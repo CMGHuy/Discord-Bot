@@ -8,9 +8,36 @@ from swingbot import config
 from swingbot.core import scan_engine
 from swingbot.bot_core import bot
 from swingbot.core.risk_metrics import compute_risk_metrics
-from swingbot.core.strategy import STRATEGY_SHORT_NAMES
 
 trade_log = scan_engine.trade_log
+
+
+def _primary_source_label(t: dict) -> str:
+    """
+    Picks the highest-priority confirming method from a trade's
+    target_sources / stop_sources lists, using the same METHOD_PRIORITY
+    ranking as the admin dashboard and trade charts.  Falls back to
+    t["strategy"] (the old fixed "S/R Confluence" default) for trades
+    logged before those source lists existed.
+    """
+    from swingbot.core.charts.chart_style import METHOD_PRIORITY
+    sources = list(dict.fromkeys(
+        (t.get("target_sources") or []) + (t.get("stop_sources") or [])
+    ))
+    if not sources:
+        return t.get("strategy") or "--"
+
+    def _rank(label: str):
+        for i, key in enumerate(METHOD_PRIORITY):
+            if label.startswith(key):
+                return i
+        return None
+
+    ranked = [(r, s) for s in sources for r in [_rank(s)] if r is not None]
+    if not ranked:
+        return sources[0]
+    ranked.sort(key=lambda x: x[0])
+    return ranked[0][1]
 
 MIN_PER_PAGE = 1
 MAX_PER_PAGE = 25
@@ -19,12 +46,15 @@ DEFAULT_PER_PAGE = 10
 
 def format_trades_table(trades, header: str) -> str:
     lines = [header, "```"]
-    lines.append(f"{'ID':8s} {'Ticker':6s} {'Strategy':8s} {'H':3s} {'Dir':5s} {'Conf':5s} {'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s}")
+    lines.append(f"{'ID':8s} {'Ticker':6s} {'Method':10s} {'H':3s} {'Dir':5s} {'Conf':5s} {'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s}")
     for t in trades:
-        short_strategy = STRATEGY_SHORT_NAMES.get(t['strategy'], t['strategy'][:8])
+        # Use the actual confirming method (target_sources/stop_sources priority
+        # ranking) instead of the static "S/R Confluence" t["strategy"] default.
+        method = _primary_source_label(t)
+        method_short = method[:10]
         dir_short = "LONG" if t['direction'] == "bullish" else "SHORT"
         lines.append(
-            f"{t['id']:8s} {t['ticker']:6s} {short_strategy:8s} {t['horizon_key']:3s} {dir_short:5s} "
+            f"{t['id']:8s} {t['ticker']:6s} {method_short:10s} {t['horizon_key']:3s} {dir_short:5s} "
             f"{'L'+str(t['confidence_level']):5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} {t['status']:6s}"
         )
     lines.append("```")

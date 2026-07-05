@@ -183,10 +183,104 @@ def _render_dashboard_fragment() -> str:
     # Highest-score agreed strategy per trade -- see helpers._primary_strategy_label
     # for why this replaces the old always-"S/R Confluence" t.strategy field.
     strategy_map = {t["id"]: _primary_strategy_label(t) for t in open_trades}
+
+    # ── Per-trade P&L / risk metrics ──────────────────────────────────────────
+    # Computed here (Python) so the template stays logic-light; all values are
+    # None when the live price is unavailable.
+    pnl_map: dict = {}   # trade_id → {pnl_pct, to_sl_pct, to_tp_pct, pos_pct, entry_pct}
+    days_map: dict = {}  # trade_id → int days open
+    now_utc = datetime.now(timezone.utc)
+
+    for t in open_trades:
+        tid = t["id"]
+        price = price_map.get(tid)
+        entry = t.get("entry") or 0
+        sl    = t.get("stop_loss") or 0
+        tp    = t.get("take_profit") or 0
+        is_bull = t.get("direction") == "bullish"
+
+        # Days open
+        try:
+            opened_dt = datetime.fromisoformat(t["opened_at"])
+            days_map[tid] = max(0, (now_utc - opened_dt).days)
+        except Exception:
+            days_map[tid] = None
+
+        if price and entry:
+            raw_pnl = (price - entry) / entry * 100
+            pnl_pct = raw_pnl if is_bull else -raw_pnl
+            to_sl   = abs(price - sl) / abs(price) * 100 if price else None
+            to_tp   = abs(tp - price) / abs(price) * 100 if price else None
+
+            # Position bar: maps SL→TP to 0→100 %.
+            # pos_pct  = where current price sits
+            # entry_pct = where the original entry sits (anchor marker)
+            if is_bull:
+                span = tp - sl
+            else:
+                span = sl - tp
+            if span and span > 0:
+                cur_pos   = (price - sl) / span * 100 if is_bull else (sl - price) / span * 100
+                entry_pos = (entry - sl) / span * 100 if is_bull else (sl - entry) / span * 100
+            else:
+                cur_pos = entry_pos = 50.0
+
+            pnl_map[tid] = {
+                "pnl_pct":    round(pnl_pct, 2),
+                "to_sl_pct":  round(to_sl, 1) if to_sl is not None else None,
+                "to_tp_pct":  round(to_tp, 1) if to_tp is not None else None,
+                "pos_pct":    max(0.0, min(100.0, round(cur_pos, 1))),
+                "entry_pct":  max(0.0, min(100.0, round(entry_pos, 1))),
+            }
+        else:
+            pnl_map[tid] = None
+
+    # ── Closed trades (last 25 by closed_at) ─────────────────────────────────
+    all_trades_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
+    closed_trades = [t for t in all_trades_raw if t["status"] in ("win", "loss", "closed")]
+    closed_trades.sort(key=lambda t: t.get("closed_at") or "", reverse=True)
+    closed_trades = closed_trades[:25]
+
+    # Per-closed-trade computed fields (passed as helper callables so Jinja
+    # can call them like functions: {{ trade_pnl(t) }}).
+    def _closed_pnl(t) -> float | None:
+        ex, en = t.get("exit_price"), t.get("entry")
+        if not ex or not en:
+            return None
+        raw = (ex - en) / en * 100
+        return round(raw if t["direction"] == "bullish" else -raw, 2)
+
+    def _closed_r(t) -> float | None:
+        ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
+        if not ex or not en or not sl_v:
+            return None
+        risk = abs(en - sl_v)
+        if not risk:
+            return None
+        realized = (ex - en) if t["direction"] == "bullish" else (en - ex)
+        return round(realized / risk, 2)
+
+    def _closed_days(t) -> int | None:
+        try:
+            opened = datetime.fromisoformat(t["opened_at"])
+            closed_dt = datetime.fromisoformat(t["closed_at"])
+            return max(0, (closed_dt - opened).days)
+        except Exception:
+            return None
+
+    # Aggregate realized stats for the extra stat cards.
+    realized_pnls = [p for p in (_closed_pnl(t) for t in closed_trades) if p is not None]
+    stats["total_realized_pct"] = round(sum(realized_pnls) / len(realized_pnls), 2) if realized_pnls else None
+    stats["best_trade_pct"]  = round(max(realized_pnls), 2) if realized_pnls else None
+    stats["worst_trade_pct"] = round(min(realized_pnls), 2) if realized_pnls else None
+
     return render_template(
         "dashboard_fragment.html",
         open_trades=open_trades, stats=stats, confidence_hex=_confidence_hex,
-        cur_map=cur_map, status_map=status_map, strategy_map=strategy_map, price_map=price_map,
+        cur_map=cur_map, status_map=status_map, strategy_map=strategy_map,
+        price_map=price_map, pnl_map=pnl_map, days_map=days_map,
+        closed_trades=closed_trades,
+        trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
     )
 
 

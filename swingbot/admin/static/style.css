@@ -158,6 +158,45 @@ button:disabled, .btn.disabled {
   0%, 100% { opacity: 1;    transform: scale(1);    }
   50%      { opacity: 0.35; transform: scale(0.82); }
 }
+/* ---- Position bar (open trades: shows where price sits between SL and TP) ----
+   Appears below the blinking dot in the Status cell.  SL is the left edge
+   (0 %), TP is the right edge (100 %).  The coloured fill tracks current
+   price; a thin tick at entry_pct marks where the trade was entered.        */
+.pos-bar {
+  width: 62px; height: 5px; border-radius: 3px; background: #1a1e27;
+  position: relative; margin-top: 5px; flex-shrink: 0;
+}
+.pos-bar-fill {
+  position: absolute; left: 0; top: 0; height: 100%;
+  border-radius: 3px; transition: width 0.4s ease;
+}
+.pos-bar-entry {
+  position: absolute; top: -2px; width: 2px; height: 9px;
+  background: #4a5470; border-radius: 1px; transform: translateX(-50%);
+}
+
+/* ---- Outcome badges (closed trades table) ---- */
+.outcome-win  {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  font-weight: 700; background: rgba(109,218,158,0.12); color: #6dda9e;
+  border: 1px solid rgba(109,218,158,0.3); white-space: nowrap;
+}
+.outcome-loss {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  font-weight: 700; background: rgba(218,109,109,0.12); color: #da6d6d;
+  border: 1px solid rgba(218,109,109,0.3); white-space: nowrap;
+}
+.outcome-closed {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  font-weight: 700; background: rgba(90,98,117,0.18); color: #7a8299;
+  border: 1px solid rgba(90,98,117,0.3); white-space: nowrap;
+}
+
+/* ---- Stat card accent variants ---- */
+.stat-card.accent-green { border-color: rgba(109,218,158,0.25); }
+.stat-card.accent-red   { border-color: rgba(218,109,109,0.25); }
+.stat-card.accent-blue  { border-color: rgba(110,168,254,0.25); }
+
 a.back-link { color: #6ea8fe; text-decoration: none; font-size: 13px; }
 code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12px; color: #a8b4cc; }
 .kv { width: 100%; border-collapse: collapse; }
