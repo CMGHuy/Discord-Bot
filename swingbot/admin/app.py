@@ -65,7 +65,7 @@ TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
 PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 
 NAV_ITEMS = [
-    ("dashboard", "🏠", "Dashboard", "index"),
+    ("dashboard", "🏠", "Dashboard123", "index"),
     ("watchlist", "📋", "Watchlist", "watchlist_page"),
     ("settings", "⚙️", "Settings", "settings_page"),
     ("logs", "📜", "Logs", "logs_page"),
