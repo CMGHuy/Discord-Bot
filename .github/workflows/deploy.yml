@@ -32,7 +32,8 @@ jobs:
           from swingbot.core import (levels, confidence, volatility, strategy, indicators,
                                       trade_plan, account, backtest, data, data_store, events,
                                       explain, export_data, market_events, performance, regime,
-                                      state, ticker_utils, trade_chart, watchlist, scan_engine)
+                                      state, ticker_utils, watchlist, scan_engine)
+          from swingbot.core.charts import trade_chart
           import swingbot.bot_core
           from swingbot.commands import scanning, watchlist as wl, info, trades, backtest as bt, account as acct, data as dc
           from swingbot.admin import app
