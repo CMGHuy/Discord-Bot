@@ -53,4 +53,4 @@ jobs:
           port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
           script_stop: true
           script: |
-            /opt/swing-bot/deploy/deploy.sh
+            bash /opt/swing-bot/deploy/deploy.sh
