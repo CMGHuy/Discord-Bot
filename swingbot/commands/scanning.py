@@ -1,0 +1,708 @@
+"""!check, !session, !status, and the automatic background session-scan loop."""
+import asyncio
+import datetime as dt
+import json
+import os
+
+import discord
+from discord.ext import tasks
+
+from swingbot import config
+from swingbot.config import auto_reload_if_changed
+from swingbot.core import scan_engine
+from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
+from swingbot.core.account import load_account_config
+from swingbot.core.performance import TradeLog
+from swingbot.core.strategy import HORIZONS
+from swingbot.core.watchlist import load_watchlist
+
+_TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
+_PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
+_HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
+
+
+def _write_heartbeat() -> None:
+    """
+    Stamps a small JSON file that the admin UI reads to show a blinking
+    green/red bot-liveness dot on the Dashboard. Written on every
+    session_scan tick (including off-hours / paused ticks) so the dot
+    goes red only when the bot process itself stops responding, not just
+    because it's outside the trading session window.
+    """
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(_HEARTBEAT_FILE, "w") as fh:
+            json.dump({
+                "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "session_active": in_session(),
+                "scan_paused": is_scan_paused(),
+            }, fh)
+    except Exception:
+        pass
+
+
+def is_scan_paused() -> bool:
+    """Whether the automatic background scan loop is currently paused
+    (via the admin UI toggle or the !pause command). Manual scans
+    (!check, and the admin UI's "Run !check now" trigger) are NOT
+    affected by this -- pausing only stops the unattended, scheduled
+    scanning so the user can still check on demand."""
+    return os.path.exists(_PAUSE_FILE)
+
+
+def set_scan_paused(paused: bool) -> None:
+    os.makedirs(config.DATA_DIR, exist_ok=True)
+    if paused:
+        with open(_PAUSE_FILE, "w") as f:
+            f.write(dt.datetime.now(dt.timezone.utc).isoformat())
+    else:
+        try:
+            os.remove(_PAUSE_FILE)
+        except OSError:
+            pass  # already resumed by a parallel caller
+
+trade_log = scan_engine.trade_log
+
+
+async def _send_alerts(destination, alerts):
+    for embed, chart_path in alerts:
+        if chart_path:
+            await destination.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+        else:
+            await destination.send(embed=embed)
+
+
+def _presence_text() -> str:
+    """
+    Builds the short status string shown as the bot's Discord presence
+    (the "Watching ..." line under its name in the member list) -- see
+    _refresh_presence(). Replaces the old approach of posting a fresh
+    "nothing new to post" message to the alerts channel on every single
+    scan tick just to prove the process was still alive: that was pure
+    channel noise on a busy watchlist (a new message every
+    SCAN_INTERVAL_MINUTES, forever, regardless of whether anything
+    actually happened), and it's not even a reliable liveness signal --
+    a hung process still shows its last-sent message sitting there
+    looking perfectly fine. A live, always-current presence string next
+    to the bot's own name updates in place and needs no channel message
+    at all to prove the bot is up right now.
+    """
+    open_count = trade_log.get_stats()["open"]
+    plural = "" if open_count == 1 else "s"
+    if is_scan_paused():
+        return f"⏸ Paused · {open_count} open trade{plural}"
+    if not in_session():
+        return f"😴 Off-hours · {open_count} open trade{plural}"
+    now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
+    return f"🟢 Active · {open_count} open trade{plural} · {now_str}"
+
+
+async def _refresh_presence():
+    """
+    Pushes the current _presence_text() onto the bot's Discord presence
+    (an Activity of type "Watching", e.g. "Watching 🟢 Active · 3 open
+    trades · 14:35"). Called every session_scan tick (so it's at least as
+    fresh as SCAN_INTERVAL_MINUTES, the same cadence the old per-tick
+    channel message used) plus once at startup and immediately after
+    !pause/!resume so a manual state change is reflected right away
+    rather than waiting for the next tick. Best-effort: a failure here
+    (e.g. a transient gateway hiccup) is logged and swallowed rather than
+    ever taking down a scan over a cosmetic status update.
+    """
+    try:
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=_presence_text()))
+    except Exception as e:
+        log.debug("Could not update Discord presence: %s", e)
+
+
+@tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
+async def session_scan():
+    # Always refresh the live-status presence first, even on the early-return
+    # paths below (paused / outside session / missing channel config) -- the
+    # whole point is that this reflects the bot's real current state at least
+    # once every SCAN_INTERVAL_MINUTES no matter what else happens this tick.
+    await _refresh_presence()
+    # Write heartbeat file so the admin dashboard can show a live green/red
+    # status dot even when the bot is paused or outside the session window.
+    _write_heartbeat()
+
+    if is_scan_paused():
+        log.debug("session_scan tick skipped -- scanning is paused")
+        return
+    if not in_session():
+        log.debug("session_scan tick skipped -- outside the session window")
+        return
+    if not config.CHANNEL_ID:
+        log.warning("DISCORD_CHANNEL_ID not set; skipping scheduled post.")
+        return
+    channel = bot.get_channel(int(config.CHANNEL_ID))
+    if channel is None:
+        log.warning("Could not find channel %s", config.CHANNEL_ID)
+        return
+
+    now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
+    log.info("Running session scan at %s…", now_str)
+    progress = scan_engine.ScanProgress()
+    alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
+    await _send_alerts(channel, alerts)
+
+    f = progress.funnel
+    if alerts:
+        log.info("Posted %d new confirmed signal(s).", len(alerts))
+        if f:
+            summary = (
+                f"🔍 **Scan** ({now_str}) — {f['tickers']} tickers, {f['checked']} combos checked → "
+                f"{f['scenarios_found']} scenario(s) found ({f['fully_qualifying']} qualifying) → "
+                f"**{len(alerts)} new alert(s) posted above**"
+            )
+            await channel.send(summary)
+    else:
+        # Deliberately NOT posted to the channel anymore -- see _presence_text()'s
+        # docstring. Still logged (visible in the admin UI's Logs page) for
+        # anyone who wants tick-by-tick detail without it living in Discord.
+        log.info("Session scan complete at %s — nothing new to post.", now_str)
+        if f and (f["scenarios_found"] > 0 or f["tickers"] > 0):
+            not_ready_parts = []
+            if f.get("failed_min_confluence", 0):
+                not_ready_parts.append(f"{f['failed_min_confluence']} below min strategies")
+            if f.get("failed_min_confidence", 0):
+                not_ready_parts.append(f"{f['failed_min_confidence']} below min confidence")
+            if f.get("awaiting_confirmation", 0):
+                not_ready_parts.append(f"{f['awaiting_confirmation']} awaiting confirmation")
+            not_ready_str = (", ".join(not_ready_parts) + " — ") if not_ready_parts else ""
+            log.info(
+                "Scan detail (%s): %d tickers -> %d scenario(s) found (%d qualifying), %snothing new to post",
+                now_str, f["tickers"], f["scenarios_found"], f["fully_qualifying"], not_ready_str,
+            )
+
+    # Refresh again now that this tick's own scan may have changed the open-
+    # trade count (a trade closing mid-scan shouldn't have to wait for next
+    # tick's presence update to be reflected).
+    await _refresh_presence()
+
+
+@tasks.loop(minutes=15)
+async def heartbeat():
+    """
+    Periodic "still alive and here's the state" LOG line only (never posted
+    to Discord) -- makes it easy to confirm from the logs alone (Discord UI
+    or the admin UI's Logs page) that the process is actually running and
+    see its basic status at a glance, without needing to correlate scan-tick
+    timestamps. The user-visible "is the bot alive" signal lives on the
+    bot's own Discord presence instead (see _refresh_presence(), refreshed
+    every session_scan tick -- i.e. at least every SCAN_INTERVAL_MINUTES),
+    not in a channel message; this log-only heartbeat is a slower (15 min),
+    log-file-only companion to that, unrelated to anything posted in Discord.
+    """
+    open_count = trade_log.get_stats()["open"]
+    watchlist_size = len(load_watchlist())
+    latency_ms = round(bot.latency * 1000) if bot.latency else None
+    log.info(
+        "Heartbeat -- session=%s scan=%s watchlist=%d open_trades=%d gateway_latency=%sms",
+        "active" if in_session() else "inactive", "paused" if is_scan_paused() else "running",
+        watchlist_size, open_count,
+        latency_ms if latency_ms is not None else "n/a",
+    )
+
+
+@tasks.loop(seconds=30)
+async def config_watcher():
+    """
+    Polls .env mtime every 30 seconds so settings saved via the admin UI
+    apply quickly even when the Docker socket isn't mounted (which would
+    have allowed an immediate SIGHUP). Without this, changes would only
+    take effect at the next scan tick (up to SCAN_INTERVAL_MINUTES away).
+    The mtime check is a single stat() syscall -- no file I/O -- so the
+    overhead is negligible.
+
+    Also watches for a trigger file written by the admin UI's "Run !check now"
+    button. When found, runs a full scan immediately (same as !check all) and
+    deletes the trigger file so it doesn't fire again next tick.
+    """
+    changed = await asyncio.to_thread(auto_reload_if_changed)
+    if changed:
+        # LOG_LEVEL change needs the Python logging level updated too
+        if "LOG_LEVEL" in changed:
+            import logging
+            logging.getLogger().setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
+        if "SCAN_INTERVAL_MINUTES" in changed and session_scan.is_running():
+            session_scan.change_interval(minutes=config.SCAN_INTERVAL_MINUTES)
+            log.info("Scan interval hot-reloaded to every %d min (takes effect next tick).",
+                     config.SCAN_INTERVAL_MINUTES)
+        log.info("Config auto-reloaded from .env -- %d setting(s) changed: %s",
+                 len(changed), ", ".join(f"{k}={v[1]!r}" for k, v in changed.items()))
+
+        # Notify Discord channel about key setting changes so the user can
+        # confirm the new value is live without needing to check the logs.
+        _notify_keys = {
+            "MIN_ALERT_CONFIDENCE_LEVEL": (
+                lambda old, new: (
+                    f"⚙️ **Min confidence level** updated: Lv{old} → Lv{new}  "
+                    f"(next `!check` and scheduled scans will use Lv{new}+)"
+                )
+            ),
+            "MIN_TARGET_CONFLUENCE_COUNT": (
+                lambda old, new: (
+                    f"⚙️ **Min strategies confirmed** updated: {old} → {new}"
+                )
+            ),
+            "SCAN_INTERVAL_MINUTES": (
+                lambda old, new: (
+                    f"⚙️ **Scan interval** updated: every {old} min → every {new} min"
+                )
+            ),
+            "MIN_RISK_REWARD_RATIO": (
+                lambda old, new: (
+                    f"⚙️ **Min R:R ratio** updated: {old} → {new}"
+                )
+            ),
+        }
+        if config.CHANNEL_ID:
+            channel = bot.get_channel(int(config.CHANNEL_ID))
+            if channel:
+                for attr_key, fmt_fn in _notify_keys.items():
+                    if attr_key in changed:
+                        old_val, new_val = changed[attr_key]
+                        try:
+                            await channel.send(fmt_fn(old_val, new_val))
+                        except Exception as _e:
+                            log.warning("Could not post config-change notice to Discord: %s", _e)
+
+    # --- Admin UI "Run !check now" trigger ---
+    if os.path.exists(_TRIGGER_FILE):
+        try:
+            os.remove(_TRIGGER_FILE)
+        except OSError:
+            pass  # already removed by a parallel tick or a concurrent process
+        else:
+            log.info("Admin UI triggered a manual !check scan.")
+            if not config.CHANNEL_ID:
+                log.warning("CHANNEL_ID not set; cannot post scan results.")
+                return
+            channel = bot.get_channel(int(config.CHANNEL_ID))
+            if channel is None:
+                try:
+                    channel = await bot.fetch_channel(int(config.CHANNEL_ID))
+                except Exception as _ce:
+                    log.warning("Could not resolve channel %s for triggered scan: %s", config.CHANNEL_ID, _ce)
+                    return
+            min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
+            # Post a live-updating progress message — same UX as the Discord
+            # !check command so the user sees per-ticker progress in real time.
+            progress_msg = await channel.send(
+                f"🔍 **Manual scan triggered from admin UI** · min confidence Lv{min_lv}"
+                f" · crawling data… 0%"
+            )
+            progress = scan_engine.ScanProgress()
+
+            async def _ui_poll_progress():
+                last_shown = None
+                while True:
+                    await asyncio.sleep(2.0)
+                    if progress.stage == "crawling data":
+                        pct = round(progress.done / progress.total * 100) if progress.total else 0
+                        ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+                        label = (
+                            f"📡 **Crawling** (UI trigger) — {progress.done}/{progress.total} "
+                            f"ticker(s) fetched ({pct}%){ticker_bit}"
+                        )
+                    elif progress.stage == "building alerts":
+                        if progress.alerts_total:
+                            label = (
+                                f"📊 **Building alerts** (UI trigger) — "
+                                f"{progress.alerts_done}/{progress.alerts_total} done (generating charts…)"
+                            )
+                        else:
+                            label = (
+                                f"📊 **Deduplicating** (UI trigger) — "
+                                f"{progress.qualifying_found} qualifying scenario(s) found, merging…"
+                            )
+                    else:
+                        ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+                        found_bit = (
+                            f" · **{progress.qualifying_found} qualifying** so far"
+                            if progress.qualifying_found else ""
+                        )
+                        label = (
+                            f"🔬 **Analyzing** (UI trigger) — {progress.done}/{progress.total} "
+                            f"tickers ({progress.pct}%){ticker_bit}{found_bit}"
+                        )
+                    if label != last_shown:
+                        try:
+                            await progress_msg.edit(content=label)
+                        except discord.NotFound:
+                            return
+                        last_shown = label
+
+            poller = asyncio.create_task(_ui_poll_progress())
+            try:
+                alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
+            finally:
+                poller.cancel()
+
+            await _send_alerts(channel, alerts)
+            f = progress.funnel
+            if progress.stopped:
+                summary = (
+                    f"🛑 **Triggered scan stopped early** (by the admin UI's Stop button or `!stop`) — "
+                    f"**{len(alerts)} alert(s)** built from what completed before the stop."
+                )
+            elif f:
+                lv_counts = f.get("conf_level_counts", {})
+                lv_breakdown = (
+                    "  ".join(f"Lv{lv}:{cnt}" for lv, cnt in sorted(lv_counts.items()))
+                    if lv_counts else "none"
+                )
+                summary = (
+                    f"✅ **Triggered scan complete** — {f['tickers']} ticker(s) · "
+                    f"{f['fully_qualifying']} fully qualifying → **{len(alerts)} alert(s)**\n"
+                    f"Confidence breakdown: {lv_breakdown}  (min Lv{min_lv})"
+                )
+            else:
+                summary = f"✅ **Triggered scan complete** — {len(alerts)} alert(s) found (min confidence: Lv{min_lv})."
+            try:
+                await progress_msg.edit(content=summary)
+            except discord.NotFound:
+                await channel.send(summary)
+            log.info("Triggered scan complete — %d alert(s) posted%s.", len(alerts),
+                      " (stopped early)" if progress.stopped else "")
+
+
+@on_config_reload
+def _apply_scan_interval_change(changed: dict):
+    """SCAN_INTERVAL_MINUTES is baked into @tasks.loop() at decoration time
+    (discord.ext.tasks doesn't re-read it live), so a hot reload needs to
+    explicitly push the new interval onto the running loop."""
+    if "SCAN_INTERVAL_MINUTES" in changed and session_scan.is_running():
+        new_minutes = config.SCAN_INTERVAL_MINUTES
+        session_scan.change_interval(minutes=new_minutes)
+        log.info("Scan interval hot-reloaded to every %d minute(s) (takes effect next tick).", new_minutes)
+
+
+@bot.event
+async def on_ready():
+    log.info("Logged in as %s (id=%s)", bot.user, bot.user.id if bot.user else "n/a")
+    log.info("Watching %d guild(s): %s", len(bot.guilds), ", ".join(g.name for g in bot.guilds) or "none")
+    wl_size = len(load_watchlist())
+    log.info(
+        "Session window: %02d:00-%02d:00 Europe/Berlin (7 days), scanning every %d min, "
+        "%d-scan confirmation, min confidence Lv%d, min %d strategies confirmed (within %.1f%% deviation), "
+        "watchlist size %d",
+        config.SESSION_START_HOUR, config.SESSION_END_HOUR, config.SCAN_INTERVAL_MINUTES,
+        config.SIGNAL_CONFIRMATION_SCANS, config.MIN_ALERT_CONFIDENCE_LEVEL, config.MIN_TARGET_CONFLUENCE_COUNT,
+        config.CONFLUENCE_DEVIATION_PCT, wl_size,
+    )
+    install_reload_signal_handler()
+    if not session_scan.is_running():
+        session_scan.start()
+    if not heartbeat.is_running():
+        heartbeat.start()
+    if not config_watcher.is_running():
+        config_watcher.start()
+    await _refresh_presence()
+
+    # Sync slash commands to Discord (runs once on startup; safe to call every time)
+    try:
+        synced = await bot.tree.sync()
+        log.info("Synced %d slash command(s) to Discord.", len(synced))
+    except Exception as e:
+        log.warning("Failed to sync slash commands: %s", e)
+
+    # Post a startup notice to the alerts channel so there's a visible
+    # timestamp in Discord for when the bot came (back) online.
+    if config.CHANNEL_ID:
+        channel = bot.get_channel(int(config.CHANNEL_ID))
+        if channel:
+            open_count = trade_log.get_stats()["open"]
+            await channel.send(
+                f"🤖 **Bot online** — {dt.datetime.now(SESSION_TZ).strftime('%Y-%m-%d %H:%M %Z')}\n"
+                f"Session: {config.SESSION_START_HOUR:02d}:00–{config.SESSION_END_HOUR:02d}:00 Berlin · "
+                f"scan every {config.SCAN_INTERVAL_MINUTES} min · watchlist: {wl_size} ticker(s) · "
+                f"open trades: {open_count} · min confidence: Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}"
+            )
+
+
+@bot.command(name="check")
+async def check_cmd(ctx, *args: str):
+    """
+    Live scan with optional date filtering.
+
+    Usage:
+      !check [horizon] [min_strategies] [from:YYYY-MM-DD] [to:YYYY-MM-DD]
+
+    When from:/to: are given, queries the trade log for plans recorded in
+    that window instead of running a live scan.
+    Examples:
+      !check
+      !check 4w
+      !check 4w 2
+      !check from:2024-01-01 to:2024-12-31
+      !check 4w from:2024-06-01
+    """
+    # --- parse args ---
+    horizon = "all"
+    min_confluence = None
+    date_from = date_to = None
+
+    for token in args:
+        tl = token.lower()
+        if tl in ("all", *HORIZONS.keys()):
+            horizon = tl
+        elif tl.startswith("from:"):
+            date_from = token[5:]
+        elif tl.startswith("to:"):
+            date_to = token[3:]
+        elif tl.isdigit():
+            min_confluence = int(tl)
+
+    # --- historical mode: query trade log by date ---
+    if date_from or date_to:
+        await _check_historical(ctx, horizon, date_from, date_to)
+        return
+
+    # --- live scan mode (existing behaviour) ---
+    min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
+    progress = scan_engine.ScanProgress()
+    progress_msg = await ctx.send(
+        f"🔬 Scanning `{horizon}` · min confidence Lv{min_lv}"
+        + (f" · min strategies {min_confluence}" if min_confluence else "")
+        + " · crawling data… 0%"
+    )
+
+    async def _poll_progress():
+        last_shown = None
+        while True:
+            await asyncio.sleep(1.5)
+            if progress.stage == "crawling data":
+                ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+                pct = round(progress.done / progress.total * 100) if progress.total else 0
+                label = (
+                    f"📡 **Crawling** — {progress.done}/{progress.total} ticker(s) fetched "
+                    f"({pct}%){ticker_bit}"
+                )
+            elif progress.stage == "building alerts":
+                if progress.alerts_total:
+                    label = (
+                        f"📊 **Building alerts** — {progress.alerts_done}/{progress.alerts_total} done "
+                        f"(generating charts…)"
+                    )
+                else:
+                    label = (
+                        f"📊 **Deduplicating** — {progress.qualifying_found} qualifying "
+                        f"scenario(s) found, merging similar setups…"
+                    )
+            else:
+                ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
+                found_bit = f" · **{progress.qualifying_found} qualifying** so far" if progress.qualifying_found else ""
+                label = (
+                    f"🔬 **Analyzing** ({horizon}) — {progress.done}/{progress.total} tickers "
+                    f"({progress.pct}%){ticker_bit}{found_bit}"
+                )
+            if label != last_shown:
+                try:
+                    await progress_msg.edit(content=label)
+                except discord.NotFound:
+                    return
+                last_shown = label
+
+    poller = asyncio.create_task(_poll_progress())
+    try:
+        alerts = await scan_engine.run_scan(
+            horizon_filter=horizon, require_confirmation=False, bot=bot, progress=progress,
+            min_confluence=min_confluence,
+        )
+    finally:
+        poller.cancel()
+
+    if progress.stopped:
+        await progress_msg.edit(
+            content=f"🛑 **Scan stopped early** (use `!stop` to cancel a scan in progress) — "
+                    f"{len(alerts)} alert(s) built from what completed before the stop."
+        )
+        if alerts:
+            await _send_alerts(ctx, alerts)
+        return
+
+    await progress_msg.edit(content="🔬 Scan complete — building results…")
+
+    if not alerts:
+        f = progress.funnel
+        if f and f.get("scenarios_found", 0) > 0:
+            not_ready_parts = []
+            if f.get("failed_min_confluence", 0):
+                not_ready_parts.append(f"{f['failed_min_confluence']} below min strategies")
+            if f.get("failed_min_confidence", 0):
+                not_ready_parts.append(f"{f['failed_min_confidence']} below min confidence (Lv{min_lv}+)")
+            not_ready_str = (", ".join(not_ready_parts) + " — ") if not_ready_parts else ""
+            await progress_msg.edit(
+                content=(
+                    f"📭 **No qualifying trades** right now (min confidence: Lv{min_lv}"
+                    + (f", min strategies: {min_confluence}" if min_confluence else "")
+                    + f").\n{not_ready_str}{f['scenarios_found']} scenario(s) analyzed."
+                )
+            )
+        else:
+            await progress_msg.edit(
+                content=(
+                    f"📭 **No qualifying trades** right now (min confidence: Lv{min_lv}"
+                    + (f", min strategies: {min_confluence}" if min_confluence else "")
+                    + ")."
+                )
+            )
+        return
+
+    f = progress.funnel
+    lv_counts = f.get("conf_level_counts", {}) if f else {}
+    lv_breakdown = (
+        "  ".join(f"Lv{lv}:{cnt}" for lv, cnt in sorted(lv_counts.items()))
+        if lv_counts else "none"
+    )
+    summary = (
+        f"✅ **{len(alerts)} qualifying trade(s)** (min Lv{min_lv}"
+        + (f", min strategies: {min_confluence}" if min_confluence else "")
+        + f")  •  confidence breakdown: {lv_breakdown}"
+    )
+    await progress_msg.edit(content=summary)
+    await _send_alerts(ctx, alerts)
+
+
+async def _check_historical(ctx, horizon: str, date_from: str | None, date_to: str | None):
+    """Show trade plans recorded in the trade log within a date window."""
+    from_dt = date_from or "0000-01-01"
+    to_dt   = date_to   or "9999-12-31"
+
+    all_trades = trade_log.get_trades(status=None, limit=None)
+
+    # Filter by opened_at date and optional horizon
+    def _in_range(t):
+        opened = t.get("opened_at", "")[:10]  # YYYY-MM-DD
+        if opened < from_dt or opened > to_dt:
+            return False
+        if horizon != "all" and t.get("horizon_key") != horizon:
+            return False
+        return True
+
+    trades = [t for t in all_trades if _in_range(t)]
+
+    range_str = f"{date_from or '…'} → {date_to or 'now'}"
+    horiz_str = f" · horizon `{horizon}`" if horizon != "all" else ""
+
+    if not trades:
+        await ctx.send(
+            f"📭 No recorded trade plans found for **{range_str}**{horiz_str}.\n"
+            "Trade plans are only recorded when the bot posts an alert (or you run `!check`)."
+        )
+        return
+
+    header = (
+        f"📋 **{len(trades)} recorded trade plan(s)** — {range_str}{horiz_str}\n"
+        "*(from the trade log — these are plans the bot actually posted)*\n"
+    )
+    await ctx.send(header)
+
+    # Send each trade as a short summary (avoid chart re-generation)
+    for t in trades:
+        direction_emoji = "📈" if t.get("direction") == "bullish" else "📉"
+        status_emoji = {"open": "🟡", "win": "✅", "loss": "❌", "closed": "⬜"}.get(t.get("status", ""), "⬜")
+        entry   = t.get("entry_price", t.get("entry", "?"))
+        stop    = t.get("stop_loss", "?")
+        target  = t.get("take_profit", "?")
+        lv      = t.get("confidence_level", "?")
+        strats  = t.get("strategy", "?")
+        horizon_k = t.get("horizon_key", "?")
+        opened  = t.get("opened_at", "?")[:10]
+        ticker  = t.get("ticker", "?")
+        tid     = t.get("id", "?")
+
+        line = (
+            f"{direction_emoji} {status_emoji} **{ticker}** `{horizon_k}` — "
+            f"Lv{lv} · {strats}\n"
+            f"Entry **{entry}** · Stop {stop} · Target {target}\n"
+            f"Opened: {opened}  `ID: {tid}`  — use `!trade {tid}` for full details & chart"
+        )
+        await ctx.send(line)
+
+
+@bot.command(name="session")
+async def session_cmd(ctx):
+    from swingbot.bot_core import in_session
+    now = dt.datetime.now(SESSION_TZ)
+    active = in_session()
+    start = config.SESSION_START_HOUR
+    end = config.SESSION_END_HOUR
+    status = "🟢 **Active**" if active else "🔴 **Inactive**"
+    paused_bit = "\n⏸️ **Scanning is paused** — use `!resume` or the admin UI to resume." if is_scan_paused() else ""
+    await ctx.send(
+        f"{status} — session window: {start:02d}:00–{end:02d}:00 Europe/Berlin (7 days)\n"
+        f"Current time: {now.strftime('%Y-%m-%d %H:%M %Z')}{paused_bit}"
+    )
+
+
+@bot.command(name="status")
+async def status_cmd(ctx):
+    wl = load_watchlist()
+    stats = trade_log.get_stats()
+    active = in_session()
+    session_status = "🟢 active" if active else "🔴 inactive"
+    latency_ms = round(bot.latency * 1000) if bot.latency else None
+    paused = is_scan_paused()
+    scan_line = "⏸️ **paused** (manual !check still works)" if paused else "▶️ running"
+    await ctx.send(
+        f"**Bot status**\n"
+        f"Automatic scanning: {scan_line}\n"
+        f"Session: {session_status} ({config.SESSION_START_HOUR:02d}:00–{config.SESSION_END_HOUR:02d}:00 Berlin)\n"
+        f"Watchlist: {len(wl)} ticker(s)\n"
+        f"Open positions: {stats['open']} / {config.MAX_OPEN_POSITIONS} max\n"
+        f"Closed trades: {stats.get('win', 0)} wins · {stats.get('loss', 0)} losses\n"
+        f"Min confidence: Lv{config.MIN_ALERT_CONFIDENCE_LEVEL} · "
+        f"Min strategies: {config.MIN_TARGET_CONFLUENCE_COUNT}\n"
+        f"Gateway latency: {latency_ms}ms" + (" ⚠️ high" if latency_ms and latency_ms > 300 else "")
+    )
+
+
+@bot.command(name="pause")
+async def pause_cmd(ctx):
+    """Pause the automatic background scan loop. Manual !check still works."""
+    if is_scan_paused():
+        await ctx.send("⏸️ Scanning is already paused.")
+        return
+    set_scan_paused(True)
+    log.info("Automatic scanning paused via !pause (by %s).", ctx.author)
+    await _refresh_presence()
+    await ctx.send(
+        "⏸️ **Automatic scanning paused.** The bot will stop posting scheduled alerts. "
+        "`!check` still works on demand. Use `!resume` or the admin UI to turn it back on."
+    )
+
+
+@bot.command(name="resume")
+async def resume_cmd(ctx):
+    """Resume the automatic background scan loop after a !pause."""
+    if not is_scan_paused():
+        await ctx.send("▶️ Scanning is already running.")
+        return
+    set_scan_paused(False)
+    log.info("Automatic scanning resumed via !resume (by %s).", ctx.author)
+    await _refresh_presence()
+    await ctx.send("▶️ **Automatic scanning resumed.**")
+
+
+@bot.command(name="stop")
+async def stop_cmd(ctx):
+    """
+    Stop whatever scan is currently in progress (!check, /check, the
+    admin UI's "Run !check now" trigger, or the automatic session scan).
+
+    Different from !pause: !pause only stops FUTURE automatic scans from
+    starting -- a scan already running keeps going. !stop cuts short a
+    scan that's already running, right now. It's cooperative (checked
+    once per ticker inside scan_engine's crawl/analyze/alert-building
+    loops), so it takes effect at the next checkpoint, not instantly --
+    there's no way to forcibly kill a scan mid-fetch.
+    """
+    if not scan_engine.is_scan_running():
+        await ctx.send("ℹ️ No scan is currently running.")
+        return
+    scan_engine.request_stop()
+    log.info("Stop requested via !stop (by %s).", ctx.author)
+    await ctx.send("🛑 **Stop requested** — the running scan will end after finishing its current ticker.")

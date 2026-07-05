@@ -1,0 +1,63 @@
+# Every version below is pinned exactly rather than left as a loose ">="
+# floor. With a loose floor, pip's resolver has to consider every release
+# of every package (and every release of every package's own dependencies)
+# to find a mutually-compatible combination -- that backtracking, plus a
+# metadata fetch per candidate version, is most of why installs were slow.
+# An exact pin gives the resolver exactly one candidate per package, so
+# there's nothing left to backtrack over.
+#
+# yfinance and pandas are deliberately pinned to the newest release WITHIN
+# their existing major version (0.2.x and 2.x respectively) rather than the
+# latest overall (yfinance has since released a 1.x line, pandas a 3.x line)
+# -- both are major-version jumps that can change public APIs this project
+# calls directly (e.g. data.py's yf.Ticker(...).fast_info field names), and
+# jumping there wasn't asked for and hasn't been tested against this code.
+# Bumping to a new major version is a deliberate future upgrade, not a
+# side effect of a dependency-install speed fix.
+#
+# To refresh these later: check each package's PyPI release history for
+# the newest version still inside the major version already in use here,
+# update the pin, then run the bot/admin UI through their normal manual
+# checks before committing the bump.
+discord.py==2.7.1
+yfinance==0.2.66
+pandas==2.3.3
+numpy==2.4.6
+python-dotenv==1.2.2
+mplfinance==0.12.10b0
+matplotlib==3.11.0
+
+# Diagonal support/resistance trendlines (swingbot/core/trendlines.py),
+# on top of the horizontal levels every other method in levels.py finds.
+# Only needs numpy/pandas at runtime with the extraction/fit methods
+# this project uses (METHOD_NAIVECONSEC/METHOD_NSQUREDLOGN) -- no
+# findiff or scikit-image required. If this ever fails to install or
+# import for some reason, trendlines.py degrades gracefully: diagonal
+# trendline levels are simply skipped and every other level source is
+# unaffected.
+trendln==0.1.18
+
+# Risk-adjusted performance metrics for !performance (swingbot/core/
+# risk_metrics.py) -- Sharpe, Sortino, max drawdown, Calmar, profit
+# factor, computed from the closed-trade track record. Same author as
+# yfinance, which this project already depends on. If this ever fails to
+# install or import, risk_metrics.py degrades gracefully: !performance
+# falls back to win-rate-only stats, exactly as before this feature existed.
+quantstats==0.0.81
+
+# Candlestick pattern recognition (swingbot/core/candlestick_patterns.py)
+# used as one more confidence factor (see confidence.py) -- 62 native
+# reversal/continuation patterns in pure Python, no TA-Lib/C compilation
+# needed (same reasoning volatility.py already gives for avoiding
+# ta-lib/pandas-ta proper). If this ever fails to install or import,
+# candlestick_patterns.py degrades gracefully: that confidence factor
+# just contributes 0 and every other factor is unaffected.
+pandas-ta-classic==0.6.52
+
+# Admin web UI (admin_ui.py) -- runs as its own container, see docker-compose.yml
+flask==3.1.3
+# Optional: enables the "Restart bot container" button in the admin UI when
+# the Docker socket is mounted into the admin container. Safe to leave
+# installed even if you never mount the socket -- the button just stays
+# disabled and the rest of the admin UI works normally.
+docker==7.1.0

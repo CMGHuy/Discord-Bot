@@ -1,0 +1,330 @@
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-label">Open trades</div>
+    <div class="stat-value" style="color: #6ea8fe;">{{ stats.open }}</div>
+    <div class="stat-sub">currently tracking</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Wins</div>
+    <div class="stat-value" style="color: #6dda9e;">{{ stats.wins }}</div>
+    <div class="stat-sub">closed profitable</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Losses</div>
+    <div class="stat-value" style="color: #da6d6d;">{{ stats.losses }}</div>
+    <div class="stat-sub">closed at loss</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Win rate</div>
+    <div class="stat-value" style="color: {% if stats.closed > 0 and stats.win_rate >= 50 %}#6dda9e{% elif stats.closed > 0 %}#da6d6d{% else %}#5a6275{% endif %};">
+      {{ '%.0f%%'|format(stats.win_rate) if stats.closed > 0 else '—' }}
+    </div>
+    <div class="stat-sub">{{ stats.closed }} closed total</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label" title="Average realized R-multiple across closed win/loss trades">Expectancy</div>
+    <div class="stat-value" style="color: {% if stats.expectancy_r is not none and stats.expectancy_r >= 0 %}#6dda9e{% elif stats.expectancy_r is not none %}#da6d6d{% else %}#5a6275{% endif %};">
+      {{ '%+.2fR'|format(stats.expectancy_r) if stats.expectancy_r is not none else '—' }}
+    </div>
+    <div class="stat-sub">{{ stats.r_multiples_count }} R-trades</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label" title="Equal-weighted average unrealized P&amp;L% across open trades with a resolvable live price">Open P&amp;L</div>
+    <div class="stat-value" style="color: {% if stats.total_unrealized_pct is not none and stats.total_unrealized_pct >= 0 %}#6dda9e{% elif stats.total_unrealized_pct is not none %}#da6d6d{% else %}#5a6275{% endif %};">
+      {{ '%+.1f%%'|format(stats.total_unrealized_pct) if stats.total_unrealized_pct is not none else '—' }}
+    </div>
+    <div class="stat-sub">avg across open trades</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Avg open confidence</div>
+    <div class="stat-value" style="color: #6ea8fe;">
+      {{ '%.1f/5'|format(stats.avg_open_confidence) if stats.avg_open_confidence is not none else '—' }}
+    </div>
+    <div class="stat-sub">across open trades</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Avg holding period</div>
+    <div class="stat-value" style="color: #6ea8fe;">
+      {{ '%.1f d'|format(stats.avg_holding_days) if stats.avg_holding_days is not none else '—' }}
+    </div>
+    <div class="stat-sub">closed trades</div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+    <p class="card-title" style="margin:0;">Open trades
+      <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
+        drag a column header to reorder · click a header to sort · click a row for full detail
+      </span>
+    </p>
+    <input id="trade-filter" type="text" placeholder="Filter by ticker, strategy…"
+           oninput="filterTable()"
+           style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;
+                  padding:6px 10px;font-size:13px;font-family:inherit;width:220px;">
+  </div>
+
+  {% if open_trades %}
+  <div style="overflow-x:auto;">
+  <table id="trades-table">
+    <thead>
+    <tr>
+      <th data-col-id="rownum" title="Row number">#</th>
+      <th data-col-id="status" draggable="true" onclick="sortByHeader(this)" title="How close the live price is to the stop-loss (red) vs. the target (green)">Status <span class="sort-arrow" data-col-id="status"></span></th>
+      <th data-col-id="ticker" draggable="true" onclick="sortByHeader(this)" title="Sort by ticker">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
+      <th data-col-id="strategy" draggable="true" onclick="sortByHeader(this)" title="Sort by strategy">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
+      <th data-col-id="horizon" draggable="true" onclick="sortByHeader(this)" title="Swing hold duration">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
+      <th data-col-id="direction" draggable="true" onclick="sortByHeader(this)" title="Sort by direction">Direction <span class="sort-arrow" data-col-id="direction"></span></th>
+      <th data-col-id="confidence" draggable="true" onclick="sortByHeader(this)" title="Sort by confidence level">Confidence <span class="sort-arrow" data-col-id="confidence"></span></th>
+      <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Sort by score (0–100)">Score <span class="sort-arrow" data-col-id="score"></span></th>
+      <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)" title="Sort by entry price">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live current price">Current Price <span class="sort-arrow" data-col-id="current_price"></span></th>
+      <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
+      <th data-col-id="target" draggable="true" onclick="sortByHeader(this)">Target <span class="sort-arrow" data-col-id="target"></span></th>
+      <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
+      <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)" title="Sort by date opened">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
+      <th data-col-id="action" draggable="true">Action</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for t in open_trades %}
+    {%- set horizon_labels = {'2w':'~2 weeks','4w':'~4 weeks','2m':'~2 months','3m':'~3 months','6m':'~6 months'} -%}
+    {%- set status = status_map.get(t.id, {'color': '#5a6275', 'proximity': 0.0, 'blink_seconds': 2.2, 'label': 'Unknown'}) -%}
+    {%- set cur_price = price_map.get(t.id) -%}
+    <tr class="clickable" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
+      <td class="muted">{{ loop.index }}</td>
+      <td data-sort="{{ status.proximity }}" title="{{ status.label }} ({{ '%+.0f%%'|format(status.proximity * 100) }} of the way from entry to {{ 'stop' if status.proximity < 0 else 'target' }})">
+        <span class="trade-status-dot" style="--status-color: {{ status.color }}; --blink-duration: {{ status.blink_seconds }}s;"></span>
+      </td>
+      <td>
+        <span style="display:flex; align-items:center; gap:7px;">
+          <img src="{{ url_for('ticker_logo', ticker=t.ticker) }}" alt=""
+               style="width:18px; height:18px; border-radius:4px; object-fit:contain; background:#fff; flex-shrink:0;"
+               onerror="this.style.display='none'" loading="lazy">
+          <strong>{{ t.ticker }}</strong>
+        </span>
+      </td>
+      {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
+      <td title="Highest-score agreed strategy for this trade (target/stop sources: {{ _all_sources | unique | join(', ') if _all_sources else 'n/a' }})">
+        {{ strategy_map.get(t.id, t.strategy) }}
+      </td>
+      <td>
+        <span class="pill" title="Swing hold duration: {{ horizon_labels.get(t.horizon_key, t.horizon_key) }}" style="cursor:help;">
+          {{ t.horizon_key }}
+        </span>
+      </td>
+      <td>
+        <span style="color: {{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }}; font-weight:600;">
+          {{ '▲ LONG' if t.direction == 'bullish' else '▼ SHORT' }}
+        </span>
+      </td>
+      <td data-sort="{{ t.confidence_level }}">
+        <span class="confidence-badge" style="color: {{ confidence_hex(t.confidence_level) }};">
+          Lv{{ t.confidence_level }}/5
+        </span>
+      </td>
+      <td data-sort="{{ t.confidence_score if t.confidence_score is not none else 0 }}">
+        {%- if t.confidence_score is not none -%}
+          <span style="font-weight:600; color:
+            {%- if t.confidence_score >= 75 %} #6dda9e
+            {%- elif t.confidence_score >= 50 %} #e2b25a
+            {%- else %} #da6d6d{%- endif %};">
+            {{ t.confidence_score }}
+          </span>
+          <span class="muted" style="font-size:11px;">/100</span>
+        {%- else -%}
+          <span class="muted">—</span>
+        {%- endif -%}
+      </td>
+      <td>{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td data-sort="{{ cur_price if cur_price is not none else 0 }}"
+          style="color: {% if cur_price is none %}#5a6275{% elif cur_price >= t.entry %}#6dda9e{% else %}#da6d6d{% endif %};">
+        {%- if cur_price is not none -%}
+          {{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(cur_price) }}
+        {%- else -%}
+          <span class="muted">—</span>
+        {%- endif -%}
+      </td>
+      <td style="color:#da6d6d;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
+      <td style="color:#6dda9e;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
+      <td>{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
+      <td class="muted" data-sort="{{ t.opened_at }}">{{ t.opened_at[:16] | replace('T', ' ') }}</td>
+      <td onclick="event.stopPropagation();" style="display:flex; gap:6px; align-items:center;">
+        <button type="button" class="icon-btn secondary" title="Copy link to this trade"
+                onclick="copyTradeLink(this, '{{ url_for('trade_detail', trade_id=t.id, _external=True) }}')">🔗</button>
+        <form method="post" action="/trades/{{ t.id }}/close" style="margin:0;"
+              onsubmit="return confirm('Mark {{ t.ticker }} trade as manually closed?');">
+          <button type="submit" class="icon-btn danger" title="Close trade">✕</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <script>
+  // ---- Column sort (click a header) --------------------------------------
+  // Columns are identified by a stable data-col-id, NOT a raw positional
+  // index -- indices shift whenever the user drags a column to reorder it
+  // (see the drag-and-drop handlers set up once in dashboard.html), so
+  // sorting always re-derives "which numeric cell index is this column
+  // *right now*" via colIndexById() rather than a number baked in at
+  // render time.
+  var _sortColId = null, _sortAsc = false;
+
+  function colIndexById(colId) {
+    var ths = document.querySelectorAll('#trades-table thead th[data-col-id]');
+    for (var i = 0; i < ths.length; i++) {
+      if (ths[i].dataset.colId === colId) return i;
+    }
+    return -1;
+  }
+
+  function sortByHeader(th) {
+    var colId = th.dataset.colId;
+    if (_sortColId === colId) { _sortAsc = !_sortAsc; } else { _sortColId = colId; _sortAsc = false; }
+    var idx = colIndexById(colId);
+    if (idx === -1) return;
+    var tbody = document.querySelector('#trades-table tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort(function(a, b) {
+      var ac = a.cells[idx], bc = b.cells[idx];
+      var av = (ac.dataset.sort !== undefined ? ac.dataset.sort : ac.innerText).trim();
+      var bv = (bc.dataset.sort !== undefined ? bc.dataset.sort : bc.innerText).trim();
+      var an = parseFloat(av), bn = parseFloat(bv);
+      var cmp = (!isNaN(an) && !isNaN(bn)) ? (an - bn) : av.localeCompare(bv);
+      return _sortAsc ? cmp : -cmp;
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+    document.querySelectorAll('.sort-arrow').forEach(function(el) {
+      el.textContent = (el.dataset.colId === _sortColId) ? (_sortAsc ? ' ▲' : ' ▼') : '';
+    });
+  }
+
+  // Default view (no column explicitly clicked yet): highest confidence
+  // LEVEL first, ties broken by highest confidence SCORE -- matches what
+  // the backend already sorts by (TradeLog.get_trades(sort_by="confidence")),
+  // re-applied here too so the ordering is correct even if this markup is
+  // ever reused somewhere that doesn't pre-sort server-side.
+  function applyDefaultSort() {
+    var confIdx = colIndexById('confidence'), scoreIdx = colIndexById('score');
+    if (confIdx === -1 || scoreIdx === -1) return;
+    var tbody = document.querySelector('#trades-table tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort(function(a, b) {
+      var aConf = parseFloat(a.cells[confIdx].dataset.sort) || 0;
+      var bConf = parseFloat(b.cells[confIdx].dataset.sort) || 0;
+      if (bConf !== aConf) return bConf - aConf;
+      var aScore = parseFloat(a.cells[scoreIdx].dataset.sort) || 0;
+      var bScore = parseFloat(b.cells[scoreIdx].dataset.sort) || 0;
+      return bScore - aScore;
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+  }
+
+  function filterTable() {
+    var q = document.getElementById('trade-filter').value.toLowerCase();
+    document.querySelectorAll('#trades-table tbody tr').forEach(function(row) {
+      row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+
+  // ---- Copy trade link ----------------------------------------------------
+  // navigator.clipboard needs a secure context (https, or localhost) -- falls
+  // back to the older execCommand('copy') via a throwaway textarea for plain
+  // http admin deployments (e.g. an internal LAN IP) where it's unavailable.
+  function copyTradeLink(btn, url) {
+    function showCopied() {
+      var original = btn.textContent;
+      btn.textContent = '✓';
+      btn.disabled = true;
+      setTimeout(function() { btn.textContent = original; btn.disabled = false; }, 1200);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(showCopied).catch(function() { _fallbackCopy(url, showCopied); });
+    } else {
+      _fallbackCopy(url, showCopied);
+    }
+  }
+
+  function _fallbackCopy(text, onDone) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    if (onDone) onDone();
+  }
+
+  // ---- Column order persistence (drag-and-drop lives in dashboard.html) --
+  // Defined here (not dashboard.html) because these need the table to
+  // exist; dashboard.html calls applyColumnOrder() again after every
+  // auto-refresh swap, since a <script> block injected via .innerHTML
+  // (as the auto-refresh does) never re-executes on its own.
+  var COLUMN_ORDER_KEY = 'swingbot_dashboard_column_order';
+
+  function saveColumnOrder(order) {
+    try { localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order)); } catch (e) {}
+  }
+
+  function loadColumnOrder() {
+    try {
+      var raw = localStorage.getItem(COLUMN_ORDER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function reorderTableColumns(table, targetOrder) {
+    var headRow = table.querySelector('thead tr');
+    var currentIds = Array.from(headRow.children).map(function(th) { return th.dataset.colId; });
+    var indices = targetOrder.map(function(id) { return currentIds.indexOf(id); }).filter(function(i) { return i !== -1; });
+    if (indices.length !== currentIds.length) return;   // malformed/stale saved order -- leave layout untouched
+    table.querySelectorAll('tr').forEach(function(row) {
+      var cells = Array.from(row.children);
+      if (cells.length !== currentIds.length) return;    // guards a header/body cell-count mismatch
+      indices.forEach(function(i) { row.appendChild(cells[i]); });
+    });
+  }
+
+  function applyColumnOrder() {
+    var table = document.getElementById('trades-table');
+    if (!table) return;
+    var saved = loadColumnOrder();
+    if (!saved) return;
+    var headRow = table.querySelector('thead tr');
+    var currentIds = Array.from(headRow.children).map(function(th) { return th.dataset.colId; });
+    // Saved columns first (that still exist in today's markup), then any
+    // column this saved order doesn't know about appended at the end --
+    // keeps a stored order from a previous UI version from silently
+    // dropping a newly-added column off the table.
+    var target = saved.filter(function(id) { return currentIds.indexOf(id) !== -1; });
+    currentIds.forEach(function(id) { if (target.indexOf(id) === -1) target.push(id); });
+    reorderTableColumns(table, target);
+  }
+
+  // Real execution (this script block runs once, at initial page load) --
+  // apply any saved column order first, then the confidence+score default.
+  applyColumnOrder();
+  applyDefaultSort();
+  </script>
+
+  {% else %}
+  <div style="padding: 28px 0; text-align: center; color: #5a6275;">
+    No open trades right now. Run <code>!check</code> in Discord to scan.
+  </div>
+  {% endif %}
+
+  <div class="row" style="margin-top: 18px;">
+    <form method="post" action="{{ url_for('clear_open_trades') }}"
+          onsubmit="return confirm('Clear all {{ stats.open }} open trade(s)? Closed win/loss history is kept.');">
+      <button type="submit" class="danger small" {{ 'disabled' if stats.open == 0 else '' }}>
+        🗑 Clear open trades
+      </button>
+    </form>
+    <span class="muted">Closed win/loss history is never touched.</span>
+  </div>
+</div>

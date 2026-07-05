@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} — Swing Bot Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">📈</span> Swing Bot</div>
+    <nav>
+      {% for key, icon, label, endpoint in nav_items %}
+      <a href="{{ url_for(endpoint) }}" class="{{ 'active' if key == active_page else '' }}">
+        <span class="icon">{{ icon }}</span> {{ label }}
+      </a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-footer">
+      {{ now }}
+      {% if versions %}
+      <div class="version-tag" title="UI: {{ versions.ui }}&#10;Swing bot: {{ versions.bot }}">
+        UI v{{ versions.ui }} &middot; Bot v{{ versions.bot }}
+      </div>
+      {% endif %}
+    </div>
+  </aside>
+  <div class="content">
+    <div class="page-header">
+      <h1>{{ title }}</h1>
+    </div>
+    {% if msg %}
+      <div class="banner {{ 'ok' if ok == '1' else 'err' }}">{{ msg }}</div>
+    {% endif %}
+    {% block body %}{% endblock %}
+  </div>
+</div>
+</body>
+</html>

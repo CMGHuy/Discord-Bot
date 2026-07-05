@@ -1,0 +1,378 @@
+"""
+All environment-driven configuration in one place.
+
+FIELDS below is the single source of truth for every .env-driven
+setting: name, type, default, which module-level global it populates,
+and metadata the admin UI uses to render one input field per parameter
+(section grouping, label, help text, min/max/step for numbers, options
+for selects). Adding a new setting means adding one entry here -- the
+admin UI picks it up automatically, nothing to change on that side.
+
+Hot reload: `reload()` re-reads .env and updates this module's globals
+in place (same module object, so every `config.XXX` reference anywhere
+in the codebase sees the new value on its next read -- no re-import
+needed). The bot process listens for SIGHUP (see bot_core.py) and calls
+reload() when it receives one; the admin UI's "Update settings" button
+saves .env and then asks the bot container to reload via the same
+mechanism used for "Restart bot container" (needs the Docker socket
+mount), just with a signal instead of a full restart.
+
+Two settings can't actually hot-reload their real-world effect no
+matter what:
+  - DISCORD_TOKEN: changing it updates config.TOKEN in memory, but the
+    bot's already-open Discord Gateway connection was made with the old
+    token and won't reconnect using the new one until the process
+    restarts.
+  - ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_PORT: these configure the
+    *admin* process itself, not the bot -- Flask can't rebind its own
+    port live, and the admin UI only re-reads its own credentials at
+    its own startup. Changing these needs the ADMIN container restarted,
+    not the bot.
+Both are flagged via `hot_reloadable=False` in FIELDS below so the UI
+can say so accurately instead of over-promising.
+"""
+import logging
+import os
+from dataclasses import dataclass, field
+from dotenv import load_dotenv
+
+# Explicit path resolution: load .env from the PROJECT ROOT (one level up
+# from this file -- config.py lives at swingbot/config.py, but .env lives
+# next to bot.py/admin_ui.py/docker-compose.yml at the repo root) so
+# `python bot.py` picks up its values no matter where it's launched from.
+#
+# override=True is required here: python-dotenv's default is to NOT
+# overwrite a variable that's already set in the process environment.
+# Without this, a value that got exported into your shell once (or set
+# by whatever launched this process) would silently keep winning over
+# .env forever, even after editing .env. override=True makes .env the
+# actual source of truth every time it's (re)loaded, matching what
+# you'd expect -- both at startup and on every reload() call.
+_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_PACKAGE_DIR)
+ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
+
+log = logging.getLogger("swing-bot.config")
+
+# All runtime state (trades.json, state.json, account.json, watchlist.json)
+# and generated chart images live under the project root, not inside the
+# swingbot/ package -- so they survive `pip install`-style reorganization,
+# are trivial to bind-mount as a single directory in Docker, and don't get
+# bundled if the package is ever packaged up for distribution. Not
+# .env-driven, so not part of FIELDS/reload().
+DATA_DIR = os.path.join(_PROJECT_ROOT, "data")
+EXPORT_DIR = os.path.join(_PROJECT_ROOT, "exports")
+TRADE_CHART_DIR = os.path.join(EXPORT_DIR, "trade_charts")
+LOG_DIR = os.path.join(_PROJECT_ROOT, "logs")
+LOG_FILE = os.path.join(LOG_DIR, "bot.log")
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
+
+
+@dataclass
+class Field:
+    key: str                      # .env variable name
+    attr: str                     # module-level global this populates (config.<attr>)
+    section: str                  # grouping used by the admin UI
+    label: str
+    type: str = "text"            # text | number | float | checkbox | select | password
+    default: str = ""
+    help: str = ""
+    min: float | None = None
+    max: float | None = None
+    step: float | None = None
+    options: list = field(default_factory=list)   # for type="select" -- plain strings or (value, label) tuples
+    sensitive: bool = False        # masked in logs / password input in the UI
+    hot_reloadable: bool = True     # see module docstring
+
+    def __post_init__(self):
+        # Normalize plain-string options to (value, label) tuples so the
+        # UI template only ever has to deal with one shape.
+        self.options = [(o, o) if not isinstance(o, tuple) else o for o in self.options]
+
+
+FIELDS: list[Field] = [
+    # --- Discord connection ---
+    Field("DISCORD_TOKEN", "TOKEN", "Discord Connection", "Bot token",
+          type="password", sensitive=True, hot_reloadable=False,
+          help="From the Discord Developer Portal. Changing this requires a full bot restart -- "
+               "the Gateway connection can't be swapped to a new token live."),
+    Field("DISCORD_CHANNEL_ID", "CHANNEL_ID", "Discord Connection", "Alerts channel ID",
+          help="Channel where new trade alerts are posted."),
+    Field("CLOSED_TRADES_CHANNEL_ID", "CLOSED_TRADES_CHANNEL_ID", "Discord Connection", "Closed-trades channel ID",
+          help="Channel for WIN/LOSS and near-SL/TP notifications. Separate from the alerts channel so results don't get lost among new signals."),
+
+    # --- Scanning & session ---
+    Field("SESSION_START_HOUR", "SESSION_START_HOUR", "Scanning & Session", "Session start hour",
+          type="number", default="8", min=0, max=23, step=1,
+          help="Europe/Berlin, 24h clock. The bot only scans automatically inside this window."),
+    Field("SESSION_END_HOUR", "SESSION_END_HOUR", "Scanning & Session", "Session end hour",
+          type="number", default="23", min=0, max=23, step=1,
+          help="Europe/Berlin, 24h clock. Automatic scanning stops for the day at this hour (exclusive)."),
+    Field("SCAN_INTERVAL_MINUTES", "SCAN_INTERVAL_MINUTES", "Scanning & Session", "Scan interval (minutes)",
+          type="number", default="5", min=1, max=120, step=1,
+          help="Every scan both looks for new trades and checks all open trades for near-close proximity."),
+    Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
+          type="number", default="2", min=1, max=10, step=1,
+          help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
+    Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
+          type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
+          help="DEBUG shows every signal/strategy combo evaluated; INFO shows per-scan progress and trade decisions."),
+
+    # --- Trade filters & risk ---
+    Field("MIN_REWARD_PCT", "MIN_REWARD_PCT", "Trade Filters & Risk", "Min reward %",
+          type="float", default="5.0", min=0, step=0.5,
+          help="Hard filter, enforced exactly as set: a scenario is dropped entirely (not shown, not scored) "
+               "unless its target is at least this far from today's price. No exceptions for a close miss."),
+    Field("MIN_STOP_DISTANCE_PCT", "MIN_STOP_DISTANCE_PCT", "Trade Filters & Risk", "Min stop distance %",
+          type="float", default="2.0", min=0, step=0.5,
+          help="Hard filter, enforced exactly as set: dropped entirely if the stop sits closer than this -- "
+               "too exposed to ordinary daily noise. No exceptions for a close miss."),
+    Field("MAX_STOP_LOSS_PCT", "MAX_STOP_LOSS_PCT", "Trade Filters & Risk", "Max stop-loss %",
+          type="float", default="7.0", min=0, step=0.5,
+          help="Hard filter, enforced exactly as set: dropped entirely if the stop sits further than this from "
+               "entry -- disciplined cut-loss ceiling, keep in the 5-7% range. No exceptions for a close miss."),
+    Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
+          type="float", default="1.5", min=0, step=0.1,
+          help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
+               "clears this bar. No exceptions for a close miss."),
+    Field("CONFLUENCE_DEVIATION_PCT", "CONFLUENCE_DEVIATION_PCT", "Trade Filters & Risk", "Confluence deviation %",
+          type="float", default="5.0", min=0.5, step=0.5,
+          help="How close (as a %) an independent strategy's own predicted level has to land to the scenario's "
+               "actual target/stop price to count as confirming it, for the 'min strategies confirmed' filter "
+               "below. Independent of the (tighter) clustering tolerance levels.py uses internally to merge raw "
+               "levels into one displayed price -- this is a looser, separate pass over EVERY supported "
+               "strategy's own simulated level, counting distinct strategies (not raw sub-levels -- 5 Fibonacci "
+               "ratios only ever count as one 'Fibonacci' vote) within this deviation of the final price."),
+    Field("MIN_TARGET_CONFLUENCE_COUNT", "MIN_TARGET_CONFLUENCE_COUNT", "Trade Filters & Risk", "Min strategies confirmed",
+          type="number", default="1", min=1, max=10, step=1,
+          help="A scenario is dropped -- before its confidence level is even calculated -- unless at least this "
+               "many DISTINCT strategies (EMA, VWAP, Fibonacci, rolling structure, zigzag pivots, Bollinger "
+               "Bands, Donchian Channel, floor pivots, trendlines, Fair Value Gaps -- 10 total) land within "
+               "'Confluence deviation %' of the target/stop price. 1 disables this filter (any single "
+               "confirming strategy is enough). Can also be overridden per-run with `!check <horizon> <min_strategies>`."),
+    Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
+          type="select", default="3", options=["1", "2", "3", "4", "5"],
+          help="Only this level and above are shown as alerts (quality over quantity)."),
+    Field("DEDUP_TOLERANCE_PCT", "DEDUP_TOLERANCE_PCT", "Trade Filters & Risk", "Dedup tolerance %",
+          type="float", default="2.0", min=0, step=0.5,
+          help="Two signals on the same ticker/direction are merged into one alert if entry/SL/TP are all within this % of each other."),
+    Field("NEAR_CLOSE_THRESHOLD_PCT", "NEAR_CLOSE_THRESHOLD_PCT", "Trade Filters & Risk", "Near-close threshold %",
+          type="float", default="2.0", min=0, step=0.5,
+          help="How close price must get to a trade's SL/TP before a near-close warning posts."),
+
+    # --- Data & display ---
+    Field("DEFAULT_HISTORY_PERIOD", "DEFAULT_HISTORY_PERIOD", "Data & Display", "History period",
+          default="10y", help="How much daily history to pull for live scanning, e.g. 10y, 5y, 2y, 1y."),
+    Field("CURRENCY_SYMBOL", "CURRENCY_SYMBOL", "Data & Display", "Fallback currency symbol",
+          type="select", default="€",
+          options=[("€", "EUR (€)"), ("$", "USD ($)"), ("£", "GBP (£)")],
+          help="Used only when a ticker's real trading currency can't be detected."),
+    Field("MARKET_REGIME_TICKER", "MARKET_REGIME_TICKER", "Data & Display", "Market regime benchmark ticker",
+          default="SPY", help="Benchmark index used to gauge the overall market trend."),
+
+    # --- Account (informational sizing defaults) ---
+    Field("ACCOUNT_BALANCE", "ACCOUNT_BALANCE", "Account Defaults", "Account balance",
+          type="float", default="10000", min=0, step=100,
+          help="Seed value the first time data/account.json is created. Edit anytime with !account balance -- not read from .env after that."),
+    Field("RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT", "Account Defaults", "Risk per trade %",
+          type="float", default="1.0", min=0, step=0.1,
+          help="The % of account balance you're willing to lose on a single trade if its stop-loss is hit -- "
+               "a classic position-sizing input (e.g. 1% means a full stop-out only costs 1% of the account). "
+               "This is informational only: seeded into data/account.json and shown by !account, but nothing "
+               "in the live alert/scan pipeline uses it to size a position -- how many shares to actually buy "
+               "is left entirely up to you. Edit anytime with !account risk PCT."),
+    Field("MAX_OPEN_POSITIONS", "MAX_OPEN_POSITIONS", "Account Defaults", "Max open positions",
+          type="number", default="10", min=1, step=1,
+          help="Informational only, same as the two fields above: once this many paper trades are open, "
+               "new alerts still post but the Discord embed shows a position-limit warning."),
+
+    # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
+    Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
+          default="admin", hot_reloadable=False,
+          help="Requires restarting the ADMIN container to take effect, not the bot."),
+    Field("ADMIN_PASSWORD", "ADMIN_PASSWORD", "Admin UI", "Admin password",
+          type="password", default="admin", sensitive=True, hot_reloadable=False,
+          help="Requires restarting the ADMIN container to take effect, not the bot. Change this from the default."),
+    Field("ADMIN_PORT", "ADMIN_PORT", "Admin UI", "Admin UI port",
+          type="number", default="1234", min=1, max=65535, step=1, hot_reloadable=False,
+          help="Requires restarting the ADMIN container (Flask can't rebind its own port live)."),
+    Field("DASHBOARD_REFRESH_SECONDS", "DASHBOARD_REFRESH_SECONDS", "Admin UI", "Dashboard auto-refresh (seconds)",
+          type="number", default="5", min=2, max=300, step=1,
+          help="How often the Dashboard page's open-trades table auto-refreshes while the 'Auto-refresh' "
+               "checkbox is on. Takes effect on your next Dashboard page load -- no restart needed."),
+    Field("LOGS_REFRESH_SECONDS", "LOGS_REFRESH_SECONDS", "Admin UI", "Logs auto-refresh (seconds)",
+          type="number", default="3", min=2, max=300, step=1,
+          help="How often the Logs page auto-refreshes while its own 'Auto-refresh' checkbox is on. "
+               "Takes effect on your next Logs page load -- no restart needed."),
+]
+
+_CASTERS = {
+    "number": lambda v: int(v),
+    "float": lambda v: float(v),
+    "checkbox": lambda v: str(v).lower() == "true",
+}
+
+
+def _cast(f: Field, raw: str):
+    # A couple of "select" fields need a specific underlying type rather
+    # than the raw string the <select> posts back -- handled by attr name
+    # so it doesn't matter whether the field is rendered as select/text/etc.
+    if f.attr == "LOG_LEVEL":
+        return raw.upper()
+    if f.attr == "MIN_ALERT_CONFIDENCE_LEVEL":
+        return int(raw)
+    caster = _CASTERS.get(f.type)
+    return caster(raw) if caster else raw
+
+
+def _apply_env() -> dict:
+    """
+    Reads every FIELDS entry from the current environment (after
+    load_dotenv has populated os.environ) and sets the corresponding
+    module global. Returns {attr: (old_value, new_value)} for anything
+    that actually changed, so reload() can log what happened.
+    """
+    changed = {}
+    g = globals()
+    for f in FIELDS:
+        raw = os.getenv(f.key, f.default)
+        try:
+            new_value = _cast(f, raw)
+        except (ValueError, TypeError):
+            # A malformed value in .env must not leave the global entirely
+            # undefined -- on the very first load (module import time)
+            # there IS no "previous value" to keep, so g.get(f.attr) would
+            # be None and the `continue` below used to skip setting the
+            # attribute at all, leaving any later `config.SOME_ATTR` access
+            # raise AttributeError instead of falling back to the
+            # documented default. Fall back to the field's own default
+            # instead, which is guaranteed well-formed.
+            log.warning("Could not parse %s=%r as %s -- falling back to default %r",
+                        f.key, raw, f.type, f.default)
+            try:
+                new_value = _cast(f, f.default)
+            except (ValueError, TypeError):
+                log.error("Field %s has an invalid default %r; leaving unset", f.key, f.default)
+                continue
+        old_value = g.get(f.attr)
+        g[f.attr] = new_value
+        if old_value != new_value:
+            changed[f.attr] = (old_value, new_value)
+    return changed
+
+
+def _load_dotenv_file() -> tuple:
+    """
+    Returns (loaded, used_canonical_path). Tries the project's own ENV_PATH
+    first; if that file doesn't exist, falls back to python-dotenv's default
+    upward search from the current working directory -- which can find a
+    completely different, unrelated .env file. Callers need to know WHICH
+    happened so startup logging doesn't claim the canonical path was used
+    when it actually wasn't.
+    """
+    if load_dotenv(dotenv_path=ENV_PATH, override=True):
+        return True, True
+    if load_dotenv(override=True):
+        return True, False
+    return False, False
+
+
+_DOTENV_LOADED, _DOTENV_FROM_CANONICAL_PATH = _load_dotenv_file()
+_apply_env()
+_ENV_MTIME: float = os.path.getmtime(ENV_PATH) if os.path.exists(ENV_PATH) else 0.0
+
+
+def reload() -> dict:
+    """
+    Re-reads .env from disk and updates every FIELDS-backed global in
+    place. Returns {attr: (old, new)} for whatever actually changed.
+    Safe to call repeatedly (e.g. on every SIGHUP) -- a no-op env
+    produces an empty dict.
+    """
+    global _DOTENV_LOADED, _DOTENV_FROM_CANONICAL_PATH, _ENV_MTIME
+    _DOTENV_LOADED, _DOTENV_FROM_CANONICAL_PATH = _load_dotenv_file()
+    _ENV_MTIME = os.path.getmtime(ENV_PATH) if os.path.exists(ENV_PATH) else 0.0
+    changed = _apply_env()
+    if changed:
+        log.info("Config reloaded from %s -- %d value(s) changed:", ENV_PATH, len(changed))
+        for attr, (old, new) in changed.items():
+            f = next((f for f in FIELDS if f.attr == attr), None)
+            display_old = "***" if f and f.sensitive else old
+            display_new = "***" if f and f.sensitive else new
+            log.info("  %s: %r -> %r", attr, display_old, display_new)
+    else:
+        log.debug("Config reloaded from %s -- no changes.", ENV_PATH)
+    return changed
+
+
+def auto_reload_if_changed() -> dict:
+    """
+    Checks if .env has been modified on disk since the last load/reload.
+    If so, calls reload() and returns the changed values; otherwise a
+    no-op that returns {}. Cheap enough to call at the start of every
+    scan -- the mtime check is a single stat() call with no file I/O
+    unless something actually changed.
+    """
+    if not os.path.exists(ENV_PATH):
+        return {}
+    try:
+        current_mtime = os.path.getmtime(ENV_PATH)
+    except OSError:
+        return {}
+    if current_mtime <= _ENV_MTIME:
+        return {}
+    log.info(".env modified on disk (mtime changed) -- auto-reloading config before this scan")
+    return reload()
+
+
+def _mask(value: str | None) -> str:
+    """Shows just enough of a secret to confirm it loaded, never the full value."""
+    if not value:
+        return "NOT SET"
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}...{value[-4:]} ({len(value)} chars)"
+
+
+def log_startup_config() -> None:
+    """
+    Logs exactly what config.py picked up from the environment, so a
+    misconfigured or missing .env fails loudly at startup instead of
+    silently falling back to defaults. Call this once, right after
+    `import config`, before the bot connects to Discord.
+    """
+    if _DOTENV_LOADED and _DOTENV_FROM_CANONICAL_PATH:
+        log.info("Loaded .env from %s", ENV_PATH)
+    elif _DOTENV_LOADED:
+        log.warning(
+            "No .env found at the expected path %s -- loaded a DIFFERENT .env "
+            "found via the current working directory instead. Settings below "
+            "may not be what you expect; consider moving your .env to %s.",
+            ENV_PATH, ENV_PATH,
+        )
+    else:
+        log.warning(
+            "No .env file found at %s (or the current directory) -- "
+            "falling back to whatever is already in the process environment "
+            "and the hardcoded defaults below.", ENV_PATH
+        )
+
+    log.info("---- Configuration in effect ----")
+    g = globals()
+    for f in FIELDS:
+        value = g.get(f.attr)
+        log.info("%s=%s", f.key, _mask(value) if f.sensitive else value)
+    log.info("----------------------------------")
+
+    # The admin web UI has no other authentication layer -- if it's still on
+    # the documented default admin/admin (unlike DISCORD_TOKEN, there's no
+    # SystemExit gate for this since the bot itself doesn't need it to run),
+    # make sure that's loud and impossible to miss in the logs rather than a
+    # silent security footgun.
+    if g.get("ADMIN_USERNAME") == "admin" and g.get("ADMIN_PASSWORD") == "admin":
+        log.warning(
+            "SECURITY: the admin UI is using the DEFAULT credentials (admin/admin). "
+            "Anyone who can reach it can view and control the bot. Set ADMIN_USERNAME "
+            "and ADMIN_PASSWORD in .env before exposing it beyond localhost."
+        )

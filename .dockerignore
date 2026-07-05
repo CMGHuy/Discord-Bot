@@ -1,0 +1,28 @@
+# Runtime/state files -- these live on the host via the bind mount in
+# docker-compose.yml, not baked into the image.
+data/
+logs/
+.env
+.env.bak
+.env.example
+exports/
+
+# Python/dev cruft
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.git/
+.gitignore
+*.egg-info/
+
+# Dev tooling -- not needed inside the container
+.vscode/
+.claude/
+*.bak
+
+# Docker files themselves don't belong in the image context
+Dockerfile
+docker-compose.yml
+.dockerignore

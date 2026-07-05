@@ -1,0 +1,58 @@
+# nginx reverse proxy for the swing-bot admin UI.
+#
+# This puts nginx in front of the admin container (port 1234) so you can:
+#   - Serve over HTTPS with a real TLS certificate (via certbot / Let's Encrypt)
+#   - Keep port 1234 closed on ufw and expose only 80/443
+#
+# Setup (on the server, as root):
+#   apt install nginx certbot python3-certbot-nginx
+#   cp /opt/swing-bot/deploy/nginx.conf.example /etc/nginx/sites-available/swing-bot
+#   # Edit the server_name line below with your actual domain
+#   ln -s /etc/nginx/sites-available/swing-bot /etc/nginx/sites-enabled/
+#   nginx -t && systemctl reload nginx
+#   certbot --nginx -d your.domain.com
+#
+# Without a domain (IP-only, self-signed TLS):
+#   openssl req -x509 -nodes -newkey rsa:2048 \
+#     -keyout /etc/ssl/private/swing-bot.key \
+#     -out /etc/ssl/certs/swing-bot.crt -days 365
+#   # Then use the ssl_certificate lines in the HTTPS block below
+
+server {
+    listen 80;
+    server_name your.domain.com;   # <-- replace with your domain or IP
+
+    # Let certbot manage this for Let's Encrypt:
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name your.domain.com;   # <-- same as above
+
+    # Let's Encrypt (certbot fills these in automatically):
+    ssl_certificate     /etc/letsencrypt/live/your.domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your.domain.com/privkey.pem;
+
+    # Hardened TLS
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+
+    # Proxy to the admin container
+    location / {
+        proxy_pass         http://127.0.0.1:1234;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}

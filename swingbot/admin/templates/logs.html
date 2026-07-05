@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="log-toolbar">
+  <label class="muted" style="display:flex;align-items:center;gap:6px;">
+    Show last
+    <select id="lines-select" onchange="location.href='{{ url_for('logs_page') }}?lines=' + this.value"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:13px;">
+      {% for n in [100, 500, 1000, 2000, 5000] %}
+      <option value="{{ n }}" {{ 'selected' if lines == n else '' }}>{{ n }} lines</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="muted" style="display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="auto-refresh" checked> Auto-refresh ({{ logs_refresh_seconds }}s)
+  </label>
+  <button type="button" class="secondary small" onclick="refreshLogs()">&#8635; Refresh</button>
+  <a href="{{ url_for('logs_raw') }}?lines={{ lines }}" class="btn secondary small" target="_blank">&#x2197; Raw</a>
+  <form method="post" action="{{ url_for('logs_clear') }}" style="margin:0;"
+        onsubmit="return confirm('Clear the entire log file? This cannot be undone.');">
+    <button type="submit" class="danger small">&#128465; Clear log</button>
+  </form>
+  <span class="muted" style="font-size:11px; margin-left:auto;">{{ log_path }}</span>
+</div>
+
+<div class="log-filter-row" style="margin-bottom:12px;display:flex;gap:16px;font-size:12px;flex-wrap:wrap;">
+  <label class="log-level-info" style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+    <input type="checkbox" class="log-filter-cb" data-level="INFO" checked> &#9632; INFO
+  </label>
+  <label class="log-level-warning" style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+    <input type="checkbox" class="log-filter-cb" data-level="WARNING" checked> &#9632; WARNING
+  </label>
+  <label class="log-level-error" style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+    <input type="checkbox" class="log-filter-cb" data-level="ERROR" checked> &#9632; ERROR
+  </label>
+  <label class="log-level-debug" style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+    <input type="checkbox" class="log-filter-cb" data-level="DEBUG" checked> &#9632; DEBUG
+  </label>
+  <span class="muted" id="log-filter-hidden-count" style="font-size:11px;"></span>
+</div>
+
+<pre id="log-box" class="log-box">{{ log_content }}</pre>
+
+<script>
+  // Escapes HTML special characters so a log line's own content can never
+  // be interpreted as markup once wrapped in a <span> below.
+  function _escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Wraps each WHOLE line (not just the [LEVEL] marker) in a
+  // <span class="log-line log-line-LEVEL"> so applyLogFilters() below can
+  // hide/show entire lines by level, not just recolor a substring. Lines
+  // that don't contain a recognized [LEVEL] marker (continuation lines of
+  // a multi-line log message, tracebacks, etc.) default to INFO so they
+  // stay visible whenever INFO is checked, rather than disappearing.
+  function colorizeLog(box) {
+    var raw = box.textContent;
+    var lines = raw.split('\n');
+    var html = lines.map(function(line) {
+      var level = 'INFO';
+      if (line.indexOf('[ERROR]') !== -1) level = 'ERROR';
+      else if (line.indexOf('[WARNING]') !== -1) level = 'WARNING';
+      else if (line.indexOf('[DEBUG]') !== -1) level = 'DEBUG';
+      else if (line.indexOf('[INFO]') !== -1) level = 'INFO';
+      var escaped = _escapeHtml(line)
+        .replace(/\[ERROR\]/g,   '<span class="log-level-error">[ERROR]</span>')
+        .replace(/\[WARNING\]/g, '<span class="log-level-warning">[WARNING]</span>')
+        .replace(/\[INFO\]/g,    '<span class="log-level-info">[INFO]</span>')
+        .replace(/\[DEBUG\]/g,   '<span class="log-level-debug">[DEBUG]</span>');
+      return '<span class="log-line log-line-' + level + '">' + escaped + '</span>';
+    }).join('');   // no '\n' between spans -- .log-line is display:block (see style.css),
+                    // so the line break comes from the block box itself, not a stray text
+                    // node that would otherwise leave a blank line when a span is hidden.
+    box.innerHTML = html;
+    applyLogFilters();
+  }
+
+  function applyLogFilters() {
+    var activeLevels = {};
+    var hiddenCount = 0;
+    document.querySelectorAll('.log-filter-cb').forEach(function(cb) {
+      activeLevels[cb.dataset.level] = cb.checked;
+    });
+    document.querySelectorAll('#log-box .log-line').forEach(function(el) {
+      var level = el.className.replace('log-line ', '').replace('log-line-', '');
+      var show = activeLevels[level] !== false;
+      el.style.display = show ? '' : 'none';
+      if (!show) hiddenCount++;
+    });
+    var counter = document.getElementById('log-filter-hidden-count');
+    counter.textContent = hiddenCount > 0 ? hiddenCount + ' line(s) hidden by filter' : '';
+  }
+  document.querySelectorAll('.log-filter-cb').forEach(function(cb) {
+    cb.addEventListener('change', applyLogFilters);
+  });
+
+  var logBox = document.getElementById('log-box');
+  colorizeLog(logBox);
+  logBox.scrollTop = logBox.scrollHeight;
+
+  function refreshLogs() {
+    var linesEl = document.getElementById('lines-select');
+    fetch('{{ url_for("logs_raw") }}?lines=' + linesEl.value, { credentials: 'same-origin' })
+      .then(function(r) { return r.text(); })
+      .then(function(text) {
+        var atBottom = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 60;
+        logBox.textContent = text;
+        colorizeLog(logBox);
+        if (atBottom) { logBox.scrollTop = logBox.scrollHeight; }
+      })
+      .catch(function() {});
+  }
+  setInterval(function() {
+    if (document.getElementById('auto-refresh').checked) { refreshLogs(); }
+  }, {{ (logs_refresh_seconds * 1000) | int }});
+</script>
+{% endblock %}

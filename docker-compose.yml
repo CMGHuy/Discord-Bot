@@ -1,0 +1,70 @@
+# Two services built from the same image (see Dockerfile):
+#   - bot:   runs the Discord bot itself (python bot.py -> swingbot/)
+#   - admin: a small authenticated web UI (python admin_ui.py ->
+#            swingbot/admin/app.py) to clear all open paper trades,
+#            view/edit .env, and inspect any trade in full detail --
+#            without needing shell access to the container.
+#
+# Both services bind-mount this whole project directory to /app, so the
+# swingbot/ source, data/ (trades.json, state.json, account.json,
+# watchlist.json), .env, and exports/ are all shared between them and
+# persisted on the host -- no separate data volume needed.
+#
+# Quick start:
+#   1. cp .env.example .env   and fill in DISCORD_TOKEN, DISCORD_CHANNEL_ID, etc.
+#   2. Set ADMIN_USERNAME / ADMIN_PASSWORD below (or export them in your
+#      shell) -- do NOT leave the defaults in place.
+#   3. docker compose up -d --build
+#   4. Bot logs:   docker compose logs -f bot
+#      Admin UI:   http://localhost:1234  (or your server's address)
+#
+# After editing .env from the admin UI, restart the bot to pick up the
+# change: click "Restart bot container" in the UI (requires the Docker
+# socket mount below), or run `docker compose restart bot`.
+
+services:
+  bot:
+    build: .
+    image: swing-bot:latest
+    container_name: swing-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    # Chart generation (matplotlib/mplfinance) is CPU-only and headless;
+    # no GPU or display needed.
+
+  admin:
+    # No 'build:' here -- reuses the image the bot service just built.
+    # Without this, docker compose up --build would compile everything twice
+    # (identical layers, wasted time). The bot service's image: tag ensures
+    # both services share the same already-built layer cache.
+    image: swing-bot:latest
+    container_name: swing-bot-admin
+    restart: unless-stopped
+    command: ["python", "admin_ui.py"]
+    env_file:
+      - .env
+    environment:
+      # Change these -- the defaults in swingbot/admin/app.py are not
+      # safe to leave in place if this port is reachable by anyone but you.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_PORT: ${ADMIN_PORT:-1234}
+      BOT_CONTAINER_NAME: swing-bot
+    volumes:
+      - .:/app
+      # Optional: lets the admin UI's "Restart bot container" button
+      # actually restart the bot service via the Docker API. Remove this
+      # line if you'd rather not grant the admin container access to the
+      # host's Docker socket -- the rest of the UI (clear open trades,
+      # edit .env, trade detail) works fine without it; you'd just
+      # restart the bot yourself with `docker compose restart bot` after
+      # saving .env.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${ADMIN_PORT:-1234}:${ADMIN_PORT:-1234}"
+    depends_on:
+      - bot
+

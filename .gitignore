@@ -1,0 +1,9 @@
+state.json
+trades.json
+.env
+.env.bak
+__pycache__/
+exports/
+market_data/
+.vscode/
+logs/

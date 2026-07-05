@@ -1,0 +1,55 @@
+name: Deploy to Hetzner
+
+# Runs on every push to main, plus lets you trigger a deploy manually
+# from the Actions tab (e.g. to re-deploy without a new commit, or to
+# pick a different branch/tag via workflow_dispatch's ref selector).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  # Fails fast, in CI, before ever touching the server, if the codebase
+  # doesn't even import cleanly -- catches an accidental syntax error or
+  # a forgotten dependency in requirements.txt without leaving the
+  # production bot mid-restart on a broken build.
+  sanity-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import every module (no Discord token needed for this)
+        run: |
+          python -c "
+          from swingbot import config
+          from swingbot.core import (levels, confidence, volatility, strategy, indicators,
+                                      trade_plan, account, backtest, data, data_store, events,
+                                      explain, export_data, market_events, performance, regime,
+                                      state, ticker_utils, trade_chart, watchlist, scan_engine)
+          import swingbot.bot_core
+          from swingbot.commands import scanning, watchlist as wl, info, trades, backtest as bt, account as acct, data as dc
+          from swingbot.admin import app
+          print('All modules import cleanly.')
+          "
+
+  deploy:
+    needs: sanity-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            /opt/swing-bot/deploy/deploy.sh

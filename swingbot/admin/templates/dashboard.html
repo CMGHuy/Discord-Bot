@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="row" style="margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+  <label class="muted" style="display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="auto-refresh" checked> Auto-refresh every {{ dashboard_refresh_seconds }}s
+  </label>
+  <button type="button" class="secondary small" onclick="refreshDashboard()">&#8635; Refresh now</button>
+  <span class="muted" id="refresh-status" style="font-size:12px;"></span>
+
+  <!-- Bot liveness indicator: green = bot process active, red = offline/hung -->
+  <span style="display:flex; align-items:center; gap:7px; margin-left:4px;" title="" id="bot-status-wrap">
+    <span id="bot-status-dot" class="trade-status-dot"
+          style="--status-color: #5a6275; --blink-duration: 2.2s;"></span>
+    <span id="bot-status-label" class="muted" style="font-size:12px;">Bot: checking…</span>
+  </span>
+
+  <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <span id="scan-pause-badge" class="pill" style="display:none;"></span>
+    <form method="post" id="pause-resume-form" style="margin:0;"
+          onsubmit="return confirm(this.action.endsWith('/scan/pause') ? 'Pause automatic scanning? Manual !check and \"Run !check now\" will still work.' : 'Resume automatic scanning?');">
+      <button type="submit" class="secondary small" id="pause-resume-btn">…</button>
+    </form>
+    <form method="post" action="{{ url_for('trigger_scan') }}" style="margin:0;">
+      <button type="submit" class="small" id="trigger-btn" title="Queues a !check scan — the bot will pick it up within 30 seconds">
+        🔍 Run !check now
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('stop_scan') }}" style="margin:0;"
+          onsubmit="return confirm('Stop the scan currently running?');">
+      <button type="submit" class="danger small" id="stop-btn" disabled
+              title="Stop the scan currently in progress (only enabled while one is running)">
+        🛑 Stop scan
+      </button>
+    </form>
+    <span id="trigger-status" class="muted" style="font-size:12px;"></span>
+    <a href="{{ url_for('export_trades_csv') }}" class="btn secondary small">&#11015; Export CSV</a>
+  </div>
+</div>
+
+<div style="margin-bottom:16px; padding:10px 16px; background:#0f1219; border:1px solid #1f2330;
+            border-left: 3px solid #2558c9; border-radius:8px; font-size:12.5px; color:#7a8299; line-height:1.5;">
+  <strong style="color:#9aa3b8;">What appears here:</strong>
+  Only trades that meet <em>every</em> configured requirement (min reward, stop distance, risk:reward,
+  min strategies confirmed, min confidence) are logged here as paper trades.
+  Trade plans shown by <code>!check</code> that don't clear all requirements appear in Discord
+  but are <strong>not</strong> logged &mdash; they&rsquo;re marked in bold red in the Discord embed.
+  The automatic background scan only ever posts and logs fully-qualifying setups.
+</div>
+
+<div id="dashboard-fragment">{{ fragment | safe }}</div>
+<script>
+  // Basic-Auth credentials are cached by the browser per-origin.
+  // We encode them ourselves here so the fetch() request is never
+  // rejected with a silent 401 (which the catch() would swallow).
+  var _authHeader = null;
+  (function() {
+    // Try to parse credentials from the URL if the user navigated here
+    // with them in the address bar (unlikely with Basic Auth dialogs, but
+    // a useful fallback). Prompt-dialog credentials are stored by the
+    // browser -- XMLHttpRequest always re-sends them; fetch() with
+    // credentials:'include' does too in most browsers for same-origin.
+    _authHeader = 'same-origin';
+  })();
+
+  function refreshDashboard() {
+    fetch('{{ url_for("dashboard_fragment") }}', { credentials: 'include' })
+      .then(function(r) {
+        if (r.status === 401) {
+          // Auth expired -- reload the page so the browser re-prompts.
+          window.location.reload();
+          return null;
+        }
+        return r.text();
+      })
+      .then(function(html) {
+        if (!html) return;
+        document.getElementById('dashboard-fragment').innerHTML = html;
+        document.getElementById('refresh-status').textContent =
+          'Updated ' + new Date().toLocaleTimeString();
+        // The fragment's own <script> block (which defines applyColumnOrder(),
+        // applyDefaultSort(), etc. and calls them once) does NOT re-execute when
+        // injected via .innerHTML like this -- that's a standard browser
+        // restriction, not a bug -- so the saved column order has to be
+        // reapplied explicitly here, every refresh, from this OUTER script
+        // (a real, already-running function, so it always fires normally).
+        if (typeof applyColumnOrder === 'function') { applyColumnOrder(); }
+      })
+      .catch(function() {});
+  }
+  setInterval(function() {
+    if (document.getElementById('auto-refresh').checked) { refreshDashboard(); }
+  }, {{ (dashboard_refresh_seconds * 1000) | int }});
+
+  // ---- Drag-and-drop column reordering ------------------------------------
+  // Delegated on the OUTER #dashboard-fragment container (which itself is
+  // never replaced, only its contents), so these listeners keep working
+  // across every auto-refresh without needing to be re-attached -- unlike a
+  // handler bound directly to a <th>, which would be destroyed and lost the
+  // moment that element is replaced by a fresh fragment render.
+  (function() {
+    var container = document.getElementById('dashboard-fragment');
+    var dragSrcColId = null;
+
+    container.addEventListener('dragstart', function(e) {
+      var th = e.target.closest('th[data-col-id]');
+      if (!th) return;
+      dragSrcColId = th.dataset.colId;
+      e.dataTransfer.effectAllowed = 'move';
+      th.classList.add('dragging-col');
+    });
+
+    container.addEventListener('dragover', function(e) {
+      if (!dragSrcColId) return;
+      var th = e.target.closest('th[data-col-id]');
+      if (!th) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      th.classList.add('drop-target-col');
+    });
+
+    container.addEventListener('dragleave', function(e) {
+      var th = e.target.closest('th[data-col-id]');
+      if (th) th.classList.remove('drop-target-col');
+    });
+
+    container.addEventListener('drop', function(e) {
+      var th = e.target.closest('th[data-col-id]');
+      if (th) th.classList.remove('drop-target-col');
+      if (!th || !dragSrcColId) return;
+      e.preventDefault();
+      var targetColId = th.dataset.colId;
+      if (targetColId === dragSrcColId) return;
+      var table = document.getElementById('trades-table');
+      if (!table || typeof reorderTableColumns !== 'function') return;
+      var headRow = table.querySelector('thead tr');
+      var order = Array.from(headRow.children).map(function(el) { return el.dataset.colId; });
+      var fromIdx = order.indexOf(dragSrcColId);
+      var toIdx = order.indexOf(targetColId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, dragSrcColId);
+      reorderTableColumns(table, order);
+      if (typeof saveColumnOrder === 'function') { saveColumnOrder(order); }
+    });
+
+    container.addEventListener('dragend', function(e) {
+      var th = e.target.closest('th[data-col-id]');
+      if (th) th.classList.remove('dragging-col');
+      container.querySelectorAll('.drop-target-col').forEach(function(el) {
+        el.classList.remove('drop-target-col');
+      });
+      dragSrcColId = null;
+    });
+  })();
+
+  function refreshScanStatus() {
+    fetch('{{ url_for("scan_status") }}', { credentials: 'include' })
+      .then(function(r) { return r.status === 401 ? null : r.json(); })
+      .then(function(data) {
+        if (!data) return;
+        var btn = document.getElementById('pause-resume-btn');
+        var form = document.getElementById('pause-resume-form');
+        var badge = document.getElementById('scan-pause-badge');
+        if (data.paused) {
+          btn.textContent = '▶ Resume scanning';
+          btn.title = 'Resume the automatic background scan loop';
+          form.action = '{{ url_for("resume_scan") }}';
+          badge.style.display = 'inline-block';
+          badge.textContent = '⏸ Paused';
+          badge.style.color = '#e2b25a';
+          badge.style.borderColor = '#e2b25a';
+        } else {
+          btn.textContent = '⏸ Pause scanning';
+          btn.title = 'Pause the automatic background scan loop (manual !check still works)';
+          form.action = '{{ url_for("pause_scan") }}';
+          badge.style.display = 'none';
+        }
+        // "Stop scan" only makes sense -- and is only enabled -- while a
+        // scan is actually in progress right now.
+        document.getElementById('stop-btn').disabled = !data.running;
+
+        // ---- Bot liveness indicator ----------------------------------------
+        var dot   = document.getElementById('bot-status-dot');
+        var label = document.getElementById('bot-status-label');
+        var wrap  = document.getElementById('bot-status-wrap');
+        if (dot && label) {
+          if (data.bot_alive) {
+            var statusParts = ['Bot: 🟢 active'];
+            if (data.bot_session_active === false) { statusParts = ['Bot: 🟡 online (off-hours)']; }
+            if (data.bot_scan_paused)              { statusParts = ['Bot: ⏸ paused']; }
+            var lastSeen = data.bot_last_seen
+              ? ' · last seen ' + new Date(data.bot_last_seen).toLocaleTimeString()
+              : '';
+            dot.style.setProperty('--status-color', data.bot_scan_paused ? '#e2b25a'
+                                   : data.bot_session_active ? '#26a69a' : '#6ea8fe');
+            dot.style.setProperty('--blink-duration', '2.2s');
+            label.textContent = statusParts[0] + lastSeen;
+            if (wrap) wrap.title = 'Bot process is alive' + lastSeen;
+          } else if (data.bot_last_seen) {
+            // Heartbeat file exists but is stale — bot has gone quiet.
+            var ago = Math.round((Date.now() - new Date(data.bot_last_seen).getTime()) / 1000);
+            var agoStr = ago < 120 ? ago + 's ago' : Math.round(ago / 60) + 'm ago';
+            dot.style.setProperty('--status-color', '#ef5350');
+            dot.style.setProperty('--blink-duration', '0.8s');
+            label.textContent = 'Bot: 🔴 offline (last seen ' + agoStr + ')';
+            if (wrap) wrap.title = 'Bot process has not responded in over ' + agoStr;
+          } else {
+            // No heartbeat file at all — bot has never written one (first run,
+            // or file deleted) — show neutral grey rather than alarming red.
+            dot.style.setProperty('--status-color', '#5a6275');
+            dot.style.setProperty('--blink-duration', '2.2s');
+            label.textContent = 'Bot: status unknown';
+            if (wrap) wrap.title = 'No heartbeat file found — bot may not be running yet';
+          }
+        }
+      })
+      .catch(function() {});
+  }
+  refreshScanStatus();
+  setInterval(refreshScanStatus, 5000);
+</script>
+{% endblock %}

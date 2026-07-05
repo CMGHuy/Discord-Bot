@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="settings-toolbar">
+  <input id="settings-filter" type="text" placeholder="Search settings by name or description…"
+         oninput="filterSettings()" autocomplete="off">
+  <span class="muted" style="font-size:12px;">
+    <span class="changed-dot" style="position:static;"></span> = changed from default
+  </span>
+</div>
+
+<form method="post" action="{{ url_for('save_settings') }}" id="settings-form">
+  {% for section, fields in fields_by_section %}
+  {% set meta = section_meta.get(section, ('⚙️', '')) %}
+  <div class="settings-card" data-section-card>
+    <div class="settings-card-header">
+      <span class="section-icon">{{ meta[0] }}</span>
+      <h3>{{ section }}</h3>
+      {% if meta[1] %}<span class="section-desc">{{ meta[1] }}</span>{% endif %}
+      <div class="badge-row">
+        <span class="field-count-badge">{{ fields|length }} field{{ 's' if fields|length != 1 else '' }}</span>
+      </div>
+    </div>
+    <div class="field-grid">
+      {% for f in fields %}
+      {% set current = field_value(f) %}
+      {% if f.type == 'checkbox' %}
+        {% set is_default = (current == ((f.default|string|lower) == 'true')) %}
+      {% else %}
+        {% set is_default = ((current|string) == (f.default|string) or (current in (None, '') and f.default in (None, ''))) %}
+      {% endif %}
+      <div class="field" data-field-search="{{ (f.label ~ ' ' ~ f.key ~ ' ' ~ f.help) | lower }}">
+        <div class="field-label-row">
+          {% if not is_default %}<span class="changed-dot" title="Changed from default ({{ f.default }})"></span>{% endif %}
+          <label for="fld_{{ f.key }}">{{ f.label }}</label>
+          {% if f.default is not none and f.default != '' %}<span class="default-badge" title="Default value">{{ f.default }}</span>{% endif %}
+          {% if not f.hot_reloadable %}<span class="restart-badge" title="Requires container restart to take effect">↺ restart</span>{% endif %}
+        </div>
+        <div class="field-desc">{{ f.help if f.help else 'Env var: ' ~ f.key }}</div>
+
+        {% if f.type == 'checkbox' %}
+        <div class="checkbox-wrap">
+          <input type="checkbox" id="fld_{{ f.key }}" name="{{ f.key }}" {{ 'checked' if current else '' }}>
+          <label for="fld_{{ f.key }}" class="checkbox-label">Enabled</label>
+        </div>
+        {% elif f.type == 'select' %}
+        <select id="fld_{{ f.key }}" name="{{ f.key }}"
+                title="{{ f.key }}{% if f.default %} — default: {{ f.default }}{% endif %}">
+          {% for value, label in f.options %}
+          <option value="{{ value }}" {{ 'selected' if (current|string) == value else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        {% elif f.type == 'password' %}
+        <input type="password" id="fld_{{ f.key }}" name="{{ f.key }}" value="{{ current }}"
+               autocomplete="off" placeholder="{{ 'blank = keep current' if current else 'not set' }}"
+               title="{{ f.key }}">
+        {% elif f.type in ('number', 'float') %}
+        <input type="number" id="fld_{{ f.key }}" name="{{ f.key }}" value="{{ current }}"
+               title="{{ f.key }}{% if f.default %} — default: {{ f.default }}{% endif %}"
+               {% if f.min is not none %}min="{{ f.min }}"{% endif %}
+               {% if f.max is not none %}max="{{ f.max }}"{% endif %}
+               {% if f.step is not none %}step="{{ f.step }}"{% endif %}
+               placeholder="{{ f.default if f.default else '' }}">
+        {% else %}
+        <input type="text" id="fld_{{ f.key }}" name="{{ f.key }}" value="{{ current }}"
+               autocomplete="off"
+               title="{{ f.key }}{% if f.default %} — default: {{ f.default }}{% endif %}"
+               placeholder="{{ f.default if f.default else '' }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="save-bar">
+    <button type="submit">💾 Save &amp; reload bot</button>
+    <span class="save-hint">Saves to .env and hot-reloads the bot — no restart needed<br>except for fields marked <span class="restart-badge">↺ restart</span> (token, credentials, port).</span>
+  </div>
+</form>
+
+<div class="card" style="margin-top: 24px;">
+  <p class="card-title">Bot control</p>
+  <div class="row">
+    <form method="post" action="{{ url_for('restart_bot') }}"
+          onsubmit="return confirm('Restart the bot container now? It will be offline for a few seconds.');">
+      <button type="submit" class="warning" {{ '' if restart_available else 'disabled' }}>
+        🔄 Restart bot container
+      </button>
+    </form>
+    {% if not restart_available %}
+    <span class="muted">Docker socket not mounted — restart manually with <code>docker compose restart bot</code>.</span>
+    {% else %}
+    <span class="muted">Full restart. Use for token/credential changes or when hot reload isn't taking effect.</span>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  function filterSettings() {
+    var q = document.getElementById('settings-filter').value.toLowerCase().trim();
+    document.querySelectorAll('[data-section-card]').forEach(function(card) {
+      var anyVisible = false;
+      card.querySelectorAll('[data-field-search]').forEach(function(field) {
+        var match = !q || field.dataset.fieldSearch.includes(q);
+        field.style.display = match ? '' : 'none';
+        if (match) anyVisible = true;
+      });
+      card.style.display = anyVisible ? '' : 'none';
+    });
+  }
+</script>
+{% endblock %}
