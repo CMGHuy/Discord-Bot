@@ -36,6 +36,56 @@ class RegimeResult:
     label: str
 
 
+_HTF_EMA_PERIOD = {
+    # Short horizons: 50-day EMA as a weekly / intermediate-term bias proxy
+    "2w": 50, "4w": 50, "2m": 50,
+    # Longer horizons: 200-day EMA as a monthly / long-term bias proxy
+    "3m": 200, "6m": 200,
+}
+
+
+def get_htf_bias(df: pd.DataFrame, horizon_key: str) -> dict | None:
+    """
+    Per-ticker higher-timeframe (HTF) bias from the daily data already
+    fetched during the crawl phase -- no extra API calls needed.
+
+    Uses longer-period EMAs on the daily bars as a timeframe proxy:
+      2w / 4w / 2m horizons → 50-day EMA (weekly trend proxy)
+      3m / 6m horizons       → 200-day EMA (monthly trend proxy)
+
+    Returns a dict:
+        {
+            "bias"        : "bullish" | "bearish",
+            "ema_period"  : int,
+            "close"       : float,
+            "ema_value"   : float,
+            "pct_above_ema": float,
+        }
+    or None when HTF_CONFLUENCE_ENABLED is False, the horizon isn't
+    mapped (unsupported key), or not enough bars exist for the EMA.
+    """
+    if not app_config.HTF_CONFLUENCE_ENABLED:
+        return None
+    period = _HTF_EMA_PERIOD.get(horizon_key)
+    if period is None:
+        return None
+    if len(df) < period + 10:
+        return None
+
+    ema_series = ema(df["Close"], period)
+    last_close = float(df["Close"].iloc[-1])
+    last_ema = float(ema_series.iloc[-1])
+    pct_above = (last_close - last_ema) / last_ema * 100
+
+    return {
+        "bias": "bullish" if last_close > last_ema else "bearish",
+        "ema_period": period,
+        "close": round(last_close, 4),
+        "ema_value": round(last_ema, 4),
+        "pct_above_ema": round(pct_above, 2),
+    }
+
+
 def get_market_regime(df: pd.DataFrame, ticker: str = None) -> RegimeResult:
     ticker = ticker or app_config.MARKET_REGIME_TICKER
     if len(df) < 220:

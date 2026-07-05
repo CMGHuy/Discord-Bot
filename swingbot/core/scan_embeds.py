@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import discord
 
 from swingbot import config
+from .account import compute_position_size, load_account_config
 from .data import get_currency_symbol, get_daily_data
 from .strategy import HORIZONS
 from .charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
@@ -177,12 +178,32 @@ def _build_trade_plan_table(item) -> str:
     rows.append(("Target confirmed by", _row_value("min_confluence", _sources_str(plan.target_sources))))
     rows.append(("Stop confirmed by", _sources_str(plan.stop_sources)))
 
+    # Position sizing -- uses the live account config so !account changes
+    # are reflected immediately without a bot restart.
+    account_cfg = load_account_config()
+    pos = compute_position_size(plan.entry, plan.stop_loss, account_cfg)
+    if pos and pos["balance"] > 0:
+        cur = config.CURRENCY_SYMBOL
+        cap_note = f"  [capped at {pos['max_position_pct']:.0f}% of account]" if pos["capped"] else ""
+        rows.append((
+            "Suggested size",
+            f"~{pos['shares']:.1f} shares  "
+            f"({cur}{pos['position_value']:,.0f} deployed, "
+            f"{cur}{pos['risk_amount']:,.0f} at risk @ {pos['risk_pct']}% rule){cap_note}",
+        ))
+
     key_width = max(len(k) for k, _ in rows)
     lines = [f"{k.ljust(key_width)} : {v}" for k, v in rows]
     return "```ansi\n" + "\n".join(lines) + "\n```"
 
 
-def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename) -> discord.Embed:
+def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
+                htf_info: dict = None) -> discord.Embed:
+    """
+    htf_info, when provided, is a dict from scan_engine.py's HTF check:
+        {"htf_bias": "bullish"|"bearish", "counter_trend": bool, "ema_period": int, "horizon_key": str}
+    Counter-trend setups get a ⚠️ warning field added to the embed.
+    """
     result, plan, conf = item.result, item.plan, item.conf
     is_bull = result.trend == "bullish"
     direction = "LONG (buy)" if is_bull else "SHORT (sell)"
@@ -216,6 +237,21 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             name="⚠️ Not yet a clean setup",
             value=f"Doesn't meet: {unmet}. Shown for visibility -- see the trade plan below for exactly why "
                   "(marked in bold red); not logged as a paper trade and won't auto-alert until it clears these.",
+            inline=False,
+        )
+
+    if htf_info and htf_info.get("counter_trend"):
+        ema_p = htf_info["ema_period"]
+        htf_bias_word = htf_info["htf_bias"].capitalize()
+        signal_word = "Bullish" if is_bull else "Bearish"
+        embed.add_field(
+            name="📉 Counter-trend signal",
+            value=(
+                f"{signal_word} setup, but this ticker's own {ema_p}-day EMA trend is **{htf_bias_word}** "
+                f"(higher-timeframe bias for {htf_info['horizon_key']} horizon). "
+                f"Counter-trend setups have a lower base probability of following through -- "
+                f"confidence was reduced by {config.HTF_COUNTER_TREND_PENALTY} points to reflect this."
+            ),
             inline=False,
         )
 

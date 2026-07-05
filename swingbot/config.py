@@ -186,6 +186,62 @@ FIELDS: list[Field] = [
           type="number", default="10", min=1, step=1,
           help="Informational only, same as the two fields above: once this many paper trades are open, "
                "new alerts still post but the Discord embed shows a position-limit warning."),
+    Field("MAX_POSITION_SIZE_PCT", "MAX_POSITION_SIZE_PCT", "Account Defaults", "Max position size % of account",
+          type="float", default="20.0", min=1, max=100, step=1,
+          help="Position-size cap: the suggested share count is clipped so shares × entry never exceeds "
+               "this % of the account balance. Prevents a very tight stop on a cheap stock from implying "
+               "a position that's a large fraction of the account (e.g. at 1% risk, a 0.50 stop on a "
+               "$5 stock suggests 10× as many shares as a $5 stop on a $50 stock). 20% is a sensible "
+               "ceiling for a single position; lower if you want more diversification headroom."),
+
+    # --- Secondary alerts (email + push, fires only on high-confidence qualifying setups) ---
+    Field("SECONDARY_ALERT_MIN_CONFIDENCE", "SECONDARY_ALERT_MIN_CONFIDENCE", "Secondary Alerts",
+          "Min confidence level for secondary alerts",
+          type="select", default="4", options=["1", "2", "3", "4", "5"],
+          help="Secondary channels (email, push) only fire for setups at this confidence level or above. "
+               "Default 4 (High) avoids spam on marginal signals -- you still see everything in Discord."),
+    Field("ALERT_EMAIL_ENABLED", "ALERT_EMAIL_ENABLED", "Secondary Alerts", "Email alerts enabled",
+          type="checkbox", default="false",
+          help="Send an email for every qualifying alert above the min confidence level. "
+               "Requires SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and ALERT_EMAIL_TO to be configured."),
+    Field("ALERT_EMAIL_TO", "ALERT_EMAIL_TO", "Secondary Alerts", "Alert recipient email address",
+          help="Where alert emails are sent. Can be the same as SMTP_USER (send to yourself) or different."),
+    Field("SMTP_HOST", "SMTP_HOST", "Secondary Alerts", "SMTP server host",
+          default="smtp.gmail.com",
+          help="SMTP server for sending alert emails. Gmail: smtp.gmail.com. Outlook: smtp.office365.com."),
+    Field("SMTP_PORT", "SMTP_PORT", "Secondary Alerts", "SMTP server port",
+          type="number", default="587", min=1, max=65535, step=1,
+          help="587 for STARTTLS (recommended). 465 for SSL. 25 for unencrypted (not recommended)."),
+    Field("SMTP_USER", "SMTP_USER", "Secondary Alerts", "SMTP username / sender address",
+          help="Email address the alerts are sent FROM. For Gmail use an App Password (not your account password)."),
+    Field("SMTP_PASSWORD", "SMTP_PASSWORD", "Secondary Alerts", "SMTP password",
+          type="password", sensitive=True,
+          help="SMTP login password. For Gmail, create an App Password at myaccount.google.com/apppasswords "
+               "(requires 2FA). Never use your real account password here."),
+    Field("ALERT_PUSH_ENABLED", "ALERT_PUSH_ENABLED", "Secondary Alerts", "Push notifications enabled (ntfy.sh)",
+          type="checkbox", default="false",
+          help="Send a push notification via ntfy.sh for every qualifying alert. Free, no account needed -- "
+               "pick a unique topic name, set it below, and subscribe via the ntfy app on iOS/Android."),
+    Field("NTFY_TOPIC", "NTFY_TOPIC", "Secondary Alerts", "ntfy.sh topic name",
+          help="Your unique ntfy.sh topic -- the URL will be https://ntfy.sh/<topic>. Choose something "
+               "hard to guess (e.g. swingbot-yourname-abc123) since anyone who knows the topic can subscribe."),
+
+    # --- Multi-timeframe confluence ---
+    Field("HTF_CONFLUENCE_ENABLED", "HTF_CONFLUENCE_ENABLED", "Multi-Timeframe Confluence",
+          "Higher-timeframe bias filter enabled",
+          type="checkbox", default="true",
+          help="Check each ticker's own higher-timeframe EMA bias (50-day for short horizons, 200-day for "
+               "longer ones) before accepting a signal. Counter-trend signals are penalised by "
+               "HTF_COUNTER_TREND_PENALTY confidence points and flagged in the embed. They still post -- "
+               "the filter is informational, not a hard suppressor -- unless the penalty drops them below "
+               "MIN_ALERT_CONFIDENCE_LEVEL after the reduction."),
+    Field("HTF_COUNTER_TREND_PENALTY", "HTF_COUNTER_TREND_PENALTY", "Multi-Timeframe Confluence",
+          "Counter-trend confidence score penalty",
+          type="number", default="15", min=0, max=40, step=5,
+          help="How many raw confidence score points are subtracted when a signal goes against its "
+               "ticker's own higher-timeframe EMA trend. 15 is enough to drop a borderline Level 3 "
+               "signal to Level 2 (and thus below the default MIN_ALERT_CONFIDENCE_LEVEL=3 gate). "
+               "Set 0 to disable the penalty while keeping the counter-trend label visible."),
 
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
@@ -220,7 +276,7 @@ def _cast(f: Field, raw: str):
     # so it doesn't matter whether the field is rendered as select/text/etc.
     if f.attr == "LOG_LEVEL":
         return raw.upper()
-    if f.attr == "MIN_ALERT_CONFIDENCE_LEVEL":
+    if f.attr in ("MIN_ALERT_CONFIDENCE_LEVEL", "SECONDARY_ALERT_MIN_CONFIDENCE"):
         return int(raw)
     caster = _CASTERS.get(f.type)
     return caster(raw) if caster else raw

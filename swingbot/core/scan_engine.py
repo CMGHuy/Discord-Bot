@@ -56,13 +56,14 @@ from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from . import levels
 from .account import compute_unrealized_pnl, load_account_config
-from .confidence import score_confidence
+from .confidence import ConfidenceResult, score_confidence
 from .data import get_currency_symbol, get_daily_data
 from .events import earnings_within_window
 from .explain import build_explanation
 from .market_events import get_market_events
+from .notifier import notify_secondary
 from .performance import TradeLog
-from .regime import get_market_regime
+from .regime import get_htf_bias, get_market_regime
 from .state import StateStore
 from .strategy import HORIZONS, MIN_BARS
 from .charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
@@ -143,6 +144,7 @@ class ScanItem:
     target_confluence: tuple = None   # (count, family_names) from levels.count_confirming_strategies
     stop_confluence: tuple = None
     combined_from: list = field(default_factory=list)
+    htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
 
     @property
     def all_requirements_met(self) -> bool:
@@ -486,12 +488,48 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
                                          target_confluence=target_confluence, stop_confluence=stop_confluence,
                                          track_record=track_record)
+
+                # Multi-timeframe confluence: check this ticker's own
+                # higher-timeframe EMA bias (50-day for short horizons,
+                # 200-day for longer ones) using the already-fetched daily
+                # df -- no extra API call. A counter-trend signal gets a
+                # configurable penalty subtracted from its raw score, which
+                # can drop it one level and thus below MIN_ALERT_CONFIDENCE_LEVEL.
+                htf_result = get_htf_bias(df, horizon_key)
+                htf_counter_trend = (
+                    htf_result is not None
+                    and htf_result["bias"] != scenario.direction
+                )
+                if htf_counter_trend and config.HTF_COUNTER_TREND_PENALTY > 0:
+                    penalty = config.HTF_COUNTER_TREND_PENALTY
+                    new_score = max(0, conf.score - penalty)
+                    # Re-bucket the level from the adjusted score using the
+                    # same 20-point band boundaries as confidence.py uses.
+                    new_level = max(1, min(5, 1 + new_score // 20))
+                    from .confidence import LEVELS as _CONF_LEVELS
+                    new_label = next(
+                        (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
+                        conf.label,
+                    )
+                    conf = ConfidenceResult(
+                        level=new_level, score=new_score, label=new_label,
+                        breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
+                    )
+                    log.info(
+                        "%s (%s, %s): HTF counter-trend (signal=%s, %d-day EMA=%s) -- "
+                        "confidence reduced by %d pts to Lv%d(%d/100)",
+                        ticker, horizon_key, scenario.direction,
+                        scenario.direction, htf_result["ema_period"], htf_result["bias"],
+                        penalty, new_level, new_score,
+                    )
+
                 log.debug(
-                    "%s %s (%s): target_confluence=%d(%s) stop_confluence=%d(%s) confidence=Lv%d(%d/100)",
+                    "%s %s (%s): target_confluence=%d(%s) stop_confluence=%d(%s) confidence=Lv%d(%d/100)%s",
                     ticker, scenario.direction, horizon_key,
                     target_confluence[0], ",".join(target_confluence[1][:3]),
                     stop_confluence[0], ",".join(stop_confluence[1][:3]),
                     conf.level, conf.score,
+                    " [HTF counter-trend]" if htf_counter_trend else "",
                 )
 
                 conf_level_counts[conf.level] = conf_level_counts.get(conf.level, 0) + 1
@@ -534,9 +572,22 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                    ticker, horizon_key, scenario.direction, config.SIGNAL_CONFIRMATION_SCANS)
                         continue
 
+                # Build htf_info dict for the embed only when counter-trend
+                # (so the embed knows to show the warning field); otherwise None.
+                htf_info_for_item = None
+                if htf_counter_trend and htf_result is not None:
+                    htf_info_for_item = {
+                        "htf_bias": htf_result["bias"],
+                        "counter_trend": True,
+                        "ema_period": htf_result["ema_period"],
+                        "horizon_key": horizon_key,
+                        "pct_above_ema": htf_result["pct_above_ema"],
+                    }
+
                 scan_items.append(ScanItem(
                     result=result, plan=scenario, conf=conf, requirements=requirements,
                     target_confluence=target_confluence, stop_confluence=stop_confluence,
+                    htf_info=htf_info_for_item,
                 ))
                 if progress is not None:
                     progress.qualifying_found = len(scan_items)
@@ -695,8 +746,15 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.warning("Could not generate trade chart for %s: %s", result.ticker, e, exc_info=True)
             chart_path, chart_filename = None, None
 
-        embed = build_embed(item, explanation, perf_stats, warning, chart_filename)
+        embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
+                            htf_info=item.htf_info)
         alerts.append((embed, chart_path))
+
+        # Secondary alerting (email / push) -- fires only for high-confidence,
+        # fully-qualifying alerts when enabled. Blocking I/O but we're already
+        # in the background thread (_sync_run_scan), so it won't block Discord.
+        notify_secondary(item, plan, conf)
+
         if progress is not None:
             progress.alerts_done += 1
 

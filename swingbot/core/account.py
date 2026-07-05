@@ -2,13 +2,17 @@
 Account config storage (balance / risk % / max open positions, editable
 via `!account`) and unrealized P/L tracking for `!pnl`.
 
-There is no euro-based position sizing anymore -- no flat stake, no
-fixed max-loss band. The bot's focus is finding a qualifying
-support/resistance setup (see levels.py); how many shares/how much
-capital to actually put behind it is left entirely up to the person
-placing the trade. `!account` settings are kept around only in case a
-future feature wants them again -- nothing in the live alert pipeline
-reads risk_pct/balance right now.
+Position sizing is computed by compute_position_size() using the classic
+fixed-fractional formula:
+
+    risk_amount = balance × risk_pct / 100
+    shares      = risk_amount / abs(entry − stop_loss)
+
+A MAX_POSITION_SIZE_PCT cap prevents the position from consuming too
+large a fraction of the account (e.g. a tiny stop on a cheap stock
+could otherwise suggest a very large share count). The result is shown
+in every Discord alert embed as "Suggested size" -- informational, not
+executed automatically. Actual trade sizing is always the trader's call.
 """
 import json
 import os
@@ -61,6 +65,76 @@ def set_max_open_positions(max_open: int, path: str = CONFIG_PATH) -> dict:
     config["max_open_positions"] = max_open
     save_account_config(config, path)
     return config
+
+
+def set_max_position_pct(max_pct: float, path: str = CONFIG_PATH) -> dict:
+    config = load_account_config(path)
+    config["max_position_pct"] = max_pct
+    save_account_config(config, path)
+    return config
+
+
+def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None) -> dict | None:
+    """
+    Fixed-fractional position sizing: risk a fixed % of account balance
+    per trade, sized so a full stop-out costs exactly that amount.
+
+    Formula:
+        risk_amount    = balance × risk_pct / 100
+        raw_shares     = risk_amount / abs(entry − stop_loss)
+        position_value = raw_shares × entry
+
+    If position_value would exceed balance × max_position_pct/100, shares
+    are capped at that maximum and `capped` is True in the result -- this
+    prevents a very tight stop on a cheap stock from implying a position
+    that's most of the account.
+
+    Returns None when balance ≤ 0, entry ≤ 0, or the stop distance is
+    zero (avoids division by zero; also genuinely unsizeable).
+
+    Return dict keys:
+        shares          -- suggested whole/fractional share count
+        risk_amount     -- € at risk if stop-loss is hit
+        position_value  -- total capital deployed (shares × entry)
+        capped          -- True if position_value was capped by max_position_pct
+        balance         -- account balance used in calculation
+        risk_pct        -- risk % used
+        max_position_pct -- position size cap % used
+    """
+    if account_cfg is None:
+        account_cfg = load_account_config()
+
+    balance = float(account_cfg.get("balance", 0))
+    risk_pct = float(account_cfg.get("risk_pct", 1.0))
+    max_position_pct = float(account_cfg.get("max_position_pct", app_config.MAX_POSITION_SIZE_PCT))
+
+    if balance <= 0 or entry <= 0:
+        return None
+
+    stop_distance = abs(entry - stop_loss)
+    if stop_distance <= 0:
+        return None
+
+    risk_amount = balance * risk_pct / 100.0
+    raw_shares = risk_amount / stop_distance
+    position_value = raw_shares * entry
+    max_position_value = balance * max_position_pct / 100.0
+
+    capped = False
+    if position_value > max_position_value:
+        raw_shares = max_position_value / entry
+        position_value = max_position_value
+        capped = True
+
+    return {
+        "shares": round(raw_shares, 2),
+        "risk_amount": round(risk_amount, 2),
+        "position_value": round(position_value, 2),
+        "capped": capped,
+        "balance": balance,
+        "risk_pct": risk_pct,
+        "max_position_pct": max_position_pct,
+    }
 
 
 @dataclass
