@@ -101,16 +101,34 @@ async def _refresh_presence():
     """
     Pushes the current _presence_text() onto the bot's Discord presence
     (an Activity of type "Watching", e.g. "Watching 🟢 Active · 3 open
-    trades · 14:35"). Called every session_scan tick (so it's at least as
-    fresh as SCAN_INTERVAL_MINUTES, the same cadence the old per-tick
-    channel message used) plus once at startup and immediately after
-    !pause/!resume so a manual state change is reflected right away
-    rather than waiting for the next tick. Best-effort: a failure here
-    (e.g. a transient gateway hiccup) is logged and swallowed rather than
-    ever taking down a scan over a cosmetic status update.
+    trades · 14:35") AND sets the bot's status dot so it works like the
+    blinking green/red circle in the admin Dashboard:
+
+      discord.Status.online  → solid green dot  (in session, scanning)
+      discord.Status.idle    → yellow crescent   (bot running but off-hours)
+      discord.Status.dnd     → red dot with dash (scan paused)
+
+    The dot is visible next to the bot's name in the Discord member list,
+    in DMs, and wherever the bot's avatar appears -- no channel message
+    needed, updates in place, and goes red automatically the moment the
+    bot process stops responding (Discord marks it offline).
+
+    Called every session_scan tick (at least every SCAN_INTERVAL_MINUTES)
+    plus once at startup and immediately after !pause/!resume so a manual
+    state change is reflected right away. Best-effort: a failure here is
+    logged and swallowed rather than taking down a scan.
     """
     try:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=_presence_text()))
+        if is_scan_paused():
+            status = discord.Status.dnd       # 🔴 red dot with dash
+        elif not in_session():
+            status = discord.Status.idle      # 🌙 yellow crescent (off-hours)
+        else:
+            status = discord.Status.online    # 🟢 solid green dot
+        await bot.change_presence(
+            status=status,
+            activity=discord.Activity(type=discord.ActivityType.watching, name=_presence_text()),
+        )
     except Exception as e:
         log.debug("Could not update Discord presence: %s", e)
 
