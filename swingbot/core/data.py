@@ -149,7 +149,7 @@ def get_currency_symbol(ticker: str, default_symbol: str = "€") -> str:
 # color) only actually changes about once a minute, matching what the
 # dashboard asked for, while the fragment itself can still re-render
 # every 5s for everything else (new trades, stat counts, etc.).
-_PRICE_CACHE_TTL_SECONDS = 60
+_PRICE_CACHE_TTL_SECONDS = 15
 _price_cache: dict[str, tuple[float, float]] = {}   # ticker -> (price, fetched_at monotonic)
 
 
@@ -186,6 +186,23 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) 
     if cached:
         return cached[0]
     return None
+
+
+def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
+    """
+    Warm the price cache for a list of tickers in parallel.
+    Call this before `get_current_price` in a render loop so all fetches
+    happen concurrently instead of sequentially -- the loop then hits the
+    cache on every call and returns instantly.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    unique = list({t.upper().strip() for t in tickers if t})
+    if not unique:
+        return
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(unique))) as pool:
+        futures = [pool.submit(get_current_price, tk) for tk in unique]
+        for fut in as_completed(futures):
+            fut.result()  # discard — side-effect is populating _price_cache
 
 
 # ---------------------------------------------------------------------------

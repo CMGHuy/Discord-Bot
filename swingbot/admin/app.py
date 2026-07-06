@@ -49,7 +49,7 @@ from swingbot import config
 from swingbot.core.performance import TradeLog, trade_proximity
 from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
 from swingbot.core.account import compute_position_size, load_account_config
-from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, get_logo_path
+from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, get_logo_path, prefetch_prices
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.ticker_directory import search_tickers
 # Pure helper functions (.env parsing, Docker container control, confidence-hex,
@@ -187,6 +187,10 @@ def _render_dashboard_fragment() -> str:
     sizing_map    : dict = {}
     unrealized_pnls: list = []
     now_utc = datetime.now(timezone.utc)
+
+    # Fetch all prices concurrently so the loop below hits the in-memory
+    # cache and never blocks on a sequential network call per ticker.
+    prefetch_prices([t["ticker"] for t in open_trades])
 
     for t in open_trades:
         tid     = t["id"]
