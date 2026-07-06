@@ -425,3 +425,102 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 @media (max-width: 720px) {
   .detail-two-col { grid-template-columns: 1fr !important; }
 }
+
+/* ==========================================================================
+   RESPONSIVE LAYOUT
+   Breakpoints:
+     ≤900px  — tablet: sidebar collapses to icon-only strip
+     ≤640px  — mobile: sidebar flies off-screen; hamburger toggles it
+   ========================================================================== */
+
+/* ── Hamburger button (hidden on desktop) ─────────────────────────────────── */
+.hamburger {
+  display: none;
+  background: transparent; border: none; box-shadow: none;
+  color: #8a92a6; font-size: 22px; padding: 4px 8px; cursor: pointer;
+  line-height: 1; border-radius: 6px; flex-shrink: 0;
+}
+.hamburger:hover { background: #1c2030; color: #dde1ea; box-shadow: none; }
+.hamburger:active { transform: none; }
+
+/* Overlay that dims the content when sidebar is open on mobile */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 99;
+  background: rgba(0,0,0,0.55);
+}
+.sidebar-overlay.active { display: block; }
+
+/* ── Sidebar open/close state ─────────────────────────────────────────────── */
+.sidebar {
+  transition: transform 0.22s ease, width 0.22s ease;
+}
+
+/* ── Tablet (≤900px): icon-only sidebar ──────────────────────────────────── */
+@media (max-width: 900px) {
+  .sidebar { width: 58px; }
+  .sidebar .brand .brand-text { display: none; }
+  .sidebar nav a { justify-content: center; padding: 11px 0; gap: 0; }
+  .sidebar nav a .icon { font-size: 18px; width: auto; }
+  .sidebar nav a .nav-label { display: none; }
+  .sidebar-footer { display: none; }
+  .content { padding: 20px 18px 60px; }
+}
+
+/* ── Mobile (≤640px): sidebar flies off-screen ───────────────────────────── */
+@media (max-width: 640px) {
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
+    width: 210px !important;
+    transform: translateX(-100%);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Restore full sidebar labels when open */
+  .sidebar .brand .brand-text { display: inline; }
+  .sidebar nav a { justify-content: flex-start; padding: 9px 12px; gap: 10px; }
+  .sidebar nav a .nav-label { display: inline; }
+  .sidebar-footer { display: block; }
+
+  .hamburger { display: inline-flex; }
+
+  /* Page header: hamburger + title on the same row */
+  .page-header { gap: 10px; }
+  .page-header h1 { font-size: 18px; }
+
+  .content { padding: 14px 12px 60px; }
+
+  /* Stat cards: allow 2 per row minimum on phones */
+  .stat-row { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .stat-card { padding: 12px 14px; }
+  .stat-card .stat-value { font-size: 22px; }
+
+  /* Tables: horizontal scroll already set on wrapper divs; reduce font */
+  table { font-size: 12px; }
+  th, td { padding: 7px 8px; }
+
+  /* Cards */
+  .card { padding: 14px 14px; }
+
+  /* Dashboard filter/controls row: wrap tightly */
+  .dashboard-controls { flex-wrap: wrap; gap: 6px; }
+
+  /* KV tables: let the label column shrink */
+  .kv td:first-child { width: 130px; font-size: 12px; }
+
+  /* Settings filter full width */
+  .settings-toolbar #settings-filter { width: 100%; }
+
+  /* Field grid: single column */
+  .field-grid { grid-template-columns: 1fr; }
+}
+
+/* ── All breakpoints: ensure tables inside cards scroll horizontally ───────── */
+.card > .table-scroll, .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Make any overflow-x:auto wrapper nicer with a subtle fade hint on the right */
+.card > div[style*="overflow-x:auto"],
+.card > div[style*="overflow-x: auto"] {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

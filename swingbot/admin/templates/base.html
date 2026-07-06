@@ -7,13 +7,18 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
 <div class="shell">
-  <aside class="sidebar">
-    <div class="brand"><span class="logo">📈</span> Swing Bot</div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="logo">📈</span>
+      <span class="brand-text">Swing Bot</span>
+    </div>
     <nav>
       {% for key, icon, label, endpoint in nav_items %}
       <a href="{{ url_for(endpoint) }}" class="{{ 'active' if key == active_page else '' }}">
-        <span class="icon">{{ icon }}</span> {{ label }}
+        <span class="icon">{{ icon }}</span>
+        <span class="nav-label">{{ label }}</span>
       </a>
       {% endfor %}
     </nav>
@@ -26,8 +31,10 @@
       {% endif %}
     </div>
   </aside>
+
   <div class="content">
     <div class="page-header">
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
       <h1>{{ title }}</h1>
     </div>
     {% if msg %}
@@ -36,5 +43,40 @@
     {% block body %}{% endblock %}
   </div>
 </div>
+
+<script>
+(function () {
+  var sidebar   = document.getElementById('sidebar');
+  var overlay   = document.getElementById('sidebar-overlay');
+  var hamburger = document.getElementById('hamburger');
+  if (!sidebar || !overlay || !hamburger) return;
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    overlay.classList.add('active');
+    hamburger.setAttribute('aria-expanded', 'true');
+    hamburger.innerHTML = '&#10005;';
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+    hamburger.setAttribute('aria-expanded', 'false');
+    hamburger.innerHTML = '&#9776;';
+  }
+
+  hamburger.addEventListener('click', function () {
+    sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+  });
+  overlay.addEventListener('click', closeSidebar);
+
+  sidebar.querySelectorAll('nav a').forEach(function (a) {
+    a.addEventListener('click', closeSidebar);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeSidebar();
+  });
+})();
+</script>
 </body>
 </html>
