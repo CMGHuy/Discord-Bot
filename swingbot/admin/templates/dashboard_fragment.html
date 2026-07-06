@@ -446,6 +446,7 @@
       <th style="text-align:right;" title="Realized R-multiple (exit P&L / initial risk)">R</th>
       <th style="text-align:right;" title="Calendar days from open to close">Days</th>
       <th>Closed</th>
+      <th style="width:36px;"></th>
     </tr>
     </thead>
     <tbody>
@@ -503,10 +504,24 @@
       </td>
       <td style="text-align:right;" class="muted">{{ c_days if c_days is not none else '—' }}</td>
       <td class="muted" style="font-size:12px;">{{ (t.closed_at or '')[:10] }}</td>
+      <td onclick="event.stopPropagation();" style="padding:4px 6px;">
+        <form method="post" action="{{ url_for('delete_single_trade', trade_id=t.id) }}" style="margin:0;"
+              onsubmit="return confirm('Delete {{ t.ticker }} trade record? This cannot be undone.');">
+          <button type="submit" class="danger small" title="Delete this trade record"
+                  style="padding:2px 7px;font-size:11px;line-height:1.4;">✕</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+  <div class="row" style="margin-top:12px;">
+    <form method="post" action="{{ url_for('clear_trade_history') }}"
+          onsubmit="return confirm('Delete all {{ closed_trades | length }} closed trade record(s)? This cannot be undone.');">
+      <button type="submit" class="danger small">🗑 Clear all history</button>
+    </form>
+    <span class="muted" style="font-size:12px;">Open trades are not affected.</span>
   </div>
   {% else %}
   <div style="padding:20px 0;text-align:center;color:#5a6275;">

@@ -403,7 +403,13 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
 
 async def notify_closed_trades(bot, newly_closed: list):
     """Send a notification for every newly-closed trade (win, loss, or manual close)."""
-    if not newly_closed or not config.CLOSED_TRADES_CHANNEL_ID:
+    if not newly_closed:
+        return
+    if not config.CLOSED_TRADES_CHANNEL_ID:
+        log.warning(
+            "notify_closed_trades: CLOSED_TRADES_CHANNEL_ID is not set in .env — "
+            "cannot post closed-trade notifications. Set it in Settings > Discord Connection."
+        )
         return
     channel = bot.get_channel(int(config.CLOSED_TRADES_CHANNEL_ID))
     if channel is None:

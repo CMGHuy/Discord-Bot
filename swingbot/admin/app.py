@@ -362,6 +362,22 @@ def clear_open_trades():
     return redirect(url_for("index", msg=msg, ok=1))
 
 
+@app.route("/trades/history/clear", methods=["POST"])
+@require_auth
+def clear_trade_history():
+    removed = _trades().clear_history()
+    msg = f"Cleared {removed} closed trade record(s). Open trades were left untouched."
+    return redirect(url_for("index", msg=msg, ok=1))
+
+
+@app.route("/trades/<trade_id>/delete", methods=["POST"])
+@require_auth
+def delete_single_trade(trade_id):
+    deleted = _trades().delete_trade(trade_id)
+    if deleted:
+        return redirect(url_for("index", msg=f"Trade {trade_id} deleted.", ok=1))
+    return redirect(url_for("index", msg=f"Trade {trade_id} not found.", ok=0))
+
 
 # ---------------------------------------------------------------------------
 # Routes -- Settings
@@ -614,23 +630,6 @@ def watchlist_add():
     if ticker in updated:
         return redirect(url_for("watchlist_page", msg=f"Added {ticker} to watchlist ({len(updated)} tickers total).", ok=1))
     return redirect(url_for("watchlist_page", msg=f"{ticker} is already in the watchlist.", ok=1))
-
-
-@app.route("/watchlist/fetchlogos", methods=["POST"])
-@require_auth
-def watchlist_fetchlogos():
-    """
-    Pre-downloads and caches the logo for every current watchlist ticker
-    (see core/data.get_ticker_logo) so the images above render instantly
-    instead of each one lazily fetching on its first page view. Safe to
-    re-run any time -- already-cached logos resolve instantly.
-    """
-    tickers = load_watchlist()
-    ok = sum(1 for t in tickers if get_logo_path(t))
-    msg = f"Fetched logos for {ok}/{len(tickers)} ticker(s)."
-    if ok < len(tickers):
-        msg += " Some tickers have no discoverable logo (unusual symbols, indices, futures, etc.)."
-    return redirect(url_for("watchlist_page", msg=msg, ok=1))
 
 
 @app.route("/watchlist/remove", methods=["POST"])

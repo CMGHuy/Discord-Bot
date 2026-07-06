@@ -11,11 +11,6 @@
     </div>
     <button type="submit" class="small">+ Add</button>
   </form>
-  <form method="post" action="{{ url_for('watchlist_fetchlogos') }}" style="margin:0;">
-    <button type="submit" class="secondary small" title="Downloads and caches a logo for every ticker below -- takes a bit for a large watchlist.">
-      &#8635; Fetch all logos
-    </button>
-  </form>
 </div>
 
 <div class="card">
@@ -40,14 +35,7 @@
     {% for ticker in tickers %}
     <tr>
       <td class="muted">{{ loop.index }}</td>
-      <td>
-        <span style="display:flex; align-items:center; gap:8px;">
-          <img src="{{ url_for('ticker_logo', ticker=ticker) }}" alt=""
-               style="width:22px; height:22px; border-radius:5px; object-fit:contain; background:#fff; flex-shrink:0;"
-               onerror="this.style.display='none'" loading="lazy">
-          <strong>{{ ticker }}</strong>
-        </span>
-      </td>
+      <td><strong>{{ ticker }}</strong></td>
       <td class="muted">{{ company_names.get(ticker) or '—' }}</td>
       <td>
         {% if trade_counts[ticker].open > 0 %}

@@ -113,6 +113,10 @@
                  background:rgba(255,255,255,0.1); border:none; color:#fff;
                  font-size:24px; width:44px; height:44px; border-radius:50%;
                  cursor:pointer; display:flex; align-items:center; justify-content:center;">&#10005;</button>
+  <div style="position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:9001;
+              color:rgba(255,255,255,0.45); font-size:11px; white-space:nowrap; pointer-events:none;">
+    Pinch to zoom &nbsp;·&nbsp; Drag to pan &nbsp;·&nbsp; Double-tap to reset
+  </div>
   <img id="lb-img" alt="Enlarged chart"
        style="position:absolute; top:50%; left:50%; transform-origin:0 0;
               max-width:none; max-height:none; user-select:none; -webkit-user-drag:none;">
@@ -146,29 +150,47 @@
     ty = Math.max(-maxTy, Math.min(maxTy, ty));
   }
 
+  function fitImage() {
+    vw = window.innerWidth; vh = window.innerHeight;
+    imgNatW = lbImg.naturalWidth  || vw;
+    imgNatH = lbImg.naturalHeight || vh;
+    // Fit the (landscape) chart to fill as much of the screen as possible
+    var fitScale = Math.min(vw / imgNatW, vh / imgNatH);
+    minScale = fitScale;
+    scale = fitScale;
+    tx = 0; ty = 0;
+    lbImg.style.visibility = 'visible';
+    applyTransform();
+  }
+
   window.openLightbox = function(src) {
     vw = window.innerWidth; vh = window.innerHeight;
-    lbImg.src = src;
-    lbImg.onload = function() {
-      imgNatW = lbImg.naturalWidth  || vw;
-      imgNatH = lbImg.naturalHeight || vh;
-      // Fit image to viewport at scale=1
-      var fitScale = Math.min(vw / imgNatW, vh / imgNatH, 1);
-      minScale = fitScale;
-      scale = fitScale;
-      tx = 0; ty = 0;
-      applyTransform();
-    };
-    scale = 1; tx = 0; ty = 0;
-    applyTransform();
+    lbImg.style.visibility = 'hidden';   // hide until fit is computed
     overlay.style.display = 'block';
     document.body.style.overflow = 'hidden';
+
+    // Request landscape so the wide chart fills the screen on phones.
+    // Fails silently on desktop / browsers that don't support the API.
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(function() {});
+    }
+
+    lbImg.onload = fitImage;
+    lbImg.src = src;
+    // If image already cached, onload may not fire — call fitImage directly.
+    if (lbImg.complete && lbImg.naturalWidth) {
+      fitImage();
+    }
   };
 
   function closeLightbox() {
     overlay.style.display = 'none';
     document.body.style.overflow = '';
     lbImg.src = '';
+    lbImg.style.visibility = 'hidden';
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
   }
 
   closeBtn.addEventListener('click', closeLightbox);

@@ -440,6 +440,16 @@ class TradeLog:
                 self._save()
         return deleted
 
+    def clear_history(self) -> int:
+        """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
+        with _LOCK:
+            before = len(self._trades)
+            self._trades = [t for t in self._trades if t["status"] == "open"]
+            removed = before - len(self._trades)
+            if removed:
+                self._save()
+        return removed
+
     def clear_open(self) -> int:
         """Delete every trade currently in status='open', leaving closed win/loss history untouched."""
         with _LOCK:
