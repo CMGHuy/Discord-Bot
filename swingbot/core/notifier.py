@@ -111,21 +111,23 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
         f"Lv{conf.level} {conf.label} ({result.horizon_label})"
     )
 
-    # Body: key numbers + confirming methods
-    sources_str = ", ".join(list(dict.fromkeys(plan.target_sources))[:3]) if plan.target_sources else "n/a"
+    # Compute pct distances (not stored on TradePlan — derive them here)
+    stop_distance_pct = abs(plan.entry - plan.stop_loss) / plan.entry * 100
+    target_distance_pct = abs(plan.take_profit - plan.entry) / plan.entry * 100
     stop_sign = "-" if is_bull else "+"
+
+    # Target sources come from item.target_confluence = (count, [family, ...]) or None
+    tc = item.target_confluence
+    sources_str = ", ".join(list(dict.fromkeys(tc[1]))[:3]) if tc else "n/a"
+
     body_lines = [
         f"{'📈' if is_bull else '📉'} {direction} signal — {result.ticker}",
         f"Horizon  : {result.horizon_label}",
         f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)",
         "",
         f"Entry    : {cur}{plan.entry:.2f}",
-        f"Stop-loss: {cur}{plan.stop_loss:.2f}  ({stop_sign}{plan.stop_distance_pct:.1f}%)",
-        f"Target 1 : {cur}{plan.take_profit:.2f}  (+{plan.target_distance_pct:.1f}%)",
-    ]
-    if plan.target2_price is not None:
-        body_lines.append(f"Target 2 : {cur}{plan.target2_price:.2f}  (+{plan.target2_distance_pct:.1f}%)")
-    body_lines += [
+        f"Stop-loss: {cur}{plan.stop_loss:.2f}  ({stop_sign}{stop_distance_pct:.1f}%)",
+        f"Target 1 : {cur}{plan.take_profit:.2f}  (+{target_distance_pct:.1f}%)",
         f"R:R      : {plan.risk_reward_ratio}:1",
         "",
         f"Confirmed by: {sources_str}",

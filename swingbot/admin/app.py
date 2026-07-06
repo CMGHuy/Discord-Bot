@@ -39,6 +39,7 @@ import csv
 import io
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -515,9 +516,19 @@ def watchlist_page():
         open_c = sum(1 for tr in (trades or []) if tr["status"] == "open")
         closed_c = len(trades or []) - open_c
         trade_counts[ticker] = {"open": open_c, "closed": closed_c}
-    # Real company names (e.g. "Apple Inc." for AAPL) -- cached in-memory
-    # after the first lookup per ticker, see core/data.get_company_name.
-    company_names = {ticker: get_company_name(ticker) for ticker in tickers}
+    # Real company names -- fetched concurrently so yfinance fallbacks for
+    # international tickers don't stall the page load sequentially.
+    # US-listed tickers are resolved from the local NASDAQ/NYSE directory
+    # instantly; only OTC/international symbols hit the network.
+    company_names: dict[str, str | None] = {}
+    with ThreadPoolExecutor(max_workers=min(10, len(tickers) or 1)) as pool:
+        futures = {pool.submit(get_company_name, tk): tk for tk in tickers}
+        for fut in as_completed(futures):
+            tk = futures[fut]
+            try:
+                company_names[tk] = fut.result()
+            except Exception:
+                company_names[tk] = None
     return _render(
         "Watchlist", "watchlist", "watchlist.html",
         tickers=tickers,
@@ -704,6 +715,7 @@ def stop_scan():
     automatic session scan). Different from pause: pause only stops
     FUTURE automatic scans, this cuts short one already in progress.
     Cooperative -- takes effect at the scan's next per-ticker checkpoint,
+       Cooperative -- takes effect at the scan's next per-ticker checkpoint,
     not instantly (see scan_engine.request_stop())."""
     try:
         request_stop()
@@ -719,7 +731,3 @@ def main():
     host = os.getenv("ADMIN_HOST", "0.0.0.0")
     port = int(os.getenv("ADMIN_PORT", 1234))
     app.run(host=host, port=port, debug=False)
-
-
-if __name__ == "__main__":
-    main()

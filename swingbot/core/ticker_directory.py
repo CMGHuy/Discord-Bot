@@ -36,6 +36,7 @@ _REFRESH_INTERVAL_SECONDS = 7 * 24 * 3600  # re-download at most once a week
 # In-memory copy for the life of the process, avoiding a JSON re-parse of a
 # multi-thousand-row file on every single autocomplete keystroke.
 _directory: list[dict] | None = None
+_symbol_map: dict[str, str] = {}   # symbol → name, for O(1) lookups
 _loaded_at = 0.0
 _fetch_failed_once = False
 
@@ -130,7 +131,7 @@ def _ensure_loaded() -> None:
     stale) rather than leaving autocomplete empty over a transient
     network hiccup.
     """
-    global _directory, _loaded_at, _fetch_failed_once
+    global _directory, _symbol_map, _loaded_at, _fetch_failed_once
     if _directory is not None:
         return
 
@@ -149,7 +150,19 @@ def _ensure_loaded() -> None:
             _fetch_failed_once = True
 
     _directory = rows
+    _symbol_map = {row["symbol"].upper(): row["name"] for row in rows}
     _loaded_at = time.time()
+
+
+def lookup_name(ticker: str) -> str | None:
+    """
+    Fast O(1) name lookup from the in-memory ticker directory (NASDAQ+NYSE/AMEX).
+    Returns the company/fund name (e.g. "Apple Inc." for AAPL) or None if the
+    ticker is not in the directory (e.g. OTC, international, or index symbols).
+    Does not make any network calls -- directory is loaded on first use.
+    """
+    _ensure_loaded()
+    return _symbol_map.get(ticker.upper().strip())
 
 
 def search_tickers(query: str, limit: int = 15) -> list[dict]:

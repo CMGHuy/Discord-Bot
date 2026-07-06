@@ -218,22 +218,15 @@ button:disabled, .btn.disabled {
   gap: 6px;
   white-space: nowrap;
 }
-.dist-sl {
+/* Single progress label: 0% = SL, 100% = TP */
+.dist-progress {
   font-size: 10px;
   color: #5a6275;
   font-variant-numeric: tabular-nums;
 }
-/* dist-warn: 70%+ of the way to SL (price getting close to stop).
-   dist-danger: 100%+ = SL touched or exceeded (deep in loss).     */
-.dist-sl.dist-danger { color: #ef5350; font-weight: 700; }
-.dist-sl.dist-warn   { color: #e2b25a; font-weight: 600; }
-.dist-tp {
-  font-size: 10px;
-  color: #5a6275;
-  font-variant-numeric: tabular-nums;
-}
-/* dist-tp-hit: 100%+ = TP reached or exceeded — highlight in green. */
-.dist-tp.dist-tp-hit { color: #6dda9e; font-weight: 700; }
+.dist-progress.dist-danger { color: #ef5350; font-weight: 700; }  /* ≤20% — near SL */
+.dist-progress.dist-warn   { color: #e2b25a; font-weight: 600; }  /* 21–40% — drifting toward SL */
+.dist-progress.dist-tp-hit { color: #6dda9e; font-weight: 700; }  /* ≥80% — near TP */
 
 /* ---- Size cell (open trades: suggested share count + deployed capital) ---- */
 .size-cell {

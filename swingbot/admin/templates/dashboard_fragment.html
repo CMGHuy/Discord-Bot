@@ -173,7 +173,7 @@
 
       {# ── Status cell: dot + bar + live SL/TP distances ─────────────────── #}
       <td data-sort="{{ status.proximity }}"
-          title="{{ status.label }}{% if pnl %} · P&L: {{ '%+.2f%%'|format(pnl.pnl_pct) }}{% if pnl.to_sl_pct is not none %} · {{ '%.1f%%'|format(pnl.to_sl_pct) }} to SL{% endif %}{% if pnl.to_tp_pct is not none %} · {{ '%.1f%%'|format(pnl.to_tp_pct) }} to TP{% endif %}{% endif %}">
+          title="{{ status.label }}{% if pnl %} · P&L: {{ '%+.2f%%'|format(pnl.pnl_pct) }} · Progress: {{ '%.0f%%'|format(pnl.pos_pct) }} (0% = SL, 100% = TP){% endif %}">
         <div class="status-cell">
           {# Dot: color gradient = grey→green (toward TP) or grey→red (toward SL) #}
           <span class="trade-status-dot"
@@ -186,20 +186,15 @@
                  style="width:{{ pnl.pos_pct }}%; background:{{ status.color }}; opacity:0.85;"></div>
             <div class="pos-bar-entry" style="left:{{ pnl.entry_pct }}%;"></div>
           </div>
-          {# SL and TP progress labels.
-             to_sl_pct = % of entry→SL distance consumed (100% = SL hit, >100% = past it).
-             to_tp_pct = % of entry→TP distance achieved  (100% = TP hit, >100% = exceeded). #}
+          {# Single progress % where 0% = price at SL, 100% = price at TP #}
           <div class="status-dists">
-            <span class="dist-sl
-              {%- if pnl.to_sl_pct is not none and pnl.to_sl_pct >= 100 %} dist-danger
-              {%- elif pnl.to_sl_pct is not none and pnl.to_sl_pct >= 70 %} dist-warn
+            <span class="dist-progress
+              {%- if pnl.pos_pct <= 20 %} dist-danger
+              {%- elif pnl.pos_pct <= 40 %} dist-warn
+              {%- elif pnl.pos_pct >= 80 %} dist-tp-hit
               {%- endif %}"
-              title="{% if pnl.to_sl_pct %}{{ '%.0f%%'|format(pnl.to_sl_pct) }} of the way to stop-loss (100% = SL touched){% else %}No SL progress{% endif %}">
-              {%- if pnl.to_sl_pct is not none -%}{{ '%.0f%%'|format(pnl.to_sl_pct) }} SL{%- else -%}—{%- endif -%}
-            </span>
-            <span class="dist-tp{% if pnl.to_tp_pct is not none and pnl.to_tp_pct >= 100 %} dist-tp-hit{% endif %}"
-              title="{% if pnl.to_tp_pct %}{{ '%.0f%%'|format(pnl.to_tp_pct) }} of the way to take-profit (100% = TP touched){% else %}No TP progress{% endif %}">
-              {%- if pnl.to_tp_pct is not none -%}{{ '%.0f%%'|format(pnl.to_tp_pct) }} TP{%- else -%}—{%- endif -%}
+              title="{{ '%.0f%%'|format(pnl.pos_pct) }} — 0% = SL, 100% = TP">
+              {{ '%.0f%%'|format(pnl.pos_pct) }}
             </span>
           </div>
           {% else %}

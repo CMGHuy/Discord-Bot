@@ -69,12 +69,24 @@ def get_company_name(ticker: str) -> str | None:
     for AAPL, "SPDR S&P 500 ETF Trust" for SPY), or None if it can't be
     resolved for any reason (unusual symbol, index, future, transient
     network failure). Used by the Watchlist page's "Company" column.
+
+    Fast path: NASDAQ/NYSE directory lookup (no network call, covers most
+    US-listed tickers). Falls back to yfinance only for international or
+    OTC symbols not in the directory.
     """
+    from .ticker_directory import lookup_name  # avoid circular import at module level
+
     ticker_key = ticker.upper().strip()
     if ticker_key in _company_name_cache:
         return _company_name_cache[ticker_key]
 
-    name = None
+    # Fast path: local directory, no network needed
+    name = lookup_name(ticker_key)
+    if name:
+        _company_name_cache[ticker_key] = name
+        return name
+
+    # Slow path: yfinance for international / OTC symbols
     for candidate in candidate_symbols(ticker_key):
         try:
             info = yf.Ticker(candidate).info
