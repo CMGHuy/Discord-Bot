@@ -234,7 +234,17 @@ def _check_near_close(ticker: str, df) -> list:
     trades that just crossed into the near-close zone (alerts once per
     approach -- the flag resets if price moves back away, so a later
     approach can warn again).
+
+    Gated entirely on config.NEAR_CLOSE_ALERTS_ENABLED (Settings ->
+    Trade Filters & Risk) so it can be temporarily switched off without
+    losing NEAR_CLOSE_THRESHOLD_PCT -- this only silences the early
+    warning; SL/TP hits themselves (and the trade actually closing) go
+    through update_open_trades/close_if_live_price_hit and are completely
+    unaffected either way.
     """
+    if not config.NEAR_CLOSE_ALERTS_ENABLED:
+        return []
+
     warnings = []
     current_price = float(df["Close"].iloc[-1])
     open_trades = [t for t in trade_log.get_trades(status="open", limit=200) if t["ticker"] == ticker]

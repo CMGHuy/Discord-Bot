@@ -160,6 +160,13 @@ FIELDS: list[Field] = [
     Field("DEDUP_TOLERANCE_PCT", "DEDUP_TOLERANCE_PCT", "Trade Filters & Risk", "Dedup tolerance %",
           type="float", default="2.0", min=0, step=0.5,
           help="Two signals on the same ticker/direction are merged into one alert if entry/SL/TP are all within this % of each other."),
+    Field("NEAR_CLOSE_ALERTS_ENABLED", "NEAR_CLOSE_ALERTS_ENABLED", "Trade Filters & Risk",
+          "Approaching SL/TP notifications enabled",
+          type="checkbox", default="true",
+          help="Post a warning to the closed-trades channel when an open trade's price gets within "
+               "'Near-close threshold %' (below) of its stop-loss or target. Turn off here to temporarily "
+               "silence these without losing the threshold setting -- SL/TP hits themselves (and the trade "
+               "actually closing) are unaffected either way; this only controls the early warning."),
     Field("NEAR_CLOSE_THRESHOLD_PCT", "NEAR_CLOSE_THRESHOLD_PCT", "Trade Filters & Risk", "Near-close threshold %",
           type="float", default="2.0", min=0, step=0.5,
           help="How close price must get to a trade's SL/TP before a near-close warning posts."),

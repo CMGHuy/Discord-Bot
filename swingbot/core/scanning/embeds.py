@@ -356,8 +356,16 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     title = f"{icon} {trade['ticker']} — {outcome_word}"
     embed = discord.Embed(title=title, color=color)
 
+    # Realized $/€ gain/loss -- computed from the share count snapshotted
+    # onto the trade when it was OPENED (see account.py / performance.py's
+    # _settle_account_balance), not recomputed from today's account
+    # balance. None for trades logged before this feature existed, or a
+    # manual close (no real exit price to settle against).
+    amount = trade.get("realized_pnl_amount")
+    amount_str = f"{amount:+.2f}{cur}" if amount is not None else "n/a"
+
     # Top summary line
-    result_parts = [outcome_word, f"P&L: {pnl_str}", f"R: {r_str}"]
+    result_parts = [outcome_word, f"P&L: {pnl_str}", f"Gain/Loss: {amount_str}", f"R: {r_str}"]
     embed.add_field(name="Result", value=" · ".join(result_parts), inline=False)
 
     # Trade plan

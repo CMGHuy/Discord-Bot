@@ -117,6 +117,7 @@ COMMANDS_BY_CATEGORY = {
         ("!tradecharts [open|closed|all] [n]", "Chart images for multiple trades at once (max 10)"),
         ("!pnl", "Current unrealized profit/loss for every open trade, at today's price"),
         ("!performance [level]", "Win rate + risk-adjusted stats (Sharpe, Sortino, max drawdown, Calmar, profit factor), overall or per confidence level"),
+        ("!summary", "Today's status at a glance: trades opened/closed, wins/losses, net gain/loss, and account balance movement today"),
     ],
     "🧪 Backtesting": [
         ("!backtest TICKER [horizon] [strategy] [from:DATE] [to:DATE] [setups]",
@@ -176,6 +177,7 @@ COMMAND_USAGE = {
     "pnl":                 ("!pnl", "!pnl"),
     "performance":         ("!performance [level]",
                             "!performance  or  !performance 4"),
+    "summary":             ("!summary", "!summary"),
     # Backtesting
     "backtest":            ("!backtest TICKER [horizon] [strategy] [from:YYYY-MM-DD] [to:YYYY-MM-DD] [setups]",
                             "!backtest AAPL 4w bnr from:2024-01-01 to:2024-12-31 setups"),

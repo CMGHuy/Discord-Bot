@@ -4,47 +4,6 @@
 {# ── Inject chart data ────────────────────────────────────────────────────── #}
 <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
 
-{# ── Macro: breakdown table ───────────────────────────────────────────────── #}
-{% macro breakdown_table(rows, label_header) %}
-{% if rows %}
-<div style="overflow-x:auto;">
-<table class="kv" style="width:100%; border-collapse:collapse; font-size:13px;">
-  <thead>
-    <tr style="border-bottom:1px solid #1f2330; color:#5a6275; font-size:11px; text-transform:uppercase; letter-spacing:.04em;">
-      <th style="text-align:left; padding:6px 10px; font-weight:600;">{{ label_header }}</th>
-      <th style="text-align:right; padding:6px 10px; font-weight:600;">Closed</th>
-      <th style="text-align:right; padding:6px 10px; font-weight:600;">Wins</th>
-      <th style="text-align:right; padding:6px 10px; font-weight:600;">Losses</th>
-      <th style="text-align:right; padding:6px 10px; font-weight:600;">Win Rate</th>
-      <th style="text-align:right; padding:6px 10px; font-weight:600;">Avg Return</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for r in rows %}
-    {% set wr = r.win_rate or 0 %}
-    {% set wr_color = '#44ff88' if wr >= 60 else ('#e2b25a' if wr >= 40 else '#ff4444') %}
-    <tr style="border-bottom:1px solid #13161d;">
-      <td style="padding:7px 10px; font-weight:600; color:#dde1ea;">{{ r.key }}</td>
-      <td style="text-align:right; padding:7px 10px; color:#5a6275;">{{ r.total }}</td>
-      <td style="text-align:right; padding:7px 10px; color:#44ff88;">{{ r.wins }}</td>
-      <td style="text-align:right; padding:7px 10px; color:#ff4444;">{{ r.losses }}</td>
-      <td style="text-align:right; padding:7px 10px; font-weight:600; color:{{ wr_color }};">
-        {% if r.win_rate is not none %}{{ r.win_rate }}%{% else %}<span class="muted">—</span>{% endif %}
-      </td>
-      <td style="text-align:right; padding:7px 10px;
-                 color:{% if r.avg_pnl is not none and r.avg_pnl >= 0 %}#44ff88{% elif r.avg_pnl is not none %}#ff4444{% else %}#5a6275{% endif %};">
-        {% if r.avg_pnl is not none %}{{ '%+.2f'|format(r.avg_pnl) }}%{% else %}<span class="muted">—</span>{% endif %}
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="muted" style="margin:0;">No closed trades yet.</p>
-{% endif %}
-{% endmacro %}
-
 <style>
 /* ── KPI strip ─────────────────────────────────────────────────────────── */
 .kpi-strip {
@@ -221,7 +180,55 @@
   display: flex; gap: 16px; flex-wrap: wrap;
 }
 .cal-modal-summary b { color: #dde1ea; }
+
+/* ── Date-range filter bar ─────────────────────────────────────────────────
+   Applies to every KPI/chart/table on this page -- see renderAll() in the
+   script below, which re-derives everything from whichever subset of
+   `raw.trades` falls in the selected range instead of always using all of
+   them. #}
+.range-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 16px;
+}
+.range-btn {
+  background: #13161d; border: 1px solid #1f2330; color: #9aa0b0;
+  border-radius: 6px; padding: 6px 14px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.range-btn:hover { background: #1a1d26; color: #dde1ea; }
+.range-btn.active { background: #5a7fff; border-color: #5a7fff; color: #fff; }
+.range-custom { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
+.range-custom input[type="date"] {
+  background: #0d0f14; border: 1px solid #1f2330; border-radius: 6px;
+  color: #dde1ea; padding: 5px 8px; font-size: 12.5px;
+}
+.range-custom button {
+  background: #13161d; border: 1px solid #1f2330; color: #9aa0b0;
+  border-radius: 6px; padding: 5px 12px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+}
+.range-custom button:hover { background: #1a1d26; color: #dde1ea; }
+#range-summary { font-size: 12px; color: #5a6275; margin-left: auto; }
+@media (max-width: 720px) {
+  #range-summary { margin-left: 0; width: 100%; }
+}
 </style>
+
+{# ── Date-range filter (applies to everything below -- see renderAll() JS) ── #}
+<div class="range-bar" id="range-bar">
+  <button type="button" class="range-btn" data-range="all">All time</button>
+  <button type="button" class="range-btn" data-range="today">Today</button>
+  <button type="button" class="range-btn" data-range="week">This week</button>
+  <button type="button" class="range-btn" data-range="month">This month</button>
+  <button type="button" class="range-btn" data-range="year">This year</button>
+  <div class="range-custom">
+    <input type="date" id="range-from" aria-label="From date">
+    <span class="muted">–</span>
+    <input type="date" id="range-to" aria-label="To date">
+    <button type="button" id="range-apply">Apply</button>
+  </div>
+  <span id="range-summary"></span>
+</div>
 
 {# ── KPI strip (populated by JS) ─────────────────────────────────────────── #}
 <div class="kpi-strip" id="kpi-strip">
@@ -343,43 +350,24 @@
   </div>
 </div>
 
-{# ── Breakdown tables (server-rendered) ──────────────────────────────────── #}
-{% if stats.total_closed > 0 %}
+{# ── Breakdown tables (JS-rendered from the filtered trade set -- see
+   renderAll() below; always present in the DOM so the date-range filter can
+   refresh them without a page reload) ─────────────────────────────────── #}
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; margin-top:16px;" class="detail-two-col">
   <div class="card" style="margin-top:0;">
     <p class="card-title">📈 By Stock</p>
-    {{ breakdown_table(stats.by_ticker, "Ticker") }}
+    <div id="by-ticker-table"></div>
   </div>
   <div class="card" style="margin-top:0;">
     <p class="card-title">🎯 By Strategy</p>
-    {{ breakdown_table(stats.by_strategy, "Strategy") }}
+    <div id="by-strategy-table"></div>
   </div>
 </div>
 
 <div class="card">
   <p class="card-title">📅 By Day of Week <span class="muted" style="font-size:11px; font-weight:400;">(trade closed, Berlin time)</span></p>
-  {% if stats.by_dow %}
-  <div style="display:flex; gap:24px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px;">
-    {% set max_total = stats.by_dow | map(attribute='total') | max %}
-    {% for r in stats.by_dow %}
-      {% set bar_h = (r.total / max_total * 80) | round | int %}
-      {% set wr = r.win_rate or 0 %}
-      {% set bar_color = '#44ff88' if wr >= 60 else ('#e2b25a' if wr >= 40 else '#ff4444') %}
-      <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:52px;">
-        <div style="font-size:11px; color:#5a6275; font-weight:600;">
-          {% if r.win_rate is not none %}{{ r.win_rate }}%{% endif %}
-        </div>
-        <div style="width:36px; background:{{ bar_color }}; border-radius:3px 3px 0 0;
-                    height:{{ [bar_h, 4] | max }}px; opacity:0.85;"></div>
-        <div style="font-size:10px; color:#dde1ea; text-align:center;">{{ r.key[:3] }}</div>
-        <div style="font-size:10px; color:#5a6275;">{{ r.total }}T</div>
-      </div>
-    {% endfor %}
-  </div>
-  {{ breakdown_table(stats.by_dow, "Day") }}
-  {% else %}
-  <p class="muted" style="margin:0;">No closed trades yet.</p>
-  {% endif %}
+  <div id="dow-bars" style="display:flex; gap:24px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px;"></div>
+  <div id="by-dow-table"></div>
 </div>
 
 {# ── Raw trade log ────────────────────────────────────────────────────────── #}
@@ -403,8 +391,9 @@
           <th data-col="6">Entry ↕</th>
           <th data-col="7">Exit ↕</th>
           <th data-col="8">P&amp;L % ↕</th>
-          <th data-col="9">Conf ↕</th>
-          <th data-col="10">Result ↕</th>
+          <th data-col="9">Gain/Loss ↕</th>
+          <th data-col="10">Conf ↕</th>
+          <th data-col="11">Result ↕</th>
         </tr>
       </thead>
       <tbody id="trade-log-body"></tbody>
@@ -412,7 +401,6 @@
   </div>
   <div id="tl-footer" style="font-size:11px; color:#5a6275; margin-top:8px; text-align:right;"></div>
 </div>
-{% endif %}
 
 {# ── Chart.js ─────────────────────────────────────────────────────────────── #}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
@@ -424,6 +412,160 @@
 
 /* ── helpers ────────────────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
+/* Chart.js instance registry -- every chart is created via mkChart() instead
+   of `new Chart(...)` directly so renderAll() can destroy the previous set
+   before building new ones each time the date-range filter changes (Chart.js
+   throws "Canvas is already in use" if you don't destroy first). */
+let activeCharts = [];
+function mkChart(id, cfg) {
+  const c = new Chart($(id), cfg);
+  activeCharts.push(c);
+  return c;
+}
+const CHART_CARD_IDS = [
+  'balance-card','activity-card','equity-card','drawdown-card','rolling-card',
+  'heatmap-card','pnl-hist-card','dur-hist-card','winloss-pie-card',
+  'direction-pie-card','strategy-pie-card','r-multiple-card','confidence-card',
+  'cum-pnl-card',
+];
+
+/* ── Berlin-timezone date helpers (date-range filter) ─────────────────────
+   Every "day boundary" on this page -- today/this-week/this-month/this-year
+   presets, and matching each trade to a calendar day -- uses Europe/Berlin,
+   matching the rest of the bot (daily summaries, !summary, day-of-week
+   breakdowns all use the same timezone). */
+const _berlinYmdFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year:'numeric', month:'2-digit', day:'2-digit' });
+const _berlinDowFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Berlin', weekday: 'long' });
+function berlinDateStr(date) { return _berlinYmdFmt.format(date); }        // Date -> "YYYY-MM-DD"
+function berlinDateOf(iso)   { return iso ? berlinDateStr(new Date(iso)) : null; } // ISO string -> "YYYY-MM-DD"
+function berlinDow(iso)      { return iso ? _berlinDowFmt.format(new Date(iso)) : null; }
+function berlinYmdParts(date) {
+  const [y,m,d] = berlinDateStr(date).split('-').map(Number);
+  return { y, m, d };
+}
+function ymdToStr(y,m,d) { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+// Pure calendar-date arithmetic on a Y-M-D triple (already resolved to Berlin
+// local time) -- represented as UTC-noon internally purely so JS Date's
+// day-of-week/day-add math has no DST edge cases to trip over.
+function addDaysYmd(y,m,d,delta) {
+  const dt = new Date(Date.UTC(y, m-1, d, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return { y: dt.getUTCFullYear(), m: dt.getUTCMonth()+1, d: dt.getUTCDate() };
+}
+function weekday1to7(y,m,d) {   // 1=Monday .. 7=Sunday
+  const dt = new Date(Date.UTC(y, m-1, d, 12, 0, 0));
+  const jsDow = dt.getUTCDay(); // 0=Sun..6=Sat
+  return jsDow === 0 ? 7 : jsDow;
+}
+function computeRangePreset(preset) {
+  const { y, m, d } = berlinYmdParts(new Date());
+  const todayStr = ymdToStr(y, m, d);
+  if (preset === 'today') return [todayStr, todayStr];
+  if (preset === 'week') {
+    const dow = weekday1to7(y, m, d);
+    const mon = addDaysYmd(y, m, d, -(dow - 1));
+    return [ymdToStr(mon.y, mon.m, mon.d), todayStr];
+  }
+  if (preset === 'month') return [ymdToStr(y, m, 1), todayStr];
+  if (preset === 'year')  return [ymdToStr(y, 1, 1), todayStr];
+  return [null, null]; // 'all'
+}
+function filterTradesByRange(trades, fromStr, toStr) {
+  if (!fromStr && !toStr) return trades.slice();
+  return trades.filter(t => {
+    const ds = berlinDateOf(t.closed_at);
+    if (!ds) return false;
+    if (fromStr && ds < fromStr) return false;
+    if (toStr   && ds > toStr)   return false;
+    return true;
+  });
+}
+function filterBalanceHistory(history, fromStr, toStr) {
+  if (!history || !history.length) return [];
+  if (!fromStr && !toStr) return history.slice();
+  const inRange = history.filter(h => {
+    const ds = berlinDateOf(h.ts);
+    if (!ds) return false;
+    if (fromStr && ds < fromStr) return false;
+    if (toStr   && ds > toStr)   return false;
+    return true;
+  });
+  if (fromStr) {
+    // Anchor the chart with the last known balance BEFORE the range starts,
+    // so a narrow range doesn't open with the line starting mid-air.
+    let before = null;
+    for (const h of history) {
+      const ds = berlinDateOf(h.ts);
+      if (ds && ds < fromStr) before = h;
+    }
+    if (before) {
+      const anchor = Object.assign({}, before, { reason: (before.reason ? before.reason + ' ' : '') + '(range start)' });
+      return [anchor, ...inRange];
+    }
+  }
+  return inRange;
+}
+function groupBreakdown(trades, keyFn) {
+  const map = {};
+  for (const t of trades) {
+    const key = keyFn(t) || 'Unknown';
+    if (!map[key]) map[key] = { key, total:0, wins:0, losses:0, pnlSum:0, pnlCount:0 };
+    const g = map[key];
+    g.total++;
+    if (t.status === 'win') g.wins++;
+    else if (t.status === 'loss') g.losses++;
+    if (t.pnl_pct != null) { g.pnlSum += t.pnl_pct; g.pnlCount++; }
+  }
+  const rows = Object.values(map).map(g => ({
+    key: g.key, total: g.total, wins: g.wins, losses: g.losses,
+    win_rate: (g.wins + g.losses) > 0 ? parseFloat((g.wins/(g.wins+g.losses)*100).toFixed(1)) : null,
+    avg_pnl:  g.pnlCount ? parseFloat((g.pnlSum/g.pnlCount).toFixed(2)) : null,
+  }));
+  rows.sort((a,b) => b.total - a.total);
+  return rows;
+}
+function buildBreakdownTable(rows, labelHeader) {
+  if (!rows.length) return '<p class="muted" style="margin:0;">No closed trades in this range.</p>';
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="border-bottom:1px solid #1f2330;">
+      <th style="text-align:left;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">${labelHeader}</th>
+      <th style="text-align:right;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Trades</th>
+      <th style="text-align:right;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Win Rate</th>
+      <th style="text-align:right;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Avg P&amp;L</th>
+    </tr></thead><tbody>`;
+  for (const r of rows) {
+    const wrTxt   = r.win_rate != null ? r.win_rate.toFixed(1)+'%' : '—';
+    const wrColor = r.win_rate == null ? '#9aa0b0' : r.win_rate>=60?'#44ff88':r.win_rate>=40?'#e2b25a':'#ff4444';
+    const avgTxt   = r.avg_pnl != null ? (r.avg_pnl>=0?'+':'')+r.avg_pnl.toFixed(2)+'%' : '—';
+    const avgColor = r.avg_pnl == null ? '#9aa0b0' : (r.avg_pnl>=0?'#44ff88':'#ff4444');
+    html += `<tr style="border-bottom:1px solid #0d0f14;">
+      <td style="padding:6px 8px;color:#dde1ea;font-weight:600;">${r.key}</td>
+      <td style="padding:6px 8px;text-align:right;color:#9aa0b0;">${r.total}</td>
+      <td style="padding:6px 8px;text-align:right;color:${wrColor};font-weight:600;">${wrTxt}</td>
+      <td style="padding:6px 8px;text-align:right;color:${avgColor};">${avgTxt}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  return html;
+}
+const _DOW_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+function buildDowBars(rows) {
+  const byKey = {};
+  rows.forEach(r => { byKey[r.key] = r; });
+  const ordered = _DOW_ORDER.map(d => byKey[d] || { key:d, total:0, wins:0, losses:0, win_rate:null, avg_pnl:null });
+  const maxTotal = Math.max(...ordered.map(r=>r.total), 1);
+  return ordered.map(r => {
+    const barH = r.total > 0 ? Math.max(Math.round(r.total / maxTotal * 80), 4) : 0;
+    const wr = r.win_rate;
+    const barColor = wr == null ? '#5a6275' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
+    return `<div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:52px;">
+      <div style="font-size:11px; color:#5a6275; font-weight:600;">${wr!=null ? wr.toFixed(0)+'%' : ''}</div>
+      <div style="width:36px; background:${barColor}; border-radius:3px 3px 0 0; height:${barH}px; opacity:0.85;"></div>
+      <div style="font-size:10px; color:#dde1ea; text-align:center;">${r.key.slice(0,3)}</div>
+      <div style="font-size:10px; color:#5a6275;">${r.total}T</div>
+    </div>`;
+  }).join('');
+}
 const fmt1  = n => n == null ? '—' : n.toFixed(1);
 const fmt2  = n => n == null ? '—' : n.toFixed(2);
 const fmtP  = n => n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
@@ -451,83 +593,126 @@ const chartDefaults = {
 
 /* ── load data ──────────────────────────────────────────────────────────── */
 const raw    = JSON.parse($('chart-data').textContent);
-const trades = raw.trades;
+const allTrades = raw.trades;
 const spyCum = raw.spy_cum || {};
+let currentTrades = [];   // updated at the end of every renderAll() call --
+                           // the trade-log table (bound once, below) reads
+                           // from this instead of a stale closure variable.
 
-/* ── 0. Account balance over time (real currency) ────────────────────────
-   Independent of `trades`/pnl_pct -- built straight from account.json's own
-   balance_history (one entry per real trade settlement plus any manual
-   `!account balance` overrides), so it still renders even before any trade
-   has closed (the "account created" seed point) and reflects the account's
-   own ground truth rather than a value re-derived from the trade log. */
-(function () {
-  const history = raw.balance_history || [];
-  if (!history.length) return;
-  $('balance-card').style.display = '';
+/* ── Chart global defaults (set once) ────────────────────────────────────── */
+Chart.defaults.color           = chartDefaults.tickColor;
+Chart.defaults.font.family     = chartDefaults.font.family;
+Chart.defaults.font.size       = chartDefaults.font.size;
+Chart.defaults.plugins.legend.labels.color = '#9aa0b0';
 
-  const sizingNote = raw.sizing_mode === 'account_pct'
-    ? `Account % mode -- ${raw.position_pct}% of balance per trade`
-    : `Risk % mode -- ${raw.risk_pct}% risked per trade`;
-  const titleEl = $('balance-card').querySelector('.chart-title .muted');
-  if (titleEl) titleEl.textContent = `(real currency, not % -- ${sizingNote})`;
-
-  const labels = history.map(h => fmtDateTime(h.ts) || h.ts);
-  const balances = history.map(h => h.balance);
-  new Chart($('chart-balance'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Account balance',
-        data: balances,
-        borderColor: '#5a7fff', borderWidth: 2,
-        backgroundColor: 'rgba(90,127,255,.08)',
-        fill: true, tension: 0.25, pointRadius: 0,
-        stepped: false,
-      }],
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      interaction:{ mode:'index', intersect:false },
-      plugins:{
-        legend:{ display:false },
-        tooltip:{ callbacks:{
-          title: ctx => ctx[0]?.label || '',
-          label: ctx => {
-            const h = history[ctx.dataIndex];
-            const parts = [` Balance: ${ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:2})}`];
-            if (h.pnl_amount != null) parts.push(` ${h.pnl_amount>=0?'Gain':'Loss'}: ${h.pnl_amount>=0?'+':''}${h.pnl_amount.toFixed(2)}`);
-            if (h.ticker) parts.push(` Trade: ${h.ticker}${h.status?' ('+h.status+')':''}`);
-            if (h.reason) parts.push(` ${h.reason}`);
-            return parts;
-          },
-        } },
-      },
-      scales: {
-        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8, maxRotation:45, minRotation:0} },
-        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>v.toLocaleString()} },
-      },
-    },
-  });
-})();
-
-if (!trades.length) {
-  if (!raw.balance_history || !raw.balance_history.length) {
-    $('kpi-strip').innerHTML =
-      '<div style="grid-column:1/-1;padding:24px;text-align:center;color:#5a6275;">' +
-      'No closed trades yet — stats will appear once trades resolve.</div>';
-  } else {
-    // At least the account balance chart above has something to show, even
-    // with zero closed trades yet (e.g. right after account creation) --
-    // only the trade-derived KPIs/charts below are skipped.
-    $('kpi-strip').innerHTML =
-      `<div class="kpi-card"><div class="kpi-val">${raw.account_balance != null ? raw.account_balance.toLocaleString() : '—'}</div><div class="kpi-lbl">Account Balance</div></div>` +
-      '<div style="grid-column:span 3;padding:12px;color:#5a6275;display:flex;align-items:center;">No closed trades yet -- trade stats will appear once trades resolve.</div>';
-  }
-  return;
+function gridOpts(y2=false) {
+  return {
+    x: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, maxTicksLimit: 8 } },
+    y: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, maxTicksLimit: 6 } },
+    ...(y2 ? { y2: { position:'right', grid:{display:false}, ticks:{color:chartDefaults.tickColor} } } : {}),
+  };
 }
 
-trades.sort((a,b) => (a.closed_at||'').localeCompare(b.closed_at||''));
+/* ── renderAll(): rebuilds every KPI/chart/table below the filter bar from
+   whichever (possibly filtered) subset of trades + balance history is
+   passed in. Called once at page load with the full unfiltered data, and
+   again every time the date-range filter bar changes. ───────────────────── */
+function renderAll(tradesIn, balanceHistoryIn) {
+  // Reset: hide every conditionally-visible chart card and destroy the
+  // previous round of Chart.js instances before building new ones -- Chart.js
+  // throws "Canvas is already in use" otherwise.
+  CHART_CARD_IDS.forEach(id => { const el = $(id); if (el) el.style.display = 'none'; });
+  activeCharts.forEach(c => c.destroy());
+  activeCharts = [];
+
+  const trades = tradesIn.slice().sort((a,b) => (a.closed_at||'').localeCompare(b.closed_at||''));
+  currentTrades = trades;
+  const history = balanceHistoryIn || [];
+
+  /* ── 0. Account balance over time (real currency) ──────────────────────
+     Independent of `trades`/pnl_pct -- built straight from account.json's
+     own balance_history, filtered/anchored to the selected range (see
+     filterBalanceHistory above), so it still renders even before any trade
+     in the filtered range has closed. */
+  if (history.length) {
+    $('balance-card').style.display = '';
+
+    const sizingNote = raw.sizing_mode === 'account_pct'
+      ? `Account % mode -- ${raw.position_pct}% of balance per trade`
+      : `Risk % mode -- ${raw.risk_pct}% risked per trade`;
+    const titleEl = $('balance-card').querySelector('.chart-title .muted');
+    if (titleEl) titleEl.textContent = `(real currency, not % -- ${sizingNote})`;
+
+    const labels = history.map(h => fmtDateTime(h.ts) || h.ts);
+    const balances = history.map(h => h.balance);
+    mkChart('chart-balance', {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Account balance',
+          data: balances,
+          borderColor: '#5a7fff', borderWidth: 2,
+          backgroundColor: 'rgba(90,127,255,.08)',
+          fill: true, tension: 0.25, pointRadius: 0,
+          stepped: false,
+        }],
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'index', intersect:false },
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{
+            title: ctx => ctx[0]?.label || '',
+            label: ctx => {
+              const h = history[ctx.dataIndex];
+              const parts = [` Balance: ${ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:2})}`];
+              if (h.pnl_amount != null) parts.push(` ${h.pnl_amount>=0?'Gain':'Loss'}: ${h.pnl_amount>=0?'+':''}${h.pnl_amount.toFixed(2)}`);
+              if (h.ticker) parts.push(` Trade: ${h.ticker}${h.status?' ('+h.status+')':''}`);
+              if (h.reason) parts.push(` ${h.reason}`);
+              return parts;
+            },
+          } },
+        },
+        scales: {
+          x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8, maxRotation:45, minRotation:0} },
+          y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>v.toLocaleString()} },
+        },
+      },
+    });
+  }
+
+  // Always rebuild the breakdown tables / day-of-week bars from the filtered
+  // trade set, even with zero trades (buildBreakdownTable/buildDowBars both
+  // handle the empty case with a friendly message / zero-height bars).
+  $('by-ticker-table').innerHTML   = buildBreakdownTable(groupBreakdown(trades, t => t.ticker), 'Ticker');
+  $('by-strategy-table').innerHTML = buildBreakdownTable(groupBreakdown(trades, t => t.strategy || 'Unknown'), 'Strategy');
+  const dowRows = groupBreakdown(trades, t => berlinDow(t.closed_at));
+  $('dow-bars').innerHTML = buildDowBars(dowRows);
+  $('by-dow-table').innerHTML = buildBreakdownTable(dowRows, 'Day');
+
+  if (!trades.length) {
+    if (!history.length) {
+      $('kpi-strip').innerHTML =
+        '<div style="grid-column:1/-1;padding:24px;text-align:center;color:#5a6275;">' +
+        'No closed trades in this range.</div>';
+    } else {
+      $('kpi-strip').innerHTML =
+        `<div class="kpi-card"><div class="kpi-val">${raw.account_balance != null ? raw.account_balance.toLocaleString() : '—'}</div><div class="kpi-lbl">Account Balance</div></div>` +
+        '<div style="grid-column:span 3;padding:12px;color:#5a6275;display:flex;align-items:center;">No closed trades in this range.</div>';
+    }
+    return;
+  }
+
+  renderAllInner(trades, history);
+}
+
+/* Split out so the early-return above (zero trades in range) stays simple
+   while the bulk of the KPI/chart-building logic below is unchanged from
+   before the date-range filter was added -- it just now runs on whatever
+   `trades` renderAll() was given instead of the full unfiltered list. */
+function renderAllInner(trades, history) {
 
 const pnls     = trades.map(t => t.pnl_pct).filter(x => x != null);
 const wins     = trades.filter(t => t.status === 'win');
@@ -628,20 +813,6 @@ const kpiHtml = [
 ].join('');
 $('kpi-strip').innerHTML = kpiHtml;
 
-/* ── Chart global defaults ──────────────────────────────────────────────── */
-Chart.defaults.color           = chartDefaults.tickColor;
-Chart.defaults.font.family     = chartDefaults.font.family;
-Chart.defaults.font.size       = chartDefaults.font.size;
-Chart.defaults.plugins.legend.labels.color = '#9aa0b0';
-
-function gridOpts(y2=false) {
-  return {
-    x: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, maxTicksLimit: 8 } },
-    y: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, maxTicksLimit: 6 } },
-    ...(y2 ? { y2: { position:'right', grid:{display:false}, ticks:{color:chartDefaults.tickColor} } } : {}),
-  };
-}
-
 /* ── 1. Daily activity bar chart ─────────────────────────────────────────── */
 (function () {
   const dayMap = {};
@@ -654,7 +825,7 @@ function gridOpts(y2=false) {
   const days = Object.keys(dayMap).sort();
   if (!days.length) return;
   $('activity-card').style.display = '';
-  new Chart($('chart-activity'), {
+  mkChart('chart-activity', {
     type: 'bar',
     data: {
       labels: days,
@@ -708,7 +879,7 @@ function gridOpts(y2=false) {
     });
   }
 
-  new Chart($('chart-equity'), {
+  mkChart('chart-equity', {
     type: 'line',
     data: { labels: equityDates, datasets },
     options: {
@@ -733,7 +904,7 @@ function gridOpts(y2=false) {
 (function () {
   if (!equityDates.length) return;
   $('drawdown-card').style.display = '';
-  new Chart($('chart-drawdown'), {
+  mkChart('chart-drawdown', {
     type: 'line',
     data: {
       labels: equityDates,
@@ -789,7 +960,7 @@ function gridOpts(y2=false) {
   }
 
   $('rolling-card').style.display = '';
-  new Chart($('chart-rolling'), {
+  mkChart('chart-rolling', {
     type: 'line',
     data: {
       labels: allDates,
@@ -810,7 +981,12 @@ function gridOpts(y2=false) {
   });
 })();
 
-/* ── 5. Monthly returns heatmap (+ click-through day calendar) ───────────── */
+/* ── 5. Monthly returns heatmap ───────────────────────────────────────────
+   (click-through day calendar logic itself is bound ONCE at module level,
+   below renderAllInner, and reads from `currentTrades` -- see comment there
+   for why: this whole function reruns on every filter change, and
+   addEventListener calls in here would otherwise stack up a new listener
+   per re-render.) */
 (function () {
   if (!pnls.length) return;
 
@@ -829,8 +1005,6 @@ function gridOpts(y2=false) {
 
   const years = [...new Set(yms.map(ym=>ym.slice(0,4)))].sort();
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const DOW_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   const maxAbs = Math.max(...Object.values(monthMap).map(Math.abs), 1);
 
@@ -861,72 +1035,6 @@ function gridOpts(y2=false) {
 
   $('heatmap-container').innerHTML = html;
   $('heatmap-card').style.display = '';
-
-  /* ── Month drill-down: full calendar, per-day trade count + win/loss % ── */
-  const calOverlay = $('cal-overlay');
-  const calTitle    = $('cal-modal-title');
-  const calBody     = $('cal-modal-body');
-
-  function closeCal() { calOverlay.style.display = 'none'; }
-  $('cal-modal-close').addEventListener('click', closeCal);
-  calOverlay.addEventListener('click', e => { if (e.target === calOverlay) closeCal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCal(); });
-
-  function openCalForMonth(ym) {
-    const [yr, mo] = ym.split('-').map(Number);   // mo is 1-12
-    const dayMap = {};   // day-of-month (1-31) -> {count, wins, losses}
-    for (const t of trades) {
-      if (!t.closed_at || t.closed_at.slice(0,7) !== ym) continue;
-      const day = parseInt(t.closed_at.slice(8,10), 10);
-      if (!dayMap[day]) dayMap[day] = { count:0, wins:0, losses:0 };
-      dayMap[day].count++;
-      if (t.status === 'win') dayMap[day].wins++; else if (t.status === 'loss') dayMap[day].losses++;
-    }
-
-    const daysInMonth = new Date(yr, mo, 0).getDate();
-    // JS getDay(): 0=Sun..6=Sat -- convert to a Mon-first index (0=Mon..6=Sun)
-    // so the grid lines up with the DOW_LABELS header above.
-    const firstDow = (new Date(yr, mo-1, 1).getDay() + 6) % 7;
-
-    let monthTotal = 0, monthWins = 0, monthLosses = 0;
-    Object.values(dayMap).forEach(d => { monthTotal += d.count; monthWins += d.wins; monthLosses += d.losses; });
-    const monthWr = monthTotal ? (monthWins/(monthWins+monthLosses||1)*100) : null;
-
-    calTitle.textContent = `${MONTHS_FULL[mo-1]} ${yr}`;
-
-    let html = `<div class="cal-modal-summary">
-      <span><b>${monthTotal}</b> trade${monthTotal===1?'':'s'}</span>
-      <span><b>${monthWins}</b> win${monthWins===1?'':'s'}</span>
-      <span><b>${monthLosses}</b> loss${monthLosses===1?'es':''}</span>
-      ${monthWr!=null ? `<span>Win rate <b>${monthWr.toFixed(0)}%</b></span>` : ''}
-    </div>`;
-    html += `<div class="cal-grid">`;
-    for (const d of DOW_LABELS) html += `<div class="cal-dow">${d}</div>`;
-    for (let i=0; i<firstDow; i++) html += `<div class="cal-day cal-empty"></div>`;
-    for (let day=1; day<=daysInMonth; day++) {
-      const d = dayMap[day];
-      if (!d) {
-        html += `<div class="cal-day"><div class="cal-day-num">${day}</div></div>`;
-        continue;
-      }
-      const wr = (d.wins + d.losses) > 0 ? (d.wins/(d.wins+d.losses)*100) : null;
-      const wrColor = wr==null ? '#5a6275' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
-      const wrTxt = wr!=null ? `${wr.toFixed(0)}% win` : `${d.count} closed`;
-      html += `<div class="cal-day" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L">
-        <div class="cal-day-num">${day}</div>
-        <div class="cal-day-count">${d.count} trade${d.count===1?'':'s'}</div>
-        <div class="cal-day-wr" style="color:${wrColor};">${wrTxt}</div>
-      </div>`;
-    }
-    html += `</div>`;
-    calBody.innerHTML = html;
-    calOverlay.style.display = 'flex';
-  }
-
-  $('heatmap-container').addEventListener('click', e => {
-    const cell = e.target.closest('.hm-cell.hm-clickable');
-    if (cell) openCalForMonth(cell.dataset.ym);
-  });
 })();
 
 /* ── 6. P&L histogram ───────────────────────────────────────────────────── */
@@ -943,7 +1051,7 @@ function gridOpts(y2=false) {
     colors.push(b >= 0 ? 'rgba(68,255,136,.7)' : 'rgba(255,68,68,.7)');
   }
   $('pnl-hist-card').style.display = '';
-  new Chart($('chart-pnl-hist'), {
+  mkChart('chart-pnl-hist', {
     type: 'bar',
     data: { labels: bins, datasets: [{ label:'Trades', data: counts, backgroundColor: colors, borderWidth:0 }] },
     options: {
@@ -969,7 +1077,7 @@ function gridOpts(y2=false) {
     counts.push(holdDays.filter(v=>v>=b && v<b+binW).length);
   }
   $('dur-hist-card').style.display = '';
-  new Chart($('chart-dur-hist'), {
+  mkChart('chart-dur-hist', {
     type: 'bar',
     data: { labels: bins.map(b=>b+'-'+(b+binW-1)+'d'), datasets:[{ label:'Trades (days held)', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
     options: {
@@ -995,7 +1103,7 @@ function gridOpts(y2=false) {
 (function () {
   if (!totalTrades) return;
   $('winloss-pie-card').style.display = '';
-  new Chart($('chart-winloss-pie'), {
+  mkChart('chart-winloss-pie', {
     type: 'doughnut',
     data: {
       labels: ['Wins', 'Losses'],
@@ -1024,7 +1132,7 @@ function gridOpts(y2=false) {
   const longs  = trades.filter(t => t.direction === 'bullish').length;
   const shorts = trades.filter(t => t.direction === 'bearish').length;
   if (!longs && !shorts) { $('direction-pie-card').style.display = 'none'; return; }
-  new Chart($('chart-direction-pie'), {
+  mkChart('chart-direction-pie', {
     type: 'doughnut',
     data: {
       labels: ['Long', 'Short'],
@@ -1059,7 +1167,7 @@ function gridOpts(y2=false) {
   if (!stratKeys.length) return;
   $('strategy-pie-card').style.display = '';
   const palette = ['#5a7fff','#44ff88','#e2b25a','#ff4444','#ab47bc','#26c6da','#ff9800','#9aa0b0','#66bb6a','#ec407a'];
-  new Chart($('chart-strategy-pie'), {
+  mkChart('chart-strategy-pie', {
     type: 'pie',
     data: {
       labels: stratKeys,
@@ -1096,7 +1204,7 @@ function gridOpts(y2=false) {
     counts.push(rMultiples.filter(v=>v>=b && v<b+binW).length);
     colors.push(b >= 0 ? 'rgba(68,255,136,.7)' : 'rgba(255,68,68,.7)');
   }
-  new Chart($('chart-r-multiple'), {
+  mkChart('chart-r-multiple', {
     type: 'bar',
     data: { labels: bins.map(b=>b+'R'), datasets:[{ label:'Trades', data:counts, backgroundColor:colors, borderWidth:0 }] },
     options: {
@@ -1126,7 +1234,7 @@ function gridOpts(y2=false) {
   $('confidence-card').style.display = '';
   const wrByLevel = byLevel.map(arr => arr.length ? arr.filter(t=>t.status==='win').length/arr.length*100 : null);
   const countByLevel = byLevel.map(arr => arr.length);
-  new Chart($('chart-confidence'), {
+  mkChart('chart-confidence', {
     type: 'bar',
     data: {
       labels: levels.map(lv=>'Lv'+lv),
@@ -1186,7 +1294,7 @@ function gridOpts(y2=false) {
     };
   });
 
-  new Chart($('chart-cum-pnl-strategy'), {
+  mkChart('chart-cum-pnl-strategy', {
     type: 'line',
     data: { labels: equityDates, datasets },
     options: {
@@ -1205,7 +1313,90 @@ function gridOpts(y2=false) {
   });
 })();
 
-/* ── 13. Trade log table ─────────────────────────────────────────────────── */
+} // end renderAllInner
+
+/* ── Month drill-down calendar modal ──────────────────────────────────────
+   Bound ONCE at page load (same reasoning as the trade-log table below) --
+   reads from `currentTrades`, which renderAll() keeps up to date, so the
+   calendar always reflects whatever date range is currently selected even
+   though its own click listeners never get re-attached. */
+(function () {
+  const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  const calOverlay = $('cal-overlay');
+  const calTitle    = $('cal-modal-title');
+  const calBody     = $('cal-modal-body');
+  if (!calOverlay) return;
+
+  function closeCal() { calOverlay.style.display = 'none'; }
+  $('cal-modal-close').addEventListener('click', closeCal);
+  calOverlay.addEventListener('click', e => { if (e.target === calOverlay) closeCal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCal(); });
+
+  function openCalForMonth(ym) {
+    const trades = currentTrades;
+    const [yr, mo] = ym.split('-').map(Number);   // mo is 1-12
+    const dayMap = {};   // day-of-month (1-31) -> {count, wins, losses}
+    for (const t of trades) {
+      if (!t.closed_at || t.closed_at.slice(0,7) !== ym) continue;
+      const day = parseInt(t.closed_at.slice(8,10), 10);
+      if (!dayMap[day]) dayMap[day] = { count:0, wins:0, losses:0 };
+      dayMap[day].count++;
+      if (t.status === 'win') dayMap[day].wins++; else if (t.status === 'loss') dayMap[day].losses++;
+    }
+
+    const daysInMonth = new Date(yr, mo, 0).getDate();
+    // JS getDay(): 0=Sun..6=Sat -- convert to a Mon-first index (0=Mon..6=Sun)
+    // so the grid lines up with the DOW_LABELS header above.
+    const firstDow = (new Date(yr, mo-1, 1).getDay() + 6) % 7;
+
+    let monthTotal = 0, monthWins = 0, monthLosses = 0;
+    Object.values(dayMap).forEach(d => { monthTotal += d.count; monthWins += d.wins; monthLosses += d.losses; });
+    const monthWr = monthTotal ? (monthWins/(monthWins+monthLosses||1)*100) : null;
+
+    calTitle.textContent = `${MONTHS_FULL[mo-1]} ${yr}`;
+
+    let html = `<div class="cal-modal-summary">
+      <span><b>${monthTotal}</b> trade${monthTotal===1?'':'s'}</span>
+      <span><b>${monthWins}</b> win${monthWins===1?'':'s'}</span>
+      <span><b>${monthLosses}</b> loss${monthLosses===1?'es':''}</span>
+      ${monthWr!=null ? `<span>Win rate <b>${monthWr.toFixed(0)}%</b></span>` : ''}
+    </div>`;
+    html += `<div class="cal-grid">`;
+    for (const d of DOW_LABELS) html += `<div class="cal-dow">${d}</div>`;
+    for (let i=0; i<firstDow; i++) html += `<div class="cal-day cal-empty"></div>`;
+    for (let day=1; day<=daysInMonth; day++) {
+      const d = dayMap[day];
+      if (!d) {
+        html += `<div class="cal-day"><div class="cal-day-num">${day}</div></div>`;
+        continue;
+      }
+      const wr = (d.wins + d.losses) > 0 ? (d.wins/(d.wins+d.losses)*100) : null;
+      const wrColor = wr==null ? '#5a6275' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
+      const wrTxt = wr!=null ? `${wr.toFixed(0)}% win` : `${d.count} closed`;
+      html += `<div class="cal-day" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L">
+        <div class="cal-day-num">${day}</div>
+        <div class="cal-day-count">${d.count} trade${d.count===1?'':'s'}</div>
+        <div class="cal-day-wr" style="color:${wrColor};">${wrTxt}</div>
+      </div>`;
+    }
+    html += `</div>`;
+    calBody.innerHTML = html;
+    calOverlay.style.display = 'flex';
+  }
+
+  $('heatmap-container').addEventListener('click', e => {
+    const cell = e.target.closest('.hm-cell.hm-clickable');
+    if (cell) openCalForMonth(cell.dataset.ym);
+  });
+})();
+
+/* ── 13. Trade log table ──────────────────────────────────────────────────
+   Bound ONCE at page load (not inside renderAll/renderAllInner) so header
+   click / search-input listeners never stack up across re-renders -- it
+   always reads from the module-level `currentTrades`, which renderAll()
+   updates every time the date-range filter changes. */
 (function () {
   const tbody = $('trade-log-body');
   if (!tbody) return;
@@ -1223,12 +1414,14 @@ function gridOpts(y2=false) {
       t.entry     ? t.entry.toFixed(2)     : '—',
       t.exit_price? t.exit_price.toFixed(2): '—',
       t.pnl_pct   != null ? t.pnl_pct : null,
+      t.realized_pnl_amount != null ? t.realized_pnl_amount : null,
       t.confidence || 0,
       t.status,
     ];
   }
 
   function renderTable(filter) {
+    const trades = currentTrades;
     const rows = trades
       .filter(t => !filter || (t.ticker+' '+(t.strategy||'')).toLowerCase().includes(filter))
       .map(t => ({ t, d: rowData(t) }));
@@ -1246,7 +1439,10 @@ function gridOpts(y2=false) {
       const pnl    = d[8];
       const pnlTxt = pnl != null ? (pnl>=0?'+':'')+pnl.toFixed(2)+'%' : '—';
       const pnlCls = pnl != null ? (pnl>=0?'tl-win':'tl-loss') : '';
-      const resCls = d[10]==='win' ? 'tl-win' : 'tl-loss';
+      const amt    = d[9];
+      const amtTxt = amt != null ? (amt>=0?'+':'')+amt.toFixed(2) : '—';
+      const amtCls = amt != null ? (amt>=0?'tl-win':'tl-loss') : '';
+      const resCls = d[11]==='win' ? 'tl-win' : 'tl-loss';
       const dirCol = d[2].startsWith('▲') ? '#44ff88' : '#ff4444';
       return `<tr>
         <td style="font-weight:600;color:#dde1ea;">${d[0]}</td>
@@ -1258,8 +1454,9 @@ function gridOpts(y2=false) {
         <td>$${d[6]}</td>
         <td>$${d[7]}</td>
         <td class="${pnlCls}">${pnlTxt}</td>
-        <td style="color:#e2b25a;">Lv${d[9]}</td>
-        <td class="${resCls}" style="text-transform:capitalize;">${d[10]}</td>
+        <td class="${amtCls}">${amtTxt}</td>
+        <td style="color:#e2b25a;">Lv${d[10]}</td>
+        <td class="${resCls}" style="text-transform:capitalize;">${d[11]}</td>
       </tr>`;
     }).join('');
 
@@ -1281,7 +1478,59 @@ function gridOpts(y2=false) {
     renderTable(this.value.toLowerCase().trim());
   });
 
+  // Re-render the trade-log table's own view (respecting current sort/search)
+  // every time renderAll() finishes -- hook via a tiny pub/sub: renderAll()
+  // calls window.__tlRerender() at its very end if defined.
+  window.__tlRerender = () => renderTable($('tl-search').value.toLowerCase().trim());
   renderTable('');
+})();
+
+/* ── Date-range filter bar wiring ─────────────────────────────────────────── */
+(function () {
+  const presetBtns = Array.from(document.querySelectorAll('.range-btn[data-range]'));
+  const fromInput  = $('range-from');
+  const toInput    = $('range-to');
+  const applyBtn   = $('range-apply');
+  const summaryEl  = $('range-summary');
+
+  function setActivePreset(preset) {
+    presetBtns.forEach(b => b.classList.toggle('active', b.dataset.range === preset));
+  }
+
+  function applyRange(fromStr, toStr, label) {
+    const filteredTrades  = filterTradesByRange(allTrades, fromStr, toStr);
+    const filteredHistory = filterBalanceHistory(raw.balance_history || [], fromStr, toStr);
+    renderAll(filteredTrades, filteredHistory);
+    if (window.__tlRerender) window.__tlRerender();
+
+    if (!fromStr && !toStr) {
+      summaryEl.textContent = `Showing: all time (${filteredTrades.length} trades)`;
+    } else {
+      summaryEl.textContent = `Showing: ${fromStr || '…'} – ${toStr || '…'} (${filteredTrades.length} trades)`;
+    }
+    if (label) { fromInput.value = ''; toInput.value = ''; }
+  }
+
+  presetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setActivePreset(btn.dataset.range);
+      const [fromStr, toStr] = computeRangePreset(btn.dataset.range);
+      applyRange(fromStr, toStr, true);
+    });
+  });
+
+  applyBtn.addEventListener('click', () => {
+    const fromStr = fromInput.value || null;
+    const toStr   = toInput.value || null;
+    if (!fromStr && !toStr) return;
+    setActivePreset(null); // clear preset highlighting -- this is a custom range
+    applyRange(fromStr, toStr, false);
+  });
+
+  // ── Initial render: "All time" ──────────────────────────────────────────
+  setActivePreset('all');
+  renderAll(allTrades, raw.balance_history || []);
+  summaryEl.textContent = `Showing: all time (${allTrades.length} trades)`;
 })();
 
 })();

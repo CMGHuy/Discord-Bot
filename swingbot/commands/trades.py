@@ -1,13 +1,22 @@
-"""!trades, !trade, !tradecharts, !performance, !pnl."""
+"""!trades, !trade, !tradecharts, !performance, !pnl, !summary."""
 import asyncio
 import os
+from datetime import datetime, timezone
 
 import discord
 
 from swingbot import config
+from swingbot.core import account as account_module
 from swingbot.core import scan_engine
+from swingbot.core.data import get_currency_symbol
 from swingbot.bot_core import bot
 from swingbot.core.risk_metrics import compute_risk_metrics
+
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
+except Exception:
+    _BERLIN_TZ = None
 
 trade_log = scan_engine.trade_log
 
@@ -46,16 +55,25 @@ DEFAULT_PER_PAGE = 10
 
 def format_trades_table(trades, header: str) -> str:
     lines = [header, "```"]
-    lines.append(f"{'ID':8s} {'Ticker':6s} {'Method':10s} {'H':3s} {'Dir':5s} {'Conf':5s} {'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s}")
+    lines.append(
+        f"{'ID':8s} {'Ticker':6s} {'Method':10s} {'H':3s} {'Dir':5s} {'Conf':5s} "
+        f"{'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s} {'Gain/Loss':>11s}"
+    )
     for t in trades:
         # Use the actual confirming method (target_sources/stop_sources priority
         # ranking) instead of the static "S/R Confluence" t["strategy"] default.
         method = _primary_source_label(t)
         method_short = method[:10]
         dir_short = "LONG" if t['direction'] == "bullish" else "SHORT"
+        # Realized $/€ gain/loss -- only meaningful for a closed win/loss
+        # trade that has a sizing snapshot (see account.py/performance.py);
+        # blank for a still-open trade or one logged before this existed.
+        amount = t.get("realized_pnl_amount")
+        amount_str = f"{amount:+.2f}" if amount is not None else "--"
         lines.append(
             f"{t['id']:8s} {t['ticker']:6s} {method_short:10s} {t['horizon_key']:3s} {dir_short:5s} "
-            f"{'L'+str(t['confidence_level']):5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} {t['status']:6s}"
+            f"{'L'+str(t['confidence_level']):5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} "
+            f"{t['status']:6s} {amount_str:>11s}"
         )
     lines.append("```")
     lines.append("Use `!trade ID` for full detail, `!trade delete ID` to remove one, `!trades clear` to clear active trades, `!trades clear history` to clear closed trade history.")
@@ -159,33 +177,103 @@ async def trades_clear_history(ctx):
     await ctx.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
 
 
+def _build_trade_detail_embed(match: dict) -> discord.Embed:
+    """
+    One trade's full detail as a proper Discord embed -- a grid of
+    label/value fields (Discord's own "table" layout) instead of a wall of
+    prose sentences, so entry/stop/target/status etc. each read as their
+    own row instead of being buried mid-sentence.
+    """
+    is_bull = match["direction"] == "bullish"
+    is_open = match["status"] == "open"
+    direction_word = "LONG (buy)" if is_bull else "SHORT (sell)"
+    cur = get_currency_symbol(match["ticker"], config.CURRENCY_SYMBOL)
+    method = _primary_source_label(match)
+
+    if is_open:
+        icon, color = "🔵", discord.Color.blue()
+        status_word = "OPEN"
+    elif match["status"] == "win":
+        icon, color = "✅", discord.Color.green()
+        status_word = "WIN ✅"
+    elif match["status"] == "loss":
+        icon, color = "❌", discord.Color.red()
+        status_word = "LOSS ❌"
+    else:
+        icon, color = "🔒", discord.Color.from_rgb(90, 98, 117)
+        status_word = "MANUALLY CLOSED"
+
+    embed = discord.Embed(title=f"{icon} Trade {match['id']} — {match['ticker']}", color=color)
+
+    embed.add_field(name="Status", value=status_word, inline=True)
+    embed.add_field(name="Direction", value=direction_word, inline=True)
+    embed.add_field(name="Confidence", value=f"{match['confidence_label']} (Lv{match['confidence_level']})", inline=True)
+
+    embed.add_field(name="Strategy", value=method, inline=True)
+    embed.add_field(name="Horizon", value=match["horizon_key"], inline=True)
+    if match.get("risk_reward_ratio"):
+        embed.add_field(name="Reward:Risk", value=f"{match['risk_reward_ratio']}:1", inline=True)
+    else:
+        embed.add_field(name="​", value="​", inline=True)   # keeps the 3-column grid even
+
+    reward_pct = abs(match["take_profit"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
+    embed.add_field(name="Entry", value=f"{cur}{match['entry']:.2f}", inline=True)
+    embed.add_field(name="Stop-loss", value=f"{cur}{match['stop_loss']:.2f}", inline=True)
+    embed.add_field(name="Target 1", value=f"{cur}{match['take_profit']:.2f} (+{reward_pct:.1f}%)", inline=True)
+
+    if match.get("target2"):
+        t2_pct = abs(match["target2"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
+        embed.add_field(name="Target 2 (stretch)", value=f"{cur}{match['target2']:.2f} (+{t2_pct:.1f}%)", inline=True)
+
+    embed.add_field(name="Opened", value=match["opened_at"][:16].replace("T", " ") + " UTC", inline=True)
+
+    if not is_open:
+        exit_price = match.get("exit_price")
+        embed.add_field(
+            name="Closed",
+            value=(match.get("closed_at") or "n/a")[:16].replace("T", " ") + " UTC",
+            inline=True,
+        )
+        embed.add_field(name="Exit price", value=f"{cur}{exit_price:.2f}" if exit_price else "n/a", inline=True)
+
+        # Realized P&L% + $/€ gain-loss -- the actual currency amount from
+        # the position size snapshotted when this trade was opened (see
+        # account.py / performance.py's _settle_account_balance). "n/a" for
+        # a manual close (no exit price) or a trade logged before sizing
+        # snapshots existed.
+        if exit_price and match["entry"]:
+            raw_pct = (exit_price - match["entry"]) / match["entry"] * 100
+            pnl_pct = raw_pct if is_bull else -raw_pct
+            embed.add_field(name="Realized P&L", value=f"{pnl_pct:+.2f}%", inline=True)
+        else:
+            embed.add_field(name="Realized P&L", value="n/a", inline=True)
+
+        amount = match.get("realized_pnl_amount")
+        embed.add_field(name="Gain/Loss", value=f"{amount:+.2f}{cur}" if amount is not None else "n/a", inline=True)
+
+    if match.get("close_reason"):
+        embed.add_field(name="Close reason", value=match["close_reason"], inline=False)
+
+    embed.set_footer(text=f"Trade ID: {match['id']}")
+    return embed
+
+
 @bot.group(name="trade", invoke_without_command=True)
 async def trade_cmd(ctx, trade_id: str):
     match = trade_log.get_trade_by_id(trade_id)
     if not match:
         await ctx.send(f"No trade found with id `{trade_id}`. Use `!trades` to list recent ones.")
         return
-    direction_word = "LONG (buy)" if match["direction"] == "bullish" else "SHORT (sell)"
-    reward_pct = abs(match["take_profit"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
-    lines = [
-        f"**Trade {match['id']}** — {match['ticker']}",
-        f"Strategy: {match['strategy']} ({match['horizon_key']})",
-        f"Direction: {direction_word}, Confidence: {match['confidence_label']} (Lv{match['confidence_level']})",
-        f"Entry: {match['entry']} | Stop-loss: {match['stop_loss']} | Target 1: {match['take_profit']} (+{reward_pct:.1f}% target)",
-    ]
-    if match.get("target2"):
-        t2_pct = abs(match["target2"] - match["entry"]) / match["entry"] * 100 if match["entry"] else 0.0
-        lines.append(f"Target 2 (stretch): {match['target2']} (+{t2_pct:.1f}%)")
-    lines.append(f"Opened: {match['opened_at']}")
-    lines.append(f"Status: {match['status']}")
-    if match["status"] != "open":
-        lines.append(f"Closed: {match['closed_at']} @ {match['exit_price']}")
 
+    embed = _build_trade_detail_embed(match)
     chart_path = await asyncio.to_thread(scan_engine.regenerate_chart_for_trade, match)
     if chart_path:
-        await ctx.send("\n".join(lines), file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+        filename = os.path.basename(chart_path)
+        embed.set_image(url=f"attachment://{filename}")
+        await ctx.send(embed=embed, file=discord.File(chart_path, filename=filename))
     else:
-        await ctx.send("\n".join(lines) + "\n(Could not generate a chart for this trade right now.)")
+        embed.add_field(name="⚠️ Chart", value="Could not generate a chart for this trade right now.", inline=False)
+        await ctx.send(embed=embed)
 
 
 @trade_cmd.command(name="delete")
@@ -307,3 +395,112 @@ async def pnl_cmd(ctx):
         lines.append(f"Average unrealized P/L across {counted} priced trade(s): {total_pct/counted:+.2f}%")
     lines.append("ToSL%/ToTP% = how far the current price is from the stop-loss / recommended TP.")
     await ctx.send("\n".join(lines))
+
+
+def _berlin_date(iso_ts: str):
+    """Parses an ISO timestamp and returns its calendar date in Europe/Berlin
+    -- the same day boundary performance.py's by-day-of-week breakdown and
+    account.py's daily balance summary already use, so "today" means the
+    same thing everywhere in the bot."""
+    if not iso_ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (dt.astimezone(_BERLIN_TZ) if _BERLIN_TZ else dt).date()
+
+
+def _closed_pnl_pct(t: dict) -> float | None:
+    entry, exit_p = t.get("entry"), t.get("exit_price")
+    if not entry or not exit_p:
+        return None
+    raw = (exit_p - entry) / entry * 100
+    return raw if t["direction"] == "bullish" else -raw
+
+
+@bot.command(name="summary")
+async def summary_cmd(ctx):
+    """
+    Everything that happened TODAY (Europe/Berlin calendar day) in one
+    place: trades opened, trades closed (win/loss, %, and $/€), and the
+    account balance's own movement today -- a quick end-of-day (or
+    check-in-anytime) status read without digging through !trades or the
+    admin Performance page.
+    """
+    today = datetime.now(_BERLIN_TZ).date() if _BERLIN_TZ else datetime.now(timezone.utc).date()
+    all_trades = trade_log.get_trades(status="all", limit=None)
+
+    opened_today = [t for t in all_trades if _berlin_date(t.get("opened_at")) == today]
+    closed_today = [
+        t for t in all_trades
+        if t["status"] in ("win", "loss", "closed") and _berlin_date(t.get("closed_at")) == today
+    ]
+    wins_today   = [t for t in closed_today if t["status"] == "win"]
+    losses_today = [t for t in closed_today if t["status"] == "loss"]
+    manual_today = [t for t in closed_today if t["status"] == "closed"]
+
+    amounts = [t["realized_pnl_amount"] for t in closed_today if t.get("realized_pnl_amount") is not None]
+    net_amount = sum(amounts) if amounts else None
+    pnl_pcts = [p for t in closed_today if (p := _closed_pnl_pct(t)) is not None]
+    avg_pnl_pct = sum(pnl_pcts) / len(pnl_pcts) if pnl_pcts else None
+
+    acct = account_module.get_daily_summary()
+
+    color = (
+        discord.Color.green() if (net_amount or 0) > 0
+        else discord.Color.red() if (net_amount or 0) < 0
+        else discord.Color.from_rgb(90, 98, 117)
+    )
+    embed = discord.Embed(title=f"📋 Today's Summary — {today.isoformat()} (Berlin)", color=color)
+
+    embed.add_field(name="Opened today", value=str(len(opened_today)), inline=True)
+    embed.add_field(name="Closed today", value=str(len(closed_today)), inline=True)
+    embed.add_field(name="Still open", value=str(trade_log.get_stats()["open"]), inline=True)
+
+    embed.add_field(name="Wins", value=f"✅ {len(wins_today)}", inline=True)
+    embed.add_field(name="Losses", value=f"❌ {len(losses_today)}", inline=True)
+    if manual_today:
+        embed.add_field(name="Manually closed", value=f"🔒 {len(manual_today)}", inline=True)
+    else:
+        embed.add_field(name="​", value="​", inline=True)   # keeps the 3-column grid even
+
+    embed.add_field(name="Avg realized P&L", value=f"{avg_pnl_pct:+.2f}%" if avg_pnl_pct is not None else "n/a", inline=True)
+    embed.add_field(name="Net gain/loss", value=f"{net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
+    embed.add_field(name="​", value="​", inline=True)
+
+    embed.add_field(name="Account balance", value=f"{acct['balance']:.2f}" if acct["balance"] is not None else "n/a", inline=True)
+    embed.add_field(
+        name="Balance change today",
+        value=f"{acct['pct_change_today']:+.2f}%" if acct["pct_change_today"] is not None else "no change yet today",
+        inline=True,
+    )
+    embed.add_field(name="​", value="​", inline=True)
+
+    if closed_today:
+        lines = []
+        for t in sorted(closed_today, key=lambda t: t.get("closed_at") or ""):
+            icon = "✅" if t["status"] == "win" else ("❌" if t["status"] == "loss" else "🔒")
+            pct = _closed_pnl_pct(t)
+            amt = t.get("realized_pnl_amount")
+            pct_str = f"{pct:+.2f}%" if pct is not None else "n/a"
+            amt_str = f"{amt:+.2f}" if amt is not None else "n/a"
+            lines.append(f"{icon} `{t['id']}` {t['ticker']:6s} {pct_str:>8s}  ({amt_str})")
+        text = "\n".join(lines)
+        if len(text) > 1000:
+            text = text[:997] + "…"
+        embed.add_field(name="Closed trades today", value=f"```{text}```", inline=False)
+
+    if opened_today:
+        lines = [f"🔵 `{t['id']}` {t['ticker']:6s} {t['direction']:7s} Lv{t['confidence_level']}" for t in opened_today]
+        text = "\n".join(lines)
+        if len(text) > 1000:
+            text = text[:997] + "…"
+        embed.add_field(name="Opened trades today", value=f"```{text}```", inline=False)
+
+    if not opened_today and not closed_today:
+        embed.add_field(name="​", value="No trades opened or closed yet today.", inline=False)
+
+    await ctx.send(embed=embed)

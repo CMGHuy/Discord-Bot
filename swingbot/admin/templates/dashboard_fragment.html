@@ -507,6 +507,7 @@
       <th style="text-align:right;">Entry</th>
       <th style="text-align:right;">Exit</th>
       <th style="text-align:right;" title="Realized P&L % vs entry">P&amp;L%</th>
+      <th style="text-align:right;" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss</th>
       <th style="text-align:right;" title="Realized R-multiple">R</th>
       <th style="text-align:right;" title="Calendar days from open to close">Days</th>
       <th>Opened</th>
@@ -552,6 +553,13 @@
       <td style="text-align:right;font-weight:700;
                  color:{% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
         {{ '%+.2f%%'|format(c_pnl) if c_pnl is not none else '—' }}
+      </td>
+      <td style="text-align:right;font-weight:700;
+                 color:{% if t.realized_pnl_amount is none %}#5a6275{% elif t.realized_pnl_amount >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          title="{{ 'Position size at open: ' ~ cur_map.get(t.ticker, '') ~ '%.2f'|format(t.position_value) if t.position_value else 'No sizing snapshot for this trade (logged before this feature existed)' }}">
+        {%- if t.realized_pnl_amount is not none -%}
+          {{ '%+.2f'|format(t.realized_pnl_amount) }} {{ cur_map.get(t.ticker, '') }}
+        {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
       <td style="text-align:right;font-weight:600;
                  color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
