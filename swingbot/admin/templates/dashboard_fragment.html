@@ -41,6 +41,27 @@
 
 {# ── Stat cards ──────────────────────────────────────────────────────────── #}
 <div class="stat-row">
+  <div class="stat-card accent-blue" title="Current account balance and its movement so far today (Europe/Berlin calendar day), updating automatically as trades close.">
+    <div class="stat-label">Account balance</div>
+    <div class="stat-value" style="color: #6ea8fe;">
+      {{ '%.2f'|format(stats.account.balance) if stats.account.balance is not none else '—' }}
+    </div>
+    <div class="stat-sub">
+      {% if stats.account.pct_change_today is not none %}
+        <span style="color: {{ '#6dda9e' if stats.account.pct_change_today >= 0 else '#da6d6d' }}; font-weight:600;">
+          {{ '%+.2f%%'|format(stats.account.pct_change_today) }} today
+        </span>
+      {% else %}
+        no change yet today
+      {% endif %}
+      {% if stats.account.trades_closed_today %}
+        <br>
+        <span style="color:#6dda9e;">+{{ '%.2f'|format(stats.account.wins_amount_today) }}</span> /
+        <span style="color:#da6d6d;">-{{ '%.2f'|format(stats.account.losses_amount_today) }}</span>
+        ({{ stats.account.trades_closed_today }} closed today)
+      {% endif %}
+    </div>
+  </div>
   <div class="stat-card accent-blue">
     <div class="stat-label">Open trades</div>
     <div class="stat-value" style="color: #6ea8fe;">{{ stats.open }}</div>

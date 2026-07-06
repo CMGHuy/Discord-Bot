@@ -50,7 +50,7 @@ from flask import Flask, Response, abort, redirect, render_template, request, se
 from swingbot import config
 from swingbot.core.performance import TradeLog, trade_proximity
 from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
-from swingbot.core.account import compute_position_size, load_account_config
+from swingbot.core.account import compute_position_size, get_daily_summary, load_account_config
 from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, prefetch_prices, is_us_market_active
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.ticker_directory import search_tickers
@@ -356,6 +356,13 @@ def _render_dashboard_fragment() -> str:
     stats["total_realized_pct"] = round(sum(realized_pnls) / len(realized_pnls), 2) if realized_pnls else None
     stats["best_trade_pct"]     = round(max(realized_pnls), 2) if realized_pnls else None
     stats["worst_trade_pct"]    = round(min(realized_pnls), 2) if realized_pnls else None
+
+    # Account balance + today's movement -- recomputed on every fragment
+    # render, so with the dashboard's existing auto-refresh poll this stat
+    # card updates on its own the moment a trade closes and settles into
+    # the account balance (see performance.py's _settle_account_balance),
+    # with no extra JS/websocket plumbing needed.
+    stats["account"] = get_daily_summary()
 
     return render_template(
         "dashboard_fragment.html",

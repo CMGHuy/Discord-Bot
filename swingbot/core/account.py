@@ -43,6 +43,12 @@ from datetime import datetime, timezone
 
 from swingbot import config as app_config
 
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
+except Exception:
+    _BERLIN_TZ = None
+
 CONFIG_PATH = os.path.join(app_config.DATA_DIR, "account.json")
 
 # balance_history is append-only and grows one entry per closed trade (plus
@@ -168,6 +174,91 @@ def get_balance_history(path: str = CONFIG_PATH) -> list:
     balance` overrides -- for the admin Performance page's balance-over-time
     chart."""
     return load_account_config(path).get("balance_history", [])
+
+
+def _to_berlin(ts_iso: str) -> datetime | None:
+    try:
+        dt = datetime.fromisoformat(ts_iso)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_BERLIN_TZ) if _BERLIN_TZ else dt
+
+
+def get_daily_summary(path: str = CONFIG_PATH) -> dict:
+    """
+    Today's account-balance movement (Europe/Berlin calendar day, matching
+    the same day boundary performance.py's by-day-of-week breakdown
+    already uses), for the dashboard's Account Balance stat card:
+
+      - balance: current account balance (right now)
+      - balance_start_of_day: balance as of the last event BEFORE today
+        started -- i.e. what the balance was at midnight -- or None if
+        there's no history from before today (a brand-new account whose
+        very first entry IS today).
+      - pct_change_today: (balance - balance_start_of_day) / balance_start_of_day
+        x 100 -- reflects EVERYTHING that moved the balance today,
+        including a manual `!account balance` override, since that's a
+        real change to the balance regardless of cause.
+      - pnl_today: sum of pnl_amount across today's entries that came from
+        an actual trade settlement (pnl_amount is not None) -- i.e.
+        EXCLUDING manual overrides, since "today's win/loss" should mean
+        "what today's trades actually made or lost", not an unrelated
+        manual balance correction.
+      - wins_amount_today / losses_amount_today: pnl_today split into its
+        positive and negative (shown as a positive magnitude) parts, for a
+        two-color "+X won / -Y lost" display if wanted.
+      - trades_closed_today: count of trade-settlement entries today.
+
+    All currency fields are None if there's no balance_history at all
+    (shouldn't normally happen -- load_account_config always seeds at
+    least one entry -- but guards against a hand-edited account.json).
+    """
+    cfg = load_account_config(path)
+    balance = float(cfg.get("balance", 0))
+    history = cfg.get("balance_history", [])
+    if not history:
+        return {
+            "balance": balance, "balance_start_of_day": None, "pct_change_today": None,
+            "pnl_today": None, "wins_amount_today": None, "losses_amount_today": None,
+            "trades_closed_today": 0,
+        }
+
+    now_berlin = datetime.now(_BERLIN_TZ) if _BERLIN_TZ else datetime.now(timezone.utc)
+    today = now_berlin.date()
+
+    before_today = None    # most recent entry strictly before today
+    today_trade_pnls = []  # pnl_amount for today's real trade settlements only
+    for entry in history:
+        dt = _to_berlin(entry.get("ts", ""))
+        if dt is None:
+            continue
+        if dt.date() < today:
+            if before_today is None or dt > _to_berlin(before_today.get("ts", "")):
+                before_today = entry
+        elif dt.date() == today and entry.get("pnl_amount") is not None:
+            today_trade_pnls.append(float(entry["pnl_amount"]))
+
+    balance_start_of_day = float(before_today["balance"]) if before_today else None
+    pct_change_today = (
+        round((balance - balance_start_of_day) / balance_start_of_day * 100, 3)
+        if balance_start_of_day else None
+    )
+
+    wins_amount_today   = round(sum(p for p in today_trade_pnls if p > 0), 2)
+    losses_amount_today = round(-sum(p for p in today_trade_pnls if p < 0), 2)   # positive magnitude
+    pnl_today = round(sum(today_trade_pnls), 2) if today_trade_pnls else 0.0
+
+    return {
+        "balance": balance,
+        "balance_start_of_day": balance_start_of_day,
+        "pct_change_today": pct_change_today,
+        "pnl_today": pnl_today,
+        "wins_amount_today": wins_amount_today,
+        "losses_amount_today": losses_amount_today,
+        "trades_closed_today": len(today_trade_pnls),
+    }
 
 
 def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = CONFIG_PATH) -> dict:
