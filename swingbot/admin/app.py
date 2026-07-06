@@ -815,8 +815,12 @@ def resume_scan():
 @app.route("/performance", methods=["GET"])
 @require_auth
 def stats_page():
-    stats = _trades().get_detailed_stats()
-    return _render("Performance", "stats", "stats.html", stats=stats)
+    tl = _trades()
+    stats = tl.get_detailed_stats()
+    chart_data_json = json.dumps(tl.get_chart_data())
+    return _render("Performance", "stats", "stats.html", stats=stats,
+                   chart_data_json=chart_data_json)
+
 
 
 def main():

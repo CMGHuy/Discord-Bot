@@ -596,3 +596,93 @@ class TradeLog:
             "by_strategy": strategy_rows,
             "by_dow": dow_rows,
         }
+
+    def get_chart_data(self) -> dict:
+        """
+        Returns per-trade data for the JS-rendered performance analytics page.
+
+        Includes:
+          - trades: list of closed trades with pnl_pct, holding_days, opened_at, etc.
+          - spy_cum: {date_str: cumulative_%_return} from first trade's open date,
+                     for benchmark overlay. Empty dict if yfinance is unavailable.
+        """
+        self.refresh()
+        closed = sorted(
+            [t for t in self._trades if t["status"] in ("win", "loss")],
+            key=lambda t: t.get("closed_at") or "",
+        )
+
+        trades_out = []
+        for t in closed:
+            try:
+                entry = float(t.get("entry") or 0)
+            except (TypeError, ValueError):
+                entry = 0.0
+            try:
+                exit_p = float(t.get("exit_price") or 0)
+            except (TypeError, ValueError):
+                exit_p = 0.0
+
+            is_bull = t.get("direction") == "bullish"
+            pnl_pct = None
+            if entry > 0 and exit_p > 0:
+                pnl_pct = round(
+                    ((exit_p - entry) / entry * 100) if is_bull
+                    else ((entry - exit_p) / entry * 100),
+                    3,
+                )
+
+            opened_at = t.get("opened_at") or ""
+            closed_at = t.get("closed_at") or ""
+            holding_days = None
+            try:
+                if opened_at and closed_at:
+                    oa = datetime.fromisoformat(opened_at)
+                    ca = datetime.fromisoformat(closed_at)
+                    holding_days = round((ca - oa).total_seconds() / 86400, 2)
+            except Exception:
+                pass
+
+            trades_out.append({
+                "ticker":       t.get("ticker", ""),
+                "direction":    t.get("direction", ""),
+                "entry":        entry,
+                "exit_price":   exit_p,
+                "pnl_pct":      pnl_pct,
+                "status":       t.get("status", ""),
+                "opened_at":    opened_at,
+                "closed_at":    closed_at,
+                "holding_days": holding_days,
+                "strategy":     t.get("strategy", ""),
+                "confidence":   int(t.get("confidence") or 0),
+            })
+
+        # SPY benchmark: cumulative % return from the first trade's open date.
+        # Silently skipped if yfinance is unavailable or there are no trades.
+        spy_cum: dict = {}
+        if trades_out:
+            try:
+                import yfinance as yf  # already in requirements.txt
+                start_date = min(
+                    t["opened_at"][:10] for t in trades_out if t["opened_at"]
+                )
+                spy_df = yf.download(
+                    "SPY", start=start_date, progress=False, auto_adjust=True
+                )
+                if spy_df is not None and not spy_df.empty:
+                    closes = spy_df["Close"].dropna()
+                    base = float(closes.iloc[0])
+                    if base > 0:
+                        spy_cum = {
+                            str(idx.date()): round((float(val) - base) / base * 100, 3)
+                            for idx, val in closes.items()
+                        }
+            except Exception:
+                pass
+
+        return {
+            "trades":  trades_out,
+            "spy_cum": spy_cum,
+        }
+,
+        }

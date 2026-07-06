@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block body %}
 
-{# ── Macro: reusable breakdown table ──────────────────────────────────────── #}
+{# ── Inject chart data ────────────────────────────────────────────────────── #}
+<script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+
+{# ── Macro: breakdown table ───────────────────────────────────────────────── #}
 {% macro breakdown_table(rows, label_header) %}
 {% if rows %}
 <div style="overflow-x:auto;">
@@ -42,77 +45,145 @@
 {% endif %}
 {% endmacro %}
 
-{# ── Summary bar ──────────────────────────────────────────────────────────── #}
-<div class="card" style="margin-top:16px;">
-  <p class="card-title">📊 Overall Performance</p>
-  <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-end;">
+<style>
+/* ── KPI strip ─────────────────────────────────────────────────────────── */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.kpi-card {
+  background: #13161d;
+  border: 1px solid #1f2330;
+  border-radius: 8px;
+  padding: 12px 10px 10px;
+  text-align: center;
+}
+.kpi-val  { font-size: 22px; font-weight: 700; color: #dde1ea; line-height: 1.1; }
+.kpi-val.up   { color: #44ff88; }
+.kpi-val.down { color: #ff4444; }
+.kpi-val.warn { color: #e2b25a; }
+.kpi-lbl  { font-size: 10px; color: #5a6275; text-transform: uppercase;
+            letter-spacing: .05em; margin-top: 4px; }
 
-    <div style="text-align:center; min-width:80px;">
-      <div style="font-size:28px; font-weight:700; color:#dde1ea;">{{ stats.total_closed }}</div>
-      <div class="muted" style="font-size:11px; margin-top:2px;">CLOSED TRADES</div>
-    </div>
+/* ── Charts ────────────────────────────────────────────────────────────── */
+.chart-card { background: #13161d; border: 1px solid #1f2330;
+              border-radius: 8px; padding: 16px; margin-top: 16px; }
+.chart-title { font-size: 12px; font-weight: 600; color: #5a6275;
+               text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+.chart-wrap  { position: relative; }
 
-    <div style="text-align:center; min-width:80px;">
-      <div style="font-size:28px; font-weight:700; color:#44ff88;">{{ stats.total_wins }}</div>
-      <div class="muted" style="font-size:11px; margin-top:2px;">WINS</div>
-    </div>
+/* ── Heatmap ───────────────────────────────────────────────────────────── */
+.heatmap-grid { display: grid; gap: 2px; margin-top: 4px; }
+.hm-cell {
+  border-radius: 3px; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 600; color: rgba(255,255,255,.75);
+  cursor: default;
+}
+.hm-header { font-size: 9px; color: #5a6275; text-align: center;
+             display: flex; align-items: center; justify-content: center; }
 
-    <div style="text-align:center; min-width:80px;">
-      <div style="font-size:28px; font-weight:700; color:#ff4444;">{{ stats.total_losses }}</div>
-      <div class="muted" style="font-size:11px; margin-top:2px;">LOSSES</div>
-    </div>
+/* ── Trade log table ───────────────────────────────────────────────────── */
+#trade-log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#trade-log-table thead tr { border-bottom: 1px solid #1f2330; }
+#trade-log-table th {
+  padding: 6px 8px; text-align: right; font-size: 10px; color: #5a6275;
+  text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+#trade-log-table th:first-child,
+#trade-log-table th:nth-child(2),
+#trade-log-table th:nth-child(3) { text-align: left; }
+#trade-log-table th:hover { color: #dde1ea; }
+#trade-log-table td {
+  padding: 6px 8px; text-align: right;
+  border-bottom: 1px solid #0d0f14; color: #9aa0b0;
+}
+#trade-log-table td:first-child,
+#trade-log-table td:nth-child(2),
+#trade-log-table td:nth-child(3) { text-align: left; }
+#trade-log-table tbody tr:hover td { background: #1a1d26; }
+.tl-win  { color: #44ff88 !important; font-weight: 600; }
+.tl-loss { color: #ff4444 !important; font-weight: 600; }
+</style>
 
-    {% if stats.overall_win_rate is not none %}
-    {% set wr = stats.overall_win_rate %}
-    <div style="text-align:center; min-width:80px;">
-      <div style="font-size:28px; font-weight:700;
-                  color:{{ '#44ff88' if wr >= 60 else ('#e2b25a' if wr >= 40 else '#ff4444') }};">
-        {{ wr }}%
-      </div>
-      <div class="muted" style="font-size:11px; margin-top:2px;">WIN RATE</div>
-    </div>
-    {% endif %}
-
-    {% if stats.overall_avg_pnl is not none %}
-    <div style="text-align:center; min-width:80px;">
-      <div style="font-size:28px; font-weight:700;
-                  color:{{ '#44ff88' if stats.overall_avg_pnl >= 0 else '#ff4444' }};">
-        {{ '%+.2f'|format(stats.overall_avg_pnl) }}%
-      </div>
-      <div class="muted" style="font-size:11px; margin-top:2px;">AVG RETURN</div>
-    </div>
-    {% endif %}
-
-  </div>
-
+{# ── KPI strip (populated by JS) ─────────────────────────────────────────── #}
+<div class="kpi-strip" id="kpi-strip">
   {% if stats.total_closed == 0 %}
-  <p class="muted" style="margin-top:16px; margin-bottom:0;">
-    No closed trades yet. Stats will appear here once trades hit their stop-loss or take-profit.
-  </p>
+  <div style="grid-column:1/-1; padding:24px; text-align:center; color:#5a6275;">
+    No closed trades yet — stats will appear once trades resolve.
+  </div>
   {% endif %}
 </div>
 
-{# ── 2-column: By Stock + By Strategy ────────────────────────────────────── #}
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;" class="detail-two-col">
+{# ── Charts (all populated by JS) ────────────────────────────────────────── #}
+<div class="chart-card" id="activity-card" style="display:none;">
+  <div class="chart-title">📅 Daily Activity — wins &amp; losses per day</div>
+  <div class="chart-wrap" style="height:160px;">
+    <canvas id="chart-activity"></canvas>
+  </div>
+</div>
 
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;" id="equity-row">
+  <div class="chart-card" style="margin-top:0;" id="equity-card">
+    <div class="chart-title">📈 Equity curve vs SPY benchmark</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-equity"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="drawdown-card">
+    <div class="chart-title">🌊 Drawdown (% below peak)</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-drawdown"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card" id="rolling-card" style="display:none;">
+  <div class="chart-title">🔄 Rolling returns (30-day &amp; 90-day cumulative %)</div>
+  <div class="chart-wrap" style="height:180px;">
+    <canvas id="chart-rolling"></canvas>
+  </div>
+</div>
+
+<div id="heatmap-card" class="chart-card" style="display:none;">
+  <div class="chart-title">🗓 Monthly returns heatmap</div>
+  <div id="heatmap-container"></div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;" id="hist-row">
+  <div class="chart-card" style="margin-top:0;" id="pnl-hist-card">
+    <div class="chart-title">📊 P&amp;L distribution per trade (%)</div>
+    <div class="chart-wrap" style="height:200px;">
+      <canvas id="chart-pnl-hist"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="dur-hist-card">
+    <div class="chart-title">⏱ Holding period distribution (days)</div>
+    <div class="chart-wrap" style="height:200px;">
+      <canvas id="chart-dur-hist"></canvas>
+    </div>
+  </div>
+</div>
+
+{# ── Breakdown tables (server-rendered) ──────────────────────────────────── #}
+{% if stats.total_closed > 0 %}
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; margin-top:16px;" class="detail-two-col">
   <div class="card" style="margin-top:0;">
     <p class="card-title">📈 By Stock</p>
     {{ breakdown_table(stats.by_ticker, "Ticker") }}
   </div>
-
   <div class="card" style="margin-top:0;">
     <p class="card-title">🎯 By Strategy</p>
     {{ breakdown_table(stats.by_strategy, "Strategy") }}
   </div>
-
 </div>
 
-{# ── Day of week ──────────────────────────────────────────────────────────── #}
 <div class="card">
   <p class="card-title">📅 By Day of Week <span class="muted" style="font-size:11px; font-weight:400;">(trade closed, Berlin time)</span></p>
-
   {% if stats.by_dow %}
-  {# Mini bar chart + table side by side #}
   <div style="display:flex; gap:24px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px;">
     {% set max_total = stats.by_dow | map(attribute='total') | max %}
     {% for r in stats.by_dow %}
@@ -124,17 +195,550 @@
           {% if r.win_rate is not none %}{{ r.win_rate }}%{% endif %}
         </div>
         <div style="width:36px; background:{{ bar_color }}; border-radius:3px 3px 0 0;
-                    height:{{ [bar_h, 4] | max }}px; opacity:0.85; transition:height .3s;"></div>
+                    height:{{ [bar_h, 4] | max }}px; opacity:0.85;"></div>
         <div style="font-size:10px; color:#dde1ea; text-align:center;">{{ r.key[:3] }}</div>
         <div style="font-size:10px; color:#5a6275;">{{ r.total }}T</div>
       </div>
     {% endfor %}
   </div>
-
   {{ breakdown_table(stats.by_dow, "Day") }}
   {% else %}
   <p class="muted" style="margin:0;">No closed trades yet.</p>
   {% endif %}
 </div>
+
+{# ── Raw trade log ────────────────────────────────────────────────────────── #}
+<div class="card" style="margin-top:16px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+    <p class="card-title" style="margin:0;">📋 Trade Log</p>
+    <input id="tl-search" type="text" placeholder="Filter ticker / strategy…"
+           style="background:#0d0f14; border:1px solid #1f2330; border-radius:5px;
+                  color:#dde1ea; padding:5px 10px; font-size:12px; width:200px;">
+  </div>
+  <div style="overflow-x:auto;">
+    <table id="trade-log-table">
+      <thead>
+        <tr>
+          <th data-col="0">Ticker ↕</th>
+          <th data-col="1">Strategy ↕</th>
+          <th data-col="2">Dir ↕</th>
+          <th data-col="3">Opened ↕</th>
+          <th data-col="4">Closed ↕</th>
+          <th data-col="5">Days ↕</th>
+          <th data-col="6">Entry ↕</th>
+          <th data-col="7">Exit ↕</th>
+          <th data-col="8">P&amp;L % ↕</th>
+          <th data-col="9">Conf ↕</th>
+          <th data-col="10">Result ↕</th>
+        </tr>
+      </thead>
+      <tbody id="trade-log-body"></tbody>
+    </table>
+  </div>
+  <div id="tl-footer" style="font-size:11px; color:#5a6275; margin-top:8px; text-align:right;"></div>
+</div>
+{% endif %}
+
+{# ── Chart.js ─────────────────────────────────────────────────────────────── #}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+        crossorigin="anonymous"></script>
+
+<script>
+(function () {
+"use strict";
+
+/* ── helpers ────────────────────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const fmt1  = n => n == null ? '—' : n.toFixed(1);
+const fmt2  = n => n == null ? '—' : n.toFixed(2);
+const fmtP  = n => n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+const fmtPF = n => n == null ? '—' : (n === Infinity ? '∞' : n.toFixed(2));
+const sign  = n => n == null ? '' : (n >= 0 ? 'up' : 'down');
+const mean  = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+const stddev = arr => {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/(arr.length-1));
+};
+const max = arr => arr.reduce((a,b)=>Math.max(a,b), -Infinity);
+const min = arr => arr.reduce((a,b)=>Math.min(a,b),  Infinity);
+const sum  = arr => arr.reduce((a,b)=>a+b, 0);
+const chartDefaults = {
+  color: '#5a6275',
+  gridColor: '#1a1d26',
+  tickColor: '#5a6275',
+  font: { family: 'system-ui, -apple-system, sans-serif', size: 11 },
+};
+
+/* ── load data ──────────────────────────────────────────────────────────── */
+const raw    = JSON.parse($('chart-data').textContent);
+const trades = raw.trades;
+const spyCum = raw.spy_cum || {};
+
+if (!trades.length) {
+  $('kpi-strip').innerHTML =
+    '<div style="grid-column:1/-1;padding:24px;text-align:center;color:#5a6275;">' +
+    'No closed trades yet — stats will appear once trades resolve.</div>';
+  return;
+}
+
+trades.sort((a,b) => (a.closed_at||'').localeCompare(b.closed_at||''));
+
+const pnls     = trades.map(t => t.pnl_pct).filter(x => x != null);
+const wins     = trades.filter(t => t.status === 'win');
+const losses   = trades.filter(t => t.status === 'loss');
+const winPnls  = wins.map(t=>t.pnl_pct).filter(x=>x!=null);
+const lossPnls = losses.map(t=>t.pnl_pct).filter(x=>x!=null);
+const holdDays = trades.map(t=>t.holding_days).filter(x=>x!=null);
+
+/* ── derived metrics ────────────────────────────────────────────────────── */
+const totalTrades  = trades.length;
+const winRate      = totalTrades ? wins.length / totalTrades * 100 : 0;
+const avgWin       = winPnls.length  ? mean(winPnls)  : 0;
+const avgLoss      = lossPnls.length ? mean(lossPnls) : 0;
+const grossWin     = sum(winPnls);
+const grossLoss    = Math.abs(sum(lossPnls));
+const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : null);
+const expectancy   = winRate/100 * avgWin + (1 - winRate/100) * avgLoss;
+const avgHold      = holdDays.length ? mean(holdDays) : null;
+
+/* Equity curve (index = 100 at start) */
+const equityDates = [];
+const equityVals  = [];
+let   eq = 100;
+for (const t of trades) {
+  if (t.pnl_pct != null) eq *= (1 + t.pnl_pct / 100);
+  equityDates.push((t.closed_at || '').slice(0,10));
+  equityVals.push(parseFloat(eq.toFixed(2)));
+}
+const totalReturn = equityVals[equityVals.length-1] - 100;
+
+/* Drawdown */
+let peak = 100;
+const ddVals = [0];
+for (const v of equityVals) {
+  if (v > peak) peak = v;
+  ddVals.push(peak > 0 ? parseFloat(((v - peak)/peak*100).toFixed(3)) : 0);
+}
+ddVals.shift();
+const maxDD = min(ddVals);
+
+/* Annualised return & Sharpe / Sortino */
+const firstDate = new Date(trades[0].opened_at || trades[0].closed_at);
+const lastDate  = new Date(trades[trades.length-1].closed_at);
+const yearsFrac = Math.max((lastDate - firstDate) / (365.25*24*3600*1000), 1/365);
+const annReturn = (Math.pow(eq / 100, 1 / yearsFrac) - 1) * 100;
+
+/* Per-trade Sharpe / Sortino (annualised using avg holding period) */
+const tradeStd     = stddev(pnls);
+const downside     = pnls.filter(x => x < 0);
+const downStd      = stddev(downside.length ? downside : pnls);
+const annFactor    = avgHold ? Math.sqrt(252 / Math.max(avgHold, 0.5)) : 1;
+const sharpe       = tradeStd > 0  ? mean(pnls) / tradeStd * annFactor : null;
+const sortino      = downStd  > 0  ? mean(pnls) / downStd  * annFactor : null;
+const calmar       = maxDD    < 0  ? annReturn / Math.abs(maxDD) : null;
+const volatility   = tradeStd * annFactor;
+
+/* Trades per month */
+const monthsTotal = yearsFrac * 12;
+const tradesPerMo = totalTrades / Math.max(monthsTotal, 1);
+
+/* % time in market (approx, based on holding days) */
+const totalDays    = (lastDate - firstDate) / (24*3600*1000) || 1;
+const inMarketDays = sum(holdDays);
+const pctInMarket  = Math.min(inMarketDays / totalDays * 100, 100);
+
+/* SPY total return over same window */
+const spyDates = Object.keys(spyCum).sort();
+const spyLast  = spyDates.length ? spyCum[spyDates[spyDates.length-1]] : null;
+
+/* ── KPI cards ──────────────────────────────────────────────────────────── */
+function kpi(val, label, cls='') {
+  return `<div class="kpi-card">
+    <div class="kpi-val ${cls}">${val}</div>
+    <div class="kpi-lbl">${label}</div>
+  </div>`;
+}
+
+const kpiHtml = [
+  kpi(totalTrades,              'Trades'),
+  kpi(wins.length,              'Wins',        'up'),
+  kpi(losses.length,            'Losses',      'down'),
+  kpi(winRate.toFixed(1)+'%',   'Win Rate',    winRate>=55?'up':winRate>=40?'warn':'down'),
+  kpi(fmtP(avgWin),             'Avg Win',     'up'),
+  kpi(fmtP(avgLoss),            'Avg Loss',    'down'),
+  kpi(fmtPF(profitFactor),      'Profit Factor', profitFactor!=null&&profitFactor>=1.5?'up':profitFactor!=null&&profitFactor>=1?'warn':'down'),
+  kpi(fmtP(expectancy),         'Expectancy',  sign(expectancy)),
+  kpi(fmtP(totalReturn),        'Total Return',sign(totalReturn)),
+  kpi(fmtP(annReturn),          'Ann. Return', sign(annReturn)),
+  kpi(sharpe  !=null?fmt2(sharpe) :'—', 'Sharpe',  sharpe !=null&&sharpe >=1?'up':sharpe !=null&&sharpe >=0?'warn':'down'),
+  kpi(sortino !=null?fmt2(sortino):'—', 'Sortino', sortino!=null&&sortino>=1?'up':sortino!=null&&sortino>=0?'warn':'down'),
+  kpi(maxDD.toFixed(1)+'%',     'Max Drawdown','down'),
+  kpi(calmar  !=null?fmt2(calmar) :'—', 'Calmar',  calmar !=null&&calmar >=1?'up':calmar !=null&&calmar >=0?'warn':'down'),
+  kpi(volatility.toFixed(1)+'%','Volatility (ann)'),
+  kpi(avgHold !=null?fmt1(avgHold)+'d':'—','Avg Hold'),
+  kpi(fmt1(tradesPerMo)+'/mo',  'Trades/Month'),
+  kpi(fmt1(pctInMarket)+'%',    '% In Market'),
+].join('');
+$('kpi-strip').innerHTML = kpiHtml;
+
+/* ── Chart global defaults ──────────────────────────────────────────────── */
+Chart.defaults.color           = chartDefaults.tickColor;
+Chart.defaults.font.family     = chartDefaults.font.family;
+Chart.defaults.font.size       = chartDefaults.font.size;
+Chart.defaults.plugins.legend.labels.color = '#9aa0b0';
+
+function gridOpts(y2=false) {
+  return {
+    x: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, maxTicksLimit: 8 } },
+    y: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor, maxTicksLimit: 6 } },
+    ...(y2 ? { y2: { position:'right', grid:{display:false}, ticks:{color:chartDefaults.tickColor} } } : {}),
+  };
+}
+
+/* ── 1. Daily activity bar chart ─────────────────────────────────────────── */
+(function () {
+  const dayMap = {};
+  for (const t of trades) {
+    const d = (t.closed_at||'').slice(0,10);
+    if (!d) continue;
+    if (!dayMap[d]) dayMap[d] = {w:0, l:0};
+    if (t.status==='win') dayMap[d].w++; else dayMap[d].l++;
+  }
+  const days = Object.keys(dayMap).sort();
+  if (!days.length) return;
+  $('activity-card').style.display = '';
+  new Chart($('chart-activity'), {
+    type: 'bar',
+    data: {
+      labels: days,
+      datasets: [
+        { label:'Wins',   data: days.map(d=>dayMap[d].w), backgroundColor:'rgba(68,255,136,.75)', stack:'s' },
+        { label:'Losses', data: days.map(d=>dayMap[d].l), backgroundColor:'rgba(255,68,68,.75)',  stack:'s' },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'top', labels:{boxWidth:12,padding:16} }, tooltip:{mode:'index',intersect:false} },
+      scales: {
+        x: { stacked:true, grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:14, maxRotation:45} },
+        y: { stacked:true, grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1}, title:{display:true,text:'Trades',color:chartDefaults.tickColor} },
+      },
+    },
+  });
+})();
+
+/* ── 2. Equity curve ─────────────────────────────────────────────────────── */
+(function () {
+  if (!equityDates.length) return;
+  $('equity-card').style.display = '';
+
+  /* Build SPY series aligned to equity dates */
+  const spyAligned = equityDates.map(d => {
+    /* find closest SPY date ≤ d */
+    const keys = Object.keys(spyCum).sort();
+    let best = null;
+    for (const k of keys) { if (k <= d) best = k; else break; }
+    return best != null ? spyCum[best] : null;
+  });
+  const hasSpy = spyAligned.some(v=>v!=null);
+
+  const datasets = [
+    {
+      label: 'Bot Equity',
+      data: equityVals.map(v => parseFloat((v-100).toFixed(2))),
+      borderColor: '#44ff88', borderWidth: 2,
+      backgroundColor: 'rgba(68,255,136,.08)',
+      fill: true, tension: 0.3, pointRadius: 0,
+    },
+  ];
+  if (hasSpy) {
+    datasets.push({
+      label: 'SPY Benchmark',
+      data: spyAligned,
+      borderColor: '#5a7fff', borderWidth: 1.5,
+      borderDash: [4,3], backgroundColor: 'transparent',
+      fill: false, tension: 0.3, pointRadius: 0,
+    });
+  }
+
+  new Chart($('chart-equity'), {
+    type: 'line',
+    data: { labels: equityDates, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top', labels:{boxWidth:12,padding:16} },
+                tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y>=0?'+':''}${ctx.parsed.y.toFixed(2)}%` } } },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback: v => (v>=0?'+':'')+v+'%' } },
+      },
+    },
+  });
+})();
+
+/* ── 3. Drawdown chart ───────────────────────────────────────────────────── */
+(function () {
+  if (!equityDates.length) return;
+  $('drawdown-card').style.display = '';
+  new Chart($('chart-drawdown'), {
+    type: 'line',
+    data: {
+      labels: equityDates,
+      datasets: [{
+        label: 'Drawdown',
+        data: ddVals,
+        borderColor: '#ff4444', borderWidth: 1.5,
+        backgroundColor: 'rgba(255,68,68,.15)',
+        fill: true, tension: 0.2, pointRadius: 0,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+                tooltip:{ callbacks:{ label: ctx => ` Drawdown: ${ctx.parsed.y.toFixed(2)}%` } } },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>v+'%'}, reverse:false },
+      },
+    },
+  });
+})();
+
+/* ── 4. Rolling returns ──────────────────────────────────────────────────── */
+(function () {
+  if (trades.length < 5) return;
+
+  /* Build cumulative equity indexed series by date */
+  const eqMap = {};
+  let e = 100;
+  for (const t of trades) {
+    if (t.pnl_pct != null) e *= (1 + t.pnl_pct / 100);
+    eqMap[(t.closed_at||'').slice(0,10)] = e;
+  }
+
+  /* All calendar dates from first to last trade */
+  const allDates = Object.keys(eqMap).sort();
+  if (allDates.length < 10) return;
+
+  function rollingReturn(windowDays) {
+    const vals = [];
+    for (let i = 0; i < allDates.length; i++) {
+      const cur = new Date(allDates[i]);
+      const pastDate = new Date(cur - windowDays*24*3600*1000);
+      /* find closest date ≤ pastDate */
+      let prevEq = 100;
+      for (let j = i-1; j >= 0; j--) {
+        if (new Date(allDates[j]) <= pastDate) { prevEq = eqMap[allDates[j]]; break; }
+      }
+      vals.push(parseFloat(((eqMap[allDates[i]] / prevEq - 1) * 100).toFixed(2)));
+    }
+    return vals;
+  }
+
+  $('rolling-card').style.display = '';
+  new Chart($('chart-rolling'), {
+    type: 'line',
+    data: {
+      labels: allDates,
+      datasets: [
+        { label:'30-day rolling', data: rollingReturn(30),  borderColor:'#44ff88', borderWidth:1.5, fill:false, tension:0.3, pointRadius:0 },
+        { label:'90-day rolling', data: rollingReturn(90),  borderColor:'#e2b25a', borderWidth:1.5, fill:false, tension:0.3, pointRadius:0, borderDash:[4,3] },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top', labels:{boxWidth:12,padding:16} } },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:10} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>(v>=0?'+':'')+v+'%'} },
+      },
+    },
+  });
+})();
+
+/* ── 5. Monthly returns heatmap ─────────────────────────────────────────── */
+(function () {
+  if (!pnls.length) return;
+
+  const monthMap = {};
+  for (const t of trades) {
+    if (t.pnl_pct == null || !t.closed_at) continue;
+    const ym = t.closed_at.slice(0,7);
+    if (!monthMap[ym]) monthMap[ym] = 0;
+    monthMap[ym] += t.pnl_pct;
+  }
+  const yms = Object.keys(monthMap).sort();
+  if (!yms.length) return;
+
+  const years = [...new Set(yms.map(ym=>ym.slice(0,4)))].sort();
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const maxAbs = Math.max(...Object.values(monthMap).map(Math.abs), 1);
+
+  function cellColor(val) {
+    if (val == null) return '#1a1d26';
+    const t = Math.min(Math.abs(val) / maxAbs, 1);
+    if (val > 0) return `rgba(68,255,136,${0.15 + t*0.7})`;
+    return `rgba(255,68,68,${0.15 + t*0.7})`;
+  }
+
+  let html = `<div class="heatmap-grid" style="grid-template-columns:40px repeat(12,1fr);">`;
+  /* header row */
+  html += `<div class="hm-header"></div>`;
+  for (const m of MONTHS) html += `<div class="hm-header">${m}</div>`;
+  /* data rows */
+  for (const yr of years) {
+    html += `<div class="hm-header" style="justify-content:flex-end;padding-right:6px;">${yr}</div>`;
+    for (let mi=0; mi<12; mi++) {
+      const ym  = `${yr}-${String(mi+1).padStart(2,'0')}`;
+      const val = monthMap[ym] != null ? monthMap[ym] : null;
+      const txt = val != null ? (val>=0?'+':'')+val.toFixed(1)+'%' : '';
+      html += `<div class="hm-cell" style="background:${cellColor(val)};" title="${ym}: ${txt||'no trades'}">${txt}</div>`;
+    }
+  }
+  html += `</div>`;
+
+  $('heatmap-container').innerHTML = html;
+  $('heatmap-card').style.display = '';
+})();
+
+/* ── 6. P&L histogram ───────────────────────────────────────────────────── */
+(function () {
+  if (pnls.length < 2) return;
+  const lo = Math.floor(min(pnls));
+  const hi = Math.ceil(max(pnls));
+  const binW = Math.max(0.5, parseFloat(((hi-lo)/20).toFixed(1)));
+  const bins = [], counts = [], colors = [];
+  for (let b=lo; b<hi; b+=binW) {
+    bins.push(b.toFixed(1));
+    const cnt = pnls.filter(v=>v>=b && v<b+binW).length;
+    counts.push(cnt);
+    colors.push(b >= 0 ? 'rgba(68,255,136,.7)' : 'rgba(255,68,68,.7)');
+  }
+  $('pnl-hist-card').style.display = '';
+  new Chart($('chart-pnl-hist'), {
+    type: 'bar',
+    data: { labels: bins, datasets: [{ label:'Trades', data: counts, backgroundColor: colors, borderWidth:0 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title: t=>`P&L ${t[0].label}% – ${(parseFloat(t[0].label)+binW).toFixed(1)}%` } } },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:10} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1} },
+      },
+    },
+  });
+})();
+
+/* ── 7. Duration histogram ──────────────────────────────────────────────── */
+(function () {
+  if (holdDays.length < 2) return;
+  const lo = 0;
+  const hi = Math.ceil(max(holdDays));
+  const binW = Math.max(1, Math.ceil(hi/15));
+  const bins = [], counts = [];
+  for (let b=lo; b<hi; b+=binW) {
+    bins.push(b);
+    counts.push(holdDays.filter(v=>v>=b && v<b+binW).length);
+  }
+  $('dur-hist-card').style.display = '';
+  new Chart($('chart-dur-hist'), {
+    type: 'bar',
+    data: { labels: bins.map(b=>b+'-'+(b+binW-1)+'d'), datasets:[{ label:'Trades', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1} },
+      },
+    },
+  });
+})();
+
+/* ── 8. Trade log table ──────────────────────────────────────────────────── */
+(function () {
+  const tbody = $('trade-log-body');
+  if (!tbody) return;
+
+  let sortCol = 3, sortAsc = false;
+
+  function rowData(t) {
+    return [
+      t.ticker,
+      t.strategy || '—',
+      t.direction === 'bullish' ? '▲ Long' : '▼ Short',
+      (t.opened_at || '').slice(0,16).replace('T',' '),
+      (t.closed_at || '').slice(0,16).replace('T',' '),
+      t.holding_days != null ? t.holding_days : '',
+      t.entry     ? t.entry.toFixed(2)     : '—',
+      t.exit_price? t.exit_price.toFixed(2): '—',
+      t.pnl_pct   != null ? t.pnl_pct : null,
+      t.confidence || 0,
+      t.status,
+    ];
+  }
+
+  function renderTable(filter) {
+    const rows = trades
+      .filter(t => !filter || (t.ticker+' '+(t.strategy||'')).toLowerCase().includes(filter))
+      .map(t => ({ t, d: rowData(t) }));
+
+    rows.sort((a,b) => {
+      const av = a.d[sortCol], bv = b.d[sortCol];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === 'number' ? av-bv : String(av).localeCompare(String(bv));
+      return sortAsc ? cmp : -cmp;
+    });
+
+    tbody.innerHTML = rows.map(({t,d}) => {
+      const pnl    = d[8];
+      const pnlTxt = pnl != null ? (pnl>=0?'+':'')+pnl.toFixed(2)+'%' : '—';
+      const pnlCls = pnl != null ? (pnl>=0?'tl-win':'tl-loss') : '';
+      const resCls = d[10]==='win' ? 'tl-win' : 'tl-loss';
+      const dirCol = d[2].startsWith('▲') ? '#44ff88' : '#ff4444';
+      return `<tr>
+        <td style="font-weight:600;color:#dde1ea;">${d[0]}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d[1]}">${d[1]}</td>
+        <td style="color:${dirCol};font-weight:600;">${d[2]}</td>
+        <td>${d[3]}</td>
+        <td>${d[4]}</td>
+        <td>${d[5]!==''?d[5]+'d':'—'}</td>
+        <td>$${d[6]}</td>
+        <td>$${d[7]}</td>
+        <td class="${pnlCls}">${pnlTxt}</td>
+        <td style="color:#e2b25a;">Lv${d[9]}</td>
+        <td class="${resCls}" style="text-transform:capitalize;">${d[10]}</td>
+      </tr>`;
+    }).join('');
+
+    const footer = $('tl-footer');
+    if (footer) footer.textContent = `Showing ${rows.length} of ${trades.length} trades`;
+  }
+
+  /* Sort on header click */
+  document.querySelectorAll('#trade-log-table th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = parseInt(th.dataset.col);
+      if (sortCol === col) sortAsc = !sortAsc;
+      else { sortCol = col; sortAsc = false; }
+      renderTable($('tl-search').value.toLowerCase().trim());
+    });
+  });
+
+  $('tl-search').addEventListener('input', function () {
+    renderTable(this.value.toLowerCase().trim());
+  });
+
+  renderTable('');
+})();
+
+})();
+</script>
 
 {% endblock %}
