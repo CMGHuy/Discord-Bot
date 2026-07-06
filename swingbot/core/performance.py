@@ -596,18 +596,3 @@ class TradeLog:
             "by_strategy": strategy_rows,
             "by_dow": dow_rows,
         }
-ows = sorted(_build(by_strategy), key=lambda r: r["total"], reverse=True)
-        dow_rows = sorted(_build(by_dow_raw), key=lambda r: _DOW_ORDER.index(r["key"]))
-
-        total_wins = len([t for t in closed if t["status"] == "win"])
-        all_pnls = [p for t in closed if (p := _pnl_pct(t)) is not None]
-        return {
-            "total_closed": len(closed),
-            "total_wins": total_wins,
-            "total_losses": len(closed) - total_wins,
-            "overall_win_rate": round(total_wins / len(closed) * 100) if closed else None,
-            "overall_avg_pnl": round(sum(all_pnls) / len(all_pnls), 2) if all_pnls else None,
-            "by_ticker": ticker_rows,
-            "by_strategy": strategy_rows,
-            "by_dow": dow_rows,
-        }

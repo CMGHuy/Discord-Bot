@@ -417,13 +417,63 @@
   <p class="card-title" style="margin-bottom:14px;">
     Trade history
     <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
-      last {{ closed_trades | length }} closed trade(s) · win/loss/manually-closed
+      {{ closed_trades | length }} closed trade(s) · win/loss/manually-closed
     </span>
   </p>
 
   {% if closed_trades %}
+
+  {# ── Filter + pagination toolbar ── #}
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+    <select id="ct-filter-outcome" class="ct-filter" data-filter="outcome"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All outcomes</option>
+      <option value="win">WIN</option>
+      <option value="loss">LOSS</option>
+      <option value="closed">CLOSED</option>
+    </select>
+    <select id="ct-filter-ticker" class="ct-filter" data-filter="ticker"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All tickers</option>
+    </select>
+    <select id="ct-filter-strategy" class="ct-filter" data-filter="strategy"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All strategies</option>
+    </select>
+    <select id="ct-filter-horizon" class="ct-filter" data-filter="horizon"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All horizons</option>
+    </select>
+    <select id="ct-filter-dir" class="ct-filter" data-filter="dir"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All directions</option>
+      <option value="bullish">▲ Long</option>
+      <option value="bearish">▼ Short</option>
+    </select>
+    <select id="ct-filter-conf" class="ct-filter" data-filter="conf"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All confidence</option>
+      <option value="1">Lv1</option><option value="2">Lv2</option><option value="3">Lv3</option>
+      <option value="4">Lv4</option><option value="5">Lv5</option>
+    </select>
+    <button type="button" id="ct-reset-filters" class="secondary small"
+            style="font-size:12px;padding:4px 10px;">✕ Reset</button>
+    <span style="flex:1;"></span>
+    <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:5px;">
+      Show
+      <select id="ct-per-page"
+              style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="0">All</option>
+      </select>
+      per page
+    </label>
+  </div>
+
   <div style="overflow-x:auto;">
-  <table id="closed-trades-table">
+  <table id="closed-trades-table" style="width:100%;">
     <thead>
     <tr>
       <th style="width:26px;">#</th>
@@ -436,48 +486,45 @@
       <th style="text-align:right;">Entry</th>
       <th style="text-align:right;">Exit</th>
       <th style="text-align:right;" title="Realized P&L % vs entry">P&amp;L%</th>
-      <th style="text-align:right;" title="Realized R-multiple (exit P&L / initial risk)">R</th>
+      <th style="text-align:right;" title="Realized R-multiple">R</th>
       <th style="text-align:right;" title="Calendar days from open to close">Days</th>
+      <th>Opened</th>
       <th>Closed</th>
-      <th style="width:36px;"></th>
+      <th style="width:60px;"></th>
     </tr>
     </thead>
     <tbody>
     {% for t in closed_trades %}
-    {%- set c_pnl  = trade_pnl(t) -%}
-    {%- set c_r    = trade_r(t) -%}
-    {%- set c_days = trade_days(t) -%}
+    {%- set c_pnl   = trade_pnl(t) -%}
+    {%- set c_r     = trade_r(t) -%}
+    {%- set c_days  = trade_days(t) -%}
     {%- set c_strat = strategy_map.get(t.id, t.strategy) -%}
-    <tr class="clickable" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
-      <td class="muted">{{ loop.index }}</td>
+    <tr class="clickable"
+        data-outcome="{{ t.status }}"
+        data-ticker="{{ t.ticker }}"
+        data-strategy="{{ c_strat }}"
+        data-horizon="{{ t.horizon_key }}"
+        data-dir="{{ t.direction }}"
+        data-conf="{{ t.confidence_level }}"
+        onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
+      <td class="muted"><span class="row-num">{{ loop.index }}</span></td>
       <td>
-        {% if t.status == 'win' %}
-          <span class="outcome-win">WIN</span>
-        {% elif t.status == 'loss' %}
-          <span class="outcome-loss">LOSS</span>
-        {% else %}
-          <span class="outcome-closed">CLOSED</span>
-        {% endif %}
+        {% if t.status == 'win' %}<span class="outcome-win">WIN</span>
+        {% elif t.status == 'loss' %}<span class="outcome-loss">LOSS</span>
+        {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
       <td><strong>{{ t.ticker }}</strong></td>
-      <td class="muted" style="font-size:12px;" title="{{ ((t.target_sources | default([])) + (t.stop_sources | default([]))) | unique | join(', ') }}">
-        {{ c_strat[:14] }}
-      </td>
+      <td class="muted" style="font-size:12px;" title="{{ c_strat }}">{{ c_strat[:14] }}</td>
       <td><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
       <td>
         <span style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:12px;font-weight:600;">
           {{ '▲' if t.direction == 'bullish' else '▼' }}
         </span>
       </td>
-      <td>
-        <span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">
-          Lv{{ t.confidence_level }}
-        </span>
-      </td>
+      <td><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
       <td style="text-align:right;" class="muted">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
       <td style="text-align:right;">
-        {%- if t.exit_price -%}
-          {{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
+        {%- if t.exit_price -%}{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
       <td style="text-align:right;font-weight:700;
@@ -489,12 +536,15 @@
         {{ '%+.2f'|format(c_r) if c_r is not none else '—' }}
       </td>
       <td style="text-align:right;" class="muted">{{ c_days if c_days is not none else '—' }}</td>
-      <td class="muted" style="font-size:12px;">{{ (t.closed_at or '')[:10] }}</td>
-      <td onclick="event.stopPropagation();" style="padding:4px 6px;">
+      <td class="muted" style="font-size:12px;white-space:nowrap;" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
+      <td class="muted" style="font-size:12px;white-space:nowrap;" title="{{ (t.closed_at or '')[:16] }} UTC">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
+      <td onclick="event.stopPropagation();" style="padding:4px 6px;display:flex;gap:4px;align-items:center;">
+        <button type="button" class="icon-btn secondary"
+                title="Open trade detail"
+                onclick="window.open('{{ url_for('trade_detail', trade_id=t.id) }}','_blank')">↗</button>
         <form method="post" action="{{ url_for('delete_single_trade', trade_id=t.id) }}" style="margin:0;"
               onsubmit="return confirm('Delete {{ t.ticker }} trade record? This cannot be undone.');">
-          <button type="submit" class="danger small" title="Delete this trade record"
-                  style="padding:2px 7px;font-size:11px;line-height:1.4;">✕</button>
+          <button type="submit" class="icon-btn danger" title="Delete this trade record">✕</button>
         </form>
       </td>
     </tr>
@@ -502,6 +552,16 @@
     </tbody>
   </table>
   </div>
+
+  {# ── Pagination bar ── #}
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+    <button type="button" id="ct-prev" class="secondary small" style="padding:4px 12px;">‹ Prev</button>
+    <span id="ct-page-info" class="muted" style="font-size:12px;">Page 1 / 1</span>
+    <button type="button" id="ct-next" class="secondary small" style="padding:4px 12px;">Next ›</button>
+    <span style="flex:1;"></span>
+    <span id="ct-info" class="muted" style="font-size:12px;"></span>
+  </div>
+
   <div class="row" style="margin-top:12px;">
     <form method="post" action="{{ url_for('clear_trade_history') }}"
           onsubmit="return confirm('Delete all {{ closed_trades | length }} closed trade record(s)? This cannot be undone.');">
@@ -509,6 +569,97 @@
     </form>
     <span class="muted" style="font-size:12px;">Open trades are not affected.</span>
   </div>
+
+  <script>
+  (function() {
+    var allRows = Array.from(document.querySelectorAll('#closed-trades-table tbody tr'));
+    var STORAGE_KEY = 'ct_per_page';
+    var savedPP = parseInt(localStorage.getItem(STORAGE_KEY) || '25');
+    var ppSel = document.getElementById('ct-per-page');
+    ppSel.value = String(savedPP);
+    var perPage = savedPP;
+    var currentPage = 1;
+    var filters = {};
+
+    // Populate ticker / strategy / horizon dropdowns from row data
+    function uniqueSorted(attr) {
+      return [...new Set(allRows.map(function(r){ return r.dataset[attr]; }))].sort();
+    }
+    function populateSelect(id, values) {
+      var sel = document.getElementById(id);
+      values.forEach(function(v) {
+        var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+      });
+    }
+    populateSelect('ct-filter-ticker',   uniqueSorted('ticker'));
+    populateSelect('ct-filter-strategy', uniqueSorted('strategy'));
+    populateSelect('ct-filter-horizon',  uniqueSorted('horizon'));
+
+    function getVisible() {
+      return allRows.filter(function(row) {
+        for (var key in filters) {
+          if (filters[key] && row.dataset[key] !== filters[key]) return false;
+        }
+        return true;
+      });
+    }
+
+    function render() {
+      var visible = getVisible();
+      var total = visible.length;
+      var pp = perPage === 0 ? total : perPage;
+      var totalPages = pp > 0 ? Math.max(1, Math.ceil(total / pp)) : 1;
+      currentPage = Math.max(1, Math.min(currentPage, totalPages));
+      var start = (currentPage - 1) * pp;
+      var end   = Math.min(start + pp, total);
+
+      allRows.forEach(function(r){ r.style.display = 'none'; });
+      visible.slice(start, end).forEach(function(r, i) {
+        r.style.display = '';
+        r.querySelector('.row-num').textContent = start + i + 1;
+      });
+
+      document.getElementById('ct-info').textContent =
+        total === 0 ? 'No matching trades' :
+        'Showing ' + (start + 1) + '–' + end + ' of ' + total;
+      document.getElementById('ct-page-info').textContent = 'Page ' + currentPage + ' / ' + totalPages;
+      document.getElementById('ct-prev').disabled = currentPage <= 1;
+      document.getElementById('ct-next').disabled = currentPage >= totalPages;
+    }
+
+    document.querySelectorAll('.ct-filter').forEach(function(el) {
+      el.addEventListener('change', function() {
+        filters[el.dataset.filter] = el.value;
+        currentPage = 1;
+        render();
+      });
+    });
+
+    ppSel.addEventListener('change', function() {
+      perPage = parseInt(this.value);
+      localStorage.setItem(STORAGE_KEY, perPage);
+      currentPage = 1;
+      render();
+    });
+
+    document.getElementById('ct-prev').addEventListener('click', function() {
+      currentPage--; render();
+    });
+    document.getElementById('ct-next').addEventListener('click', function() {
+      currentPage++; render();
+    });
+
+    document.getElementById('ct-reset-filters').addEventListener('click', function() {
+      document.querySelectorAll('.ct-filter').forEach(function(el){ el.value = ''; });
+      filters = {};
+      currentPage = 1;
+      render();
+    });
+
+    render();
+  })();
+  </script>
+
   {% else %}
   <div style="padding:20px 0;text-align:center;color:#5a6275;">
     No closed trades yet. Trades are marked win/loss automatically when price hits stop or target.
