@@ -1,4 +1,44 @@
 {% set _no_closed = closed_trades | length == 0 %}
+{# ── Session banner (populated by JS from browser UTC clock) ─────────────── #}
+<div class="session-banner" id="session-banner">
+  <span class="session-time" id="session-time"></span>
+  <span id="session-pills"></span>
+</div>
+<script>
+(function() {
+  var SESSIONS = [
+    { name:"Tokyo",    flag:"🗼", start:0*60,     end:9*60,     color:"#6ea8fe", bg:"rgba(110,168,254,0.12)" },
+    { name:"London",   flag:"🏦", start:8*60,     end:16*60+30, color:"#e2b25a", bg:"rgba(226,178,90,0.12)"  },
+    { name:"New York", flag:"🗽", start:13*60+30, end:20*60,    color:"#6dda9e", bg:"rgba(109,218,158,0.12)" }
+  ];
+  function pad(n){ return n<10?'0'+n:String(n); }
+  function renderBanner() {
+    var now = new Date();
+    var h = now.getUTCHours(), m = now.getUTCMinutes();
+    var t = h*60+m;
+    var timeEl   = document.getElementById('session-time');
+    var pillsEl  = document.getElementById('session-pills');
+    if (!timeEl || !pillsEl) return;
+    timeEl.textContent = pad(h)+':'+pad(m)+' UTC';
+    var active = SESSIONS.filter(function(s){ return t >= s.start && t < s.end; });
+    if (active.length === 0) {
+      pillsEl.innerHTML = '<span class="session-pill" style="color:#4a5470;border-color:#2a2e3d;background:#13161d;">⏸ Markets closed</span>';
+    } else {
+      var html = active.map(function(s){
+        return '<span class="session-pill" style="color:'+s.color+';border-color:'+s.color+'55;background:'+s.bg+';">'+s.flag+' '+s.name+'</span>';
+      }).join('');
+      if (active.length > 1) {
+        html += '<span class="session-pill" style="color:#e2b25a;border-color:#e2b25a55;background:rgba(226,178,90,0.08);">⚡ Overlap — high liquidity</span>';
+      }
+      pillsEl.innerHTML = html;
+    }
+  }
+  renderBanner();
+  // Re-render each minute (fragment is polled every ~5s so this stays fresh)
+  setTimeout(function repeat(){ renderBanner(); setTimeout(repeat, 60000); }, (60 - new Date().getUTCSeconds()) * 1000);
+})();
+</script>
+
 {# ── Stat cards ──────────────────────────────────────────────────────────── #}
 <div class="stat-row">
   <div class="stat-card accent-blue">
@@ -95,7 +135,7 @@
     <tr>
       <th data-col-id="rownum" title="Row number">#</th>
       <th data-col-id="status" draggable="true" onclick="sortByHeader(this)"
-          title="Coloured bar: SL (left) → entry (tick) → TP (right). Red = near stop, green = near target. Click to sort.">
+          title="Dot color: grey=neutral, green=moving toward TP, red=moving toward SL. Bar: SL(left)→TP(right). Numbers: distance to SL and TP.">
         Status <span class="sort-arrow" data-col-id="status"></span>
       </th>
       <th data-col-id="ticker" draggable="true" onclick="sortByHeader(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
@@ -105,12 +145,15 @@
       <th data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
       <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score 0–100">Score <span class="sort-arrow" data-col-id="score"></span></th>
       <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
-      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted)">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
-      <th data-col-id="to_sl" draggable="true" onclick="sortByHeader(this)" title="Distance from current price to stop-loss">%→SL <span class="sort-arrow" data-col-id="to_sl"></span></th>
+      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (cached ~60s)">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
+      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~60s).">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
       <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
       <th data-col-id="target" draggable="true" onclick="sortByHeader(this)">Target <span class="sort-arrow" data-col-id="target"></span></th>
       <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
+      <th data-col-id="size" draggable="true" onclick="sortByHeader(this)"
+          title="Suggested position size based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk of {{ cur_map.values()|list|first|default('') }}{{ '%.0f'|format(account_cfg.balance) }} account. Capped at {{ '%.0f%%'|format(account_cfg.max_position_pct) }} of account.">
+        Size <span class="sort-arrow" data-col-id="size"></span>
+      </th>
       <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Calendar days since opened">Days <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="action">Action</th>
@@ -123,30 +166,52 @@
     {%- set cur_price = price_map.get(t.id) -%}
     {%- set pnl = pnl_map.get(t.id) -%}
     {%- set days_open = days_map.get(t.id) -%}
+    {%- set sizing = sizing_map.get(t.id) -%}
+    {%- set is_bull = t.direction == 'bullish' -%}
     <tr class="clickable" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
       <td class="muted">{{ loop.index }}</td>
 
-      {# Status: blinking dot + mini SL→TP position bar #}
+      {# ── Status cell: dot + bar + live SL/TP distances ─────────────────── #}
       <td data-sort="{{ status.proximity }}"
-          title="{{ status.label }} · {{ '%+.0f%%'|format(status.proximity * 100) }} from entry{% if pnl %} · P&L: {{ '%+.2f%%'|format(pnl.pnl_pct) }}{% if pnl.to_sl_pct %} · {{ '%.1f%%'|format(pnl.to_sl_pct) }} to SL{% endif %}{% endif %}">
-        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:0;">
-          <span class="trade-status-dot" style="--status-color: {{ status.color }}; --blink-duration: {{ status.blink_seconds }}s;"></span>
+          title="{{ status.label }}{% if pnl %} · P&L: {{ '%+.2f%%'|format(pnl.pnl_pct) }}{% if pnl.to_sl_pct is not none %} · {{ '%.1f%%'|format(pnl.to_sl_pct) }} to SL{% endif %}{% if pnl.to_tp_pct is not none %} · {{ '%.1f%%'|format(pnl.to_tp_pct) }} to TP{% endif %}{% endif %}">
+        <div class="status-cell">
+          {# Dot: color gradient = grey→green (toward TP) or grey→red (toward SL) #}
+          <span class="trade-status-dot"
+                style="--status-color:{{ status.color }}; --blink-duration:{{ status.blink_seconds }}s;"></span>
+
+          {# Position bar: SL=0% left, TP=100% right, tick=entry #}
           {% if pnl %}
-          <div class="pos-bar" title="Bar: SL (left 0%) → TP (right 100%). Tick = entry.">
-            <div class="pos-bar-fill" style="width:{{ pnl.pos_pct }}%; background:{{ status.color }}; opacity:0.85;"></div>
+          <div class="pos-bar" title="SL (left 0%) → TP (right 100%). Tick = entry.">
+            <div class="pos-bar-fill"
+                 style="width:{{ pnl.pos_pct }}%; background:{{ status.color }}; opacity:0.85;"></div>
             <div class="pos-bar-entry" style="left:{{ pnl.entry_pct }}%;"></div>
           </div>
+          {# SL and TP distance labels — the key info the user asked for #}
+          <div class="status-dists">
+            <span class="dist-sl
+              {%- if pnl.to_sl_pct is not none and pnl.to_sl_pct < 3 %} dist-danger
+              {%- elif pnl.to_sl_pct is not none and pnl.to_sl_pct < 6 %} dist-warn
+              {%- endif %}"
+              title="Distance from current price to stop-loss">
+              {%- if pnl.to_sl_pct is not none -%}{{ '%.1f%%'|format(pnl.to_sl_pct) }}↓SL{%- else -%}—{%- endif -%}
+            </span>
+            <span class="dist-tp"
+              title="Distance from current price to take-profit">
+              {%- if pnl.to_tp_pct is not none -%}{{ '%.1f%%'|format(pnl.to_tp_pct) }}↑TP{%- else -%}—{%- endif -%}
+            </span>
+          </div>
           {% else %}
-          <div class="pos-bar"><div class="pos-bar-fill" style="width:50%; background:#2a2e3d;"></div></div>
+          <div class="pos-bar"><div class="pos-bar-fill" style="width:50%;background:#2a2e3d;"></div></div>
+          <div class="status-dists"><span class="muted" style="font-size:10px;">no price</span></div>
           {% endif %}
         </div>
       </td>
 
       {# Ticker with logo #}
       <td>
-        <span style="display:flex; align-items:center; gap:7px;">
+        <span style="display:flex;align-items:center;gap:7px;">
           <img src="{{ url_for('ticker_logo', ticker=t.ticker) }}" alt=""
-               style="width:18px; height:18px; border-radius:4px; object-fit:contain; background:#fff; flex-shrink:0;"
+               style="width:18px;height:18px;border-radius:4px;object-fit:contain;background:#fff;flex-shrink:0;"
                onerror="this.style.display='none'" loading="lazy">
           <strong>{{ t.ticker }}</strong>
         </span>
@@ -164,20 +229,20 @@
       </td>
 
       <td>
-        <span style="color: {{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }}; font-weight:600;">
-          {{ '▲' if t.direction == 'bullish' else '▼' }}
+        <span style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }}; font-weight:600;">
+          {{ '▲ LONG' if is_bull else '▼ SHORT' }}
         </span>
       </td>
 
       <td data-sort="{{ t.confidence_level }}">
-        <span class="confidence-badge" style="color: {{ confidence_hex(t.confidence_level) }};">
+        <span class="confidence-badge" style="color:{{ confidence_hex(t.confidence_level) }};">
           Lv{{ t.confidence_level }}
         </span>
       </td>
 
       <td data-sort="{{ t.confidence_score if t.confidence_score is not none else 0 }}">
         {%- if t.confidence_score is not none -%}
-          <span style="font-weight:600; color:
+          <span style="font-weight:600;color:
             {%- if t.confidence_score >= 75 %} #6dda9e
             {%- elif t.confidence_score >= 50 %} #e2b25a
             {%- else %} #da6d6d{%- endif %};">{{ t.confidence_score }}</span><span class="muted" style="font-size:10px;">/100</span>
@@ -186,9 +251,11 @@
 
       <td>{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
 
-      {# Current price — coloured green/red vs entry #}
+      {# Current price — direction-aware color: good direction = green, bad = red #}
+      {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
       <td data-sort="{{ cur_price if cur_price is not none else 0 }}"
-          style="color: {% if cur_price is none %}#5a6275{% elif cur_price >= t.entry %}#6dda9e{% else %}#da6d6d{% endif %};">
+          style="color: {% if cur_price is none %}#5a6275{% elif price_is_good %}#6dda9e{% else %}#da6d6d{% endif %};"
+          title="{% if cur_price is not none %}{{ 'Up from entry' if price_is_good else 'Down from entry' }} · prices refresh ~60s{% endif %}">
         {%- if cur_price is not none -%}
           {{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(cur_price) }}
         {%- else -%}
@@ -198,7 +265,8 @@
 
       {# Unrealized P&L % — positive = in profit for this direction #}
       <td data-sort="{{ pnl.pnl_pct if pnl else 0 }}"
-          style="font-weight:600; color: {% if pnl is none %}#5a6275{% elif pnl.pnl_pct >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+          style="font-weight:600;color: {% if pnl is none %}#5a6275{% elif pnl.pnl_pct >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~60s cache).">
         {%- if pnl -%}
           {{ '%+.2f%%'|format(pnl.pnl_pct) }}
         {%- else -%}
@@ -206,31 +274,35 @@
         {%- endif -%}
       </td>
 
-      {# Distance to stop-loss — the urgency signal #}
-      <td data-sort="{{ pnl.to_sl_pct if pnl and pnl.to_sl_pct is not none else 999 }}"
-          title="{{ 'Stop at ' ~ cur_map.get(t.ticker, '') ~ '%.2f'|format(t.stop_loss) }}"
-          style="color: {% if pnl and pnl.to_sl_pct is not none and pnl.to_sl_pct < 3 %}#ef5350{% elif pnl and pnl.to_sl_pct is not none and pnl.to_sl_pct < 6 %}#e2b25a{% else %}#5a6275{% endif %};">
-        {%- if pnl and pnl.to_sl_pct is not none -%}
-          {{ '%.1f%%'|format(pnl.to_sl_pct) }}
-        {%- else -%}—{%- endif -%}
-      </td>
-
       <td style="color:#da6d6d;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
       <td style="color:#6dda9e;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
       <td>{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
 
+      {# Suggested position size #}
+      <td data-sort="{{ sizing.shares if sizing else 0 }}"
+          title="{% if sizing %}~{{ sizing.shares }} shares · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.position_value) }} deployed · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.risk_amount) }} at risk ({{ sizing.risk_pct }}% rule){% if sizing.capped %} · capped at {{ sizing.max_position_pct }}% of account{% endif %}{% else %}Set !account balance and risk to enable sizing{% endif %}">
+        {% if sizing %}
+          <div class="size-cell">
+            <span class="size-shares">~{{ sizing.shares | int if sizing.shares == (sizing.shares | int) else '%.1f'|format(sizing.shares) }} sh</span>
+            <span class="size-value muted">{{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.position_value) }}{% if sizing.capped %}<span title="Capped at max position size">⚠</span>{% endif %}</span>
+          </div>
+        {% else %}
+          <span class="muted">—</span>
+        {% endif %}
+      </td>
+
       {# Days open — flag trades aging beyond their horizon #}
       <td data-sort="{{ days_open if days_open is not none else -1 }}"
-          style="color: {% if days_open is not none and days_open > 30 %}#e2b25a{% else %}#5a6275{% endif %};"
+          style="color:{% if days_open is not none and days_open > 30 %}#e2b25a{% else %}#5a6275{% endif %};"
           title="{{ (days_open|string + ' calendar days') if days_open is not none else 'Unknown' }}">
         {{ days_open if days_open is not none else '—' }}
       </td>
 
       <td class="muted" data-sort="{{ t.opened_at }}">{{ t.opened_at[:10] }}</td>
 
-      <td onclick="event.stopPropagation();" style="display:flex; gap:6px; align-items:center;">
-        <button type="button" class="icon-btn secondary" title="Copy link"
-                onclick="copyTradeLink(this, '{{ url_for('trade_detail', trade_id=t.id, _external=True) }}')">🔗</button>
+      <td onclick="event.stopPropagation();" style="display:flex;gap:6px;align-items:center;">
+        <button type="button" class="icon-btn secondary" title="Open trade detail in new tab"
+                onclick="window.open('{{ url_for('trade_detail', trade_id=t.id) }}','_blank')">↗</button>
         <form method="post" action="/trades/{{ t.id }}/close" style="margin:0;"
               onsubmit="return confirm('Mark {{ t.ticker }} trade as manually closed?');">
           <button type="submit" class="icon-btn danger" title="Close trade">✕</button>
@@ -240,6 +312,10 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
+
+  <div style="margin-top:8px; font-size:11px; color:#3d4354; text-align:right;">
+    Live prices refresh approximately every 60 seconds · P&amp;L updates on next refresh · Sizing based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk · <code>!account</code> to change
   </div>
 
   <script>
@@ -295,30 +371,6 @@
     document.querySelectorAll('#trades-table tbody tr').forEach(function(row) {
       row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none';
     });
-  }
-
-  function copyTradeLink(btn, url) {
-    function showCopied() {
-      var original = btn.textContent;
-      btn.textContent = '✓';
-      btn.disabled = true;
-      setTimeout(function() { btn.textContent = original; btn.disabled = false; }, 1200);
-    }
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(url).then(showCopied).catch(function() { _fallbackCopy(url, showCopied); });
-    } else {
-      _fallbackCopy(url, showCopied);
-    }
-  }
-
-  function _fallbackCopy(text, onDone) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch (e) {}
-    document.body.removeChild(ta);
-    if (onDone) onDone();
   }
 
   var COLUMN_ORDER_KEY = 'swingbot_dashboard_column_order';
@@ -419,9 +471,9 @@
         {% endif %}
       </td>
       <td>
-        <span style="display:flex; align-items:center; gap:6px;">
+        <span style="display:flex;align-items:center;gap:6px;">
           <img src="{{ url_for('ticker_logo', ticker=t.ticker) }}" alt=""
-               style="width:16px; height:16px; border-radius:3px; object-fit:contain; background:#fff; flex-shrink:0;"
+               style="width:16px;height:16px;border-radius:3px;object-fit:contain;background:#fff;flex-shrink:0;"
                onerror="this.style.display='none'" loading="lazy">
           <strong>{{ t.ticker }}</strong>
         </span>
@@ -431,12 +483,12 @@
       </td>
       <td><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
       <td>
-        <span style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }}; font-size:12px; font-weight:600;">
+        <span style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:12px;font-weight:600;">
           {{ '▲' if t.direction == 'bullish' else '▼' }}
         </span>
       </td>
       <td>
-        <span style="color: {{ confidence_hex(t.confidence_level) }}; font-size:12px; font-weight:700;">
+        <span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">
           Lv{{ t.confidence_level }}
         </span>
       </td>
@@ -446,25 +498,23 @@
           {{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
-      <td style="text-align:right; font-weight:700;
-                 color: {% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+      <td style="text-align:right;font-weight:700;
+                 color:{% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
         {{ '%+.2f%%'|format(c_pnl) if c_pnl is not none else '—' }}
       </td>
-      <td style="text-align:right; font-weight:600;
-                 color: {% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+      <td style="text-align:right;font-weight:600;
+                 color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
         {{ '%+.2f'|format(c_r) if c_r is not none else '—' }}
       </td>
       <td style="text-align:right;" class="muted">{{ c_days if c_days is not none else '—' }}</td>
-      <td class="muted" style="font-size:12px;">
-        {{ (t.closed_at or '')[:10] }}
-      </td>
+      <td class="muted" style="font-size:12px;">{{ (t.closed_at or '')[:10] }}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
   {% else %}
-  <div style="padding:20px 0; text-align:center; color:#5a6275;">
+  <div style="padding:20px 0;text-align:center;color:#5a6275;">
     No closed trades yet. Trades are marked win/loss automatically when price hits stop or target.
   </div>
   {% endif %}

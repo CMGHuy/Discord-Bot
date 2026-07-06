@@ -47,6 +47,7 @@ from flask import Flask, Response, abort, redirect, render_template, request, se
 from swingbot import config
 from swingbot.core.performance import TradeLog, trade_proximity
 from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
+from swingbot.core.account import compute_position_size, load_account_config
 from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, get_logo_path
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.ticker_directory import search_tickers
@@ -274,11 +275,25 @@ def _render_dashboard_fragment() -> str:
     stats["best_trade_pct"]  = round(max(realized_pnls), 2) if realized_pnls else None
     stats["worst_trade_pct"] = round(min(realized_pnls), 2) if realized_pnls else None
 
+    # ── Per-trade position sizing ─────────────────────────────────────────────
+    # Uses the LIVE account config (data/account.json) so any !account change
+    # shows up here on the next dashboard refresh without a bot restart.
+    # None when balance = 0 or entry/stop-distance is 0 (uncomputable).
+    account_cfg = load_account_config()
+    sizing_map: dict = {}   # trade_id → compute_position_size() dict | None
+    for t in open_trades:
+        sizing_map[t["id"]] = compute_position_size(
+            entry=t.get("entry") or 0,
+            stop_loss=t.get("stop_loss") or 0,
+            account_cfg=account_cfg,
+        )
+
     return render_template(
         "dashboard_fragment.html",
         open_trades=open_trades, stats=stats, confidence_hex=_confidence_hex,
         cur_map=cur_map, status_map=status_map, strategy_map=strategy_map,
         price_map=price_map, pnl_map=pnl_map, days_map=days_map,
+        sizing_map=sizing_map, account_cfg=account_cfg,
         closed_trades=closed_trades,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
     )
