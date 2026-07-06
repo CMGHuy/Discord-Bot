@@ -32,8 +32,9 @@ jobs:
           from swingbot.core import (levels, confidence, volatility, strategy, indicators,
                                       trade_plan, account, backtest, data, data_store, events,
                                       explain, export_data, market_events, performance, regime,
-                                      state, ticker_utils, watchlist, scan_engine)
+                                      state, ticker_utils, watchlist, scan_engine, retrospective)
           from swingbot.core.charts import trade_chart
+          from swingbot.core.scanning import embeds, engine, confidence as scan_conf
           import swingbot.bot_core
           from swingbot.commands import scanning, watchlist as wl, info, trades, backtest as bt, account as acct, data as dc
           from swingbot.admin import app
@@ -79,13 +80,14 @@ jobs:
 
           checks = [
               # (module, symbol, kind)  kind: 'callable' or 'any'
-              ("swingbot.admin.app", "main",                    "callable"),
-              ("swingbot.admin.app", "app",                     "any"),
-              ("swingbot.core.data", "get_current_price",       "callable"),
-              ("swingbot.core.data", "is_us_market_active",     "callable"),
-              ("swingbot.core.performance", "TradeLog",        "any"),
-              ("swingbot.core.scanning.embeds", "notify_closed_trades", "callable"),
-              ("swingbot.core.scanning.engine", "get_all_unrealized_pnl", "callable"),
+              ("swingbot.admin.app",              "main",                       "callable"),
+              ("swingbot.admin.app",              "app",                        "any"),
+              ("swingbot.core.data",              "get_current_price",          "callable"),
+              ("swingbot.core.data",              "is_us_market_active",        "callable"),
+              ("swingbot.core.performance",       "TradeLog",                   "any"),
+              ("swingbot.core.scanning.embeds",   "notify_closed_trades",       "callable"),
+              ("swingbot.core.scanning.engine",   "get_all_unrealized_pnl",     "callable"),
+              ("swingbot.core.retrospective",     "build_daily_retrospective",  "callable"),
           ]
 
           errors = []
@@ -106,6 +108,46 @@ jobs:
               print('\n'.join(errors))
               sys.exit(1)
           print(f"Symbol check OK — {len(checks)} symbols verified.")
+          PYEOF
+
+      - name: Config key check (catches renamed .env variables)
+        run: |
+          python - << 'PYEOF'
+          import sys
+          from swingbot import config
+
+          # Every config attribute the codebase reads.
+          # Update this list whenever a Field is added or renamed.
+          required_attrs = [
+              "TOKEN",
+              "DISCORD_CHANNEL_TRADES_ID",
+              "DISCORD_CHANNEL_TRADES_HISTORY_ID",
+              "DISCORD_CHANNEL_RETROSPECTIVE_ID",
+              "SESSION_START_HOUR",
+              "SESSION_END_HOUR",
+              "SCAN_INTERVAL_MINUTES",
+              "SIGNAL_CONFIRMATION_SCANS",
+              "MIN_REWARD_PCT",
+              "MIN_STOP_DISTANCE_PCT",
+              "MAX_STOP_LOSS_PCT",
+              "MIN_RISK_REWARD_RATIO",
+              "MIN_TARGET_CONFLUENCE_COUNT",
+              "MIN_ALERT_CONFIDENCE_LEVEL",
+              "NEAR_CLOSE_THRESHOLD_PCT",
+              "HTF_CONFLUENCE_ENABLED",
+              "HTF_COUNTER_TREND_PENALTY",
+          ]
+
+          errors = []
+          for attr in required_attrs:
+              if not hasattr(config, attr):
+                  errors.append(f"  config.{attr} — NOT FOUND (Field missing or renamed?)")
+
+          if errors:
+              print("MISSING CONFIG ATTRS:")
+              print('\n'.join(errors))
+              sys.exit(1)
+          print(f"Config check OK — {len(required_attrs)} attributes verified.")
           PYEOF
 
       - name: Flask route coverage (catches url_for() endpoints missing from app)
@@ -141,6 +183,7 @@ jobs:
               "watchlist_add",
               "watchlist_remove",
               "watchlist_suggest",
+              "stats_page",
               "static",
           ]
 

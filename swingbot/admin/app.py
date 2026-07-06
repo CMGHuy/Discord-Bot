@@ -811,7 +811,15 @@ def resume_scan():
         ok = 0
     return redirect(url_for("index", msg=msg, ok=ok))
 
+
 @app.route("/performance", methods=["GET"])
 @require_auth
 def stats_page():
-    stats = _
+    stats = _trades().get_detailed_stats()
+    return _render("Performance", "stats", "stats.html", stats=stats)
+
+
+def main():
+    host = os.getenv("ADMIN_HOST", "0.0.0.0")
+    port = int(os.getenv("ADMIN_PORT", 1234))
+    app.run(host=host, port=port, debug=False)
