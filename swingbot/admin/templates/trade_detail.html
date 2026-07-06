@@ -9,8 +9,17 @@
          onerror="this.style.display='none'">
     {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
   </p>
-  <div class="chart-wrap">
-    <img src="{{ url_for('trade_chart_image', trade_id=t.id) }}" alt="Chart for {{ t.ticker }}" loading="lazy">
+  <div class="chart-wrap" id="chart-wrap">
+    <div class="chart-loading" id="chart-loading">
+      <div class="chart-spinner"></div>
+      <span>Generating chart for {{ t.ticker }}…</span>
+    </div>
+    <img id="chart-img"
+         src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
+         alt="Chart for {{ t.ticker }}"
+         style="display:none;"
+         onload="this.style.display=''; document.getElementById('chart-loading').style.display='none';"
+         onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
   </div>
 </div>
 

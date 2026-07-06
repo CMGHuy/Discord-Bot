@@ -186,18 +186,20 @@
                  style="width:{{ pnl.pos_pct }}%; background:{{ status.color }}; opacity:0.85;"></div>
             <div class="pos-bar-entry" style="left:{{ pnl.entry_pct }}%;"></div>
           </div>
-          {# SL and TP distance labels — the key info the user asked for #}
+          {# SL and TP progress labels.
+             to_sl_pct = % of entry→SL distance consumed (100% = SL hit, >100% = past it).
+             to_tp_pct = % of entry→TP distance achieved  (100% = TP hit, >100% = exceeded). #}
           <div class="status-dists">
             <span class="dist-sl
-              {%- if pnl.to_sl_pct is not none and pnl.to_sl_pct < 3 %} dist-danger
-              {%- elif pnl.to_sl_pct is not none and pnl.to_sl_pct < 6 %} dist-warn
+              {%- if pnl.to_sl_pct is not none and pnl.to_sl_pct >= 100 %} dist-danger
+              {%- elif pnl.to_sl_pct is not none and pnl.to_sl_pct >= 70 %} dist-warn
               {%- endif %}"
-              title="Distance from current price to stop-loss">
-              {%- if pnl.to_sl_pct is not none -%}{{ '%.1f%%'|format(pnl.to_sl_pct) }}↓SL{%- else -%}—{%- endif -%}
+              title="{% if pnl.to_sl_pct %}{{ '%.0f%%'|format(pnl.to_sl_pct) }} of the way to stop-loss (100% = SL touched){% else %}No SL progress{% endif %}">
+              {%- if pnl.to_sl_pct is not none -%}{{ '%.0f%%'|format(pnl.to_sl_pct) }} SL{%- else -%}—{%- endif -%}
             </span>
-            <span class="dist-tp"
-              title="Distance from current price to take-profit">
-              {%- if pnl.to_tp_pct is not none -%}{{ '%.1f%%'|format(pnl.to_tp_pct) }}↑TP{%- else -%}—{%- endif -%}
+            <span class="dist-tp{% if pnl.to_tp_pct is not none and pnl.to_tp_pct >= 100 %} dist-tp-hit{% endif %}"
+              title="{% if pnl.to_tp_pct %}{{ '%.0f%%'|format(pnl.to_tp_pct) }} of the way to take-profit (100% = TP touched){% else %}No TP progress{% endif %}">
+              {%- if pnl.to_tp_pct is not none -%}{{ '%.0f%%'|format(pnl.to_tp_pct) }} TP{%- else -%}—{%- endif -%}
             </span>
           </div>
           {% else %}

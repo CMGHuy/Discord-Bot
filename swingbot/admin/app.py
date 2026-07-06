@@ -210,11 +210,27 @@ def _render_dashboard_fragment() -> str:
         if price and entry:
             raw_pnl = (price - entry) / entry * 100
             pnl_pct = raw_pnl if is_bull else -raw_pnl
-            to_sl   = abs(price - sl) / abs(price) * 100 if price else None
-            to_tp   = abs(tp - price) / abs(price) * 100 if price else None
+
+            # SL / TP progress: how far along the entry→SL (or entry→TP)
+            # distance the price has travelled, as a percentage.
+            #   0%   = price is still at entry (just opened)
+            #   100% = price has reached the level exactly
+            #   150% = price went 50% beyond that level
+            # Negative values (price moved AWAY from the level) are clamped
+            # to 0 so we only ever show progress, never "negative distance".
+            sl_dist = abs(entry - sl) or 1.0
+            tp_dist = abs(tp - entry) or 1.0
+            if is_bull:
+                sl_raw = (entry - price) / sl_dist * 100   # rises as price drops toward SL
+                tp_raw = (price - entry) / tp_dist * 100   # rises as price climbs toward TP
+            else:
+                sl_raw = (price - entry) / sl_dist * 100   # rises as price rises toward SL
+                tp_raw = (entry - price) / tp_dist * 100   # rises as price falls toward TP
+            to_sl = round(max(0.0, sl_raw), 1)
+            to_tp = round(max(0.0, tp_raw), 1)
 
             # Position bar: maps SL→TP to 0→100 %.
-            # pos_pct  = where current price sits
+            # pos_pct  = where current price sits (clamped for bar rendering)
             # entry_pct = where the original entry sits (anchor marker)
             if is_bull:
                 span = tp - sl
@@ -228,8 +244,8 @@ def _render_dashboard_fragment() -> str:
 
             pnl_map[tid] = {
                 "pnl_pct":    round(pnl_pct, 2),
-                "to_sl_pct":  round(to_sl, 1) if to_sl is not None else None,
-                "to_tp_pct":  round(to_tp, 1) if to_tp is not None else None,
+                "to_sl_pct":  to_sl,
+                "to_tp_pct":  to_tp,
                 "pos_pct":    max(0.0, min(100.0, round(cur_pos, 1))),
                 "entry_pct":  max(0.0, min(100.0, round(entry_pos, 1))),
             }
