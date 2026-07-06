@@ -514,7 +514,8 @@
         {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
       <td><strong>{{ t.ticker }}</strong></td>
-      <td class="muted" style="font-size:12px;" title="{{ c_strat }}">{{ c_strat[:14] }}</td>
+      {%- set _ct_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
+      <td title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>
       <td><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
       <td>
         <span style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:12px;font-weight:600;">
