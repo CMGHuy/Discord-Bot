@@ -3,19 +3,25 @@ Daily end-of-session retrospective builder.
 
 Compiles everything that happened during a trading day (Berlin time) into:
   - per-trade table (opened today, closed today, still open)
-  - win/loss/P&L stats for the day
-  - strategy & horizon breakdown
+  - win/loss/P&L stats for the day, incl. real currency P&L via account.py
+  - strategy & horizon breakdown (strategy resolved via the SAME
+    primary_strategy_label() the Dashboard/Trade Log use -- never the raw
+    `t["strategy"]` placeholder field, which is hardcoded to "S/R Confluence"
+    on every trade and was previously used here by mistake)
   - confidence-level breakdown
   - data-driven lessons derived from the day's patterns
-  - concrete parameter-tuning suggestions
+  - concrete parameter-tuning suggestions for tomorrow
 
 Designed to be channel-agnostic: build_daily_retrospective() returns a list
-of plain strings and discord.Embed-compatible dicts; the caller posts them
-wherever it wants (DISCORD_CHANNEL_RETROSPECTIVE_ID, DISCORD_CHANNEL_TRADES_HISTORY_ID, etc.).
+of plain strings; the caller posts them wherever it wants
+(DISCORD_CHANNEL_RETROSPECTIVE_ID, DISCORD_CHANNEL_TRADES_HISTORY_ID, etc.).
 """
 import datetime as dt
 import logging
 from collections import defaultdict
+
+from swingbot.core.performance import primary_strategy_label
+from swingbot.core import account as account_module
 
 try:
     from zoneinfo import ZoneInfo
@@ -90,6 +96,38 @@ def _days_held(trade: dict) -> int | None:
     return (closed.date() - opened.date()).days
 
 
+def _result_label(trade: dict) -> str:
+    """
+    Short label for HOW a closed trade ended. `close_reason` is only set for
+    manual closes, the price-monitor auto-close, and the near-TP-timeout
+    auto-close -- the main scan-loop SL/TP check (the path most trades close
+    through) never sets it, so a win/loss with no close_reason means it
+    genuinely hit its take-profit/stop-loss price.
+    """
+    reason = (trade.get("close_reason") or "").lower()
+    status = trade.get("status")
+    if "near-tp" in reason or "near tp" in reason:
+        return "NEAR-TP"
+    if "manual" in reason:
+        return "MANUAL"
+    if status == "win":
+        return "TP HIT"
+    if status == "loss":
+        return "SL HIT"
+    return "CLOSED"
+
+
+def _strategy_label(trade: dict) -> str:
+    """Same resolution the Dashboard's Trades table / Trade Log use -- ranks
+    target_sources/stop_sources via chart_drawing.METHOD_PRIORITY instead of
+    trusting the raw `strategy` field, which is a hardcoded placeholder
+    ("S/R Confluence") on every trade from ScenarioSignal."""
+    try:
+        return primary_strategy_label(trade)
+    except Exception:
+        return trade.get("strategy") or "--"
+
+
 # ---------------------------------------------------------------------------
 # Main builder
 # ---------------------------------------------------------------------------
@@ -98,14 +136,13 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     """
     Returns a list of strings to post to Discord in order.
     Each string is a ready-to-send Discord message (plain text or markdown).
-    Pass `today` to override the date (useful for testing); defaults to
-    today in Europe/Berlin time.
+    Pass `today` to override the date (useful for testing / !recap <date>);
+    defaults to today in Europe/Berlin time.
     """
+    now_berlin = dt.datetime.now(_BERLIN_TZ).date() if _BERLIN_TZ else dt.date.today()
     if today is None:
-        if _BERLIN_TZ:
-            today = dt.datetime.now(_BERLIN_TZ).date()
-        else:
-            today = dt.date.today()
+        today = now_berlin
+    is_today = (today == now_berlin)
 
     date_label = today.strftime("%A, %-d %B %Y") if hasattr(today, "strftime") else str(today)
 
@@ -142,6 +179,22 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     r_mults   = [r for t in closed_today if (r := _r_multiple(t)) is not None]
     avg_r     = round(sum(r_mults) / len(r_mults), 2) if r_mults else None
 
+    gross_win  = sum(p for p in pnls if p > 0)
+    gross_loss = abs(sum(p for p in pnls if p < 0))
+    if gross_loss > 0:
+        profit_factor = round(gross_win / gross_loss, 2)
+    elif gross_win > 0:
+        profit_factor = None  # infinite -- no losses to divide by, shown as "∞" below
+    else:
+        profit_factor = None
+
+    best_trade  = max(closed_today, key=lambda t: (_pnl_pct(t) if _pnl_pct(t) is not None else -1e9), default=None)
+    worst_trade = min(closed_today, key=lambda t: (_pnl_pct(t) if _pnl_pct(t) is not None else 1e9), default=None)
+    if best_trade is not None and _pnl_pct(best_trade) is None:
+        best_trade = None
+    if worst_trade is not None and _pnl_pct(worst_trade) is None:
+        worst_trade = None
+
     messages: list[str] = []
 
     # ── Part 1: Header + at-a-glance ─────────────────────────────────────
@@ -163,6 +216,29 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         header += f"**Sum P&L (paper):** {total_pnl:+.2f}%\n"
     if avg_r is not None:
         header += f"**Avg R-multiple:** {avg_r:+.2f}R\n"
+    if gross_win > 0 or gross_loss > 0:
+        pf_str = "∞" if profit_factor is None and gross_win > 0 else (f"{profit_factor:.2f}" if profit_factor is not None else "—")
+        header += f"**Profit factor (today):** {pf_str}\n"
+    if best_trade is not None:
+        header += f"**Best trade:** {best_trade['ticker']} {_pnl_pct(best_trade):+.2f}%\n"
+    if worst_trade is not None and worst_trade is not best_trade:
+        header += f"**Worst trade:** {worst_trade['ticker']} {_pnl_pct(worst_trade):+.2f}%\n"
+
+    # Real-currency stats -- only meaningful for "today" (get_daily_summary()
+    # always answers relative to the actual current Berlin day, so a !recap
+    # for a past date can't reuse it without misleadingly mixing dates).
+    if is_today:
+        try:
+            daily = account_module.get_daily_summary()
+            if daily.get("pnl_today") is not None:
+                header += f"**Net $ P&L today:** {daily['pnl_today']:+.2f}\n"
+            if daily.get("balance") is not None:
+                pct = daily.get("pct_change_today")
+                pct_str = f" ({pct:+.2f}% today)" if pct is not None else ""
+                header += f"**Account balance:** {daily['balance']:,.2f}{pct_str}\n"
+        except Exception:
+            log.exception("build_daily_retrospective: get_daily_summary() failed, skipping currency stats")
+
     if still_open:
         header += f"**Still open:** {len(still_open)} trade(s)\n"
 
@@ -171,25 +247,32 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     messages.append(header)
 
     # ── Part 2: Closed-today trade table ─────────────────────────────────
+    # Same base columns as the "Still open" table below (Ticker/Dir/Strategy/
+    # Conf/Entry/SL/TP) plus the close-specific ones (Exit/P&L%/Amt/R/Days/
+    # Result), so the two tables read as one consistent format.
     if closed_today:
         lines = ["**Closed today:**",
                  "```",
-                 f"{'Ticker':<7} {'Dir':<5} {'Strategy':<18} {'Conf':<5} {'Open':<6} {'Close':<6} {'P&L%':>6} {'R':>5} {'Days':>4} {'Out':<6}",
-                 "─" * 75]
+                 f"{'Ticker':<7} {'Dir':<5} {'Strategy':<14} {'Conf':<4} "
+                 f"{'Entry':>8} {'SL':>8} {'TP':>8} {'Exit':>8} {'P&L%':>7} {'Amt':>9} {'R':>5} {'Days':>4} {'Result':<8}",
+                 "─" * 108]
         for t in sorted(closed_today, key=lambda x: x.get("closed_at", "")):
-            pnl = _pnl_pct(t)
-            r   = _r_multiple(t)
+            pnl  = _pnl_pct(t)
+            r    = _r_multiple(t)
             days = _days_held(t)
-            strategy = t.get("strategy", "?")[:17]
+            amt  = t.get("realized_pnl_amount")
+            strategy = _strategy_label(t)[:13]
             direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
-            out = {"win": "WIN ✓", "loss": "LOSS ✗"}.get(t["status"], "CLSD")
+            result = _result_label(t)
             lines.append(
-                f"{t['ticker']:<7} {direction:<5} {strategy:<18} Lv{t.get('confidence_level','-'):<3} "
-                f"{_berlin_hm(t.get('opened_at','')):<6} {_berlin_hm(t.get('closed_at','')):<6} "
-                f"{(f'{pnl:+.2f}%' if pnl is not None else '—'):>6} "
+                f"{t['ticker']:<7} {direction:<5} {strategy:<14} Lv{t.get('confidence_level','-'):<2} "
+                f"{t.get('entry',0):>8.2f} {t.get('stop_loss',0):>8.2f} {t.get('take_profit',0):>8.2f} "
+                f"{(t.get('exit_price') or 0):>8.2f} "
+                f"{(f'{pnl:+.2f}%' if pnl is not None else '—'):>7} "
+                f"{(f'{amt:+.2f}' if amt is not None else '—'):>9} "
                 f"{(f'{r:+.2f}' if r is not None else '—'):>5} "
                 f"{(str(days) if days is not None else '—'):>4} "
-                f"{out:<6}"
+                f"{result:<8}"
             )
         lines.append("```")
         messages.append("\n".join(lines))
@@ -197,7 +280,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     # ── Part 3: Still-open positions ─────────────────────────────────────
     if still_open:
         lines = ["**Still open (all active positions):**", "```",
-                 f"{'Ticker':<7} {'Dir':<5} {'Strategy':<18} {'Conf':<5} {'Opened':<17} {'Entry':>7} {'SL':>7} {'TP':>7}",
+                 f"{'Ticker':<7} {'Dir':<5} {'Strategy':<14} {'Conf':<4} {'Opened':<17} {'Entry':>7} {'SL':>7} {'TP':>7}",
                  "─" * 75]
         for t in still_open:
             direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
@@ -205,7 +288,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             opened_date = _berlin_date(t.get("opened_at", ""))
             date_pfx = opened_date.strftime("%-d %b") if opened_date else "?"
             lines.append(
-                f"{t['ticker']:<7} {direction:<5} {t.get('strategy','?')[:17]:<18} Lv{t.get('confidence_level','-'):<3} "
+                f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:13]:<14} Lv{t.get('confidence_level','-'):<2} "
                 f"{date_pfx + ' ' + opened_str:<17} "
                 f"{t.get('entry',0):>7.2f} {t.get('stop_loss',0):>7.2f} {t.get('take_profit',0):>7.2f}"
             )
@@ -221,13 +304,13 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     # ── Part 5: Lessons learned + tuning suggestions ──────────────────────
     lessons, suggestions = _analyse(closed_today, opened_today, still_open)
     if lessons or suggestions:
-        insight_lines = ["**🔍 Lessons & Tuning Suggestions**"]
+        insight_lines = ["**🔍 Lessons Learned Today & Improvements for Tomorrow**"]
         if lessons:
-            insight_lines.append("\n**Observations:**")
+            insight_lines.append("\n**📝 What happened today:**")
             for l in lessons:
                 insight_lines.append(f"• {l}")
         if suggestions:
-            insight_lines.append("\n**Parameter / algorithm improvements:**")
+            insight_lines.append("\n**🔧 What to improve for tomorrow (feeds back into the algorithm's settings):**")
             for s in suggestions:
                 insight_lines.append(f"→ {s}")
         messages.append("\n".join(insight_lines))
@@ -245,7 +328,7 @@ def _build_breakdown(closed: list) -> str:
     by_conf:     dict[int, list] = defaultdict(list)
 
     for t in closed:
-        by_strategy[t.get("strategy", "Unknown")].append(t)
+        by_strategy[_strategy_label(t)].append(t)
         by_horizon[t.get("horizon_key", "?")].append(t)
         by_conf[t.get("confidence_level", 0)].append(t)
 
@@ -323,10 +406,31 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
         elif total >= 2 and wr == 100:
             lessons.append(f"Lv{lv} trades were perfect today ({total} trades, all wins).")
 
-    # --- Strategy analysis ---
+    # --- Confidence SCORE analysis (wins vs losses) ---
+    win_scores  = [s for t in wins   if (s := t.get("confidence_score")) is not None]
+    loss_scores = [s for t in losses if (s := t.get("confidence_score")) is not None]
+    if win_scores and loss_scores:
+        avg_win_score  = round(sum(win_scores)  / len(win_scores),  1)
+        avg_loss_score = round(sum(loss_scores) / len(loss_scores), 1)
+        if avg_win_score - avg_loss_score >= 8:
+            lessons.append(
+                f"Winning trades averaged a confidence score of {avg_win_score} vs {avg_loss_score} for losses — "
+                f"the confidence score is tracking real outcomes well today."
+            )
+        elif avg_loss_score - avg_win_score >= 8:
+            lessons.append(
+                f"Losing trades actually scored HIGHER on confidence ({avg_loss_score} vs {avg_win_score} for wins) — "
+                f"the scoring model may be over-weighting a factor that didn't hold up today."
+            )
+            suggestions.append(
+                "Review confidence_breakdown for today's losses vs wins to see which scoring factor is misleading right now."
+            )
+
+    # --- Strategy analysis (uses the SAME resolved strategy label the
+    #     Dashboard/Trade Log use, not the raw hardcoded placeholder field) ---
     by_strat: dict[str, list] = defaultdict(list)
     for t in closed:
-        by_strat[t.get("strategy", "Unknown")].append(t)
+        by_strat[_strategy_label(t)].append(t)
 
     for strat, trades in by_strat.items():
         if len(trades) < 2:
@@ -400,6 +504,21 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
             )
             suggestions.append(
                 "Review same-day closures: if SL was hit within hours, the entry timing or stop placement needs work."
+            )
+
+    # --- Near-TP timeout analysis ---
+    near_tp_closes = [t for t in closed if _result_label(t) == "NEAR-TP"]
+    if near_tp_closes:
+        ntp_wins = sum(1 for t in near_tp_closes if t["status"] == "win")
+        lessons.append(
+            f"{len(near_tp_closes)} trade(s) closed via the near-TP timeout instead of reaching the real target "
+            f"({ntp_wins} still booked as wins)."
+        )
+        if len(near_tp_closes) >= 2:
+            suggestions.append(
+                "Several trades are stalling near TP and timing out rather than reaching it — consider raising "
+                "`NEAR_TP_TIMEOUT_MINUTES` to give trades more room, or lowering `NEAR_TP_TIMEOUT_THRESHOLD_PCT` "
+                "to lock in profit earlier if the stall pattern repeats."
             )
 
     # --- Still-open trade risk reminder ---

@@ -487,12 +487,13 @@ async def trade_monitor():
 _recap_fired_date: dt.date | None = None   # tracks the last date a recap was posted
 
 
-async def _post_retrospective(channel_id_override: int | None = None):
-    """Build and post today's retrospective. Called by daily_recap task and !recap command."""
+async def _post_retrospective(channel_id_override: int | None = None, today=None):
+    """Build and post today's (or `today`'s, if given) retrospective. Called
+    by daily_recap task and !recap command."""
     from swingbot.core.retrospective import build_daily_retrospective
 
     all_trades = trade_log.get_trades(limit=10_000)
-    messages   = build_daily_retrospective(all_trades)
+    messages   = build_daily_retrospective(all_trades, today=today)
 
     # Resolve target channel: explicit override → DISCORD_CHANNEL_RETROSPECTIVE_ID → DISCORD_CHANNEL_TRADES_HISTORY_ID
     cid = channel_id_override
@@ -650,7 +651,7 @@ async def recap_cmd(ctx, date_arg: str = ""):
 
     await ctx.send("⏳ Building retrospective…")
     try:
-        await _post_retrospective(channel_id_override=ctx.channel.id)
+        await _post_retrospective(channel_id_override=ctx.channel.id, today=today)
     except Exception as exc:
         log.exception("!recap failed: %s", exc)
         await ctx.send(f"❌ Failed to build retrospective: {exc}")
