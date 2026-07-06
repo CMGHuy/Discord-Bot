@@ -22,12 +22,17 @@ git fetch origin main
 git reset --hard origin/main
 
 echo "==> Building and starting services"
-docker compose up -d --build
+# --wait blocks until all containers with a healthcheck report healthy
+# (or exits non-zero if any container fails to become healthy within its
+# start_period + retries window). This means the SSH step in the CI
+# pipeline fails loudly instead of silently returning while a container
+# is still crashing in a restart loop.
+docker compose up -d --build --wait
 
 echo "==> Pruning old, now-unused images (keeps disk usage in check on small instances)"
 docker image prune -f
 
-echo "==> Status"
+echo "==> Health status after deploy"
 docker compose ps
 
 echo "==> Done. Tail logs with: docker compose logs -f bot"

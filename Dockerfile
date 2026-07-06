@@ -37,6 +37,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# curl: used by the HEALTHCHECK in docker-compose.yml (admin service) and
+# handy for ad-hoc debugging inside a running container. Installed before
+# the Python deps so it's in its own cached layer -- a requirements.txt
+# bump doesn't re-run apt.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # uv itself is tiny and rarely changes -- installing it in its own layer
 # (before requirements.txt is even copied in) means it's cached
 # independently of every dependency-pin bump below.

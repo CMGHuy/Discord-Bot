@@ -34,6 +34,18 @@ services:
       - .:/app
     # Chart generation (matplotlib/mplfinance) is CPU-only and headless;
     # no GPU or display needed.
+    #
+    # Health check: signal 0 to PID 1 confirms the Python process is still
+    # alive. This catches silent crashes that `restart: unless-stopped`
+    # would otherwise not catch until the next OOM kill or system reboot.
+    # start_period gives the bot time to connect to Discord before the
+    # check starts counting failures.
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1 2>/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   admin:
     # No 'build:' here -- reuses the image the bot service just built.
@@ -65,6 +77,21 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "${ADMIN_PORT:-1234}:${ADMIN_PORT:-1234}"
+    # Health check: asks Flask for the root page and accepts 200 (logged
+    # in) or 401 (auth gate hit -- server is up). Any other status or a
+    # connection refusal means the admin UI is not healthy.
+    # curl is installed in the Dockerfile specifically for this check.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          curl -s -o /dev/null -w '%{http_code}' http://localhost:${ADMIN_PORT:-1234}/
+          | grep -qE '^(200|401|302)$'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
 

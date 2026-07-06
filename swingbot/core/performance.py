@@ -684,5 +684,3 @@ class TradeLog:
             "trades":  trades_out,
             "spy_cum": spy_cum,
         }
-,
-        }

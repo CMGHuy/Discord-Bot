@@ -9,10 +9,10 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  # Fails fast, in CI, before ever touching the server, if the codebase
-  # doesn't even import cleanly -- catches an accidental syntax error or
-  # a forgotten dependency in requirements.txt without leaving the
-  # production bot mid-restart on a broken build.
+  # ── 1. Fast fail: does the code even import? ───────────────────────────────
+  # Catches a forgotten syntax error or a missing dependency in
+  # requirements.txt before ever touching the server or waiting for a
+  # Docker build.
   sanity-check:
     runs-on: ubuntu-latest
     steps:
@@ -41,8 +41,10 @@ jobs:
           print('All modules import cleanly.')
           "
 
-  # Deeper structural tests: catches truncated files, missing symbols,
-  # and Flask routes referenced in templates that were never registered.
+  # ── 2. Structural tests ────────────────────────────────────────────────────
+  # Deeper than a plain import: catches truncated files, missing symbols,
+  # renamed config keys, and Flask routes referenced in templates that
+  # were never registered.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -85,6 +87,7 @@ jobs:
               ("swingbot.core.data",              "get_current_price",          "callable"),
               ("swingbot.core.data",              "is_us_market_active",        "callable"),
               ("swingbot.core.performance",       "TradeLog",                   "any"),
+              ("swingbot.core.performance",       "TradeLog.get_chart_data",    "any"),
               ("swingbot.core.scanning.embeds",   "notify_closed_trades",       "callable"),
               ("swingbot.core.scanning.engine",   "get_all_unrealized_pnl",     "callable"),
               ("swingbot.core.retrospective",     "build_daily_retrospective",  "callable"),
@@ -92,16 +95,22 @@ jobs:
 
           errors = []
           for mod_name, sym, kind in checks:
+              # Support dotted attribute paths like "TradeLog.get_chart_data"
+              parts = sym.split('.')
               try:
                   mod = importlib.import_module(mod_name)
               except Exception as e:
                   errors.append(f"  Cannot import {mod_name}: {e}")
                   continue
-              obj = getattr(mod, sym, None)
-              if obj is None:
-                  errors.append(f"  {mod_name}.{sym} — NOT FOUND")
-              elif kind == "callable" and not callable(obj):
-                  errors.append(f"  {mod_name}.{sym} — exists but is not callable")
+              obj = mod
+              for part in parts:
+                  obj = getattr(obj, part, None)
+                  if obj is None:
+                      errors.append(f"  {mod_name}.{sym} — NOT FOUND")
+                      break
+              else:
+                  if kind == "callable" and not callable(obj):
+                      errors.append(f"  {mod_name}.{sym} — exists but is not callable")
 
           if errors:
               print("MISSING SYMBOLS:")
@@ -197,8 +206,169 @@ jobs:
           print(f"Route check OK — all {len(required)} required endpoints registered.")
           PYEOF
 
-  deploy:
+  # ── 3. Docker build + container health ────────────────────────────────────
+  # Builds the real Docker image (same Dockerfile used in production) and
+  # actually starts both entrypoints to prove the containers come up
+  # healthy.  Catches:
+  #   - Dockerfile or requirements.txt breakage that a plain `pip install`
+  #     in the earlier jobs wouldn't catch (e.g. system-level deps).
+  #   - admin_ui.py failing to bind / Flask crashing on startup.
+  #   - Auth gate regression (unauthenticated request must return 401).
+  #   - Any route returning 5xx instead of 200.
+  container-healthcheck:
     needs: [sanity-check, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # BuildKit is required for --mount=type=cache in the Dockerfile.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Layer cache: keyed on Dockerfile + requirements.txt so a
+      # source-only change reuses the cached pip/uv layer entirely.
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: swing-bot:ci
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      # Without the move the cache directory grows unboundedly across runs.
+      - name: Rotate build cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      # ── Entrypoint import checks (no network, no Discord token needed) ──
+      - name: bot.py — entrypoint imports cleanly inside the image
+        run: |
+          docker run --rm \
+            -e DISCORD_TOKEN=ci-stub \
+            -e DISCORD_CHANNEL_TRADES_ID=0 \
+            -e DISCORD_CHANNEL_TRADES_HISTORY_ID=0 \
+            -e DISCORD_CHANNEL_RETROSPECTIVE_ID=0 \
+            swing-bot:ci \
+            python -c "import bot; print('bot.py: OK')"
+
+      - name: admin_ui.py — entrypoint imports cleanly inside the image
+        run: |
+          docker run --rm \
+            -e DISCORD_TOKEN=ci-stub \
+            -e ADMIN_USERNAME=ci \
+            -e ADMIN_PASSWORD=ci-secret \
+            swing-bot:ci \
+            python -c "from swingbot.admin.app import app, main; print('admin_ui.py: OK')"
+
+      # ── Admin container smoke test ──────────────────────────────────────
+      - name: Start admin container
+        run: |
+          docker run -d \
+            --name swing-bot-admin-ci \
+            -p 1234:1234 \
+            -e DISCORD_TOKEN=ci-stub \
+            -e DISCORD_CHANNEL_TRADES_ID=0 \
+            -e DISCORD_CHANNEL_TRADES_HISTORY_ID=0 \
+            -e DISCORD_CHANNEL_RETROSPECTIVE_ID=0 \
+            -e ADMIN_USERNAME=ci \
+            -e ADMIN_PASSWORD=ci-secret \
+            -e ADMIN_PORT=1234 \
+            swing-bot:ci \
+            python admin_ui.py
+
+      - name: Wait for admin UI to become available (up to 30 s)
+        run: |
+          echo "Waiting for admin UI on :1234..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234/ || true)
+            if echo "$STATUS" | grep -qE "^(200|401|302)$"; then
+              echo "Admin UI up — HTTP $STATUS after ${i}s"
+              exit 0
+            fi
+            echo "  [${i}/30] HTTP '${STATUS:-no response}' — retrying in 1s..."
+            sleep 1
+          done
+          echo "Admin UI did not respond within 30 s — dumping logs:"
+          docker logs swing-bot-admin-ci
+          exit 1
+
+      - name: Auth gate — unauthenticated request must return 401
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234/)
+          if [ "$STATUS" != "401" ]; then
+            echo "FAIL: expected HTTP 401 without credentials, got HTTP $STATUS"
+            exit 1
+          fi
+          echo "OK: auth gate returns 401"
+
+      - name: Route smoke test — all key pages must return 200 with valid credentials
+        run: |
+          AUTH="ci:ci-secret"
+          FAILED=""
+
+          check() {
+            local url="$1" exp="$2" label="$3"
+            local status
+            status=$(curl -s -o /tmp/ci_body.html -w "%{http_code}" -u "$AUTH" "$url")
+            if [ "$status" = "$exp" ]; then
+              echo "  OK  $label  ->  HTTP $status"
+            else
+              echo "  FAIL $label: expected HTTP $exp, got HTTP $status"
+              # Show the first error line from the response body to help debug
+              grep -i "error\|traceback\|exception" /tmp/ci_body.html | head -3 || true
+              FAILED="$FAILED $label"
+            fi
+          }
+
+          check "http://localhost:1234/"            "200" "dashboard"
+          check "http://localhost:1234/performance" "200" "performance / stats"
+          check "http://localhost:1234/logs"        "200" "logs"
+          check "http://localhost:1234/settings"    "200" "settings"
+          check "http://localhost:1234/watchlist"   "200" "watchlist"
+
+          if [ -n "$FAILED" ]; then
+            echo ""
+            echo "FAILED routes:$FAILED"
+            exit 1
+          fi
+          echo "All routes OK."
+
+      - name: Verify container stayed healthy throughout the test
+        run: |
+          STATE=$(docker inspect --format='{{.State.Status}}' swing-bot-admin-ci)
+          if [ "$STATE" != "running" ]; then
+            echo "FAIL: container exited unexpectedly (state: $STATE)"
+            docker logs swing-bot-admin-ci
+            exit 1
+          fi
+          echo "OK: container still running (state: $STATE)"
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs swing-bot-admin-ci
+
+      - name: Tear down admin container
+        if: always()
+        run: docker rm -f swing-bot-admin-ci || true
+
+  # ── 4. Deploy ──────────────────────────────────────────────────────────────
+  # Only runs after all three check jobs pass. SSHes into the Hetzner
+  # server and runs the deploy script, which pulls latest, rebuilds, and
+  # restarts both services -- waiting for health checks to pass before
+  # returning (see deploy/deploy.sh).
+  deploy:
+    needs: [container-healthcheck]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
