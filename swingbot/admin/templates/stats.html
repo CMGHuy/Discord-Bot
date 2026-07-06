@@ -119,11 +119,33 @@
   gap: 16px;
   margin-top: 16px;
 }
+
+/* ── Pie chart panel row (Grafana-style) ───────────────────────────────────
+   All pie charts grouped into one row of compact tiles instead of each
+   getting a full half-width panel like the line/bar charts above -- a pie
+   doesn't need that much horizontal room, and Grafana's own dashboards
+   group small single-stat/pie panels into a dense row rather than
+   stretching them. auto-fit + a capped column width narrows the PANEL;
+   the chart-wrap height (unchanged, same as the old .stats-two-col pies)
+   is what actually determines the pie's own diameter, so the pie itself
+   doesn't get any smaller -- only the empty space around it shrinks. */
+.pie-panel-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 260px));
+  gap: 16px;
+  margin-top: 16px;
+  justify-content: start;
+}
 @media (max-width: 720px) {
   .stats-two-col { grid-template-columns: 1fr !important; }
+  /* The pie row's auto-fit columns already wrap naturally on a narrow
+     screen; forcing a single column just keeps three tiles from ever
+     squeezing down to an illegibly narrow sliver at in-between widths. */
+  .pie-panel-row { grid-template-columns: 1fr !important; }
 
   /* Charts get a bit shorter on phones -- keeps the whole dashboard from
      turning into one long vertical scroll of half-empty tall canvases. */
+  #balance-card .chart-wrap,
   #activity-card .chart-wrap,
   #equity-card .chart-wrap,
   #drawdown-card .chart-wrap { height: 180px !important; }
@@ -131,6 +153,7 @@
   #pnl-hist-card .chart-wrap,
   #dur-hist-card .chart-wrap,
   #winloss-pie-card .chart-wrap,
+  #direction-pie-card .chart-wrap,
   #strategy-pie-card .chart-wrap,
   #r-multiple-card .chart-wrap,
   #confidence-card .chart-wrap { height: 170px !important; }
@@ -147,6 +170,57 @@
    of shrinking the cells to nothing on a phone. */
 #heatmap-container { overflow-x: auto; }
 #heatmap-container .heatmap-grid { min-width: 480px; }
+.hm-cell.hm-clickable { cursor: pointer; }
+.hm-cell.hm-clickable:hover { outline: 2px solid rgba(255,255,255,.5); outline-offset: -2px; }
+
+/* ── Month drill-down calendar modal ──────────────────────────────────────
+   Same dark-overlay pattern as the trade chart lightbox (trade_detail.html)
+   -- click a heatmap month cell to see that month's actual calendar, one
+   cell per day, with that day's trade count and win/loss % instead of only
+   the month's aggregate return the heatmap itself shows. #}
+.cal-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.cal-modal {
+  background: #13161d; border: 1px solid #1f2330; border-radius: 10px;
+  max-width: 640px; width: 100%; max-height: 88vh; overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+.cal-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+#cal-modal-title { font-size: 15px; font-weight: 700; color: #dde1ea; }
+#cal-modal-close {
+  background: rgba(255,255,255,0.08); border: none; color: #dde1ea;
+  font-size: 16px; width: 30px; height: 30px; border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+#cal-modal-close:hover { background: rgba(255,255,255,0.16); }
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+}
+.cal-dow {
+  font-size: 10px; color: #5a6275; text-transform: uppercase;
+  text-align: center; padding-bottom: 4px; letter-spacing: .04em;
+}
+.cal-day {
+  border-radius: 6px; min-height: 58px; padding: 5px 6px;
+  background: #191d28; border: 1px solid #1f2330;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cal-day.cal-empty { background: transparent; border-color: transparent; }
+.cal-day .cal-day-num { font-size: 10px; color: #6b7385; font-weight: 600; }
+.cal-day .cal-day-count { font-size: 11px; color: #dde1ea; font-weight: 700; }
+.cal-day .cal-day-wr { font-size: 10px; font-weight: 600; }
+.cal-modal-summary {
+  font-size: 12px; color: #9aa0b0; margin-bottom: 14px;
+  display: flex; gap: 16px; flex-wrap: wrap;
+}
+.cal-modal-summary b { color: #dde1ea; }
 </style>
 
 {# ── KPI strip (populated by JS) ─────────────────────────────────────────── #}
@@ -159,6 +233,13 @@
 </div>
 
 {# ── Charts (all populated by JS) ────────────────────────────────────────── #}
+<div class="chart-card" id="balance-card" style="display:none;">
+  <div class="chart-title">🏦 Account balance over time <span class="muted" style="font-size:11px; font-weight:400;">(real currency, not %)</span></div>
+  <div class="chart-wrap" style="height:200px;">
+    <canvas id="chart-balance"></canvas>
+  </div>
+</div>
+
 <div class="chart-card" id="activity-card" style="display:none;">
   <div class="chart-title">📅 Daily Activity — wins &amp; losses per day</div>
   <div class="chart-wrap" style="height:160px;">
@@ -189,8 +270,19 @@
 </div>
 
 <div id="heatmap-card" class="chart-card" style="display:none;">
-  <div class="chart-title">🗓 Monthly returns heatmap</div>
+  <div class="chart-title">🗓 Monthly returns heatmap <span class="muted" style="font-size:11px; font-weight:400;">(click a month to see the day-by-day calendar)</span></div>
   <div id="heatmap-container"></div>
+</div>
+
+{# ── Month drill-down calendar modal ─────────────────────────────────────── #}
+<div id="cal-overlay" class="cal-overlay" style="display:none;">
+  <div class="cal-modal">
+    <div class="cal-modal-header">
+      <span id="cal-modal-title">Month</span>
+      <button id="cal-modal-close" aria-label="Close" type="button">&#10005;</button>
+    </div>
+    <div id="cal-modal-body"></div>
+  </div>
 </div>
 
 <div class="stats-two-col" id="hist-row">
@@ -208,11 +300,17 @@
   </div>
 </div>
 
-<div class="stats-two-col" id="pie-row">
+<div class="pie-panel-row" id="pie-row">
   <div class="chart-card" style="margin-top:0;" id="winloss-pie-card">
     <div class="chart-title">🥧 Win / Loss split</div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-winloss-pie"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="direction-pie-card">
+    <div class="chart-title">🥧 Long / Short split</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-direction-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="strategy-pie-card">
@@ -356,10 +454,76 @@ const raw    = JSON.parse($('chart-data').textContent);
 const trades = raw.trades;
 const spyCum = raw.spy_cum || {};
 
+/* ── 0. Account balance over time (real currency) ────────────────────────
+   Independent of `trades`/pnl_pct -- built straight from account.json's own
+   balance_history (one entry per real trade settlement plus any manual
+   `!account balance` overrides), so it still renders even before any trade
+   has closed (the "account created" seed point) and reflects the account's
+   own ground truth rather than a value re-derived from the trade log. */
+(function () {
+  const history = raw.balance_history || [];
+  if (!history.length) return;
+  $('balance-card').style.display = '';
+
+  const sizingNote = raw.sizing_mode === 'account_pct'
+    ? `Account % mode -- ${raw.position_pct}% of balance per trade`
+    : `Risk % mode -- ${raw.risk_pct}% risked per trade`;
+  const titleEl = $('balance-card').querySelector('.chart-title .muted');
+  if (titleEl) titleEl.textContent = `(real currency, not % -- ${sizingNote})`;
+
+  const labels = history.map(h => fmtDateTime(h.ts) || h.ts);
+  const balances = history.map(h => h.balance);
+  new Chart($('chart-balance'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Account balance',
+        data: balances,
+        borderColor: '#5a7fff', borderWidth: 2,
+        backgroundColor: 'rgba(90,127,255,.08)',
+        fill: true, tension: 0.25, pointRadius: 0,
+        stepped: false,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          title: ctx => ctx[0]?.label || '',
+          label: ctx => {
+            const h = history[ctx.dataIndex];
+            const parts = [` Balance: ${ctx.parsed.y.toLocaleString(undefined,{maximumFractionDigits:2})}`];
+            if (h.pnl_amount != null) parts.push(` ${h.pnl_amount>=0?'Gain':'Loss'}: ${h.pnl_amount>=0?'+':''}${h.pnl_amount.toFixed(2)}`);
+            if (h.ticker) parts.push(` Trade: ${h.ticker}${h.status?' ('+h.status+')':''}`);
+            if (h.reason) parts.push(` ${h.reason}`);
+            return parts;
+          },
+        } },
+      },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8, maxRotation:45, minRotation:0} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>v.toLocaleString()} },
+      },
+    },
+  });
+})();
+
 if (!trades.length) {
-  $('kpi-strip').innerHTML =
-    '<div style="grid-column:1/-1;padding:24px;text-align:center;color:#5a6275;">' +
-    'No closed trades yet — stats will appear once trades resolve.</div>';
+  if (!raw.balance_history || !raw.balance_history.length) {
+    $('kpi-strip').innerHTML =
+      '<div style="grid-column:1/-1;padding:24px;text-align:center;color:#5a6275;">' +
+      'No closed trades yet — stats will appear once trades resolve.</div>';
+  } else {
+    // At least the account balance chart above has something to show, even
+    // with zero closed trades yet (e.g. right after account creation) --
+    // only the trade-derived KPIs/charts below are skipped.
+    $('kpi-strip').innerHTML =
+      `<div class="kpi-card"><div class="kpi-val">${raw.account_balance != null ? raw.account_balance.toLocaleString() : '—'}</div><div class="kpi-lbl">Account Balance</div></div>` +
+      '<div style="grid-column:span 3;padding:12px;color:#5a6275;display:flex;align-items:center;">No closed trades yet -- trade stats will appear once trades resolve.</div>';
+  }
   return;
 }
 
@@ -442,6 +606,7 @@ function kpi(val, label, cls='') {
 }
 
 const kpiHtml = [
+  kpi(raw.account_balance != null ? raw.account_balance.toLocaleString(undefined,{maximumFractionDigits:2}) : '—', 'Account Balance'),
   kpi(totalTrades,              'Trades'),
   kpi(wins.length,              'Wins',        'up'),
   kpi(losses.length,            'Losses',      'down'),
@@ -645,22 +810,27 @@ function gridOpts(y2=false) {
   });
 })();
 
-/* ── 5. Monthly returns heatmap ─────────────────────────────────────────── */
+/* ── 5. Monthly returns heatmap (+ click-through day calendar) ───────────── */
 (function () {
   if (!pnls.length) return;
 
-  const monthMap = {};
+  const monthMap = {};       // ym -> summed pnl_pct (heatmap cell color/text)
+  const monthHasTrades = {}; // ym -> true if ANY trade closed that month (clickable even if pnl_pct was null for all of them)
   for (const t of trades) {
-    if (t.pnl_pct == null || !t.closed_at) continue;
+    if (!t.closed_at) continue;
     const ym = t.closed_at.slice(0,7);
+    monthHasTrades[ym] = true;
+    if (t.pnl_pct == null) continue;
     if (!monthMap[ym]) monthMap[ym] = 0;
     monthMap[ym] += t.pnl_pct;
   }
-  const yms = Object.keys(monthMap).sort();
+  const yms = Object.keys(monthHasTrades).sort();
   if (!yms.length) return;
 
   const years = [...new Set(yms.map(ym=>ym.slice(0,4)))].sort();
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   const maxAbs = Math.max(...Object.values(monthMap).map(Math.abs), 1);
 
@@ -682,13 +852,81 @@ function gridOpts(y2=false) {
       const ym  = `${yr}-${String(mi+1).padStart(2,'0')}`;
       const val = monthMap[ym] != null ? monthMap[ym] : null;
       const txt = val != null ? (val>=0?'+':'')+val.toFixed(1)+'%' : '';
-      html += `<div class="hm-cell" style="background:${cellColor(val)};" title="${ym}: ${txt||'no trades'}">${txt}</div>`;
+      const clickable = monthHasTrades[ym] ? 'hm-clickable' : '';
+      const tip = monthHasTrades[ym] ? `${ym}: ${txt||'no P&L data'} -- click for day-by-day` : `${ym}: no trades`;
+      html += `<div class="hm-cell ${clickable}" data-ym="${ym}" style="background:${cellColor(val)};" title="${tip}">${txt}</div>`;
     }
   }
   html += `</div>`;
 
   $('heatmap-container').innerHTML = html;
   $('heatmap-card').style.display = '';
+
+  /* ── Month drill-down: full calendar, per-day trade count + win/loss % ── */
+  const calOverlay = $('cal-overlay');
+  const calTitle    = $('cal-modal-title');
+  const calBody     = $('cal-modal-body');
+
+  function closeCal() { calOverlay.style.display = 'none'; }
+  $('cal-modal-close').addEventListener('click', closeCal);
+  calOverlay.addEventListener('click', e => { if (e.target === calOverlay) closeCal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCal(); });
+
+  function openCalForMonth(ym) {
+    const [yr, mo] = ym.split('-').map(Number);   // mo is 1-12
+    const dayMap = {};   // day-of-month (1-31) -> {count, wins, losses}
+    for (const t of trades) {
+      if (!t.closed_at || t.closed_at.slice(0,7) !== ym) continue;
+      const day = parseInt(t.closed_at.slice(8,10), 10);
+      if (!dayMap[day]) dayMap[day] = { count:0, wins:0, losses:0 };
+      dayMap[day].count++;
+      if (t.status === 'win') dayMap[day].wins++; else if (t.status === 'loss') dayMap[day].losses++;
+    }
+
+    const daysInMonth = new Date(yr, mo, 0).getDate();
+    // JS getDay(): 0=Sun..6=Sat -- convert to a Mon-first index (0=Mon..6=Sun)
+    // so the grid lines up with the DOW_LABELS header above.
+    const firstDow = (new Date(yr, mo-1, 1).getDay() + 6) % 7;
+
+    let monthTotal = 0, monthWins = 0, monthLosses = 0;
+    Object.values(dayMap).forEach(d => { monthTotal += d.count; monthWins += d.wins; monthLosses += d.losses; });
+    const monthWr = monthTotal ? (monthWins/(monthWins+monthLosses||1)*100) : null;
+
+    calTitle.textContent = `${MONTHS_FULL[mo-1]} ${yr}`;
+
+    let html = `<div class="cal-modal-summary">
+      <span><b>${monthTotal}</b> trade${monthTotal===1?'':'s'}</span>
+      <span><b>${monthWins}</b> win${monthWins===1?'':'s'}</span>
+      <span><b>${monthLosses}</b> loss${monthLosses===1?'es':''}</span>
+      ${monthWr!=null ? `<span>Win rate <b>${monthWr.toFixed(0)}%</b></span>` : ''}
+    </div>`;
+    html += `<div class="cal-grid">`;
+    for (const d of DOW_LABELS) html += `<div class="cal-dow">${d}</div>`;
+    for (let i=0; i<firstDow; i++) html += `<div class="cal-day cal-empty"></div>`;
+    for (let day=1; day<=daysInMonth; day++) {
+      const d = dayMap[day];
+      if (!d) {
+        html += `<div class="cal-day"><div class="cal-day-num">${day}</div></div>`;
+        continue;
+      }
+      const wr = (d.wins + d.losses) > 0 ? (d.wins/(d.wins+d.losses)*100) : null;
+      const wrColor = wr==null ? '#5a6275' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
+      const wrTxt = wr!=null ? `${wr.toFixed(0)}% win` : `${d.count} closed`;
+      html += `<div class="cal-day" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L">
+        <div class="cal-day-num">${day}</div>
+        <div class="cal-day-count">${d.count} trade${d.count===1?'':'s'}</div>
+        <div class="cal-day-wr" style="color:${wrColor};">${wrTxt}</div>
+      </div>`;
+    }
+    html += `</div>`;
+    calBody.innerHTML = html;
+    calOverlay.style.display = 'flex';
+  }
+
+  $('heatmap-container').addEventListener('click', e => {
+    const cell = e.target.closest('.hm-cell.hm-clickable');
+    if (cell) openCalForMonth(cell.dataset.ym);
+  });
 })();
 
 /* ── 6. P&L histogram ───────────────────────────────────────────────────── */
@@ -764,6 +1002,35 @@ function gridOpts(y2=false) {
       datasets: [{
         data: [wins.length, losses.length],
         backgroundColor: ['rgba(68,255,136,.78)', 'rgba(255,68,68,.78)'],
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      cutout: '62%',
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:16} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 8b. Long / Short pie ─────────────────────────────────────────────────── */
+(function () {
+  const longs  = trades.filter(t => t.direction === 'bullish').length;
+  const shorts = trades.filter(t => t.direction === 'bearish').length;
+  if (!longs && !shorts) { $('direction-pie-card').style.display = 'none'; return; }
+  new Chart($('chart-direction-pie'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Long', 'Short'],
+      datasets: [{
+        data: [longs, shorts],
+        backgroundColor: ['rgba(90,127,255,.78)', 'rgba(226,178,90,.78)'],
         borderColor: '#13161d', borderWidth: 2,
       }],
     },

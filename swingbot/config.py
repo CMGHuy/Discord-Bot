@@ -213,6 +213,20 @@ FIELDS: list[Field] = [
                "a position that's a large fraction of the account (e.g. at 1% risk, a 0.50 stop on a "
                "$5 stock suggests 10× as many shares as a $5 stop on a $50 stock). 20% is a sensible "
                "ceiling for a single position; lower if you want more diversification headroom."),
+    Field("POSITION_SIZING_MODE", "POSITION_SIZING_MODE", "Account Defaults", "Position sizing mode",
+          type="select", default="risk_pct", options=[("risk_pct", "Risk % (fixed-fractional)"), ("account_pct", "Account % (fixed allocation)")],
+          help="'Risk %' (the original model): size so a full stop-out costs exactly Risk per trade % of "
+               "the account -- position size varies with how tight the stop is. 'Account %': size so the "
+               "position itself is always exactly Position size % of account (below) of the account balance, "
+               "regardless of stop distance -- e.g. a €1,000,000 account at 0.1% always opens a €1,000 "
+               "position. Live-editable per account via `!account sizing risk|account`, same as the other "
+               "Account Defaults below -- this .env value only seeds a brand-new data/account.json."),
+    Field("POSITION_SIZE_PCT_OF_ACCOUNT", "POSITION_SIZE_PCT_OF_ACCOUNT", "Account Defaults",
+          "Position size % of account",
+          type="float", default="0.1", min=0.001, max=100, step=0.01,
+          help="Only used when Position sizing mode above is 'Account %'. The position's total value (shares "
+               "× entry) is sized to exactly this % of the account balance -- e.g. 0.1% on a €1,000,000 "
+               "account opens a €1,000 position on every trade. Live-editable with `!account positionpct PCT`."),
 
     # --- Secondary alerts (email + push, fires only on high-confidence qualifying setups) ---
     Field("SECONDARY_ALERT_MIN_CONFIDENCE", "SECONDARY_ALERT_MIN_CONFIDENCE", "Secondary Alerts",

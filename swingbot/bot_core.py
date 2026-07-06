@@ -126,9 +126,11 @@ COMMANDS_BY_CATEGORY = {
          "Backtest every watchlist ticker ranked by expectancy. Same options as !backtest."),
     ],
     "💰 Account & sizing": [
-        ("!account", "Show account balance / risk settings (currently informational only, not used for sizing)"),
+        ("!account", "Show account balance / sizing settings"),
         ("!account balance AMOUNT", "Set account balance"),
-        ("!account risk PCT", "Set risk % per trade"),
+        ("!account sizing risk|account", "Risk % (fixed-fractional) or Account % (fixed allocation, e.g. 0.1% of a €1M account = €1,000/trade)"),
+        ("!account positionpct PCT", "Set position size % of account per trade (used in 'account' sizing mode)"),
+        ("!account risk PCT", "Set risk % per trade (used in 'risk' sizing mode)"),
         ("!account maxpositions N", "Set max concurrent open positions"),
     ],
     "💾 Data export & local cache": [
@@ -182,6 +184,8 @@ COMMAND_USAGE = {
     # Account
     "account":             ("!account", "!account"),
     "account balance":     ("!account balance AMOUNT", "!account balance 10000"),
+    "account sizing":      ("!account sizing risk|account", "!account sizing account"),
+    "account positionpct": ("!account positionpct PCT", "!account positionpct 0.1"),
     "account risk":        ("!account risk PCT",        "!account risk 1.5"),
     "account maxpositions":("!account maxpositions N",  "!account maxpositions 5"),
     # Data & cache

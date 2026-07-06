@@ -29,6 +29,7 @@ except Exception:
     _BERLIN_TZ = None
 
 from swingbot import config
+from swingbot.core import account as account_module
 
 _LOCK = Lock()
 
@@ -117,6 +118,43 @@ def trade_proximity(direction: str, entry: float, stop_loss: float, take_profit:
     return {"proximity": round(proximity, 4), "color": color, "blink_seconds": blink_seconds, "label": label}
 
 
+def primary_strategy_label(t: dict) -> str:
+    """
+    The real per-trade "strategy" label to SHOW, as opposed to
+    t["strategy"] itself -- which, for every trade produced by the live
+    confluence engine, is just ScenarioSignal's hardcoded default
+    ("S/R Confluence", see levels.ScenarioSignal) and is never actually
+    overridden per-trade. Every trade in trades.json ends up with that
+    exact same literal string, which is why any view that reads
+    t["strategy"] directly (the admin Performance page's Trade Log table
+    and By-Strategy breakdown, before this function existed) showed the
+    same strategy for every single row.
+
+    The real per-trade signal instead lives in target_sources /
+    stop_sources: the independent methods (EMA20, VWAP, Fib 61.8%, Volume
+    Profile, a diagonal trendline, ...) that a real confluence pass found
+    agreeing on this trade's levels (see levels.count_confirming_strategies()).
+    This reuses chart_drawing._pick_primary_source -- the same ranking
+    (METHOD_PRIORITY) already used to choose which single confirming
+    method gets drawn on that trade's own chart, and that the dashboard's
+    open-trades table already uses for its Strategy column -- so every
+    place in the admin UI that shows a trade's strategy now agrees,
+    instead of three different labels for the same trade.
+
+    Falls back to t["strategy"] (or "--") for older trades logged before
+    target_sources/stop_sources existed, or if neither list has anything
+    _pick_primary_source recognizes.
+
+    Imported lazily to avoid pulling matplotlib/mplfinance (chart_style.py's
+    import chain) into every process that imports performance.py just to
+    read a trade log -- only paid for by the callers (admin UI page
+    renders) that actually need this label.
+    """
+    from swingbot.core.charts.chart_drawing import _pick_primary_source
+    sources = t.get("target_sources") or t.get("stop_sources") or []
+    return _pick_primary_source(sources) or t.get("strategy") or "--"
+
+
 class TradeLog:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "trades.json")
@@ -180,10 +218,72 @@ class TradeLog:
                                            # threshold and hasn't dropped back below it since -- see
                                            # check_near_tp_timeout(). None while price isn't in that zone.
         }
+
+        # Snapshot position sizing NOW, at the moment the trade is opened --
+        # not recomputed later from whatever the account balance happens to
+        # be when it closes. Without this, a trade opened when the account
+        # was €1,000,000 (sized at €1,000 on a 0.1% account_pct allocation)
+        # would settle its P&L using a completely different share count if
+        # the balance had since moved. See account.py's docstring for the
+        # two sizing modes. `shares` is None (and no P&L is ever settled to
+        # the account) if sizing can't be computed at all -- e.g. account
+        # balance is 0/unset, or (risk_pct mode) stop distance is zero.
+        try:
+            sizing = account_module.compute_position_size(entry, stop_loss)
+        except Exception:
+            sizing = None
+        record["shares"] = sizing["shares"] if sizing else None
+        record["position_value"] = sizing["position_value"] if sizing else None
+        record["sizing_mode"] = sizing["mode"] if sizing else None
+        record["realized_pnl_amount"] = None      # filled in on close by _settle_account_balance
+        record["account_balance_after"] = None    # filled in on close by _settle_account_balance
+
         with _LOCK:
             self._trades.append(record)
             self._save()
         return trade_id
+
+    def _settle_account_balance(self, t: dict) -> None:
+        """
+        Computes this trade's realized currency P&L -- using the share
+        count SNAPSHOTTED at log_trade() time, not today's account
+        balance/sizing settings -- and applies it to the account balance
+        via account.apply_realized_pnl(), which also appends a
+        balance_history entry the admin Performance page charts.
+
+        Mutates `t` in place (realized_pnl_amount, account_balance_after)
+        so the trade record itself carries a permanent record of what it
+        actually did to the account, alongside its %-based pnl_pct.
+
+        No-op (never touches the account) for:
+          - a trade logged before this feature existed / that never got a
+            valid `shares` snapshot (e.g. account balance was 0 at open time)
+          - anything other than an actual win/loss close -- a manual
+            "closed" (no real exit price) has no real P&L to realize.
+
+        Call this BEFORE saving `t` to disk (inside the same lock the
+        caller already holds) so realized_pnl_amount/account_balance_after
+        land in the same write instead of needing a second save.
+        """
+        shares = t.get("shares")
+        exit_price = t.get("exit_price")
+        entry = t.get("entry")
+        if not shares or exit_price is None or entry is None or t.get("status") not in ("win", "loss"):
+            return
+        is_bull = t.get("direction") == "bullish"
+        pnl_amount = shares * (exit_price - entry) if is_bull else shares * (entry - exit_price)
+        pnl_amount = round(pnl_amount, 2)
+        try:
+            updated_cfg = account_module.apply_realized_pnl(
+                pnl_amount, {"trade_id": t.get("id"), "ticker": t.get("ticker"), "status": t.get("status")},
+            )
+            t["realized_pnl_amount"] = pnl_amount
+            t["account_balance_after"] = updated_cfg.get("balance")
+        except Exception:
+            # Account bookkeeping must never prevent the trade itself from
+            # closing -- worst case the account balance simply doesn't
+            # reflect this one trade yet.
+            pass
 
     def update_open_trades(self, ticker: str, df, live_price: float | None = None) -> list:
         """
@@ -265,6 +365,7 @@ class TradeLog:
                 t["status"] = new_status
                 t["exit_price"] = exit_price
                 t["closed_at"] = closed_at
+                self._settle_account_balance(t)
                 newly_closed.append(t)
             if newly_closed:
                 self._save()
@@ -520,6 +621,7 @@ class TradeLog:
                 t["exit_price"] = exit_price
                 t["closed_at"] = closed_at
                 t["close_reason"] = "auto (price monitor)"
+                self._settle_account_balance(t)
                 newly_closed.append(dict(t))
             if newly_closed:
                 self._save()
@@ -613,6 +715,7 @@ class TradeLog:
                     t["closed_at"] = now_iso
                     t["close_reason"] = "auto (near-TP timeout)"
                     t["near_tp_since"] = None
+                    self._settle_account_balance(t)
                     newly_closed.append(dict(t))
             self._save()
         return newly_closed
@@ -670,7 +773,11 @@ class TradeLog:
 
         for t in closed:
             by_ticker[t["ticker"]].append(t)
-            by_strategy[t.get("strategy", "Unknown")].append(t)
+            # See primary_strategy_label's docstring: t["strategy"] itself is
+            # a fixed placeholder on every trade the live engine logs, so
+            # grouping by it directly would put every closed trade in one
+            # bucket instead of breaking down by what actually confirmed it.
+            by_strategy[primary_strategy_label(t)].append(t)
             dow = _closed_dow(t)
             if dow:
                 by_dow_raw[dow].append(t)
@@ -764,8 +871,25 @@ class TradeLog:
                 "opened_at":    opened_at,
                 "closed_at":    closed_at,
                 "holding_days": holding_days,
-                "strategy":     t.get("strategy", ""),
-                "confidence":   int(t.get("confidence") or 0),
+                # The REAL confirming method (see primary_strategy_label), not
+                # the raw t["strategy"] field -- which is the same hardcoded
+                # "S/R Confluence" default on every trade the live engine
+                # logs and would otherwise make every row here look identical.
+                "strategy":     primary_strategy_label(t),
+                # Bug fix: this used to read t.get("confidence"), a key that
+                # doesn't exist on a trade record (the real field is
+                # "confidence_level") -- every trade silently fell back to 0
+                # and showed as "Lv0" everywhere on this page.
+                "confidence":   int(t.get("confidence_level") or 0),
+                # Position-size snapshot (see account.py) and this trade's
+                # real currency effect on the account -- None for anything
+                # closed before this feature existed, or that never got a
+                # valid sizing snapshot at open time.
+                "shares":               t.get("shares"),
+                "position_value":       t.get("position_value"),
+                "sizing_mode":          t.get("sizing_mode"),
+                "realized_pnl_amount":  t.get("realized_pnl_amount"),
+                "account_balance_after": t.get("account_balance_after"),
             })
 
         # SPY benchmark: cumulative % return from the first trade's open date.
@@ -791,7 +915,21 @@ class TradeLog:
             except Exception:
                 pass
 
+        # Real account balance over time -- the currency-based counterpart
+        # to the %-based equity curve above, built from the actual
+        # settlements applied by _settle_account_balance() (plus any manual
+        # `!account balance` overrides), not re-derived from trades_out --
+        # it's the account's own ground truth, including anything that
+        # happened outside the trade log (a manual override, a trade closed
+        # before this feature existed and so never settled anything).
+        account_cfg = account_module.load_account_config()
+
         return {
             "trades":  trades_out,
             "spy_cum": spy_cum,
+            "account_balance": account_cfg.get("balance"),
+            "balance_history": account_cfg.get("balance_history", []),
+            "sizing_mode": account_cfg.get("sizing_mode"),
+            "position_pct": account_cfg.get("position_pct"),
+            "risk_pct": account_cfg.get("risk_pct"),
         }

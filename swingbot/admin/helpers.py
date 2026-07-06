@@ -14,7 +14,7 @@ from itertools import groupby
 from dotenv import dotenv_values
 
 from swingbot import config
-from swingbot.core.charts.chart_drawing import _pick_primary_source
+from swingbot.core.performance import primary_strategy_label as _primary_strategy_label
 from swingbot.core.scan_engine import CONFIDENCE_COLORS
 
 try:
@@ -158,30 +158,12 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
-def _primary_strategy_label(t: dict) -> str:
-    """
-    The dashboard's Strategy column used to just show t["strategy"], which
-    is a fixed default ("S/R Confluence") set once when the trade's
-    ScenarioSignal was built and never actually overridden per-trade --
-    every open trade showed the exact same label regardless of what
-    really confirmed it. The real per-trade signal is in target_sources /
-    stop_sources: the independent methods (EMA20, VWAP, Fib 61.8%, Volume
-    Profile, ...) that a real confluence pass found agreeing on this
-    trade's levels (see levels.count_confirming_strategies()).
-
-    This reuses chart_drawing._pick_primary_source -- the same ranking
-    (METHOD_PRIORITY) already used to choose which single confirming
-    method gets drawn on that trade's own chart -- so the dashboard's
-    "highest-score agreed strategy" always matches what the chart shows,
-    instead of introducing a second, inconsistent ranking.
-
-    Falls back to t["strategy"] (or "--") for older trades logged before
-    target_sources/stop_sources existed, or if neither list has anything
-    _pick_primary_source recognizes.
-    """
-    sources = t.get("target_sources") or t.get("stop_sources") or []
-    return _pick_primary_source(sources) or t.get("strategy") or "--"
-
+# _primary_strategy_label is now defined once, in core/performance.py (as
+# primary_strategy_label), and imported above under this same historical
+# name -- the admin Performance page (get_chart_data / get_detailed_stats)
+# needed the exact same "real confirming method, not the fixed placeholder
+# t['strategy']" logic this dashboard helper already had, so it moved to
+# the shared core layer instead of being duplicated a second time there.
 
 # ---------------------------------------------------------------------------
 # Version tracking (sidebar)
