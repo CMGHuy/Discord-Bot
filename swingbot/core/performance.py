@@ -18,8 +18,15 @@ partial fills, or gaps beyond what the daily bar shows.
 import json
 import os
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from threading import Lock
+
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
+except Exception:
+    _BERLIN_TZ = None
 
 from swingbot import config
 
@@ -467,3 +474,140 @@ class TradeLog:
             self._trades = []
             self._save()
         return count
+
+    def close_if_live_price_hit(self, ticker: str, live_price: float) -> list:
+        """
+        Fast SL/TP check using only a live price quote -- no DataFrame needed.
+        Called by the trade_monitor background task (60s interval) to catch
+        hits immediately between full scan cycles.
+        Returns the list of newly-closed trade records (already saved to disk).
+        """
+        self.refresh()
+        open_trades = [t for t in self._trades
+                       if t["ticker"] == ticker and t["status"] == "open"]
+        if not open_trades:
+            return []
+
+        updates = []
+        for trade in open_trades:
+            is_bull = trade["direction"] == "bullish"
+            if is_bull:
+                if live_price <= trade["stop_loss"]:
+                    updates.append((trade["id"], "loss", trade["stop_loss"]))
+                elif live_price >= trade["take_profit"]:
+                    updates.append((trade["id"], "win", trade["take_profit"]))
+            else:
+                if live_price >= trade["stop_loss"]:
+                    updates.append((trade["id"], "loss", trade["stop_loss"]))
+                elif live_price <= trade["take_profit"]:
+                    updates.append((trade["id"], "win", trade["take_profit"]))
+
+        if not updates:
+            return []
+
+        newly_closed = []
+        closed_at = datetime.now(timezone.utc).isoformat()
+        with _LOCK:
+            id_map = {t["id"]: t for t in self._trades}
+            for trade_id, new_status, exit_price in updates:
+                t = id_map.get(trade_id)
+                if t is None or t["status"] != "open":
+                    continue
+                t["status"] = new_status
+                t["exit_price"] = exit_price
+                t["closed_at"] = closed_at
+                t["close_reason"] = "auto (price monitor)"
+                newly_closed.append(dict(t))
+            if newly_closed:
+                self._save()
+        return newly_closed
+
+    def get_detailed_stats(self) -> dict:
+        """
+        Performance breakdowns by ticker, strategy, and day-of-week (Berlin time).
+        Only win/loss trades (SL or TP actually hit) are included.
+        """
+        self.refresh()
+        closed = [t for t in self._trades if t["status"] in ("win", "loss")]
+
+        def _pnl_pct(t):
+            try:
+                entry = float(t["entry"])
+                exit_p = float(t["exit_price"])
+                if entry <= 0:
+                    return None
+                is_bull = t["direction"] == "bullish"
+                return ((exit_p - entry) / entry * 100) if is_bull else ((entry - exit_p) / entry * 100)
+            except (TypeError, KeyError, ZeroDivisionError):
+                return None
+
+        def _closed_dow(t):
+            _DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            try:
+                dt = datetime.fromisoformat(t.get("closed_at", ""))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if _BERLIN_TZ:
+                    dt = dt.astimezone(_BERLIN_TZ)
+                return _DOW[dt.weekday()]
+            except Exception:
+                return None
+
+        def _build(grouped):
+            rows = []
+            for key, trades in grouped.items():
+                wins = [t for t in trades if t["status"] == "win"]
+                pnls = [p for t in trades if (p := _pnl_pct(t)) is not None]
+                rows.append({
+                    "key": key,
+                    "total": len(trades),
+                    "wins": len(wins),
+                    "losses": len(trades) - len(wins),
+                    "win_rate": round(len(wins) / len(trades) * 100) if trades else None,
+                    "avg_pnl": round(sum(pnls) / len(pnls), 2) if pnls else None,
+                })
+            return rows
+
+        by_ticker = defaultdict(list)
+        by_strategy = defaultdict(list)
+        by_dow_raw = defaultdict(list)
+        _DOW_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+        for t in closed:
+            by_ticker[t["ticker"]].append(t)
+            by_strategy[t.get("strategy", "Unknown")].append(t)
+            dow = _closed_dow(t)
+            if dow:
+                by_dow_raw[dow].append(t)
+
+        ticker_rows = sorted(_build(by_ticker), key=lambda r: r["total"], reverse=True)
+        strategy_rows = sorted(_build(by_strategy), key=lambda r: r["total"], reverse=True)
+        dow_rows = sorted(_build(by_dow_raw), key=lambda r: _DOW_ORDER.index(r["key"]))
+
+        total_wins = len([t for t in closed if t["status"] == "win"])
+        all_pnls = [p for t in closed if (p := _pnl_pct(t)) is not None]
+        return {
+            "total_closed": len(closed),
+            "total_wins": total_wins,
+            "total_losses": len(closed) - total_wins,
+            "overall_win_rate": round(total_wins / len(closed) * 100) if closed else None,
+            "overall_avg_pnl": round(sum(all_pnls) / len(all_pnls), 2) if all_pnls else None,
+            "by_ticker": ticker_rows,
+            "by_strategy": strategy_rows,
+            "by_dow": dow_rows,
+        }
+ows = sorted(_build(by_strategy), key=lambda r: r["total"], reverse=True)
+        dow_rows = sorted(_build(by_dow_raw), key=lambda r: _DOW_ORDER.index(r["key"]))
+
+        total_wins = len([t for t in closed if t["status"] == "win"])
+        all_pnls = [p for t in closed if (p := _pnl_pct(t)) is not None]
+        return {
+            "total_closed": len(closed),
+            "total_wins": total_wins,
+            "total_losses": len(closed) - total_wins,
+            "overall_win_rate": round(total_wins / len(closed) * 100) if closed else None,
+            "overall_avg_pnl": round(sum(all_pnls) / len(all_pnls), 2) if all_pnls else None,
+            "by_ticker": ticker_rows,
+            "by_strategy": strategy_rows,
+            "by_dow": dow_rows,
+        }

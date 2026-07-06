@@ -72,9 +72,10 @@ PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 
 NAV_ITEMS = [
     ("dashboard", "🏠", "Dashboard", "index"),
+    ("stats",     "📊", "Performance", "stats_page"),
     ("watchlist", "📋", "Watchlist", "watchlist_page"),
-    ("settings", "⚙️", "Settings", "settings_page"),
-    ("logs", "📜", "Logs", "logs_page"),
+    ("settings",  "⚙️", "Settings", "settings_page"),
+    ("logs",      "📜", "Logs", "logs_page"),
 ]
 
 _SECTION_META = {
@@ -809,6 +810,13 @@ def resume_scan():
         msg = f"Could not remove pause file: {e}"
         ok = 0
     return redirect(url_for("index", msg=msg, ok=ok))
+
+@app.route("/performance", methods=["GET"])
+@require_auth
+def stats_page():
+    stats = _trades().get_detailed_stats()
+    return _render("Performance", "stats", "stats.html", stats=stats)
+
 
 def main():
     host = os.getenv("ADMIN_HOST", "0.0.0.0")

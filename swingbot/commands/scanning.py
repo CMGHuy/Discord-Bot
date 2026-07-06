@@ -12,6 +12,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core import scan_engine
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.account import load_account_config
+from swingbot.core.data import get_current_price
 from swingbot.core.performance import TradeLog
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.watchlist import load_watchlist
@@ -410,6 +411,57 @@ async def config_watcher():
                       " (stopped early)" if progress.stopped else "")
 
 
+@tasks.loop(seconds=60)
+async def trade_monitor():
+    """
+    Lightweight SL/TP price monitor — runs every 60 seconds, entirely
+    separate from the full scan cycle.  For every open trade it fetches
+    the live price (incl. premarket/aftermarket via get_current_price)
+    and calls close_if_live_price_hit().  If any trade closes, a
+    notification is posted to CLOSED_TRADES_CHANNEL_ID immediately,
+    without waiting for the next scheduled scan.
+
+    Skips silently if a full scan is already running (which does the same
+    check inside update_open_trades) to avoid a race on trades.json.
+    Also skips when there are no open trades, keeping the overhead
+    proportional to actual activity.
+    """
+    if scan_engine.is_scan_running():
+        return  # full scan already handles SL/TP this tick
+
+    open_trades = trade_log.get_trades(status="open", limit=200)
+    if not open_trades:
+        return
+
+    tickers = list({t["ticker"] for t in open_trades})
+    all_newly_closed = []
+
+    for ticker in tickers:
+        try:
+            live = await asyncio.to_thread(get_current_price, ticker)
+        except Exception as exc:
+            log.debug("trade_monitor: price fetch failed for %s: %s", ticker, exc)
+            continue
+        if not live or live <= 0:
+            continue
+        try:
+            closed = await asyncio.to_thread(trade_log.close_if_live_price_hit, ticker, live)
+        except Exception as exc:
+            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc)
+            continue
+        if closed:
+            log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
+            all_newly_closed.extend(closed)
+
+    if all_newly_closed:
+        from swingbot.core.scanning.embeds import notify_closed_trades
+        try:
+            await notify_closed_trades(bot, all_newly_closed)
+        except Exception as exc:
+            log.warning("trade_monitor: failed to post close notifications: %s", exc)
+        await _refresh_presence()
+
+
 @on_config_reload
 def _apply_scan_interval_change(changed: dict):
     """SCAN_INTERVAL_MINUTES is baked into @tasks.loop() at decoration time
@@ -441,6 +493,8 @@ async def on_ready():
         heartbeat.start()
     if not config_watcher.is_running():
         config_watcher.start()
+    if not trade_monitor.is_running():
+        trade_monitor.start()
     await _refresh_presence()
 
     # Sync slash commands to Discord (runs once on startup; safe to call every time)
@@ -747,4 +801,4 @@ async def stop_cmd(ctx):
         return
     scan_engine.request_stop()
     log.info("Stop requested via !stop (by %s).", ctx.author)
-    await ctx.send("🛑 **Stop requested** — the running scan will end after finishing its current ticker.")
+    await ctx.send("\U0001f6d1 **Stop requested** — the running scan will end after finishing its current ticker.")
