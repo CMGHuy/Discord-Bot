@@ -40,8 +40,121 @@ jobs:
           print('All modules import cleanly.')
           "
 
+  # Deeper structural tests: catches truncated files, missing symbols,
+  # and Flask routes referenced in templates that were never registered.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: AST syntax check (catches truncated / corrupted .py files)
+        run: |
+          python - << 'PYEOF'
+          import ast, sys, pathlib
+          errors = []
+          files = list(pathlib.Path('.').rglob('*.py'))
+          for f in files:
+              try:
+                  ast.parse(f.read_text(encoding='utf-8', errors='replace'))
+              except SyntaxError as e:
+                  errors.append(f"{f}:{e.lineno}: {e.msg}")
+          if errors:
+              print("SYNTAX ERRORS FOUND:")
+              print('\n'.join(errors))
+              sys.exit(1)
+          print(f"AST OK — {len(files)} files parsed without errors.")
+          PYEOF
+
+      - name: Required symbol check (catches missing main(), dropped functions)
+        run: |
+          python - << 'PYEOF'
+          import sys, importlib
+
+          checks = [
+              # (module, symbol, kind)  kind: 'callable' or 'any'
+              ("swingbot.admin.app", "main",                    "callable"),
+              ("swingbot.admin.app", "app",                     "any"),
+              ("swingbot.core.data", "get_current_price",       "callable"),
+              ("swingbot.core.data", "is_us_market_active",     "callable"),
+              ("swingbot.core.performance", "TradeStore",       "any"),
+              ("swingbot.core.scanning.engine", "get_all_unrealized_pnl", "callable"),
+          ]
+
+          errors = []
+          for mod_name, sym, kind in checks:
+              try:
+                  mod = importlib.import_module(mod_name)
+              except Exception as e:
+                  errors.append(f"  Cannot import {mod_name}: {e}")
+                  continue
+              obj = getattr(mod, sym, None)
+              if obj is None:
+                  errors.append(f"  {mod_name}.{sym} — NOT FOUND")
+              elif kind == "callable" and not callable(obj):
+                  errors.append(f"  {mod_name}.{sym} — exists but is not callable")
+
+          if errors:
+              print("MISSING SYMBOLS:")
+              print('\n'.join(errors))
+              sys.exit(1)
+          print(f"Symbol check OK — {len(checks)} symbols verified.")
+          PYEOF
+
+      - name: Flask route coverage (catches url_for() endpoints missing from app)
+        run: |
+          python - << 'PYEOF'
+          import sys
+          from swingbot.admin.app import app
+
+          registered = {rule.endpoint for rule in app.url_map.iter_rules()}
+
+          # Every endpoint referenced via url_for() across all templates.
+          # Update this list whenever a new url_for() call is added to a template.
+          required = [
+              "index",
+              "dashboard_fragment",
+              "trigger_scan",
+              "stop_scan",
+              "scan_status",
+              "pause_scan",
+              "resume_scan",
+              "trade_detail",
+              "trade_chart_image",
+              "close_trade",
+              "export_trades_csv",
+              "ticker_logo",
+              "clear_open_trades",
+              "logs_page",
+              "logs_raw",
+              "logs_clear",
+              "save_settings",
+              "restart_bot",
+              "watchlist_add",
+              "watchlist_remove",
+              "watchlist_suggest",
+              "watchlist_fetchlogos",
+              "static",
+          ]
+
+          missing = [e for e in required if e not in registered]
+          if missing:
+              print("MISSING FLASK ROUTES:")
+              for e in missing:
+                  print(f"  endpoint '{e}' is referenced in a template but not registered in app.py")
+              print(f"\nRegistered endpoints: {sorted(registered)}")
+              sys.exit(1)
+          print(f"Route check OK — all {len(required)} required endpoints registered.")
+          PYEOF
+
   deploy:
-    needs: sanity-check
+    needs: [sanity-check, test]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH

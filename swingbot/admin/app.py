@@ -666,6 +666,23 @@ def trigger_scan():
     return redirect(url_for("index", msg=msg, ok=ok))
 
 
+@app.route("/scan/stop", methods=["POST"])
+@require_auth
+def stop_scan():
+    """Ask the bot to stop whatever scan is currently running. Cooperative --
+    takes effect at the scan's next per-ticker checkpoint, not instantly
+    (see scan_engine.request_stop()). Different from pause: pause stops
+    future automatic scans; this cuts short one already in progress."""
+    try:
+        request_stop()
+        msg = "Stop requested — the running scan will end after finishing its current ticker."
+        ok = 1
+    except Exception as e:
+        msg = f"Could not request stop: {e}"
+        ok = 0
+    return redirect(url_for("index", msg=msg, ok=ok))
+
+
 @app.route("/scan/status", methods=["GET"])
 @require_auth
 def scan_status():
@@ -755,9 +772,5 @@ def resume_scan():
         ok = 1
     except Exception as e:
         msg = f"Could not remove pause file: {e}"
-     
-
-def main():
-    host = os.getenv("ADMIN_HOST", "0.0.0.0")
-    port = int(os.getenv("ADMIN_PORT", 1234))
-    app.run(host=host, port=port, debug=False)
+        ok = 0
+    return redirect(url_for("index", msg=msg, ok=ok))
