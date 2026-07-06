@@ -417,9 +417,11 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   padding: 8px 12px; cursor: pointer; font-size: 13px;
 }
-.ticker-suggest
+.ticker-suggestion:hover { background: #181c26; }
+.ticker-suggestion .ticker-sym { font-weight: 700; color: #dde1ea; }
+.ticker-suggestion .ticker-name { font-size: 12px; color: #6b7385; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---- Trade detail 2-column card grid (collapses to single-column below 720px) ---- */
 @media (max-width: 720px) {
   .detail-two-col { grid-template-columns: 1fr !important; }
 }
-; text-overflow: ellipsis; }
