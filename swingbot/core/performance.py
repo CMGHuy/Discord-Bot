@@ -40,9 +40,9 @@ _LOCK = Lock()
 # the same red/grey/green already used elsewhere in the admin UI
 # (win/loss stat cards, direction column) so this new indicator reads as
 # part of the same color language instead of introducing a new palette.
-_PROXIMITY_STOP_COLOR   = (0xda, 0x6d, 0x6d)   # red   -- same as .stat-value loss color
-_PROXIMITY_NEUTRAL_COLOR = (0x5a, 0x62, 0x75)  # grey  -- same as .muted text color
-_PROXIMITY_TARGET_COLOR = (0x6d, 0xda, 0x9e)   # green -- same as .stat-value win color
+_PROXIMITY_STOP_COLOR   = (0xff, 0x44, 0x44)   # bright red
+_PROXIMITY_NEUTRAL_COLOR = (0x6e, 0x77, 0x8c)  # mid grey
+_PROXIMITY_TARGET_COLOR = (0x44, 0xff, 0x88)   # bright green
 
 
 def _lerp_color(c1: tuple, c2: tuple, t: float) -> str:

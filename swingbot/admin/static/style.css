@@ -149,14 +149,14 @@ button:disabled, .btn.disabled {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--status-color, #5a6275);
-  box-shadow: 0 0 6px 0 var(--status-color, #5a6275);
+  background: var(--status-color, #6e778c);
+  box-shadow: 0 0 10px 2px var(--status-color, #6e778c);
   animation: trade-blink var(--blink-duration, 2.2s) ease-in-out infinite;
 }
 
 @keyframes trade-blink {
   0%, 100% { opacity: 1;    transform: scale(1);    }
-  50%      { opacity: 0.35; transform: scale(0.82); }
+  50%      { opacity: 0.5;  transform: scale(0.85); }
 }
 
 /* ---- Live price cell pulse ---- */

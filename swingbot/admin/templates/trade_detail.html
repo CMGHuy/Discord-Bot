@@ -20,81 +20,89 @@
   </div>
 </div>
 
-<div class="card">
-  <p class="card-title">&#127919; Trade plan</p>
-  <table class="kv">
-    <tr><td>Entry (at alert time)</td><td>{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
-    <tr><td>Stop loss</td><td style="color:#da6d6d;">{{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
-    <tr><td>{{ level_word }} 1 (Target)</td><td style="color:#6dda9e;">{{ cur }}{{ "%.2f"|format(t.take_profit) }}</td></tr>
-    {% if t.target2 %}
-    <tr><td>{{ level_word }} 2 (Stretch)</td><td>{{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
-    {% endif %}
-    {% if t.risk_reward_ratio %}
-    <tr><td>Reward:Risk</td><td>{{ t.risk_reward_ratio }}:1</td></tr>
-    {% endif %}
-    {% if t.target_sources %}
-    <tr><td>Target confirmed by</td><td>{{ sources_str(t.target_sources) }}</td></tr>
-    {% endif %}
-    {% if t.stop_sources %}
-    <tr><td>Stop confirmed by</td><td>{{ sources_str(t.stop_sources) }}</td></tr>
-    {% endif %}
-  </table>
+{# ── 2-column layout: left = Trade plan + Setup, right = Why + Confidence ── #}
+<div class="detail-two-col" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;">
 
-  <p class="card-title" style="margin-top:20px;">&#128256; If it gets there</p>
-  <table class="kv">
-    {% if t.target2 %}
-    <tr><td>Continues past {{ level_word|lower }} 1</td><td>next stop {{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
-    {% else %}
-    <tr><td>Continues past {{ level_word|lower }} 1</td><td class="muted">no further level found</td></tr>
-    {% endif %}
-    <tr><td>Reverses at {{ level_word|lower }} 1</td><td>pulls back toward {{ opposite_word|lower }} at {{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
-  </table>
-</div>
+  {# ── LEFT COLUMN ── #}
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div class="card" style="margin-top:0;">
+      <p class="card-title">&#127919; Trade plan</p>
+      <table class="kv">
+        <tr><td>Entry (at alert time)</td><td>{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
+        <tr><td>Stop loss</td><td style="color:#da6d6d;">{{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
+        <tr><td>{{ level_word }} 1 (Target)</td><td style="color:#6dda9e;">{{ cur }}{{ "%.2f"|format(t.take_profit) }}</td></tr>
+        {% if t.target2 %}
+        <tr><td>{{ level_word }} 2 (Stretch)</td><td>{{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
+        {% endif %}
+        {% if t.risk_reward_ratio %}
+        <tr><td>Reward:Risk</td><td>{{ t.risk_reward_ratio }}:1</td></tr>
+        {% endif %}
+        {% if t.target_sources %}
+        <tr><td>Target confirmed by</td><td>{{ sources_str(t.target_sources) }}</td></tr>
+        {% endif %}
+        {% if t.stop_sources %}
+        <tr><td>Stop confirmed by</td><td>{{ sources_str(t.stop_sources) }}</td></tr>
+        {% endif %}
+      </table>
 
-{# ── 2-column row: Setup + Why This Trade ──────────────────────────────── #}
-<div class="detail-two-col" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; margin-bottom:0;">
-  <div class="card" style="margin-top:0;">
-    <p class="card-title">Setup</p>
-    <table class="kv">
-      <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
-      <tr><td>Direction</td><td>{{ 'LONG (buy)' if is_bull else 'SHORT (sell)' }}</td></tr>
-      <tr><td>Confidence</td><td><span class="confidence-badge" style="color: {{ confidence_hex }};">
-        {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if t.confidence_score is not none %}, {{ t.confidence_score }}/100{% endif %})
-      </span></td></tr>
-      {% if t.confirmed_by %}
-      <tr><td>Confirmed by</td><td>
-        {% for c in t.confirmed_by %}{{ c.strategy }} ({{ c.horizon_key }}){% if not loop.last %}, {% endif %}{% endfor %}
-      </td></tr>
-      {% endif %}
-      <tr><td>Status</td><td>{{ t.status | upper }}</td></tr>
-      <tr><td>Opened</td><td>{{ t.opened_at[:19] }}</td></tr>
-      {% if t.status != 'open' %}
-      <tr><td>Closed</td><td>{{ t.closed_at[:19] if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
-      {% endif %}
-    </table>
+      <p class="card-title" style="margin-top:20px;">&#128256; If it gets there</p>
+      <table class="kv">
+        {% if t.target2 %}
+        <tr><td>Continues past {{ level_word|lower }} 1</td><td>next stop {{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
+        {% else %}
+        <tr><td>Continues past {{ level_word|lower }} 1</td><td class="muted">no further level found</td></tr>
+        {% endif %}
+        <tr><td>Reverses at {{ level_word|lower }} 1</td><td>pulls back toward {{ opposite_word|lower }} at {{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:0;">
+      <p class="card-title">Setup</p>
+      <table class="kv">
+        <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
+        <tr><td>Direction</td><td>{{ 'LONG (buy)' if is_bull else 'SHORT (sell)' }}</td></tr>
+        <tr><td>Confidence</td><td><span class="confidence-badge" style="color: {{ confidence_hex }};">
+          {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if t.confidence_score is not none %}, {{ t.confidence_score }}/100{% endif %})
+        </span></td></tr>
+        {% if t.confirmed_by %}
+        <tr><td>Confirmed by</td><td>
+          {% for c in t.confirmed_by %}{{ c.strategy }} ({{ c.horizon_key }}){% if not loop.last %}, {% endif %}{% endfor %}
+        </td></tr>
+        {% endif %}
+        <tr><td>Status</td><td>{{ t.status | upper }}</td></tr>
+        <tr><td>Opened</td><td title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }} (Berlin)</td></tr>
+        {% if t.status != 'open' %}
+        <tr><td>Closed</td><td>{{ t.closed_at | berlin_time if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
   </div>
 
-  <div class="card" style="margin-top:0;">
-    <p class="card-title">&#128203; Why this trade</p>
-    {% if t.explanation %}
-    <div class="explanation">{{ t.explanation }}</div>
-    {% else %}
-    <p class="muted">No explanation recorded for this trade.</p>
+  {# ── RIGHT COLUMN ── #}
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div class="card" style="margin-top:0;">
+      <p class="card-title">&#128203; Why this trade</p>
+      {% if t.explanation %}
+      <div class="explanation">{{ t.explanation }}</div>
+      {% else %}
+      <p class="muted">No explanation recorded for this trade.</p>
+      {% endif %}
+    </div>
+
+    {% if t.confidence_breakdown %}
+    <div class="card" style="margin-top:0;">
+      <p class="card-title">&#128300; Confidence score breakdown</p>
+      <p class="muted" style="margin-top:0;margin-bottom:12px;">Raw scoring detail behind the confidence level. See swingbot/core/confidence.py for factor definitions.</p>
+      <table class="kv">
+        {% for factor, note in t.confidence_breakdown.items() %}
+        <tr><td>{{ factor }}</td><td>{{ note }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
     {% endif %}
   </div>
-</div>
 
-{% if t.confidence_breakdown %}
-<div class="card">
-  <p class="card-title">&#128300; Confidence score breakdown</p>
-  <p class="muted" style="margin-top:0;margin-bottom:12px;">Raw scoring detail behind the confidence level. See swingbot/core/confidence.py for factor definitions.</p>
-  <table class="kv">
-    {% for factor, note in t.confidence_breakdown.items() %}
-    <tr><td>{{ factor }}</td><td>{{ note }}</td></tr>
-    {% endfor %}
-  </table>
 </div>
-{% endif %}
 
 {% if not has_detail %}
 <div class="card">
@@ -103,20 +111,22 @@
 {% endif %}
 {# ── Lightbox (tap-to-enlarge chart with pinch-zoom + pan) ────────────────── #}
 <div id="lb-overlay" style="display:none; position:fixed; inset:0; z-index:9000;
-     background:rgba(0,0,0,0.92); touch-action:none; cursor:zoom-out;"
+     background:rgba(0,0,0,0.92); touch-action:none; cursor:zoom-out; overflow:hidden;"
      aria-label="Chart lightbox — tap to close">
   <button id="lb-close" aria-label="Close"
           style="position:absolute; top:14px; right:16px; z-index:9001;
-                 background:rgba(255,255,255,0.1); border:none; color:#fff;
-                 font-size:24px; width:44px; height:44px; border-radius:50%;
+                 background:rgba(255,255,255,0.15); border:none; color:#fff;
+                 font-size:24px; width:48px; height:48px; border-radius:50%;
                  cursor:pointer; display:flex; align-items:center; justify-content:center;">&#10005;</button>
   <div style="position:absolute; bottom:18px; left:50%; transform:translateX(-50%); z-index:9001;
               color:rgba(255,255,255,0.45); font-size:11px; white-space:nowrap; pointer-events:none;">
     Pinch to zoom &nbsp;·&nbsp; Drag to pan &nbsp;·&nbsp; Double-tap to reset
   </div>
+  {# top:0;left:0 + pure-JS pixel translate avoids the %-of-naturalWidth bug that hid the image on mobile #}
   <img id="lb-img" alt="Enlarged chart"
-       style="position:absolute; top:50%; left:50%; transform-origin:0 0;
-              max-width:none; max-height:none; user-select:none; -webkit-user-drag:none;">
+       style="position:absolute; top:0; left:0; transform-origin:0 0;
+              max-width:none; max-height:none; visibility:hidden;
+              user-select:none; -webkit-user-drag:none;">
 </div>
 
 <script>
@@ -126,58 +136,54 @@
   var closeBtn = document.getElementById('lb-close');
   if (!overlay || !lbImg) return;
 
-  // State
+  // ── State ────────────────────────────────────────────────────────────────
   var scale = 1, minScale = 1, maxScale = 8;
-  var tx = 0, ty = 0;           // current translation (px, centred when scale=1)
-  var imgNatW = 0, imgNatH = 0; // natural image dimensions
-  var vw = 0, vh = 0;           // viewport dimensions
+  // panTx/panTy: extra offset from the perfectly-centred position (px)
+  var panTx = 0, panTy = 0;
+  var imgNatW = 0, imgNatH = 0;
+  var vw = 0, vh = 0;
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  // applyTransform: positions image so that (panTx=0, panTy=0) is perfectly
+  // centred, then adds any extra pan offset.  Uses only pixel values — no
+  // percentage translates — so it's correct regardless of natural image size.
   function applyTransform() {
-    lbImg.style.transform =
-      'translate(-50%, -50%) translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+    var tx = (vw - imgNatW * scale) / 2 + panTx;
+    var ty = (vh - imgNatH * scale) / 2 + panTy;
+    lbImg.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
   }
 
-  function clampTranslation() {
-    // Prevent panning past image edges when zoomed in
-    var halfW = (imgNatW * scale) / 2;
-    var halfH = (imgNatH * scale) / 2;
-    var maxTx = Math.max(0, halfW - vw / 2);
-    var maxTy = Math.max(0, halfH - vh / 2);
-    tx = Math.max(-maxTx, Math.min(maxTx, tx));
-    ty = Math.max(-maxTy, Math.min(maxTy, ty));
+  function clampPan() {
+    var maxPx = Math.max(0, (imgNatW * scale - vw) / 2);
+    var maxPy = Math.max(0, (imgNatH * scale - vh) / 2);
+    panTx = Math.max(-maxPx, Math.min(maxPx, panTx));
+    panTy = Math.max(-maxPy, Math.min(maxPy, panTy));
   }
 
   function fitImage() {
     vw = window.innerWidth; vh = window.innerHeight;
     imgNatW = lbImg.naturalWidth  || vw;
     imgNatH = lbImg.naturalHeight || vh;
-    // Fit the (landscape) chart to fill as much of the screen as possible
     var fitScale = Math.min(vw / imgNatW, vh / imgNatH);
     minScale = fitScale;
-    scale = fitScale;
-    tx = 0; ty = 0;
+    scale    = fitScale;
+    panTx = 0; panTy = 0;
     lbImg.style.visibility = 'visible';
     applyTransform();
   }
 
+  // ── Open / close ─────────────────────────────────────────────────────────
   window.openLightbox = function(src) {
     vw = window.innerWidth; vh = window.innerHeight;
-    lbImg.style.visibility = 'hidden';   // hide until fit is computed
-    overlay.style.display = 'block';
+    lbImg.style.visibility = 'hidden';
+    overlay.style.display  = 'block';
     document.body.style.overflow = 'hidden';
-
-    // Request landscape so the wide chart fills the screen on phones.
-    // Fails silently on desktop / browsers that don't support the API.
     if (screen.orientation && screen.orientation.lock) {
       screen.orientation.lock('landscape').catch(function() {});
     }
-
     lbImg.onload = fitImage;
     lbImg.src = src;
-    // If image already cached, onload may not fire — call fitImage directly.
-    if (lbImg.complete && lbImg.naturalWidth) {
-      fitImage();
-    }
+    if (lbImg.complete && lbImg.naturalWidth) { fitImage(); }
   };
 
   function closeLightbox() {
@@ -190,44 +196,44 @@
     }
   }
 
-  closeBtn.addEventListener('click', closeLightbox);
-  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
-
-  // Click/tap outside image (on overlay) closes
-  overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) closeLightbox();
+  // Re-fit whenever the viewport changes (orientation lock rotation, pinch-zoom of page, etc.)
+  window.addEventListener('resize', function() {
+    if (overlay.style.display !== 'none' && lbImg.naturalWidth) { fitImage(); }
   });
 
-  // ── Mouse wheel zoom ────────────────────────────────────────────────────
+  closeBtn.addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeLightbox(); });
+
+  // ── Mouse wheel zoom ─────────────────────────────────────────────────────
   overlay.addEventListener('wheel', function(e) {
     e.preventDefault();
-    var delta = e.deltaY > 0 ? 0.85 : 1.18;
-    var newScale = Math.max(minScale, Math.min(maxScale, scale * delta));
-    // Zoom toward cursor position
-    var rect = overlay.getBoundingClientRect();
-    var cx = e.clientX - rect.left - vw / 2;
-    var cy = e.clientY - rect.top  - vh / 2;
-    tx = cx + (tx - cx) * (newScale / scale);
-    ty = cy + (ty - cy) * (newScale / scale);
+    var newScale = Math.max(minScale, Math.min(maxScale, scale * (e.deltaY > 0 ? 0.85 : 1.18)));
+    // Keep the image pixel under the cursor stationary
+    var imgPx = (e.clientX - (vw - imgNatW * scale) / 2 - panTx) / scale;
+    var imgPy = (e.clientY - (vh - imgNatH * scale) / 2 - panTy) / scale;
     scale = newScale;
-    clampTranslation();
+    panTx = e.clientX - (vw - imgNatW * scale) / 2 - imgPx * scale;
+    panTy = e.clientY - (vh - imgNatH * scale) / 2 - imgPy * scale;
+    clampPan();
     applyTransform();
   }, { passive: false });
 
-  // ── Mouse drag ──────────────────────────────────────────────────────────
-  var dragging = false, dragStartX = 0, dragStartY = 0, dragTx = 0, dragTy = 0;
+  // ── Mouse drag ───────────────────────────────────────────────────────────
+  var dragging = false, dragStartX = 0, dragStartY = 0, startPanTx = 0, startPanTy = 0;
   overlay.addEventListener('mousedown', function(e) {
     if (e.target === closeBtn) return;
-    dragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
-    dragTx = tx; dragTy = ty;
+    dragging = true;
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    startPanTx = panTx;     startPanTy = panTy;
     overlay.style.cursor = 'grabbing';
     e.preventDefault();
   });
   window.addEventListener('mousemove', function(e) {
     if (!dragging) return;
-    tx = dragTx + (e.clientX - dragStartX);
-    ty = dragTy + (e.clientY - dragStartY);
-    clampTranslation();
+    panTx = startPanTx + (e.clientX - dragStartX);
+    panTy = startPanTy + (e.clientY - dragStartY);
+    clampPan();
     applyTransform();
   });
   window.addEventListener('mouseup', function() {
@@ -235,21 +241,17 @@
     overlay.style.cursor = 'zoom-out';
   });
 
-  // ── Touch: pinch-zoom + pan ─────────────────────────────────────────────
+  // ── Touch: pinch-zoom + pan ───────────────────────────────────────────────
   var lastDist = 0, lastMidX = 0, lastMidY = 0;
-  var touchStartTx = 0, touchStartTy = 0;
-  var singleTouchStartX = 0, singleTouchStartY = 0;
+  var touchStartPanTx = 0, touchStartPanTy = 0;
+  var singleStartX = 0, singleStartY = 0;
 
   function touchDist(t) {
-    var dx = t[0].clientX - t[1].clientX;
-    var dy = t[0].clientY - t[1].clientY;
+    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
     return Math.sqrt(dx * dx + dy * dy);
   }
   function touchMid(t) {
-    return {
-      x: (t[0].clientX + t[1].clientX) / 2,
-      y: (t[0].clientY + t[1].clientY) / 2
-    };
+    return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
   }
 
   overlay.addEventListener('touchstart', function(e) {
@@ -258,11 +260,10 @@
       lastDist = touchDist(e.touches);
       var mid = touchMid(e.touches);
       lastMidX = mid.x; lastMidY = mid.y;
-      touchStartTx = tx; touchStartTy = ty;
+      touchStartPanTx = panTx; touchStartPanTy = panTy;
     } else if (e.touches.length === 1) {
-      singleTouchStartX = e.touches[0].clientX;
-      singleTouchStartY = e.touches[0].clientY;
-      touchStartTx = tx; touchStartTy = ty;
+      singleStartX = e.touches[0].clientX; singleStartY = e.touches[0].clientY;
+      touchStartPanTx = panTx; touchStartPanTy = panTy;
     }
   }, { passive: false });
 
@@ -271,39 +272,42 @@
     if (e.touches.length === 2) {
       var dist = touchDist(e.touches);
       var mid  = touchMid(e.touches);
-      var ratio = dist / lastDist;
-      var newScale = Math.max(minScale, Math.min(maxScale, scale * ratio));
-      // Zoom toward pinch midpoint
-      var cx = mid.x - vw / 2;
-      var cy = mid.y - vh / 2;
-      tx = cx + (tx - cx) * (newScale / scale);
-      ty = cy + (ty - cy) * (newScale / scale);
-      // Also pan by midpoint movement
-      tx += mid.x - lastMidX;
-      ty += mid.y - lastMidY;
+      var newScale = Math.max(minScale, Math.min(maxScale, scale * (dist / lastDist)));
+      // Keep image pixel under pinch midpoint stationary
+      var imgPx = (mid.x - (vw - imgNatW * scale) / 2 - panTx) / scale;
+      var imgPy = (mid.y - (vh - imgNatH * scale) / 2 - panTy) / scale;
       scale = newScale;
+      panTx = mid.x - (vw - imgNatW * scale) / 2 - imgPx * scale + (mid.x - lastMidX);
+      panTy = mid.y - (vh - imgNatH * scale) / 2 - imgPy * scale + (mid.y - lastMidY);
       lastDist = dist; lastMidX = mid.x; lastMidY = mid.y;
-      clampTranslation();
+      clampPan();
       applyTransform();
     } else if (e.touches.length === 1) {
-      tx = touchStartTx + (e.touches[0].clientX - singleTouchStartX);
-      ty = touchStartTy + (e.touches[0].clientY - singleTouchStartY);
-      clampTranslation();
+      panTx = touchStartPanTx + (e.touches[0].clientX - singleStartX);
+      panTy = touchStartPanTy + (e.touches[0].clientY - singleStartY);
+      clampPan();
       applyTransform();
     }
   }, { passive: false });
 
-  // Double-tap to reset zoom
+  // Double-tap to toggle zoom
   var lastTap = 0;
   overlay.addEventListener('touchend', function(e) {
     var now = Date.now();
     if (now - lastTap < 300 && e.changedTouches.length === 1) {
-      if (Math.abs(scale - minScale) < 0.01) {
-        scale = Math.min(maxScale, minScale * 2.5);
+      if (Math.abs(scale - minScale) < minScale * 0.05) {
+        // zoom in to 2.5× centred on tap point
+        var tx0 = e.changedTouches[0].clientX, ty0 = e.changedTouches[0].clientY;
+        var newScale = Math.min(maxScale, minScale * 2.5);
+        var imgPx = (tx0 - (vw - imgNatW * scale) / 2 - panTx) / scale;
+        var imgPy = (ty0 - (vh - imgNatH * scale) / 2 - panTy) / scale;
+        scale = newScale;
+        panTx = tx0 - (vw - imgNatW * scale) / 2 - imgPx * scale;
+        panTy = ty0 - (vh - imgNatH * scale) / 2 - imgPy * scale;
       } else {
-        scale = minScale; tx = 0; ty = 0;
+        scale = minScale; panTx = 0; panTy = 0;
       }
-      clampTranslation();
+      clampPan();
       applyTransform();
     }
     lastTap = now;

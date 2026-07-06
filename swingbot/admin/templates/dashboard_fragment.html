@@ -286,7 +286,7 @@
         {{ days_open if days_open is not none else '—' }}
       </td>
 
-      <td class="muted" data-sort="{{ t.opened_at }}">{{ t.opened_at[:16] }}</td>
+      <td class="muted" data-sort="{{ t.opened_at }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
 
       <td onclick="event.stopPropagation();" style="display:flex;gap:6px;align-items:center;">
         <button type="button" class="icon-btn secondary" title="Open trade detail in new tab"

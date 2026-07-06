@@ -100,6 +100,30 @@ app.logger.setLevel(logging.INFO)
 logging.getLogger("werkzeug").addHandler(_admin_file_handler)
 logging.getLogger("werkzeug").setLevel(logging.INFO)
 
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
+except Exception:
+    _BERLIN_TZ = None
+
+
+def _berlin_time(dt_str: str, fmt: str = "%Y-%m-%d %H:%M") -> str:
+    """Jinja filter: converts a UTC ISO datetime string to Berlin local time."""
+    if not dt_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if _BERLIN_TZ:
+            dt = dt.astimezone(_BERLIN_TZ)
+        return dt.strftime(fmt)
+    except Exception:
+        return dt_str[:16]
+
+
+app.jinja_env.filters["berlin_time"] = _berlin_time
+
 
 def _trades() -> TradeLog:
     """
@@ -758,7 +782,7 @@ def scan_status():
 @require_auth
 def pause_scan():
     """Pause the automatic background scan loop (checked by session_scan
-    in commands/scanning.py). Manual !check / "Run !check now" still work
+    in commands/scanning.py). Manual !c    in commands/scanning.py). Manual !check / "Run !check now" still work
     while paused -- this only stops the unattended scheduled scanning."""
     try:
         os.makedirs(config.DATA_DIR, exist_ok=True)
