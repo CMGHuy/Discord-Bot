@@ -130,7 +130,6 @@ jobs:
               "trade_chart_image",
               "close_trade",
               "export_trades_csv",
-              "ticker_logo",
               "clear_open_trades",
               "clear_trade_history",
               "delete_single_trade",

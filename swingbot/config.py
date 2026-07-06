@@ -65,6 +65,7 @@ EXPORT_DIR = os.path.join(_PROJECT_ROOT, "exports")
 TRADE_CHART_DIR = os.path.join(EXPORT_DIR, "trade_charts")
 LOG_DIR = os.path.join(_PROJECT_ROOT, "logs")
 LOG_FILE = os.path.join(LOG_DIR, "bot.log")
+ADMIN_LOG_FILE = os.path.join(LOG_DIR, "admin.log")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 

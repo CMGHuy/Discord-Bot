@@ -38,10 +38,12 @@ edited/linted as HTML. Shared CSS lives in static/style.css.
 import csv
 import io
 import json
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 
 from flask import Flask, Response, abort, redirect, render_template, request, send_file, url_for
 
@@ -49,7 +51,7 @@ from swingbot import config
 from swingbot.core.performance import TradeLog, trade_proximity
 from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
 from swingbot.core.account import compute_position_size, load_account_config
-from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, get_logo_path, prefetch_prices, is_us_market_active
+from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, prefetch_prices, is_us_market_active
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.ticker_directory import search_tickers
 # Pure helper functions (.env parsing, Docker container control, confidence-hex,
@@ -58,7 +60,8 @@ from .helpers import (
     BOT_CONTAINER_NAME, FIELDS_BY_KEY, FIELDS_BY_SECTION, docker_sdk,
     _build_env_text, _changed_non_hot_reloadable_fields, _clear_log, _confidence_hex,
     _field_display_value, _get_bot_container, _hot_reload_bot_container, _primary_strategy_label,
-    _read_env_values, _restart_bot_container, _sources_str, _tail_log, _write_env_text, get_versions,
+    _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
+    _clear_admin_log, _write_env_text, get_versions,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -86,6 +89,16 @@ _SECTION_META = {
 }
 
 app = Flask(__name__)
+
+# Wire Flask + Werkzeug request logs to admin.log so the Logs page can show
+# admin UI activity separately from the bot's own log stream.
+_admin_log_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+_admin_file_handler = RotatingFileHandler(config.ADMIN_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2)
+_admin_file_handler.setFormatter(_admin_log_fmt)
+app.logger.addHandler(_admin_file_handler)
+app.logger.setLevel(logging.INFO)
+logging.getLogger("werkzeug").addHandler(_admin_file_handler)
+logging.getLogger("werkzeug").setLevel(logging.INFO)
 
 
 def _trades() -> TradeLog:
@@ -430,17 +443,31 @@ def logs_page():
     except ValueError:
         lines = 500
     lines = max(1, min(lines, 5000))
+    source = request.args.get("source", "bot")  # "bot" or "admin"
+    if source == "admin":
+        log_content = _tail_admin_log(lines)
+        log_path = config.ADMIN_LOG_FILE
+    else:
+        source = "bot"
+        log_content = _tail_log(lines)
+        log_path = config.LOG_FILE
     return _render(
-        "Logs", "logs", "logs.html", log_content=_tail_log(lines), lines=lines, log_path=config.LOG_FILE,
-        logs_refresh_seconds=config.LOGS_REFRESH_SECONDS,
+        "Logs", "logs", "logs.html",
+        log_content=log_content, lines=lines, log_path=log_path,
+        log_source=source, logs_refresh_seconds=config.LOGS_REFRESH_SECONDS,
     )
 
 
 @app.route("/logs/clear", methods=["POST"])
 @require_auth
 def logs_clear():
-    success, message = _clear_log()
-    return redirect(url_for("logs_page", msg=message, ok=1 if success else 0))
+    source = request.args.get("source", "bot")
+    if source == "admin":
+        success, message = _clear_admin_log()
+    else:
+        source = "bot"
+        success, message = _clear_log()
+    return redirect(url_for("logs_page", msg=message, ok=1 if success else 0, source=source))
 
 
 @app.route("/logs/raw", methods=["GET"])
@@ -451,7 +478,9 @@ def logs_raw():
     except ValueError:
         lines = 500
     lines = max(1, min(lines, 5000))
-    return Response(_tail_log(lines), mimetype="text/plain; charset=utf-8")
+    source = request.args.get("source", "bot")
+    content = _tail_admin_log(lines) if source == "admin" else _tail_log(lines)
+    return Response(content, mimetype="text/plain; charset=utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -550,23 +579,6 @@ def export_trades_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=trades.csv"},
     )
-
-
-# ---------------------------------------------------------------------------
-# Route -- ticker logos (used by the Watchlist, Dashboard, and Trade detail
-# pages below). Serves from core/data.py's on-disk logo cache, fetching and
-# caching on first request if it isn't there yet. Returns 404 (rather than a
-# broken image placeholder) when no logo can be found -- the templates below
-# add onerror="this.style.display='none'" so a missing logo just quietly
-# collapses instead of showing a broken-image icon.
-# ---------------------------------------------------------------------------
-@app.route("/logo/<ticker>")
-@require_auth
-def ticker_logo(ticker):
-    path = get_logo_path(ticker)
-    if not path:
-        abort(404)
-    return send_file(path, mimetype="image/png", max_age=86400)
 
 
 # ---------------------------------------------------------------------------

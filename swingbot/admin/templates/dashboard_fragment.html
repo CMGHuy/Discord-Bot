@@ -181,7 +181,7 @@
 
           {# Position bar: SL=0% left, TP=100% right, tick=entry #}
           {% if pnl %}
-          <div class="pos-bar" title="SL (left 0%) → TP (right 100%). Tick = entry.">
+          <div class="pos-bar" title="{{ status.label }}">
             <div class="pos-bar-fill"
                  style="width:{{ pnl.pos_pct }}%; background:{{ pnl.pos_color }}; opacity:0.9;"></div>
             <div class="pos-bar-entry" style="left:{{ pnl.entry_pct }}%;"></div>
@@ -190,7 +190,7 @@
           <div class="status-dists">
             <span class="dist-progress"
               style="color: {{ pnl.pos_color }}; font-weight: {% if pnl.pos_pct <= 30 or pnl.pos_pct >= 75 %}700{% else %}500{% endif %};"
-              title="{{ '%.0f%%'|format(pnl.pos_pct) }} — 0% = SL, 100% = TP">
+              title="{{ status.label }}">
               {{ '%.0f%%'|format(pnl.pos_pct) }}
             </span>
           </div>
@@ -201,15 +201,8 @@
         </div>
       </td>
 
-      {# Ticker with logo #}
-      <td>
-        <span style="display:flex;align-items:center;gap:7px;">
-          <img src="{{ url_for('ticker_logo', ticker=t.ticker) }}" alt=""
-               style="width:18px;height:18px;border-radius:4px;object-fit:contain;background:#fff;flex-shrink:0;"
-               onerror="this.style.display='none'" loading="lazy">
-          <strong>{{ t.ticker }}</strong>
-        </span>
-      </td>
+      {# Ticker #}
+      <td><strong>{{ t.ticker }}</strong></td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
       <td title="Sources: {{ _all_sources | unique | join(', ') if _all_sources else 'n/a' }}">
@@ -293,7 +286,7 @@
         {{ days_open if days_open is not none else '—' }}
       </td>
 
-      <td class="muted" data-sort="{{ t.opened_at }}">{{ t.opened_at[:10] }}</td>
+      <td class="muted" data-sort="{{ t.opened_at }}">{{ t.opened_at[:16] }}</td>
 
       <td onclick="event.stopPropagation();" style="display:flex;gap:6px;align-items:center;">
         <button type="button" class="icon-btn secondary" title="Open trade detail in new tab"
@@ -466,14 +459,7 @@
           <span class="outcome-closed">CLOSED</span>
         {% endif %}
       </td>
-      <td>
-        <span style="display:flex;align-items:center;gap:6px;">
-          <img src="{{ url_for('ticker_logo', ticker=t.ticker) }}" alt=""
-               style="width:16px;height:16px;border-radius:3px;object-fit:contain;background:#fff;flex-shrink:0;"
-               onerror="this.style.display='none'" loading="lazy">
-          <strong>{{ t.ticker }}</strong>
-        </span>
-      </td>
+      <td><strong>{{ t.ticker }}</strong></td>
       <td class="muted" style="font-size:12px;" title="{{ ((t.target_sources | default([])) + (t.stop_sources | default([]))) | unique | join(', ') }}">
         {{ c_strat[:14] }}
       </td>

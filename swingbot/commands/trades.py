@@ -58,7 +58,7 @@ def format_trades_table(trades, header: str) -> str:
             f"{'L'+str(t['confidence_level']):5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} {t['status']:6s}"
         )
     lines.append("```")
-    lines.append("Use `!trade ID` for full detail, `!trade delete ID` to remove one, `!trades clear` to wipe all.")
+    lines.append("Use `!trade ID` for full detail, `!trade delete ID` to remove one, `!trades clear` to clear active trades, `!trades clear history` to clear closed trade history.")
     return "\n".join(lines)
 
 
@@ -144,10 +144,19 @@ async def trades_cmd(ctx, status: str = "all", per_page: int = DEFAULT_PER_PAGE)
     view.message = await ctx.send(view.render(), view=view)
 
 
-@trades_cmd.command(name="clear")
+@trades_cmd.group(name="clear", invoke_without_command=True)
 async def trades_clear(ctx):
-    count = trade_log.clear_all()
-    await ctx.send(f"Cleared {count} trade record(s).")
+    """Clear all currently OPEN/active trades. Closed trade history is kept.
+    Use `!trades clear history` to remove closed trade records instead."""
+    count = trade_log.clear_open()
+    await ctx.send(f"Cleared {count} open trade(s). Closed win/loss history was not touched.")
+
+
+@trades_clear.command(name="history")
+async def trades_clear_history(ctx):
+    """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
+    count = trade_log.clear_history()
+    await ctx.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
 
 
 @bot.group(name="trade", invoke_without_command=True)

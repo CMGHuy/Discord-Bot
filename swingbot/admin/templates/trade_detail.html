@@ -4,9 +4,6 @@
 
 <div class="card" style="margin-top: 16px;">
   <p class="card-title" style="display:flex; align-items:center; gap:8px;">
-    <img src="{{ url_for('ticker_logo', ticker=t.ticker) }}" alt=""
-         style="width:24px; height:24px; border-radius:5px; object-fit:contain; background:#fff; flex-shrink:0;"
-         onerror="this.style.display='none'">
     {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
   </p>
   <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">

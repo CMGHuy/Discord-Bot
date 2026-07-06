@@ -224,6 +224,17 @@ def _tail_log(n: int = 500) -> str:
         return f"(could not read log file: {e})"
 
 
+def _tail_admin_log(n: int = 500) -> str:
+    if not os.path.exists(config.ADMIN_LOG_FILE):
+        return "(no admin log yet — admin UI activity will appear here after the next page interaction)"
+    try:
+        with open(config.ADMIN_LOG_FILE, "r", errors="replace") as f:
+            lines = f.readlines()
+        return "".join(lines[-n:]) if lines else "(admin log file is empty)"
+    except Exception as e:
+        return f"(could not read admin log file: {e})"
+
+
 def _clear_log() -> tuple:
     if not os.path.exists(config.LOG_FILE):
         return False, "Log file doesn't exist yet."
@@ -233,3 +244,14 @@ def _clear_log() -> tuple:
         return True, "Log file cleared."
     except Exception as e:
         return False, f"Could not clear log file: {e}"
+
+
+def _clear_admin_log() -> tuple:
+    if not os.path.exists(config.ADMIN_LOG_FILE):
+        return False, "Admin log file doesn't exist yet."
+    try:
+        with open(config.ADMIN_LOG_FILE, "w") as f:
+            f.write("")
+        return True, "Admin log file cleared."
+    except Exception as e:
+        return False, f"Could not clear admin log file: {e}"

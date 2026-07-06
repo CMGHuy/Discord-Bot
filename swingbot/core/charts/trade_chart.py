@@ -829,28 +829,6 @@ def generate_trade_chart(
     finally:
         plt.close(fig)
 
-    # Composite the stock logo into the top-left corner of the saved PNG.
-    # Done as a post-process on the PNG (not via matplotlib) so it's
-    # completely independent of the chart layout and never clips any data.
-    try:
-        from PIL import Image as _PILImage
-        from ..data import get_ticker_logo
-        logo = get_ticker_logo(ticker)
-        if logo is not None:
-            chart_img = _PILImage.open(path).convert("RGBA")
-            # Scale logo to ~5% of chart height, max 56 px
-            logo_h = min(56, int(chart_img.height * 0.05))
-            logo_w = int(logo.width * logo_h / logo.height)
-            logo_resized = logo.resize((logo_w, logo_h), _PILImage.LANCZOS)
-            # White rounded background patch for visibility on any chart theme
-            pad = 4
-            bg = _PILImage.new("RGBA", (logo_w + pad * 2, logo_h + pad * 2), (255, 255, 255, 210))
-            bg.paste(logo_resized, (pad, pad), logo_resized)
-            chart_img.paste(bg, (8, 8), bg)
-            chart_img.convert("RGB").save(path, "PNG")
-    except Exception as _logo_err:
-        log.debug("Logo overlay failed for %s: %s", ticker, _logo_err)
-
     return path
 
 

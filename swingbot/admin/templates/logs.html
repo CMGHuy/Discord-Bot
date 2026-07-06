@@ -1,9 +1,28 @@
 {% extends "base.html" %}
 {% block body %}
+{# ── Source tabs ──────────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid #1f2330;padding-bottom:0;">
+  <a href="{{ url_for('logs_page', lines=lines, source='bot') }}"
+     style="padding:7px 18px;font-size:13px;font-weight:600;border-radius:6px 6px 0 0;text-decoration:none;
+            background:{{ '#1a1e2b' if log_source=='bot' else 'transparent' }};
+            color:{{ '#dde1ea' if log_source=='bot' else '#5a6275' }};
+            border:1px solid {{ '#2a2e3d' if log_source=='bot' else 'transparent' }};border-bottom:none;">
+    🤖 Bot
+  </a>
+  <a href="{{ url_for('logs_page', lines=lines, source='admin') }}"
+     style="padding:7px 18px;font-size:13px;font-weight:600;border-radius:6px 6px 0 0;text-decoration:none;
+            background:{{ '#1a1e2b' if log_source=='admin' else 'transparent' }};
+            color:{{ '#dde1ea' if log_source=='admin' else '#5a6275' }};
+            border:1px solid {{ '#2a2e3d' if log_source=='admin' else 'transparent' }};border-bottom:none;">
+    🌐 Admin UI
+  </a>
+</div>
+
 <div class="log-toolbar">
   <label class="muted" style="display:flex;align-items:center;gap:6px;">
     Show last
-    <select id="lines-select" onchange="location.href='{{ url_for('logs_page') }}?lines=' + this.value"
+    <select id="lines-select"
+            onchange="location.href='{{ url_for('logs_page') }}?lines=' + this.value + '&source={{ log_source }}'"
             style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:13px;">
       {% for n in [100, 500, 1000, 2000, 5000] %}
       <option value="{{ n }}" {{ 'selected' if lines == n else '' }}>{{ n }} lines</option>
@@ -14,9 +33,9 @@
     <input type="checkbox" id="auto-refresh" checked> Auto-refresh ({{ logs_refresh_seconds }}s)
   </label>
   <button type="button" class="secondary small" onclick="refreshLogs()">&#8635; Refresh</button>
-  <a href="{{ url_for('logs_raw') }}?lines={{ lines }}" class="btn secondary small" target="_blank">&#x2197; Raw</a>
-  <form method="post" action="{{ url_for('logs_clear') }}" style="margin:0;"
-        onsubmit="return confirm('Clear the entire log file? This cannot be undone.');">
+  <a href="{{ url_for('logs_raw') }}?lines={{ lines }}&source={{ log_source }}" class="btn secondary small" target="_blank">&#x2197; Raw</a>
+  <form method="post" action="{{ url_for('logs_clear') }}?source={{ log_source }}" style="margin:0;"
+        onsubmit="return confirm('Clear the {{ log_source }} log file? This cannot be undone.');">
     <button type="submit" class="danger small">&#128465; Clear log</button>
   </form>
   <span class="muted" style="font-size:11px; margin-left:auto;">{{ log_path }}</span>
@@ -100,7 +119,7 @@
 
   function refreshLogs() {
     var linesEl = document.getElementById('lines-select');
-    fetch('{{ url_for("logs_raw") }}?lines=' + linesEl.value, { credentials: 'same-origin' })
+    fetch('{{ url_for("logs_raw") }}?lines=' + linesEl.value + '&source={{ log_source }}', { credentials: 'same-origin' })
       .then(function(r) { return r.text(); })
       .then(function(text) {
         var atBottom = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 60;

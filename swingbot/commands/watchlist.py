@@ -2,7 +2,7 @@
 import asyncio
 
 from swingbot.bot_core import bot
-from swingbot.core.data import get_daily_data, get_ticker_logo
+from swingbot.core.data import get_daily_data
 from swingbot.core.watchlist import add_ticker, clear_watchlist, load_watchlist, remove_ticker
 
 
@@ -39,28 +39,3 @@ async def watchlist_remove(ctx, ticker: str):
 async def watchlist_clear(ctx):
     clear_watchlist()
     await ctx.send("Watchlist cleared.")
-
-
-@watchlist_cmd.command(name="fetchlogos")
-async def watchlist_fetchlogos(ctx):
-    """
-    Pre-downloads and caches a logo for every ticker currently in the
-    watchlist (data/logos/<TICKER>.png). Already-cached tickers resolve
-    instantly, so this is safe to re-run any time after adding new tickers.
-
-    Logos are used to stamp generated trade charts (core/trade_chart.py)
-    and are shown next to each ticker in the admin UI's Watchlist,
-    Dashboard, and trade-detail pages.
-    """
-    tickers = load_watchlist()
-    await ctx.send(f"Fetching logos for **{len(tickers)}** ticker(s)… this can take a bit.")
-
-    found, missing = [], []
-    for t in tickers:
-        logo = await asyncio.to_thread(get_ticker_logo, t)
-        (found if logo is not None else missing).append(t)
-
-    msg = f"✅ Logos ready for **{len(found)}/{len(tickers)}** ticker(s)."
-    if missing:
-        msg += f"\n⚠️ No logo found for: {', '.join(missing)} (unusual symbols, indices, futures, etc. often don't have one)."
-    await ctx.send(msg)
