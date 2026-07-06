@@ -153,15 +153,31 @@ _PRICE_CACHE_TTL_SECONDS = 15
 _price_cache: dict[str, tuple[float, float]] = {}   # ticker -> (price, fetched_at monotonic)
 
 
+def _fast_info_price(fi) -> float | None:
+    """Extract last price from a yfinance FastInfo object, trying multiple
+    attribute names to handle different yfinance versions."""
+    for attr in ("last_price", "lastPrice", "regularMarketPrice",
+                 "pre_market_price", "preMarketPrice",
+                 "post_market_price", "postMarketPrice"):
+        try:
+            val = fi.get(attr) if hasattr(fi, "get") else getattr(fi, attr, None)
+            if val is not None and float(val) > 0:
+                return float(val)
+        except Exception:
+            continue
+    return None
+
+
 def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) -> float | None:
     """
-    Returns the latest traded price for `ticker`, or None if it can't be
-    fetched. Uses yfinance's `fast_info` (a lightweight quote endpoint)
-    rather than `get_daily_data`'s full OHLCV history download -- this is
-    called once per open trade on every dashboard render, so it needs to
-    stay cheap. Cached in-memory per ticker for `ttl_seconds` (default
-    60s) so repeated calls within that window return instantly without
-    another network round-trip.
+    Returns the latest traded price for `ticker`, including premarket and
+    aftermarket sessions (prepost=True). Uses yfinance fast_info first
+    (cheap, covers regular + extended hours for most tickers), then falls
+    back to a 1-minute history request with prepost=True so price is never
+    stale just because markets are closed.
+
+    Cached in-memory per ticker for `ttl_seconds` (default 15s) so the
+    dashboard's rapid auto-refresh doesn't hammer yfinance.
     """
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
@@ -171,18 +187,28 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) 
 
     for candidate in candidate_symbols(ticker_key):
         try:
-            fast_info = yf.Ticker(candidate).fast_info
-            price = fast_info.get("lastPrice") if hasattr(fast_info, "get") else getattr(fast_info, "last_price", None)
+            # Fast path: fast_info covers regular + extended hours for most tickers
+            fi = yf.Ticker(candidate).fast_info
+            price = _fast_info_price(fi)
             if price:
-                price = float(price)
                 _price_cache[ticker_key] = (price, now)
                 return price
+        except Exception:
+            pass
+
+        try:
+            # Fallback: 1-minute bar with prepost=True — captures premarket/aftermarket
+            hist = yf.Ticker(candidate).history(period="1d", interval="1m", prepost=True)
+            if hist is not None and not hist.empty:
+                price = float(hist["Close"].dropna().iloc[-1])
+                if price > 0:
+                    _price_cache[ticker_key] = (price, now)
+                    return price
         except Exception:
             continue
 
     # Nothing resolved -- keep serving the last known-good price (if any)
-    # rather than blanking the status out just because of a transient
-    # fetch failure; only actually returns None the very first time.
+    # rather than blanking the status out just because of a transient failure.
     if cached:
         return cached[0]
     return None
@@ -309,7 +335,7 @@ def get_ticker_logo(ticker: str) -> "PIL.Image.Image | None":
         img.thumbnail((64, 64), Image.LANCZOS)
         img.save(local_path, "PNG")
         _LOGO_CACHE[ticker_key] = local_path
-        log.debug("Logo downloaded for %s → %s", ticker_key, local_path)
+        log.debug("Logo downloaded for %s -> %s", ticker_key, local_path)
         return img
     except Exception as exc:
         log.debug("Logo fetch failed for %s: %s", ticker_key, exc)
@@ -320,15 +346,15 @@ def get_ticker_logo(ticker: str) -> "PIL.Image.Image | None":
 
 def get_logo_path(ticker: str) -> str | None:
     """
-    Ensures `ticker`'s logo is downloaded/cached (see get_ticker_logo above),
-    then returns the local PNG file path -- or None if no logo could be
-    found for it. Used by the admin UI to serve `<img src>` tags by
-    streaming the cached file directly, instead of re-decoding/re-encoding
-    the image on every page load.
+    Ensures ticker's logo is downloaded/cached, then returns the local PNG
+    file path -- or None if no logo could be found. Used by the admin UI to
+    serve <img src> tags by streaming the cached file directly.
     """
     img = get_ticker_logo(ticker)
     if img is None:
         return None
     ticker_key = ticker.upper().strip()
     path = os.path.join(_logo_cache_dir(), f"{ticker_key}.png")
+    return path if os.path.exists(path) else None
+   path = os.path.join(_logo_cache_dir(), f"{ticker_key}.png")
     return path if os.path.exists(path) else None

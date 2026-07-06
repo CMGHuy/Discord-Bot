@@ -158,6 +158,16 @@ button:disabled, .btn.disabled {
   0%, 100% { opacity: 1;    transform: scale(1);    }
   50%      { opacity: 0.35; transform: scale(0.82); }
 }
+
+/* ---- Live price cell pulse ---- */
+.price-live {
+  animation: price-pulse 2s ease-in-out infinite;
+  font-weight: 600;
+}
+@keyframes price-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
 /* ---- Position bar (open trades: shows where price sits between SL and TP) ----
    Appears below the blinking dot in the Status cell.  SL is the left edge
    (0 %), TP is the right edge (100 %).  The coloured fill tracks current

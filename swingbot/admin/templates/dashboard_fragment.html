@@ -145,8 +145,8 @@
       <th data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
       <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score 0–100">Score <span class="sort-arrow" data-col-id="score"></span></th>
       <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (cached ~60s)">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
-      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~60s).">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
+      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (incl. pre/aftermarket, cached ~15s)">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
+      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s).">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
       <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
       <th data-col-id="target" draggable="true" onclick="sortByHeader(this)">Target <span class="sort-arrow" data-col-id="target"></span></th>
       <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
@@ -188,11 +188,8 @@
           </div>
           {# Single progress % where 0% = price at SL, 100% = price at TP #}
           <div class="status-dists">
-            <span class="dist-progress
-              {%- if pnl.pos_pct <= 20 %} dist-danger
-              {%- elif pnl.pos_pct <= 40 %} dist-warn
-              {%- elif pnl.pos_pct >= 80 %} dist-tp-hit
-              {%- endif %}"
+            <span class="dist-progress"
+              style="color: {{ status.color }}; font-weight: {% if pnl.pos_pct <= 30 or pnl.pos_pct >= 75 %}700{% else %}400{% endif %};"
               title="{{ '%.0f%%'|format(pnl.pos_pct) }} — 0% = SL, 100% = TP">
               {{ '%.0f%%'|format(pnl.pos_pct) }}
             </span>
@@ -248,11 +245,12 @@
 
       <td>{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
 
-      {# Current price — direction-aware color: good direction = green, bad = red #}
+      {# Current price — direction-aware color + blink when live #}
       {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
       <td data-sort="{{ cur_price if cur_price is not none else 0 }}"
-          style="color: {% if cur_price is none %}#5a6275{% elif price_is_good %}#6dda9e{% else %}#da6d6d{% endif %};"
-          title="{% if cur_price is not none %}{{ 'Up from entry' if price_is_good else 'Down from entry' }} · prices refresh ~60s{% endif %}">
+          class="{% if cur_price is not none %}price-live{% endif %}"
+          style="color: {% if cur_price is none %}#5a6275{% elif price_is_good %}{{ status.color }}{% else %}{{ status.color }}{% endif %}; --price-color: {{ status.color }};"
+          title="{% if cur_price is not none %}{{ 'Up from entry' if price_is_good else 'Down from entry' }} · prices refresh ~15s (incl. pre/aftermarket){% endif %}">
         {%- if cur_price is not none -%}
           {{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(cur_price) }}
         {%- else -%}
@@ -263,7 +261,7 @@
       {# Unrealized P&L % — positive = in profit for this direction #}
       <td data-sort="{{ pnl.pnl_pct if pnl else 0 }}"
           style="font-weight:600;color: {% if pnl is none %}#5a6275{% elif pnl.pnl_pct >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
-          title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~60s cache).">
+          title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~15s cache).">
         {%- if pnl -%}
           {{ '%+.2f%%'|format(pnl.pnl_pct) }}
         {%- else -%}
@@ -312,7 +310,7 @@
   </div>
 
   <div style="margin-top:8px; font-size:11px; color:#3d4354; text-align:right;">
-    Live prices refresh approximately every 60 seconds · P&amp;L updates on next refresh · Sizing based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk · <code>!account</code> to change
+    Live prices refresh approximately every 15 seconds (incl. pre/aftermarket sessions) · P&amp;L updates on next refresh · Sizing based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk · <code>!account</code> to change
   </div>
 
   <script>
@@ -516,3 +514,4 @@
   </div>
   {% endif %}
 </div>
+                                                                                                                                                                                                                                                                                                                                                                                                                      

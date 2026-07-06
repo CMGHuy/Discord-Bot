@@ -48,6 +48,7 @@
 </div>
 
 <div id="dashboard-fragment">{{ fragment | safe }}</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/morphdom/2.7.4/morphdom-umd.min.js"></script>
 <script>
   // Basic-Auth credentials are cached by the browser per-origin.
   // We encode them ourselves here so the fetch() request is never
@@ -66,7 +67,6 @@
     fetch('{{ url_for("dashboard_fragment") }}', { credentials: 'include' })
       .then(function(r) {
         if (r.status === 401) {
-          // Auth expired -- reload the page so the browser re-prompts.
           window.location.reload();
           return null;
         }
@@ -74,15 +74,27 @@
       })
       .then(function(html) {
         if (!html) return;
-        document.getElementById('dashboard-fragment').innerHTML = html;
+        var container = document.getElementById('dashboard-fragment');
+        if (typeof morphdom !== 'undefined') {
+          // Diff-patch: only updates DOM nodes that actually changed.
+          // This prevents the full repaint / layout-thrash that innerHTML
+          // causes, eliminating the visible flash on every refresh cycle.
+          var wrapper = document.createElement('div');
+          wrapper.id = 'dashboard-fragment';
+          wrapper.innerHTML = html;
+          morphdom(container, wrapper, {
+            // Keep existing input values and focus state intact across patches
+            onBeforeElUpdated: function(from, to) {
+              if (from.nodeName === 'INPUT' || from.nodeName === 'SELECT') return false;
+              return true;
+            }
+          });
+        } else {
+          // morphdom not yet loaded (first render) -- fall back to innerHTML
+          container.innerHTML = html;
+        }
         document.getElementById('refresh-status').textContent =
           'Updated ' + new Date().toLocaleTimeString();
-        // The fragment's own <script> block (which defines applyColumnOrder(),
-        // applyDefaultSort(), etc. and calls them once) does NOT re-execute when
-        // injected via .innerHTML like this -- that's a standard browser
-        // restriction, not a bug -- so the saved column order has to be
-        // reapplied explicitly here, every refresh, from this OUTER script
-        // (a real, already-running function, so it always fires normally).
         if (typeof applyColumnOrder === 'function') { applyColumnOrder(); }
       })
       .catch(function() {});
