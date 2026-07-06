@@ -175,10 +175,14 @@ class TradeLog:
             self._save()
         return trade_id
 
-    def update_open_trades(self, ticker: str, df) -> list:
+    def update_open_trades(self, ticker: str, df, live_price: float | None = None) -> list:
         """
         Check this ticker's open trades against bars since they were opened.
         `df` must be indexed by date with High/Low columns, most recent last.
+        `live_price` is the current quote including premarket/aftermarket -- when
+        provided it is checked as a "virtual" final bar so intraday SL/TP hits
+        (including extended-hours moves not yet in the daily df) are caught
+        immediately rather than waiting for the next completed daily bar.
         Returns the list of trades that were newly closed this call.
         """
         # Compute outcomes WITHOUT the lock first (pure pandas work, no writes).
@@ -189,7 +193,8 @@ class TradeLog:
         if not open_trades:
             return []
 
-        updates = []   # [(trade_id, new_status, exit_price, closed_at)]
+        updates = []   # [(trade_id, new_status, exit_price)]
+        already_closed_ids: set = set()
         for trade in open_trades:
             opened_at = datetime.fromisoformat(trade["opened_at"])
             bars_since = (
@@ -197,10 +202,9 @@ class TradeLog:
                 if df.index.tz is not None
                 else df[df.index > opened_at.replace(tzinfo=None)]
             )
-            if bars_since.empty:
-                continue
 
             is_bull = trade["direction"] == "bullish"
+            hit = False
             for _, bar in bars_since.iterrows():
                 hi, lo = float(bar["High"]), float(bar["Low"])
                 if is_bull:
@@ -212,10 +216,28 @@ class TradeLog:
 
                 if hit_stop:
                     updates.append((trade["id"], "loss", trade["stop_loss"]))
+                    already_closed_ids.add(trade["id"])
+                    hit = True
                     break
                 elif hit_target:
                     updates.append((trade["id"], "win", trade["take_profit"]))
+                    already_closed_ids.add(trade["id"])
+                    hit = True
                     break
+
+            # Check live price (premarket/aftermarket) if the bar scan didn't
+            # already close this trade and we have a live quote to work with.
+            if not hit and live_price and live_price > 0 and trade["id"] not in already_closed_ids:
+                if is_bull:
+                    if live_price <= trade["stop_loss"]:
+                        updates.append((trade["id"], "loss", trade["stop_loss"]))
+                    elif live_price >= trade["take_profit"]:
+                        updates.append((trade["id"], "win", trade["take_profit"]))
+                else:
+                    if live_price >= trade["stop_loss"]:
+                        updates.append((trade["id"], "loss", trade["stop_loss"]))
+                    elif live_price <= trade["take_profit"]:
+                        updates.append((trade["id"], "win", trade["take_profit"]))
 
         if not updates:
             return []

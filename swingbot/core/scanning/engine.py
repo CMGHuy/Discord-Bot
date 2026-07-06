@@ -57,7 +57,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core import levels
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
 from .confidence import ConfidenceResult, score_confidence
-from swingbot.core.data import get_currency_symbol, get_daily_data
+from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
 from swingbot.core.events import earnings_within_window
 from swingbot.core.explain import build_explanation
 from swingbot.core.market_events import get_market_events
@@ -409,7 +409,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             continue
         log.debug("Fetched %d bars for %s (close=%.2f)", len(df), ticker, float(df["Close"].iloc[-1]))
 
-        newly_closed = trade_log.update_open_trades(ticker, df)
+        # Fetch live price (incl. premarket/aftermarket) once per ticker and use
+        # it both for SL/TP hit detection and as the current_price for new plans.
+        live = get_current_price(ticker)
+        current_price = live if (live and live > 0) else float(df["Close"].iloc[-1])
+
+        newly_closed = trade_log.update_open_trades(ticker, df, live_price=current_price)
         if newly_closed:
             log.info("%s: %d open trade(s) closed this scan (%s)", ticker, len(newly_closed),
                       ", ".join(f"{t['id']}={t['status']}" for t in newly_closed))
@@ -422,7 +427,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.info("%s: %d trade(s) newly near their stop-loss/take-profit", ticker, len(near_close))
         all_near_close_warnings.extend(near_close)
 
-        current_price = float(df["Close"].iloc[-1])
         bars_available = len(df)
 
         for horizon_key, h in HORIZONS.items():
@@ -813,12 +817,17 @@ def get_all_unrealized_pnl() -> list:
     for t in open_trades:
         ticker = t["ticker"]
         if ticker not in price_cache:
-            try:
-                df = get_daily_data(ticker, period="5d")
-                price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
-            except Exception as exc:
-                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc)
-                price_cache[ticker] = None
+            # Prefer live price (incl. premarket/aftermarket); fall back to last daily close
+            live = get_current_price(ticker)
+            if live and live > 0:
+                price_cache[ticker] = live
+            else:
+                try:
+                    df = get_daily_data(ticker, period="5d")
+                    price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
+                except Exception as exc:
+                    log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc)
+                    price_cache[ticker] = None
         current_price = price_cache[ticker]
         if current_price is None:
             continue
