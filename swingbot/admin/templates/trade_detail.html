@@ -74,8 +74,11 @@
     <table class="kv">
       <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
       <tr><td>Direction</td><td>{{ 'LONG (buy)' if is_bull else 'SHORT (sell)' }}</td></tr>
+      {%- set conf_score = t.get('confidence_score') -%}
+      {%- set pnl_amt = t.get('realized_pnl_amount') -%}
+      {%- set conf_breakdown = t.get('confidence_breakdown') -%}
       <tr><td>Confidence</td><td><span class="confidence-badge" style="color: {{ confidence_hex }};">
-        {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if t.confidence_score is not none %}, {{ t.confidence_score }}/100{% endif %})
+        {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if conf_score is not none %}, {{ conf_score }}/100{% endif %})
       </span></td></tr>
       {% if t.confirmed_by %}
       <tr><td>Confirmed by</td><td>
@@ -87,20 +90,20 @@
       {% if t.status != 'open' %}
       <tr><td>Closed</td><td>{{ t.closed_at | berlin_time if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
       {% endif %}
-      {% if t.status in ('win', 'loss') and t.realized_pnl_amount is not none %}
-      <tr><td>Realized gain/loss</td><td style="color:{{ '#6dda9e' if t.realized_pnl_amount >= 0 else '#da6d6d' }}; font-weight:600;">
-        {{ '%+.2f'|format(t.realized_pnl_amount) }} {{ cur }}
+      {% if t.status in ('win', 'loss') and pnl_amt is not none %}
+      <tr><td>Realized gain/loss</td><td style="color:{{ '#6dda9e' if pnl_amt >= 0 else '#da6d6d' }}; font-weight:600;">
+        {{ '%+.2f'|format(pnl_amt) }} {{ cur }}
       </td></tr>
       {% endif %}
     </table>
   </div>
 
-  {% if t.confidence_breakdown %}
+  {% if conf_breakdown %}
   <div class="card" style="margin-top:0; grid-column:2; grid-row:2;">
     <p class="card-title">&#128300; Confidence score breakdown</p>
     <p class="muted" style="margin-top:0;margin-bottom:12px;">Raw scoring detail behind the confidence level. See swingbot/core/confidence.py for factor definitions.</p>
     <table class="kv">
-      {% for factor, note in t.confidence_breakdown.items() %}
+      {% for factor, note in conf_breakdown.items() %}
       <tr><td>{{ factor }}</td><td>{{ note }}</td></tr>
       {% endfor %}
     </table>
