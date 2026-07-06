@@ -756,3 +756,8 @@ def resume_scan():
     except Exception as e:
         msg = f"Could not remove pause file: {e}"
      
+
+def main():
+    host = os.getenv("ADMIN_HOST", "0.0.0.0")
+    port = int(os.getenv("ADMIN_PORT", 1234))
+    app.run(host=host, port=port, debug=False)
