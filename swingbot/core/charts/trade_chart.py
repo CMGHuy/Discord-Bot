@@ -467,7 +467,7 @@ def generate_trade_chart(
         # every mplfinance-created panel that's already on the figure.
         try:
             fig.subplots_adjust(
-                hspace=0.55, top=0.91,
+                hspace=0.55, top=0.91, bottom=0.05,
                 left=VOLUME_PROFILE_PANEL_WIDTH_FRAC + VOLUME_PROFILE_PANEL_GAP_FRAC + 0.02,
             )
         except Exception:
@@ -818,8 +818,8 @@ def generate_trade_chart(
         # below expands the saved image to include it as its own line rather
         # than overlapping the lowest panel's x-axis tick labels.
         fig.text(
-            0.5, -0.02, DISCLAIMER_TEXT,
-            ha="center", va="top", fontsize=7, color=MUTED_TEXT_COLOR, alpha=0.9,
+            0.5, 0.015, DISCLAIMER_TEXT,
+            ha="center", va="bottom", fontsize=9, color="#e2b25a", fontweight="bold",
         )
 
         os.makedirs(out_dir, exist_ok=True)

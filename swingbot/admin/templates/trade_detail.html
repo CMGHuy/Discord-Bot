@@ -24,27 +24,6 @@
 </div>
 
 <div class="card">
-  <p class="card-title">Setup</p>
-  <table class="kv">
-    <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
-    <tr><td>Direction</td><td>{{ 'LONG (buy)' if is_bull else 'SHORT (sell)' }}</td></tr>
-    <tr><td>Confidence</td><td><span class="confidence-badge" style="color: {{ confidence_hex }};">
-      {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if t.confidence_score is not none %}, {{ t.confidence_score }}/100{% endif %})
-    </span></td></tr>
-    {% if t.confirmed_by %}
-    <tr><td>Confirmed by</td><td>
-      {% for c in t.confirmed_by %}{{ c.strategy }} ({{ c.horizon_key }}){% if not loop.last %}, {% endif %}{% endfor %}
-    </td></tr>
-    {% endif %}
-    <tr><td>Status</td><td>{{ t.status | upper }}</td></tr>
-    <tr><td>Opened</td><td>{{ t.opened_at[:19] }}</td></tr>
-    {% if t.status != 'open' %}
-    <tr><td>Closed</td><td>{{ t.closed_at[:19] if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
-    {% endif %}
-  </table>
-</div>
-
-<div class="card">
   <p class="card-title">&#127919; Trade plan</p>
   <table class="kv">
     <tr><td>Entry (at alert time)</td><td>{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
@@ -75,12 +54,38 @@
   </table>
 </div>
 
-{% if t.explanation %}
-<div class="card">
-  <p class="card-title">&#128203; Why this trade</p>
-  <div class="explanation">{{ t.explanation }}</div>
+{# ── 2-column row: Setup + Why This Trade ──────────────────────────────── #}
+<div class="detail-two-col" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; margin-bottom:0;">
+  <div class="card" style="margin-top:0;">
+    <p class="card-title">Setup</p>
+    <table class="kv">
+      <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
+      <tr><td>Direction</td><td>{{ 'LONG (buy)' if is_bull else 'SHORT (sell)' }}</td></tr>
+      <tr><td>Confidence</td><td><span class="confidence-badge" style="color: {{ confidence_hex }};">
+        {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if t.confidence_score is not none %}, {{ t.confidence_score }}/100{% endif %})
+      </span></td></tr>
+      {% if t.confirmed_by %}
+      <tr><td>Confirmed by</td><td>
+        {% for c in t.confirmed_by %}{{ c.strategy }} ({{ c.horizon_key }}){% if not loop.last %}, {% endif %}{% endfor %}
+      </td></tr>
+      {% endif %}
+      <tr><td>Status</td><td>{{ t.status | upper }}</td></tr>
+      <tr><td>Opened</td><td>{{ t.opened_at[:19] }}</td></tr>
+      {% if t.status != 'open' %}
+      <tr><td>Closed</td><td>{{ t.closed_at[:19] if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:0;">
+    <p class="card-title">&#128203; Why this trade</p>
+    {% if t.explanation %}
+    <div class="explanation">{{ t.explanation }}</div>
+    {% else %}
+    <p class="muted">No explanation recorded for this trade.</p>
+    {% endif %}
+  </div>
 </div>
-{% endif %}
 
 {% if t.confidence_breakdown %}
 <div class="card">

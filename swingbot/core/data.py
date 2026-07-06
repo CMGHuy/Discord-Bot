@@ -167,10 +167,12 @@ def _fast_info_price(fi) -> float | None:
 def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) -> float | None:
     """
     Returns the latest traded price for `ticker`, including premarket and
-    aftermarket sessions. Uses yfinance fast_info first (cheap, covers
-    regular + extended hours for most tickers), then falls back to a
-    1-minute history request with prepost=True so price is never stale
-    just because markets are closed.
+    aftermarket sessions.
+
+    Primary source: 1-minute history with prepost=True — this always returns
+    the most recently traded price in any session and is the most accurate.
+    Fallback: fast_info attributes for when the history call fails (e.g.
+    network timeout, symbol not found in history endpoint).
 
     Cached in-memory per ticker for `ttl_seconds` (default 15s).
     """
@@ -181,17 +183,11 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) 
         return cached[0]
 
     for candidate in candidate_symbols(ticker_key):
-        # Fast path: fast_info covers regular + extended hours for most tickers
-        try:
-            fi = yf.Ticker(candidate).fast_info
-            price = _fast_info_price(fi)
-            if price:
-                _price_cache[ticker_key] = (price, now)
-                return price
-        except Exception:
-            pass
-
-        # Fallback: 1-minute bar with prepost=True captures premarket/aftermarket
+        # Primary: 1-minute history with prepost=True is the most accurate
+        # source — it returns the true last-traded price in any session
+        # (pre-market, regular, after-hours).  fast_info can return the
+        # previous regular-session close during extended hours which causes
+        # the stale-price issue.
         try:
             hist = yf.Ticker(candidate).history(period="1d", interval="1m", prepost=True)
             if hist is not None and not hist.empty:
@@ -200,12 +196,44 @@ def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS) 
                     _price_cache[ticker_key] = (price, now)
                     return price
         except Exception:
+            pass
+
+        # Fallback: fast_info is cheaper but may be stale during extended hours
+        try:
+            fi = yf.Ticker(candidate).fast_info
+            price = _fast_info_price(fi)
+            if price:
+                _price_cache[ticker_key] = (price, now)
+                return price
+        except Exception:
             continue
 
     # Serve last known-good price on transient failure rather than blanking the UI
     if cached:
         return cached[0]
     return None
+
+
+def is_us_market_active() -> bool:
+    """
+    Returns True when any US equity market session is currently open:
+      Pre-market:  4:00 AM – 9:30 AM  ET
+      Regular:     9:30 AM – 4:00 PM  ET
+      After-hours: 4:00 PM – 8:00 PM  ET
+    Returns False on weekends and between 8 PM and 4 AM ET.
+    Uses a simple DST approximation (months 3–11 = EDT, otherwise EST).
+    """
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
+    if now_utc.weekday() >= 5:          # Saturday or Sunday
+        return False
+    # Approximate ET offset: Mar–Nov = UTC-4 (EDT), Dec–Feb = UTC-5 (EST)
+    et_offset = -4 if 3 <= now_utc.month <= 11 else -5
+    et_hour = (now_utc.hour + et_offset) % 24
+    et_min  = now_utc.minute
+    et_t    = et_hour * 60 + et_min     # minutes since midnight ET
+    # Active window: 4:00 AM (t=240) through 8:00 PM (t=1200)
+    return 4 * 60 <= et_t < 20 * 60
 
 
 def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:

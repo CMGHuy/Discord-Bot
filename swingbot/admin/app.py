@@ -49,7 +49,7 @@ from swingbot import config
 from swingbot.core.performance import TradeLog, trade_proximity
 from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
 from swingbot.core.account import compute_position_size, load_account_config
-from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, get_logo_path, prefetch_prices
+from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, get_logo_path, prefetch_prices, is_us_market_active
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.ticker_directory import search_tickers
 # Pure helper functions (.env parsing, Docker container control, confidence-hex,
@@ -146,6 +146,28 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 # ---------------------------------------------------------------------------
 # Routes -- Dashboard
 # ---------------------------------------------------------------------------
+def _pos_color(pos_pct: float, entry_pct: float) -> str:
+    """Color for the SL→TP progress bar and percentage text.
+    Interpolates red (SL, 0%) → grey (entry) → green (TP, 100%)
+    so the bar always shows absolute position between stop and target,
+    independent of whether the trade is currently profitable.
+    """
+    SL      = (0xda, 0x6d, 0x6d)   # red   (#da6d6d)
+    NEUTRAL = (0x5a, 0x62, 0x75)   # grey  (#5a6275)
+    TP      = (0x6d, 0xda, 0x9e)   # green (#6dda9e)
+    ep = max(1.0, min(99.0, entry_pct))
+    if pos_pct <= ep:
+        t = max(0.0, min(1.0, pos_pct / ep))
+        c1, c2 = SL, NEUTRAL
+    else:
+        t = max(0.0, min(1.0, (pos_pct - ep) / (100.0 - ep)))
+        c1, c2 = NEUTRAL, TP
+    r = round(c1[0] + (c2[0] - c1[0]) * t)
+    g = round(c1[1] + (c2[1] - c1[1]) * t)
+    b = round(c1[2] + (c2[2] - c1[2]) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 def _render_dashboard_fragment() -> str:
     # Single TradeLog read for the whole render -- avoids re-reading trades.json
     # separately for get_stats(), get_extended_stats(), and the trade lists.
@@ -242,12 +264,15 @@ def _render_dashboard_fragment() -> str:
             else:
                 cur_pos = entry_pos = 50.0
 
+            _p   = max(0.0, min(100.0, round(cur_pos, 1)))
+            _ep  = max(0.0, min(100.0, round(entry_pos, 1)))
             pnl_map[tid] = {
                 "pnl_pct":   round(pnl_pct, 2),
                 "to_sl_pct": round(max(0.0, sl_raw), 1),
                 "to_tp_pct": round(max(0.0, tp_raw), 1),
-                "pos_pct":   max(0.0, min(100.0, round(cur_pos, 1))),
-                "entry_pct": max(0.0, min(100.0, round(entry_pos, 1))),
+                "pos_pct":   _p,
+                "entry_pct": _ep,
+                "pos_color": _pos_color(_p, _ep),
             }
         else:
             pnl_map[tid] = None
@@ -301,6 +326,7 @@ def _render_dashboard_fragment() -> str:
         sizing_map=sizing_map, account_cfg=account_cfg,
         closed_trades=closed_trades,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
+        is_market_active=is_us_market_active(),
     )
 
 
