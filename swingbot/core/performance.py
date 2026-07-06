@@ -176,6 +176,9 @@ class TradeLog:
             "closed_at": None,
             "exit_price": None,
             "near_close_alerted": False,  # tracks whether we've already warned this trade is close to SL/TP
+            "near_tp_since": None,        # ISO timestamp of when price FIRST reached the near-TP timeout
+                                           # threshold and hasn't dropped back below it since -- see
+                                           # check_near_tp_timeout(). None while price isn't in that zone.
         }
         with _LOCK:
             self._trades.append(record)
@@ -522,6 +525,98 @@ class TradeLog:
                 self._save()
         return newly_closed
 
+    def check_near_tp_timeout(self, ticker: str, live_price: float) -> list:
+        """
+        Closes an open trade early, locking in the profit already made, if
+        price has gotten most of the way to the target and then gone
+        sideways there instead of actually tapping it -- see
+        config.NEAR_TP_TIMEOUT_ENABLED / _THRESHOLD_PCT / _MINUTES.
+
+        Called by the trade_monitor background task (60s interval) on
+        whatever's still open AFTER close_if_live_price_hit's exact SL/TP
+        check has already run for this tick -- a trade that just hit its
+        real target or stop this same call is already closed by the time
+        this runs and won't show up in the `open_trades` query below.
+
+        Progress toward the target is measured as a % of the entry ->
+        target-1 distance (mirrored for a short: falling price is
+        progress). Reaching config.NEAR_TP_TIMEOUT_THRESHOLD_PCT starts a
+        per-trade clock (persisted as "near_tp_since" so it survives a
+        bot restart between checks); dropping back below the threshold
+        resets it to None rather than accumulating partial credit across
+        separate approaches. Only once price has stayed AT OR ABOVE the
+        threshold continuously for config.NEAR_TP_TIMEOUT_MINUTES does the
+        trade actually close, at the current live price, marked a win.
+
+        Returns the list of newly-closed trade records (already saved to
+        disk), same shape as close_if_live_price_hit.
+        """
+        if not config.NEAR_TP_TIMEOUT_ENABLED:
+            return []
+
+        self.refresh()
+        open_trades = [t for t in self._trades
+                       if t["ticker"] == ticker and t["status"] == "open"]
+        if not open_trades:
+            return []
+
+        now = datetime.now(timezone.utc)
+        threshold = config.NEAR_TP_TIMEOUT_THRESHOLD_PCT / 100.0
+        timeout = config.NEAR_TP_TIMEOUT_MINUTES
+
+        # (trade_id, action) where action is either "start" (set the clock
+        # to now), "reset" (clear it), or "close" (timeout elapsed).
+        actions = []
+        for trade in open_trades:
+            entry = trade.get("entry")
+            target = trade.get("take_profit")
+            if not entry or not target or entry == target:
+                continue   # malformed record -- nothing sane to measure progress against
+            is_bull = trade["direction"] == "bullish"
+            reward = (target - entry) if is_bull else (entry - target)
+            if reward <= 0:
+                continue   # target isn't actually beyond entry in the trade's own direction
+            progress = ((live_price - entry) if is_bull else (entry - live_price)) / reward
+
+            near_tp_since = trade.get("near_tp_since")
+            if progress >= threshold:
+                if near_tp_since is None:
+                    actions.append((trade["id"], "start", None))
+                else:
+                    started = datetime.fromisoformat(near_tp_since)
+                    if started.tzinfo is None:
+                        started = started.replace(tzinfo=timezone.utc)
+                    elapsed_minutes = (now - started).total_seconds() / 60.0
+                    if elapsed_minutes >= timeout:
+                        actions.append((trade["id"], "close", None))
+            elif near_tp_since is not None:
+                actions.append((trade["id"], "reset", None))
+
+        if not actions:
+            return []
+
+        newly_closed = []
+        now_iso = now.isoformat()
+        with _LOCK:
+            id_map = {t["id"]: t for t in self._trades}
+            for trade_id, action, _ in actions:
+                t = id_map.get(trade_id)
+                if t is None or t["status"] != "open":
+                    continue   # already closed by a parallel call this tick
+                if action == "start":
+                    t["near_tp_since"] = now_iso
+                elif action == "reset":
+                    t["near_tp_since"] = None
+                elif action == "close":
+                    t["status"] = "win"
+                    t["exit_price"] = live_price
+                    t["closed_at"] = now_iso
+                    t["close_reason"] = "auto (near-TP timeout)"
+                    t["near_tp_since"] = None
+                    newly_closed.append(dict(t))
+            self._save()
+        return newly_closed
+
     def get_detailed_stats(self) -> dict:
         """
         Performance breakdowns by ticker, strategy, and day-of-week (Berlin time).
@@ -643,12 +738,28 @@ class TradeLog:
             except Exception:
                 pass
 
+            # R-multiple = actual P&L / originally-planned risk (entry -> stop
+            # loss), so a "+2.4R" win reads as "2.4x what I was risking" --
+            # comparable across trades with very different stop distances,
+            # unlike raw pnl_pct alone.
+            try:
+                stop_loss = float(t.get("stop_loss") or 0)
+            except (TypeError, ValueError):
+                stop_loss = 0.0
+            r_multiple = None
+            if entry > 0 and stop_loss > 0 and pnl_pct is not None:
+                risk_pct = abs(entry - stop_loss) / entry * 100
+                if risk_pct > 0:
+                    r_multiple = round(pnl_pct / risk_pct, 3)
+
             trades_out.append({
                 "ticker":       t.get("ticker", ""),
                 "direction":    t.get("direction", ""),
                 "entry":        entry,
                 "exit_price":   exit_p,
+                "stop_loss":    stop_loss or None,
                 "pnl_pct":      pnl_pct,
+                "r_multiple":   r_multiple,
                 "status":       t.get("status", ""),
                 "opened_at":    opened_at,
                 "closed_at":    closed_at,

@@ -107,6 +107,46 @@
 #trade-log-table tbody tr:hover td { background: #1a1d26; }
 .tl-win  { color: #44ff88 !important; font-weight: 600; }
 .tl-loss { color: #ff4444 !important; font-weight: 600; }
+
+/* ── Responsive: performance page ─────────────────────────────────────────
+   The equity/drawdown pair and the P&L/holding-period histogram pair are
+   laid out 2-up on desktop; below 720px (same breakpoint the rest of the
+   admin UI already collapses .detail-two-col at) they stack to 1 column so
+   neither chart gets squeezed down to an unreadable sliver on a phone. #}
+.stats-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (max-width: 720px) {
+  .stats-two-col { grid-template-columns: 1fr !important; }
+
+  /* Charts get a bit shorter on phones -- keeps the whole dashboard from
+     turning into one long vertical scroll of half-empty tall canvases. */
+  #activity-card .chart-wrap,
+  #equity-card .chart-wrap,
+  #drawdown-card .chart-wrap { height: 180px !important; }
+  #rolling-card .chart-wrap { height: 150px !important; }
+  #pnl-hist-card .chart-wrap,
+  #dur-hist-card .chart-wrap,
+  #winloss-pie-card .chart-wrap,
+  #strategy-pie-card .chart-wrap,
+  #r-multiple-card .chart-wrap,
+  #confidence-card .chart-wrap { height: 170px !important; }
+
+  .kpi-strip { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+  .kpi-val { font-size: 18px; }
+  .kpi-lbl { font-size: 9px; }
+
+  .chart-card { padding: 12px; }
+}
+
+/* Monthly heatmap: 12 month-columns + a label column stop being legible
+   once squeezed below their natural width -- scroll horizontally instead
+   of shrinking the cells to nothing on a phone. */
+#heatmap-container { overflow-x: auto; }
+#heatmap-container .heatmap-grid { min-width: 480px; }
 </style>
 
 {# ── KPI strip (populated by JS) ─────────────────────────────────────────── #}
@@ -126,7 +166,7 @@
   </div>
 </div>
 
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;" id="equity-row">
+<div class="stats-two-col" id="equity-row">
   <div class="chart-card" style="margin-top:0;" id="equity-card">
     <div class="chart-title">📈 Equity curve vs SPY benchmark</div>
     <div class="chart-wrap" style="height:220px;">
@@ -153,7 +193,7 @@
   <div id="heatmap-container"></div>
 </div>
 
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;" id="hist-row">
+<div class="stats-two-col" id="hist-row">
   <div class="chart-card" style="margin-top:0;" id="pnl-hist-card">
     <div class="chart-title">📊 P&amp;L distribution per trade (%)</div>
     <div class="chart-wrap" style="height:200px;">
@@ -165,6 +205,43 @@
     <div class="chart-wrap" style="height:200px;">
       <canvas id="chart-dur-hist"></canvas>
     </div>
+  </div>
+</div>
+
+<div class="stats-two-col" id="pie-row">
+  <div class="chart-card" style="margin-top:0;" id="winloss-pie-card">
+    <div class="chart-title">🥧 Win / Loss split</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-winloss-pie"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="strategy-pie-card">
+    <div class="chart-title">🧩 Trades by strategy</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-strategy-pie"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="stats-two-col" id="extra-row">
+  <div class="chart-card" style="margin-top:0;" id="r-multiple-card">
+    <div class="chart-title">📐 R-multiple distribution (P&amp;L ÷ planned risk)</div>
+    <div class="chart-wrap" style="height:200px;">
+      <canvas id="chart-r-multiple"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="confidence-card">
+    <div class="chart-title">🔬 Win rate by confidence level</div>
+    <div class="chart-wrap" style="height:200px;">
+      <canvas id="chart-confidence"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="chart-card" id="cum-pnl-card" style="display:none;">
+  <div class="chart-title">💰 Cumulative P&amp;L by strategy</div>
+  <div class="chart-wrap" style="height:220px;">
+    <canvas id="chart-cum-pnl-strategy"></canvas>
   </div>
 </div>
 
@@ -263,6 +340,10 @@ const stddev = arr => {
 const max = arr => arr.reduce((a,b)=>Math.max(a,b), -Infinity);
 const min = arr => arr.reduce((a,b)=>Math.min(a,b),  Infinity);
 const sum  = arr => arr.reduce((a,b)=>a+b, 0);
+// "2026-07-06T14:32:07+00:00" -> "2026-07-06 14:32" -- date-only labels
+// couldn't distinguish same-day trades closed hours apart, which mattered
+// once trades started closing intraday rather than once a day.
+const fmtDateTime = iso => iso ? iso.slice(0,16).replace('T', ' ') : '';
 const chartDefaults = {
   color: '#5a6275',
   gridColor: '#1a1d26',
@@ -308,7 +389,7 @@ const equityVals  = [];
 let   eq = 100;
 for (const t of trades) {
   if (t.pnl_pct != null) eq *= (1 + t.pnl_pct / 100);
-  equityDates.push((t.closed_at || '').slice(0,10));
+  equityDates.push(fmtDateTime(t.closed_at));
   equityVals.push(parseFloat(eq.toFixed(2)));
 }
 const totalReturn = equityVals[equityVals.length-1] - 100;
@@ -471,7 +552,12 @@ function gridOpts(y2=false) {
       plugins:{ legend:{ position:'top', labels:{boxWidth:12,padding:16} },
                 tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y>=0?'+':''}${ctx.parsed.y.toFixed(2)}%` } } },
       scales: {
-        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8} },
+        // Labels are now "YYYY-MM-DD HH:MM" (see fmtDateTime) instead of
+        // date-only, so a trade closed at 14:32 reads as its own point
+        // instead of collapsing into the same tick as every other trade
+        // closed that day. maxRotation lets the wider label fit without
+        // overlapping its neighbors.
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8, maxRotation:45, minRotation:0} },
         y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback: v => (v>=0?'+':'')+v+'%' } },
       },
     },
@@ -499,7 +585,7 @@ function gridOpts(y2=false) {
       plugins:{ legend:{display:false},
                 tooltip:{ callbacks:{ label: ctx => ` Drawdown: ${ctx.parsed.y.toFixed(2)}%` } } },
       scales: {
-        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8} },
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8, maxRotation:45, minRotation:0} },
         y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>v+'%'}, reverse:false },
       },
     },
@@ -647,19 +733,212 @@ function gridOpts(y2=false) {
   $('dur-hist-card').style.display = '';
   new Chart($('chart-dur-hist'), {
     type: 'bar',
-    data: { labels: bins.map(b=>b+'-'+(b+binW-1)+'d'), datasets:[{ label:'Trades', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
+    data: { labels: bins.map(b=>b+'-'+(b+binW-1)+'d'), datasets:[{ label:'Trades (days held)', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false} },
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{
+          title: t => `Held ${t[0].label.replace('d','')} days`,
+          label: ctx => ` ${ctx.parsed.y} trade${ctx.parsed.y===1?'':'s'}`,
+        } },
+      },
       scales: {
-        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor} },
-        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1} },
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor},
+             title:{ display:true, text:'Holding period (days)', color:chartDefaults.tickColor, font:{size:10} } },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1},
+             title:{ display:true, text:'Number of trades', color:chartDefaults.tickColor, font:{size:10} } },
       },
     },
   });
 })();
 
-/* ── 8. Trade log table ──────────────────────────────────────────────────── */
+/* ── 8. Win / Loss pie ───────────────────────────────────────────────────── */
+(function () {
+  if (!totalTrades) return;
+  $('winloss-pie-card').style.display = '';
+  new Chart($('chart-winloss-pie'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Wins', 'Losses'],
+      datasets: [{
+        data: [wins.length, losses.length],
+        backgroundColor: ['rgba(68,255,136,.78)', 'rgba(255,68,68,.78)'],
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      cutout: '62%',
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:16} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 9. Trades-by-strategy pie ───────────────────────────────────────────── */
+(function () {
+  const stratMap = {};
+  for (const t of trades) {
+    const s = t.strategy || 'Unknown';
+    stratMap[s] = (stratMap[s] || 0) + 1;
+  }
+  const stratKeys = Object.keys(stratMap).sort((a,b)=>stratMap[b]-stratMap[a]);
+  if (!stratKeys.length) return;
+  $('strategy-pie-card').style.display = '';
+  const palette = ['#5a7fff','#44ff88','#e2b25a','#ff4444','#ab47bc','#26c6da','#ff9800','#9aa0b0','#66bb6a','#ec407a'];
+  new Chart($('chart-strategy-pie'), {
+    type: 'pie',
+    data: {
+      labels: stratKeys,
+      datasets: [{
+        data: stratKeys.map(k=>stratMap[k]),
+        backgroundColor: stratKeys.map((_,i)=>palette[i % palette.length]),
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:10}} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 10. R-multiple distribution ─────────────────────────────────────────── */
+(function () {
+  const rMultiples = trades.map(t=>t.r_multiple).filter(x=>x!=null);
+  if (rMultiples.length < 2) { $('r-multiple-card').style.display = 'none'; return; }
+  $('r-multiple-card').style.display = '';
+  const lo = Math.floor(min(rMultiples) * 2) / 2;
+  const hi = Math.ceil(max(rMultiples) * 2) / 2;
+  const binW = Math.max(0.25, parseFloat(((hi-lo)/16).toFixed(2)));
+  const bins = [], counts = [], colors = [];
+  for (let b = lo; b < hi; b += binW) {
+    bins.push(b.toFixed(2));
+    counts.push(rMultiples.filter(v=>v>=b && v<b+binW).length);
+    colors.push(b >= 0 ? 'rgba(68,255,136,.7)' : 'rgba(255,68,68,.7)');
+  }
+  new Chart($('chart-r-multiple'), {
+    type: 'bar',
+    data: { labels: bins.map(b=>b+'R'), datasets:[{ label:'Trades', data:counts, backgroundColor:colors, borderWidth:0 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{
+          title: t => `${t[0].label.replace('R','')} – ${(parseFloat(t[0].label)+binW).toFixed(2)}R`,
+          label: ctx => ` ${ctx.parsed.y} trade${ctx.parsed.y===1?'':'s'}`,
+        } },
+      },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:10},
+             title:{ display:true, text:'R-multiple (P&L ÷ planned risk)', color:chartDefaults.tickColor, font:{size:10} } },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1},
+             title:{ display:true, text:'Number of trades', color:chartDefaults.tickColor, font:{size:10} } },
+      },
+    },
+  });
+})();
+
+/* ── 11. Win rate by confidence level ────────────────────────────────────── */
+(function () {
+  const levels = [1,2,3,4,5];
+  const byLevel = levels.map(lv => trades.filter(t => t.confidence === lv));
+  if (!byLevel.some(arr => arr.length)) { $('confidence-card').style.display = 'none'; return; }
+  $('confidence-card').style.display = '';
+  const wrByLevel = byLevel.map(arr => arr.length ? arr.filter(t=>t.status==='win').length/arr.length*100 : null);
+  const countByLevel = byLevel.map(arr => arr.length);
+  new Chart($('chart-confidence'), {
+    type: 'bar',
+    data: {
+      labels: levels.map(lv=>'Lv'+lv),
+      datasets: [{
+        label: 'Win rate',
+        data: wrByLevel,
+        backgroundColor: wrByLevel.map(v => v==null ? 'rgba(90,98,117,.4)' : v>=60?'rgba(68,255,136,.75)':v>=40?'rgba(226,178,90,.75)':'rgba(255,68,68,.75)'),
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{
+          label: ctx => ctx.parsed.y==null ? ' No closed trades' : ` Win rate: ${ctx.parsed.y.toFixed(1)}% (${countByLevel[ctx.dataIndex]} trades)`,
+        } },
+      },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor},
+             title:{ display:true, text:'Confidence level', color:chartDefaults.tickColor, font:{size:10} } },
+        y: { grid:{color:chartDefaults.gridColor}, min:0, max:100, ticks:{color:chartDefaults.tickColor, callback:v=>v+'%'},
+             title:{ display:true, text:'Win rate', color:chartDefaults.tickColor, font:{size:10} } },
+      },
+    },
+  });
+})();
+
+/* ── 12. Cumulative P&L by strategy ──────────────────────────────────────── */
+(function () {
+  const stratKeys = [...new Set(trades.map(t => t.strategy || 'Unknown'))];
+  // Only worth a chart once there's more than one strategy to compare --
+  // with just one it's identical to the equity curve above.
+  if (stratKeys.length < 2) return;
+  $('cum-pnl-card').style.display = '';
+  const palette = ['#5a7fff','#44ff88','#e2b25a','#ff4444','#ab47bc','#26c6da','#ff9800','#9aa0b0','#66bb6a','#ec407a'];
+
+  // Aligned to the SAME `equityDates` labels (index = trade's overall
+  // closing order) as the equity curve above, one value per strategy at
+  // the index where one of ITS trades closed and null everywhere else --
+  // spanGaps draws a straight line across those nulls, so each strategy's
+  // line still reads as continuous even though it only actually has data
+  // on a subset of the shared x-axis.
+  const datasets = stratKeys.map((s, i) => {
+    let cum = 0;
+    const data = trades.map(t => {
+      if ((t.strategy || 'Unknown') !== s) return null;
+      if (t.pnl_pct != null) cum += t.pnl_pct;
+      return parseFloat(cum.toFixed(2));
+    });
+    return {
+      label: s,
+      data,
+      borderColor: palette[i % palette.length],
+      backgroundColor: 'transparent',
+      borderWidth: 1.75, tension: 0.25, pointRadius: 0, spanGaps: true,
+    };
+  });
+
+  new Chart($('chart-cum-pnl-strategy'), {
+    type: 'line',
+    data: { labels: equityDates, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ position:'top', labels:{boxWidth:12,padding:12,font:{size:10}} },
+        tooltip:{ callbacks:{ label: ctx => ctx.parsed.y==null ? undefined : ` ${ctx.dataset.label}: ${ctx.parsed.y>=0?'+':''}${ctx.parsed.y.toFixed(2)}%` } },
+      },
+      scales: {
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxTicksLimit:8, maxRotation:45, minRotation:0} },
+        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, callback:v=>(v>=0?'+':'')+v+'%'},
+             title:{ display:true, text:'Cumulative P&L (sum of %)', color:chartDefaults.tickColor, font:{size:10} } },
+      },
+    },
+  });
+})();
+
+/* ── 13. Trade log table ─────────────────────────────────────────────────── */
 (function () {
   const tbody = $('trade-log-body');
   if (!tbody) return;

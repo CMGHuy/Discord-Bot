@@ -416,13 +416,18 @@ async def trade_monitor():
     """
     Lightweight SL/TP price monitor — runs every 60 seconds, entirely
     separate from the full scan cycle.  For every open trade it fetches
-    the live price (incl. premarket/aftermarket via get_current_price)
-    and calls close_if_live_price_hit().  If any trade closes, a
+    the live price (incl. premarket/aftermarket via get_current_price),
+    calls close_if_live_price_hit() for an exact SL/TP hit, and then
+    check_near_tp_timeout() for whatever's still open -- closing early,
+    as a win at the live price, any trade that's gotten most of the way
+    to its target and then stalled there instead of actually tapping it
+    (see config.NEAR_TP_TIMEOUT_*). If any trade closes either way, a
     notification is posted to DISCORD_CHANNEL_TRADES_HISTORY_ID immediately,
     without waiting for the next scheduled scan.
 
     Skips silently if a full scan is already running (which does the same
-    check inside update_open_trades) to avoid a race on trades.json.
+    SL/TP check inside update_open_trades, but not the near-TP timeout --
+    that's this task's alone) to avoid a race on trades.json.
     Also skips when there are no open trades, keeping the overhead
     proportional to actual activity.
     """
@@ -452,6 +457,23 @@ async def trade_monitor():
         if closed:
             log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
             all_newly_closed.extend(closed)
+
+        # Near-TP timeout exit: for whatever's STILL open on this ticker
+        # after the exact SL/TP check above (a trade that just tapped its
+        # real target this same tick is already gone from "open" status by
+        # the time this runs) -- locks in profit on a trade that got most
+        # of the way to target and then stalled instead of actually
+        # touching it. See config.NEAR_TP_TIMEOUT_* / performance.py's
+        # check_near_tp_timeout docstring for the exact rule.
+        try:
+            near_tp_closed = await asyncio.to_thread(trade_log.check_near_tp_timeout, ticker, live)
+        except Exception as exc:
+            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc)
+            continue
+        if near_tp_closed:
+            log.info("trade_monitor: %d trade(s) closed for %s via near-TP timeout (live=%.4f)",
+                      len(near_tp_closed), ticker, live)
+            all_newly_closed.extend(near_tp_closed)
 
     if all_newly_closed:
         from swingbot.core.scanning.embeds import notify_closed_trades

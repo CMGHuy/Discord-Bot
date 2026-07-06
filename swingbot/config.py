@@ -163,6 +163,23 @@ FIELDS: list[Field] = [
     Field("NEAR_CLOSE_THRESHOLD_PCT", "NEAR_CLOSE_THRESHOLD_PCT", "Trade Filters & Risk", "Near-close threshold %",
           type="float", default="2.0", min=0, step=0.5,
           help="How close price must get to a trade's SL/TP before a near-close warning posts."),
+    Field("NEAR_TP_TIMEOUT_ENABLED", "NEAR_TP_TIMEOUT_ENABLED", "Trade Filters & Risk", "Near-TP timeout exit enabled",
+          type="checkbox", default="true",
+          help="If a trade gets most of the way to its target and then goes sideways there instead of "
+               "actually tapping it, close it early at the live price to lock in the profit already made "
+               "rather than risk giving it all back waiting for the exact target price."),
+    Field("NEAR_TP_TIMEOUT_THRESHOLD_PCT", "NEAR_TP_TIMEOUT_THRESHOLD_PCT", "Trade Filters & Risk",
+          "Near-TP timeout progress threshold %",
+          type="float", default="80.0", min=1, max=99, step=1,
+          help="How far toward the target (as a % of entry -> target 1 distance) price has to have travelled "
+               "before the timeout-exit clock (below) starts. 80% means price is most of the way there but "
+               "hasn't actually touched the target yet. Dropping back below this threshold resets the clock."),
+    Field("NEAR_TP_TIMEOUT_MINUTES", "NEAR_TP_TIMEOUT_MINUTES", "Trade Filters & Risk",
+          "Near-TP timeout duration (minutes)",
+          type="number", default="15", min=1, max=1440, step=1,
+          help="Once price has been at or above the progress threshold continuously for this many minutes "
+               "without actually reaching the target, the trade is closed at the live price as a win. Only "
+               "checked by the 60s trade_monitor loop, so real-world timing is accurate to within about a minute."),
 
     # --- Data & display ---
     Field("DEFAULT_HISTORY_PERIOD", "DEFAULT_HISTORY_PERIOD", "Data & Display", "History period",

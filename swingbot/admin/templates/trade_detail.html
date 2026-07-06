@@ -202,6 +202,18 @@
   });
 
   closeBtn.addEventListener('click', closeLightbox);
+  // Dedicated touch handling for the close button, independent of the
+  // overlay's own pinch/pan touch listeners below -- stopPropagation keeps
+  // this tap from ever reaching the overlay's touchstart/touchmove (which
+  // otherwise treat every touch as the start of a pinch/pan gesture and
+  // call preventDefault on it), so the close button stays tappable no
+  // matter what zoom/pinch state the lightbox is currently in.
+  closeBtn.addEventListener('touchstart', function(e) { e.stopPropagation(); }, { passive: true });
+  closeBtn.addEventListener('touchend', function(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    closeLightbox();
+  }, { passive: false });
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeLightbox(); });
 
@@ -245,6 +257,16 @@
   var lastDist = 0, lastMidX = 0, lastMidY = 0;
   var touchStartPanTx = 0, touchStartPanTy = 0;
   var singleStartX = 0, singleStartY = 0;
+  // Tracks whether the CURRENT (still in-progress, not-yet-fully-released)
+  // touch gesture ever had 2 fingers down -- i.e. was a pinch. Mobile
+  // browsers fire one touchend per finger lifted, not one for the whole
+  // gesture, so releasing both fingers of a pinch produces two touchend
+  // events in quick succession; without this flag the second one landed
+  // inside the 300ms double-tap window below and was misread as a
+  // double-tap, silently resetting the zoom right back to minScale the
+  // instant a two-finger pinch ended. Reset once the gesture is fully over
+  // (touches.length reaches 0) so it doesn't leak into the next gesture.
+  var hadMultiTouch = false;
 
   function touchDist(t) {
     var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
@@ -255,8 +277,14 @@
   }
 
   overlay.addEventListener('touchstart', function(e) {
+    // Let the close button's own touch handlers deal with taps on it --
+    // otherwise this preventDefault()/pinch-state setup runs on every touch
+    // that lands on it too (it's a child of overlay, so the event bubbles
+    // here), which is what made the close button stop responding.
+    if (e.target === closeBtn) return;
     e.preventDefault();
     if (e.touches.length === 2) {
+      hadMultiTouch = true;
       lastDist = touchDist(e.touches);
       var mid = touchMid(e.touches);
       lastMidX = mid.x; lastMidY = mid.y;
@@ -293,6 +321,23 @@
   // Double-tap to toggle zoom
   var lastTap = 0;
   overlay.addEventListener('touchend', function(e) {
+    if (e.target === closeBtn) return;
+    // Only evaluate once every finger is actually up -- e.touches is the
+    // set still touching the screen, which is what makes this different
+    // from a per-finger-lift check.
+    if (e.touches.length > 0) return;
+    var wasPinch = hadMultiTouch;
+    hadMultiTouch = false;
+    if (wasPinch) {
+      // The two-finger release itself isn't a tap, and mobile browsers
+      // fire touchend once per lifted finger, so the SECOND finger's
+      // touchend here would otherwise land inside the 300ms window below
+      // and get misread as a double-tap that resets the zoom back to
+      // minScale right after the user just pinched in. Skip it, and don't
+      // let it seed the double-tap timer for whatever the user does next.
+      lastTap = 0;
+      return;
+    }
     var now = Date.now();
     if (now - lastTap < 300 && e.changedTouches.length === 1) {
       if (Math.abs(scale - minScale) < minScale * 0.05) {
