@@ -774,3 +774,8 @@ def resume_scan():
         msg = f"Could not remove pause file: {e}"
         ok = 0
     return redirect(url_for("index", msg=msg, ok=ok))
+
+def main():
+    host = os.getenv("ADMIN_HOST", "0.0.0.0")
+    port = int(os.getenv("ADMIN_PORT", 1234))
+    app.run(host=host, port=port, debug=False)
