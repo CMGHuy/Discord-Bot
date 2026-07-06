@@ -79,6 +79,8 @@ _SECTION_META = {
     "Data & Display":        ("📊", "Data history, currency, and market benchmark settings."),
     "Account Defaults":      ("💰", "Starting account values seeded into data/account.json on first run."),
     "Admin UI":              ("🔐", "Credentials and port for this web UI (requires admin container restart to take effect)."),
+    "Secondary Alerts":       ("🔔", "Email and push (ntfy.sh) notifications for high-confidence signals."),
+    "Multi-Timeframe Confluence": ("📈", "Higher-timeframe EMA bias filter applied as a per-ticker gate during scans."),
 }
 
 app = Flask(__name__)
@@ -144,122 +146,117 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 # Routes -- Dashboard
 # ---------------------------------------------------------------------------
 def _render_dashboard_fragment() -> str:
-    open_trades = _trades().get_trades(status="open", limit=None, sort_by="confidence")
-    stats = _trades().get_stats()
-    stats.update(_trades().get_extended_stats())
-    # Pre-build a per-ticker currency map so Jinja doesn't call get_currency_symbol
-    # (a network round-trip) inline -- lookups are cached after the first call so
-    # this is fast for tickers we've seen before.
-    cur_map = {t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL) for t in open_trades}
-    # Trade-health status per open trade: how close its live price is to the
-    # stop-loss (red) vs. the target (green), grey near entry. get_current_price
-    # is itself cached for 60s, so this only actually hits yfinance once a
-    # minute per ticker no matter how often the dashboard's 5s poll calls in --
-    # the color simply won't change in between those refreshes.
-    # Keyed by trade id, not ticker -- the same ticker can have more than one
-    # open trade at once (different strategy/horizon), each with its own
-    # entry/stop/target, so they need independent statuses.
-    status_map = {}
-    price_map = {}   # trade id -> live current price (or None if unresolvable), for the Current Price column
-    unrealized_pcts = []   # one entry per open trade with a resolvable live price
-    for t in open_trades:
-        price = get_current_price(t["ticker"])
-        price_map[t["id"]] = price
-        if price is None:
-            status_map[t["id"]] = {"color": "#5a6275", "proximity": 0.0, "blink_seconds": 2.2, "label": "Price unavailable"}
-        else:
-            status_map[t["id"]] = trade_proximity(
-                t["direction"], t["entry"], t["stop_loss"], t["take_profit"], price
-            )
-            pct = (price - t["entry"]) / t["entry"] * 100 if t["entry"] else 0.0
-            if t["direction"] == "bearish":
-                pct = -pct
-            unrealized_pcts.append(pct)
-    # Equal-weighted average across every open position (no per-trade position
-    # sizing is tracked anywhere in this app -- see config.py's Account
-    # Defaults docstring), i.e. "if I'd put one unit into each open trade,
-    # what's my blended unrealized return right now". None (shown as "--")
-    # when there are no open trades or none of their live prices resolved.
-    stats["total_unrealized_pct"] = (sum(unrealized_pcts) / len(unrealized_pcts)) if unrealized_pcts else None
-    # Highest-score agreed strategy per trade -- see helpers._primary_strategy_label
-    # for why this replaces the old always-"S/R Confluence" t.strategy field.
+    # Single TradeLog read for the whole render -- avoids re-reading trades.json
+    # separately for get_stats(), get_extended_stats(), and the trade lists.
+    tl = _trades()
+    open_trades  = tl.get_trades(status="open", limit=None, sort_by="confidence")
+    stats        = tl.get_stats()
+    stats.update(tl.get_extended_stats())
+
+    # Closed trades (last 25 by closed_at) -- built early so their tickers
+    # are included in cur_map below.
+    all_raw      = tl.get_trades(status=None, limit=None, sort_by="opened_at")
+    closed_trades = sorted(
+        [t for t in all_raw if t["status"] in ("win", "loss", "closed")],
+        key=lambda t: t.get("closed_at") or "",
+        reverse=True,
+    )[:25]
+
+    # Currency symbol map -- covers every ticker shown on the page (open AND
+    # recently closed). Previously only open_trades were included, so closed
+    # trades for tickers without a current open position showed no symbol.
+    all_tickers = {t["ticker"] for t in open_trades + closed_trades}
+    cur_map     = {tk: get_currency_symbol(tk, config.CURRENCY_SYMBOL) for tk in all_tickers}
+
+    # Account config for position sizing (guaranteed to have all keys via
+    # load_account_config's {**defaults, **stored} merge).
+    account_cfg = load_account_config()
+
+    # Per-trade strategy label (reuses chart ranking so dashboard + chart agree).
     strategy_map = {t["id"]: _primary_strategy_label(t) for t in open_trades}
 
-    # ── Per-trade P&L / risk metrics ──────────────────────────────────────────
-    # Computed here (Python) so the template stays logic-light; all values are
-    # None when the live price is unavailable.
-    pnl_map: dict = {}   # trade_id → {pnl_pct, to_sl_pct, to_tp_pct, pos_pct, entry_pct}
-    days_map: dict = {}  # trade_id → int days open
+    # ── Single pass over open trades ─────────────────────────────────────────
+    # Computes prices, status colors, P&L, SL/TP progress, position bar,
+    # days-open, and sizing all in one loop instead of the previous two
+    # (price/status then pnl/days) plus a separate sizing loop.
+    status_map    : dict = {}
+    price_map     : dict = {}
+    pnl_map       : dict = {}
+    days_map      : dict = {}
+    sizing_map    : dict = {}
+    unrealized_pnls: list = []
     now_utc = datetime.now(timezone.utc)
 
     for t in open_trades:
-        tid = t["id"]
-        price = price_map.get(tid)
-        entry = t.get("entry") or 0
-        sl    = t.get("stop_loss") or 0
-        tp    = t.get("take_profit") or 0
+        tid     = t["id"]
+        price   = get_current_price(t["ticker"])
+        entry   = t.get("entry")    or 0.0
+        sl      = t.get("stop_loss")  or 0.0
+        tp      = t.get("take_profit") or 0.0
         is_bull = t.get("direction") == "bullish"
+
+        price_map[tid] = price
+
+        # Status dot color/speed
+        if price is None:
+            status_map[tid] = {
+                "color": "#5a6275", "proximity": 0.0,
+                "blink_seconds": 2.2, "label": "Price unavailable",
+            }
+        else:
+            status_map[tid] = trade_proximity(t["direction"], entry, sl, tp, price)
 
         # Days open
         try:
-            opened_dt = datetime.fromisoformat(t["opened_at"])
-            days_map[tid] = max(0, (now_utc - opened_dt).days)
+            days_map[tid] = max(0, (now_utc - datetime.fromisoformat(t["opened_at"])).days)
         except Exception:
             days_map[tid] = None
 
+        # P&L, SL/TP progress, position bar
         if price and entry:
             raw_pnl = (price - entry) / entry * 100
             pnl_pct = raw_pnl if is_bull else -raw_pnl
+            unrealized_pnls.append(pnl_pct)
 
-            # SL / TP progress: how far along the entry→SL (or entry→TP)
-            # distance the price has travelled, as a percentage.
-            #   0%   = price is still at entry (just opened)
-            #   100% = price has reached the level exactly
-            #   150% = price went 50% beyond that level
-            # Negative values (price moved AWAY from the level) are clamped
-            # to 0 so we only ever show progress, never "negative distance".
+            # Progress toward each level from entry (0% = at entry, 100% = at
+            # level, >100% = past it). Clamped to 0 when price moved AWAY.
             sl_dist = abs(entry - sl) or 1.0
             tp_dist = abs(tp - entry) or 1.0
             if is_bull:
-                sl_raw = (entry - price) / sl_dist * 100   # rises as price drops toward SL
-                tp_raw = (price - entry) / tp_dist * 100   # rises as price climbs toward TP
+                sl_raw = (entry - price) / sl_dist * 100
+                tp_raw = (price - entry) / tp_dist * 100
             else:
-                sl_raw = (price - entry) / sl_dist * 100   # rises as price rises toward SL
-                tp_raw = (entry - price) / tp_dist * 100   # rises as price falls toward TP
-            to_sl = round(max(0.0, sl_raw), 1)
-            to_tp = round(max(0.0, tp_raw), 1)
+                sl_raw = (price - entry) / sl_dist * 100
+                tp_raw = (entry - price) / tp_dist * 100
 
-            # Position bar: maps SL→TP to 0→100 %.
-            # pos_pct  = where current price sits (clamped for bar rendering)
-            # entry_pct = where the original entry sits (anchor marker)
-            if is_bull:
-                span = tp - sl
-            else:
-                span = sl - tp
-            if span and span > 0:
+            # Position bar: SL = 0%, TP = 100%
+            span = (tp - sl) if is_bull else (sl - tp)
+            if span > 0:
                 cur_pos   = (price - sl) / span * 100 if is_bull else (sl - price) / span * 100
                 entry_pos = (entry - sl) / span * 100 if is_bull else (sl - entry) / span * 100
             else:
                 cur_pos = entry_pos = 50.0
 
             pnl_map[tid] = {
-                "pnl_pct":    round(pnl_pct, 2),
-                "to_sl_pct":  to_sl,
-                "to_tp_pct":  to_tp,
-                "pos_pct":    max(0.0, min(100.0, round(cur_pos, 1))),
-                "entry_pct":  max(0.0, min(100.0, round(entry_pos, 1))),
+                "pnl_pct":   round(pnl_pct, 2),
+                "to_sl_pct": round(max(0.0, sl_raw), 1),
+                "to_tp_pct": round(max(0.0, tp_raw), 1),
+                "pos_pct":   max(0.0, min(100.0, round(cur_pos, 1))),
+                "entry_pct": max(0.0, min(100.0, round(entry_pos, 1))),
             }
         else:
             pnl_map[tid] = None
 
-    # ── Closed trades (last 25 by closed_at) ─────────────────────────────────
-    all_trades_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
-    closed_trades = [t for t in all_trades_raw if t["status"] in ("win", "loss", "closed")]
-    closed_trades.sort(key=lambda t: t.get("closed_at") or "", reverse=True)
-    closed_trades = closed_trades[:25]
+        # Position sizing
+        sizing_map[tid] = compute_position_size(entry=entry, stop_loss=sl, account_cfg=account_cfg)
 
-    # Per-closed-trade computed fields (passed as helper callables so Jinja
-    # can call them like functions: {{ trade_pnl(t) }}).
+    # Equal-weighted average unrealized return across all open positions with a
+    # live price (None → shown as "—" in the stat card).
+    stats["total_unrealized_pct"] = (
+        sum(unrealized_pnls) / len(unrealized_pnls) if unrealized_pnls else None
+    )
+
+    # ── Closed-trade P&L helpers (passed as callables to Jinja) ──────────────
     def _closed_pnl(t) -> float | None:
         ex, en = t.get("exit_price"), t.get("entry")
         if not ex or not en:
@@ -279,33 +276,17 @@ def _render_dashboard_fragment() -> str:
 
     def _closed_days(t) -> int | None:
         try:
-            opened = datetime.fromisoformat(t["opened_at"])
-            closed_dt = datetime.fromisoformat(t["closed_at"])
-            return max(0, (closed_dt - opened).days)
+            return max(0, (
+                datetime.fromisoformat(t["closed_at"]) -
+                datetime.fromisoformat(t["opened_at"])
+            ).days)
         except Exception:
             return None
 
-    # Aggregate realized stats for the extra stat cards.
     realized_pnls = [p for p in (_closed_pnl(t) for t in closed_trades) if p is not None]
     stats["total_realized_pct"] = round(sum(realized_pnls) / len(realized_pnls), 2) if realized_pnls else None
-    stats["best_trade_pct"]  = round(max(realized_pnls), 2) if realized_pnls else None
-    stats["worst_trade_pct"] = round(min(realized_pnls), 2) if realized_pnls else None
-
-    # ── Per-trade position sizing ─────────────────────────────────────────────
-    # Uses the LIVE account config (data/account.json) so any !account change
-    # shows up here on the next dashboard refresh without a bot restart.
-    # None when balance = 0 or entry/stop-distance is 0 (uncomputable).
-    account_cfg = load_account_config()
-    # Backfill keys added after the initial account.json was seeded -- existing
-    # files won't have them, so read from config defaults rather than crashing.
-    account_cfg.setdefault("max_position_pct", config.MAX_POSITION_SIZE_PCT)
-    sizing_map: dict = {}   # trade_id → compute_position_size() dict | None
-    for t in open_trades:
-        sizing_map[t["id"]] = compute_position_size(
-            entry=t.get("entry") or 0,
-            stop_loss=t.get("stop_loss") or 0,
-            account_cfg=account_cfg,
-        )
+    stats["best_trade_pct"]     = round(max(realized_pnls), 2) if realized_pnls else None
+    stats["worst_trade_pct"]    = round(min(realized_pnls), 2) if realized_pnls else None
 
     return render_template(
         "dashboard_fragment.html",
