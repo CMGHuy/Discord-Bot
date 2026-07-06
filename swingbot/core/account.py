@@ -5,8 +5,8 @@ via `!account`) and unrealized P/L tracking for `!pnl`.
 Position sizing is computed by compute_position_size() using the classic
 fixed-fractional formula:
 
-    risk_amount = balance × risk_pct / 100
-    shares      = risk_amount / abs(entry − stop_loss)
+    risk_amount = balance x risk_pct / 100
+    shares      = risk_amount / abs(entry - stop_loss)
 
 A MAX_POSITION_SIZE_PCT cap prevents the position from consuming too
 large a fraction of the account (e.g. a tiny stop on a cheap stock
@@ -24,21 +24,28 @@ CONFIG_PATH = os.path.join(app_config.DATA_DIR, "account.json")
 
 
 def load_account_config(path: str = CONFIG_PATH) -> dict:
+    # Canonical defaults -- every key that exists in the account config schema.
+    # Used both as the seed for a brand-new account.json AND as a fallback for
+    # keys that were added after an existing file was first created (so loading
+    # an old file never returns a dict that's missing a key downstream code
+    # assumes will be there).
+    defaults = {
+        "balance":            app_config.ACCOUNT_BALANCE,
+        "risk_pct":           app_config.RISK_PER_TRADE_PCT,
+        "max_open_positions": app_config.MAX_OPEN_POSITIONS,
+        "max_position_pct":   app_config.MAX_POSITION_SIZE_PCT,
+    }
     if os.path.exists(path):
         with open(path, "r") as f:
             try:
-                return json.load(f)
+                stored = json.load(f)
+                # Merge: stored values win over defaults, but any key that
+                # doesn't exist in the stored file gets the default value.
+                return {**defaults, **stored}
             except json.JSONDecodeError:
                 pass
-    # Read live from app_config (not frozen module-level constants) so a
-    # config.reload() is reflected the first time account.json gets seeded.
-    config = {
-        "balance": app_config.ACCOUNT_BALANCE,
-        "risk_pct": app_config.RISK_PER_TRADE_PCT,
-        "max_open_positions": app_config.MAX_OPEN_POSITIONS,
-    }
-    save_account_config(config, path)
-    return config
+    save_account_config(defaults, path)
+    return dict(defaults)
 
 
 def save_account_config(config: dict, path: str = CONFIG_PATH):
@@ -80,23 +87,20 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     per trade, sized so a full stop-out costs exactly that amount.
 
     Formula:
-        risk_amount    = balance × risk_pct / 100
-        raw_shares     = risk_amount / abs(entry − stop_loss)
-        position_value = raw_shares × entry
+        risk_amount    = balance x risk_pct / 100
+        raw_shares     = risk_amount / abs(entry - stop_loss)
+        position_value = raw_shares x entry
 
-    If position_value would exceed balance × max_position_pct/100, shares
-    are capped at that maximum and `capped` is True in the result -- this
-    prevents a very tight stop on a cheap stock from implying a position
-    that's most of the account.
+    If position_value would exceed balance x max_position_pct/100, shares
+    are capped at that maximum and `capped` is True in the result.
 
-    Returns None when balance ≤ 0, entry ≤ 0, or the stop distance is
-    zero (avoids division by zero; also genuinely unsizeable).
+    Returns None when balance <= 0, entry <= 0, or stop distance is zero.
 
     Return dict keys:
         shares          -- suggested whole/fractional share count
-        risk_amount     -- € at risk if stop-loss is hit
-        position_value  -- total capital deployed (shares × entry)
-        capped          -- True if position_value was capped by max_position_pct
+        risk_amount     -- currency at risk if stop-loss is hit
+        position_value  -- total capital deployed (shares x entry)
+        capped          -- True if position_value was capped
         balance         -- account balance used in calculation
         risk_pct        -- risk % used
         max_position_pct -- position size cap % used
@@ -127,12 +131,12 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         capped = True
 
     return {
-        "shares": round(raw_shares, 2),
-        "risk_amount": round(risk_amount, 2),
-        "position_value": round(position_value, 2),
-        "capped": capped,
-        "balance": balance,
-        "risk_pct": risk_pct,
+        "shares":           round(raw_shares, 2),
+        "risk_amount":      round(risk_amount, 2),
+        "position_value":   round(position_value, 2),
+        "capped":           capped,
+        "balance":          balance,
+        "risk_pct":         risk_pct,
         "max_position_pct": max_position_pct,
     }
 
@@ -141,15 +145,16 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
 class UnrealizedPnL:
     current_price: float
     pct_change: float           # positive = in profit, negative = in loss, relative to entry
-    distance_to_sl_pct: float    # how close (in %) current price is to the stop-loss
-    distance_to_tp_pct: float    # how close (in %) current price is to the recommended TP
+    distance_to_sl_pct: float   # how close (in %) current price is to the stop-loss
+    distance_to_tp_pct: float   # how close (in %) current price is to the recommended TP
 
 
 def compute_unrealized_pnl(entry: float, stop_loss: float, take_profit: float, direction: str,
                             current_price: float) -> UnrealizedPnL:
     """Mark-to-market % P/L for a still-open paper trade, given the current market price."""
     if entry <= 0:
-        return UnrealizedPnL(current_price=current_price, pct_change=0.0, distance_to_sl_pct=0.0, distance_to_tp_pct=0.0)
+        return UnrealizedPnL(current_price=current_price, pct_change=0.0,
+                             distance_to_sl_pct=0.0, distance_to_tp_pct=0.0)
 
     is_bull = direction == "bullish"
     sign = 1 if is_bull else -1

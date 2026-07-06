@@ -280,6 +280,9 @@ def _render_dashboard_fragment() -> str:
     # shows up here on the next dashboard refresh without a bot restart.
     # None when balance = 0 or entry/stop-distance is 0 (uncomputable).
     account_cfg = load_account_config()
+    # Backfill keys added after the initial account.json was seeded -- existing
+    # files won't have them, so read from config defaults rather than crashing.
+    account_cfg.setdefault("max_position_pct", config.MAX_POSITION_SIZE_PCT)
     sizing_map: dict = {}   # trade_id → compute_position_size() dict | None
     for t in open_trades:
         sizing_map[t["id"]] = compute_position_size(
