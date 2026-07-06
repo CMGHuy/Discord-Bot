@@ -561,7 +561,7 @@ def close_trade(trade_id):
     # from the bot and corrupt or lose data.
     tl.close_trade_manual(trade_id, reason="manual (admin UI)")
 
-    # Queue a Discord notification so the bot posts to CLOSED_TRADES_CHANNEL_ID.
+    # Queue a Discord notification so the bot posts to DISCORD_CHANNEL_TRADES_HISTORY_ID.
     # The admin UI and bot run in separate processes; we share data via a JSON
     # queue file, same pattern as the scan-trigger flag.
     try:
@@ -814,11 +814,4 @@ def resume_scan():
 @app.route("/performance", methods=["GET"])
 @require_auth
 def stats_page():
-    stats = _trades().get_detailed_stats()
-    return _render("Performance", "stats", "stats.html", stats=stats)
-
-
-def main():
-    host = os.getenv("ADMIN_HOST", "0.0.0.0")
-    port = int(os.getenv("ADMIN_PORT", 1234))
-    app.run(host=host, port=port, debug=False)
+    stats = _

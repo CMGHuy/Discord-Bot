@@ -98,10 +98,12 @@ FIELDS: list[Field] = [
           type="password", sensitive=True, hot_reloadable=False,
           help="From the Discord Developer Portal. Changing this requires a full bot restart -- "
                "the Gateway connection can't be swapped to a new token live."),
-    Field("DISCORD_CHANNEL_ID", "CHANNEL_ID", "Discord Connection", "Alerts channel ID",
+    Field("DISCORD_CHANNEL_TRADES_ID", "DISCORD_CHANNEL_TRADES_ID", "Discord Connection", "Alerts channel ID",
           help="Channel where new trade alerts are posted."),
-    Field("CLOSED_TRADES_CHANNEL_ID", "CLOSED_TRADES_CHANNEL_ID", "Discord Connection", "Closed-trades channel ID",
+    Field("DISCORD_CHANNEL_TRADES_HISTORY_ID", "DISCORD_CHANNEL_TRADES_HISTORY_ID", "Discord Connection", "Closed-trades channel ID",
           help="Channel for WIN/LOSS and near-SL/TP notifications. Separate from the alerts channel so results don't get lost among new signals."),
+    Field("DISCORD_CHANNEL_RETROSPECTIVE_ID", "DISCORD_CHANNEL_RETROSPECTIVE_ID", "Discord Connection", "Daily retrospective channel ID",
+          help="Channel where the end-of-session retrospective is posted on weekdays. Leave blank to post to the closed-trades channel instead."),
 
     # --- Scanning & session ---
     Field("SESSION_START_HOUR", "SESSION_START_HOUR", "Scanning & Session", "Session start hour",

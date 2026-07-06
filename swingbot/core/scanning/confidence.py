@@ -437,6 +437,21 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
 
     quality_score = min(100, pts_distance + pts_stop + pts_regime + pts_adx + pts_macd + pts_rsi + pts_squeeze + pts_candle)
 
+    # Tight-stop penalty: if the stop sits below the ATR-based daily noise
+    # floor, ordinary price swings can trigger it before a genuine reversal
+    # has time to develop. Penalise quality proportionally to how much shorter
+    # than the floor the stop is (max 15 pts), then show the deduction in the
+    # breakdown so the user can see exactly why the score dropped.
+    if scenario.tight_stop and scenario.atr_floor_pct > 0:
+        shortfall_pct = (scenario.atr_floor_pct - scenario.stop_distance_pct) / scenario.atr_floor_pct
+        pts_tight_penalty = min(15, round(shortfall_pct * 15))
+        quality_score = max(0, quality_score - pts_tight_penalty)
+        breakdown["Tight stop penalty"] = (
+            f"⚠️ stop {scenario.stop_distance_pct:.1f}% away is below the ATR noise floor "
+            f"({scenario.atr_floor_pct:.1f}%) — likely to get clipped by normal volatility "
+            f"-> -{pts_tight_penalty} quality pts"
+        )
+
     # --- Step 3: quality-based adjustment, at most one level either way ---
     if quality_score >= QUALITY_BOOST_THRESHOLD:
         quality_adjustment = 1

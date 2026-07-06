@@ -20,7 +20,7 @@ from swingbot.core.watchlist import load_watchlist
 _TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
 # Queue file written by the admin UI when a trade is manually closed.
 # Each line is a JSON-encoded trade record; the bot drains it and posts
-# to CLOSED_TRADES_CHANNEL_ID, then deletes the file.
+# to DISCORD_CHANNEL_TRADES_HISTORY_ID, then deletes the file.
 _MANUAL_CLOSE_QUEUE   = os.path.join(config.DATA_DIR, "manual_close_notify.json")
 _PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 _HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
@@ -155,12 +155,12 @@ async def session_scan():
     if not in_session():
         log.debug("session_scan tick skipped -- outside the session window")
         return
-    if not config.CHANNEL_ID:
-        log.warning("DISCORD_CHANNEL_ID not set; skipping scheduled post.")
+    if not config.DISCORD_CHANNEL_TRADES_ID:
+        log.warning("DISCORD_CHANNEL_TRADES_ID not set; skipping scheduled post.")
         return
-    channel = bot.get_channel(int(config.CHANNEL_ID))
+    channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
     if channel is None:
-        log.warning("Could not find channel %s", config.CHANNEL_ID)
+        log.warning("Could not find channel %s", config.DISCORD_CHANNEL_TRADES_ID)
         return
 
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
@@ -280,8 +280,8 @@ async def config_watcher():
                 )
             ),
         }
-        if config.CHANNEL_ID:
-            channel = bot.get_channel(int(config.CHANNEL_ID))
+        if config.DISCORD_CHANNEL_TRADES_ID:
+            channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
             if channel:
                 for attr_key, fmt_fn in _notify_keys.items():
                     if attr_key in changed:
@@ -319,15 +319,15 @@ async def config_watcher():
             pass  # already removed by a parallel tick or a concurrent process
         else:
             log.info("Admin UI triggered a manual !check scan.")
-            if not config.CHANNEL_ID:
+            if not config.DISCORD_CHANNEL_TRADES_ID:
                 log.warning("CHANNEL_ID not set; cannot post scan results.")
                 return
-            channel = bot.get_channel(int(config.CHANNEL_ID))
+            channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
             if channel is None:
                 try:
-                    channel = await bot.fetch_channel(int(config.CHANNEL_ID))
+                    channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
                 except Exception as _ce:
-                    log.warning("Could not resolve channel %s for triggered scan: %s", config.CHANNEL_ID, _ce)
+                    log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
                     return
             min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
             # Post a live-updating progress message — same UX as the Discord
@@ -418,7 +418,7 @@ async def trade_monitor():
     separate from the full scan cycle.  For every open trade it fetches
     the live price (incl. premarket/aftermarket via get_current_price)
     and calls close_if_live_price_hit().  If any trade closes, a
-    notification is posted to CLOSED_TRADES_CHANNEL_ID immediately,
+    notification is posted to DISCORD_CHANNEL_TRADES_HISTORY_ID immediately,
     without waiting for the next scheduled scan.
 
     Skips silently if a full scan is already running (which does the same
@@ -462,6 +462,94 @@ async def trade_monitor():
         await _refresh_presence()
 
 
+_recap_fired_date: dt.date | None = None   # tracks the last date a recap was posted
+
+
+async def _post_retrospective(channel_id_override: int | None = None):
+    """Build and post today's retrospective. Called by daily_recap task and !recap command."""
+    from swingbot.core.retrospective import build_daily_retrospective
+
+    all_trades = trade_log.get_trades(limit=10_000)
+    messages   = build_daily_retrospective(all_trades)
+
+    # Resolve target channel: explicit override → DISCORD_CHANNEL_RETROSPECTIVE_ID → DISCORD_CHANNEL_TRADES_HISTORY_ID
+    cid = channel_id_override
+    if not cid:
+        rc = getattr(config, "DISCORD_CHANNEL_RETROSPECTIVE_ID", None)
+        if rc:
+            try:
+                cid = int(rc)
+            except (ValueError, TypeError):
+                pass
+    if not cid:
+        cc = getattr(config, "DISCORD_CHANNEL_TRADES_HISTORY_ID", None)
+        if cc:
+            try:
+                cid = int(cc)
+            except (ValueError, TypeError):
+                pass
+    if not cid:
+        log.warning("daily_recap: no channel configured (set DISCORD_CHANNEL_RETROSPECTIVE_ID or DISCORD_CHANNEL_TRADES_HISTORY_ID).")
+        return
+
+    channel = bot.get_channel(cid)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(cid)
+        except Exception as exc:
+            log.warning("daily_recap: cannot resolve channel %s: %s", cid, exc)
+            return
+
+    for msg in messages:
+        if not msg.strip():
+            continue
+        # Discord message limit is 2000 chars; chunk if needed
+        while len(msg) > 1990:
+            split_at = msg.rfind("\n", 0, 1990)
+            if split_at == -1:
+                split_at = 1990
+            await channel.send(msg[:split_at])
+            msg = msg[split_at:]
+        if msg.strip():
+            await channel.send(msg)
+
+
+@tasks.loop(minutes=1)
+async def daily_recap():
+    """
+    Posts the end-of-session retrospective once per weekday, at SESSION_END_HOUR
+    (Europe/Berlin) + 15 minutes, so it runs right after the trading session closes.
+    Guards against duplicate posts within the same calendar day.
+    """
+    global _recap_fired_date
+    try:
+        from zoneinfo import ZoneInfo as _ZI
+        now = dt.datetime.now(_ZI("Europe/Berlin"))
+    except Exception:
+        now = dt.datetime.utcnow()
+
+    # Only on Mon–Fri (weekday() 0–4)
+    if now.weekday() > 4:
+        return
+
+    today = now.date()
+    if _recap_fired_date == today:
+        return  # already posted today
+
+    # Fire at SESSION_END_HOUR:15 Berlin time (15-min grace after session closes)
+    trigger_hour   = config.SESSION_END_HOUR
+    trigger_minute = 15
+    if now.hour != trigger_hour or now.minute < trigger_minute:
+        return
+
+    log.info("daily_recap: posting end-of-session retrospective for %s", today)
+    _recap_fired_date = today
+    try:
+        await _post_retrospective()
+    except Exception as exc:
+        log.exception("daily_recap: failed to post retrospective: %s", exc)
+
+
 @on_config_reload
 def _apply_scan_interval_change(changed: dict):
     """SCAN_INTERVAL_MINUTES is baked into @tasks.loop() at decoration time
@@ -495,6 +583,8 @@ async def on_ready():
         config_watcher.start()
     if not trade_monitor.is_running():
         trade_monitor.start()
+    if not daily_recap.is_running():
+        daily_recap.start()
     await _refresh_presence()
 
     # Sync slash commands to Discord (runs once on startup; safe to call every time)
@@ -506,8 +596,8 @@ async def on_ready():
 
     # Post a startup notice to the alerts channel so there's a visible
     # timestamp in Discord for when the bot came (back) online.
-    if config.CHANNEL_ID:
-        channel = bot.get_channel(int(config.CHANNEL_ID))
+    if config.DISCORD_CHANNEL_TRADES_ID:
+        channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
         if channel:
             open_count = trade_log.get_stats()["open"]
             await channel.send(
@@ -516,6 +606,32 @@ async def on_ready():
                 f"scan every {config.SCAN_INTERVAL_MINUTES} min · watchlist: {wl_size} ticker(s) · "
                 f"open trades: {open_count} · min confidence: Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}"
             )
+
+
+@bot.command(name="recap")
+async def recap_cmd(ctx, date_arg: str = ""):
+    """
+    Post today's (or a specific day's) retrospective on demand.
+
+    Usage:
+      !recap              → today in Berlin time
+      !recap 2026-07-04   → specific date (YYYY-MM-DD)
+    """
+    import datetime as _dt
+    today = None
+    if date_arg:
+        try:
+            today = _dt.date.fromisoformat(date_arg)
+        except ValueError:
+            await ctx.send(f"⚠️ Unrecognised date `{date_arg}`. Use YYYY-MM-DD.")
+            return
+
+    await ctx.send("⏳ Building retrospective…")
+    try:
+        await _post_retrospective(channel_id_override=ctx.channel.id)
+    except Exception as exc:
+        log.exception("!recap failed: %s", exc)
+        await ctx.send(f"❌ Failed to build retrospective: {exc}")
 
 
 @bot.command(name="check")
@@ -801,4 +917,4 @@ async def stop_cmd(ctx):
         return
     scan_engine.request_stop()
     log.info("Stop requested via !stop (by %s).", ctx.author)
-    await ctx.send("\U0001f6d1 **Stop requested** — the running scan will end after finishing its current ticker.")
+    await ctx.send("🛑 **Stop requested** — the running scan will end after finishing its current ticker.")

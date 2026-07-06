@@ -405,18 +405,18 @@ async def notify_closed_trades(bot, newly_closed: list):
     """Send a notification for every newly-closed trade (win, loss, or manual close)."""
     if not newly_closed:
         return
-    if not config.CLOSED_TRADES_CHANNEL_ID:
+    if not config.DISCORD_CHANNEL_TRADES_HISTORY_ID:
         log.warning(
-            "notify_closed_trades: CLOSED_TRADES_CHANNEL_ID is not set in .env — "
+            "notify_closed_trades: DISCORD_CHANNEL_TRADES_HISTORY_ID is not set in .env — "
             "cannot post closed-trade notifications. Set it in Settings > Discord Connection."
         )
         return
-    channel = bot.get_channel(int(config.CLOSED_TRADES_CHANNEL_ID))
+    channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
     if channel is None:
         try:
-            channel = await bot.fetch_channel(int(config.CLOSED_TRADES_CHANNEL_ID))
+            channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.CLOSED_TRADES_CHANNEL_ID, _ce)
+            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
             return
     for trade in newly_closed:
         status = trade.get("status", "")
@@ -457,14 +457,14 @@ def build_near_close_embed(warning: dict) -> discord.Embed:
 
 
 async def notify_near_close(bot, warnings: list):
-    if not warnings or not config.CLOSED_TRADES_CHANNEL_ID:
+    if not warnings or not config.DISCORD_CHANNEL_TRADES_HISTORY_ID:
         return
-    channel = bot.get_channel(int(config.CLOSED_TRADES_CHANNEL_ID))
+    channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
     if channel is None:
         try:
-            channel = await bot.fetch_channel(int(config.CLOSED_TRADES_CHANNEL_ID))
+            channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.CLOSED_TRADES_CHANNEL_ID, _ce)
+            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
             return
     for warning in warnings:
         try:
