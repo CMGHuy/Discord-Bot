@@ -9,7 +9,7 @@
          onerror="this.style.display='none'">
     {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
   </p>
-  <div class="chart-wrap" id="chart-wrap">
+  <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">
     <div class="chart-loading" id="chart-loading">
       <div class="chart-spinner"></div>
       <span>Generating chart for {{ t.ticker }}…</span>
@@ -18,7 +18,7 @@
          src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
          alt="Chart for {{ t.ticker }}"
          style="display:none;"
-         onload="this.style.display=''; document.getElementById('chart-loading').style.display='none';"
+         onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
          onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
   </div>
 </div>
@@ -104,4 +104,191 @@
   <p class="muted">This trade was logged before the admin UI captured the full alert detail &mdash; only the core trade plan above is available.</p>
 </div>
 {% endif %}
+{# ── Lightbox (tap-to-enlarge chart with pinch-zoom + pan) ────────────────── #}
+<div id="lb-overlay" style="display:none; position:fixed; inset:0; z-index:9000;
+     background:rgba(0,0,0,0.92); touch-action:none; cursor:zoom-out;"
+     aria-label="Chart lightbox — tap to close">
+  <button id="lb-close" aria-label="Close"
+          style="position:absolute; top:14px; right:16px; z-index:9001;
+                 background:rgba(255,255,255,0.1); border:none; color:#fff;
+                 font-size:24px; width:44px; height:44px; border-radius:50%;
+                 cursor:pointer; display:flex; align-items:center; justify-content:center;">&#10005;</button>
+  <img id="lb-img" alt="Enlarged chart"
+       style="position:absolute; top:50%; left:50%; transform-origin:0 0;
+              max-width:none; max-height:none; user-select:none; -webkit-user-drag:none;">
+</div>
+
+<script>
+(function() {
+  var overlay = document.getElementById('lb-overlay');
+  var lbImg   = document.getElementById('lb-img');
+  var closeBtn = document.getElementById('lb-close');
+  if (!overlay || !lbImg) return;
+
+  // State
+  var scale = 1, minScale = 1, maxScale = 8;
+  var tx = 0, ty = 0;           // current translation (px, centred when scale=1)
+  var imgNatW = 0, imgNatH = 0; // natural image dimensions
+  var vw = 0, vh = 0;           // viewport dimensions
+
+  function applyTransform() {
+    lbImg.style.transform =
+      'translate(-50%, -50%) translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+  }
+
+  function clampTranslation() {
+    // Prevent panning past image edges when zoomed in
+    var halfW = (imgNatW * scale) / 2;
+    var halfH = (imgNatH * scale) / 2;
+    var maxTx = Math.max(0, halfW - vw / 2);
+    var maxTy = Math.max(0, halfH - vh / 2);
+    tx = Math.max(-maxTx, Math.min(maxTx, tx));
+    ty = Math.max(-maxTy, Math.min(maxTy, ty));
+  }
+
+  window.openLightbox = function(src) {
+    vw = window.innerWidth; vh = window.innerHeight;
+    lbImg.src = src;
+    lbImg.onload = function() {
+      imgNatW = lbImg.naturalWidth  || vw;
+      imgNatH = lbImg.naturalHeight || vh;
+      // Fit image to viewport at scale=1
+      var fitScale = Math.min(vw / imgNatW, vh / imgNatH, 1);
+      minScale = fitScale;
+      scale = fitScale;
+      tx = 0; ty = 0;
+      applyTransform();
+    };
+    scale = 1; tx = 0; ty = 0;
+    applyTransform();
+    overlay.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  };
+
+  function closeLightbox() {
+    overlay.style.display = 'none';
+    document.body.style.overflow = '';
+    lbImg.src = '';
+  }
+
+  closeBtn.addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+
+  // Click/tap outside image (on overlay) closes
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeLightbox();
+  });
+
+  // ── Mouse wheel zoom ────────────────────────────────────────────────────
+  overlay.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    var delta = e.deltaY > 0 ? 0.85 : 1.18;
+    var newScale = Math.max(minScale, Math.min(maxScale, scale * delta));
+    // Zoom toward cursor position
+    var rect = overlay.getBoundingClientRect();
+    var cx = e.clientX - rect.left - vw / 2;
+    var cy = e.clientY - rect.top  - vh / 2;
+    tx = cx + (tx - cx) * (newScale / scale);
+    ty = cy + (ty - cy) * (newScale / scale);
+    scale = newScale;
+    clampTranslation();
+    applyTransform();
+  }, { passive: false });
+
+  // ── Mouse drag ──────────────────────────────────────────────────────────
+  var dragging = false, dragStartX = 0, dragStartY = 0, dragTx = 0, dragTy = 0;
+  overlay.addEventListener('mousedown', function(e) {
+    if (e.target === closeBtn) return;
+    dragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    dragTx = tx; dragTy = ty;
+    overlay.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    tx = dragTx + (e.clientX - dragStartX);
+    ty = dragTy + (e.clientY - dragStartY);
+    clampTranslation();
+    applyTransform();
+  });
+  window.addEventListener('mouseup', function() {
+    dragging = false;
+    overlay.style.cursor = 'zoom-out';
+  });
+
+  // ── Touch: pinch-zoom + pan ─────────────────────────────────────────────
+  var lastDist = 0, lastMidX = 0, lastMidY = 0;
+  var touchStartTx = 0, touchStartTy = 0;
+  var singleTouchStartX = 0, singleTouchStartY = 0;
+
+  function touchDist(t) {
+    var dx = t[0].clientX - t[1].clientX;
+    var dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  function touchMid(t) {
+    return {
+      x: (t[0].clientX + t[1].clientX) / 2,
+      y: (t[0].clientY + t[1].clientY) / 2
+    };
+  }
+
+  overlay.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      lastDist = touchDist(e.touches);
+      var mid = touchMid(e.touches);
+      lastMidX = mid.x; lastMidY = mid.y;
+      touchStartTx = tx; touchStartTy = ty;
+    } else if (e.touches.length === 1) {
+      singleTouchStartX = e.touches[0].clientX;
+      singleTouchStartY = e.touches[0].clientY;
+      touchStartTx = tx; touchStartTy = ty;
+    }
+  }, { passive: false });
+
+  overlay.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      var dist = touchDist(e.touches);
+      var mid  = touchMid(e.touches);
+      var ratio = dist / lastDist;
+      var newScale = Math.max(minScale, Math.min(maxScale, scale * ratio));
+      // Zoom toward pinch midpoint
+      var cx = mid.x - vw / 2;
+      var cy = mid.y - vh / 2;
+      tx = cx + (tx - cx) * (newScale / scale);
+      ty = cy + (ty - cy) * (newScale / scale);
+      // Also pan by midpoint movement
+      tx += mid.x - lastMidX;
+      ty += mid.y - lastMidY;
+      scale = newScale;
+      lastDist = dist; lastMidX = mid.x; lastMidY = mid.y;
+      clampTranslation();
+      applyTransform();
+    } else if (e.touches.length === 1) {
+      tx = touchStartTx + (e.touches[0].clientX - singleTouchStartX);
+      ty = touchStartTy + (e.touches[0].clientY - singleTouchStartY);
+      clampTranslation();
+      applyTransform();
+    }
+  }, { passive: false });
+
+  // Double-tap to reset zoom
+  var lastTap = 0;
+  overlay.addEventListener('touchend', function(e) {
+    var now = Date.now();
+    if (now - lastTap < 300 && e.changedTouches.length === 1) {
+      if (Math.abs(scale - minScale) < 0.01) {
+        scale = Math.min(maxScale, minScale * 2.5);
+      } else {
+        scale = minScale; tx = 0; ty = 0;
+      }
+      clampTranslation();
+      applyTransform();
+    }
+    lastTap = now;
+  });
+})();
+</script>
 {% endblock %}

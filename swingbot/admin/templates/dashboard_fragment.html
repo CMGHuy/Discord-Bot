@@ -249,7 +249,7 @@
       {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
       <td data-sort="{{ cur_price if cur_price is not none else 0 }}"
           class="{% if cur_price is not none and is_market_active %}price-live{% endif %}"
-          style="color: {% if cur_price is none %}#5a6275{% elif price_is_good %}{{ status.color }}{% else %}{{ status.color }}{% endif %}; --price-color: {{ status.color }};"
+          style="color: {% if cur_price is none %}#5a6275{% elif price_is_good %}#6dda9e{% else %}#e07070{% endif %}; font-weight: {% if cur_price is not none %}600{% else %}400{% endif %};"
           title="{% if cur_price is not none %}{{ 'Up from entry' if price_is_good else 'Down from entry' }} · prices refresh ~15s (incl. pre/aftermarket){% endif %}">
         {%- if cur_price is not none -%}
           {{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(cur_price) }}

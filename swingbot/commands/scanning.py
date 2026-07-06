@@ -16,7 +16,11 @@ from swingbot.core.performance import TradeLog
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.watchlist import load_watchlist
 
-_TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
+_TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
+# Queue file written by the admin UI when a trade is manually closed.
+# Each line is a JSON-encoded trade record; the bot drains it and posts
+# to CLOSED_TRADES_CHANNEL_ID, then deletes the file.
+_MANUAL_CLOSE_QUEUE   = os.path.join(config.DATA_DIR, "manual_close_notify.json")
 _PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 _HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
 
@@ -285,6 +289,26 @@ async def config_watcher():
                             await channel.send(fmt_fn(old_val, new_val))
                         except Exception as _e:
                             log.warning("Could not post config-change notice to Discord: %s", _e)
+
+    # --- Admin UI manual-close notification queue ---
+    if os.path.exists(_MANUAL_CLOSE_QUEUE):
+        try:
+            with open(_MANUAL_CLOSE_QUEUE, "r") as _qf:
+                _queued = json.load(_qf)
+        except Exception as _qe:
+            log.warning("Could not read manual_close_notify queue: %s", _qe)
+            _queued = []
+        if _queued:
+            try:
+                os.remove(_MANUAL_CLOSE_QUEUE)
+            except OSError:
+                pass
+            from swingbot.core.scanning.embeds import notify_closed_trades
+            try:
+                await notify_closed_trades(bot, _queued)
+                log.info("Posted %d manually-closed trade notification(s) to Discord.", len(_queued))
+            except Exception as _ne:
+                log.warning("Failed to post manual-close notifications: %s", _ne)
 
     # --- Admin UI "Run !check now" trigger ---
     if os.path.exists(_TRIGGER_FILE):

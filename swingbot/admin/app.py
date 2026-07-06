@@ -63,7 +63,8 @@ from .helpers import (
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
-TRIGGER_FILE = os.path.join(config.DATA_DIR, "trigger_check.flag")
+TRIGGER_FILE        = os.path.join(config.DATA_DIR, "trigger_check.flag")
+MANUAL_CLOSE_QUEUE  = os.path.join(config.DATA_DIR, "manual_close_notify.json")
 PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 
 NAV_ITEMS = [
@@ -489,6 +490,27 @@ def close_trade(trade_id):
     # so an unlocked read-modify-write here could race a concurrent write
     # from the bot and corrupt or lose data.
     tl.close_trade_manual(trade_id, reason="manual (admin UI)")
+
+    # Queue a Discord notification so the bot posts to CLOSED_TRADES_CHANNEL_ID.
+    # The admin UI and bot run in separate processes; we share data via a JSON
+    # queue file, same pattern as the scan-trigger flag.
+    try:
+        # Re-read the trade after closing so we get the updated closed_at / status
+        closed_t = tl.get_trade_by_id(trade_id) or {}
+        if closed_t:
+            existing: list = []
+            if os.path.exists(MANUAL_CLOSE_QUEUE):
+                try:
+                    with open(MANUAL_CLOSE_QUEUE, "r") as _qf:
+                        existing = json.load(_qf)
+                except Exception:
+                    existing = []
+            existing.append(closed_t)
+            with open(MANUAL_CLOSE_QUEUE, "w") as _qf:
+                json.dump(existing, _qf)
+    except Exception as _qe:
+        log.warning("Could not queue manual-close notification for %s: %s", trade_id, _qe)
+
     return redirect(url_for("index", msg=f"Trade {t['ticker']} marked as closed.", ok=1))
 
 
@@ -733,31 +755,4 @@ def resume_scan():
         ok = 1
     except Exception as e:
         msg = f"Could not remove pause file: {e}"
-        ok = 0
-    return redirect(url_for("index", msg=msg, ok=ok))
-
-
-@app.route("/scan/stop", methods=["POST"])
-@require_auth
-def stop_scan():
-    """Ask the bot to stop whatever scan is currently running (!check,
-    /check, this admin UI's own "Run !check now" trigger, or the
-    automatic session scan). Different from pause: pause only stops
-    FUTURE automatic scans, this cuts short one already in progress.
-    Cooperative -- takes effect at the scan's next per-ticker checkpoint,
-       Cooperative -- takes effect at the scan's next per-ticker checkpoint,
-    not instantly (see scan_engine.request_stop())."""
-    try:
-        request_stop()
-        msg = "Stop requested — the running scan will end after finishing its current ticker."
-        ok = 1
-    except Exception as e:
-        msg = f"Could not request stop: {e}"
-        ok = 0
-    return redirect(url_for("index", msg=msg, ok=ok))
-
-
-def main():
-    host = os.getenv("ADMIN_HOST", "0.0.0.0")
-    port = int(os.getenv("ADMIN_PORT", 1234))
-    app.run(host=host, port=port, debug=False)
+     

@@ -314,29 +314,95 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
 
 
 def build_closed_trade_embed(trade: dict) -> discord.Embed:
-    won = trade["status"] == "win"
-    outcome_word = "WIN" if won else "LOSS"
-    color = discord.Color.green() if won else discord.Color.red()
-    pct = (trade["exit_price"] - trade["entry"]) / trade["entry"] * 100
-    if trade["direction"] == "bearish":
-        pct = -pct
-    cur = get_currency_symbol(trade["ticker"], config.CURRENCY_SYMBOL)
-    title = f"{'✅' if won else '❌'} TRADE CLOSED: {outcome_word} — {trade['ticker']}"
+    """Build a rich embed for a trade that just closed (win, loss, or manual close)."""
+    status   = trade["status"]   # "win" | "loss" | "closed"
+    won      = status == "win"
+    manual   = status == "closed"
+
+    if manual:
+        outcome_word = "MANUALLY CLOSED"
+        icon  = "🔒"
+        color = discord.Color.from_rgb(90, 98, 117)   # grey
+    elif won:
+        outcome_word = "WIN ✅"
+        icon  = "✅"
+        color = discord.Color.green()
+    else:
+        outcome_word = "LOSS ❌"
+        icon  = "❌"
+        color = discord.Color.red()
+
+    cur        = get_currency_symbol(trade["ticker"], config.CURRENCY_SYMBOL)
+    exit_price = trade.get("exit_price")
+    entry      = trade.get("entry", 0.0)
+    is_bull    = trade.get("direction") == "bullish"
+
+    # Realized P&L — only meaningful when we have an exit price
+    if exit_price is not None and entry:
+        raw_pct = (exit_price - entry) / entry * 100
+        pct     = raw_pct if is_bull else -raw_pct
+        pnl_str = f"{pct:+.2f}%"
+    else:
+        pnl_str = "n/a"
+
+    # R-multiple — risk_per_share is stored on the trade if sizing was active
+    risk = trade.get("risk_per_share") or abs(entry - trade.get("stop_loss", entry)) or None
+    if risk and exit_price is not None:
+        realized = (exit_price - entry) if is_bull else (entry - exit_price)
+        r_str    = f"{realized / risk:+.2f}R"
+    else:
+        r_str = "n/a"
+
+    title = f"{icon} {trade['ticker']} — {outcome_word}"
     embed = discord.Embed(title=title, color=color)
-    embed.add_field(name="Result", value=f"**{outcome_word}** ({pct:+.2f}%)", inline=False)
-    embed.add_field(name="Setup", value=f"{trade['strategy']} ({trade['horizon_key']})", inline=True)
-    embed.add_field(name="Direction", value="LONG" if trade["direction"] == "bullish" else "SHORT", inline=True)
-    embed.add_field(name="Confidence", value=f"{trade['confidence_label']} (Lv{trade['confidence_level']})", inline=True)
-    embed.add_field(name="Entry", value=f"{cur}{trade['entry']:.2f}", inline=True)
-    embed.add_field(name="Exit", value=f"{cur}{trade['exit_price']:.2f}", inline=True)
-    embed.add_field(name="Change", value=f"{pct:+.2f}%", inline=True)
-    embed.add_field(name="Opened", value=trade["opened_at"][:19], inline=True)
-    embed.add_field(name="Closed", value=trade["closed_at"][:19], inline=True)
+
+    # Top summary line
+    result_parts = [outcome_word, f"P&L: {pnl_str}", f"R: {r_str}"]
+    embed.add_field(name="Result", value=" · ".join(result_parts), inline=False)
+
+    # Trade plan
+    embed.add_field(name="Setup",      value=f"{trade.get('strategy','?')} ({trade.get('horizon_key','?')})", inline=True)
+    embed.add_field(name="Direction",  value="LONG" if is_bull else "SHORT", inline=True)
+    embed.add_field(name="Confidence", value=f"{trade.get('confidence_label','?')} (Lv{trade.get('confidence_level','?')})", inline=True)
+    embed.add_field(name="Entry",  value=f"{cur}{entry:.2f}", inline=True)
+    if exit_price is not None:
+        embed.add_field(name="Exit", value=f"{cur}{exit_price:.2f}", inline=True)
+    else:
+        embed.add_field(name="Exit", value="—  (manually closed, no price recorded)", inline=True)
+    embed.add_field(name="Stop loss",  value=f"{cur}{trade.get('stop_loss', 0):.2f}", inline=True)
+    embed.add_field(name="Target",     value=f"{cur}{trade.get('take_profit', 0):.2f}", inline=True)
+    if trade.get("risk_reward_ratio"):
+        embed.add_field(name="R:R at open", value=f"{trade['risk_reward_ratio']}:1", inline=True)
+
+    # Holding period
+    try:
+        from datetime import datetime, timezone
+        opened  = datetime.fromisoformat(trade["opened_at"])
+        closed_ = datetime.fromisoformat(trade["closed_at"])
+        days    = max(0, (closed_ - opened).days)
+        embed.add_field(name="Held", value=f"{days}d  ({trade['opened_at'][:10]} → {trade['closed_at'][:10]})", inline=False)
+    except Exception:
+        pass
+
+    # Lesson learned / original explanation
+    explanation = trade.get("explanation") or ""
+    if explanation.strip():
+        # Discord field values max 1024 chars
+        lesson = explanation.strip()
+        if len(lesson) > 1000:
+            lesson = lesson[:997] + "…"
+        embed.add_field(name="📖 Why this trade was opened", value=lesson, inline=False)
+
+    close_reason = trade.get("close_reason", "")
+    if close_reason:
+        embed.add_field(name="Close reason", value=close_reason, inline=False)
+
     embed.set_footer(text=f"Trade ID: {trade['id']}")
     return embed
 
 
 async def notify_closed_trades(bot, newly_closed: list):
+    """Send a notification for every newly-closed trade (win, loss, or manual close)."""
     if not newly_closed or not config.CLOSED_TRADES_CHANNEL_ID:
         return
     channel = bot.get_channel(int(config.CLOSED_TRADES_CHANNEL_ID))
@@ -347,9 +413,15 @@ async def notify_closed_trades(bot, newly_closed: list):
             log.warning("Could not resolve closed-trades channel %s: %s", config.CLOSED_TRADES_CHANNEL_ID, _ce)
             return
     for trade in newly_closed:
+        status = trade.get("status", "")
+        if status not in ("win", "loss", "closed"):
+            continue   # skip anything unexpected (still-open, etc.)
         try:
-            outcome_word = "WIN" if trade["status"] == "win" else "LOSS"
-            await channel.send(content=f"**{outcome_word}** — {trade['ticker']} (`{trade['id']}`)", embed=build_closed_trade_embed(trade))
+            embed = build_closed_trade_embed(trade)
+            # Compact header line so the embed title stands out
+            header_map = {"win": "✅ WIN", "loss": "❌ LOSS", "closed": "🔒 CLOSED"}
+            header = f"{header_map.get(status, status.upper())} — **{trade['ticker']}**"
+            await channel.send(content=header, embed=embed)
         except Exception as e:
             log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e)
 
