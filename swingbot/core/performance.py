@@ -927,6 +927,7 @@ class TradeLog:
                     r_multiple = round(pnl_pct / risk_pct, 3)
 
             trades_out.append({
+                "id":           t.get("id"),
                 "ticker":       t.get("ticker", ""),
                 "direction":    t.get("direction", ""),
                 "horizon_key":  t.get("horizon_key") or "",

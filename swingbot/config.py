@@ -316,7 +316,7 @@ FIELDS: list[Field] = [
           type="number", default="1234", min=1, max=65535, step=1, hot_reloadable=False,
           help="Requires restarting the ADMIN container (Flask can't rebind its own port live)."),
     Field("DASHBOARD_REFRESH_SECONDS", "DASHBOARD_REFRESH_SECONDS", "Admin UI", "Dashboard auto-refresh (seconds)",
-          type="number", default="10", min=2, max=300, step=1,
+          type="number", default="15", min=2, max=300, step=1,
           help="How often the Dashboard page's open-trades table auto-refreshes while the 'Auto-refresh' "
                "checkbox is on. Takes effect on your next Dashboard page load -- no restart needed."),
     Field("LOGS_REFRESH_SECONDS", "LOGS_REFRESH_SECONDS", "Admin UI", "Logs auto-refresh (seconds)",

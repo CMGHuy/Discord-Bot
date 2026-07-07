@@ -624,8 +624,8 @@
       Show
       <select id="ct-per-page"
               style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
+        <option value="10" selected>10</option>
+        <option value="25">25</option>
         <option value="50">50</option>
         <option value="0">All</option>
       </select>
@@ -751,7 +751,7 @@
     // function) so both sides see the same live state.
     var allRows = [];
     var STORAGE_KEY = 'ct_per_page';
-    var savedPP = parseInt(localStorage.getItem(STORAGE_KEY) || '25');
+    var savedPP = parseInt(localStorage.getItem(STORAGE_KEY) || '10');
     var ppSel = document.getElementById('ct-per-page');
     ppSel.value = String(savedPP);
     var perPage = savedPP;
