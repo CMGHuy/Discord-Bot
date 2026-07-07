@@ -366,7 +366,12 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .kv td:first-child { color: #7a8299; width: 230px; font-size: 12.5px; }
 .kv tr:last-child td { border-bottom: none; }
 .chart-wrap { text-align: center; margin-top: 10px; min-height: 80px; }
-.chart-wrap img { max-width: 100%; border-radius: 10px; border: 1px solid #1f2330; }
+/* width:100% (not just max-width) so the chart image actually stretches to
+   fill the full card width it's sitting in -- previously it only capped OUT
+   at 100% (never exceeding the card), but displayed at its own smaller
+   generated/natural pixel size whenever that was narrower than the card,
+   leaving empty space on either side instead of filling the available area. */
+.chart-wrap img { width: 100%; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid #1f2330; display: block; margin: 0 auto; }
 
 /* ---- Chart loading state (trade detail: chart generation can take several seconds) ---- */
 .chart-loading {
