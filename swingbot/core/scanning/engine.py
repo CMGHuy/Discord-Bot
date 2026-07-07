@@ -450,9 +450,28 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                        ticker, horizon_key, len(supports), len(resistances))
             floor_pct = levels.atr_floor_pct(df, current_price, h)
-            scenarios = levels.build_scenarios(current_price, supports, resistances, config.MIN_REWARD_PCT,
+            # Reward/stop bounds are widened to this horizon's OWN scale
+            # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
+            # in strategy_types.py -- 5%/3% for a 2-week swing up to 22%/11%
+            # for a 9-month swing) rather than the flat, horizon-blind
+            # config.MIN_REWARD_PCT/MAX_STOP_LOSS_PCT (3%/7%) that used to be
+            # applied identically to every horizon from 2 weeks to 9 months.
+            # That flat floor let a "9-month swing" scenario qualify with
+            # just a 3% target and sit inside a 2-7% stop -- a box small
+            # enough for a couple of ordinary trading days' volatility to
+            # fully traverse, which is exactly why trades meant to run for
+            # weeks/months were actually closing (hitting either side) within
+            # hours or a few days, and why genuine longer-term theses were
+            # getting stopped out by routine noise instead of a real reversal.
+            # config.MIN_REWARD_PCT/MIN_STOP_DISTANCE_PCT still apply as the
+            # user-configured ABSOLUTE floors (never loosened below whatever
+            # the admin UI has set), just no longer able to override a longer
+            # horizon's own wider, more appropriate requirement.
+            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT))
+            effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
+            scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                                 atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
-                                                max_stop_distance_pct=config.MAX_STOP_LOSS_PCT,
+                                                max_stop_distance_pct=effective_max_stop,
                                                 min_risk_reward=config.MIN_RISK_REWARD_RATIO)
             checked_count += 1
             if not scenarios:

@@ -35,6 +35,11 @@ except Exception:
 
 from swingbot import config
 from swingbot.core import account as account_module
+from swingbot.core.strategy_types import HORIZONS as _HORIZONS
+
+# Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
+# settings are tuned for -- see check_near_tp_timeout()'s horizon-scaling below.
+_NEAR_TP_BASELINE_HORIZON_DAYS = _HORIZONS.get("2w", {}).get("max_holding_days", 14)
 
 _LOCK = Lock()
 
@@ -720,13 +725,8 @@ class TradeLog:
 
         now = datetime.now(timezone.utc)
         threshold = config.NEAR_TP_TIMEOUT_THRESHOLD_PCT / 100.0
-        timeout = config.NEAR_TP_TIMEOUT_MINUTES
-        stall_minutes = getattr(config, "NEAR_TP_STALL_CHECK_MINUTES", 0) or 0
-        # Stall window must be strictly shorter than the full timeout, or it's
-        # meaningless as an "early" check -- clamp defensively in case of a
-        # misconfigured .env rather than trusting the raw value.
-        if stall_minutes >= timeout:
-            stall_minutes = 0
+        base_timeout = config.NEAR_TP_TIMEOUT_MINUTES
+        base_stall_minutes = getattr(config, "NEAR_TP_STALL_CHECK_MINUTES", 0) or 0
         stall_max_fluct = (getattr(config, "NEAR_TP_STALL_MAX_FLUCTUATION_PCT", 0) or 0) / 100.0
 
         def _parse_ts(iso_ts):
@@ -744,6 +744,30 @@ class TradeLog:
             target = trade.get("take_profit")
             if not entry or not target or entry == target:
                 continue   # malformed record -- nothing sane to measure progress against
+
+            # NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES are tuned
+            # for the SHORTEST horizon (2w, max_holding_days=14) -- applying
+            # that same few-minutes clock to a 9-month swing trade meant to
+            # take up to 270 days to play out was closing multi-month theses
+            # within minutes of merely nudging 80% toward target, which is
+            # exactly why trades meant to run for weeks/months were actually
+            # closing within hours. Scale both windows up proportionally to
+            # how much longer this trade's own horizon is meant to run than
+            # the 2-week baseline, so a longer-horizon trade gets proportionally
+            # longer to actually reach its target (or genuinely stall there)
+            # before being force-closed early.
+            horizon_days = _HORIZONS.get(trade.get("horizon_key"), {}).get(
+                "max_holding_days", _NEAR_TP_BASELINE_HORIZON_DAYS
+            )
+            scale = max(1.0, horizon_days / _NEAR_TP_BASELINE_HORIZON_DAYS)
+            timeout = base_timeout * scale
+            stall_minutes = base_stall_minutes * scale
+            # Stall window must be strictly shorter than the full timeout, or it's
+            # meaningless as an "early" check -- clamp defensively in case of a
+            # misconfigured .env rather than trusting the raw value.
+            if stall_minutes >= timeout:
+                stall_minutes = 0
+
             is_bull = trade["direction"] == "bullish"
             reward = (target - entry) if is_bull else (entry - target)
             if reward <= 0:

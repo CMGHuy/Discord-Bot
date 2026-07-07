@@ -21,18 +21,16 @@ a { color: #6ea8fe; }
 .sidebar {
   width: 210px; flex-shrink: 0; background: #13161d; border-right: 1px solid #1f2330;
   display: flex; flex-direction: column; padding: 0; position: sticky; top: 0;
-  /* min-height (not a flat height:100vh) -- height:100vh capped the
-     sidebar's own box at exactly one viewport tall, so on any page whose
-     content (.content) is taller than the viewport -- which is most of
-     them, e.g. Performance -- the sidebar's dark background ran out
-     partway down and the page's plain background showed through below it
-     instead of the sidebar visually spanning the whole page. min-height
-     here still guarantees a full-viewport-tall sidebar on short pages, but
-     now also lets flexbox's default stretch behavior (the .shell row's
-     cross-axis) grow it to match whatever the tallest sibling (.content)
-     actually needs, with position:sticky still keeping its own nav content
-     pinned to the viewport as you scroll either way. */
-  min-height: 100vh; overflow-y: auto;
+  /* Locked to exactly one viewport tall (not min-height, which let the
+     sidebar stretch to match tall page content and pushed the footer --
+     Last updated + version tags -- below the fold, forcing a scroll to see
+     it). height:100vh + position:sticky keeps the sidebar's own box pinned
+     to exactly the viewport at all times, on every page, regardless of how
+     tall .content is. The <nav> list below is the only part that grows/
+     scrolls internally (flex:1 + overflow-y:auto on nav itself), so .brand
+     up top and .sidebar-footer down below always stay in view without any
+     scrolling of the sidebar as a whole. */
+  height: 100vh; overflow: hidden;
 }
 .sidebar .brand {
   display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 20px 16px;
@@ -49,7 +47,12 @@ a { color: #6ea8fe; }
 }
 .sidebar .brand .brand-row { display: flex; align-items: center; gap: 10px; }
 .sidebar .brand .logo { font-size: 22px; }
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; padding: 10px 8px; }
+/* flex:1 lets nav soak up whatever space is left between .brand (top) and
+   .sidebar-footer/.font-size-control (bottom) inside the viewport-locked
+   .sidebar box; its own overflow-y:auto means if there are ever more nav
+   items than fit, THIS list scrolls internally instead of the footer
+   getting pushed off the bottom of the screen. */
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; padding: 10px 8px; overflow-y: auto; min-height: 0; }
 .sidebar nav a {
   display: flex; align-items: center; gap: 10px; padding: 9px 12px; color: #8a92a6;
   text-decoration: none; font-size: 13.5px; border-radius: 7px; transition: background 0.12s;
