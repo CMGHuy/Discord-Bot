@@ -36,6 +36,17 @@
   renderBanner();
   // Re-render each minute (fragment is polled every ~5s so this stays fresh)
   setTimeout(function repeat(){ renderBanner(); setTimeout(repeat, 60000); }, (60 - new Date().getUTCSeconds()) * 1000);
+
+  // Also exposed globally so dashboard.html's refreshDashboard() can force a
+  // fresh render after EVERY auto-refresh tick, not just rely on morphdom's
+  // onBeforeElUpdated skip (which preserves this subtree so its self-driven
+  // 60s timer above keeps running, but only if that timer is still alive --
+  // e.g. a slow tab getting throttled/backgrounded by the browser can pause
+  // setTimeout chains, which previously meant the banner could go stale or
+  // blank until the tab regained focus). Calling this explicitly on every
+  // fetch makes the banner self-healing regardless of what happened to the
+  // original timer, exactly like refreshClosedTradesTable/refreshOpenTradesTable.
+  window.renderSessionBanner = renderBanner;
 })();
 </script>
 
@@ -61,6 +72,27 @@
         ({{ stats.account.trades_closed_today }} closed today)
       {% endif %}
     </div>
+  </div>
+  <div class="stat-card stat-card-wide"
+       title="What a trade actually costs right now, based on today's account balance and sizing settings. This only reflects trades opened under these exact settings -- an already-open trade keeps whatever it was actually sized at when it opened (see the Unreal. P&amp;L column tooltip below), so it won't retroactively match this if you've changed the balance, risk %, or sizing mode since.">
+    <div class="stat-label">Position premium per trade</div>
+    {% if sizing_note.mode == 'account_pct' %}
+      <div class="stat-value" style="color: #6ea8fe;">
+        {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.premium) }}
+      </div>
+      <div class="stat-sub">
+        fixed -- Account % mode, {{ sizing_note.position_pct }}% of balance every trade
+      </div>
+    {% else %}
+      <div class="stat-value" style="color: #e2b25a;">
+        up to {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.max_position) }}
+      </div>
+      <div class="stat-sub">
+        Risk % mode -- risks {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.risk_amount) }} ({{ sizing_note.risk_pct }}%) if stopped out,
+        capped at {{ sizing_note.max_position_pct }}% of balance. Varies per trade with stop distance --
+        switch to <code>!account sizing account</code> for a fixed premium instead.
+      </div>
+    {% endif %}
   </div>
   <div class="stat-card accent-blue">
     <div class="stat-label">Open trades</div>
@@ -188,7 +220,7 @@
           title="Unrealized gain/loss in account currency = shares (snapshotted when this trade was opened) x (current price − entry price), direction-adjusted.">
         Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
       </th>
-      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Time since opened -- hours while under a day old, then days + hours">Days <span class="sort-arrow" data-col-id="days"></span></th>
+      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Time since opened, down to the minute">Days <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="action">Action</th>
     </tr>
@@ -311,9 +343,10 @@
          before shares were snapshotted at all. #}
       {%- set actual_shares = t.shares if t.get('shares') else (sizing.shares if sizing else None) -%}
       {%- set unreal_amt = (actual_shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (actual_shares and cur_price is not none) else None -%}
+      {%- set _snap_mode = t.get('sizing_mode') -%}
       <td data-sort="{{ unreal_amt if unreal_amt is not none else 0 }}"
           style="font-weight:700;color: {% if unreal_amt is none %}#5a6275{% elif unreal_amt >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
-          title="{% if actual_shares and unreal_amt is not none %}~{{ actual_shares }} shares{{ ' (snapshotted at open)' if t.get('shares') else ' (est. -- no snapshot on this older trade)' }} · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(actual_shares * t.entry) }} deployed{% elif actual_shares %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
+          title="{% if actual_shares and unreal_amt is not none %}~{{ actual_shares }} shares{{ ' (snapshotted at open)' if t.get('shares') else ' (est. -- no snapshot on this older trade)' }} · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(actual_shares * t.entry) }} deployed{% if _snap_mode %} · sized under {{ 'Account %' if _snap_mode == 'account_pct' else 'Risk %' }} mode when opened{% if _snap_mode != account_cfg.sizing_mode %} (today's setting is {{ 'Account %' if account_cfg.sizing_mode == 'account_pct' else 'Risk %' }} -- this won't match the current premium note above){% endif %}{% endif %}{% elif actual_shares %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
         {%- if unreal_amt is not none -%}
           {{ '%+.2f'|format(unreal_amt) }} {{ cur_map.get(t.ticker, '') }}
         {%- else -%}
@@ -616,7 +649,7 @@
       <th style="text-align:right;" title="Realized P&L % vs entry">P&amp;L%</th>
       <th style="text-align:right;" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss</th>
       <th style="text-align:right;" title="Realized R-multiple">R</th>
-      <th style="text-align:right;" title="Calendar days from open to close">Days</th>
+      <th style="text-align:right;" title="Time held, from open to close, down to the minute">Days</th>
       <th>Opened</th>
       <th>Closed</th>
       <th style="width:60px;"></th>
@@ -674,7 +707,7 @@
                  color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
         {{ '%+.2f'|format(c_r) if c_r is not none else '—' }}
       </td>
-      <td style="text-align:right;" class="muted">{{ c_days if c_days is not none else '—' }}</td>
+      <td style="text-align:right;white-space:nowrap;" class="muted" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}">{{ c_days.label if c_days is not none else '—' }}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap;" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap;" title="{{ (t.closed_at or '')[:16] }} UTC">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
       <td onclick="event.stopPropagation();" style="padding:4px 6px;display:flex;gap:4px;align-items:center;">

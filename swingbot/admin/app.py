@@ -192,27 +192,35 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 # ---------------------------------------------------------------------------
 # Routes -- Dashboard
 # ---------------------------------------------------------------------------
+def _format_duration_hms(total_seconds: float) -> str:
+    """
+    Human-readable elapsed-time label with day/hour/MINUTE granularity --
+    e.g. "12 minutes", "4 hours 20 minutes", "1 day 5 hours 32 minutes" --
+    used everywhere a "how long has this been open/how long was this held"
+    figure is shown (dashboard's Open Trades + Trade History Days columns).
+    Whole-calendar-days-only (as this used to show) reads as "0" for
+    anything opened/closed same-day regardless of whether that was 10
+    minutes or 23 hours -- this is precise down to the minute instead, and
+    always surfaces hours+minutes even once the duration spans full days,
+    rather than dropping them once a coarser unit is available.
+    """
+    total_seconds = max(0.0, total_seconds)
+    total_minutes = int(total_seconds // 60)
+    days, rem = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    if hours or days:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    return ' '.join(parts)
+
+
 def _format_open_duration(total_hours: float) -> str:
-    """
-    Human-readable "how long has this trade been open" label -- hour
-    granularity under a day (e.g. "4 hours"), then "N day(s) M hours" once
-    it crosses 24h (e.g. "1 day 5 hours"), dropping the hours part when
-    it's exactly a whole number of days. Whole-calendar-days-only (as this
-    used to show) reads as "0" for anything opened today, whether that was
-    10 minutes or 23 hours ago -- this is precise at the hour level instead.
-    """
-    total_hours = max(0.0, total_hours)
-    if total_hours < 1:
-        return "< 1 hour"
-    whole_hours = int(total_hours)
-    if whole_hours < 24:
-        return f"{whole_hours} hour{'s' if whole_hours != 1 else ''}"
-    days = whole_hours // 24
-    rem_hours = whole_hours % 24
-    label = f"{days} day{'s' if days != 1 else ''}"
-    if rem_hours:
-        label += f" {rem_hours} hour{'s' if rem_hours != 1 else ''}"
-    return label
+    """Thin wrapper over _format_duration_hms for callers that already have
+    an elapsed-hours figure (the Open Trades loop below)."""
+    return _format_duration_hms(max(0.0, total_hours) * 3600)
 
 
 def _pos_color(pos_pct: float, entry_pct: float) -> str:
@@ -336,6 +344,35 @@ def _render_dashboard_fragment() -> str:
     # load_account_config's {**defaults, **stored} merge).
     account_cfg = load_account_config()
 
+    # "What does a trade actually cost right now" note for the dashboard --
+    # answers the recurring question of why unrealized P&L on open positions
+    # doesn't match a naive "balance x position %" guess. In Account % mode
+    # the premium IS that exact fixed number every time. In Risk % mode
+    # (the default) there is no single fixed premium -- position value varies
+    # per trade with how far away its stop is, up to the Max position size %
+    # cap -- so we surface the worked-out range instead of a single figure.
+    # Note this reflects TODAY's settings only: any trade opened under a
+    # different balance/risk/mode has its own shares snapshotted at open time
+    # (see account.py's module docstring) and won't retroactively match this.
+    _sizing_balance = float(account_cfg.get("balance", 0))
+    if account_cfg.get("sizing_mode") == "account_pct":
+        _premium = round(_sizing_balance * float(account_cfg.get("position_pct", 0)) / 100.0, 2)
+        sizing_note = {
+            "mode": "account_pct",
+            "premium": _premium,
+            "position_pct": account_cfg.get("position_pct", 0),
+        }
+    else:
+        _risk_amount = round(_sizing_balance * float(account_cfg.get("risk_pct", 0)) / 100.0, 2)
+        _max_position = round(_sizing_balance * float(account_cfg.get("max_position_pct", 0)) / 100.0, 2)
+        sizing_note = {
+            "mode": "risk_pct",
+            "risk_amount": _risk_amount,
+            "risk_pct": account_cfg.get("risk_pct", 0),
+            "max_position": _max_position,
+            "max_position_pct": account_cfg.get("max_position_pct", 0),
+        }
+
     # Per-trade strategy label (reuses chart ranking so dashboard + chart agree).
     strategy_map = {t["id"]: _primary_strategy_label(t) for t in open_trades}
 
@@ -454,12 +491,20 @@ def _render_dashboard_fragment() -> str:
         realized = (ex - en) if t["direction"] == "bullish" else (en - ex)
         return round(realized / risk, 2)
 
-    def _closed_days(t) -> int | None:
+    def _closed_days(t) -> dict | None:
+        """Returns {label, total_hours} -- the full day/hour/minute holding
+        period label (see _format_duration_hms) plus a raw sortable figure,
+        for the Trade History table's Days column."""
         try:
-            return max(0, (
+            elapsed = (
                 datetime.fromisoformat(t["closed_at"]) -
                 datetime.fromisoformat(t["opened_at"])
-            ).days)
+            )
+            total_seconds = max(0.0, elapsed.total_seconds())
+            return {
+                "label": _format_duration_hms(total_seconds),
+                "total_hours": total_seconds / 3600.0,
+            }
         except Exception:
             return None
 
@@ -480,7 +525,7 @@ def _render_dashboard_fragment() -> str:
         open_trades=open_trades, stats=stats, confidence_hex=_confidence_hex,
         cur_map=cur_map, status_map=status_map, strategy_map=strategy_map,
         price_map=price_map, pnl_map=pnl_map, days_map=days_map,
-        sizing_map=sizing_map, account_cfg=account_cfg,
+        sizing_map=sizing_map, account_cfg=account_cfg, sizing_note=sizing_note,
         closed_trades=closed_trades,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
         is_market_active=is_us_market_active(),

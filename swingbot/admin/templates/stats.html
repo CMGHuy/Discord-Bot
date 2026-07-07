@@ -117,6 +117,7 @@
   #confidence-pie-card .chart-wrap,
   #ticker-pie-card .chart-wrap,
   #holding-pie-card .chart-wrap,
+  #horizon-pie-card .chart-wrap,
   #r-multiple-card .chart-wrap,
   #confidence-card .chart-wrap { height: 170px !important; }
 
@@ -414,6 +415,12 @@
       <canvas id="chart-holding-pie"></canvas>
     </div>
   </div>
+  <div class="chart-card" style="margin-top:0;" id="horizon-pie-card">
+    <div class="chart-title">🎯 Trades by horizon</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-horizon-pie"></canvas>
+    </div>
+  </div>
 </div>
 
 <div class="stats-two-col" id="extra-row">
@@ -514,7 +521,7 @@ const CHART_CARD_IDS = [
   'balance-card','activity-card','equity-card','drawdown-card','rolling-card',
   'heatmap-card','pnl-hist-card','dur-hist-card','winloss-pie-card',
   'direction-pie-card','strategy-pie-card','confidence-pie-card','ticker-pie-card',
-  'holding-pie-card','r-multiple-card','confidence-card',
+  'holding-pie-card','horizon-pie-card','r-multiple-card','confidence-card',
   'cum-pnl-card',
 ];
 
@@ -528,6 +535,27 @@ const _berlinDowFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Berli
 function berlinDateStr(date) { return _berlinYmdFmt.format(date); }        // Date -> "YYYY-MM-DD"
 function berlinDateOf(iso)   { return iso ? berlinDateStr(new Date(iso)) : null; } // ISO string -> "YYYY-MM-DD"
 function berlinDow(iso)      { return iso ? _berlinDowFmt.format(new Date(iso)) : null; }
+
+/* Human-readable "how long was this held" label with day/hour/MINUTE
+   granularity -- e.g. "12 minutes", "4 hours 20 minutes", "1 day 5 hours
+   32 minutes" -- mirrors app.py's _format_duration_hms() exactly, so the
+   Trade Log table's Days column reads the same way as the dashboard's
+   Open Trades + Trade History Days columns. `holdingDays` is the fractional
+   day count already provided per-trade by get_chart_data(). */
+function formatHoldingDuration(holdingDays) {
+  if (holdingDays == null) return null;
+  const totalSeconds = Math.max(0, holdingDays * 86400);
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const days = Math.floor(totalMinutes / (24*60));
+  const rem = totalMinutes % (24*60);
+  const hours = Math.floor(rem / 60);
+  const minutes = rem % 60;
+  const parts = [];
+  if (days) parts.push(`${days} day${days!==1?'s':''}`);
+  if (hours || days) parts.push(`${hours} hour${hours!==1?'s':''}`);
+  parts.push(`${minutes} minute${minutes!==1?'s':''}`);
+  return parts.join(' ');
+}
 function berlinYmdParts(date) {
   const [y,m,d] = berlinDateStr(date).split('-').map(Number);
   return { y, m, d };
@@ -791,10 +819,25 @@ function renderAll(tradesIn, balanceHistoryIn) {
         `<div class="kpi-card"><div class="kpi-val">${raw.account_balance != null ? raw.account_balance.toLocaleString() : '—'}</div><div class="kpi-lbl">Account Balance</div></div>` +
         '<div style="grid-column:span 3;padding:12px;color:#5a6275;display:flex;align-items:center;">No closed trades in this range.</div>';
     }
+    // Even with zero trades, keep the Trade Log table in sync (it should
+    // show "0 of 0 trades", not whatever it last displayed) -- see the note
+    // below on why this call is needed at all.
+    if (window.__tlRerender) window.__tlRerender();
     return;
   }
 
   renderAllInner(trades, history);
+
+  // The Trade Log table (further down this file) is bound ONCE at page
+  // load and reads from `currentTrades` (set just above) rather than
+  // re-running its own fetch -- so it has to be told explicitly every time
+  // renderAll() produces a new `trades` set, including the very FIRST call
+  // at page load. Without this, the table stays empty until the user
+  // happens to click a preset/Apply button (whose click handlers already
+  // called this), which is exactly the "Trade Log sometimes shows nothing"
+  // symptom -- it was actually "always empty on load, only fixed by
+  // interacting with the filter bar", not intermittent.
+  if (window.__tlRerender) window.__tlRerender();
 }
 
 /* Split out so the early-return above (zero trades in range) stays simple
@@ -1162,8 +1205,8 @@ $('kpi-strip').innerHTML = kpiHtml;
    hours; HOLD_BUCKET_LABELS[i] describes the [edges[i], edges[i+1]) range,
    with a final open-ended "4+ weeks" catch-all since horizons here run out
    to several months. */
-const HOLD_BUCKET_EDGES_H  = [0, 4, 8, 12, 24, 48, 72, 120, 168, 336, 672, Infinity];
-const HOLD_BUCKET_LABELS   = ['0-4h','4-8h','8-12h','12-24h','2 days','3 days','5 days','1 week','2 weeks','4 weeks','4+ weeks'];
+const HOLD_BUCKET_EDGES_H  = [0, 2, 4, 8, 12, 24, 48, 72, 120, 168, 336, 672, Infinity];
+const HOLD_BUCKET_LABELS   = ['0-2h','2-4h','4-8h','8-12h','12-24h','2 days','3 days','5 days','1 week','2 weeks','4 weeks','4+ weeks'];
 function bucketizeHoldHours(hoursArr) {
   return HOLD_BUCKET_LABELS.map((_, i) =>
     hoursArr.filter(h => h >= HOLD_BUCKET_EDGES_H[i] && h < HOLD_BUCKET_EDGES_H[i+1]).length
@@ -1397,6 +1440,51 @@ const holdHours = holdDays.map(d => d * 24);
         tooltip:{ callbacks:{ label: ctx => {
           const total = nonEmpty.reduce((s,b)=>s+b.count,0);
           const pct = total ? (ctx.parsed/total*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 9e. Trades-by-horizon pie -- the intended holding-period bucket (2w,
+   4w, 2m, ... 9m) each trade was actually opened under, distinct from the
+   9d block above which measures how long trades were ACTUALLY held ──────── */
+(function () {
+  const HORIZON_ORDER = ['2w','4w','2m','3m','4m','5m','6m','7m','8m','9m'];
+  const HORIZON_LABELS = { '2w':'~2 weeks','4w':'~4 weeks','2m':'~2 months','3m':'~3 months','4m':'~4 months',
+    '5m':'~5 months','6m':'~6 months','7m':'~7 months','8m':'~8 months','9m':'~9 months' };
+  const horizonMap = {};
+  for (const t of trades) {
+    const h = t.horizon_key || 'Unknown';
+    horizonMap[h] = (horizonMap[h] || 0) + 1;
+  }
+  const horizonKeys = Object.keys(horizonMap).sort((a,b) => {
+    const ia = HORIZON_ORDER.indexOf(a), ib = HORIZON_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  if (!horizonKeys.length) return;
+  $('horizon-pie-card').style.display = '';
+  const horizonPalette = ['#5a7fff','#26c6da','#44ff88','#8bc76d','#e2b25a','#ff9800','#ec407a','#ab47bc','#da6d6d','#9aa0b0'];
+  mkChart('chart-horizon-pie', {
+    type: 'pie',
+    data: {
+      labels: horizonKeys.map(k => HORIZON_LABELS[k] || k),
+      datasets: [{
+        data: horizonKeys.map(k=>horizonMap[k]),
+        backgroundColor: horizonKeys.map((_,i)=>horizonPalette[i % horizonPalette.length]),
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:10}} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
           return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
         } } },
       },
@@ -1681,13 +1769,14 @@ const holdHours = holdDays.map(d => d * 24);
       const amtCls = amt != null ? (amt>=0?'tl-win':'tl-loss') : '';
       const resCls = d[11]==='win' ? 'tl-win' : 'tl-loss';
       const dirCol = d[2].startsWith('▲') ? '#44ff88' : '#ff4444';
+      const holdLabel = d[5] !== '' ? formatHoldingDuration(d[5]) : null;
       return `<tr>
         <td style="font-weight:600;color:#dde1ea;">${d[0]}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d[1]}">${d[1]}</td>
         <td style="color:${dirCol};font-weight:600;">${d[2]}</td>
         <td>${d[3]}</td>
         <td>${d[4]}</td>
-        <td>${d[5]!==''?d[5]+'d':'—'}</td>
+        <td style="white-space:nowrap;">${holdLabel !== null ? holdLabel : '—'}</td>
         <td>$${d[6]}</td>
         <td>$${d[7]}</td>
         <td class="${pnlCls}">${pnlTxt}</td>

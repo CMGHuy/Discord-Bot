@@ -224,7 +224,7 @@ FIELDS: list[Field] = [
           type="float", default="1000000", min=0, step=100,
           help="Seed value the first time data/account.json is created. Edit anytime with !account balance -- not read from .env after that."),
     Field("RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT", "Account Defaults", "Risk per trade %",
-          type="float", default="1.0", min=0, step=0.1,
+          type="float", default="0.1", min=0, step=0.1,
           help="The % of account balance you're willing to lose on a single trade if its stop-loss is hit -- "
                "a classic position-sizing input (e.g. 1% means a full stop-out only costs 1% of the account). "
                "This is informational only: seeded into data/account.json and shown by !account, but nothing "
@@ -235,7 +235,7 @@ FIELDS: list[Field] = [
           help="Informational only, same as the two fields above: once this many paper trades are open, "
                "new alerts still post but the Discord embed shows a position-limit warning."),
     Field("MAX_POSITION_SIZE_PCT", "MAX_POSITION_SIZE_PCT", "Account Defaults", "Max position size % of account",
-          type="float", default="5.0", min=1, max=100, step=1,
+          type="float", default="1.0", min=1, max=100, step=1,
           help="Position-size cap: the suggested share count is clipped so shares × entry never exceeds "
                "this % of the account balance. Prevents a very tight stop on a cheap stock from implying "
                "a position that's a large fraction of the account (e.g. at 1% risk, a 0.50 stop on a "

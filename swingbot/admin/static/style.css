@@ -153,6 +153,26 @@ button:disabled, .btn.disabled {
 /* ---- Stat cards ---- */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .stat-card { background: #0d0f14; border: 1px solid #1f2330; border-radius: 10px; padding: 16px 18px; }
+/* Small blinking "live" dot before every stat card's label -- signals that
+   these panels are continuously recomputed on every dashboard auto-refresh
+   (not a static snapshot), the same visual language as the open-trades
+   status dot (trade-blink) elsewhere on this page. Deliberately just a tiny
+   dot rather than blinking the whole card/number -- the actual figures
+   need to stay easily readable, not flash. */
+.stat-card .stat-label { position: relative; padding-left: 12px; }
+.stat-card .stat-label::before {
+  content: ''; position: absolute; left: 0; top: 50%;
+  width: 6px; height: 6px; margin-top: -3px; border-radius: 50%;
+  background: #5a7fff; box-shadow: 0 0 6px 1px rgba(90,127,255,0.55);
+  animation: stat-blink 2.2s ease-in-out infinite;
+}
+.stat-card.accent-green .stat-label::before { background: #6dda9e; box-shadow: 0 0 6px 1px rgba(109,218,158,0.55); }
+.stat-card.accent-red   .stat-label::before { background: #da6d6d; box-shadow: 0 0 6px 1px rgba(218,109,109,0.55); }
+.stat-card.accent-blue  .stat-label::before { background: #6ea8fe; box-shadow: 0 0 6px 1px rgba(110,168,254,0.55); }
+@keyframes stat-blink {
+  0%, 100% { opacity: 1;    transform: scale(1);    }
+  50%      { opacity: 0.3;  transform: scale(0.6);  }
+}
 /* Account balance can run to 7+ digits (e.g. 1,000,000.00) -- twice the
    width of a normal stat card so the full number always has room instead
    of cramming/wrapping in the same ~130px column every other stat gets. */

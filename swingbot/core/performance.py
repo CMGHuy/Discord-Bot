@@ -929,6 +929,7 @@ class TradeLog:
             trades_out.append({
                 "ticker":       t.get("ticker", ""),
                 "direction":    t.get("direction", ""),
+                "horizon_key":  t.get("horizon_key") or "",
                 "entry":        entry,
                 "exit_price":   exit_p,
                 "stop_loss":    stop_loss or None,

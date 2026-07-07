@@ -178,6 +178,14 @@
         // own: its <script> tag only executes once, on the very first load.
         if (typeof refreshClosedTradesTable === 'function') { refreshClosedTradesTable(); }
         if (typeof refreshOpenTradesTable === 'function') { refreshOpenTradesTable(); }
+        // Force the session banner (Tokyo/London/New York pills) to re-render
+        // fresh on every refresh instead of just trusting morphdom's skip-diff
+        // + the banner's own internal 60s timer to keep it alive indefinitely
+        // (a backgrounded/throttled tab can pause that timer, which is
+        // exactly what made the banner appear to "disappear after showing
+        // once" -- it goes stale until the tab regains focus, or blank if
+        // morphdom ever failed to preserve the subtree for any reason).
+        if (typeof renderSessionBanner === 'function') { renderSessionBanner(); }
       })
       .catch(function() {});
   }
