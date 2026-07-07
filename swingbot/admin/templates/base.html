@@ -13,6 +13,19 @@
      so the page never breaks, it just looks slightly plainer. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script>
+// Applied in <head>, before the body paints, so the page renders at the
+// saved zoom level from the very first frame instead of flashing at 100%
+// and then jumping to the saved size once the bottom-of-body script runs.
+(function() {
+  try {
+    var saved = parseFloat(localStorage.getItem('adminFontZoom'));
+    if (saved && saved > 0) {
+      document.documentElement.style.zoom = saved;
+    }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -30,6 +43,11 @@
       </a>
       {% endfor %}
     </nav>
+    <div class="font-size-control" title="Adjust the page's overall text/UI size">
+      <button type="button" id="font-size-dec" aria-label="Decrease font size">A&#8722;</button>
+      <span id="font-size-label">100%</span>
+      <button type="button" id="font-size-inc" aria-label="Increase font size">A&#43;</button>
+    </div>
     <div class="sidebar-footer">
       {{ now }}
       {% if versions %}
@@ -84,6 +102,39 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeSidebar();
   });
+})();
+
+// ---- Font/UI size control -------------------------------------------------
+// Uses CSS `zoom` (not a `transform: scale`) so it genuinely scales the
+// whole page -- text, padding, icons, chart canvases -- the same way
+// browser-level page zoom does, rather than just the text. Persisted in
+// localStorage and re-applied instantly in <head> (see the inline script
+// up there) on every subsequent page load, so it's a one-time-per-browser
+// setting, not something you have to redo on every page.
+(function () {
+  var MIN = 0.8, MAX = 1.5, STEP = 0.1;
+  var decBtn = document.getElementById('font-size-dec');
+  var incBtn = document.getElementById('font-size-inc');
+  var label  = document.getElementById('font-size-label');
+  if (!decBtn || !incBtn || !label) return;
+
+  function currentZoom() {
+    var z = parseFloat(document.documentElement.style.zoom);
+    return z && z > 0 ? z : 1.0;
+  }
+  function applyZoom(z) {
+    z = Math.round(Math.min(MAX, Math.max(MIN, z)) * 100) / 100;
+    document.documentElement.style.zoom = z;
+    label.textContent = Math.round(z * 100) + '%';
+    try { localStorage.setItem('adminFontZoom', z); } catch (e) {}
+    decBtn.disabled = z <= MIN;
+    incBtn.disabled = z >= MAX;
+  }
+
+  decBtn.addEventListener('click', function () { applyZoom(currentZoom() - STEP); });
+  incBtn.addEventListener('click', function () { applyZoom(currentZoom() + STEP); });
+
+  applyZoom(currentZoom());
 })();
 </script>
 </body>

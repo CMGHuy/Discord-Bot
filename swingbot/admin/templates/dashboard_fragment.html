@@ -41,10 +41,10 @@
 
 {# ── Stat cards ──────────────────────────────────────────────────────────── #}
 <div class="stat-row">
-  <div class="stat-card accent-blue" title="Current account balance and its movement so far today (Europe/Berlin calendar day), updating automatically as trades close.">
+  <div class="stat-card stat-card-wide accent-blue" title="Current account balance and its movement so far today (Europe/Berlin calendar day), updating automatically as trades close.">
     <div class="stat-label">Account balance</div>
     <div class="stat-value" style="color: #6ea8fe;">
-      {{ '%.2f'|format(stats.account.balance) if stats.account.balance is not none else '—' }}
+      {{ '{:,.2f}'.format(stats.account.balance) if stats.account.balance is not none else '—' }}
     </div>
     <div class="stat-sub">
       {% if stats.account.pct_change_today is not none %}
@@ -140,13 +140,26 @@
   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
     <p class="card-title" style="margin:0;">Open trades
       <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
-        drag header to reorder · click header to sort · click row for detail
+        {{ open_trades|length }} trade{{ 's' if open_trades|length != 1 else '' }} open · drag header to reorder · click header to sort · click row for detail
       </span>
     </p>
-    <input id="trade-filter" type="text" placeholder="Filter by ticker, strategy…"
-           oninput="filterTable()"
-           style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;
-                  padding:6px 10px;font-size:13px;font-family:inherit;width:220px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <input id="trade-filter" type="text" placeholder="Filter by ticker, strategy…"
+             oninput="filterTable()"
+             style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;
+                    padding:6px 10px;font-size:13px;font-family:inherit;width:220px;">
+      <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:5px;">
+        Show
+        <select id="ot-per-page"
+                style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="0">All</option>
+        </select>
+        per page
+      </label>
+    </div>
   </div>
 
   {% if open_trades %}
@@ -172,8 +185,8 @@
       <th data-col-id="target" draggable="true" onclick="sortByHeader(this)">Target <span class="sort-arrow" data-col-id="target"></span></th>
       <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
       <th data-col-id="size" draggable="true" onclick="sortByHeader(this)"
-          title="Suggested position size based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk of {{ cur_map.values()|list|first|default('') }}{{ '%.0f'|format(account_cfg.balance) }} account. Capped at {{ '%.0f%%'|format(account_cfg.max_position_pct) }} of account.">
-        Size <span class="sort-arrow" data-col-id="size"></span>
+          title="Unrealized gain/loss in account currency, based on the suggested position size ({{ '%.0f%%'|format(account_cfg.risk_pct) }} risk of {{ cur_map.values()|list|first|default('') }}{{ '%.0f'|format(account_cfg.balance) }} account, capped at {{ '%.0f%%'|format(account_cfg.max_position_pct) }} of account) and the live price vs. entry.">
+        Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
       </th>
       <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Calendar days since opened">Days <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
@@ -288,17 +301,17 @@
       <td style="color:#6dda9e;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
       <td>{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
 
-      {# Suggested position size #}
-      <td data-sort="{{ sizing.shares if sizing else 0 }}"
-          title="{% if sizing %}~{{ sizing.shares }} shares · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.position_value) }} deployed · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.risk_amount) }} at risk ({{ sizing.risk_pct }}% rule){% if sizing.capped %} · capped at {{ sizing.max_position_pct }}% of account{% endif %}{% else %}Set !account balance and risk to enable sizing{% endif %}">
-        {% if sizing %}
-          <div class="size-cell">
-            <span class="size-shares">~{{ sizing.shares | int if sizing.shares == (sizing.shares | int) else '%.1f'|format(sizing.shares) }} sh</span>
-            <span class="size-value muted">{{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.position_value) }}{% if sizing.capped %}<span title="Capped at max position size">⚠</span>{% endif %}</span>
-          </div>
-        {% else %}
+      {# Unrealized gain/loss in account currency -- shares (snapshotted at sizing
+         time) x the live price's move away from entry, direction-adjusted #}
+      {%- set unreal_amt = (sizing.shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (sizing and cur_price is not none) else None -%}
+      <td data-sort="{{ unreal_amt if unreal_amt is not none else 0 }}"
+          style="font-weight:700;color: {% if unreal_amt is none %}#5a6275{% elif unreal_amt >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          title="{% if sizing and unreal_amt is not none %}~{{ sizing.shares }} shares · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.position_value) }} deployed{% if sizing.capped %} (capped at {{ sizing.max_position_pct }}% of account){% endif %}{% elif sizing %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
+        {%- if unreal_amt is not none -%}
+          {{ '%+.2f'|format(unreal_amt) }} {{ cur_map.get(t.ticker, '') }}
+        {%- else -%}
           <span class="muted">—</span>
-        {% endif %}
+        {%- endif -%}
       </td>
 
       {# Days open — flag trades aging beyond their horizon #}
@@ -322,6 +335,15 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
+
+  {# ── Pagination bar ── #}
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+    <button type="button" id="ot-prev" class="secondary small" style="padding:4px 12px;">‹ Prev</button>
+    <span id="ot-page-info" class="muted" style="font-size:12px;">Page 1 / 1</span>
+    <button type="button" id="ot-next" class="secondary small" style="padding:4px 12px;">Next ›</button>
+    <span style="flex:1;"></span>
+    <span id="ot-info" class="muted" style="font-size:12px;"></span>
   </div>
 
   <div style="margin-top:8px; font-size:11px; color:#3d4354; text-align:right;">
@@ -358,6 +380,11 @@
     document.querySelectorAll('.sort-arrow').forEach(function(el) {
       el.textContent = (el.dataset.colId === _sortColId) ? (_sortAsc ? ' ▲' : ' ▼') : '';
     });
+    // Row order just changed -- re-scan so pagination's "first N" reflects
+    // the new sort order rather than the stale array captured before sorting.
+    otRefreshRows();
+    otCurrentPage = 1;
+    otRender();
   }
 
   function applyDefaultSort() {
@@ -377,11 +404,81 @@
   }
 
   function filterTable() {
-    var q = document.getElementById('trade-filter').value.toLowerCase();
-    document.querySelectorAll('#trades-table tbody tr').forEach(function(row) {
-      row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none';
+    otCurrentPage = 1;
+    otRender();
+  }
+
+  // ── Open trades pagination -- mirrors the Trade History table's ct-*
+  // pagination pattern (see below), applied on top of the existing free-text
+  // filter box and column sort rather than a fresh set of filter dropdowns. ──
+  var otAllRows = [];
+  var OT_STORAGE_KEY = 'ot_per_page';
+  var otPPSel = document.getElementById('ot-per-page');
+  var otSavedPP = parseInt(localStorage.getItem(OT_STORAGE_KEY) || '25');
+  otPPSel.value = String(otSavedPP);
+  var otPerPage = otSavedPP;
+  var otCurrentPage = 1;
+
+  function otRefreshRows() {
+    otAllRows = Array.from(document.querySelectorAll('#trades-table tbody tr'));
+  }
+
+  function otGetVisible() {
+    var q = (document.getElementById('trade-filter').value || '').toLowerCase();
+    return otAllRows.filter(function(row) {
+      return !q || row.innerText.toLowerCase().includes(q);
     });
   }
+
+  function otRender() {
+    var visible = otGetVisible();
+    var total = visible.length;
+    var pp = otPerPage === 0 ? total : otPerPage;
+    var totalPages = pp > 0 ? Math.max(1, Math.ceil(total / pp)) : 1;
+    otCurrentPage = Math.max(1, Math.min(otCurrentPage, totalPages));
+    var start = (otCurrentPage - 1) * pp;
+    var end = Math.min(start + pp, total);
+
+    otAllRows.forEach(function(r) { r.style.display = 'none'; });
+    visible.slice(start, end).forEach(function(r) { r.style.display = ''; });
+
+    var otInfo = document.getElementById('ot-info');
+    var otPageInfo = document.getElementById('ot-page-info');
+    var otPrev = document.getElementById('ot-prev');
+    var otNext = document.getElementById('ot-next');
+    if (otInfo) {
+      otInfo.textContent = total === 0 ? 'No matching trades' :
+        'Showing ' + (start + 1) + '–' + end + ' of ' + total;
+    }
+    if (otPageInfo) otPageInfo.textContent = 'Page ' + otCurrentPage + ' / ' + totalPages;
+    if (otPrev) otPrev.disabled = otCurrentPage <= 1;
+    if (otNext) otNext.disabled = otCurrentPage >= totalPages;
+  }
+
+  // Re-scans the (possibly just-refreshed) table for rows and re-renders the
+  // current page. Called once below on initial load, AND again by
+  // dashboard.html's refreshDashboard() after every auto-refresh -- this
+  // table's own <script> tag only ever executes on the very first load
+  // (browsers don't re-run scripts injected via morphdom/innerHTML), so
+  // without this explicit re-run hook, newly opened/closed trades would
+  // never update the pagination totals after the first page load.
+  window.refreshOpenTradesTable = function() {
+    otRefreshRows();
+    otRender();
+  };
+
+  otPPSel.addEventListener('change', function() {
+    otPerPage = parseInt(this.value);
+    localStorage.setItem(OT_STORAGE_KEY, otPerPage);
+    otCurrentPage = 1;
+    otRender();
+  });
+  document.getElementById('ot-prev').addEventListener('click', function() {
+    otCurrentPage--; otRender();
+  });
+  document.getElementById('ot-next').addEventListener('click', function() {
+    otCurrentPage++; otRender();
+  });
 
   var COLUMN_ORDER_KEY = 'swingbot_dashboard_column_order';
   function saveColumnOrder(order) {
@@ -415,6 +512,7 @@
 
   applyColumnOrder();
   applyDefaultSort();
+  window.refreshOpenTradesTable();
   </script>
 
   {% else %}
@@ -605,7 +703,12 @@
 
   <script>
   (function() {
-    var allRows = Array.from(document.querySelectorAll('#closed-trades-table tbody tr'));
+    // Mutable state shared between the ONE-TIME event bindings below and
+    // window.refreshClosedTradesTable(), which re-scans the table and
+    // re-populates the ticker/strategy/horizon dropdowns every time. Plain
+    // vars in this outer IIFE's scope (not re-declared inside the re-run
+    // function) so both sides see the same live state.
+    var allRows = [];
     var STORAGE_KEY = 'ct_per_page';
     var savedPP = parseInt(localStorage.getItem(STORAGE_KEY) || '25');
     var ppSel = document.getElementById('ct-per-page');
@@ -614,19 +717,20 @@
     var currentPage = 1;
     var filters = {};
 
-    // Populate ticker / strategy / horizon dropdowns from row data
     function uniqueSorted(attr) {
-      return [...new Set(allRows.map(function(r){ return r.dataset[attr]; }))].sort();
+      return [...new Set(allRows.map(function(r){ return r.dataset[attr]; }))].filter(Boolean).sort();
     }
     function populateSelect(id, values) {
       var sel = document.getElementById(id);
+      // Clear everything except the first "All ..." placeholder option
+      // before repopulating -- this function used to only ever run once,
+      // so it never needed to guard against re-adding the same options
+      // (which would otherwise duplicate every entry each time this runs).
+      while (sel.options.length > 1) sel.remove(1);
       values.forEach(function(v) {
         var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
       });
     }
-    populateSelect('ct-filter-ticker',   uniqueSorted('ticker'));
-    populateSelect('ct-filter-strategy', uniqueSorted('strategy'));
-    populateSelect('ct-filter-horizon',  uniqueSorted('horizon'));
 
     function getVisible() {
       return allRows.filter(function(row) {
@@ -660,6 +764,27 @@
       document.getElementById('ct-next').disabled = currentPage >= totalPages;
     }
 
+    // Re-scans the (possibly just-refreshed) table for rows and rebuilds
+    // the ticker/strategy/horizon dropdowns from them, then re-renders the
+    // current page. Called once below for the initial page load, AND again
+    // by dashboard.html's refreshDashboard() after every auto-refresh --
+    // this table's own <script> tag only ever executes on that very first
+    // load (browsers don't re-run scripts injected via morphdom/innerHTML),
+    // so without an explicit re-run hook like this, newly closed trades
+    // would never show up here and the filter dropdowns would permanently
+    // reflect only whatever existed at the moment the page was first opened.
+    window.refreshClosedTradesTable = function() {
+      allRows = Array.from(document.querySelectorAll('#closed-trades-table tbody tr'));
+      populateSelect('ct-filter-ticker',   uniqueSorted('ticker'));
+      populateSelect('ct-filter-strategy', uniqueSorted('strategy'));
+      populateSelect('ct-filter-horizon',  uniqueSorted('horizon'));
+      render();
+    };
+
+    // Click/change handlers bound ONCE -- these DOM elements (select/button)
+    // persist across refreshes (morphdom patches them in place rather than
+    // recreating them), so binding again on every refresh would stack up
+    // duplicate listeners instead of helping.
     document.querySelectorAll('.ct-filter').forEach(function(el) {
       el.addEventListener('change', function() {
         filters[el.dataset.filter] = el.value;
@@ -689,7 +814,7 @@
       render();
     });
 
-    render();
+    window.refreshClosedTradesTable();
   })();
   </script>
 

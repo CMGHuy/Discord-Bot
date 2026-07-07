@@ -31,10 +31,28 @@ trade is considered to be sized at.
 Realized P&L bookkeeping: apply_realized_pnl() is called by
 performance.py the instant a trade actually closes (SL/TP hit, or the
 near-TP timeout exit) -- using the shares snapshotted at open time -- to
-add/subtract that trade's real currency gain/loss to/from the account
-balance, and appends one entry to balance_history so the admin
-Performance page can chart the account balance over time, not just the
-%-based equity curve it already had.
+record that trade's real currency gain/loss and append one entry to
+balance_history so the admin Performance page can chart the account
+balance over time, not just the %-based equity curve it already had.
+
+Balance model -- self-healing by design:
+  effective balance = base_balance + SUM(realized_pnl_amount over every
+                       trade in trades.json that has actually settled)
+
+`base_balance` is the only number a human ever sets directly (via
+`!account balance <amount>`) -- it is NOT the displayed balance. The
+displayed/usable "balance" is always RECOMPUTED from base_balance plus
+the full all-time realized P&L pulled straight from trades.json, every
+single time load_account_config() runs, rather than trusted as a single
+incrementally-updated running total. This means:
+  - Setting the balance back to 10,000 (or up to 100,000,000) never
+    discards trading history -- the account immediately reflects
+    10,000 (or 100,000,000) PLUS everything ever realized, and keeps
+    adding future realized P&L on top of that new base.
+  - If account.json is ever lost, corrupted, or accidentally reset to a
+    stale/default value (e.g. by a deploy pipeline), the balance simply
+    recomputes itself correctly again from base_balance + trades.json --
+    there is no drifting running total that can silently lose history.
 """
 import json
 import os
@@ -58,6 +76,34 @@ CONFIG_PATH = os.path.join(app_config.DATA_DIR, "account.json")
 _MAX_BALANCE_HISTORY = 5000
 
 
+def _sum_realized_pnl(trades_path: str = None) -> float:
+    """
+    All-time realized P&L: sum of `realized_pnl_amount` across every trade
+    in trades.json that has actually settled (i.e. the field is not None).
+    Reads trades.json directly (rather than importing core.performance's
+    TradeLog) to avoid a circular import -- performance.py already imports
+    this module at load time. This is the single source of truth the
+    effective account balance is layered on top of.
+    """
+    path = trades_path or os.path.join(app_config.DATA_DIR, "trades.json")
+    if not os.path.exists(path):
+        return 0.0
+    try:
+        with open(path, "r") as f:
+            trades = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return 0.0
+    total = 0.0
+    for t in trades:
+        pnl = t.get("realized_pnl_amount")
+        if pnl is not None:
+            try:
+                total += float(pnl)
+            except (TypeError, ValueError):
+                pass
+    return round(total, 2)
+
+
 def load_account_config(path: str = CONFIG_PATH) -> dict:
     # Canonical defaults -- every key that exists in the account config schema.
     # Used both as the seed for a brand-new account.json AND as a fallback for
@@ -65,7 +111,7 @@ def load_account_config(path: str = CONFIG_PATH) -> dict:
     # an old file never returns a dict that's missing a key downstream code
     # assumes will be there).
     defaults = {
-        "balance":            app_config.ACCOUNT_BALANCE,
+        "base_balance":       app_config.ACCOUNT_BALANCE,
         "risk_pct":           app_config.RISK_PER_TRADE_PCT,
         "max_open_positions": app_config.MAX_OPEN_POSITIONS,
         "max_position_pct":   app_config.MAX_POSITION_SIZE_PCT,
@@ -77,15 +123,38 @@ def load_account_config(path: str = CONFIG_PATH) -> dict:
         with open(path, "r") as f:
             try:
                 stored = json.load(f)
+            except json.JSONDecodeError:
+                stored = None
+            if stored is not None:
                 # Merge: stored values win over defaults, but any key that
                 # doesn't exist in the stored file gets the default value.
                 merged = {**defaults, **stored}
+                needs_save = False
+                if "base_balance" not in stored:
+                    # Migrating from the old schema, where "balance" was a
+                    # single incrementally-updated running total with no
+                    # separate base concept. Back-solve base_balance so the
+                    # currently-displayed balance doesn't jump on migration:
+                    # base = old_balance - all-time realized P&L so far, so
+                    # base + realized_total reproduces the old balance exactly
+                    # right now, and going forward base_balance becomes the
+                    # user-settable anchor with realized P&L layered on top.
+                    old_balance = float(stored.get("balance", defaults["base_balance"]))
+                    realized_so_far = _sum_realized_pnl()
+                    merged["base_balance"] = round(old_balance - realized_so_far, 2)
+                    needs_save = True
+                # The displayed/usable balance is ALWAYS recomputed fresh --
+                # never trusted from the stored file -- so a stale or reset
+                # "balance" value in account.json can never silently lose
+                # history: it's just overwritten with the correct figure.
+                merged["balance"] = round(merged["base_balance"] + _sum_realized_pnl(), 2)
+                if needs_save:
+                    save_account_config(merged, path)
                 return merged
-            except json.JSONDecodeError:
-                pass
     # Brand-new account -- seed balance_history with a starting point so the
     # "balance over time" chart has something to plot from before the first
     # trade ever closes, instead of an empty series until then.
+    defaults["balance"] = round(defaults["base_balance"] + _sum_realized_pnl(), 2)
     defaults["balance_history"] = [{
         "ts": datetime.now(timezone.utc).isoformat(),
         "balance": defaults["balance"],
@@ -110,17 +179,30 @@ def _append_balance_history(cfg: dict, entry: dict) -> dict:
 
 
 def set_balance(balance: float, path: str = CONFIG_PATH) -> dict:
+    """
+    Sets the account's BASE balance -- not the final displayed balance.
+    The effective balance shown everywhere is always base_balance + all-time
+    realized P&L (see module docstring), so setting this to e.g. 10,000 or
+    100,000,000 does not discard trading history: the account immediately
+    reflects that new base plus everything ever realized on top of it, and
+    keeps adding future realized P&L to that new base going forward.
+    """
     config = load_account_config(path)
-    config["balance"] = balance
+    config["base_balance"] = balance
+    realized_total = _sum_realized_pnl()
+    effective_balance = round(balance + realized_total, 2)
+    config["balance"] = effective_balance
     # A manual override is a real, visible jump in the balance-over-time
     # chart -- record it as its own history entry (pnl_amount=None
     # distinguishes it from a real trade settlement) rather than silently
     # losing that point between two trade-driven entries.
     _append_balance_history(config, {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "balance": balance,
+        "balance": effective_balance,
         "pnl_amount": None,
         "reason": "manual override",
+        "base_balance": balance,
+        "realized_pnl_total": realized_total,
     })
     save_account_config(config, path)
     return config
@@ -263,20 +345,30 @@ def get_daily_summary(path: str = CONFIG_PATH) -> dict:
 
 def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = CONFIG_PATH) -> dict:
     """
-    Adds (or subtracts, if negative) a trade's realized currency P&L to the
-    account balance and appends one entry to balance_history recording the
-    new balance. Called once, right when a trade actually closes (see
-    performance.py's TradeLog._settle_account_balance) -- NOT on every
-    price tick, so a trade that's merely unrealized-in-profit never moves
-    the real account balance, only its own eventual close does.
+    Records one trade's realized currency P&L in balance_history (for the
+    Performance page's balance-over-time chart) and returns the resulting
+    effective balance. Called once, right when a trade actually closes (see
+    performance.py's TradeLog._settle_account_balance) -- NOT on every price
+    tick, so a trade that's merely unrealized-in-profit never moves the real
+    account balance, only its own eventual close does.
+
+    Note: this trade's realized_pnl_amount is written onto the trade record
+    itself by the caller AFTER this returns (see _settle_account_balance's
+    docstring), so trades.json doesn't yet include it when load_account_config()
+    (and its _sum_realized_pnl() call) runs a few lines below -- pnl_amount is
+    therefore added explicitly here on top of the freshly-computed balance,
+    rather than trusting a stored running total. Once the caller saves the
+    trade, trades.json and the computed balance are back in agreement, so
+    every subsequent load recomputes the exact same figure independently --
+    nothing here is a drifting increment that could ever get out of sync.
 
     `meta` (e.g. {"trade_id":..., "ticker":..., "status":...}) is merged
     into the history entry so it's traceable back to the trade that caused
-    it. Returns the updated account config dict (already saved to disk).
+    it. Returns the account config dict with "balance" reflecting this
+    trade's settlement (already saved to disk).
     """
     config = load_account_config(path)
-    old_balance = float(config.get("balance", 0))
-    new_balance = round(old_balance + pnl_amount, 2)
+    new_balance = round(float(config.get("balance", 0)) + pnl_amount, 2)
     config["balance"] = new_balance
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),

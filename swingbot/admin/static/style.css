@@ -38,6 +38,20 @@ a { color: #6ea8fe; }
 .sidebar-footer { padding: 14px 14px 18px; font-size: 11px; color: #4a5060; border-top: 1px solid #1f2330; }
 .version-tag { margin-top: 6px; font-size: 10.5px; color: #3d4354; letter-spacing: 0.01em; }
 
+.font-size-control {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 14px; border-top: 1px solid #1f2330;
+}
+.font-size-control button {
+  background: #1a1e27; border: 1px solid #262b38; color: #9aa3b8;
+  width: 26px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
+}
+.font-size-control button:hover:not(:disabled) { background: #232838; color: #dde1ea; }
+.font-size-control button:disabled { opacity: 0.35; cursor: default; }
+#font-size-label { font-size: 11px; color: #5a6275; min-width: 34px; text-align: center; }
+
 /* No max-width -- .content is the flex:1 remainder of .shell next to the
    fixed-width sidebar, so this lets wide tables (e.g. the Dashboard's open
    trades table) actually use the full available width instead of leaving
@@ -139,6 +153,16 @@ button:disabled, .btn.disabled {
 /* ---- Stat cards ---- */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .stat-card { background: #0d0f14; border: 1px solid #1f2330; border-radius: 10px; padding: 16px 18px; }
+/* Account balance can run to 7+ digits (e.g. 1,000,000.00) -- twice the
+   width of a normal stat card so the full number always has room instead
+   of cramming/wrapping in the same ~130px column every other stat gets. */
+.stat-card-wide { grid-column: span 2; }
+@media (max-width: 480px) {
+  /* Below one column's worth of real single-card width, span-2 would just
+     force horizontal scrolling for no benefit -- let it collapse back to a
+     normal single card on very narrow screens. */
+  .stat-card-wide { grid-column: span 1; }
+}
 .stat-card .stat-label { font-size: 11px; color: #5a6275; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
 .stat-card .stat-value { font-size: 26px; font-weight: 700; color: #fff; line-height: 1; }
 .stat-card .stat-sub   { font-size: 11px; color: #5a6275; margin-top: 4px; }
@@ -502,6 +526,7 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
   .sidebar nav a .icon { font-size: 18px; width: auto; }
   .sidebar nav a .nav-label { display: none; }
   .sidebar-footer { display: none; }
+  .font-size-control { display: none; }
   .content { padding: 20px 18px 60px; }
 }
 
@@ -519,6 +544,7 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
   .sidebar nav a { justify-content: flex-start; padding: 9px 12px; gap: 10px; }
   .sidebar nav a .nav-label { display: inline; }
   .sidebar-footer { display: block; }
+  .font-size-control { display: flex; }
 
   .hamburger { display: inline-flex; }
 

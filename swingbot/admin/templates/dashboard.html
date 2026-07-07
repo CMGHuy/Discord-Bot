@@ -171,6 +171,13 @@
         document.getElementById('refresh-status').textContent =
           'Updated ' + new Date().toLocaleTimeString();
         if (typeof applyColumnOrder === 'function') { applyColumnOrder(); }
+        // Re-scan the Trade History table + rebuild its ticker/strategy/
+        // horizon filter dropdowns from whatever's in the DOM now -- see
+        // this function's own definition (dashboard_fragment.html) for why
+        // it has to be called explicitly instead of just re-running on its
+        // own: its <script> tag only executes once, on the very first load.
+        if (typeof refreshClosedTradesTable === 'function') { refreshClosedTradesTable(); }
+        if (typeof refreshOpenTradesTable === 'function') { refreshOpenTradesTable(); }
       })
       .catch(function() {});
   }

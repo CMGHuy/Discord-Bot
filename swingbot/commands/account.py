@@ -15,7 +15,8 @@ async def account_cmd(ctx):
     else:
         sizing_line = f"Position sizing: **Risk %** -- {cfg['risk_pct']}% of balance risked per trade"
     await ctx.send(
-        f"**Account settings:**\nBalance: {cfg['balance']}\n{sizing_line}\n"
+        f"**Account settings:**\nBalance: {cfg['balance']} "
+        f"(base {cfg.get('base_balance', cfg['balance'])} + all-time realized P&L)\n{sizing_line}\n"
         f"Max concurrent open positions: {cfg.get('max_open_positions', 5)}\n\n"
         f"Change with `!account balance <amount>`, `!account sizing risk|account`, "
         f"`!account positionpct <pct>`, `!account risk <pct>`, `!account maxpositions <n>`"
@@ -25,7 +26,11 @@ async def account_cmd(ctx):
 @account_cmd.command(name="balance")
 async def account_balance(ctx, amount: float):
     cfg = set_balance(amount)
-    await ctx.send(f"Account balance set to {cfg['balance']}.")
+    await ctx.send(
+        f"Base balance set to {amount} -- effective balance is now {cfg['balance']} "
+        f"(base + all-time realized P&L). This will keep accounting for realized "
+        f"gain/loss on top of this new base going forward."
+    )
 
 
 @account_cmd.command(name="risk")

@@ -143,44 +143,55 @@
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
 }
+/* Wall-calendar look: light body, bold title, solid dark weekday header bar,
+   thin-bordered day grid with the date numeral in the corner -- deliberately
+   NOT matching the rest of this (dark-mode) admin UI, since the point is to
+   look like an actual calendar page rather than another dashboard panel. */
 .cal-modal {
-  background: #13161d; border: 1px solid #1f2330; border-radius: 10px;
-  max-width: 640px; width: 100%; max-height: 88vh; overflow-y: auto;
-  padding: 18px 20px 20px;
+  background: #f6f7f9; border: 1px solid #d7dae2; border-radius: 12px;
+  max-width: 680px; width: 100%; max-height: 88vh; overflow-y: auto;
+  padding: 20px 22px 22px; color: #20242e;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
 }
 .cal-modal-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
-#cal-modal-title { font-size: 15px; font-weight: 700; color: #dde1ea; }
+#cal-modal-title {
+  font-size: 20px; font-weight: 800; color: #171a22;
+  letter-spacing: 0.03em; text-transform: uppercase;
+}
 #cal-modal-close {
-  background: rgba(255,255,255,0.08); border: none; color: #dde1ea;
+  background: rgba(0,0,0,0.06); border: none; color: #20242e;
   font-size: 16px; width: 30px; height: 30px; border-radius: 50%;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
-#cal-modal-close:hover { background: rgba(255,255,255,0.16); }
+#cal-modal-close:hover { background: rgba(0,0,0,0.12); }
 .cal-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  border: 1px solid #20242e; border-radius: 8px; overflow: hidden;
 }
 .cal-dow {
-  font-size: 10px; color: #5a6275; text-transform: uppercase;
-  text-align: center; padding-bottom: 4px; letter-spacing: .04em;
+  font-size: 11px; font-weight: 800; color: #fff; text-transform: uppercase;
+  text-align: center; padding: 9px 4px; letter-spacing: .05em;
+  background: #20242e; border-right: 1px solid rgba(255,255,255,0.08);
 }
+.cal-dow:last-child { border-right: none; }
 .cal-day {
-  border-radius: 6px; min-height: 70px; padding: 5px 6px;
-  background: #191d28; border: 1px solid #1f2330;
-  display: flex; flex-direction: column; gap: 2px;
+  min-height: 84px; padding: 7px 8px;
+  background: #fff; border-right: 1px solid #e4e6ec; border-bottom: 1px solid #e4e6ec;
+  display: flex; flex-direction: column; gap: 3px;
 }
-.cal-day.cal-empty { background: transparent; border-color: transparent; }
-.cal-day .cal-day-num { font-size: 10px; color: #6b7385; font-weight: 600; }
-.cal-day .cal-day-count { font-size: 11px; color: #dde1ea; font-weight: 700; }
-.cal-day .cal-day-wr { font-size: 10px; font-weight: 600; }
-.cal-day .cal-day-pnl { font-size: 10.5px; font-weight: 700; }
+.cal-day.cal-empty { background: #fafafb; }
+.cal-day .cal-day-num { font-size: 13px; color: #20242e; font-weight: 800; }
+.cal-day .cal-day-count { font-size: 10.5px; color: #6b7385; font-weight: 600; }
+.cal-day .cal-day-wr { font-size: 10px; font-weight: 700; }
+.cal-day .cal-day-pnl { font-size: 11px; font-weight: 800; }
 .cal-modal-summary {
-  font-size: 12px; color: #9aa0b0; margin-bottom: 14px;
+  font-size: 12.5px; color: #4a5164; margin-bottom: 16px;
   display: flex; gap: 16px; flex-wrap: wrap;
 }
-.cal-modal-summary b { color: #dde1ea; }
+.cal-modal-summary b { color: #171a22; }
 
 /* ── Date-range filter bar ─────────────────────────────────────────────────
    Applies to every KPI/chart/table on this page -- see renderAll() in the
@@ -188,63 +199,82 @@
    `raw.trades` falls in the selected range instead of always using all of
    them. #}
 .range-bar {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   margin-top: 16px;
-  background: #10131a; border: 1px solid #1a1e27; border-radius: 10px;
-  padding: 10px 14px;
+  background: linear-gradient(180deg, #12151c 0%, #0e1016 100%);
+  border: 1px solid #232838; border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 4px 16px rgba(0,0,0,0.22);
 }
+.range-bar-icon { font-size: 14px; opacity: 0.8; }
 /* Presets rendered as one seamless segmented control (matching the
    dashboard's mode toggle) instead of loose individual pill buttons --
    makes it visually obvious they're mutually-exclusive choices of the
-   same setting, not a row of independent actions. */
+   same setting, not a row of independent actions. The active preset gets a
+   soft gradient fill + glow instead of a flat color swap, so switching
+   ranges feels like a deliberate, tactile selection rather than a plain
+   on/off toggle. */
 .range-presets {
-  display: flex; border: 1px solid #262b38; border-radius: 8px; overflow: hidden;
+  display: flex; background: #0c0e13; border: 1px solid #262b38; border-radius: 10px;
+  padding: 3px; gap: 2px;
 }
 .range-btn {
-  background: #13161d; border: none; color: #9aa0b0;
-  padding: 7px 14px; font-size: 12.5px; font-weight: 600;
-  cursor: pointer; transition: background .12s, color .12s;
+  background: transparent; border: none; color: #8b93a8;
+  padding: 7px 15px; font-size: 12.5px; font-weight: 600; border-radius: 7px;
+  cursor: pointer; transition: background .15s, color .15s, box-shadow .15s;
 }
-.range-btn + .range-btn { border-left: 1px solid #262b38; }
-.range-btn:hover { background: #1a1d26; color: #dde1ea; }
-.range-btn.active { background: #5a7fff; color: #fff; }
-.range-divider { width: 1px; align-self: stretch; background: #1f2330; }
+.range-btn:hover { background: rgba(255,255,255,0.05); color: #dde1ea; }
+.range-btn.active {
+  background: linear-gradient(135deg, #5a7fff 0%, #7a63f5 100%); color: #fff;
+  box-shadow: 0 2px 10px rgba(90,127,255,0.35);
+}
+.range-divider { width: 1px; align-self: stretch; background: #20242f; }
 .range-custom {
-  display: flex; align-items: center; gap: 7px;
-  background: #0d0f14; border: 1px solid #1f2330; border-radius: 8px;
-  padding: 5px 8px;
+  display: flex; align-items: flex-end; gap: 10px;
+  background: #0d0f14; border: 1px solid #232838; border-radius: 10px;
+  padding: 7px 12px;
 }
-.range-custom label {
-  font-size: 11px; font-weight: 700; color: #5a6275; text-transform: uppercase;
-  letter-spacing: 0.03em;
+.range-custom .range-field {
+  display: flex; flex-direction: column; gap: 3px;
+}
+.range-custom .range-field label {
+  font-size: 9.5px; font-weight: 700; color: #565e73; text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .range-custom input[type="date"] {
-  background: #13161d; border: 1px solid #262b38; border-radius: 6px;
-  color: #dde1ea; padding: 5px 8px; font-size: 12.5px;
-  transition: border-color .12s;
+  background: #161922; border: 1px solid #2a3040; border-radius: 7px;
+  color: #dde1ea; padding: 5px 9px; font-size: 12.5px; font-family: inherit;
+  color-scheme: dark; /* keeps the native calendar-picker icon visible on a dark field */
+  transition: border-color .15s, box-shadow .15s;
 }
+.range-custom input[type="date"]:hover { border-color: #3a4256; }
 .range-custom input[type="date"]:focus {
-  outline: none; border-color: #5a7fff;
+  outline: none; border-color: #5a7fff; box-shadow: 0 0 0 3px rgba(90,127,255,0.18);
 }
-.range-custom .range-sep { color: #3e4555; }
+.range-custom .range-sep { color: #454d63; font-size: 13px; padding-bottom: 6px; }
 .range-custom button {
-  background: #5a7fff; border: 1px solid #5a7fff; color: #fff;
-  border-radius: 6px; padding: 6px 14px; font-size: 12.5px; font-weight: 700;
-  cursor: pointer; transition: background .12s, opacity .12s;
+  background: linear-gradient(135deg, #5a7fff 0%, #4a6ef0 100%); border: none; color: #fff;
+  border-radius: 7px; padding: 7px 16px; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; transition: filter .15s, transform .05s;
 }
-.range-custom button:hover { background: #4a6ef0; }
+.range-custom button:hover { filter: brightness(1.1); }
+.range-custom button:active { transform: translateY(1px); }
 #range-summary {
-  font-size: 12px; color: #9aa0b0; margin-left: auto;
-  padding: 4px 10px; background: #13161d; border: 1px solid #1f2330; border-radius: 20px;
+  font-size: 12px; font-weight: 600; color: #c3c9db; margin-left: auto;
+  padding: 7px 14px; white-space: nowrap;
+  background: linear-gradient(135deg, rgba(90,127,255,0.16), rgba(122,99,245,0.10));
+  border: 1px solid rgba(90,127,255,0.35); border-radius: 20px;
 }
 @media (max-width: 720px) {
   .range-bar { flex-direction: column; align-items: stretch; }
+  .range-custom { justify-content: space-between; }
   #range-summary { margin-left: 0; width: 100%; text-align: center; }
 }
 </style>
 
 {# ── Date-range filter (applies to everything below -- see renderAll() JS) ── #}
 <div class="range-bar" id="range-bar">
+  <span class="range-bar-icon">📆</span>
   <div class="range-presets">
     <button type="button" class="range-btn" data-range="all">All time</button>
     <button type="button" class="range-btn" data-range="today">Today</button>
@@ -254,10 +284,15 @@
   </div>
   <div class="range-divider"></div>
   <div class="range-custom">
-    <label for="range-from">Custom</label>
-    <input type="date" id="range-from" aria-label="From date">
+    <div class="range-field">
+      <label for="range-from">From</label>
+      <input type="date" id="range-from" aria-label="From date">
+    </div>
     <span class="range-sep">&rarr;</span>
-    <input type="date" id="range-to" aria-label="To date">
+    <div class="range-field">
+      <label for="range-to">To</label>
+      <input type="date" id="range-to" aria-label="To date">
+    </div>
     <button type="button" id="range-apply">Apply</button>
   </div>
   <span id="range-summary"></span>
@@ -1405,7 +1440,7 @@ $('kpi-strip').innerHTML = kpiHtml;
       <span><b>${monthWins}</b> win${monthWins===1?'':'s'}</span>
       <span><b>${monthLosses}</b> loss${monthLosses===1?'es':''}</span>
       ${monthWr!=null ? `<span>Win rate <b>${monthWr.toFixed(0)}%</b></span>` : ''}
-      ${monthHasAmt ? `<span>Gain/loss <b style="color:${monthPnlAmt>=0?'#44ff88':'#ff4444'};">${monthPnlAmt>=0?'+':''}${monthPnlAmt.toFixed(2)}</b></span>` : ''}
+      ${monthHasAmt ? `<span>Gain/loss <b style="color:${monthPnlAmt>=0?'#1a9e5c':'#d23b3b'};">${monthPnlAmt>=0?'+':''}${monthPnlAmt.toFixed(2)}</b></span>` : ''}
     </div>`;
     html += `<div class="cal-grid">`;
     for (const d of DOW_LABELS) html += `<div class="cal-dow">${d}</div>`;
@@ -1417,11 +1452,11 @@ $('kpi-strip').innerHTML = kpiHtml;
         continue;
       }
       const wr = (d.wins + d.losses) > 0 ? (d.wins/(d.wins+d.losses)*100) : null;
-      const wrColor = wr==null ? '#5a6275' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
+      const wrColor = wr==null ? '#8b93a8' : (wr>=60?'#1a9e5c':wr>=40?'#b8860b':'#d23b3b');
       // e.g. "2W/1L" instead of just a win-rate % -- shows the actual
       // win/loss split at a glance, not just a derived percentage.
       const wlTxt = `${d.wins}W/${d.losses}L`;
-      const pnlColor = d.pnlAmt >= 0 ? '#44ff88' : '#ff4444';
+      const pnlColor = d.pnlAmt >= 0 ? '#1a9e5c' : '#d23b3b';
       const pnlTxt = d.hasAmt
         ? `${d.pnlAmt>=0?'+':''}${d.pnlAmt.toFixed(2)}`
         : `${d.pnlPct>=0?'+':''}${d.pnlPct.toFixed(1)}%`;
@@ -1432,6 +1467,11 @@ $('kpi-strip').innerHTML = kpiHtml;
         <div class="cal-day-pnl" style="color:${pnlColor};">${pnlTxt}</div>
       </div>`;
     }
+    // Trailing filler cells so the last week completes a full 7-column row,
+    // matching a real wall calendar's grid instead of trailing off ragged.
+    const usedCells = firstDow + daysInMonth;
+    const trailing = (7 - (usedCells % 7)) % 7;
+    for (let i=0; i<trailing; i++) html += `<div class="cal-day cal-empty"></div>`;
     html += `</div>`;
     calBody.innerHTML = html;
     calOverlay.style.display = 'flex';
