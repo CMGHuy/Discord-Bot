@@ -188,10 +188,17 @@ async def session_scan():
             if f.get("skipped_already_open", 0):
                 gap_parts.append(f"{f['skipped_already_open']} already open")
             gap_str = f" ({', '.join(gap_parts)})" if gap_parts else ""
+            # A little more visual variety than a single 🔍 -- a quick
+            # traffic-light-style read (🟢 several new alerts, 🟡 just one,
+            # plus a ✨ sparkle when at least one is a priority ⭐ setup) so
+            # the channel doesn't read as one flat wall of identical emoji.
+            n = len(alerts)
+            headline_icon = "🟢" if n >= 3 else "🟡" if n >= 1 else "⚪"
+            sparkle = " ✨" if any("⭐" in (a[0].title or "") for a in alerts) else ""
             summary = (
-                f"🔍 **Scan** ({now_str}) — {f['tickers']} tickers, {f['checked']} combos checked → "
-                f"{f['scenarios_found']} scenario(s) found ({f['fully_qualifying']} qualifying) → "
-                f"**{len(alerts)} new alert(s) posted above**{gap_str}"
+                f"{headline_icon} 🔍 **Scan** ({now_str}) — 📡 {f['tickers']} tickers, {f['checked']} combos checked → "
+                f"🧮 {f['scenarios_found']} scenario(s) found (✅ {f['fully_qualifying']} qualifying) → "
+                f"**🚨 {n} new alert(s) posted above**{sparkle}{gap_str}"
             )
             await channel.send(summary)
     else:

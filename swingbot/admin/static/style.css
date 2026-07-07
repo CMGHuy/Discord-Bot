@@ -20,7 +20,19 @@ a { color: #6ea8fe; }
 .shell { display: flex; min-height: 100vh; }
 .sidebar {
   width: 210px; flex-shrink: 0; background: #13161d; border-right: 1px solid #1f2330;
-  display: flex; flex-direction: column; padding: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column; padding: 0; position: sticky; top: 0;
+  /* min-height (not a flat height:100vh) -- height:100vh capped the
+     sidebar's own box at exactly one viewport tall, so on any page whose
+     content (.content) is taller than the viewport -- which is most of
+     them, e.g. Performance -- the sidebar's dark background ran out
+     partway down and the page's plain background showed through below it
+     instead of the sidebar visually spanning the whole page. min-height
+     here still guarantees a full-viewport-tall sidebar on short pages, but
+     now also lets flexbox's default stretch behavior (the .shell row's
+     cross-axis) grow it to match whatever the tallest sibling (.content)
+     actually needs, with position:sticky still keeping its own nav content
+     pinned to the viewport as you scroll either way. */
+  min-height: 100vh; overflow-y: auto;
 }
 .sidebar .brand {
   display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 20px 16px;
@@ -31,9 +43,9 @@ a { color: #6ea8fe; }
    showing a mismatched black square behind the circular photo. The gold ring
    echoes the favicon's accent color for a consistent brand accent. */
 .sidebar .brand .brand-avatar {
-  width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
-  background: #13161d; border: 2px solid #e2b25a;
-  box-shadow: 0 0 0 3px #13161d, 0 2px 10px rgba(0,0,0,0.45);
+  width: 128px; height: 128px; border-radius: 50%; object-fit: cover;
+  background: #13161d; border: 3px solid #e2b25a;
+  box-shadow: 0 0 0 3px #13161d, 0 3px 14px rgba(0,0,0,0.45);
 }
 .sidebar .brand .brand-row { display: flex; align-items: center; gap: 10px; }
 .sidebar .brand .logo { font-size: 22px; }
@@ -573,7 +585,7 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 
   /* Restore full sidebar labels (and full-size avatar) when open */
   .sidebar .brand { padding: 18px 20px 16px; }
-  .sidebar .brand .brand-avatar { width: 64px; height: 64px; border-width: 2px; }
+  .sidebar .brand .brand-avatar { width: 128px; height: 128px; border-width: 3px; }
   .sidebar .brand .brand-text { display: inline; }
   .sidebar nav a { justify-content: flex-start; padding: 9px 12px; gap: 10px; }
   .sidebar nav a .nav-label { display: inline; }

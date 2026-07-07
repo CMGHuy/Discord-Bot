@@ -456,9 +456,9 @@ async def summary_cmd(ctx):
     )
     embed = discord.Embed(title=f"📋 Today's Summary — {today.isoformat()} (Berlin)", color=color)
 
-    embed.add_field(name="Opened today", value=str(len(opened_today)), inline=True)
-    embed.add_field(name="Closed today", value=str(len(closed_today)), inline=True)
-    embed.add_field(name="Still open", value=str(trade_log.get_stats()["open"]), inline=True)
+    embed.add_field(name="🆕 Opened today", value=str(len(opened_today)), inline=True)
+    embed.add_field(name="🏁 Closed today", value=str(len(closed_today)), inline=True)
+    embed.add_field(name="📂 Still open", value=str(trade_log.get_stats()["open"]), inline=True)
 
     embed.add_field(name="Wins", value=f"✅ {len(wins_today)}", inline=True)
     embed.add_field(name="Losses", value=f"❌ {len(losses_today)}", inline=True)
@@ -467,14 +467,18 @@ async def summary_cmd(ctx):
     else:
         embed.add_field(name="​", value="​", inline=True)   # keeps the 3-column grid even
 
-    embed.add_field(name="Avg realized P&L", value=f"{avg_pnl_pct:+.2f}%" if avg_pnl_pct is not None else "n/a", inline=True)
-    embed.add_field(name="Net gain/loss", value=f"{net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
+    pnl_emoji = "🟢" if (avg_pnl_pct or 0) > 0 else "🔴" if (avg_pnl_pct or 0) < 0 else "⚪"
+    net_emoji = "🟢" if (net_amount or 0) > 0 else "🔴" if (net_amount or 0) < 0 else "⚪"
+    embed.add_field(name="📊 Avg realized P&L", value=f"{pnl_emoji} {avg_pnl_pct:+.2f}%" if avg_pnl_pct is not None else "n/a", inline=True)
+    embed.add_field(name="💰 Net gain/loss", value=f"{net_emoji} {net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
     embed.add_field(name="​", value="​", inline=True)
 
-    embed.add_field(name="Account balance", value=f"{acct['balance']:.2f}" if acct["balance"] is not None else "n/a", inline=True)
+    embed.add_field(name="🏦 Account balance", value=f"{acct['balance']:.2f}" if acct["balance"] is not None else "n/a", inline=True)
+    bal_change = acct.get("pct_change_today")
+    bal_emoji = "📈" if (bal_change or 0) > 0 else "📉" if (bal_change or 0) < 0 else "➖"
     embed.add_field(
         name="Balance change today",
-        value=f"{acct['pct_change_today']:+.2f}%" if acct["pct_change_today"] is not None else "no change yet today",
+        value=f"{bal_emoji} {bal_change:+.2f}%" if bal_change is not None else "no change yet today",
         inline=True,
     )
     embed.add_field(name="​", value="​", inline=True)
@@ -494,7 +498,11 @@ async def summary_cmd(ctx):
         embed.add_field(name="Closed trades today", value=f"```{text}```", inline=False)
 
     if opened_today:
-        lines = [f"🔵 `{t['id']}` {t['ticker']:6s} {t['direction']:7s} Lv{t['confidence_level']}" for t in opened_today]
+        lines = [
+            f"{'🟩' if t['direction'] == 'bullish' else '🟥'} `{t['id']}` {t['ticker']:6s} "
+            f"{'▲ LONG ' if t['direction'] == 'bullish' else '▼ SHORT'} {'⭐'*t.get('confidence_level', 0)}Lv{t['confidence_level']}"
+            for t in opened_today
+        ]
         text = "\n".join(lines)
         if len(text) > 1000:
             text = text[:997] + "…"

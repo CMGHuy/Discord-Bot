@@ -9,8 +9,11 @@ scan_engine.py imports everything here back and calls it exactly as
 before, so nothing about `!check`, the automatic scan, or the trade-detail
 chart regeneration used by the admin UI changes.
 """
+import json
 import logging
+import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import discord
 
@@ -21,6 +24,102 @@ from swingbot.core.strategy import HORIZONS
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 
 log = logging.getLogger("swing-bot.scan_engine")
+
+# ── "What changed since last scan" tracking ──────────────────────────────
+# A small on-disk cache of the last-posted numbers for each distinct
+# ticker/horizon/direction combo, so every embed can say what actually moved
+# since the last time this exact setup was shown (entry drifted, stop/target
+# adjusted, confidence upgraded/downgraded) instead of only ever showing a
+# fresh snapshot with no history. Deliberately its own tiny store rather than
+# reusing the automatic scan's confirmation-debounce state (core/state.py)
+# -- that state machine only exists for require_confirmation=True and is
+# cleared/consumed once confirmed, so it can't answer "what changed" for
+# `!check` (require_confirmation=False), which never touches it at all.
+_SNAPSHOT_PATH = os.path.join(config.DATA_DIR, "scan_snapshots.json")
+
+
+def _load_scan_snapshots() -> dict:
+    if not os.path.exists(_SNAPSHOT_PATH):
+        return {}
+    try:
+        with open(_SNAPSHOT_PATH, "r") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_scan_snapshots(data: dict) -> None:
+    try:
+        with open(_SNAPSHOT_PATH, "w") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def _format_duration_hms(total_seconds: float) -> str:
+    """Day/hour/minute holding-period label, e.g. "1 day 5 hours 32 minutes"
+    -- mirrors admin/app.py's _format_duration_hms exactly (duplicated
+    rather than imported since admin/ imports FROM core/, not the other way
+    around, and this one small formatter isn't worth a shared-module
+    detour for)."""
+    total_seconds = max(0.0, total_seconds)
+    total_minutes = int(total_seconds // 60)
+    days, rem = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    if hours or days:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    return " ".join(parts)
+
+
+def _snapshot_and_diff(item) -> str | None:
+    """
+    Compares this scenario's current entry/stop/target/confidence/R:R
+    against the last time this exact ticker + horizon + direction combo was
+    posted (by either `!check` or the automatic scan -- they share the same
+    store), and returns a short "what changed" summary. Returns None the
+    very first time a combo is seen (nothing to diff against yet) or when
+    every tracked number is unchanged.
+
+    Always writes the CURRENT numbers back to disk as the new "last seen"
+    snapshot before returning, so the NEXT scan/`!check` of this same combo
+    diffs against this one -- this call is the update, not just a read.
+    """
+    result, plan, conf = item.result, item.plan, item.conf
+    key = f"{result.ticker}|{result.horizon_key}|{result.trend}"
+    snapshots = _load_scan_snapshots()
+    prev = snapshots.get(key)
+
+    current = {
+        "entry": plan.entry, "stop_loss": plan.stop_loss, "take_profit": plan.take_profit,
+        "confidence_level": conf.level, "risk_reward_ratio": plan.risk_reward_ratio,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    snapshots[key] = current
+    _save_scan_snapshots(snapshots)
+
+    if prev is None:
+        return None
+
+    changes = []
+    if abs(prev.get("entry", plan.entry) - plan.entry) > 1e-9:
+        pct = ((plan.entry - prev["entry"]) / prev["entry"] * 100) if prev.get("entry") else 0
+        changes.append(f"Entry {prev['entry']:.2f} → {plan.entry:.2f} ({pct:+.1f}%)")
+    if abs(prev.get("stop_loss", plan.stop_loss) - plan.stop_loss) > 1e-9:
+        changes.append(f"Stop {prev['stop_loss']:.2f} → {plan.stop_loss:.2f}")
+    if abs(prev.get("take_profit", plan.take_profit) - plan.take_profit) > 1e-9:
+        changes.append(f"Target {prev['take_profit']:.2f} → {plan.take_profit:.2f}")
+    if prev.get("confidence_level") != conf.level:
+        prev_level = prev.get("confidence_level", conf.level)
+        arrow = "⬆️" if conf.level > prev_level else "⬇️"
+        changes.append(f"Confidence Lv{prev_level} {arrow} Lv{conf.level}")
+    if prev.get("risk_reward_ratio") != plan.risk_reward_ratio:
+        changes.append(f"R:R {prev.get('risk_reward_ratio', '?')}:1 → {plan.risk_reward_ratio}:1")
+
+    return " · ".join(changes) if changes else None
 
 
 @dataclass
@@ -192,6 +291,16 @@ def _build_trade_plan_table(item) -> str:
             f"({cur}{pos['position_value']:,.0f} deployed, "
             f"{cur}{pos['risk_amount']:,.0f} at risk @ {pos['risk_pct']}% rule){cap_note}",
         ))
+        # Possible P&L in real currency, not just % -- the "Suggested size"
+        # row above already states the $ at risk, but never the $ upside,
+        # so there was no way to see the actual dollar trade-off (risk $X to
+        # make $Y) without doing the shares x distance math yourself.
+        possible_profit = pos["shares"] * abs(plan.take_profit - plan.entry)
+        pnl_line = f"+{cur}{possible_profit:,.0f} at target  /  -{cur}{pos['risk_amount']:,.0f} at stop"
+        if plan.target2_price is not None:
+            possible_profit2 = pos["shares"] * abs(plan.target2_price - plan.entry)
+            pnl_line += f"  (+{cur}{possible_profit2:,.0f} at stretch target)"
+        rows.append(("Possible P&L", pnl_line))
 
     key_width = max(len(k) for k, _ in rows)
     lines = [f"{k.ljust(key_width)} : {v}" for k, v in rows]
@@ -257,6 +366,10 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         )
 
     embed.add_field(name="🎯 Trade plan", value=_build_trade_plan_table(item), inline=False)
+
+    what_changed = _snapshot_and_diff(item)
+    if what_changed:
+        embed.add_field(name="🔄 What changed since last scan", value=what_changed, inline=False)
 
     level_word = "Resistance" if is_bull else "Support"
     opposite_word = "Support" if is_bull else "Resistance"
@@ -402,7 +515,36 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
             lesson = lesson[:997] + "…"
         embed.add_field(name="📖 Why this trade was opened", value=lesson, inline=False)
 
+    # What happened -- a narrative summary of the trade's actual outcome
+    # (how it closed, how long it took, and the real PnL), placed right
+    # under "why this trade was opened" so the two read together as a
+    # before/after: why we got in, then what actually happened. The
+    # "Result" line up top is a compact stat strip for scanning several
+    # trades at once; this is the same numbers spelled out in one sentence
+    # for whoever's reading just this one trade.
     close_reason = trade.get("close_reason", "")
+    reason_phrases = {
+        "manual": "closed manually",
+        "auto (price monitor)": "closed automatically after price hit its stop-loss or take-profit",
+        "auto (near-TP stall)": "closed automatically after stalling near its take-profit without quite reaching it",
+        "auto (near-TP timeout)": "closed automatically after running out of time while sitting near its take-profit",
+    }
+    reason_phrase = reason_phrases.get(close_reason, close_reason or "closed")
+    dir_word = "long" if is_bull else "short"
+    held_phrase = ""
+    try:
+        opened_dt = datetime.fromisoformat(trade["opened_at"])
+        closed_dt = datetime.fromisoformat(trade["closed_at"])
+        held_phrase = f" after being held {_format_duration_hms(max(0.0, (closed_dt - opened_dt).total_seconds()))}"
+    except Exception:
+        pass
+    exit_phrase = f"{cur}{exit_price:.2f}" if exit_price is not None else "an unrecorded price"
+    what_happened = (
+        f"This {dir_word} trade opened at {cur}{entry:.2f} and was {reason_phrase}{held_phrase}, "
+        f"exiting at {exit_phrase} -- {pnl_str} ({amount_str}, {r_str})."
+    )
+    embed.add_field(name="📋 What happened", value=what_happened, inline=False)
+
     if close_reason:
         embed.add_field(name="Close reason", value=close_reason, inline=False)
 

@@ -88,7 +88,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  margin-top: 16px;
+  /* No margin-top -- see the note on .pie-panel-row below. Every section's
+     spacing comes from the one shared margin-bottom:18px rule above; this
+     used to also add its own margin-top:16px, making the gap ABOVE a
+     .stats-two-col row (18px + 16px = 34px) bigger than the gap below it
+     (just 18px) -- inconsistent for no real reason. */
 }
 
 /* ── Pie chart panel row (Grafana-style) ───────────────────────────────────
@@ -108,7 +112,15 @@
      the right. */
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
-  margin-top: 16px;
+  /* No margin-top here (unlike an earlier version of this rule) -- every
+     section's spacing on this page comes from ONE source, the shared
+     margin-bottom:18px rule above (#range-bar, .kpi-strip, .chart-card,
+     .stats-two-col, .pie-panel-row, .detail-two-col). This rule used to
+     also set its own margin-top:16px on top of that, which made the gap
+     BEFORE the pie row (18px from the section above + this 16px = 34px)
+     visibly bigger than the gap AFTER it (just 18px, since the next
+     section doesn't add its own margin-top) -- inconsistent spacing for
+     no reason other than this row having an extra rule the others don't. */
 }
 @media (max-width: 720px) {
   .stats-two-col { grid-template-columns: 1fr !important; }
@@ -980,7 +992,7 @@ const kpiHtml = [
   kpi(maxDD.toFixed(1)+'%',     'Max Drawdown','down'),
   kpi(calmar  !=null?fmt2(calmar) :'—', 'Calmar',  calmar !=null&&calmar >=1?'up':calmar !=null&&calmar >=0?'warn':'down'),
   kpi(volatility.toFixed(1)+'%','Volatility (ann)'),
-  kpi(avgHold !=null?fmt1(avgHold)+'d':'—','Avg Hold'),
+  kpi(avgHold !=null?formatHoldingDuration(avgHold):'—','Avg Hold'),
   kpi(fmt1(tradesPerMo)+'/mo',  'Trades/Month'),
   kpi(fmt1(pctInMarket)+'%',    '% In Market'),
 ].join('');
@@ -1248,33 +1260,68 @@ $('kpi-strip').innerHTML = kpiHtml;
    to several months. */
 const HOLD_BUCKET_EDGES_H  = [0, 2, 4, 8, 12, 24, 48, 72, 120, 168, 336, 672, Infinity];
 const HOLD_BUCKET_LABELS   = ['0-2h','2-4h','4-8h','8-12h','12-24h','2 days','3 days','5 days','1 week','2 weeks','4 weeks','4+ weeks'];
+function bucketIndexForHours(h) {
+  for (let i = 0; i < HOLD_BUCKET_LABELS.length; i++) {
+    if (h >= HOLD_BUCKET_EDGES_H[i] && h < HOLD_BUCKET_EDGES_H[i+1]) return i;
+  }
+  return -1;
+}
+// Kept alongside bucketizeHoldHoursByStatus below -- the holding-period split
+// pie further down only needs plain counts per bucket, not a win/loss split.
 function bucketizeHoldHours(hoursArr) {
-  return HOLD_BUCKET_LABELS.map((_, i) =>
-    hoursArr.filter(h => h >= HOLD_BUCKET_EDGES_H[i] && h < HOLD_BUCKET_EDGES_H[i+1]).length
-  );
+  return HOLD_BUCKET_LABELS.map((_, i) => hoursArr.filter(h => bucketIndexForHours(h) === i).length);
 }
 const holdHours = holdDays.map(d => d * 24);
+// Bucketizes by hours AND status in one pass, so each bar can show its win/
+// loss (and any manually-closed "other") composition as stacked, colored
+// segments instead of one flat, single-colored count -- answers "of the
+// trades held this long, how many actually won vs. lost", not just "how
+// many trades were held this long".
+function bucketizeHoldHoursByStatus(items) {
+  const win = HOLD_BUCKET_LABELS.map(() => 0);
+  const loss = HOLD_BUCKET_LABELS.map(() => 0);
+  const other = HOLD_BUCKET_LABELS.map(() => 0);
+  items.forEach(({ hours, status }) => {
+    const i = bucketIndexForHours(hours);
+    if (i === -1) return;
+    if (status === 'win') win[i]++;
+    else if (status === 'loss') loss[i]++;
+    else other[i]++;
+  });
+  return { win, loss, other };
+}
+const holdItems = trades.filter(t => t.holding_days != null).map(t => ({ hours: t.holding_days * 24, status: t.status }));
 
 (function () {
-  if (holdHours.length < 2) return;
-  const counts = bucketizeHoldHours(holdHours);
+  if (holdItems.length < 2) return;
+  const { win: winCounts, loss: lossCounts, other: otherCounts } = bucketizeHoldHoursByStatus(holdItems);
+  const totalsByBucket = HOLD_BUCKET_LABELS.map((_, i) => winCounts[i] + lossCounts[i] + otherCounts[i]);
+  const hasOther = otherCounts.some(c => c > 0);
   $('dur-hist-card').style.display = '';
+  const datasets = [
+    { label: 'Wins',   data: winCounts,  backgroundColor: 'rgba(68,255,136,.75)', borderWidth: 0, stack: 'holding' },
+    { label: 'Losses', data: lossCounts, backgroundColor: 'rgba(255,68,68,.75)',  borderWidth: 0, stack: 'holding' },
+  ];
+  if (hasOther) {
+    datasets.push({ label: 'Manually closed', data: otherCounts, backgroundColor: 'rgba(139,147,168,.55)', borderWidth: 0, stack: 'holding' });
+  }
   mkChart('chart-dur-hist', {
     type: 'bar',
-    data: { labels: HOLD_BUCKET_LABELS, datasets:[{ label:'Trades', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
+    data: { labels: HOLD_BUCKET_LABELS, datasets },
     options: {
       responsive:true, maintainAspectRatio:false,
       plugins:{
-        legend:{display:false},
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:10}} },
         tooltip:{ callbacks:{
           title: t => `Held ${t[0].label}`,
-          label: ctx => ` ${ctx.parsed.y} trade${ctx.parsed.y===1?'':'s'}`,
+          label: ctx => ctx.parsed.y ? ` ${ctx.dataset.label}: ${ctx.parsed.y}` : null,
+          footer: t => `Total: ${totalsByBucket[t[0].dataIndex]} trade${totalsByBucket[t[0].dataIndex]===1?'':'s'}`,
         } },
       },
       scales: {
-        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxRotation:0, minRotation:0, font:{size:9.5}},
+        x: { stacked:true, grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxRotation:0, minRotation:0, font:{size:9.5}},
              title:{ display:true, text:'Holding period', color:chartDefaults.tickColor, font:{size:10} } },
-        y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1},
+        y: { stacked:true, grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1},
              title:{ display:true, text:'Number of trades', color:chartDefaults.tickColor, font:{size:10} } },
       },
     },
@@ -1735,20 +1782,38 @@ const holdHours = holdDays.map(d => d * 24);
         html += `<div class="cal-day"><div class="cal-day-num">${day}</div></div>`;
         continue;
       }
-      const wr = (d.wins + d.losses) > 0 ? (d.wins/(d.wins+d.losses)*100) : null;
-      const wrColor = wr==null ? '#8b93a8' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
-      // e.g. "2W/1L" instead of just a win-rate % -- shows the actual
-      // win/loss split at a glance, not just a derived percentage.
-      const wlTxt = `${d.wins}W/${d.losses}L`;
-      const pnlColor = d.pnlAmt >= 0 ? '#44ff88' : '#ff4444';
-      const pnlTxt = d.hasAmt
-        ? `${d.pnlAmt>=0?'+':''}${d.pnlAmt.toFixed(2)}`
-        : `${d.pnlPct>=0?'+':''}${d.pnlPct.toFixed(1)}%`;
-      html += `<div class="cal-day cal-clickable" data-day="${day}" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L, ${pnlTxt} -- click to see trades">
+      // Wins/losses colored independently (not one shared win-rate color) --
+      // wins: green once there's more than one, grey when there are none.
+      // Losses mirror that same idea: red once there's at least one, grey
+      // when there are none. A single win/loss (exactly 1) gets an amber
+      // "on the board but not yet a real trend" in-between color, same tier
+      // this page already uses elsewhere for a middling (neither clearly
+      // good nor bad) result.
+      const winColor  = d.wins   > 1 ? '#44ff88' : d.wins   === 0 ? '#8b93a8' : '#e2b25a';
+      const lossColor = d.losses > 1 ? '#ff4444' : d.losses === 0 ? '#8b93a8' : '#e2b25a';
+      const wlHtml = `<span style="color:${winColor};">${d.wins}W</span>/<span style="color:${lossColor};">${d.losses}L</span>`;
+      // Always show BOTH the % and the $ figure -- previously this picked
+      // ONE or the other depending on whether every trade that day happened
+      // to have a realized_pnl_amount (e.g. older trades logged before that
+      // field existed), so one day might show "+2.3%" and the very next
+      // "+45.20" with no way to tell they're different units at a glance.
+      // Now every day consistently shows "+2.3% (+45.20)", with the $ side
+      // falling back to an em-dash (rather than silently omitting it) on
+      // days where no trade has a dollar figure to show.
+      const pctColor = d.pnlPct >= 0 ? '#44ff88' : '#ff4444';
+      const pctTxt = `${d.pnlPct>=0?'+':''}${d.pnlPct.toFixed(1)}%`;
+      const amtTxt = d.hasAmt ? `${d.pnlAmt>=0?'+':''}${d.pnlAmt.toFixed(2)}` : '—';
+      const amtColor = d.hasAmt ? (d.pnlAmt >= 0 ? '#44ff88' : '#ff4444') : '#5a6275';
+      // Stacked on their own lines (not side by side) so neither figure has
+      // to compete for a narrow cell's width -- the cell's min-height (not a
+      // fixed height) already lets it grow a little taller to fit both.
+      const pnlHtml = `<span style="color:${pctColor};display:block;">${pctTxt}</span><span style="color:${amtColor};font-weight:600;display:block;">${amtTxt}</span>`;
+      const tipPnl = d.hasAmt ? `${pctTxt} (${amtTxt})` : `${pctTxt} (no $ data)`;
+      html += `<div class="cal-day cal-clickable" data-day="${day}" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L, ${tipPnl} -- click to see trades">
         <div class="cal-day-num">${day}</div>
         <div class="cal-day-count">${d.count} trade${d.count===1?'':'s'}</div>
-        <div class="cal-day-wr" style="color:${wrColor};">${wlTxt}</div>
-        <div class="cal-day-pnl" style="color:${pnlColor};">${pnlTxt}</div>
+        <div class="cal-day-wr">${wlHtml}</div>
+        <div class="cal-day-pnl">${pnlHtml}</div>
       </div>`;
     }
     // Trailing filler cells so the last week completes a full 7-column row,
@@ -1877,19 +1942,24 @@ const holdHours = holdDays.map(d => d * 24);
       const resCls = d[11]==='win' ? 'tl-win' : 'tl-loss';
       const dirCol = d[2].startsWith('▲') ? '#44ff88' : '#ff4444';
       const holdLabel = d[5] !== '' ? formatHoldingDuration(d[5]) : null;
+      const openedTitle = d[3] ? `Opened ${d[3]}` : 'Open date unknown';
+      const closedTitle = d[4] ? `Closed ${d[4]}` : 'Not yet closed';
+      const outcomeTitle = d[11] === 'win' ? 'Closed profitably by hitting its take-profit target'
+        : d[11] === 'loss' ? 'Closed at a loss by hitting its stop-loss'
+        : 'Closed manually, not by hitting stop or target';
       return `<tr>
-        <td style="font-weight:600;color:#dde1ea;">${d[0]}</td>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d[1]}">${d[1]}</td>
-        <td style="color:${dirCol};font-weight:600;">${d[2]}</td>
-        <td>${d[3]}</td>
-        <td>${d[4]}</td>
-        <td style="white-space:nowrap;">${holdLabel !== null ? holdLabel : '—'}</td>
-        <td>$${d[6]}</td>
-        <td>$${d[7]}</td>
-        <td class="${pnlCls}">${pnlTxt}</td>
-        <td class="${amtCls}">${amtTxt}</td>
-        <td style="color:#e2b25a;">Lv${d[10]}</td>
-        <td class="${resCls}" style="text-transform:capitalize;">${d[11]}</td>
+        <td style="font-weight:600;color:#dde1ea;" title="${d[0]} -- ticker symbol">${d[0]}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Strategy/confirming method: ${d[1]}">${d[1]}</td>
+        <td style="color:${dirCol};font-weight:600;" title="${d[2].includes('Long') ? 'Long (bullish)' : 'Short (bearish)'}">${d[2]}</td>
+        <td title="${openedTitle}">${d[3]}</td>
+        <td title="${closedTitle}">${d[4]}</td>
+        <td style="white-space:nowrap;" title="Time held, from open to close">${holdLabel !== null ? holdLabel : '—'}</td>
+        <td title="Entry price this trade was opened at">$${d[6]}</td>
+        <td title="Actual fill price when this trade closed">$${d[7]}</td>
+        <td class="${pnlCls}" title="Realized P&amp;L %, direction-adjusted">${pnlTxt}</td>
+        <td class="${amtCls}" title="Realized gain/loss in account currency, based on the position size snapshotted when this trade was opened">${amtTxt}</td>
+        <td style="color:#e2b25a;" title="Confidence level Lv${d[10]} of 5 at the time this trade was opened">Lv${d[10]}</td>
+        <td class="${resCls}" style="text-transform:capitalize;" title="${outcomeTitle}">${d[11]}</td>
       </tr>`;
     }).join('');
 

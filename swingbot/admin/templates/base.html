@@ -60,7 +60,13 @@
       <button type="button" id="font-size-inc" aria-label="Increase font size">A&#43;</button>
     </div>
     <div class="sidebar-footer">
+      {% if versions and versions.last_updated %}
+      <div title="VERSION.json's own last-modified time -- bumped by 0.0.1 every time a real code change is made, so this doubles as when this container's image was last actually updated">
+        Last updated: {{ versions.last_updated }}
+      </div>
+      {% else %}
       {{ now }}
+      {% endif %}
       {% if versions %}
       <div class="version-tag" title="UI: {{ versions.ui }}&#10;Swing bot: {{ versions.bot }}">
         UI v{{ versions.ui }} &middot; Bot v{{ versions.bot }}

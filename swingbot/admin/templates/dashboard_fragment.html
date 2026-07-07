@@ -89,7 +89,9 @@
       </div>
       <div class="stat-sub">
         Risk % mode -- risks {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.risk_amount) }} ({{ sizing_note.risk_pct }}%) if stopped out,
-        capped at {{ sizing_note.max_position_pct }}% of balance. Varies per trade with stop distance --
+        capped at {{ sizing_note.max_position_pct }}% of balance
+        {%- if sizing_note.max_position_value_absolute %} or {{ cur_map.values()|list|first|default('') }}{{ '{:,.0f}'.format(sizing_note.max_position_value_absolute) }} absolute, whichever is tighter{% endif %}.
+        Varies per trade with stop distance --
         switch to <code>!account sizing account</code> for a fixed premium instead.
       </div>
     {% endif %}
@@ -158,10 +160,10 @@
     </div>
     <div class="stat-sub">across open trades</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" title="Average time held from open to close (win/loss/manually-closed), day/hour/minute granularity">
     <div class="stat-label">Avg holding period</div>
     <div class="stat-value" style="color: #6ea8fe;">
-      {{ '%.1f d'|format(stats.avg_holding_days) if stats.avg_holding_days is not none else '—' }}
+      {{ stats.avg_holding_label if stats.avg_holding_label else '—' }}
     </div>
     <div class="stat-sub">closed trades</div>
   </div>
@@ -236,7 +238,7 @@
     {%- set is_bull = t.direction == 'bullish' -%}
     {%- set conf_score = t.get('confidence_score') -%}
     <tr class="clickable" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
-      <td class="muted">{{ loop.index }}</td>
+      <td class="muted" title="Row number, per the table's current sort order">{{ loop.index }}</td>
 
       {# ── Status cell: dot + bar + live SL/TP distances ─────────────────── #}
       <td data-sort="{{ status.proximity }}"
@@ -269,7 +271,9 @@
       </td>
 
       {# Ticker #}
-      <td><strong>{{ t.ticker }}</strong></td>
+      <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
+        <strong>{{ t.ticker }}</strong>
+      </td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
       <td title="Sources: {{ _all_sources | unique | join(', ') if _all_sources else 'n/a' }}">
@@ -289,13 +293,14 @@
         </span>
       </td>
 
-      <td data-sort="{{ t.confidence_level }}">
+      <td data-sort="{{ t.confidence_level }}" title="Confidence level Lv{{ t.confidence_level }} of 5 -- higher means more confirming signals lined up behind this setup at the time it was opened">
         <span class="confidence-badge" style="color:{{ confidence_hex(t.confidence_level) }};">
           Lv{{ t.confidence_level }}
         </span>
       </td>
 
-      <td data-sort="{{ conf_score if conf_score is not none else 0 }}">
+      <td data-sort="{{ conf_score if conf_score is not none else 0 }}"
+          title="Confidence score out of 100 -- the underlying number the Lv1-5 confidence level is derived from">
         {%- if conf_score is not none -%}
           <span style="font-weight:600;color:
             {%- if conf_score >= 75 %} #6dda9e
@@ -304,7 +309,7 @@
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
 
-      <td>{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td title="Planned entry price for this trade">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
 
       {# Current price — direction-aware color + blink when live #}
       {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
@@ -330,9 +335,9 @@
         {%- endif -%}
       </td>
 
-      <td style="color:#da6d6d;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
-      <td style="color:#6dda9e;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
-      <td>{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
+      <td style="color:#da6d6d;" title="Stop-loss price -- this trade closes as a loss if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
+      <td style="color:#6dda9e;" title="Take-profit (target) price -- this trade closes as a win if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
+      <td title="Planned risk:reward ratio at entry -- reward distance (entry to target) ÷ risk distance (entry to stop)">{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
 
       {# Unrealized gain/loss in account currency -- ALWAYS the shares actually
          snapshotted onto this trade at open time (t.shares), never sizing_map's
@@ -680,30 +685,32 @@
         data-dir="{{ t.direction }}"
         data-conf="{{ t.confidence_level }}"
         onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
-      <td class="muted"><span class="row-num">{{ loop.index }}</span></td>
-      <td>
+      <td class="muted" title="Row number, per the table's current sort order"><span class="row-num">{{ loop.index }}</span></td>
+      <td title="{% if t.status == 'win' %}Closed profitably by hitting its take-profit target{% elif t.status == 'loss' %}Closed at a loss by hitting its stop-loss{% else %}Closed manually (e.g. via the ✕ button or the near-TP timeout), not by hitting stop or target{% endif %}">
         {% if t.status == 'win' %}<span class="outcome-win">WIN</span>
         {% elif t.status == 'loss' %}<span class="outcome-loss">LOSS</span>
         {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
-      <td><strong>{{ t.ticker }}</strong></td>
+      <td title="{{ t.ticker }} -- click this row to open the trade's detail page"><strong>{{ t.ticker }}</strong></td>
       {%- set _ct_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
       <td title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>
-      <td><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
-      <td>
+      <td title="{{ horizon_labels.get(t.horizon_key, t.horizon_key) if horizon_labels is defined else t.horizon_key }} swing horizon this trade was opened under"><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
+      <td title="{{ 'Long (bullish)' if t.direction == 'bullish' else 'Short (bearish)' }}">
         <span style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:12px;font-weight:600;">
           {{ '▲' if t.direction == 'bullish' else '▼' }}
         </span>
       </td>
-      <td><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
-      <td style="text-align:right;" class="muted" data-sort="{{ t.entry }}">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
-      <td style="text-align:right;" data-sort="{{ t.exit_price if t.exit_price else -1 }}">
+      <td title="Confidence level Lv{{ t.confidence_level }} of 5 at the time this trade was opened"><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
+      <td style="text-align:right;" class="muted" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td style="text-align:right;" data-sort="{{ t.exit_price if t.exit_price else -1 }}"
+          title="{{ 'Actual fill price when this trade closed' if t.exit_price else 'No exit price recorded for this trade' }}">
         {%- if t.exit_price -%}{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
       <td style="text-align:right;font-weight:700;
                  color:{% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
-          data-sort="{{ c_pnl if c_pnl is not none else -999999 }}">
+          data-sort="{{ c_pnl if c_pnl is not none else -999999 }}"
+          title="Realized P&amp;L %, direction-adjusted: (exit − entry) / entry, flipped in sign for short trades">
         {{ '%+.2f%%'|format(c_pnl) if c_pnl is not none else '—' }}
       </td>
       <td style="text-align:right;font-weight:700;
@@ -716,12 +723,14 @@
       </td>
       <td style="text-align:right;font-weight:600;
                  color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
-          data-sort="{{ c_r if c_r is not none else -999999 }}">
+          data-sort="{{ c_r if c_r is not none else -999999 }}"
+          title="Realized R-multiple: actual gain/loss ÷ planned risk (entry to stop distance) -- e.g. +2.00 means this trade made twice what it risked">
         {{ '%+.2f'|format(c_r) if c_r is not none else '—' }}
       </td>
-      <td style="text-align:right;white-space:nowrap;" class="muted" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}">{{ c_days.label if c_days is not none else '—' }}</td>
-      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
-      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.closed_at or '' }}" title="{{ (t.closed_at or '')[:16] }} UTC">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
+      <td style="text-align:right;white-space:nowrap;" class="muted" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}"
+          title="Time this trade was actually held, from open to close">{{ c_days.label if c_days is not none else '—' }}</td>
+      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="Opened {{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
+      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.closed_at or '' }}" title="{% if t.closed_at %}Closed {{ t.closed_at[:16] }} UTC{% else %}Not yet closed{% endif %}">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
       <td onclick="event.stopPropagation();" style="padding:4px 6px;display:flex;gap:4px;align-items:center;">
         <button type="button" class="icon-btn secondary"
                 title="Open trade detail"

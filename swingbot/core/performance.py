@@ -17,10 +17,15 @@ partial fills, or gaps beyond what the daily bar shows.
 """
 import json
 import os
-import uuid
+import secrets
+import string
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from threading import Lock
+
+# Full alphanumeric charset (62 chars: 0-9, a-z, A-Z) trade ids are drawn
+# from -- see log_trade() below.
+_TRADE_ID_ALPHABET = string.ascii_letters + string.digits
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
@@ -188,7 +193,14 @@ class TradeLog:
         levels. Trades logged before this field existed simply won't
         have it; the detail page handles that gracefully.
         """
-        trade_id = str(uuid.uuid4())[:8]
+        # 16 characters, drawn from the full alphanumeric set (0-9, a-z, A-Z
+        # -- 62 possible characters per position), not just the first 8 hex
+        # characters of a UUID4 (which can only ever be 0-9a-f). With trade
+        # volume potentially running many trades a day, a full-alphanumeric
+        # 16-char id keeps the collision space enormous (62^16) while still
+        # staying short enough to read/type/paste around, unlike a full
+        # 36-char UUID string.
+        trade_id = "".join(secrets.choice(_TRADE_ID_ALPHABET) for _ in range(16))
         record = {
             "id": trade_id,
             "ticker": ticker,
@@ -318,7 +330,7 @@ class TradeLog:
             is_bull = trade["direction"] == "bullish"
             hit = False
             for _, bar in bars_since.iterrows():
-                hi, lo = float(bar["High"]), float(bar["Low"])
+                hi, lo, op = float(bar["High"]), float(bar["Low"]), float(bar["Open"])
                 if is_bull:
                     hit_stop   = lo <= trade["stop_loss"]
                     hit_target = hi >= trade["take_profit"]
@@ -327,29 +339,49 @@ class TradeLog:
                     hit_target = lo <= trade["take_profit"]
 
                 if hit_stop:
-                    updates.append((trade["id"], "loss", trade["stop_loss"]))
+                    # Realistic fill, not always the nominal stop price: if
+                    # this bar GAPPED past the stop before ever trading at it
+                    # (e.g. opened well below an overnight stop on a bullish
+                    # trade), the real fill is that worse open price, not the
+                    # stop level itself -- a stop order can't fill better
+                    # than the first price actually available. Only when the
+                    # bar merely traded DOWN (or up, for a short) to the stop
+                    # intrabar, without gapping past it at the open, does it
+                    # fill at the stop exactly. Previously this always used
+                    # the exact stop_loss/take_profit price no matter what,
+                    # which is why every single loss showed an identical,
+                    # suspiciously-perfect -1.00 R-multiple regardless of
+                    # what the market actually did -- real losses (and wins)
+                    # should vary with real gap/slippage the same way a live
+                    # broker fill would.
+                    fill = min(op, trade["stop_loss"]) if is_bull else max(op, trade["stop_loss"])
+                    updates.append((trade["id"], "loss", fill))
                     already_closed_ids.add(trade["id"])
                     hit = True
                     break
                 elif hit_target:
-                    updates.append((trade["id"], "win", trade["take_profit"]))
+                    fill = max(op, trade["take_profit"]) if is_bull else min(op, trade["take_profit"])
+                    updates.append((trade["id"], "win", fill))
                     already_closed_ids.add(trade["id"])
                     hit = True
                     break
 
             # Check live price (premarket/aftermarket) if the bar scan didn't
             # already close this trade and we have a live quote to work with.
+            # Uses the actual observed live_price as the fill (not the
+            # nominal stop/target level) for the same reason as above -- it's
+            # a real price we actually saw, not a theoretical perfect fill.
             if not hit and live_price and live_price > 0 and trade["id"] not in already_closed_ids:
                 if is_bull:
                     if live_price <= trade["stop_loss"]:
-                        updates.append((trade["id"], "loss", trade["stop_loss"]))
+                        updates.append((trade["id"], "loss", live_price))
                     elif live_price >= trade["take_profit"]:
-                        updates.append((trade["id"], "win", trade["take_profit"]))
+                        updates.append((trade["id"], "win", live_price))
                 else:
                     if live_price >= trade["stop_loss"]:
-                        updates.append((trade["id"], "loss", trade["stop_loss"]))
+                        updates.append((trade["id"], "loss", live_price))
                     elif live_price <= trade["take_profit"]:
-                        updates.append((trade["id"], "win", trade["take_profit"]))
+                        updates.append((trade["id"], "win", live_price))
 
         if not updates:
             return []

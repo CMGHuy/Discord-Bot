@@ -315,6 +315,15 @@ def _render_dashboard_fragment() -> str:
 
     stats = tl.get_stats(trades=scoped_trades)
     stats.update(tl.get_extended_stats(trades=scoped_trades))
+    # Day/hour/minute label for the "Avg holding period" stat card, same
+    # granularity as every other holding-period display on this page (Open
+    # Trades' Days column, Trade History's Days column) -- avg_holding_days
+    # alone as "%.1f d" collapsed anything under a day down to "0.0 d",
+    # which is a less useful reading than "18 hours 24 minutes".
+    stats["avg_holding_label"] = (
+        _format_duration_hms(stats["avg_holding_days"] * 86400)
+        if stats.get("avg_holding_days") is not None else None
+    )
 
     # Closed trades -- built early so their tickers are included in cur_map
     # below. Deliberately NOT scoped to the dashboard mode -- this feeds the
@@ -365,26 +374,49 @@ def _render_dashboard_fragment() -> str:
     # (the default) there is no single fixed premium -- position value varies
     # per trade with how far away its stop is, up to the Max position size %
     # cap -- so we surface the worked-out range instead of a single figure.
+    #
+    # Every figure here is ALSO run through the two absolute $ caps
+    # (max_position_value_absolute / max_risk_amount_absolute -- see
+    # compute_position_size()'s docstring in core/account.py) the same way
+    # compute_position_size() itself does, taking whichever cap is tighter.
+    # This card used to only apply the %-based caps, so once the absolute
+    # caps were introduced it could show a stale, much larger "up to" figure
+    # than any trade could actually reach -- e.g. balance x max_position_pct
+    # coming out to $50,000 while every real trade was actually being capped
+    # at the $1,000 absolute limit under the hood.
+    #
     # Note this reflects TODAY's settings only: any trade opened under a
     # different balance/risk/mode has its own shares snapshotted at open time
     # (see account.py's module docstring) and won't retroactively match this.
     _sizing_balance = float(account_cfg.get("balance", 0))
+    _max_pos_abs = float(account_cfg.get("max_position_value_absolute", 0) or 0)
+    _max_risk_abs = float(account_cfg.get("max_risk_amount_absolute", 0) or 0)
     if account_cfg.get("sizing_mode") == "account_pct":
-        _premium = round(_sizing_balance * float(account_cfg.get("position_pct", 0)) / 100.0, 2)
+        _premium = _sizing_balance * float(account_cfg.get("position_pct", 0)) / 100.0
+        _premium = min(_premium, _sizing_balance * float(account_cfg.get("max_position_pct", 0)) / 100.0) \
+            if account_cfg.get("max_position_pct") else _premium
+        if _max_pos_abs > 0:
+            _premium = min(_premium, _max_pos_abs)
         sizing_note = {
             "mode": "account_pct",
-            "premium": _premium,
+            "premium": round(_premium, 2),
             "position_pct": account_cfg.get("position_pct", 0),
         }
     else:
-        _risk_amount = round(_sizing_balance * float(account_cfg.get("risk_pct", 0)) / 100.0, 2)
-        _max_position = round(_sizing_balance * float(account_cfg.get("max_position_pct", 0)) / 100.0, 2)
+        _risk_amount = _sizing_balance * float(account_cfg.get("risk_pct", 0)) / 100.0
+        if _max_risk_abs > 0:
+            _risk_amount = min(_risk_amount, _max_risk_abs)
+        _max_position = _sizing_balance * float(account_cfg.get("max_position_pct", 0)) / 100.0
+        if _max_pos_abs > 0:
+            _max_position = min(_max_position, _max_pos_abs)
         sizing_note = {
             "mode": "risk_pct",
-            "risk_amount": _risk_amount,
+            "risk_amount": round(_risk_amount, 2),
             "risk_pct": account_cfg.get("risk_pct", 0),
-            "max_position": _max_position,
+            "max_position": round(_max_position, 2),
             "max_position_pct": account_cfg.get("max_position_pct", 0),
+            "max_position_value_absolute": _max_pos_abs,
+            "max_risk_amount_absolute": _max_risk_abs,
         }
 
     # Per-trade strategy label (reuses chart ranking so dashboard + chart agree).

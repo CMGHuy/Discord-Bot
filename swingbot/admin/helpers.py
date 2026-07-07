@@ -9,6 +9,7 @@ these back and calls them exactly as before.
 """
 import json
 import os
+from datetime import datetime, timezone
 from itertools import groupby
 
 from dotenv import dotenv_values
@@ -178,18 +179,32 @@ def get_versions() -> dict:
     missing, unreadable, or malformed -- the sidebar should always be able
     to render something rather than error the whole page out over a
     version display.
+
+    Also includes "last_updated" -- VERSION.json's own last-modified time,
+    formatted for display. Since this file is bumped by 0.0.1 every time a
+    real code change is made (the whole point of it being a version file),
+    its mtime doubles as "when was this container's image last actually
+    changed" -- there's no separate build-timestamp artifact baked into the
+    image to read instead, and this needs no extra plumbing to keep in sync.
+    None if the file doesn't exist yet or its mtime can't be read.
     """
     if not os.path.exists(VERSION_PATH):
-        return dict(_DEFAULT_VERSIONS)
+        return {**_DEFAULT_VERSIONS, "last_updated": None}
     try:
         with open(VERSION_PATH, "r") as f:
             data = json.load(f)
-        return {
+        versions = {
             "ui": str(data.get("ui", _DEFAULT_VERSIONS["ui"])),
             "bot": str(data.get("bot", _DEFAULT_VERSIONS["bot"])),
         }
     except (OSError, json.JSONDecodeError, AttributeError):
-        return dict(_DEFAULT_VERSIONS)
+        versions = dict(_DEFAULT_VERSIONS)
+    try:
+        mtime = datetime.fromtimestamp(os.path.getmtime(VERSION_PATH), tz=timezone.utc)
+        versions["last_updated"] = mtime.strftime("%Y-%m-%d %H:%M UTC")
+    except OSError:
+        versions["last_updated"] = None
+    return versions
 
 
 # ---------------------------------------------------------------------------
