@@ -59,6 +59,7 @@ would misrepresent the real technical level), just flagged, since a
 very tight stop is more exposed to being clipped by ordinary daily noise
 rather than a genuine reversal.
 """
+import math
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -555,4 +556,24 @@ class ScenarioSignal:
         # Re-confirm (reset the debounce) if the target has meaningfully
         # moved since the last scan, rather than treating a slightly
         # recalculated level as a brand new setup every single scan.
-        return f"{round(self.scenario.take_profit, 2)}"
+        #
+        # This used to round to a fixed 2 decimal places, which is an
+        # absolute-dollar tolerance -- fine for a $5 stock, but for
+        # anything priced in the tens/hundreds of dollars, ordinary
+        # intraday noise in the still-forming daily candle's high/low
+        # shifts an S/R-based target by MORE than $0.01 on almost every
+        # scan. Since confirm_or_update() (state.py) only counts a scan
+        # toward SIGNAL_CONFIRMATION_SCANS when state_value is IDENTICAL
+        # to the previous scan's, that meant most scenarios' debounce
+        # count kept getting reset back to 1 before ever reaching the
+        # required count -- only the rare ticker whose target happened to
+        # round to the exact same cent on back-to-back scans ever actually
+        # confirmed and alerted, while `!check` (require_confirmation=
+        # False, no debounce) showed everything else that was really
+        # qualifying.
+        tp = max(self.scenario.take_profit, 0.01)
+        tol_pct = 0.15  # ~0.15% tolerance per bucket, on a log scale (see
+                        # note above -- a linear tp/bucket_size division
+                        # would make tp cancel out entirely).
+        bucket = round(math.log(tp) / math.log(1 + tol_pct / 100.0))
+        return str(bucket)

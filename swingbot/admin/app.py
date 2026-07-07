@@ -45,6 +45,12 @@ from datetime import datetime, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
+except Exception:
+    _BERLIN_TZ = None
+
 from flask import Flask, Response, abort, redirect, render_template, request, send_file, url_for
 
 from swingbot import config
@@ -207,19 +213,64 @@ def _pos_color(pos_pct: float, entry_pct: float) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def _is_today_berlin(iso_ts: str | None) -> bool:
+    """True if the given ISO timestamp falls on today's Europe/Berlin calendar
+    day -- the same day boundary the daily retrospective and account summary
+    already use, so the dashboard's "Today" mode lines up with them."""
+    if not iso_ts:
+        return False
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if _BERLIN_TZ:
+            dt = dt.astimezone(_BERLIN_TZ)
+            today = datetime.now(_BERLIN_TZ).date()
+        else:
+            today = datetime.now(timezone.utc).date()
+        return dt.date() == today
+    except Exception:
+        return False
+
+
 def _render_dashboard_fragment() -> str:
+    # "Today" mode restricts the summarized panels (stat cards + tables) to
+    # just today's activity (Europe/Berlin calendar day) -- trades opened
+    # today, or closed today -- instead of the bot's whole history. "All
+    # days" (the default, matching the dashboard's original behavior) shows
+    # everything. Read from the query string so both the full-page load and
+    # the auto-refresh fragment fetch respect whichever mode the user picked.
+    mode = request.args.get("mode", "all")
+    if mode not in ("today", "all"):
+        mode = "all"
+
     # Single TradeLog read for the whole render -- avoids re-reading trades.json
     # separately for get_stats(), get_extended_stats(), and the trade lists.
     tl = _trades()
-    open_trades  = tl.get_trades(status="open", limit=None, sort_by="confidence")
-    stats        = tl.get_stats()
-    stats.update(tl.get_extended_stats())
+    all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at")
+
+    if mode == "today":
+        scoped_trades = [
+            t for t in all_raw
+            if _is_today_berlin(t.get("opened_at")) or _is_today_berlin(t.get("closed_at"))
+        ]
+        open_trades = sorted(
+            [t for t in scoped_trades if t["status"] == "open"],
+            key=lambda t: (t.get("confidence_level", 0), t.get("confidence_score", 0)),
+            reverse=True,
+        )
+    else:
+        scoped_trades = None  # None -> get_stats()/get_extended_stats() use the full trade set
+        open_trades = tl.get_trades(status="open", limit=None, sort_by="confidence")
+
+    stats = tl.get_stats(trades=scoped_trades)
+    stats.update(tl.get_extended_stats(trades=scoped_trades))
 
     # Closed trades (last 25 by closed_at) -- built early so their tickers
     # are included in cur_map below.
-    all_raw      = tl.get_trades(status=None, limit=None, sort_by="opened_at")
+    closed_pool = scoped_trades if mode == "today" else all_raw
     closed_trades = sorted(
-        [t for t in all_raw if t["status"] in ("win", "loss", "closed")],
+        [t for t in closed_pool if t["status"] in ("win", "loss", "closed")],
         key=lambda t: t.get("closed_at") or "",
         reverse=True,
     )[:25]
@@ -373,6 +424,7 @@ def _render_dashboard_fragment() -> str:
         closed_trades=closed_trades,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
         is_market_active=is_us_market_active(),
+        dashboard_mode=mode,
     )
 
 
@@ -383,6 +435,7 @@ def index():
         "Dashboard", "dashboard", "dashboard.html",
         fragment=_render_dashboard_fragment(),
         dashboard_refresh_seconds=config.DASHBOARD_REFRESH_SECONDS,
+        dashboard_mode=request.args.get("mode", "all"),
     )
 
 

@@ -148,21 +148,21 @@ FIELDS: list[Field] = [
                "strategy's own simulated level, counting distinct strategies (not raw sub-levels -- 5 Fibonacci "
                "ratios only ever count as one 'Fibonacci' vote) within this deviation of the final price."),
     Field("MIN_TARGET_CONFLUENCE_COUNT", "MIN_TARGET_CONFLUENCE_COUNT", "Trade Filters & Risk", "Min strategies confirmed",
-          type="number", default="1", min=1, max=10, step=1,
+          type="number", default="2", min=1, max=10, step=1,
           help="A scenario is dropped -- before its confidence level is even calculated -- unless at least this "
                "many DISTINCT strategies (EMA, VWAP, Fibonacci, rolling structure, zigzag pivots, Bollinger "
                "Bands, Donchian Channel, floor pivots, trendlines, Fair Value Gaps -- 10 total) land within "
                "'Confluence deviation %' of the target/stop price. 1 disables this filter (any single "
                "confirming strategy is enough). Can also be overridden per-run with `!check <horizon> <min_strategies>`."),
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
-          type="select", default="3", options=["1", "2", "3", "4", "5"],
+          type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
     Field("DEDUP_TOLERANCE_PCT", "DEDUP_TOLERANCE_PCT", "Trade Filters & Risk", "Dedup tolerance %",
           type="float", default="2.0", min=0, step=0.5,
           help="Two signals on the same ticker/direction are merged into one alert if entry/SL/TP are all within this % of each other."),
     Field("NEAR_CLOSE_ALERTS_ENABLED", "NEAR_CLOSE_ALERTS_ENABLED", "Trade Filters & Risk",
           "Approaching SL/TP notifications enabled",
-          type="checkbox", default="true",
+          type="checkbox", default="false",
           help="Post a warning to the closed-trades channel when an open trade's price gets within "
                "'Near-close threshold %' (below) of its stop-loss or target. Turn off here to temporarily "
                "silence these without losing the threshold setting -- SL/TP hits themselves (and the trade "
@@ -198,7 +198,7 @@ FIELDS: list[Field] = [
                "replace the full timeout."),
     Field("NEAR_TP_STALL_MAX_FLUCTUATION_PCT", "NEAR_TP_STALL_MAX_FLUCTUATION_PCT", "Trade Filters & Risk",
           "Near-TP stall max fluctuation %",
-          type="float", default="0.3", min=0, max=20, step=0.1,
+          type="float", default="0.5", min=0, max=20, step=0.1,
           help="If price moves less than this % (relative to entry) over the trailing stall-check window "
                "while sitting near the target, it's considered 'stalled' and the trade closes early to lock "
                "in the profit rather than waiting out the full timeout."),
@@ -231,11 +231,11 @@ FIELDS: list[Field] = [
                "in the live alert/scan pipeline uses it to size a position -- how many shares to actually buy "
                "is left entirely up to you. Edit anytime with !account risk PCT."),
     Field("MAX_OPEN_POSITIONS", "MAX_OPEN_POSITIONS", "Account Defaults", "Max open positions",
-          type="number", default="10", min=1, step=1,
+          type="number", default="30", min=1, step=1,
           help="Informational only, same as the two fields above: once this many paper trades are open, "
                "new alerts still post but the Discord embed shows a position-limit warning."),
     Field("MAX_POSITION_SIZE_PCT", "MAX_POSITION_SIZE_PCT", "Account Defaults", "Max position size % of account",
-          type="float", default="20.0", min=1, max=100, step=1,
+          type="float", default="5.0", min=1, max=100, step=1,
           help="Position-size cap: the suggested share count is clipped so shares × entry never exceeds "
                "this % of the account balance. Prevents a very tight stop on a cheap stock from implying "
                "a position that's a large fraction of the account (e.g. at 1% risk, a 0.50 stop on a "
@@ -243,8 +243,8 @@ FIELDS: list[Field] = [
                "ceiling for a single position; lower if you want more diversification headroom."),
     Field("POSITION_SIZING_MODE", "POSITION_SIZING_MODE", "Account Defaults", "Position sizing mode",
           type="select", default="risk_pct", options=[("risk_pct", "Risk % (fixed-fractional)"), ("account_pct", "Account % (fixed allocation)")],
-          help="'Risk %' (the original model): size so a full stop-out costs exactly Risk per trade % of "
-               "the account -- position size varies with how tight the stop is. 'Account %': size so the "
+          help="<b>Risk %</b> (the original model): size so a full stop-out costs exactly Risk per trade % of "
+               "the account -- position size varies with how tight the stop is. <b>Account %</b>: size so the "
                "position itself is always exactly Position size % of account (below) of the account balance, "
                "regardless of stop distance -- e.g. a €1,000,000 account at 0.1% always opens a €1,000 "
                "position. Live-editable per account via `!account sizing risk|account`, same as the other "
@@ -316,11 +316,11 @@ FIELDS: list[Field] = [
           type="number", default="1234", min=1, max=65535, step=1, hot_reloadable=False,
           help="Requires restarting the ADMIN container (Flask can't rebind its own port live)."),
     Field("DASHBOARD_REFRESH_SECONDS", "DASHBOARD_REFRESH_SECONDS", "Admin UI", "Dashboard auto-refresh (seconds)",
-          type="number", default="5", min=2, max=300, step=1,
+          type="number", default="10", min=2, max=300, step=1,
           help="How often the Dashboard page's open-trades table auto-refreshes while the 'Auto-refresh' "
                "checkbox is on. Takes effect on your next Dashboard page load -- no restart needed."),
     Field("LOGS_REFRESH_SECONDS", "LOGS_REFRESH_SECONDS", "Admin UI", "Logs auto-refresh (seconds)",
-          type="number", default="3", min=2, max=300, step=1,
+          type="number", default="10", min=2, max=300, step=1,
           help="How often the Logs page auto-refreshes while its own 'Auto-refresh' checkbox is on. "
                "Takes effect on your next Logs page load -- no restart needed."),
 ]

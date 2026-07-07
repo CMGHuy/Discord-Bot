@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="row" style="margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+  <div id="dashboard-mode-toggle" style="display:flex; border:1px solid #2a2e3d; border-radius:8px; overflow:hidden;">
+    <button type="button" class="dashboard-mode-btn" data-mode="today"
+            onclick="setDashboardMode('today')"
+            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">Today</button>
+    <button type="button" class="dashboard-mode-btn" data-mode="all"
+            onclick="setDashboardMode('all')"
+            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">All days</button>
+  </div>
   <label class="muted" style="display:flex;align-items:center;gap:6px;">
     <input type="checkbox" id="auto-refresh" checked> Auto-refresh every {{ dashboard_refresh_seconds }}s
   </label>
@@ -63,8 +71,54 @@
     _authHeader = 'same-origin';
   })();
 
+  // ---- Dashboard mode (Today / All days) ----------------------------------
+  // Persisted in localStorage so it survives a full page reload, and
+  // reflected in the URL (?mode=...) so the choice is also shareable/
+  // bookmarkable and the initial server-side render matches the toggle.
+  var dashboardMode = {{ (dashboard_mode | default('all')) | tojson }};
+  function updateDashboardModeButtons() {
+    document.querySelectorAll('.dashboard-mode-btn').forEach(function(btn) {
+      var active = btn.dataset.mode === dashboardMode;
+      btn.style.background = active ? '#2558c9' : '#13161d';
+      btn.style.color = active ? '#fff' : '#9aa3b8';
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  function setDashboardMode(mode) {
+    if (mode === dashboardMode) return;
+    dashboardMode = mode;
+    try { localStorage.setItem('dashboardMode', mode); } catch (e) {}
+    var url = new URL(window.location.href);
+    url.searchParams.set('mode', mode);
+    window.history.replaceState(null, '', url);
+    updateDashboardModeButtons();
+    refreshDashboard();
+  }
+  (function() {
+    // On first load, a saved localStorage preference wins over the
+    // server-rendered default (but the URL's own ?mode=, if present, was
+    // already used for the server-side render and takes precedence over
+    // both, since it's the most explicit signal).
+    var urlMode = new URL(window.location.href).searchParams.get('mode');
+    var switchedFromServerRender = false;
+    if (!urlMode) {
+      try {
+        var saved = localStorage.getItem('dashboardMode');
+        if ((saved === 'today' || saved === 'all') && saved !== dashboardMode) {
+          dashboardMode = saved;
+          switchedFromServerRender = true;
+        }
+      } catch (e) {}
+    }
+    updateDashboardModeButtons();
+    // The server-rendered fragment already on the page reflects the OLD
+    // mode in this case -- re-fetch immediately so it doesn't sit stale
+    // until the next auto-refresh tick.
+    if (switchedFromServerRender) { refreshDashboard(); }
+  })();
+
   function refreshDashboard() {
-    fetch('{{ url_for("dashboard_fragment") }}', { credentials: 'include' })
+    fetch('{{ url_for("dashboard_fragment") }}?mode=' + encodeURIComponent(dashboardMode), { credentials: 'include' })
       .then(function(r) {
         if (r.status === 401) {
           window.location.reload();
@@ -86,6 +140,19 @@
             // Keep existing input values and focus state intact across patches
             onBeforeElUpdated: function(from, to) {
               if (from.nodeName === 'INPUT' || from.nodeName === 'SELECT') return false;
+              // The session banner (Tokyo/London/New York pills) is populated
+              // entirely client-side by a <script> that runs once on initial
+              // load and keeps itself fresh via its own internal setTimeout
+              // loop -- it doesn't depend on server data at all. Scripts
+              // fetched via AJAX and patched into the DOM (morphdom or
+              // innerHTML) never re-execute, so if this subtree gets diffed
+              // like everything else, morphdom overwrites the JS-populated
+              // pills with the empty server-rendered markup from the fresh
+              // fetch and nothing ever fills them back in -- the banner goes
+              // blank after the very first auto-refresh and stays that way.
+              // Skipping the whole subtree here leaves the original script's
+              // DOM nodes (and its running timer) untouched across refreshes.
+              if (from.id === 'session-banner') return false;
               return true;
             }
           });

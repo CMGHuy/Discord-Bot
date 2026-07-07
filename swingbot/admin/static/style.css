@@ -344,6 +344,20 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
   gap: 16px 22px;
   padding: 20px 22px 22px;
 }
+/* Checkbox-type fields for a section are pulled out of the regular grid and
+   rendered together, first, in their own row -- narrower columns since a
+   checkbox + label needs far less width than a number/select input, and a
+   bottom border to visually separate them from the rest of the section's
+   fields that follow directly below in the normal field-grid. */
+.field-grid.checkbox-row {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  padding-bottom: 16px;
+  margin: 0 22px;
+  padding-left: 0;
+  padding-right: 0;
+  border-bottom: 1px solid #1f2330;
+}
+.field-grid.checkbox-row.no-border { border-bottom: none; padding-bottom: 22px; }
 /* CSS Grid already stretches every .field in a row to match that row's
    tallest member (default align-items: stretch on .field-grid) -- but a
    plain flex column just stacks its children top-down at their natural

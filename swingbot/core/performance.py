@@ -373,10 +373,17 @@ class TradeLog:
                 self._save()
         return newly_closed
 
-    def get_stats(self, confidence_level: int = None) -> dict:
+    def get_stats(self, confidence_level: int = None, trades: list | None = None) -> dict:
+        """
+        `trades`, if given, overrides the base trade set the stats are
+        computed over (e.g. the dashboard's "Today" mode passing in just
+        today's opened/closed trades instead of the whole history). Defaults
+        to every trade on record, same as before this parameter existed.
+        """
         self.refresh()
-        trades = self._trades if confidence_level is None else [
-            t for t in self._trades if t["confidence_level"] == confidence_level
+        base = self._trades if trades is None else trades
+        trades = base if confidence_level is None else [
+            t for t in base if t["confidence_level"] == confidence_level
         ]
         # "closed" = manually closed from admin UI (no SL/TP hit recorded);
         # counted as closed for total/win-rate denominator but not as win or loss.
@@ -397,7 +404,7 @@ class TradeLog:
     def get_stats_by_confidence(self) -> dict:
         return {level: self.get_stats(level) for level in range(1, 6)}
 
-    def get_extended_stats(self, confidence_level: int = None) -> dict:
+    def get_extended_stats(self, confidence_level: int = None, trades: list | None = None) -> dict:
         """
         Additional performance metrics beyond get_stats()'s win/loss counts,
         for the admin dashboard's stat cards:
@@ -420,8 +427,9 @@ class TradeLog:
         real R to compute without a stop or target actually being reached.
         """
         self.refresh()
-        trades = self._trades if confidence_level is None else [
-            t for t in self._trades if t["confidence_level"] == confidence_level
+        base = self._trades if trades is None else trades
+        trades = base if confidence_level is None else [
+            t for t in base if t["confidence_level"] == confidence_level
         ]
         closed = [t for t in trades if t["status"] in ("win", "loss", "closed")]
         open_trades = [t for t in trades if t["status"] == "open"]
