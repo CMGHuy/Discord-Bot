@@ -225,7 +225,9 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
         from swingbot.core.indicators import macd as _macd_fn
         horizon_to_macd = {
             "2w": (8, 17, 9), "4w": (12, 26, 9), "2m": (12, 26, 9),
-            "3m": (19, 39, 9), "6m": (26, 52, 9),
+            "3m": (19, 39, 9), "4m": (21, 43, 9), "5m": (24, 48, 9),
+            "6m": (26, 52, 9), "7m": (28, 56, 9), "8m": (31, 61, 9),
+            "9m": (33, 65, 9),
         }
         fast_p, slow_p, sig_p = horizon_to_macd.get(horizon_key, (12, 26, 9))
         _m = _macd_fn(close, fast=fast_p, slow=slow_p, signal=sig_p)
@@ -245,7 +247,7 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
         # Simplified wave detection works best at the intermediate 4w horizon.
         # 2w is too noisy (rapid oscillations create false wave patterns),
         # 2m/3m/6m are too coarse (pattern approximation degrades). Only 4w fires.
-        if horizon_key in ("2w", "2m", "3m", "6m"):
+        if horizon_key in ("2w", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m"):
             empty = pd.Series(False, index=df.index)
             return empty, empty
         threshold_pct = h["max_risk_pct"]
@@ -261,7 +263,10 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
     if strategy == "MA Ribbon":
         horizon_to_ribbon = {
             "2w": (10, 20, 50), "4w": (10, 20, 50),
-            "2m": (20, 50, 100), "3m": (20, 50, 200), "6m": (50, 100, 200),
+            "2m": (20, 50, 100), "3m": (20, 50, 200),
+            "4m": (30, 67, 200), "5m": (40, 83, 200),
+            "6m": (50, 100, 200),
+            "7m": (60, 117, 200), "8m": (70, 133, 200), "9m": (80, 150, 200),
         }
         fast_p, mid_p, slow_p = horizon_to_ribbon.get(horizon_key, (10, 20, 50))
         fast = ema(close, fast_p)
@@ -290,14 +295,20 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
         support    = df["Low"].rolling(lookback).min().shift(lookback)
         vol_avg    = df["Volume"].rolling(20).mean()
         vol_ratio  = df["Volume"] / vol_avg
-        recent_bars = {"2w": 10, "4w": 15, "2m": 20, "3m": 25, "6m": 30}.get(horizon_key, 10)
+        recent_bars = {
+            "2w": 10, "4w": 15, "2m": 20, "3m": 25,
+            "4m": 27, "5m": 28, "6m": 30, "7m": 32, "8m": 33, "9m": 35,
+        }.get(horizon_key, 10)
         broke_up = (df["High"].rolling(recent_bars).max().shift(1) > resistance) & (vol_ratio.rolling(recent_bars).max().shift(1) >= SR_VOLUME_MULTIPLE)
         broke_dn = (df["Low"].rolling(recent_bars).min().shift(1) < support)    & (vol_ratio.rolling(recent_bars).max().shift(1) >= SR_VOLUME_MULTIPLE)
         dist_to_res = (close - resistance) / resistance.replace(0, np.nan) * 100
         dist_to_sup = (close - support)    / support.replace(0, np.nan)    * 100
         atr_calm_brt = (atr14 <= atr14.rolling(60).mean() * 1.4).fillna(True)
         # Tighter retest zone for noisy horizons (2w, 3m); wider for clean ones (4w, 2m).
-        retest_pct = {"2w": 1.0, "4w": 1.5, "2m": 1.5, "3m": 1.0, "6m": 1.5}.get(horizon_key, 1.0)
+        retest_pct = {
+            "2w": 1.0, "4w": 1.5, "2m": 1.5, "3m": 1.0,
+            "4m": 1.5, "5m": 1.5, "6m": 1.5, "7m": 1.5, "8m": 1.5, "9m": 1.5,
+        }.get(horizon_key, 1.0)
         bullish = (broke_up & dist_to_res.between(0, retest_pct) & above_50 & rsi14.between(42, 63) & atr_ok & atr_calm_brt).fillna(False)
         bearish = (broke_dn & dist_to_sup.between(-retest_pct, 0) & below_50 & rsi14.between(37, 58) & ma200_down_120 & atr_ok & atr_calm_brt).fillna(False)
         return bullish, bearish

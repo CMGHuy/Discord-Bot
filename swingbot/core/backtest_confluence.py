@@ -56,7 +56,7 @@ from .backtest import ALL_STRATEGIES, _vectorized_entries
 # ---------------------------------------------------------------------------
 CONFLUENCE_RR = 0.25          # 1 / (1 + 0.25) = 80% -- the break-even win rate at this R:R is exactly the target
 CONFLUENCE_MIN_AGREE = 2      # how many of the 11 strategies must agree on direction, same day, to enter
-CONFLUENCE_HORIZONS = ("4w", "2m", "3m", "6m")   # "2w" excluded -- validated negative edge, see module docstring
+CONFLUENCE_HORIZONS = ("4w", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m")   # "2w" excluded -- validated negative edge, see module docstring
 
 
 @dataclass

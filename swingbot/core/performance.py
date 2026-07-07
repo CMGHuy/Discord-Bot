@@ -19,7 +19,7 @@ import json
 import os
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from threading import Lock
 
 try:
@@ -217,6 +217,8 @@ class TradeLog:
             "near_tp_since": None,        # ISO timestamp of when price FIRST reached the near-TP timeout
                                            # threshold and hasn't dropped back below it since -- see
                                            # check_near_tp_timeout(). None while price isn't in that zone.
+            "near_tp_snapshots": [],       # [iso_ts, price] pairs used for the near-TP stall check -- see
+                                           # check_near_tp_timeout(). Reset whenever near_tp_since resets.
         }
 
         # Snapshot position sizing NOW, at the moment the trade is opened --
@@ -632,7 +634,9 @@ class TradeLog:
         Closes an open trade early, locking in the profit already made, if
         price has gotten most of the way to the target and then gone
         sideways there instead of actually tapping it -- see
-        config.NEAR_TP_TIMEOUT_ENABLED / _THRESHOLD_PCT / _MINUTES.
+        config.NEAR_TP_TIMEOUT_ENABLED / _THRESHOLD_PCT / _MINUTES, plus
+        the faster "stall" exit below (_STALL_CHECK_MINUTES / _STALL_MAX_
+        FLUCTUATION_PCT).
 
         Called by the trade_monitor background task (60s interval) on
         whatever's still open AFTER close_if_live_price_hit's exact SL/TP
@@ -646,9 +650,21 @@ class TradeLog:
         per-trade clock (persisted as "near_tp_since" so it survives a
         bot restart between checks); dropping back below the threshold
         resets it to None rather than accumulating partial credit across
-        separate approaches. Only once price has stayed AT OR ABOVE the
-        threshold continuously for config.NEAR_TP_TIMEOUT_MINUTES does the
-        trade actually close, at the current live price, marked a win.
+        separate approaches.
+
+        Two ways the trade can then close early, at the current live
+        price, marked a win:
+          1. "timeout" -- price has stayed AT OR ABOVE the threshold
+             continuously for config.NEAR_TP_TIMEOUT_MINUTES.
+          2. "stall" -- a faster check: once price has been in the near-TP
+             zone for at least config.NEAR_TP_STALL_CHECK_MINUTES (which
+             must be shorter than the full timeout), if price hasn't moved
+             by more than config.NEAR_TP_STALL_MAX_FLUCTUATION_PCT (as a %
+             of entry) over that trailing window, it's basically gone flat
+             right at the target -- no reason to keep waiting out the full
+             timeout, so it closes now. Price snapshots for this check are
+             persisted as "near_tp_snapshots" (list of [iso_ts, price]) and
+             reset whenever the clock resets.
 
         Returns the list of newly-closed trade records (already saved to
         disk), same shape as close_if_live_price_hit.
@@ -665,9 +681,23 @@ class TradeLog:
         now = datetime.now(timezone.utc)
         threshold = config.NEAR_TP_TIMEOUT_THRESHOLD_PCT / 100.0
         timeout = config.NEAR_TP_TIMEOUT_MINUTES
+        stall_minutes = getattr(config, "NEAR_TP_STALL_CHECK_MINUTES", 0) or 0
+        # Stall window must be strictly shorter than the full timeout, or it's
+        # meaningless as an "early" check -- clamp defensively in case of a
+        # misconfigured .env rather than trusting the raw value.
+        if stall_minutes >= timeout:
+            stall_minutes = 0
+        stall_max_fluct = (getattr(config, "NEAR_TP_STALL_MAX_FLUCTUATION_PCT", 0) or 0) / 100.0
 
-        # (trade_id, action) where action is either "start" (set the clock
-        # to now), "reset" (clear it), or "close" (timeout elapsed).
+        def _parse_ts(iso_ts):
+            ts = datetime.fromisoformat(iso_ts)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            return ts
+
+        # (trade_id, action, reason, snapshots) where action is "start" (set
+        # the clock to now), "reset" (clear it), "snapshot" (update the
+        # trailing price-history list), or "close" (timeout or stall).
         actions = []
         for trade in open_trades:
             entry = trade.get("entry")
@@ -683,16 +713,38 @@ class TradeLog:
             near_tp_since = trade.get("near_tp_since")
             if progress >= threshold:
                 if near_tp_since is None:
-                    actions.append((trade["id"], "start", None))
-                else:
-                    started = datetime.fromisoformat(near_tp_since)
-                    if started.tzinfo is None:
-                        started = started.replace(tzinfo=timezone.utc)
-                    elapsed_minutes = (now - started).total_seconds() / 60.0
-                    if elapsed_minutes >= timeout:
-                        actions.append((trade["id"], "close", None))
+                    actions.append((trade["id"], "start", None, None))
+                    continue
+
+                started = _parse_ts(near_tp_since)
+                elapsed_minutes = (now - started).total_seconds() / 60.0
+                if elapsed_minutes >= timeout:
+                    actions.append((trade["id"], "close", "timeout", None))
+                    continue
+
+                if stall_minutes <= 0:
+                    continue  # stall check disabled/misconfigured -- only the full timeout applies
+
+                snapshots = list(trade.get("near_tp_snapshots") or [])
+                snapshots.append([now.isoformat(), live_price])
+                cutoff = now - timedelta(minutes=stall_minutes)
+                trimmed = [[iso_ts, px] for iso_ts, px in snapshots if _parse_ts(iso_ts) >= cutoff]
+
+                # Only judge "stalled" once we actually have a full stall
+                # window's worth of history -- i.e. the oldest snapshot we
+                # kept is at (or older than) the cutoff, not just the first
+                # reading since the clock started.
+                have_full_window = elapsed_minutes >= stall_minutes and trimmed and _parse_ts(trimmed[0][0]) <= cutoff + timedelta(seconds=61)
+                if have_full_window:
+                    prices_in_window = [px for _, px in trimmed]
+                    fluct_pct = (max(prices_in_window) - min(prices_in_window)) / entry
+                    if fluct_pct <= stall_max_fluct:
+                        actions.append((trade["id"], "close", "stall", None))
+                        continue
+
+                actions.append((trade["id"], "snapshot", None, trimmed))
             elif near_tp_since is not None:
-                actions.append((trade["id"], "reset", None))
+                actions.append((trade["id"], "reset", None, None))
 
         if not actions:
             return []
@@ -701,20 +753,27 @@ class TradeLog:
         now_iso = now.isoformat()
         with _LOCK:
             id_map = {t["id"]: t for t in self._trades}
-            for trade_id, action, _ in actions:
+            for trade_id, action, reason, snapshots in actions:
                 t = id_map.get(trade_id)
                 if t is None or t["status"] != "open":
                     continue   # already closed by a parallel call this tick
                 if action == "start":
                     t["near_tp_since"] = now_iso
+                    t["near_tp_snapshots"] = [[now_iso, live_price]]
                 elif action == "reset":
                     t["near_tp_since"] = None
+                    t["near_tp_snapshots"] = []
+                elif action == "snapshot":
+                    t["near_tp_snapshots"] = snapshots
                 elif action == "close":
                     t["status"] = "win"
                     t["exit_price"] = live_price
                     t["closed_at"] = now_iso
-                    t["close_reason"] = "auto (near-TP timeout)"
+                    t["close_reason"] = (
+                        "auto (near-TP stall)" if reason == "stall" else "auto (near-TP timeout)"
+                    )
                     t["near_tp_since"] = None
+                    t["near_tp_snapshots"] = []
                     self._settle_account_balance(t)
                     newly_closed.append(dict(t))
             self._save()

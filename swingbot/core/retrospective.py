@@ -17,11 +17,14 @@ of plain strings; the caller posts them wherever it wants
 (DISCORD_CHANNEL_RETROSPECTIVE_ID, DISCORD_CHANNEL_TRADES_HISTORY_ID, etc.).
 """
 import datetime as dt
+import json
 import logging
+import os
 from collections import defaultdict
 
 from swingbot.core.performance import primary_strategy_label
 from swingbot.core import account as account_module
+from swingbot import config as app_config
 
 try:
     from zoneinfo import ZoneInfo
@@ -32,6 +35,85 @@ except Exception:
 log = logging.getLogger("swing-bot.retrospective")
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+# ---------------------------------------------------------------------------
+# Daily memory (for the "escalation ladder" -- see _analyse()/_escalate()):
+# a small JSON history file, one entry per trading day, so the lessons
+# engine can tell "first time this has happened" from "3rd day in a row"
+# instead of re-deriving every observation from scratch with zero memory of
+# what was already said yesterday. Also lets it notice when a suggested
+# config change was actually applied, so it stops nagging about the same
+# tune-up once it's been acted on.
+# ---------------------------------------------------------------------------
+_HISTORY_PATH = os.path.join(app_config.DATA_DIR, "retrospective_history.json")
+
+# Config keys that a suggestion might reference -- snapshotted into each
+# day's history entry so a later day can detect "this changed since
+# yesterday" and stop repeating the suggestion that presumably caused it.
+_TUNABLE_KEYS = [
+    "MIN_ALERT_CONFIDENCE_LEVEL", "MAX_STOP_LOSS_PCT", "MIN_RISK_REWARD_RATIO",
+    "HTF_COUNTER_TREND_PENALTY", "NEAR_TP_TIMEOUT_MINUTES", "NEAR_TP_TIMEOUT_THRESHOLD_PCT",
+]
+
+
+def _live_config_snapshot() -> dict:
+    return {k: getattr(app_config, k, None) for k in _TUNABLE_KEYS}
+
+
+def _load_history() -> list[dict]:
+    try:
+        with open(_HISTORY_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _save_history(history: list[dict]) -> None:
+    max_days = int(getattr(app_config, "RETROSPECTIVE_HISTORY_DAYS", 60) or 60)
+    history = sorted(history, key=lambda h: h.get("date", ""))[-max_days:]
+    try:
+        with open(_HISTORY_PATH, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception:
+        log.exception("retrospective: failed to save history to %s", _HISTORY_PATH)
+
+
+def _prev_trading_day(d: dt.date) -> dt.date:
+    """Skip weekends -- the bot only posts retrospectives Mon-Fri, so a
+    Monday's 'day before' for streak-counting purposes is Friday, not
+    Sunday (which would otherwise look like a gap and break the streak)."""
+    d = d - dt.timedelta(days=1)
+    while d.weekday() > 4:
+        d -= dt.timedelta(days=1)
+    return d
+
+
+def _find_day_entry(history: list[dict], day: dt.date) -> dict | None:
+    target = day.isoformat()
+    for h in history:
+        if h.get("date") == target:
+            return h
+    return None
+
+
+def _consecutive_bad_streak(history: list[dict], today: dt.date, issue_key: str) -> int:
+    """How many consecutive prior TRADING days (walking back from the day
+    before `today`) also had this same issue_key flagged. Stops at the
+    first day that doesn't have an entry, or has an entry where the issue
+    wasn't flagged."""
+    streak = 0
+    d = _prev_trading_day(today)
+    while True:
+        entry = _find_day_entry(history, d)
+        if not entry or not entry.get("issues", {}).get(issue_key):
+            break
+        streak += 1
+        d = _prev_trading_day(d)
+    return streak
+
+
+def _slug(s: str) -> str:
+    return "".join(c.lower() if c.isalnum() else "_" for c in s).strip("_") or "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +197,50 @@ def _result_label(trade: dict) -> str:
     if status == "loss":
         return "SL HIT"
     return "CLOSED"
+
+
+def _emit_table(title: str, header_line: str, sep: str, row_lines: list[str],
+                 max_body_chars: int = 1500) -> list[str]:
+    """
+    Build one or more COMPLETE, self-contained ``` code-block messages for a
+    table, instead of one giant string.
+
+    Why this matters: a single long table (e.g. 20+ closed trades) can
+    exceed Discord's ~2000-char message limit. The old code built one big
+    string and let the generic char-count splitter in scanning.py's
+    _post_retrospective() cut it wherever it happened to land -- which is
+    usually mid-code-block, since that splitter has no idea it's inside a
+    ``` fence. The result: the opening ``` never gets a matching closing
+    ``` in that message, so Discord renders the first half as a proper
+    monospace box and silently drops the rest into plain, un-boxed text in
+    the next message -- exactly the "two different styles stacked
+    together" bug. Building complete, independently-fenced chunks here
+    (each repeating the header/separator) guarantees every message Discord
+    receives is valid, self-contained markdown, so every chunk renders as
+    the same clean monospace table.
+    """
+    header_cost = len(header_line) + len(sep) + 2  # 2 for the ``` open/close newlines
+    chunks: list[list[str]] = []
+    cur: list[str] = []
+    cur_len = header_cost
+    for line in row_lines:
+        line_cost = len(line) + 1
+        if cur and cur_len + line_cost > max_body_chars:
+            chunks.append(cur)
+            cur = []
+            cur_len = header_cost
+        cur.append(line)
+        cur_len += line_cost
+    if cur:
+        chunks.append(cur)
+
+    n = len(chunks)
+    messages = []
+    for i, rows in enumerate(chunks):
+        label = title if n == 1 else f"{title} (part {i + 1}/{n})"
+        parts = [f"**{label}**", "```", header_line, sep, *rows, "```"]
+        messages.append("\n".join(parts))
+    return messages
 
 
 def _strategy_label(trade: dict) -> str:
@@ -249,23 +375,27 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     # ── Part 2: Closed-today trade table ─────────────────────────────────
     # Same base columns as the "Still open" table below (Ticker/Dir/Strategy/
     # Conf/Entry/SL/TP) plus the close-specific ones (Exit/P&L%/Amt/R/Days/
-    # Result), so the two tables read as one consistent format.
+    # Result), so the two tables read as one consistent format. Built via
+    # _emit_table() so a busy day's long trade list can never get cut
+    # mid-code-block (see that function's docstring for why that used to
+    # break the table's styling into two different-looking halves).
     if closed_today:
-        lines = ["**Closed today:**",
-                 "```",
-                 f"{'Ticker':<7} {'Dir':<5} {'Strategy':<14} {'Conf':<4} "
-                 f"{'Entry':>8} {'SL':>8} {'TP':>8} {'Exit':>8} {'P&L%':>7} {'Amt':>9} {'R':>5} {'Days':>4} {'Result':<8}",
-                 "─" * 108]
+        closed_header = (
+            f"{'Ticker':<7} {'Dir':<5} {'Strategy':<16} {'Conf':<4} "
+            f"{'Entry':>8} {'SL':>8} {'TP':>8} {'Exit':>8} {'P&L%':>7} {'Amt':>9} {'R':>5} {'Days':>4} {'Result':<8}"
+        )
+        closed_sep = "─" * len(closed_header)
+        closed_rows = []
         for t in sorted(closed_today, key=lambda x: x.get("closed_at", "")):
             pnl  = _pnl_pct(t)
             r    = _r_multiple(t)
             days = _days_held(t)
             amt  = t.get("realized_pnl_amount")
-            strategy = _strategy_label(t)[:13]
+            strategy = _strategy_label(t)[:15]
             direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
             result = _result_label(t)
-            lines.append(
-                f"{t['ticker']:<7} {direction:<5} {strategy:<14} Lv{t.get('confidence_level','-'):<2} "
+            closed_rows.append(
+                f"{t['ticker']:<7} {direction:<5} {strategy:<16} Lv{t.get('confidence_level','-'):<2} "
                 f"{t.get('entry',0):>8.2f} {t.get('stop_loss',0):>8.2f} {t.get('take_profit',0):>8.2f} "
                 f"{(t.get('exit_price') or 0):>8.2f} "
                 f"{(f'{pnl:+.2f}%' if pnl is not None else '—'):>7} "
@@ -274,26 +404,26 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
                 f"{(str(days) if days is not None else '—'):>4} "
                 f"{result:<8}"
             )
-        lines.append("```")
-        messages.append("\n".join(lines))
+        messages.extend(_emit_table("Closed today:", closed_header, closed_sep, closed_rows))
 
     # ── Part 3: Still-open positions ─────────────────────────────────────
     if still_open:
-        lines = ["**Still open (all active positions):**", "```",
-                 f"{'Ticker':<7} {'Dir':<5} {'Strategy':<14} {'Conf':<4} {'Opened':<17} {'Entry':>7} {'SL':>7} {'TP':>7}",
-                 "─" * 75]
+        open_header = (
+            f"{'Ticker':<7} {'Dir':<5} {'Strategy':<16} {'Conf':<4} {'Opened':<17} {'Entry':>7} {'SL':>7} {'TP':>7}"
+        )
+        open_sep = "─" * len(open_header)
+        open_rows = []
         for t in still_open:
             direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
             opened_str = _berlin_hm(t.get("opened_at", ""))
             opened_date = _berlin_date(t.get("opened_at", ""))
             date_pfx = opened_date.strftime("%-d %b") if opened_date else "?"
-            lines.append(
-                f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:13]:<14} Lv{t.get('confidence_level','-'):<2} "
+            open_rows.append(
+                f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:15]:<16} Lv{t.get('confidence_level','-'):<2} "
                 f"{date_pfx + ' ' + opened_str:<17} "
                 f"{t.get('entry',0):>7.2f} {t.get('stop_loss',0):>7.2f} {t.get('take_profit',0):>7.2f}"
             )
-        lines.append("```")
-        messages.append("\n".join(lines))
+        messages.extend(_emit_table("Still open (all active positions):", open_header, open_sep, open_rows))
 
     # ── Part 4: Breakdown tables ──────────────────────────────────────────
     if closed_today:
@@ -302,7 +432,12 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             messages.append(breakdown_msg)
 
     # ── Part 5: Lessons learned + tuning suggestions ──────────────────────
-    lessons, suggestions = _analyse(closed_today, opened_today, still_open)
+    # Loads the day-by-day memory file so repeating issues escalate ("2nd
+    # day in a row" -> "3rd day in a row") instead of restating the exact
+    # same sentence every day, and so a suggestion stops repeating once the
+    # config it referenced actually gets changed. See _escalate() below.
+    history = _load_history()
+    lessons, suggestions, issues_today = _analyse(closed_today, opened_today, still_open, today, history)
     if lessons or suggestions:
         insight_lines = ["**🔍 Lessons Learned Today & Improvements for Tomorrow**"]
         if lessons:
@@ -314,6 +449,21 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             for s in suggestions:
                 insight_lines.append(f"→ {s}")
         messages.append("\n".join(insight_lines))
+
+    # Only remember an actual "today" run -- a !recap for a past date is a
+    # re-render, not a new trading day, and shouldn't overwrite/duplicate
+    # that day's real memory entry.
+    if is_today:
+        today_entry = {
+            "date": today.isoformat(),
+            "closed_count": n_closed,
+            "win_rate": win_rate,
+            "issues": issues_today,
+            "config_snapshot": _live_config_snapshot(),
+        }
+        history = [h for h in history if h.get("date") != today.isoformat()]
+        history.append(today_entry)
+        _save_history(history)
 
     return messages
 
@@ -369,12 +519,28 @@ def _build_breakdown(closed: list) -> str:
 # Pattern analysis → lessons + suggestions
 # ---------------------------------------------------------------------------
 
-def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[str], list[str]]:
+def _analyse(closed: list, opened_today: list, still_open: list,
+             today: dt.date, history: list[dict]) -> tuple[list[str], list[str], dict]:
+    """
+    Returns (lessons, suggestions, issues_today) where issues_today is a
+    {issue_key: True} map recorded into today's history entry so tomorrow's
+    call can tell which issues were already flagged today (for streak
+    counting via _consecutive_bad_streak()).
+
+    Escalation ladder: a rule firing for the first time gets a plain,
+    single-day observation. If the SAME issue also fired on the immediately
+    preceding trading day(s), the wording escalates ("2nd/3rd/Nth day in a
+    row") instead of silently repeating verbatim -- and if the config
+    setting a suggestion referenced actually changed since it was last
+    flagged, the suggestion is replaced with an acknowledgement instead of
+    being nagged again.
+    """
     lessons:     list[str] = []
     suggestions: list[str] = []
+    issues_today: dict[str, bool] = {}
 
     if not closed and not opened_today:
-        return lessons, suggestions
+        return lessons, suggestions, issues_today
 
     wins   = [t for t in closed if t["status"] == "win"]
     losses = [t for t in closed if t["status"] == "loss"]
@@ -383,9 +549,36 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
     if n == 0:
         if opened_today:
             lessons.append(f"{len(opened_today)} trade(s) were opened today but none closed yet — check back tomorrow.")
-        return lessons, suggestions
+        return lessons, suggestions, issues_today
 
     win_rate = len(wins) / n * 100
+
+    live_cfg = _live_config_snapshot()
+    prev_entry = _find_day_entry(history, _prev_trading_day(today))
+    prev_cfg = (prev_entry or {}).get("config_snapshot", {})
+
+    def _escalate(issue_key: str, base_lesson: str, suggestion: str | None, config_key: str | None = None):
+        """Record `issue_key` as flagged today, then append an
+        appropriately escalated lesson (+ suggestion) to the output lists."""
+        issues_today[issue_key] = True
+        streak = _consecutive_bad_streak(history, today, issue_key)
+
+        if config_key is not None and streak >= 1:
+            prev_val = prev_cfg.get(config_key)
+            cur_val  = live_cfg.get(config_key)
+            if prev_val is not None and cur_val is not None and prev_val != cur_val:
+                lessons.append(
+                    f"{base_lesson} — but `{config_key}` was just changed ({prev_val} → {cur_val}) in response to "
+                    f"this, so no new suggestion today; monitoring whether it helps."
+                )
+                return
+
+        if streak >= 1:
+            lessons.append(f"{base_lesson} — this is day {streak + 1} in a row this has come up.")
+        else:
+            lessons.append(f"{base_lesson}.")
+        if suggestion:
+            suggestions.append(suggestion)
 
     # --- Confidence level analysis ---
     conf_wins:   dict[int, int] = defaultdict(int)
@@ -401,8 +594,12 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
         wins_lv = conf_wins[lv]
         wr = round(wins_lv / total * 100)
         if total >= 2 and wr == 0:
-            lessons.append(f"Lv{lv} trades had 0% win rate today ({total} trades, all losses).")
-            suggestions.append(f"Consider raising `MIN_ALERT_CONFIDENCE_LEVEL` to {lv + 1} to skip Lv{lv} signals.")
+            _escalate(
+                f"conf_lv_{lv}_bad",
+                f"Lv{lv} trades had 0% win rate today ({total} trades, all losses)",
+                f"Consider raising `MIN_ALERT_CONFIDENCE_LEVEL` to {lv + 1} to skip Lv{lv} signals.",
+                config_key="MIN_ALERT_CONFIDENCE_LEVEL",
+            )
         elif total >= 2 and wr == 100:
             lessons.append(f"Lv{lv} trades were perfect today ({total} trades, all wins).")
 
@@ -418,12 +615,11 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
                 f"the confidence score is tracking real outcomes well today."
             )
         elif avg_loss_score - avg_win_score >= 8:
-            lessons.append(
+            _escalate(
+                "confidence_score_inverted",
                 f"Losing trades actually scored HIGHER on confidence ({avg_loss_score} vs {avg_win_score} for wins) — "
-                f"the scoring model may be over-weighting a factor that didn't hold up today."
-            )
-            suggestions.append(
-                "Review confidence_breakdown for today's losses vs wins to see which scoring factor is misleading right now."
+                f"the scoring model may be over-weighting a factor that didn't hold up today",
+                "Review confidence_breakdown for today's losses vs wins to see which scoring factor is misleading right now.",
             )
 
     # --- Strategy analysis (uses the SAME resolved strategy label the
@@ -437,8 +633,11 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
             continue
         strat_wr = sum(1 for t in trades if t["status"] == "win") / len(trades) * 100
         if strat_wr == 0:
-            lessons.append(f"'{strat}' had 0% win rate today ({len(trades)} trades).")
-            suggestions.append(f"Review setup rules for '{strat}' — may need stricter confluence requirements.")
+            _escalate(
+                f"strategy_{_slug(strat)}_bad",
+                f"'{strat}' had 0% win rate today ({len(trades)} trades)",
+                f"Review setup rules for '{strat}' — may need stricter confluence requirements.",
+            )
         elif strat_wr == 100:
             lessons.append(f"'{strat}' was flawless today ({len(trades)} trades, all wins).")
 
@@ -455,16 +654,24 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
             better  = "Long" if bull_wr > bear_wr else "Short"
             worse   = "Short" if bull_wr > bear_wr else "Long"
             worse_wr = bear_wr if bull_wr > bear_wr else bull_wr
-            lessons.append(f"{better} trades strongly outperformed {worse} trades today ({max(bull_wr,bear_wr)}% vs {worse_wr}%).")
-            suggestions.append(f"Check market regime: if the broader trend is against {worse} trades, raise `HTF_COUNTER_TREND_PENALTY`.")
+            _escalate(
+                "direction_imbalance",
+                f"{better} trades strongly outperformed {worse} trades today ({max(bull_wr,bear_wr)}% vs {worse_wr}%)",
+                f"Check market regime: if the broader trend is against {worse} trades, raise `HTF_COUNTER_TREND_PENALTY`.",
+                config_key="HTF_COUNTER_TREND_PENALTY",
+            )
 
     # --- R-multiple and risk/reward ---
     r_mults = [r for t in losses if (r := _r_multiple(t)) is not None]
     if r_mults:
         avg_loss_r = round(sum(r_mults) / len(r_mults), 2)
         if avg_loss_r < -1.5:
-            lessons.append(f"Losses averaged {avg_loss_r:.2f}R — stops may be too far from entry on losing trades.")
-            suggestions.append("Consider tightening `MAX_STOP_LOSS_PCT` to reduce loss magnitude per trade.")
+            _escalate(
+                "large_loss_r",
+                f"Losses averaged {avg_loss_r:.2f}R — stops may be too far from entry on losing trades",
+                "Consider tightening `MAX_STOP_LOSS_PCT` to reduce loss magnitude per trade.",
+                config_key="MAX_STOP_LOSS_PCT",
+            )
 
     win_rs = [r for t in wins if (r := _r_multiple(t)) is not None]
     loss_rs = [r for t in losses if (r := _r_multiple(t)) is not None]
@@ -475,8 +682,11 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
         if rr is not None:
             lessons.append(f"Average win: {avg_win_r:+.2f}R  |  Average loss: {avg_loss_r:+.2f}R  |  Actual RR ratio: {rr:.2f}:1")
             if rr < 1.2:
-                suggestions.append(
-                    f"Actual RR {rr:.2f}:1 is below 1.2 — raise `MIN_RISK_REWARD_RATIO` to filter out low-reward setups."
+                _escalate(
+                    "low_rr",
+                    f"Actual RR {rr:.2f}:1 is below 1.2",
+                    "Raise `MIN_RISK_REWARD_RATIO` to filter out low-reward setups.",
+                    config_key="MIN_RISK_REWARD_RATIO",
                 )
 
     # --- Horizon analysis ---
@@ -489,8 +699,11 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
             continue
         hz_wr = sum(1 for t in trades if t["status"] == "win") / len(trades) * 100
         if hz_wr == 0:
-            lessons.append(f"All '{hz}' horizon trades closed as losses today ({len(trades)} trades).")
-            suggestions.append(f"Consider whether '{hz}' horizon is suitable for current market conditions.")
+            _escalate(
+                f"horizon_{_slug(hz)}_bad",
+                f"All '{hz}' horizon trades closed as losses today ({len(trades)} trades)",
+                f"Consider whether '{hz}' horizon is suitable for current market conditions.",
+            )
 
     # --- Trade duration analysis ---
     same_day = [t for t in closed
@@ -498,27 +711,31 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
     if same_day:
         sd_losses = [t for t in same_day if t["status"] == "loss"]
         if sd_losses:
-            lessons.append(
+            _escalate(
+                "same_day_close_losses",
                 f"{len(sd_losses)} of {len(same_day)} same-day-close trade(s) were losses — "
-                f"rapid SL hits may indicate entries at wrong price levels or stops too tight."
-            )
-            suggestions.append(
-                "Review same-day closures: if SL was hit within hours, the entry timing or stop placement needs work."
+                f"rapid SL hits may indicate entries at wrong price levels or stops too tight",
+                "Review same-day closures: if SL was hit within hours, the entry timing or stop placement needs work.",
             )
 
     # --- Near-TP timeout analysis ---
     near_tp_closes = [t for t in closed if _result_label(t) == "NEAR-TP"]
     if near_tp_closes:
         ntp_wins = sum(1 for t in near_tp_closes if t["status"] == "win")
-        lessons.append(
-            f"{len(near_tp_closes)} trade(s) closed via the near-TP timeout instead of reaching the real target "
-            f"({ntp_wins} still booked as wins)."
-        )
         if len(near_tp_closes) >= 2:
-            suggestions.append(
+            _escalate(
+                "near_tp_timeout_frequent",
+                f"{len(near_tp_closes)} trade(s) closed via the near-TP timeout instead of reaching the real target "
+                f"({ntp_wins} still booked as wins)",
                 "Several trades are stalling near TP and timing out rather than reaching it — consider raising "
                 "`NEAR_TP_TIMEOUT_MINUTES` to give trades more room, or lowering `NEAR_TP_TIMEOUT_THRESHOLD_PCT` "
-                "to lock in profit earlier if the stall pattern repeats."
+                "to lock in profit earlier if the stall pattern repeats.",
+                config_key="NEAR_TP_TIMEOUT_MINUTES",
+            )
+        else:
+            lessons.append(
+                f"{len(near_tp_closes)} trade(s) closed via the near-TP timeout instead of reaching the real target "
+                f"({ntp_wins} still booked as wins)."
             )
 
     # --- Still-open trade risk reminder ---
@@ -538,7 +755,11 @@ def _analyse(closed: list, opened_today: list, still_open: list) -> tuple[list[s
     if win_rate >= 70:
         lessons.append(f"Strong day: {win_rate:.0f}% win rate. Today's setup quality and market conditions aligned well.")
     elif win_rate < 40 and n >= 3:
-        lessons.append(f"Difficult day: {win_rate:.0f}% win rate on {n} trades. Review whether market conditions match the bot's assumptions (trending vs choppy).")
-        suggestions.append("If multiple consecutive bad days: check ADX filter thresholds — the bot may be firing in low-trend, choppy tape.")
+        _escalate(
+            "difficult_day",
+            f"Difficult day: {win_rate:.0f}% win rate on {n} trades. Review whether market conditions match the "
+            f"bot's assumptions (trending vs choppy)",
+            "If multiple consecutive bad days: check ADX filter thresholds — the bot may be firing in low-trend, choppy tape.",
+        )
 
-    return lessons, suggestions
+    return lessons, suggestions, issues_today

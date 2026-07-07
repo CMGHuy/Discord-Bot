@@ -88,7 +88,7 @@ CONFIDENCE_EXPLAINER = (
 COMMANDS_BY_CATEGORY = {
     "📡 Scanning": [
         ("!check [horizon] [min_strategies] [from:YYYY-MM-DD] [to:YYYY-MM-DD]",
-         "Live scan (no dates) or historical review (with dates). horizon=2w|4w|2m|3m|6m|all. "
+         "Live scan (no dates) or historical review (with dates). horizon=2w|4w|2m|3m|4m|5m|6m|7m|8m|9m|all. "
          "With from:/to: shows trade plans already recorded in that window instead of running a new scan."),
         ("!session", "Show the session window and whether it's active right now"),
         ("!status", "Show watchlist size, session state, open positions"),

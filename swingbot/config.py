@@ -183,10 +183,31 @@ FIELDS: list[Field] = [
                "hasn't actually touched the target yet. Dropping back below this threshold resets the clock."),
     Field("NEAR_TP_TIMEOUT_MINUTES", "NEAR_TP_TIMEOUT_MINUTES", "Trade Filters & Risk",
           "Near-TP timeout duration (minutes)",
-          type="number", default="15", min=1, max=1440, step=1,
+          type="number", default="10", min=1, max=1440, step=1,
           help="Once price has been at or above the progress threshold continuously for this many minutes "
                "without actually reaching the target, the trade is closed at the live price as a win. Only "
                "checked by the 60s trade_monitor loop, so real-world timing is accurate to within about a minute."),
+    Field("NEAR_TP_STALL_CHECK_MINUTES", "NEAR_TP_STALL_CHECK_MINUTES", "Trade Filters & Risk",
+          "Near-TP stall check window (minutes)",
+          type="number", default="5", min=1, max=1439, step=1,
+          help="A faster exit than the full timeout above: once price has been at or above the progress "
+               "threshold, check the trailing window of this many minutes -- if price hasn't moved by more "
+               "than 'Near-TP stall max fluctuation %' (below) in that window, the trade is closed early as a "
+               "stall instead of waiting out the full 'Near-TP timeout duration'. Must be less than the timeout "
+               "duration (e.g. 5 minutes when the timeout is 15) since it's meant to catch a stall sooner, not "
+               "replace the full timeout."),
+    Field("NEAR_TP_STALL_MAX_FLUCTUATION_PCT", "NEAR_TP_STALL_MAX_FLUCTUATION_PCT", "Trade Filters & Risk",
+          "Near-TP stall max fluctuation %",
+          type="float", default="0.3", min=0, max=20, step=0.1,
+          help="If price moves less than this % (relative to entry) over the trailing stall-check window "
+               "while sitting near the target, it's considered 'stalled' and the trade closes early to lock "
+               "in the profit rather than waiting out the full timeout."),
+    Field("RETROSPECTIVE_HISTORY_DAYS", "RETROSPECTIVE_HISTORY_DAYS", "Trade Filters & Risk",
+          "Retrospective memory window (days)",
+          type="number", default="60", min=5, max=365, step=1,
+          help="How many past trading days the daily retrospective remembers (data/retrospective_history.json) "
+               "in order to notice repeating problems (e.g. 'this is the 3rd day in a row VWAP has lost') instead "
+               "of re-stating the same observation from scratch every day with no memory of yesterday."),
 
     # --- Data & display ---
     Field("DEFAULT_HISTORY_PERIOD", "DEFAULT_HISTORY_PERIOD", "Data & Display", "History period",
@@ -200,7 +221,7 @@ FIELDS: list[Field] = [
 
     # --- Account (informational sizing defaults) ---
     Field("ACCOUNT_BALANCE", "ACCOUNT_BALANCE", "Account Defaults", "Account balance",
-          type="float", default="10000", min=0, step=100,
+          type="float", default="1000000", min=0, step=100,
           help="Seed value the first time data/account.json is created. Edit anytime with !account balance -- not read from .env after that."),
     Field("RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT", "Account Defaults", "Risk per trade %",
           type="float", default="1.0", min=0, step=0.1,

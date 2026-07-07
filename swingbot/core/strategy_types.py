@@ -22,7 +22,12 @@ MACD_PERIODS_BY_HORIZON = {
     "4w": (12, 26, 9),
     "2m": (12, 26, 9),
     "3m": (19, 39, 9),
+    "4m": (21, 43, 9),   # interpolated between 3m and 6m
+    "5m": (24, 48, 9),   # interpolated between 3m and 6m
     "6m": (26, 52, 9),
+    "7m": (28, 56, 9),   # extrapolated past 6m at the same per-month slope
+    "8m": (31, 61, 9),   # extrapolated past 6m at the same per-month slope
+    "9m": (33, 65, 9),   # extrapolated past 6m at the same per-month slope
 }
 
 # ---------------------------------------------------------------------------
@@ -97,6 +102,40 @@ HORIZONS = {
         "sr_target_max_pct": 30.0,
         "max_holding_days": 90,
     },
+    "4m": {
+        "label": "4-month swing",
+        "ema_fast": 30,
+        "ema_slow": 100,
+        "vwap_window": 84,       # 21 * 4
+        "fib_lookback": 168,     # 42 * 4
+        "sr_lookback": 120,      # 30 * 4
+        "atr_stop_multiple": 2.0,
+        "reward_risk_ratio": 0.83,  # interpolated between 3m and 6m
+        "min_structure_rr": 0.60,
+        "max_structure_rr": 0.83,
+        "max_risk_pct": 9.3,
+        "sr_stop_pct": 9.3,
+        "sr_target_min_pct": 18.7,
+        "sr_target_max_pct": 30.0,
+        "max_holding_days": 120,  # 30 * 4
+    },
+    "5m": {
+        "label": "5-month swing",
+        "ema_fast": 40,
+        "ema_slow": 150,
+        "vwap_window": 105,      # 21 * 5
+        "fib_lookback": 210,     # 42 * 5
+        "sr_lookback": 150,      # 30 * 5
+        "atr_stop_multiple": 2.0,
+        "reward_risk_ratio": 0.92,  # interpolated between 3m and 6m
+        "min_structure_rr": 0.65,
+        "max_structure_rr": 0.92,
+        "max_risk_pct": 9.7,
+        "sr_stop_pct": 9.7,
+        "sr_target_min_pct": 19.3,
+        "sr_target_max_pct": 30.0,
+        "max_holding_days": 150,  # 30 * 5
+    },
     "6m": {
         "label": "6-month swing",
         "ema_fast": 50,
@@ -114,6 +153,57 @@ HORIZONS = {
         "sr_target_max_pct": 30.0,
         "max_holding_days": 180,
     },
+    "7m": {
+        "label": "7-month swing",
+        "ema_fast": 60,
+        "ema_slow": 250,
+        "vwap_window": 147,      # 21 * 7
+        "fib_lookback": 294,     # 42 * 7
+        "sr_lookback": 210,      # 30 * 7
+        "atr_stop_multiple": 2.0,
+        "reward_risk_ratio": 1.08,  # extrapolated past 6m at the same slope
+        "min_structure_rr": 0.75,
+        "max_structure_rr": 1.08,
+        "max_risk_pct": 10.3,
+        "sr_stop_pct": 10.3,
+        "sr_target_min_pct": 20.7,
+        "sr_target_max_pct": 30.0,
+        "max_holding_days": 210,  # 30 * 7
+    },
+    "8m": {
+        "label": "8-month swing",
+        "ema_fast": 70,
+        "ema_slow": 300,
+        "vwap_window": 168,      # 21 * 8
+        "fib_lookback": 336,     # 42 * 8
+        "sr_lookback": 240,      # 30 * 8
+        "atr_stop_multiple": 2.0,
+        "reward_risk_ratio": 1.17,  # extrapolated past 6m at the same slope
+        "min_structure_rr": 0.80,
+        "max_structure_rr": 1.17,
+        "max_risk_pct": 10.7,
+        "sr_stop_pct": 10.7,
+        "sr_target_min_pct": 21.3,
+        "sr_target_max_pct": 30.0,
+        "max_holding_days": 240,  # 30 * 8
+    },
+    "9m": {
+        "label": "9-month swing",
+        "ema_fast": 80,
+        "ema_slow": 350,
+        "vwap_window": 189,      # 21 * 9
+        "fib_lookback": 378,     # 42 * 9
+        "sr_lookback": 270,      # 30 * 9
+        "atr_stop_multiple": 2.0,
+        "reward_risk_ratio": 1.25,  # extrapolated past 6m at the same slope
+        "min_structure_rr": 0.85,
+        "max_structure_rr": 1.25,
+        "max_risk_pct": 11.0,
+        "sr_stop_pct": 11.0,
+        "sr_target_min_pct": 22.0,
+        "sr_target_max_pct": 30.0,
+        "max_holding_days": 270,  # 30 * 9
+    },
 }
 
 # Minimum bars of history required for each horizon's slowest calculation
@@ -122,7 +212,12 @@ MIN_BARS = {
     "4w": 45,
     "2m": 75,
     "3m": 130,
+    "4m": 173,
+    "5m": 217,
     "6m": 260,
+    "7m": 303,
+    "8m": 347,
+    "9m": 390,
 }
 
 

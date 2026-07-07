@@ -40,7 +40,7 @@ _HTF_EMA_PERIOD = {
     # Short horizons: 50-day EMA as a weekly / intermediate-term bias proxy
     "2w": 50, "4w": 50, "2m": 50,
     # Longer horizons: 200-day EMA as a monthly / long-term bias proxy
-    "3m": 200, "6m": 200,
+    "3m": 200, "4m": 200, "5m": 200, "6m": 200, "7m": 200, "8m": 200, "9m": 200,
 }
 
 

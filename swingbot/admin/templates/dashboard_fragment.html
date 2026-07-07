@@ -182,7 +182,7 @@
     </thead>
     <tbody>
     {% for t in open_trades %}
-    {%- set horizon_labels = {'2w':'~2 weeks','4w':'~4 weeks','2m':'~2 months','3m':'~3 months','6m':'~6 months'} -%}
+    {%- set horizon_labels = {'2w':'~2 weeks','4w':'~4 weeks','2m':'~2 months','3m':'~3 months','4m':'~4 months','5m':'~5 months','6m':'~6 months','7m':'~7 months','8m':'~8 months','9m':'~9 months'} -%}
     {%- set status = status_map.get(t.id, {'color': '#5a6275', 'proximity': 0.0, 'blink_seconds': 2.2, 'label': 'Unknown'}) -%}
     {%- set cur_price = price_map.get(t.id) -%}
     {%- set pnl = pnl_map.get(t.id) -%}

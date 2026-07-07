@@ -375,7 +375,12 @@ def ma_ribbon_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalR
         "4w": (10, 20, 50),
         "2m": (20, 50, 100),
         "3m": (20, 50, 200),
+        "4m": (30, 67, 200),
+        "5m": (40, 83, 200),
         "6m": (50, 100, 200),
+        "7m": (60, 117, 200),
+        "8m": (70, 133, 200),
+        "9m": (80, 150, 200),
     }
     fast_p, mid_p, slow_p = horizon_to_ribbon.get(horizon_key, (10, 20, 50))
 
@@ -446,7 +451,10 @@ def break_retest_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Sign
     support    = float(df["Low"].iloc[-(lookback + 10):-10].min())
 
     # Horizon-aware look-back: how many bars count as a "recent" breakout
-    recent_bars = {"2w": 10, "4w": 15, "2m": 20, "3m": 25, "6m": 30}.get(horizon_key, 10)
+    recent_bars = {
+        "2w": 10, "4w": 15, "2m": 20, "3m": 25,
+        "4m": 27, "5m": 28, "6m": 30, "7m": 32, "8m": 33, "9m": 35,
+    }.get(horizon_key, 10)
     recent = df.iloc[-recent_bars:]
     recent_close = float(df["Close"].iloc[-1])
     recent_highs = recent["High"]
