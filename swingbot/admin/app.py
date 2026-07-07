@@ -40,6 +40,7 @@ import io
 import json
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from functools import wraps
@@ -758,6 +759,49 @@ def watchlist_add():
     if ticker in updated:
         return redirect(url_for("watchlist_page", msg=f"Added {ticker} to watchlist ({len(updated)} tickers total).", ok=1))
     return redirect(url_for("watchlist_page", msg=f"{ticker} is already in the watchlist.", ok=1))
+
+
+@app.route("/watchlist/bulk_add", methods=["POST"])
+@require_auth
+def watchlist_bulk_add():
+    """
+    Adds many tickers at once from a pasted list (comma/space/newline
+    separated) -- mainly a disaster-recovery tool: data/watchlist.json is
+    plain app-managed data (not tracked in git, see .gitignore), so it's
+    never touched by a `git reset --hard` deploy, but if it's ever lost or
+    needs rebuilding from scratch (a fresh server, a manual mistake), typing
+    dozens of tickers into the single-ticker "+ Add" box one at a time would
+    be painful. This is the same add_ticker() used by the single-add form
+    and `!watchlist add`, just called once per pasted symbol.
+    """
+    raw = request.form.get("tickers", "")
+    candidates = [t.strip().upper() for t in re.split(r"[,\s]+", raw) if t.strip()]
+    existing_before = set(load_watchlist())
+
+    valid, invalid = [], []
+    for ticker in candidates:
+        if len(ticker) > 10 or not ticker.replace(".", "").replace("-", "").replace("=", "").isalnum():
+            invalid.append(ticker)
+        else:
+            valid.append(ticker)
+
+    final_list = existing_before
+    for ticker in valid:
+        final_list = set(add_ticker(ticker))
+
+    newly_added = [t for t in valid if t not in existing_before]
+    already_had = [t for t in valid if t in existing_before]
+
+    parts = []
+    if newly_added:
+        parts.append(f"{len(newly_added)} added")
+    if already_had:
+        parts.append(f"{len(already_had)} already present")
+    if invalid:
+        shown = ', '.join(invalid[:10]) + ('…' if len(invalid) > 10 else '')
+        parts.append(f"{len(invalid)} skipped (invalid: {shown})")
+    msg = f"Bulk add: {', '.join(parts) if parts else 'nothing to add'} -- {len(final_list)} tickers total."
+    return redirect(url_for("watchlist_page", msg=msg, ok=1 if not invalid else 0))
 
 
 @app.route("/watchlist/remove", methods=["POST"])

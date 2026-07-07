@@ -11,6 +11,26 @@
     </div>
     <button type="submit" class="small">+ Add</button>
   </form>
+  <button type="button" class="secondary small" onclick="document.getElementById('bulk-add-card').style.display='';this.style.display='none';">
+    📋 Bulk add / restore
+  </button>
+</div>
+
+<div class="card" id="bulk-add-card" style="display:none; margin-bottom:20px;">
+  <p class="card-title">Bulk add / restore</p>
+  <p class="muted" style="font-size:12.5px; margin-top:0;">
+    Paste a list of tickers (comma, space, or newline separated) to add them all at once --
+    handy for restoring a whole watchlist in one go instead of adding tickers one at a time.
+    Already-present tickers are skipped safely, nothing is removed.
+  </p>
+  <form method="post" action="{{ url_for('watchlist_bulk_add') }}">
+    <textarea name="tickers" rows="4" placeholder="AAPL, MSFT, NVDA, TSLA&#10;or one per line"
+              style="width:100%; max-width:520px; background:#0a0c10; color:#dde1ea; border:1px solid #252933;
+                     border-radius:7px; padding:10px 12px; font-size:13px; font-family:inherit; resize:vertical;"></textarea>
+    <div style="margin-top:8px;">
+      <button type="submit" class="small">Add all</button>
+    </div>
+  </form>
 </div>
 
 <div class="card">
