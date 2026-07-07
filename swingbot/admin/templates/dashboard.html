@@ -1,12 +1,19 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="row" style="margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-  <div id="dashboard-mode-toggle" style="display:flex; border:1px solid #2a2e3d; border-radius:8px; overflow:hidden;">
+  <div id="dashboard-mode-toggle" title="Which trades the stat cards/tables below summarize"
+       style="display:flex; border:1px solid #2a2e3d; border-radius:8px; overflow:hidden;">
+    <button type="button" class="dashboard-mode-btn" data-mode="active"
+            onclick="setDashboardMode('active')"
+            title="Today's new trades, plus every still-open position from any day"
+            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">Today + Open</button>
     <button type="button" class="dashboard-mode-btn" data-mode="today"
             onclick="setDashboardMode('today')"
-            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">Today</button>
+            title="Only today's activity -- trades opened or closed today"
+            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">Today only</button>
     <button type="button" class="dashboard-mode-btn" data-mode="all"
             onclick="setDashboardMode('all')"
+            title="Every trade ever logged, no date filtering"
             style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">All days</button>
   </div>
   <label class="muted" style="display:flex;align-items:center;gap:6px;">
@@ -71,11 +78,12 @@
     _authHeader = 'same-origin';
   })();
 
-  // ---- Dashboard mode (Today / All days) ----------------------------------
+  // ---- Dashboard mode (Today + Open / Today only / All days) --------------
   // Persisted in localStorage so it survives a full page reload, and
   // reflected in the URL (?mode=...) so the choice is also shareable/
   // bookmarkable and the initial server-side render matches the toggle.
-  var dashboardMode = {{ (dashboard_mode | default('all')) | tojson }};
+  // "active" (today's new trades + every still-open position) is the default.
+  var dashboardMode = {{ (dashboard_mode | default('active')) | tojson }};
   function updateDashboardModeButtons() {
     document.querySelectorAll('.dashboard-mode-btn').forEach(function(btn) {
       var active = btn.dataset.mode === dashboardMode;
@@ -104,7 +112,7 @@
     if (!urlMode) {
       try {
         var saved = localStorage.getItem('dashboardMode');
-        if ((saved === 'today' || saved === 'all') && saved !== dashboardMode) {
+        if ((saved === 'active' || saved === 'today' || saved === 'all') && saved !== dashboardMode) {
           dashboardMode = saved;
           switchedFromServerRender = true;
         }

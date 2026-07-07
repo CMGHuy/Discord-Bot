@@ -124,7 +124,7 @@ FIELDS: list[Field] = [
 
     # --- Trade filters & risk ---
     Field("MIN_REWARD_PCT", "MIN_REWARD_PCT", "Trade Filters & Risk", "Min reward %",
-          type="float", default="5.0", min=0, step=0.5,
+          type="float", default="3.0", min=0, step=0.5,
           help="Hard filter, enforced exactly as set: a scenario is dropped entirely (not shown, not scored) "
                "unless its target is at least this far from today's price. No exceptions for a close miss."),
     Field("MIN_STOP_DISTANCE_PCT", "MIN_STOP_DISTANCE_PCT", "Trade Filters & Risk", "Min stop distance %",

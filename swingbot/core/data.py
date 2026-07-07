@@ -1,5 +1,6 @@
 """Fetches daily OHLC data for a ticker."""
 import io
+import json
 import logging
 import os
 import time
@@ -62,6 +63,57 @@ _currency_cache: dict[str, str] = {}
 # per ticker for the life of the process, not per Watchlist page view.
 _company_name_cache: dict[str, str | None] = {}
 
+# Both caches above used to be purely in-memory, which meant every time the
+# ADMIN container restarted (redeploy, `docker compose restart`, a crash --
+# it's a separate process from the bot, with its own memory, so the bot
+# staying up doesn't help), the Watchlist page paid the full cost again:
+# every ticker not covered by the local NASDAQ/NYSE directory (newer/small-
+# cap/international symbols -- SPCX, IREN, QBTS, ASML.AS, etc.) fell through
+# to a live yfinance network call, one by one, for every uncached ticker on
+# the list. That's what made the page occasionally take a long time to load
+# -- not "sometimes slow", but reliably slow exactly once per admin restart
+# until the in-memory cache warmed back up, which then reset the next
+# restart. Persisting both caches to a small JSON file survives restarts/
+# redeploys entirely, so only a genuinely NEW ticker ever pays the network
+# cost again.
+_TICKER_META_CACHE_PATH = None  # set lazily below to avoid a hard import-time dependency on config.DATA_DIR
+
+
+def _ticker_meta_cache_path() -> str:
+    global _TICKER_META_CACHE_PATH
+    if _TICKER_META_CACHE_PATH is None:
+        from swingbot import config as _app_config
+        _TICKER_META_CACHE_PATH = os.path.join(_app_config.DATA_DIR, "ticker_meta_cache.json")
+    return _TICKER_META_CACHE_PATH
+
+
+def _load_ticker_meta_cache():
+    path = _ticker_meta_cache_path()
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        _currency_cache.update(data.get("currency_symbols", {}))
+        _company_name_cache.update(data.get("company_names", {}))
+    except Exception:
+        log.debug("Could not load ticker_meta_cache.json -- starting with an empty cache.", exc_info=True)
+
+
+def _save_ticker_meta_cache():
+    path = _ticker_meta_cache_path()
+    try:
+        with open(path, "w") as f:
+            json.dump({
+                "currency_symbols": _currency_cache,
+                "company_names": _company_name_cache,
+            }, f, indent=2, sort_keys=True)
+    except Exception:
+        log.debug("Could not save ticker_meta_cache.json", exc_info=True)
+
+
+_load_ticker_meta_cache()
+
 
 def get_company_name(ticker: str) -> str | None:
     """
@@ -98,6 +150,7 @@ def get_company_name(ticker: str) -> str | None:
             continue
 
     _company_name_cache[ticker_key] = name
+    _save_ticker_meta_cache()  # persist so this network call isn't repeated after the next restart
     return name
 
 
@@ -135,6 +188,7 @@ def get_currency_symbol(ticker: str, default_symbol: str = "€") -> str:
         symbol = CURRENCY_SYMBOLS.get(code, f"{code} ")
 
     _currency_cache[ticker_key] = symbol
+    _save_ticker_meta_cache()  # persist so this network call isn't repeated after the next restart
     return symbol
 
 

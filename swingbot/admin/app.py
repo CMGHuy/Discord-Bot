@@ -234,15 +234,23 @@ def _is_today_berlin(iso_ts: str | None) -> bool:
 
 
 def _render_dashboard_fragment() -> str:
-    # "Today" mode restricts the summarized panels (stat cards + tables) to
-    # just today's activity (Europe/Berlin calendar day) -- trades opened
-    # today, or closed today -- instead of the bot's whole history. "All
-    # days" (the default, matching the dashboard's original behavior) shows
-    # everything. Read from the query string so both the full-page load and
-    # the auto-refresh fragment fetch respect whichever mode the user picked.
-    mode = request.args.get("mode", "all")
-    if mode not in ("today", "all"):
-        mode = "all"
+    # Three modes for the dashboard's summarized panels (stat cards + tables):
+    #   - "active" (the default): today's new trades PLUS every still-open
+    #     position regardless of which day it was opened -- "what do I need
+    #     to pay attention to right now". This is the only mode that mixes
+    #     days: an old open swing sitting from last week still shows up
+    #     (it's still live risk), but closed-trade stats only count today's
+    #     closes, not the whole history.
+    #   - "today": strictly today's activity (Europe/Berlin calendar day)
+    #     only -- trades opened today, or closed today. An old open trade
+    #     from last week is NOT shown here even though it's still open,
+    #     since it's not part of "today".
+    #   - "all": the original behavior -- every trade, no filtering.
+    # Read from the query string so both the full-page load and the
+    # auto-refresh fragment fetch respect whichever mode the user picked.
+    mode = request.args.get("mode", "active")
+    if mode not in ("active", "today", "all"):
+        mode = "active"
 
     # Single TradeLog read for the whole render -- avoids re-reading trades.json
     # separately for get_stats(), get_extended_stats(), and the trade lists.
@@ -254,23 +262,42 @@ def _render_dashboard_fragment() -> str:
             t for t in all_raw
             if _is_today_berlin(t.get("opened_at")) or _is_today_berlin(t.get("closed_at"))
         ]
+    elif mode == "active":
+        scoped_trades = [
+            t for t in all_raw
+            if t["status"] == "open"
+            or _is_today_berlin(t.get("opened_at"))
+            or _is_today_berlin(t.get("closed_at"))
+        ]
+    else:
+        scoped_trades = None  # None -> get_stats()/get_extended_stats() use the full trade set
+
+    if mode in ("today", "active"):
         open_trades = sorted(
             [t for t in scoped_trades if t["status"] == "open"],
             key=lambda t: (t.get("confidence_level", 0), t.get("confidence_score", 0)),
             reverse=True,
         )
     else:
-        scoped_trades = None  # None -> get_stats()/get_extended_stats() use the full trade set
         open_trades = tl.get_trades(status="open", limit=None, sort_by="confidence")
 
     stats = tl.get_stats(trades=scoped_trades)
     stats.update(tl.get_extended_stats(trades=scoped_trades))
 
     # Closed trades (last 25 by closed_at) -- built early so their tickers
-    # are included in cur_map below.
-    closed_pool = scoped_trades if mode == "today" else all_raw
+    # are included in cur_map below. Deliberately NOT scoped to the dashboard
+    # mode -- this feeds the "Trade history" browser table further down the
+    # page, which is its own general trade log with its own ticker/strategy/
+    # horizon/outcome filter dropdowns (populated client-side from whatever
+    # rows are actually rendered here). Scoping it to "today" or "active"
+    # mode would starve those dropdowns down to whatever handful of trades
+    # closed today -- often just one or two, or none -- making the filters
+    # look broken/empty by comparison to always having the real recent
+    # history to pick from. The mode toggle only affects the KPI stat cards
+    # and the open-trades table above; this table always shows the most
+    # recent 25 closed trades regardless of which mode is selected.
     closed_trades = sorted(
-        [t for t in closed_pool if t["status"] in ("win", "loss", "closed")],
+        [t for t in all_raw if t["status"] in ("win", "loss", "closed")],
         key=lambda t: t.get("closed_at") or "",
         reverse=True,
     )[:25]
@@ -435,7 +462,7 @@ def index():
         "Dashboard", "dashboard", "dashboard.html",
         fragment=_render_dashboard_fragment(),
         dashboard_refresh_seconds=config.DASHBOARD_REFRESH_SECONDS,
-        dashboard_mode=request.args.get("mode", "all"),
+        dashboard_mode=request.args.get("mode", "active"),
     )
 
 
@@ -673,14 +700,18 @@ def export_trades_csv():
 @require_auth
 def watchlist_page():
     tickers = load_watchlist()
-    # Build per-ticker trade stats
+    # Build per-ticker trade stats -- one read of trades.json (get_trades()
+    # re-reads the file from disk every call, see TradeLog.refresh()) instead
+    # of one per ticker. With a long watchlist this used to mean dozens of
+    # redundant full-file reads+parses on every single page load.
     tl = _trades()
-    trade_counts = {}
-    for ticker in tickers:
-        trades = tl.get_trades(ticker=ticker, status=None, limit=None)
-        open_c = sum(1 for tr in (trades or []) if tr["status"] == "open")
-        closed_c = len(trades or []) - open_c
-        trade_counts[ticker] = {"open": open_c, "closed": closed_c}
+    all_trades = tl.get_trades(status=None, limit=None) or []
+    trade_counts = {ticker: {"open": 0, "closed": 0} for ticker in tickers}
+    for tr in all_trades:
+        counts = trade_counts.get(tr["ticker"])
+        if counts is None:
+            continue  # trade on a ticker no longer in the watchlist
+        counts["open" if tr["status"] == "open" else "closed"] += 1
     # Real company names -- fetched concurrently so yfinance fallbacks for
     # international tickers don't stall the page load sequentially.
     # US-listed tickers are resolved from the local NASDAQ/NYSE directory

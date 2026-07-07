@@ -1,5 +1,9 @@
 state.json
 trades.json
+account.json
+watchlist.json
+ticker_meta_cache.json
+retrospective_history.json
 .env
 .env.bak
 __pycache__/

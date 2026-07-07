@@ -167,7 +167,7 @@
   text-align: center; padding-bottom: 4px; letter-spacing: .04em;
 }
 .cal-day {
-  border-radius: 6px; min-height: 58px; padding: 5px 6px;
+  border-radius: 6px; min-height: 70px; padding: 5px 6px;
   background: #191d28; border: 1px solid #1f2330;
   display: flex; flex-direction: column; gap: 2px;
 }
@@ -175,6 +175,7 @@
 .cal-day .cal-day-num { font-size: 10px; color: #6b7385; font-weight: 600; }
 .cal-day .cal-day-count { font-size: 11px; color: #dde1ea; font-weight: 700; }
 .cal-day .cal-day-wr { font-size: 10px; font-weight: 600; }
+.cal-day .cal-day-pnl { font-size: 10.5px; font-weight: 700; }
 .cal-modal-summary {
   font-size: 12px; color: #9aa0b0; margin-bottom: 14px;
   display: flex; gap: 16px; flex-wrap: wrap;
@@ -187,43 +188,75 @@
    `raw.trades` falls in the selected range instead of always using all of
    them. #}
 .range-bar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   margin-top: 16px;
+  background: #10131a; border: 1px solid #1a1e27; border-radius: 10px;
+  padding: 10px 14px;
+}
+/* Presets rendered as one seamless segmented control (matching the
+   dashboard's mode toggle) instead of loose individual pill buttons --
+   makes it visually obvious they're mutually-exclusive choices of the
+   same setting, not a row of independent actions. */
+.range-presets {
+  display: flex; border: 1px solid #262b38; border-radius: 8px; overflow: hidden;
 }
 .range-btn {
-  background: #13161d; border: 1px solid #1f2330; color: #9aa0b0;
-  border-radius: 6px; padding: 6px 14px; font-size: 12.5px; font-weight: 600;
-  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+  background: #13161d; border: none; color: #9aa0b0;
+  padding: 7px 14px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background .12s, color .12s;
 }
+.range-btn + .range-btn { border-left: 1px solid #262b38; }
 .range-btn:hover { background: #1a1d26; color: #dde1ea; }
-.range-btn.active { background: #5a7fff; border-color: #5a7fff; color: #fff; }
-.range-custom { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
+.range-btn.active { background: #5a7fff; color: #fff; }
+.range-divider { width: 1px; align-self: stretch; background: #1f2330; }
+.range-custom {
+  display: flex; align-items: center; gap: 7px;
+  background: #0d0f14; border: 1px solid #1f2330; border-radius: 8px;
+  padding: 5px 8px;
+}
+.range-custom label {
+  font-size: 11px; font-weight: 700; color: #5a6275; text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 .range-custom input[type="date"] {
-  background: #0d0f14; border: 1px solid #1f2330; border-radius: 6px;
+  background: #13161d; border: 1px solid #262b38; border-radius: 6px;
   color: #dde1ea; padding: 5px 8px; font-size: 12.5px;
+  transition: border-color .12s;
 }
+.range-custom input[type="date"]:focus {
+  outline: none; border-color: #5a7fff;
+}
+.range-custom .range-sep { color: #3e4555; }
 .range-custom button {
-  background: #13161d; border: 1px solid #1f2330; color: #9aa0b0;
-  border-radius: 6px; padding: 5px 12px; font-size: 12.5px; font-weight: 600;
-  cursor: pointer;
+  background: #5a7fff; border: 1px solid #5a7fff; color: #fff;
+  border-radius: 6px; padding: 6px 14px; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; transition: background .12s, opacity .12s;
 }
-.range-custom button:hover { background: #1a1d26; color: #dde1ea; }
-#range-summary { font-size: 12px; color: #5a6275; margin-left: auto; }
+.range-custom button:hover { background: #4a6ef0; }
+#range-summary {
+  font-size: 12px; color: #9aa0b0; margin-left: auto;
+  padding: 4px 10px; background: #13161d; border: 1px solid #1f2330; border-radius: 20px;
+}
 @media (max-width: 720px) {
-  #range-summary { margin-left: 0; width: 100%; }
+  .range-bar { flex-direction: column; align-items: stretch; }
+  #range-summary { margin-left: 0; width: 100%; text-align: center; }
 }
 </style>
 
 {# ── Date-range filter (applies to everything below -- see renderAll() JS) ── #}
 <div class="range-bar" id="range-bar">
-  <button type="button" class="range-btn" data-range="all">All time</button>
-  <button type="button" class="range-btn" data-range="today">Today</button>
-  <button type="button" class="range-btn" data-range="week">This week</button>
-  <button type="button" class="range-btn" data-range="month">This month</button>
-  <button type="button" class="range-btn" data-range="year">This year</button>
+  <div class="range-presets">
+    <button type="button" class="range-btn" data-range="all">All time</button>
+    <button type="button" class="range-btn" data-range="today">Today</button>
+    <button type="button" class="range-btn" data-range="week">This week</button>
+    <button type="button" class="range-btn" data-range="month">This month</button>
+    <button type="button" class="range-btn" data-range="year">This year</button>
+  </div>
+  <div class="range-divider"></div>
   <div class="range-custom">
+    <label for="range-from">Custom</label>
     <input type="date" id="range-from" aria-label="From date">
-    <span class="muted">–</span>
+    <span class="range-sep">&rarr;</span>
     <input type="date" id="range-to" aria-label="To date">
     <button type="button" id="range-apply">Apply</button>
   </div>
@@ -588,7 +621,7 @@ const chartDefaults = {
   color: '#5a6275',
   gridColor: '#1a1d26',
   tickColor: '#5a6275',
-  font: { family: 'system-ui, -apple-system, sans-serif', size: 11 },
+  font: { family: '"Inter", system-ui, -apple-system, sans-serif', size: 11 },
 };
 
 /* ── load data ──────────────────────────────────────────────────────────── */
@@ -1337,13 +1370,20 @@ $('kpi-strip').innerHTML = kpiHtml;
   function openCalForMonth(ym) {
     const trades = currentTrades;
     const [yr, mo] = ym.split('-').map(Number);   // mo is 1-12
-    const dayMap = {};   // day-of-month (1-31) -> {count, wins, losses}
+    // day-of-month (1-31) -> {count, wins, losses, pnlPct (summed % across
+    // the day's trades), pnlAmt (summed realized $/€ -- null if every
+    // trade that day is missing an amount, e.g. older records predating
+    // that field)}
+    const dayMap = {};
     for (const t of trades) {
       if (!t.closed_at || t.closed_at.slice(0,7) !== ym) continue;
       const day = parseInt(t.closed_at.slice(8,10), 10);
-      if (!dayMap[day]) dayMap[day] = { count:0, wins:0, losses:0 };
-      dayMap[day].count++;
-      if (t.status === 'win') dayMap[day].wins++; else if (t.status === 'loss') dayMap[day].losses++;
+      if (!dayMap[day]) dayMap[day] = { count:0, wins:0, losses:0, pnlPct:0, pnlAmt:0, hasAmt:false };
+      const d = dayMap[day];
+      d.count++;
+      if (t.status === 'win') d.wins++; else if (t.status === 'loss') d.losses++;
+      if (t.pnl_pct != null) d.pnlPct += t.pnl_pct;
+      if (t.realized_pnl_amount != null) { d.pnlAmt += t.realized_pnl_amount; d.hasAmt = true; }
     }
 
     const daysInMonth = new Date(yr, mo, 0).getDate();
@@ -1351,8 +1391,11 @@ $('kpi-strip').innerHTML = kpiHtml;
     // so the grid lines up with the DOW_LABELS header above.
     const firstDow = (new Date(yr, mo-1, 1).getDay() + 6) % 7;
 
-    let monthTotal = 0, monthWins = 0, monthLosses = 0;
-    Object.values(dayMap).forEach(d => { monthTotal += d.count; monthWins += d.wins; monthLosses += d.losses; });
+    let monthTotal = 0, monthWins = 0, monthLosses = 0, monthPnlAmt = 0, monthHasAmt = false;
+    Object.values(dayMap).forEach(d => {
+      monthTotal += d.count; monthWins += d.wins; monthLosses += d.losses;
+      if (d.hasAmt) { monthPnlAmt += d.pnlAmt; monthHasAmt = true; }
+    });
     const monthWr = monthTotal ? (monthWins/(monthWins+monthLosses||1)*100) : null;
 
     calTitle.textContent = `${MONTHS_FULL[mo-1]} ${yr}`;
@@ -1362,6 +1405,7 @@ $('kpi-strip').innerHTML = kpiHtml;
       <span><b>${monthWins}</b> win${monthWins===1?'':'s'}</span>
       <span><b>${monthLosses}</b> loss${monthLosses===1?'es':''}</span>
       ${monthWr!=null ? `<span>Win rate <b>${monthWr.toFixed(0)}%</b></span>` : ''}
+      ${monthHasAmt ? `<span>Gain/loss <b style="color:${monthPnlAmt>=0?'#44ff88':'#ff4444'};">${monthPnlAmt>=0?'+':''}${monthPnlAmt.toFixed(2)}</b></span>` : ''}
     </div>`;
     html += `<div class="cal-grid">`;
     for (const d of DOW_LABELS) html += `<div class="cal-dow">${d}</div>`;
@@ -1374,11 +1418,18 @@ $('kpi-strip').innerHTML = kpiHtml;
       }
       const wr = (d.wins + d.losses) > 0 ? (d.wins/(d.wins+d.losses)*100) : null;
       const wrColor = wr==null ? '#5a6275' : (wr>=60?'#44ff88':wr>=40?'#e2b25a':'#ff4444');
-      const wrTxt = wr!=null ? `${wr.toFixed(0)}% win` : `${d.count} closed`;
-      html += `<div class="cal-day" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L">
+      // e.g. "2W/1L" instead of just a win-rate % -- shows the actual
+      // win/loss split at a glance, not just a derived percentage.
+      const wlTxt = `${d.wins}W/${d.losses}L`;
+      const pnlColor = d.pnlAmt >= 0 ? '#44ff88' : '#ff4444';
+      const pnlTxt = d.hasAmt
+        ? `${d.pnlAmt>=0?'+':''}${d.pnlAmt.toFixed(2)}`
+        : `${d.pnlPct>=0?'+':''}${d.pnlPct.toFixed(1)}%`;
+      html += `<div class="cal-day" title="${day}: ${d.count} trade(s), ${d.wins}W/${d.losses}L, ${pnlTxt}">
         <div class="cal-day-num">${day}</div>
         <div class="cal-day-count">${d.count} trade${d.count===1?'':'s'}</div>
-        <div class="cal-day-wr" style="color:${wrColor};">${wrTxt}</div>
+        <div class="cal-day-wr" style="color:${wrColor};">${wlTxt}</div>
+        <div class="cal-day-pnl" style="color:${pnlColor};">${pnlTxt}</div>
       </div>`;
     }
     html += `</div>`;

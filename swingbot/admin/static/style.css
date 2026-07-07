@@ -1,6 +1,19 @@
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  /* Inter first (loaded via Google Fonts in base.html) -- falls back
+     cleanly to the platform system-UI stack if the network request for it
+     ever fails, so the page never looks broken, just slightly plainer. */
+  --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
 *, *::before, *::after { box-sizing: border-box; }
-body { background: #0d0f14; color: #dde1ea; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; font-size: 14px; }
+body {
+  background: #0d0f14; color: #dde1ea; margin: 0; font-size: 14px;
+  font-family: var(--font-sans);
+  /* Inter renders slightly darker/heavier than the old system stack at the
+     same declared weight -- a touch of antialiasing keeps body text from
+     looking overly bold on a dark background. */
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
 a { color: #6ea8fe; }
 
 /* ---- Shell layout ---- */
@@ -345,12 +358,23 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
   padding: 20px 22px 22px;
 }
 /* Checkbox-type fields for a section are pulled out of the regular grid and
-   rendered together, first, in their own row -- narrower columns since a
-   checkbox + label needs far less width than a number/select input, and a
-   bottom border to visually separate them from the rest of the section's
-   fields that follow directly below in the normal field-grid. */
+   rendered together, first, in their own row, with a bottom border to
+   visually separate them from the rest of the section's fields that follow
+   directly below in the normal field-grid.
+
+   Deliberately reuses the EXACT SAME grid-template-columns as .field-grid
+   above (240px, not some narrower value) -- these are two separate <div>
+   grids stacked vertically, not one shared grid, so CSS Grid computes each
+   one's column tracks independently. A different minmax() here would size
+   this grid's columns differently from the field-grid below it, so a
+   checkbox in "column 2" would land at a different x-position than, say,
+   "Min stop distance %" sitting in "column 2" of the field-grid underneath
+   -- which is exactly the misalignment bug this rule used to cause. Both
+   grids need identical column tracks for a field in a given column to line
+   up vertically with whatever's in that same column in the grid below,
+   regardless of which grid (checkbox-row or the regular one) it happens to
+   render in. */
 .field-grid.checkbox-row {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   padding-bottom: 16px;
   margin: 0 22px;
   padding-left: 0;
