@@ -175,9 +175,9 @@
       <th data-col-id="ticker" draggable="true" onclick="sortByHeader(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
       <th data-col-id="strategy" draggable="true" onclick="sortByHeader(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
       <th data-col-id="horizon" draggable="true" onclick="sortByHeader(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
-      <th data-col-id="direction" draggable="true" onclick="sortByHeader(this)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
+      <th data-col-id="direction" draggable="true" onclick="sortByHeader(this)" title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
       <th data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
-      <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score 0–100">Score <span class="sort-arrow" data-col-id="score"></span></th>
+      <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score out of a maximum of 100 points -- higher means more confluence factors lined up behind this setup.">Score <span class="sort-arrow" data-col-id="score"></span></th>
       <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
       <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (incl. pre/aftermarket, cached ~15s)">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
       <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s).">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
@@ -185,10 +185,10 @@
       <th data-col-id="target" draggable="true" onclick="sortByHeader(this)">Target <span class="sort-arrow" data-col-id="target"></span></th>
       <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
       <th data-col-id="size" draggable="true" onclick="sortByHeader(this)"
-          title="Unrealized gain/loss in account currency, based on the suggested position size ({{ '%.0f%%'|format(account_cfg.risk_pct) }} risk of {{ cur_map.values()|list|first|default('') }}{{ '%.0f'|format(account_cfg.balance) }} account, capped at {{ '%.0f%%'|format(account_cfg.max_position_pct) }} of account) and the live price vs. entry.">
+          title="Unrealized gain/loss in account currency = shares (snapshotted when this trade was opened) x (current price − entry price), direction-adjusted.">
         Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
       </th>
-      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Calendar days since opened">Days <span class="sort-arrow" data-col-id="days"></span></th>
+      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Time since opened -- hours while under a day old, then days + hours">Days <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="action">Action</th>
     </tr>
@@ -250,9 +250,10 @@
         </span>
       </td>
 
-      <td>
-        <span style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }}; font-weight:600;">
-          {{ '▲ LONG' if is_bull else '▼ SHORT' }}
+      <td data-sort="{{ '1' if is_bull else '0' }}">
+        <span style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }}; font-weight:700; font-size:15px; cursor:help;"
+              title="{{ 'Long (bullish)' if is_bull else 'Short (bearish)' }}">
+          {{ '▲' if is_bull else '▼' }}
         </span>
       </td>
 
@@ -267,7 +268,7 @@
           <span style="font-weight:600;color:
             {%- if conf_score >= 75 %} #6dda9e
             {%- elif conf_score >= 50 %} #e2b25a
-            {%- else %} #da6d6d{%- endif %};">{{ conf_score }}</span><span class="muted" style="font-size:10px;">/100</span>
+            {%- else %} #da6d6d{%- endif %};">{{ conf_score }}</span>
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
 
@@ -301,12 +302,18 @@
       <td style="color:#6dda9e;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
       <td>{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
 
-      {# Unrealized gain/loss in account currency -- shares (snapshotted at sizing
-         time) x the live price's move away from entry, direction-adjusted #}
-      {%- set unreal_amt = (sizing.shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (sizing and cur_price is not none) else None -%}
+      {# Unrealized gain/loss in account currency -- ALWAYS the shares actually
+         snapshotted onto this trade at open time (t.shares), never sizing_map's
+         current recompute -- sizing_map reflects TODAY's account balance/risk
+         settings, which drift over time (e.g. after a `!account balance`
+         change) and would silently misstate what this specific open position
+         is really worth. Falls back to sizing_map only for old trades logged
+         before shares were snapshotted at all. #}
+      {%- set actual_shares = t.shares if t.get('shares') else (sizing.shares if sizing else None) -%}
+      {%- set unreal_amt = (actual_shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (actual_shares and cur_price is not none) else None -%}
       <td data-sort="{{ unreal_amt if unreal_amt is not none else 0 }}"
           style="font-weight:700;color: {% if unreal_amt is none %}#5a6275{% elif unreal_amt >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
-          title="{% if sizing and unreal_amt is not none %}~{{ sizing.shares }} shares · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(sizing.position_value) }} deployed{% if sizing.capped %} (capped at {{ sizing.max_position_pct }}% of account){% endif %}{% elif sizing %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
+          title="{% if actual_shares and unreal_amt is not none %}~{{ actual_shares }} shares{{ ' (snapshotted at open)' if t.get('shares') else ' (est. -- no snapshot on this older trade)' }} · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(actual_shares * t.entry) }} deployed{% elif actual_shares %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
         {%- if unreal_amt is not none -%}
           {{ '%+.2f'|format(unreal_amt) }} {{ cur_map.get(t.ticker, '') }}
         {%- else -%}
@@ -314,11 +321,12 @@
         {%- endif -%}
       </td>
 
-      {# Days open — flag trades aging beyond their horizon #}
-      <td data-sort="{{ days_open if days_open is not none else -1 }}"
-          style="color:{% if days_open is not none and days_open > 30 %}#e2b25a{% else %}#5a6275{% endif %};"
-          title="{{ (days_open|string + ' calendar days') if days_open is not none else 'Unknown' }}">
-        {{ days_open if days_open is not none else '—' }}
+      {# Time open — shown as hours while under a day old, then "N day(s) M
+         hours" once past 24h; flags trades aging beyond ~30 days #}
+      <td data-sort="{{ days_open.total_hours if days_open is not none else -1 }}"
+          style="color:{% if days_open is not none and days_open.days > 30 %}#e2b25a{% else %}#5a6275{% endif %};"
+          title="{{ 'Opened ' ~ days_open.label ~ ' ago' if days_open is not none else 'Unknown' }}">
+        {{ days_open.label if days_open is not none else '—' }}
       </td>
 
       <td class="muted" data-sort="{{ t.opened_at }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>

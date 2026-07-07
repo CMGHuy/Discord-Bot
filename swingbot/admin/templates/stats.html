@@ -114,6 +114,9 @@
   #winloss-pie-card .chart-wrap,
   #direction-pie-card .chart-wrap,
   #strategy-pie-card .chart-wrap,
+  #confidence-pie-card .chart-wrap,
+  #ticker-pie-card .chart-wrap,
+  #holding-pie-card .chart-wrap,
   #r-multiple-card .chart-wrap,
   #confidence-card .chart-wrap { height: 170px !important; }
 
@@ -199,7 +202,8 @@
    `raw.trades` falls in the selected range instead of always using all of
    them. #}
 .range-bar {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 16px; flex-wrap: nowrap;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
   margin-top: 16px;
   background: linear-gradient(180deg, #12151c 0%, #0e1016 100%);
   border: 1px solid #232838; border-radius: 12px;
@@ -230,16 +234,13 @@
 }
 .range-divider { width: 1px; align-self: stretch; background: #20242f; }
 .range-custom {
-  display: flex; align-items: flex-end; gap: 10px;
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
   background: #0d0f14; border: 1px solid #232838; border-radius: 10px;
-  padding: 7px 12px;
+  padding: 6px 10px;
 }
-.range-custom .range-field {
-  display: flex; flex-direction: column; gap: 3px;
-}
-.range-custom .range-field label {
-  font-size: 9.5px; font-weight: 700; color: #565e73; text-transform: uppercase;
-  letter-spacing: 0.06em;
+.range-custom label {
+  font-size: 10.5px; font-weight: 700; color: #7b8296; text-transform: uppercase;
+  letter-spacing: 0.05em; white-space: nowrap;
 }
 .range-custom input[type="date"] {
   background: #161922; border: 1px solid #2a3040; border-radius: 7px;
@@ -251,23 +252,28 @@
 .range-custom input[type="date"]:focus {
   outline: none; border-color: #5a7fff; box-shadow: 0 0 0 3px rgba(90,127,255,0.18);
 }
-.range-custom .range-sep { color: #454d63; font-size: 13px; padding-bottom: 6px; }
+.range-custom .range-sep { color: #454d63; font-size: 13px; }
 .range-custom button {
   background: linear-gradient(135deg, #5a7fff 0%, #4a6ef0 100%); border: none; color: #fff;
-  border-radius: 7px; padding: 7px 16px; font-size: 12.5px; font-weight: 700;
-  cursor: pointer; transition: filter .15s, transform .05s;
+  border-radius: 7px; padding: 6px 15px; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; transition: filter .15s, transform .05s; white-space: nowrap;
 }
 .range-custom button:hover { filter: brightness(1.1); }
 .range-custom button:active { transform: translateY(1px); }
 #range-summary {
   font-size: 12px; font-weight: 600; color: #c3c9db; margin-left: auto;
-  padding: 7px 14px; white-space: nowrap;
+  padding: 7px 14px; white-space: nowrap; flex-shrink: 0;
   background: linear-gradient(135deg, rgba(90,127,255,0.16), rgba(122,99,245,0.10));
   border: 1px solid rgba(90,127,255,0.35); border-radius: 20px;
 }
+/* Thin, unobtrusive horizontal scrollbar for when the bar is wider than the
+   viewport (narrow laptop windows, tablets) -- keeps every control on one
+   row rather than stacking, while still reachable via a quick scroll. */
+.range-bar::-webkit-scrollbar { height: 5px; }
+.range-bar::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 3px; }
 @media (max-width: 720px) {
-  .range-bar { flex-direction: column; align-items: stretch; }
-  .range-custom { justify-content: space-between; }
+  .range-bar { flex-wrap: wrap; overflow-x: visible; }
+  .range-presets, .range-custom { flex-shrink: 1; }
   #range-summary { margin-left: 0; width: 100%; text-align: center; }
 }
 </style>
@@ -284,15 +290,11 @@
   </div>
   <div class="range-divider"></div>
   <div class="range-custom">
-    <div class="range-field">
-      <label for="range-from">From</label>
-      <input type="date" id="range-from" aria-label="From date">
-    </div>
+    <label for="range-from">From</label>
+    <input type="date" id="range-from" aria-label="From date">
     <span class="range-sep">&rarr;</span>
-    <div class="range-field">
-      <label for="range-to">To</label>
-      <input type="date" id="range-to" aria-label="To date">
-    </div>
+    <label for="range-to">To</label>
+    <input type="date" id="range-to" aria-label="To date">
     <button type="button" id="range-apply">Apply</button>
   </div>
   <span id="range-summary"></span>
@@ -394,6 +396,24 @@
       <canvas id="chart-strategy-pie"></canvas>
     </div>
   </div>
+  <div class="chart-card" style="margin-top:0;" id="confidence-pie-card">
+    <div class="chart-title">🔬 Trades by confidence level</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-confidence-pie"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="ticker-pie-card">
+    <div class="chart-title">📈 Trades by ticker</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-ticker-pie"></canvas>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-top:0;" id="holding-pie-card">
+    <div class="chart-title">⏱ Holding period split</div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="chart-holding-pie"></canvas>
+    </div>
+  </div>
 </div>
 
 <div class="stats-two-col" id="extra-row">
@@ -493,7 +513,8 @@ function mkChart(id, cfg) {
 const CHART_CARD_IDS = [
   'balance-card','activity-card','equity-card','drawdown-card','rolling-card',
   'heatmap-card','pnl-hist-card','dur-hist-card','winloss-pie-card',
-  'direction-pie-card','strategy-pie-card','r-multiple-card','confidence-card',
+  'direction-pie-card','strategy-pie-card','confidence-pie-card','ticker-pie-card',
+  'holding-pie-card','r-multiple-card','confidence-card',
   'cum-pnl-card',
 ];
 
@@ -1133,33 +1154,42 @@ $('kpi-strip').innerHTML = kpiHtml;
   });
 })();
 
-/* ── 7. Duration histogram ──────────────────────────────────────────────── */
+/* ── 7. Duration histogram ──────────────────────────────────────────────────
+   Fixed, human-meaningful buckets instead of an auto-scaled bin width -- an
+   intraday swing (a few hours) and a multi-week hold land in very different,
+   individually-labeled buckets rather than being lumped into whatever
+   equal-width slice the data's min/max happened to produce. Edges are in
+   hours; HOLD_BUCKET_LABELS[i] describes the [edges[i], edges[i+1]) range,
+   with a final open-ended "4+ weeks" catch-all since horizons here run out
+   to several months. */
+const HOLD_BUCKET_EDGES_H  = [0, 4, 8, 12, 24, 48, 72, 120, 168, 336, 672, Infinity];
+const HOLD_BUCKET_LABELS   = ['0-4h','4-8h','8-12h','12-24h','2 days','3 days','5 days','1 week','2 weeks','4 weeks','4+ weeks'];
+function bucketizeHoldHours(hoursArr) {
+  return HOLD_BUCKET_LABELS.map((_, i) =>
+    hoursArr.filter(h => h >= HOLD_BUCKET_EDGES_H[i] && h < HOLD_BUCKET_EDGES_H[i+1]).length
+  );
+}
+const holdHours = holdDays.map(d => d * 24);
+
 (function () {
-  if (holdDays.length < 2) return;
-  const lo = 0;
-  const hi = Math.ceil(max(holdDays));
-  const binW = Math.max(1, Math.ceil(hi/15));
-  const bins = [], counts = [];
-  for (let b=lo; b<hi; b+=binW) {
-    bins.push(b);
-    counts.push(holdDays.filter(v=>v>=b && v<b+binW).length);
-  }
+  if (holdHours.length < 2) return;
+  const counts = bucketizeHoldHours(holdHours);
   $('dur-hist-card').style.display = '';
   mkChart('chart-dur-hist', {
     type: 'bar',
-    data: { labels: bins.map(b=>b+'-'+(b+binW-1)+'d'), datasets:[{ label:'Trades (days held)', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
+    data: { labels: HOLD_BUCKET_LABELS, datasets:[{ label:'Trades', data:counts, backgroundColor:'rgba(90,127,255,.7)', borderWidth:0 }] },
     options: {
       responsive:true, maintainAspectRatio:false,
       plugins:{
         legend:{display:false},
         tooltip:{ callbacks:{
-          title: t => `Held ${t[0].label.replace('d','')} days`,
+          title: t => `Held ${t[0].label}`,
           label: ctx => ` ${ctx.parsed.y} trade${ctx.parsed.y===1?'':'s'}`,
         } },
       },
       scales: {
-        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor},
-             title:{ display:true, text:'Holding period (days)', color:chartDefaults.tickColor, font:{size:10} } },
+        x: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, maxRotation:0, minRotation:0, font:{size:9.5}},
+             title:{ display:true, text:'Holding period', color:chartDefaults.tickColor, font:{size:10} } },
         y: { grid:{color:chartDefaults.gridColor}, ticks:{color:chartDefaults.tickColor, stepSize:1},
              title:{ display:true, text:'Number of trades', color:chartDefaults.tickColor, font:{size:10} } },
       },
@@ -1251,6 +1281,122 @@ $('kpi-strip').innerHTML = kpiHtml;
         legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:10}} },
         tooltip:{ callbacks:{ label: ctx => {
           const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 9b. Trades-by-confidence-level pie ──────────────────────────────────── */
+(function () {
+  const confMap = {};
+  for (const t of trades) {
+    const lvl = t.confidence || 0;
+    const key = lvl > 0 ? `Lv${lvl}` : 'Unrated';
+    confMap[key] = (confMap[key] || 0) + 1;
+  }
+  const confKeys = Object.keys(confMap).sort((a,b) => {
+    if (a === 'Unrated') return 1;
+    if (b === 'Unrated') return -1;
+    return a.localeCompare(b);
+  });
+  if (!confKeys.length) return;
+  $('confidence-pie-card').style.display = '';
+  const confPalette = { Lv1:'#da6d6d', Lv2:'#e2915a', Lv3:'#e2b25a', Lv4:'#8bc76d', Lv5:'#44ff88', Unrated:'#5a6275' };
+  mkChart('chart-confidence-pie', {
+    type: 'doughnut',
+    data: {
+      labels: confKeys,
+      datasets: [{
+        data: confKeys.map(k=>confMap[k]),
+        backgroundColor: confKeys.map(k=>confPalette[k] || '#9aa0b0'),
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      cutout: '62%',
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:10}} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 9c. Trades-by-ticker pie -- top tickers by trade count, rest grouped
+   into "Other" so a long-tail watchlist doesn't blow up the legend ──────── */
+(function () {
+  const tickerMap = {};
+  for (const t of trades) {
+    const tk = t.ticker || 'Unknown';
+    tickerMap[tk] = (tickerMap[tk] || 0) + 1;
+  }
+  const sortedTickers = Object.keys(tickerMap).sort((a,b)=>tickerMap[b]-tickerMap[a]);
+  if (!sortedTickers.length) return;
+  $('ticker-pie-card').style.display = '';
+  const TOP_N = 8;
+  const topTickers = sortedTickers.slice(0, TOP_N);
+  const otherCount = sortedTickers.slice(TOP_N).reduce((s,k)=>s+tickerMap[k], 0);
+  const tickerLabels = topTickers.slice();
+  const tickerCounts = topTickers.map(k=>tickerMap[k]);
+  if (otherCount > 0) { tickerLabels.push('Other'); tickerCounts.push(otherCount); }
+  const tickerPalette = ['#5a7fff','#44ff88','#e2b25a','#ff4444','#ab47bc','#26c6da','#ff9800','#66bb6a','#ec407a','#9aa0b0'];
+  mkChart('chart-ticker-pie', {
+    type: 'pie',
+    data: {
+      labels: tickerLabels,
+      datasets: [{
+        data: tickerCounts,
+        backgroundColor: tickerLabels.map((_,i)=>tickerPalette[i % tickerPalette.length]),
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:10}} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const pct = totalTrades ? (ctx.parsed/totalTrades*100).toFixed(1) : '0';
+          return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+        } } },
+      },
+    },
+  });
+})();
+
+/* ── 9d. Holding-period split pie -- same fixed buckets as the duration
+   histogram above, as an at-a-glance proportion rather than a bar count ──── */
+(function () {
+  if (holdHours.length < 2) { $('holding-pie-card').style.display = 'none'; return; }
+  const counts = bucketizeHoldHours(holdHours);
+  const nonEmpty = HOLD_BUCKET_LABELS
+    .map((label, i) => ({ label, count: counts[i] }))
+    .filter(b => b.count > 0);
+  if (!nonEmpty.length) { $('holding-pie-card').style.display = 'none'; return; }
+  $('holding-pie-card').style.display = '';
+  const holdPalette = ['#5a7fff','#7a63f5','#26c6da','#44ff88','#8bc76d','#e2b25a','#ff9800','#ec407a','#ab47bc','#da6d6d','#9aa0b0'];
+  mkChart('chart-holding-pie', {
+    type: 'pie',
+    data: {
+      labels: nonEmpty.map(b=>b.label),
+      datasets: [{
+        data: nonEmpty.map(b=>b.count),
+        backgroundColor: nonEmpty.map((_,i)=>holdPalette[i % holdPalette.length]),
+        borderColor: '#13161d', borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{boxWidth:12,padding:12,font:{size:9.5}} },
+        tooltip:{ callbacks:{ label: ctx => {
+          const total = nonEmpty.reduce((s,b)=>s+b.count,0);
+          const pct = total ? (ctx.parsed/total*100).toFixed(1) : '0';
           return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
         } } },
       },

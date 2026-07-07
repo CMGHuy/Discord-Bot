@@ -192,6 +192,29 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 # ---------------------------------------------------------------------------
 # Routes -- Dashboard
 # ---------------------------------------------------------------------------
+def _format_open_duration(total_hours: float) -> str:
+    """
+    Human-readable "how long has this trade been open" label -- hour
+    granularity under a day (e.g. "4 hours"), then "N day(s) M hours" once
+    it crosses 24h (e.g. "1 day 5 hours"), dropping the hours part when
+    it's exactly a whole number of days. Whole-calendar-days-only (as this
+    used to show) reads as "0" for anything opened today, whether that was
+    10 minutes or 23 hours ago -- this is precise at the hour level instead.
+    """
+    total_hours = max(0.0, total_hours)
+    if total_hours < 1:
+        return "< 1 hour"
+    whole_hours = int(total_hours)
+    if whole_hours < 24:
+        return f"{whole_hours} hour{'s' if whole_hours != 1 else ''}"
+    days = whole_hours // 24
+    rem_hours = whole_hours % 24
+    label = f"{days} day{'s' if days != 1 else ''}"
+    if rem_hours:
+        label += f" {rem_hours} hour{'s' if rem_hours != 1 else ''}"
+    return label
+
+
 def _pos_color(pos_pct: float, entry_pct: float) -> str:
     """Color for the SL→TP progress bar and percentage text.
     Interpolates red (SL, 0%) → grey (entry) → green (TP, 100%)
@@ -351,9 +374,18 @@ def _render_dashboard_fragment() -> str:
         else:
             status_map[tid] = trade_proximity(t["direction"], entry, sl, tp, price)
 
-        # Days open
+        # Time open -- shown as hours while under a day old, then "N day(s) M
+        # hours" once it crosses 24h, instead of a coarse whole-calendar-days
+        # count that reads as "0" for anything opened today regardless of
+        # whether that was 10 minutes or 23 hours ago.
         try:
-            days_map[tid] = max(0, (now_utc - datetime.fromisoformat(t["opened_at"])).days)
+            elapsed = now_utc - datetime.fromisoformat(t["opened_at"])
+            total_hours = max(0, elapsed.total_seconds() / 3600.0)
+            days_map[tid] = {
+                "days": int(total_hours // 24),          # whole calendar days, for the >30-day aging color
+                "total_hours": total_hours,               # for sorting
+                "label": _format_open_duration(total_hours),
+            }
         except Exception:
             days_map[tid] = None
 
