@@ -72,10 +72,11 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf, effectiv
     Evaluates EVERY configured requirement against one scenario --
     always all of them, never stopping at the first failure -- and
     returns a RequirementCheck per one. This is the single source of
-    truth both `!check`'s always-show-everything display and the
-    automatic scan's stricter posting decision (`ScanItem.all_requirements_met`)
-    are built from, so the two can never disagree about what "meets
-    the settings" means.
+    truth the posting decision for BOTH scan modes is built from
+    (`ScanItem.all_requirements_met` -- see engine.py's alert-building
+    loop, which only posts a scenario once every one of these passes),
+    so `!check` and the automatic scan can never disagree about what
+    "meets the settings" means.
     """
     confluence_count, confluence_families = target_confluence
     c = scenario.constraints

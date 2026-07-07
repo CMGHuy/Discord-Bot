@@ -568,13 +568,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 )
 
                 if require_confirmation:
-                    # Automatic background scan: still only debounce-track
-                    # and (eventually) post a scenario once EVERY
-                    # requirement is met, to keep the alerts channel free
-                    # of noise -- `!check` (require_confirmation=False)
-                    # shows every scenario with a real entry point
-                    # regardless, with unmet requirements marked, so
-                    # "why didn't this alert?" is always answerable there.
+                    # Automatic background scan: only debounce-track (and
+                    # eventually post) a scenario once EVERY requirement is
+                    # met -- `!check` (require_confirmation=False) also only
+                    # POSTS fully-qualifying scenarios (see the alert-
+                    # building loop below), it just skips the confirmation
+                    # debounce below since it's a one-off on-demand look,
+                    # not a repeating alert.
                     if not all_ok:
                         continue
                     confirmed = state.confirm_or_update(
@@ -671,6 +671,26 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                        result.ticker, result.horizon_key, result.trend)
             continue
 
+        if not item.all_requirements_met:
+            # `!check`/"Run !check now" (require_confirmation=False) never
+            # filtered scan_items by all_ok the way the automatic scan does
+            # (see the require_confirmation branch above, in the loop that
+            # builds scan_items) -- so without this check, EVERY scenario
+            # with a real entry point, including ones below
+            # MIN_ALERT_CONFIDENCE_LEVEL or failing any other requirement,
+            # got a full embed built and POSTED to the real alerts channel
+            # here, indistinguishable at a glance from a genuine qualifying
+            # alert. That's the bug: a manual check could post a trade
+            # "below the min confidence to alert" setting straight into the
+            # shared channel. The funnel summary line built at the end of
+            # this scan already reports how many scenarios were found vs.
+            # fully qualifying, so "why didn't X show up" is still
+            # answerable without spamming the channel with a full alert
+            # for every non-qualifying scenario too.
+            log.debug("%s (%s, %s): found but doesn't meet every requirement -- not posted (see funnel summary for counts)",
+                       result.ticker, result.horizon_key, result.trend)
+            continue
+
         df = get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
 
         log.info(
@@ -707,11 +727,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             confirmed_by=item.combined_from,
         )
 
-        # Only a scenario that meets EVERY requirement gets logged as a
-        # paper trade -- `!check` still BUILDS and shows a full embed for
-        # one that doesn't (with the failing parameter(s) marked), but it
-        # was never actually a "trade this bot took", so it shouldn't
-        # pollute open-trade tracking or the performance stats either.
+        # By this point item.all_requirements_met is always True -- the
+        # continue above already filtered out anything that doesn't meet
+        # every requirement, for BOTH scan modes -- so this is really just
+        # "not already_open", kept explicit as a safety net in case that
+        # invariant ever changes upstream.
         trade_id = None
         if item.all_requirements_met and not already_open:
             trade_id = trade_log.log_trade(
@@ -728,11 +748,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 confirmed_by=item.combined_from,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
-        elif already_open:
-            log.info("%s (%s) already has an open trade -- not logging a duplicate", result.ticker, result.horizon_key)
         else:
-            log.info("%s (%s, %s): shown but not logged as a paper trade -- doesn't yet meet every requirement",
-                       result.ticker, result.horizon_key, result.trend)
+            log.info("%s (%s) already has an open trade -- not logging a duplicate", result.ticker, result.horizon_key)
 
         perf_stats = trade_log.get_stats(conf.level)
 

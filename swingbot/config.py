@@ -255,6 +255,22 @@ FIELDS: list[Field] = [
           help="Only used when Position sizing mode above is 'Account %'. The position's total value (shares "
                "× entry) is sized to exactly this % of the account balance -- e.g. 0.1% on a €1,000,000 "
                "account opens a €1,000 position on every trade. Live-editable with `!account positionpct PCT`."),
+    Field("MAX_POSITION_VALUE_ABSOLUTE", "MAX_POSITION_VALUE_ABSOLUTE", "Account Defaults",
+          "Max position size (absolute $)",
+          type="float", default="1000", min=0, step=10,
+          help="Hard currency cap: a trade's position value (shares × entry) never exceeds this many currency "
+               "units, full stop -- applied ON TOP OF (and independent of) the %-based caps above. Unlike a "
+               "%-only cap, this holds regardless of what the account balance grows or shrinks to, so \"every "
+               "trade costs at most $1,000\" stays true even if the balance changes. Set to 0 to disable and "
+               "rely on the %-based cap alone. Live-editable with `!account maxposition <amount>`."),
+    Field("MAX_RISK_AMOUNT_ABSOLUTE", "MAX_RISK_AMOUNT_ABSOLUTE", "Account Defaults",
+          "Max loss per trade (absolute $)",
+          type="float", default="100", min=0, step=10,
+          help="Hard currency cap: the REAL risk if a trade's stop-loss is hit (final shares × stop distance) "
+               "never exceeds this many currency units, regardless of sizing mode, Risk per trade %, or account "
+               "balance. This is what actually guarantees a fixed max loss per trade -- a %-only risk setting "
+               "silently stops meaning that the moment the balance changes. Set to 0 to disable. Live-editable "
+               "with `!account maxrisk <amount>`."),
 
     # --- Secondary alerts (email + push, fires only on high-confidence qualifying setups) ---
     Field("SECONDARY_ALERT_MIN_CONFIDENCE", "SECONDARY_ALERT_MIN_CONFIDENCE", "Secondary Alerts",

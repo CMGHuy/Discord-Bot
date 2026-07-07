@@ -117,6 +117,8 @@ def load_account_config(path: str = CONFIG_PATH) -> dict:
         "max_position_pct":   app_config.MAX_POSITION_SIZE_PCT,
         "sizing_mode":        app_config.POSITION_SIZING_MODE,
         "position_pct":       app_config.POSITION_SIZE_PCT_OF_ACCOUNT,
+        "max_position_value_absolute": app_config.MAX_POSITION_VALUE_ABSOLUTE,
+        "max_risk_amount_absolute":    app_config.MAX_RISK_AMOUNT_ABSOLUTE,
         "balance_history":    [],
     }
     if os.path.exists(path):
@@ -225,6 +227,24 @@ def set_max_open_positions(max_open: int, path: str = CONFIG_PATH) -> dict:
 def set_max_position_pct(max_pct: float, path: str = CONFIG_PATH) -> dict:
     config = load_account_config(path)
     config["max_position_pct"] = max_pct
+    save_account_config(config, path)
+    return config
+
+
+def set_max_position_value_absolute(amount: float, path: str = CONFIG_PATH) -> dict:
+    """Hard currency cap on position value -- see compute_position_size()'s
+    docstring for why this exists alongside (not instead of) max_position_pct."""
+    config = load_account_config(path)
+    config["max_position_value_absolute"] = amount
+    save_account_config(config, path)
+    return config
+
+
+def set_max_risk_amount_absolute(amount: float, path: str = CONFIG_PATH) -> dict:
+    """Hard currency cap on real risk-if-stopped -- see compute_position_size()'s
+    docstring for why this exists alongside (not instead of) risk_pct."""
+    config = load_account_config(path)
+    config["max_risk_amount_absolute"] = amount
     save_account_config(config, path)
     return config
 
@@ -387,24 +407,40 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     Position sizing -- see this module's docstring for the two modes
     (account_cfg["sizing_mode"]: "risk_pct" or "account_pct").
 
-    If position_value would exceed balance x max_position_pct/100, shares
-    are capped at that maximum and `capped` is True in the result -- in
-    "account_pct" mode this is normally a no-op (position_pct is expected
-    to already sit well under the cap) but stays as a safety net in case
-    position_pct itself is ever set above max_position_pct.
+    Three caps are applied, in order, and the TIGHTEST one wins:
+      1. max_position_pct  -- position_value never exceeds this % of balance.
+      2. MAX_POSITION_VALUE_ABSOLUTE -- position_value never exceeds this
+         many currency units, full stop, regardless of balance or any %
+         setting. This is what actually guarantees "every trade costs at
+         most $X" -- a %-only cap silently stops guaranteeing that the
+         moment the balance changes (0.1% of 1,000,000 is 1,000, but 0.1%
+         of 10,000,000 is 10,000), which is exactly the drift that made
+         unrealized P&L balloon into the thousands even after the % knobs
+         were tuned down.
+      3. MAX_RISK_AMOUNT_ABSOLUTE -- the REAL risk (final shares x stop
+         distance) never exceeds this many currency units either, again
+         regardless of mode/%/balance.
+
+    Once every cap is applied, `risk_amount` and `position_value` are ALWAYS
+    recomputed from the final (possibly capped) share count -- never left
+    as a pre-cap "intended" number -- so what's displayed is always what
+    would actually happen if this trade were stopped out, not a theoretical
+    figure the real position was never actually sized at.
 
     Returns None when balance <= 0, entry <= 0, or (risk_pct mode only)
     stop distance is zero.
 
     Return dict keys:
         shares          -- suggested whole/fractional share count
-        risk_amount     -- currency at risk if stop-loss is hit
-        position_value  -- total capital deployed (shares x entry)
-        capped          -- True if position_value was capped
+        risk_amount     -- REAL currency at risk if stop-loss is hit
+        position_value  -- REAL total capital deployed (shares x entry)
+        capped          -- True if any cap (%, or either absolute) reduced shares
         balance         -- account balance used in calculation
         risk_pct        -- risk % used (risk_pct mode)
         position_pct    -- account allocation % used (account_pct mode)
         max_position_pct -- position size cap % used
+        max_position_value_absolute -- absolute position cap used (currency)
+        max_risk_amount_absolute    -- absolute risk cap used (currency)
         mode            -- "risk_pct" or "account_pct", whichever was used
     """
     if account_cfg is None:
@@ -414,6 +450,10 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     risk_pct = float(account_cfg.get("risk_pct", 1.0))
     position_pct = float(account_cfg.get("position_pct", app_config.POSITION_SIZE_PCT_OF_ACCOUNT))
     max_position_pct = float(account_cfg.get("max_position_pct", app_config.MAX_POSITION_SIZE_PCT))
+    max_position_value_absolute = float(account_cfg.get(
+        "max_position_value_absolute", app_config.MAX_POSITION_VALUE_ABSOLUTE))
+    max_risk_amount_absolute = float(account_cfg.get(
+        "max_risk_amount_absolute", app_config.MAX_RISK_AMOUNT_ABSOLUTE))
     mode = account_cfg.get("sizing_mode", "risk_pct")
 
     if balance <= 0 or entry <= 0:
@@ -426,7 +466,6 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         # the account, independent of how far away the stop sits.
         position_value = balance * position_pct / 100.0
         raw_shares = position_value / entry
-        risk_amount = raw_shares * stop_distance   # informational only -- not what sized this trade
     else:
         mode = "risk_pct"   # normalize anything unrecognized to the documented default
         if stop_distance <= 0:
@@ -435,23 +474,31 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         raw_shares = risk_amount / stop_distance
         position_value = raw_shares * entry
 
-    max_position_value = balance * max_position_pct / 100.0
     capped = False
+    max_position_value = balance * max_position_pct / 100.0
     if position_value > max_position_value:
         raw_shares = max_position_value / entry
-        position_value = max_position_value
         capped = True
-        # risk_pct mode preserves the ORIGINAL behavior here: risk_amount
-        # stays the intended pre-cap risk (balance x risk_pct/100), not
-        # recomputed from the now-capped share count -- that's how this
-        # already worked before account_pct mode existed, and changing it
-        # would silently change what every existing risk_pct trade/alert
-        # reports. account_pct mode has no such pre-existing meaning for
-        # risk_amount (it was never the sizing input in that mode to begin
-        # with), so there it's fine -- and more useful -- to reflect the
-        # actual capped position's real risk instead of an uncapped one.
-        if mode == "account_pct":
-            risk_amount = raw_shares * stop_distance
+
+    # Absolute currency caps -- always enforced last, on top of whatever the
+    # %-based sizing/cap above produced, so they hold no matter what balance
+    # or % settings are in play.
+    if max_position_value_absolute > 0:
+        max_shares_for_position = max_position_value_absolute / entry
+        if raw_shares > max_shares_for_position:
+            raw_shares = max_shares_for_position
+            capped = True
+    if max_risk_amount_absolute > 0 and stop_distance > 0:
+        max_shares_for_risk = max_risk_amount_absolute / stop_distance
+        if raw_shares > max_shares_for_risk:
+            raw_shares = max_shares_for_risk
+            capped = True
+
+    # Always the REAL figures for the final (possibly capped) share count --
+    # never a pre-cap "intended" number -- so what's shown is always what
+    # this trade would actually do to the account.
+    position_value = raw_shares * entry
+    risk_amount = raw_shares * stop_distance
 
     return {
         "shares":           round(raw_shares, 2),
@@ -462,6 +509,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         "risk_pct":         risk_pct,
         "position_pct":     position_pct,
         "max_position_pct": max_position_pct,
+        "max_position_value_absolute": max_position_value_absolute,
+        "max_risk_amount_absolute":    max_risk_amount_absolute,
         "mode":             mode,
     }
 
