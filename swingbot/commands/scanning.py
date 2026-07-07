@@ -173,10 +173,25 @@ async def session_scan():
     if alerts:
         log.info("Posted %d new confirmed signal(s).", len(alerts))
         if f:
+            # "qualifying" and "alerts posted" can legitimately differ:
+            # qualifying scenarios found for the same ticker+trend with a
+            # near-identical entry/stop/target get merged into one alert by
+            # dedup_scan_items() (same real setup, confirmed by more than one
+            # strategy/horizon), and a qualifying scenario for a ticker that
+            # already has an open trade is skipped rather than re-alerted.
+            # Spelling that out here so "why did qualifying=2 but alerts=1"
+            # is answerable at a glance instead of looking like a bug.
+            gap_parts = []
+            merged = max(0, f.get("fully_qualifying", 0) - f.get("deduped", f.get("fully_qualifying", 0)))
+            if merged:
+                gap_parts.append(f"{merged} merged as duplicate setup(s)")
+            if f.get("skipped_already_open", 0):
+                gap_parts.append(f"{f['skipped_already_open']} already open")
+            gap_str = f" ({', '.join(gap_parts)})" if gap_parts else ""
             summary = (
                 f"🔍 **Scan** ({now_str}) — {f['tickers']} tickers, {f['checked']} combos checked → "
                 f"{f['scenarios_found']} scenario(s) found ({f['fully_qualifying']} qualifying) → "
-                f"**{len(alerts)} new alert(s) posted above**"
+                f"**{len(alerts)} new alert(s) posted above**{gap_str}"
             )
             await channel.send(summary)
     else:

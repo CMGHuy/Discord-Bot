@@ -596,14 +596,23 @@
     <select id="ct-filter-ticker" class="ct-filter" data-filter="ticker"
             style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
       <option value="">All tickers</option>
+      {%- for v in closed_trade_filter_options.ticker %}
+      <option value="{{ v }}">{{ v }}</option>
+      {%- endfor %}
     </select>
     <select id="ct-filter-strategy" class="ct-filter" data-filter="strategy"
             style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
       <option value="">All strategies</option>
+      {%- for v in closed_trade_filter_options.strategy %}
+      <option value="{{ v }}">{{ v }}</option>
+      {%- endfor %}
     </select>
     <select id="ct-filter-horizon" class="ct-filter" data-filter="horizon"
             style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
       <option value="">All horizons</option>
+      {%- for v in closed_trade_filter_options.horizon %}
+      <option value="{{ v }}">{{ v }}</option>
+      {%- endfor %}
     </select>
     <select id="ct-filter-dir" class="ct-filter" data-filter="dir"
             style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
@@ -638,20 +647,20 @@
     <thead>
     <tr>
       <th style="width:26px;">#</th>
-      <th>Outcome</th>
-      <th>Ticker</th>
-      <th title="Primary confirming method">Strategy</th>
-      <th>Horizon</th>
-      <th>Dir</th>
-      <th>Conf</th>
-      <th style="text-align:right;">Entry</th>
-      <th style="text-align:right;">Exit</th>
-      <th style="text-align:right;" title="Realized P&L % vs entry">P&amp;L%</th>
-      <th style="text-align:right;" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss</th>
-      <th style="text-align:right;" title="Realized R-multiple">R</th>
-      <th style="text-align:right;" title="Time held, from open to close, down to the minute">Days</th>
-      <th>Opened</th>
-      <th>Closed</th>
+      <th data-col-id="outcome" onclick="sortClosedTable(this)">Outcome <span class="sort-arrow" data-col-id="outcome"></span></th>
+      <th data-col-id="ticker" onclick="sortClosedTable(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
+      <th data-col-id="strategy" onclick="sortClosedTable(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
+      <th data-col-id="horizon" onclick="sortClosedTable(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
+      <th data-col-id="dir" onclick="sortClosedTable(this)">Dir <span class="sort-arrow" data-col-id="dir"></span></th>
+      <th data-col-id="conf" onclick="sortClosedTable(this)">Conf <span class="sort-arrow" data-col-id="conf"></span></th>
+      <th data-col-id="entry" onclick="sortClosedTable(this)" style="text-align:right;">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="exit" onclick="sortClosedTable(this)" style="text-align:right;">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
+      <th data-col-id="pnlpct" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
+      <th data-col-id="gainloss" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
+      <th data-col-id="r" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
+      <th data-col-id="days" onclick="sortClosedTable(this)" style="text-align:right;" title="Time held, from open to close, down to the minute">Days <span class="sort-arrow" data-col-id="days"></span></th>
+      <th data-col-id="opened" onclick="sortClosedTable(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
+      <th data-col-id="closed" onclick="sortClosedTable(this)">Closed <span class="sort-arrow" data-col-id="closed"></span></th>
       <th style="width:60px;"></th>
     </tr>
     </thead>
@@ -687,29 +696,32 @@
         </span>
       </td>
       <td><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
-      <td style="text-align:right;" class="muted">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
-      <td style="text-align:right;">
+      <td style="text-align:right;" class="muted" data-sort="{{ t.entry }}">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td style="text-align:right;" data-sort="{{ t.exit_price if t.exit_price else -1 }}">
         {%- if t.exit_price -%}{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
       <td style="text-align:right;font-weight:700;
-                 color:{% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+                 color:{% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          data-sort="{{ c_pnl if c_pnl is not none else -999999 }}">
         {{ '%+.2f%%'|format(c_pnl) if c_pnl is not none else '—' }}
       </td>
       <td style="text-align:right;font-weight:700;
                  color:{% if pnl_amt is none %}#5a6275{% elif pnl_amt >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          data-sort="{{ pnl_amt if pnl_amt is not none else -999999 }}"
           title="{{ 'Position size at open: ' ~ cur_map.get(t.ticker, '') ~ '%.2f'|format(pos_val) if pos_val else 'No sizing snapshot for this trade (logged before this feature existed)' }}">
         {%- if pnl_amt is not none -%}
           {{ '%+.2f'|format(pnl_amt) }} {{ cur_map.get(t.ticker, '') }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
       <td style="text-align:right;font-weight:600;
-                 color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+                 color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          data-sort="{{ c_r if c_r is not none else -999999 }}">
         {{ '%+.2f'|format(c_r) if c_r is not none else '—' }}
       </td>
       <td style="text-align:right;white-space:nowrap;" class="muted" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}">{{ c_days.label if c_days is not none else '—' }}</td>
-      <td class="muted" style="font-size:12px;white-space:nowrap;" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
-      <td class="muted" style="font-size:12px;white-space:nowrap;" title="{{ (t.closed_at or '')[:16] }} UTC">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
+      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
+      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.closed_at or '' }}" title="{{ (t.closed_at or '')[:16] }} UTC">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
       <td onclick="event.stopPropagation();" style="padding:4px 6px;display:flex;gap:4px;align-items:center;">
         <button type="button" class="icon-btn secondary"
                 title="Open trade detail"
@@ -757,21 +769,67 @@
     var perPage = savedPP;
     var currentPage = 1;
     var filters = {};
+    var ctSortCol = null, ctSortAsc = false;
 
-    function uniqueSorted(attr) {
-      return [...new Set(allRows.map(function(r){ return r.dataset[attr]; }))].filter(Boolean).sort();
+    // Columns whose sort value lives on the <tr> itself (data-outcome,
+    // data-ticker, etc. -- the same attributes the filter dropdowns already
+    // read), vs. columns whose value needs pulling from that column's <td>
+    // (via a data-sort attribute holding the raw/unformatted value, since
+    // the visible text is currency-symbol-prefixed, %-suffixed, or localized
+    // and would sort wrong/alphabetically otherwise).
+    var CT_ROW_ATTR_COLS = ['outcome', 'ticker', 'strategy', 'horizon', 'dir', 'conf'];
+
+    function ctColIndex(colId) {
+      var ths = document.querySelectorAll('#closed-trades-table thead th');
+      for (var i = 0; i < ths.length; i++) {
+        if (ths[i].dataset.colId === colId) return i;
+      }
+      return -1;
     }
-    function populateSelect(id, values) {
-      var sel = document.getElementById(id);
-      // Clear everything except the first "All ..." placeholder option
-      // before repopulating -- this function used to only ever run once,
-      // so it never needed to guard against re-adding the same options
-      // (which would otherwise duplicate every entry each time this runs).
-      while (sel.options.length > 1) sel.remove(1);
-      values.forEach(function(v) {
-        var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+
+    // Exposed globally -- called via the header <th>'s inline onclick, which
+    // (like any inline HTML event attribute) resolves against the global
+    // scope, not this IIFE's local scope.
+    window.sortClosedTable = function(th) {
+      var colId = th.dataset.colId;
+      if (ctSortCol === colId) { ctSortAsc = !ctSortAsc; } else { ctSortCol = colId; ctSortAsc = false; }
+      var idx = ctColIndex(colId);
+      if (idx === -1) return;
+      var useRowAttr = CT_ROW_ATTR_COLS.indexOf(colId) !== -1;
+      allRows.sort(function(a, b) {
+        var av, bv;
+        if (useRowAttr) {
+          av = a.dataset[colId]; bv = b.dataset[colId];
+        } else {
+          var ac = a.cells[idx], bc = b.cells[idx];
+          av = ac.dataset.sort !== undefined ? ac.dataset.sort : ac.innerText;
+          bv = bc.dataset.sort !== undefined ? bc.dataset.sort : bc.innerText;
+        }
+        av = (av == null ? '' : String(av)).trim();
+        bv = (bv == null ? '' : String(bv)).trim();
+        var an = parseFloat(av), bn = parseFloat(bv);
+        var cmp = (!isNaN(an) && !isNaN(bn)) ? (an - bn) : av.localeCompare(bv);
+        return ctSortAsc ? cmp : -cmp;
       });
-    }
+      var tbody = document.querySelector('#closed-trades-table tbody');
+      allRows.forEach(function(r) { tbody.appendChild(r); });
+      document.querySelectorAll('#closed-trades-table .sort-arrow').forEach(function(el) {
+        el.textContent = (el.dataset.colId === ctSortCol) ? (ctSortAsc ? ' ▲' : ' ▼') : '';
+      });
+      currentPage = 1;
+      render();
+    };
+
+    // NOTE: the ticker/strategy/horizon dropdown OPTIONS themselves are no
+    // longer built here. They used to be scanned from allRows (whatever
+    // closed-trade rows happened to be rendered on the page), which was
+    // always at most the last 25 -- any ticker/strategy/horizon that only
+    // appeared in an older, 26th+ closed trade could never be selected even
+    // though it's a real filterable value. They're now rendered server-side
+    // by app.py from the FULL closed-trade history (see
+    // closed_trade_filter_options in the dashboard route) directly into the
+    // <select> markup above, and morphdom patches them in place on every
+    // refresh same as any other element -- no client-side rebuild needed.
 
     function getVisible() {
       return allRows.filter(function(row) {
@@ -805,20 +863,17 @@
       document.getElementById('ct-next').disabled = currentPage >= totalPages;
     }
 
-    // Re-scans the (possibly just-refreshed) table for rows and rebuilds
-    // the ticker/strategy/horizon dropdowns from them, then re-renders the
-    // current page. Called once below for the initial page load, AND again
-    // by dashboard.html's refreshDashboard() after every auto-refresh --
-    // this table's own <script> tag only ever executes on that very first
+    // Re-scans the (possibly just-refreshed) table for rows and re-renders
+    // the current page. Called once below for the initial page load, AND
+    // again by dashboard.html's refreshDashboard() after every auto-refresh
+    // -- this table's own <script> tag only ever executes on that very first
     // load (browsers don't re-run scripts injected via morphdom/innerHTML),
     // so without an explicit re-run hook like this, newly closed trades
-    // would never show up here and the filter dropdowns would permanently
-    // reflect only whatever existed at the moment the page was first opened.
+    // would never show up here. (The filter dropdown OPTIONS are rendered
+    // server-side from the full trade history -- see the note above -- so
+    // they no longer need rebuilding here.)
     window.refreshClosedTradesTable = function() {
       allRows = Array.from(document.querySelectorAll('#closed-trades-table tbody tr'));
-      populateSelect('ct-filter-ticker',   uniqueSorted('ticker'));
-      populateSelect('ct-filter-strategy', uniqueSorted('strategy'));
-      populateSelect('ct-filter-horizon',  uniqueSorted('horizon'));
       render();
     };
 

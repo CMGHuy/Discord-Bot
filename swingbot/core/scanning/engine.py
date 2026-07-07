@@ -791,6 +791,19 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
     log.info("Scan pass complete: %d alert(s) built, %d skipped (already open)", len(alerts), skipped_already_open)
 
+    # Filled in only now that the alert-building loop (which is what actually
+    # computes it) has finished -- lets callers explain gaps like "2
+    # qualifying -> 1 alert posted" (a dedup merge, an already-open skip, or
+    # both) instead of just the pre-dedup fully_qualifying count vs. the
+    # final alerts count with nothing in between. See dedup_scan_items() for
+    # why 2 fully-qualifying scenarios can legitimately become 1 alert: they
+    # were for the same ticker+trend with a near-identical entry/stop/target,
+    # so they're the same real setup surfaced by more than one
+    # strategy/horizon, not two independent trade ideas.
+    if progress is not None and progress.funnel is not None:
+        progress.funnel["deduped"] = len(deduped)
+        progress.funnel["skipped_already_open"] = skipped_already_open
+
     return alerts, all_newly_closed, all_near_close_warnings
 
 

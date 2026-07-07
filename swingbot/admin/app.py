@@ -316,20 +316,27 @@ def _render_dashboard_fragment() -> str:
     stats = tl.get_stats(trades=scoped_trades)
     stats.update(tl.get_extended_stats(trades=scoped_trades))
 
-    # Closed trades (last 25 by closed_at) -- built early so their tickers
-    # are included in cur_map below. Deliberately NOT scoped to the dashboard
-    # mode -- this feeds the "Trade history" browser table further down the
-    # page, which is its own general trade log with its own ticker/strategy/
-    # horizon/outcome filter dropdowns (populated client-side from whatever
-    # rows are actually rendered here). Scoping it to "today" or "active"
-    # mode would starve those dropdowns down to whatever handful of trades
-    # closed today -- often just one or two, or none -- making the filters
-    # look broken/empty by comparison to always having the real recent
-    # history to pick from. The mode toggle only affects the KPI stat cards
-    # and the open-trades table above; this table always shows the most
-    # recent 25 closed trades regardless of which mode is selected.
+    # Closed trades -- built early so their tickers are included in cur_map
+    # below. Deliberately NOT scoped to the dashboard mode -- this feeds the
+    # "Trade history" browser table further down the page, which is its own
+    # general trade log with its own ticker/strategy/horizon/outcome filter
+    # dropdowns. Scoping it to "today" or "active" mode would starve the
+    # table down to whatever handful of trades closed today -- often just
+    # one or two, or none. The mode toggle only affects the KPI stat cards
+    # and the open-trades table above.
+    #
+    # all_closed_trades is the FULL, unbounded history -- used to build the
+    # filter dropdowns' option lists (closed_trade_filter_options below) from
+    # the COMPLETE history, not just whatever rows end up in the table. The
+    # table itself (closed_trades) is then sliced down to the most recent 25
+    # for actual display -- that row limit and the filter options are two
+    # different concerns and shouldn't share one data source (they used to,
+    # which meant any ticker/strategy/horizon that only appeared in an older,
+    # 26th+ closed trade could never be selected in the dropdowns even though
+    # it's a perfectly real filterable value).
+    all_closed_trades = [t for t in all_raw if t["status"] in ("win", "loss", "closed")]
     closed_trades = sorted(
-        [t for t in all_raw if t["status"] in ("win", "loss", "closed")],
+        all_closed_trades,
         key=lambda t: t.get("closed_at") or "",
         reverse=True,
     )[:25]
@@ -339,6 +346,13 @@ def _render_dashboard_fragment() -> str:
     # trades for tickers without a current open position showed no symbol.
     all_tickers = {t["ticker"] for t in open_trades + closed_trades}
     cur_map     = {tk: get_currency_symbol(tk, config.CURRENCY_SYMBOL) for tk in all_tickers}
+
+    # Ticker/strategy/horizon options for the Trade History filter dropdowns.
+    closed_trade_filter_options = {
+        "ticker":   sorted({t["ticker"] for t in all_closed_trades if t.get("ticker")}),
+        "strategy": sorted({_primary_strategy_label(t) for t in all_closed_trades}),
+        "horizon":  sorted({t.get("horizon_key") for t in all_closed_trades if t.get("horizon_key")}),
+    }
 
     # Account config for position sizing (guaranteed to have all keys via
     # load_account_config's {**defaults, **stored} merge).
@@ -374,7 +388,15 @@ def _render_dashboard_fragment() -> str:
         }
 
     # Per-trade strategy label (reuses chart ranking so dashboard + chart agree).
-    strategy_map = {t["id"]: _primary_strategy_label(t) for t in open_trades}
+    # Covers open_trades AND all_closed_trades (not just open_trades) -- the
+    # Trade History table below looks up this same map for its Strategy
+    # column, and needs the identical recomputed label that was shown while
+    # the trade was still open, not the raw t["strategy"] field (which is
+    # always the same hardcoded default -- see primary_strategy_label's
+    # docstring in core/performance.py). Previously this map only covered
+    # open_trades, so every closed-trade lookup missed and silently fell back
+    # to that one hardcoded string for every row.
+    strategy_map = {t["id"]: _primary_strategy_label(t) for t in open_trades + all_closed_trades}
 
     # ── Single pass over open trades ─────────────────────────────────────────
     # Computes prices, status colors, P&L, SL/TP progress, position bar,
@@ -526,7 +548,7 @@ def _render_dashboard_fragment() -> str:
         cur_map=cur_map, status_map=status_map, strategy_map=strategy_map,
         price_map=price_map, pnl_map=pnl_map, days_map=days_map,
         sizing_map=sizing_map, account_cfg=account_cfg, sizing_note=sizing_note,
-        closed_trades=closed_trades,
+        closed_trades=closed_trades, closed_trade_filter_options=closed_trade_filter_options,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
         is_market_active=is_us_market_active(),
         dashboard_mode=mode,
