@@ -559,6 +559,42 @@ class TradeLog:
             for t in self._trades
         )
 
+    def has_similar_open_trade(self, ticker: str, direction: str, entry: float, stop_loss: float,
+                                take_profit: float, tol_pct: float) -> bool:
+        """
+        True if ANY currently open trade on this ticker+direction -- regardless
+        of strategy or horizon -- has entry/stop/target all within `tol_pct`
+        of the candidate values (config.DEDUP_TOLERANCE_PCT, same tolerance
+        dedup_scan_items()/_plans_similar() use to merge multiple scenarios
+        found in a single scan into one alert).
+
+        has_open_trade() above only catches an EXACT (strategy, horizon_key)
+        repeat -- running !check repeatedly could still log a fresh "new"
+        trade every time for what's really the same real-world setup, just
+        surfaced under a different horizon (e.g. 3m/5m/7m/9m all finding
+        essentially the same support/resistance levels on the same ticker),
+        since each horizon_key is a distinct key to has_open_trade(). This
+        checks the ACTUAL price levels instead of the strategy/horizon label,
+        so a near-identical plan is caught as a duplicate no matter which
+        strategy/horizon combo produced it -- respecting the "Dedup tolerance
+        %" setting the same way a single scan's own internal dedup already
+        does, just extended across separate !check invocations over time.
+        """
+        self.refresh()
+
+        def _close(a, b):
+            ref = max(abs(a), abs(b))
+            if ref == 0:
+                return True
+            return abs(a - b) / ref * 100 <= tol_pct
+
+        return any(
+            t["ticker"] == ticker and t["direction"] == direction and t["status"] == "open"
+            and _close(t["entry"], entry) and _close(t["stop_loss"], stop_loss)
+            and _close(t["take_profit"], take_profit)
+            for t in self._trades
+        )
+
     def mark_near_close(self, trade_id: str, alerted: bool):
         """Sets/clears the near_close_alerted flag so we warn once per approach,
         not every single check while price lingers near the level."""

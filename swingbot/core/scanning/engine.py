@@ -677,7 +677,21 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             break
         result, plan, conf = item.result, item.plan, item.conf
 
-        already_open = trade_log.has_open_trade(result.ticker, result.strategy, result.horizon_key, result.trend)
+        # Broader than an exact (strategy, horizon_key) repeat: also catches
+        # a near-identical plan surfaced under a DIFFERENT strategy/horizon
+        # (e.g. running !check repeatedly finds essentially the same S/R
+        # levels under 3m/5m/7m/9m, each a technically distinct horizon_key)
+        # -- see has_similar_open_trade()'s own docstring. Without this,
+        # has_open_trade()'s exact-key match let repeated !check runs log a
+        # fresh "new" open trade every time for what was really the same
+        # setup, one per horizon that happened to qualify that scan.
+        already_open = (
+            trade_log.has_open_trade(result.ticker, result.strategy, result.horizon_key, result.trend)
+            or trade_log.has_similar_open_trade(
+                result.ticker, result.trend, plan.entry, plan.stop_loss, plan.take_profit,
+                tol_pct=config.DEDUP_TOLERANCE_PCT,
+            )
+        )
         if already_open and require_confirmation:
             # Automatic/scheduled scan: this exact setup is already being
             # tracked as an open paper trade -- don't re-fire an alert for
