@@ -464,24 +464,32 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                        ticker, horizon_key, len(supports), len(resistances))
             floor_pct = levels.atr_floor_pct(df, current_price, h)
-            # Reward/stop bounds are widened to this horizon's OWN scale
+            # Reward/stop bounds are widened toward this horizon's OWN scale
             # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
-            # in strategy_types.py -- 5%/3% for a 2-week swing up to 22%/11%
-            # for a 9-month swing) rather than the flat, horizon-blind
-            # config.MIN_REWARD_PCT/MAX_STOP_LOSS_PCT (3%/7%) that used to be
-            # applied identically to every horizon from 2 weeks to 9 months.
-            # That flat floor let a "9-month swing" scenario qualify with
-            # just a 3% target and sit inside a 2-7% stop -- a box small
-            # enough for a couple of ordinary trading days' volatility to
-            # fully traverse, which is exactly why trades meant to run for
-            # weeks/months were actually closing (hitting either side) within
-            # hours or a few days, and why genuine longer-term theses were
-            # getting stopped out by routine noise instead of a real reversal.
-            # config.MIN_REWARD_PCT/MIN_STOP_DISTANCE_PCT still apply as the
-            # user-configured ABSOLUTE floors (never loosened below whatever
-            # the admin UI has set), just no longer able to override a longer
-            # horizon's own wider, more appropriate requirement.
-            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT))
+            # in strategy_types.py -- up to 22%/11% for a 9-month swing)
+            # rather than the flat, horizon-blind config.MIN_REWARD_PCT/
+            # MAX_STOP_LOSS_PCT (3%/7%) that used to be applied identically to
+            # every horizon from 2 weeks to 9 months. That flat floor let a
+            # "9-month swing" scenario qualify with just a 3% target and sit
+            # inside a 2-7% stop -- small enough for a couple of ordinary
+            # trading days' volatility to fully traverse, which is why trades
+            # meant to run for weeks/months were actually closing within
+            # hours/days.
+            #
+            # First attempt used the horizon's FULL sr_target_min_pct as the
+            # hard floor (e.g. requiring a genuine 15-22% target for anything
+            # 4w or longer) -- that turned out to be too strict: a real
+            # support/resistance level that far away is rare on most tickers
+            # most days, so /check started coming up empty across the board.
+            # Using HALF of the horizon's own target-min as the floor keeps
+            # meaningfully more room than the old flat 3% (so trades still
+            # aren't sized like a day-trade) while staying loose enough that
+            # qualifying setups actually show up regularly. The max stop
+            # widening (the ceiling, not a floor) is left at the horizon's
+            # full max_risk_pct -- widening a ceiling can only let MORE
+            # scenarios qualify, never fewer, so it wasn't part of the
+            # "why did this go to zero" problem.
+            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.5)
             effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
             scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                                 atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
