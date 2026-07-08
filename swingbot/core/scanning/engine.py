@@ -481,15 +481,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # 4w or longer) -- that turned out to be too strict: a real
             # support/resistance level that far away is rare on most tickers
             # most days, so /check started coming up empty across the board.
-            # Using HALF of the horizon's own target-min as the floor keeps
-            # meaningfully more room than the old flat 3% (so trades still
-            # aren't sized like a day-trade) while staying loose enough that
-            # qualifying setups actually show up regularly. The max stop
-            # widening (the ceiling, not a floor) is left at the horizon's
-            # full max_risk_pct -- widening a ceiling can only let MORE
-            # scenarios qualify, never fewer, so it wasn't part of the
-            # "why did this go to zero" problem.
-            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.5)
+            # Even at HALF of the horizon's own target-min, it was still
+            # coming up too strict -- dropped further to 30% of the horizon's
+            # target-min, e.g. 9m now needs ~6.6% instead of ~11%/22%. Still
+            # meaningfully wider than the old flat 3% for longer horizons (so
+            # trades don't insta-close), but loose enough that qualifying
+            # setups should show up regularly. The max stop widening (the
+            # ceiling, not a floor) is left at the horizon's full
+            # max_risk_pct -- widening a ceiling can only let MORE scenarios
+            # qualify, never fewer, so it was never part of the "why did this
+            # go to zero" problem.
+            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.3)
             effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
             scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                                 atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
