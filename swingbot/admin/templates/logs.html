@@ -38,6 +38,24 @@
         onsubmit="return confirm('Clear the {{ log_source }} log file? This cannot be undone.');">
     <button type="submit" class="danger small">&#128465; Clear log</button>
   </form>
+  {# Hard reload -- same _restart_bot_container() the Settings page's "Restart
+     bot container" button uses (real container restart via the Docker
+     socket, not just the .env hot-reload signal), just placed here too since
+     the Logs page is usually exactly where you notice the bot's gone quiet
+     (stopped logging, hung mid-scan, etc.) and want to restart it right
+     there without navigating away. Preserves the current lines/source
+     filters via the "next"/"lines"/"source" hidden fields so the redirect
+     back lands you on the same view you were looking at. #}
+  <form method="post" action="{{ url_for('restart_bot') }}" style="margin:0;"
+        onsubmit="return confirm('Hard-restart the bot container now? It will be offline for a few seconds and stop logging until it comes back up.');">
+    <input type="hidden" name="next" value="logs">
+    <input type="hidden" name="lines" value="{{ lines }}">
+    <input type="hidden" name="source" value="{{ log_source }}">
+    <button type="submit" class="warning small" {{ '' if restart_available else 'disabled' }}
+            title="{{ 'Full container restart -- use when the bot has stopped responding/logging.' if restart_available else 'Docker socket not mounted -- restart manually with docker compose restart bot.' }}">
+      &#128260; Hard reload bot
+    </button>
+  </form>
   <span class="muted" style="font-size:11px; margin-left:auto;">{{ log_path }}</span>
 </div>
 

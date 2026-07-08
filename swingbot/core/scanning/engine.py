@@ -374,9 +374,20 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # it's sequential, not concurrent).
     fresh_data = _crawl_latest_data(tickers, progress)
 
+    # Progress is tracked per (ticker, horizon) pair, not per ticker --
+    # analyzing a single ticker means scoring it across up to 10 horizons
+    # (2w through 9m), each running ~10 strategies' confluence counts plus
+    # the full confidence quality/expectancy scoring (ADX/MACD/RSI/squeeze/
+    # candlestick checks, HTF bias, track-record lookups). That's genuinely
+    # slow per ticker, so counting progress.done only once per ticker left
+    # the %/Discord message pinned at "0%" for however long the very FIRST
+    # ticker took to finish ALL its horizons -- which could be a long,
+    # visually-stuck stretch on a big watchlist. Counting each horizon as
+    # its own unit makes the % actually move within a single ticker.
+    horizons_to_scan = [hk for hk in HORIZONS if horizon_filter == "all" or hk == horizon_filter]
     if progress is not None:
         progress.stage = "analyzing"
-        progress.total = len(tickers)
+        progress.total = len(tickers) * max(1, len(horizons_to_scan))
         progress.done = 0
         progress.current_ticker = None
 
@@ -413,9 +424,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # Already logged by _crawl_latest_data -- this ticker's
             # fetch failed during the crawl phase, so there's nothing
             # to analyze it with. Skip, same as the old inline error
-            # handling did.
+            # handling did. Counts as every one of its horizons at once
+            # (none of them can run either) so progress.total still adds
+            # up correctly against horizons_to_scan-per-ticker.
             if progress is not None:
-                progress.done += 1
+                progress.done += max(1, len(horizons_to_scan))
             continue
         log.debug("Fetched %d bars for %s (close=%.2f)", len(df), ticker, float(df["Close"].iloc[-1]))
 
@@ -439,10 +452,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         bars_available = len(df)
 
-        for horizon_key, h in HORIZONS.items():
-            if horizon_filter != "all" and horizon_key != horizon_filter:
-                continue
+        for horizon_key in horizons_to_scan:
+            h = HORIZONS[horizon_key]
             if bars_available < MIN_BARS[horizon_key]:
+                if progress is not None:
+                    progress.done += 1
                 continue
 
             log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
@@ -625,8 +639,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 if progress is not None:
                     progress.qualifying_found = len(scan_items)
 
-        if progress is not None:
-            progress.done += 1
+            # One unit of progress per (ticker, horizon) pair -- see the
+            # horizons_to_scan comment above for why this moved from once
+            # per ticker to once per horizon.
+            if progress is not None:
+                progress.done += 1
 
     log.info(
         "Signal funnel: %d ticker/horizon combo(s) checked -> %d had no qualifying entry point (no real "

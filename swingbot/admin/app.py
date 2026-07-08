@@ -673,6 +673,16 @@ def save_settings():
 @require_auth
 def restart_bot():
     success, message = _restart_bot_container()
+    # Redirects back to wherever the restart button was actually clicked from
+    # (Settings originally; now also Logs, for a "hard reload" button right
+    # next to the log stream that's usually what you're staring at when a
+    # restart is actually needed) instead of always landing on Settings.
+    next_page = request.form.get("next", "settings")
+    if next_page == "logs":
+        return redirect(url_for(
+            "logs_page", msg=message, ok=1 if success else 0,
+            lines=request.form.get("lines", 500), source=request.form.get("source", "bot"),
+        ))
     return redirect(url_for("settings_page", msg=message, ok=1 if success else 0))
 
 
@@ -699,6 +709,7 @@ def logs_page():
         "Logs", "logs", "logs.html",
         log_content=log_content, lines=lines, log_path=log_path,
         log_source=source, logs_refresh_seconds=config.LOGS_REFRESH_SECONDS,
+        restart_available=docker_sdk is not None,
     )
 
 
