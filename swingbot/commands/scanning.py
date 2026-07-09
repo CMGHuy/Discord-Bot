@@ -3,6 +3,7 @@ import asyncio
 import datetime as dt
 import json
 import os
+import time
 
 import discord
 from discord.ext import tasks
@@ -140,6 +141,25 @@ async def _refresh_presence():
 
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
+    # The entire tick's real work is wrapped in a try/except (see below) so
+    # ONE bad tick -- a transient network error, a malformed price bar, any
+    # unhandled exception anywhere inside run_scan()'s pandas/network-heavy
+    # pipeline -- can never take the whole loop down. Without this,
+    # discord.py's tasks.Loop logs the traceback once and then just STOPS
+    # calling this function forever (reconnect=True only auto-retries
+    # discord-connection-related errors, not a generic exception raised by
+    # our own scan code) -- silently, with no further log lines at all,
+    # which is exactly the "bot went quiet and never scanned again" failure
+    # mode seen before. Catching everything here guarantees a scan attempt
+    # every SCAN_INTERVAL_MINUTES no matter what happened on the last one.
+    try:
+        await _session_scan_tick()
+    except Exception:
+        log.exception("session_scan tick failed -- will retry on the next scheduled tick "
+                       "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
+
+
+async def _session_scan_tick():
     # Always refresh the live-status presence first, even on the early-return
     # paths below (paused / outside session / missing channel config) -- the
     # whole point is that this reflects the bot's real current state at least
@@ -202,28 +222,66 @@ async def session_scan():
             )
             await channel.send(summary)
     else:
-        # Deliberately NOT posted to the channel anymore -- see _presence_text()'s
-        # docstring. Still logged (visible in the admin UI's Logs page) for
-        # anyone who wants tick-by-tick detail without it living in Discord.
         log.info("Session scan complete at %s — nothing new to post.", now_str)
+        not_ready_parts = []
         if f and (f["scenarios_found"] > 0 or f["tickers"] > 0):
-            not_ready_parts = []
             if f.get("failed_min_confluence", 0):
                 not_ready_parts.append(f"{f['failed_min_confluence']} below min strategies")
             if f.get("failed_min_confidence", 0):
                 not_ready_parts.append(f"{f['failed_min_confidence']} below min confidence")
             if f.get("awaiting_confirmation", 0):
                 not_ready_parts.append(f"{f['awaiting_confirmation']} awaiting confirmation")
-            not_ready_str = (", ".join(not_ready_parts) + " — ") if not_ready_parts else ""
+            not_ready_log_str = (", ".join(not_ready_parts) + " — ") if not_ready_parts else ""
             log.info(
                 "Scan detail (%s): %d tickers -> %d scenario(s) found (%d qualifying), %snothing new to post",
-                now_str, f["tickers"], f["scenarios_found"], f["fully_qualifying"], not_ready_str,
+                now_str, f["tickers"], f["scenarios_found"], f["fully_qualifying"], not_ready_log_str,
             )
+
+        # Healthcheck post -- one short message every scan tick (every
+        # SCAN_INTERVAL_MINUTES), even when nothing qualified. Earlier this
+        # branch deliberately posted NOTHING to avoid channel noise (see
+        # _presence_text()'s docstring -- the bot's Discord presence dot was
+        # meant to be the liveness signal instead). Brought back on request:
+        # a live presence dot is easy to miss, and watching a message land
+        # in the channel every 5 minutes is a much more obvious "yes, it's
+        # still alive and actually scanning" signal than checking a status
+        # dot next to the bot's name. Kept to one compact line (no embed, no
+        # chart) specifically so it doesn't turn into the same noise problem
+        # that got this removed the first time.
+        open_count = trade_log.get_stats()["open"]
+        if f:
+            not_ready_str = ", ".join(not_ready_parts) if not_ready_parts else "none held back"
+            healthcheck = (
+                f"💓 **Healthcheck** ({now_str}) — 📡 {f['tickers']} tickers scanned, "
+                f"🧮 {f['scenarios_found']} scenario(s) found (✅ {f['fully_qualifying']} qualifying, "
+                f"{not_ready_str}) → nothing new this tick · 📂 {open_count} open trade(s)"
+            )
+        else:
+            healthcheck = f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new · 📂 {open_count} open trade(s)"
+        try:
+            await channel.send(healthcheck)
+        except Exception as e:
+            log.warning("Could not post healthcheck message: %s", e)
 
     # Refresh again now that this tick's own scan may have changed the open-
     # trade count (a trade closing mid-scan shouldn't have to wait for next
     # tick's presence update to be reflected).
     await _refresh_presence()
+
+
+@session_scan.error
+async def _session_scan_error(exc: Exception):
+    """
+    Last-resort safety net -- _session_scan_tick()'s own try/except above
+    should catch everything and let the loop keep ticking on schedule, but
+    if something still manages to escape (e.g. an exception raised by
+    discord.py's own task-loop machinery, outside our function body), this
+    logs it AND explicitly restarts the loop rather than letting
+    discord.ext.tasks quietly stop calling session_scan forever.
+    """
+    log.exception("session_scan loop raised past its own try/except -- restarting the loop: %s", exc)
+    if not session_scan.is_running():
+        session_scan.restart()
 
 
 @tasks.loop(minutes=15)
@@ -720,40 +778,57 @@ async def check_cmd(ctx, *args: str):
     # --- live scan mode (existing behaviour) ---
     min_lv = config.MIN_ALERT_CONFIDENCE_LEVEL
     progress = scan_engine.ScanProgress()
+    scan_started = time.monotonic()
     progress_msg = await ctx.send(
         f"🔬 Scanning `{horizon}` · min confidence Lv{min_lv}"
         + (f" · min strategies {min_confluence}" if min_confluence else "")
-        + " · crawling data… 0%"
+        + " · starting…"
     )
+
+    def _elapsed_str() -> str:
+        secs = round(time.monotonic() - scan_started)
+        return f"{secs}s" if secs < 60 else f"{secs // 60}m{secs % 60:02d}s"
 
     async def _poll_progress():
         last_shown = None
         while True:
-            await asyncio.sleep(1.5)
+            # 0.8s (down from 1.5s) so the message visibly updates more
+            # often -- on a big watchlist the crawl/analyze phases can each
+            # run for tens of seconds, and a slower poll made it easy to
+            # mistake "still working, just between updates" for "stuck".
+            await asyncio.sleep(0.8)
+            elapsed = _elapsed_str()
             if progress.stage == "crawling data":
                 ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
                 pct = round(progress.done / progress.total * 100) if progress.total else 0
                 label = (
                     f"📡 **Crawling** — {progress.done}/{progress.total} ticker(s) fetched "
-                    f"({pct}%){ticker_bit}"
+                    f"({pct}%){ticker_bit} · ⏱️ {elapsed}"
                 )
             elif progress.stage == "building alerts":
                 if progress.alerts_total:
                     label = (
                         f"📊 **Building alerts** — {progress.alerts_done}/{progress.alerts_total} done "
-                        f"(generating charts…)"
+                        f"(generating charts…) · ⏱️ {elapsed}"
                     )
                 else:
                     label = (
                         f"📊 **Deduplicating** — {progress.qualifying_found} qualifying "
-                        f"scenario(s) found, merging similar setups…"
+                        f"scenario(s) found, merging similar setups… · ⏱️ {elapsed}"
                     )
+            elif progress.stage == "analyzing" and progress.done == 0 and progress.current_ticker is None:
+                # Market regime (SPY vs its 200-day EMA) is fetched once,
+                # right before the per-ticker loop starts -- without this
+                # branch the message would just sit on "0/N tickers (0%)"
+                # with no ticker name yet, which reads identically to
+                # "stuck" even though it's actively doing something.
+                label = f"🌐 **Checking market regime** (SPY vs 200-day EMA)… · ⏱️ {elapsed}"
             else:
                 ticker_bit = f" `{progress.current_ticker}`" if progress.current_ticker else ""
                 found_bit = f" · **{progress.qualifying_found} qualifying** so far" if progress.qualifying_found else ""
                 label = (
-                    f"🔬 **Analyzing** ({horizon}) — {progress.done}/{progress.total} tickers "
-                    f"({progress.pct}%){ticker_bit}{found_bit}"
+                    f"🔬 **Analyzing** ({horizon}) — {progress.done}/{progress.total} ticker·horizon combo(s) "
+                    f"({progress.pct}%){ticker_bit}{found_bit} · ⏱️ {elapsed}"
                 )
             if label != last_shown:
                 try:
