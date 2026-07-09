@@ -288,7 +288,13 @@ async def _session_scan_tick():
         else:
             healthcheck = f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new · 📂 {open_count} open trade(s)"
         try:
-            await channel.send(healthcheck)
+            # silent=True -- a routine per-tick heartbeat, not something
+            # worth a push notification/sound every SCAN_INTERVAL_MINUTES.
+            # Sets Discord's own "suppress notifications" message flag, so
+            # it still posts and appears in the channel normally, it just
+            # doesn't ping/buzz the user's devices the way a real alert
+            # (new trade plan, trade closed, etc.) still should.
+            await channel.send(healthcheck, silent=True)
         except Exception as e:
             log.warning("Could not post healthcheck message: %s", e)
 
