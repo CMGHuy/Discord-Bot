@@ -298,10 +298,17 @@ def _to_display_coords(line: dict, n_bars_total: int, display_bars: int) -> dict
 
     Slope is unchanged (rate of change per bar, independent of origin).
     Intercept shifts because "x=0" now means a different point in time.
+
+    Also converts `line["touches"]` (the (bar_idx, price, vol_ratio)
+    tuples _score_candidate found -- these are what actually earned the
+    line its "Nx touch" strength) into the same display-window-relative
+    (x, price) coordinates, dropping vol_ratio -- the chart only needs
+    where to draw the diamond marker, not the volume that qualified it.
     """
     chart_start_abs = n_bars_total - display_bars
     new_intercept = line["slope"] * chart_start_abs + line["intercept"]
-    return {**line, "intercept": new_intercept}
+    new_touches = [(bar_idx - chart_start_abs, price) for bar_idx, price, _vol in line.get("touches", [])]
+    return {**line, "intercept": new_intercept, "touches": new_touches}
 
 
 # ── Public API (same signatures as original) ──────────────────────────────────
@@ -379,6 +386,27 @@ def strongest_trendline_pair(df: pd.DataFrame, lookback: int,
     if support_raw is None and resistance_raw is None:
         return _strongest_trendline_pair_trendln(df, lookback, current_price)
 
+    # Expand display_bars, if needed, to cover every pivot that actually
+    # touches the line -- _find_best_trendline() scores a line by touches
+    # found across the FULL df history (that's the whole point: a
+    # 9-month-old touch is a real confirmation), but if the display
+    # window stayed at its lookback-based default, a touch older than
+    # that window would silently fall outside the chart's own x-axis and
+    # never get drawn -- the chart would then show e.g. "Trendline (6x)"
+    # with only 2-3 diamonds visible, which is exactly the mismatch this
+    # closes. Mirrors trade_chart.generate_trade_chart()'s own
+    # lookback-expansion logic for the same reason.
+    touch_bar_indices = [
+        bar_idx
+        for raw in (support_raw, resistance_raw)
+        if raw is not None
+        for bar_idx, _price, _vol in raw["touches"]
+    ]
+    if touch_bar_indices:
+        earliest_touch = min(touch_bar_indices)
+        coverage_needed = n_bars - earliest_touch
+        display_bars = max(display_bars, min(coverage_needed, n_bars))
+
     out: dict = {"window_bars": display_bars}
 
     for key, raw in (("support", support_raw), ("resistance", resistance_raw)):
@@ -390,6 +418,7 @@ def strongest_trendline_pair(df: pd.DataFrame, lookback: int,
                 "slope": disp["slope"],
                 "intercept": disp["intercept"],
                 "strength": disp["strength"],
+                "touches": disp["touches"],
             }
 
     return out
@@ -465,6 +494,12 @@ def _strongest_trendline_pair_trendln(df: pd.DataFrame, lookback: int,
                 "slope": float(slope),
                 "intercept": float(intercept),
                 "strength": int(strength),
+                # trendln's own get_levels() doesn't expose individual touch
+                # coordinates the way the custom scanner's _score_candidate
+                # does -- no diamonds to draw in this fallback path, but the
+                # key is still present so callers can uniformly do
+                # info.get("touches", []) without a fallback-path special case.
+                "touches": [],
             }
 
         support = _best(support_lvls)

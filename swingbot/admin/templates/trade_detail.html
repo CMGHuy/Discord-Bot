@@ -4,7 +4,10 @@
 
 <div class="card" style="margin-top: 16px; margin-bottom: 18px;">
   <p class="card-title" style="display:flex; align-items:center; gap:8px;">
-    {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
+    Visualization
+    <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;">
+      {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
+    </span>
   </p>
   <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">
     <div class="chart-loading" id="chart-loading">

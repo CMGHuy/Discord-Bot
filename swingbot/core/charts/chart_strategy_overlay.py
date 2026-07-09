@@ -12,7 +12,7 @@ import pandas as pd
 from matplotlib.patches import Rectangle
 
 from .chart_style import CHART_BG, DEFAULT_TRENDLINE_LOOKBACK_DAYS, FVG_ZONE_ALPHA, _label_bbox
-from .chart_drawing import _floor_pivot_prices, _place_strategy_label
+from .chart_drawing import _fib_anchor_points, _floor_pivot_prices, _place_strategy_label
 from ..indicators import ema, fibonacci_levels, rolling_vwap, zigzag_pivots
 from ..volatility import bollinger_bands
 from ..fvg import find_fair_value_gaps_detailed
@@ -61,7 +61,8 @@ def _draw_confirmed_strategy(ax, df: pd.DataFrame, recent_len: int, h: dict, sou
             return True
 
         if source_label.startswith("Fib") or source_label in ("Swing high", "Swing low"):
-            fib = fibonacci_levels(df, h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS))
+            fib_lookback = h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS)
+            fib = fibonacci_levels(df, fib_lookback)
             drew_anything = False
             # The whole retracement fan as faint reference lines, with
             # whichever ratio (or swing high/low anchor) actually
@@ -80,6 +81,30 @@ def _draw_confirmed_strategy(ax, df: pd.DataFrame, recent_len: int, h: dict, sou
                 ax.axhline(price, color=color, linewidth=1.6, linestyle="--", alpha=0.9, zorder=3)
                 _label(recent_len - 1, price, source_label)
                 drew_anything = True
+
+            # Mark the actual 0% and 100% anchor points -- the real swing
+            # high/low bars the whole fan was measured between, not just
+            # their prices as flat reference lines off at the right edge.
+            # generate_trade_chart() expands the chart's display window
+            # (fib_window_bars) to make sure both anchors fall inside
+            # `recent`/`recent_len` before this is called, so the diamond
+            # should always land on-chart rather than needing a skip guard
+            # the way the older, non-expanding Pivot marker above does.
+            anchors = _fib_anchor_points(df, fib_lookback)
+            chart_window_start_abs = len(df) - recent_len
+            for key, bar_key, price_key, marker_label, va in (
+                ("high", "high_bar_abs", "swing_high", "0%", "bottom"),
+                ("low", "low_bar_abs", "swing_low", "100%", "top"),
+            ):
+                x = anchors[bar_key] - chart_window_start_abs
+                if x < 0:
+                    continue  # defensive -- shouldn't happen given the window expansion above
+                price = anchors[price_key]
+                ax.scatter([x], [price], color=color, s=70, marker="D", zorder=7,
+                           edgecolors=CHART_BG, linewidths=1.0)
+                _place_strategy_label(ax, x, price, None, color, marker_label, va=va)
+                drew_anything = True
+
             return drew_anything
 
         if source_label.startswith("Bollinger"):

@@ -9,7 +9,6 @@ much larger chart-assembly logic.
 import pandas as pd
 
 from .chart_style import MIN_LABEL_GAP_FRAC, METHOD_PRIORITY, _label_bbox
-from ..indicators import zigzag_pivots
 
 
 def _spread_labels(items: list, ylim: tuple) -> list:
@@ -177,44 +176,6 @@ def _draw_trendline(ax, recent_len: int, window_bars: int, slope: float, interce
     _place_strategy_label(ax, x1, y1, label_x, color, label, occupied=occupied, min_gap=min_gap)
 
 
-def _trendline_touch_points(df: pd.DataFrame, window_bars: int, slope: float, intercept: float, kind: str,
-                             threshold_pct: float, tolerance_pct: float = 2.5) -> list:
-    """
-    Finds the actual swing highs/lows (see indicators.zigzag_pivots --
-    the same pivot detector levels.py's own confluence system uses)
-    that sit within `tolerance_pct` of the trendline's own value at
-    their bar -- i.e. the real points the line is claiming to connect,
-    not just its two endpoints. `kind` is "low" for a support line or
-    "high" for a resistance line. Returns (x, price) pairs in the
-    trendline's own window-relative x-coordinates (0 = window start),
-    ready to pass straight into `_draw_trendline`'s `touch_points`.
-
-    Uses the actual High (resistance) or Low (support) at each pivot bar
-    rather than the zigzag's internal close-based price, because genuine
-    S/R is where buying/selling pressure physically stopped the move --
-    the wick extremes -- not where it happened to close.
-    """
-    try:
-        pivots = zigzag_pivots(df, threshold_pct=threshold_pct)
-    except Exception:
-        return []
-    window_start = len(df) - window_bars
-    price_col = "Low" if kind == "low" else "High"
-    touches = []
-    for bar_idx, _close_price, pkind in pivots:
-        if pkind != kind or bar_idx < window_start:
-            continue
-        x = bar_idx - window_start
-        line_price = slope * x + intercept
-        # Use High/Low at the bar for the touch comparison -- the new
-        # trendline fitter also fits through High/Low, so this keeps
-        # the detection consistent with how the line was actually built.
-        actual_price = float(df[price_col].iloc[bar_idx]) if bar_idx < len(df) else _close_price
-        if line_price and abs(actual_price - line_price) / line_price * 100 <= tolerance_pct:
-            touches.append((x, actual_price))
-    return touches
-
-
 def _pick_primary_source(sources: list) -> str | None:
     """
     Picks the single most visually informative confirming method from a
@@ -250,3 +211,28 @@ def _floor_pivot_prices(df: pd.DataFrame) -> dict:
     span = prev["High"] - prev["Low"]
     return {"Floor Pivot": pp, "Floor R1": pp + span, "Floor S1": pp - span,
             "Floor R2": pp + span * 1.5, "Floor S2": pp - span * 1.5}
+
+
+def _fib_anchor_points(df: pd.DataFrame, lookback: int) -> dict:
+    """
+    The two real (bar, price) points a Fibonacci retracement fan was
+    actually measured between -- the 0% anchor (swing high) and the 100%
+    anchor (swing low) over the last `lookback` bars.
+    `indicators.fibonacci_levels()` itself only returns the two swing
+    PRICES, not which bar each came from; this re-derives the bar
+    position (as an ABSOLUTE index into the full `df`, 0 = oldest bar --
+    same convention as trendlines.strongest_trendline_pair()'s touches,
+    so both can be compared/combined when deciding how far back the
+    chart's display window needs to reach to show them).
+    """
+    lookback = min(lookback, len(df))
+    window = df.tail(lookback)
+    window_start_abs = len(df) - lookback
+    high_pos = int(window["High"].values.argmax())
+    low_pos = int(window["Low"].values.argmin())
+    return {
+        "high_bar_abs": window_start_abs + high_pos,
+        "swing_high": float(window["High"].iloc[high_pos]),
+        "low_bar_abs": window_start_abs + low_pos,
+        "swing_low": float(window["Low"].iloc[low_pos]),
+    }

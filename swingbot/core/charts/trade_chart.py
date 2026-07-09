@@ -86,7 +86,7 @@ from .chart_style import (
     VOLUME_PROFILE_PANEL_GAP_FRAC, VOLUME_PROFILE_PANEL_WIDTH_FRAC,
     _label_bbox,
 )
-from .chart_drawing import _draw_trendline, _pick_primary_source, _spread_labels, _trendline_touch_points
+from .chart_drawing import _draw_trendline, _fib_anchor_points, _pick_primary_source, _spread_labels
 from .chart_strategy_overlay import _draw_confirmed_strategy, _draw_confirmed_strategy_secondary
 from .chart_volume_profile import _draw_volume_profile_panel
 
@@ -205,7 +205,24 @@ def generate_trade_chart(
         # source on either side) so old behavior is preserved exactly.
         trend_info = strongest_trendline_pair(df, trendline_lookback, entry)
     trendline_window_bars = trend_info["window_bars"] if trend_info else 0
-    effective_lookback_days = max(lookback_days, trendline_window_bars, 1)
+
+    # Same idea for a Fibonacci fan: if it's actually what's being drawn,
+    # its 0%/100% anchor points (the real swing high/low the ratios were
+    # measured from -- see chart_strategy_overlay's Fib block) need to be
+    # inside the visible window too, or they'd be silently uncomputable to
+    # place on-chart even though the ratio LINES themselves (flat, so
+    # unaffected by window size) would still show up fine.
+    def _is_fib(label):
+        return bool(label) and (label.startswith("Fib") or label in ("Swing high", "Swing low"))
+
+    fib_window_bars = 0
+    if _is_fib(target_primary) or _is_fib(stop_primary):
+        fib_lookback = h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS)
+        anchors = _fib_anchor_points(df, fib_lookback)
+        earliest_fib_bar = min(anchors["high_bar_abs"], anchors["low_bar_abs"])
+        fib_window_bars = min(len(df) - earliest_fib_bar, len(df))
+
+    effective_lookback_days = max(lookback_days, trendline_window_bars, fib_window_bars, 1)
     window_expanded = effective_lookback_days > lookback_days
 
     recent = df.tail(effective_lookback_days).copy()
@@ -229,10 +246,16 @@ def generate_trade_chart(
     )
 
     direction_label = "LONG (buy)" if is_bull else "SHORT (sell)"
-    window_note = (
-        f"last {effective_lookback_days} sessions, extended from {lookback_days} to fit the trendline"
-        if window_expanded else f"last {lookback_days} sessions"
-    )
+    if window_expanded:
+        _expand_reasons = []
+        if trendline_window_bars > lookback_days:
+            _expand_reasons.append("trendline")
+        if fib_window_bars > lookback_days:
+            _expand_reasons.append("Fibonacci anchors")
+        _reason = " & ".join(_expand_reasons) if _expand_reasons else "overlay"
+        window_note = f"last {effective_lookback_days} sessions, extended from {lookback_days} to fit the {_reason}"
+    else:
+        window_note = f"last {lookback_days} sessions"
 
     # ---------------------------------------------------------------
     # Indicator panels: MACD, RSI, Keltner Channel
@@ -643,16 +666,25 @@ def generate_trade_chart(
         # convention levels.py's build_scenarios() uses.
         target_side = "resistance" if is_bull else "support"
         stop_side = "support" if is_bull else "resistance"
-        pivot_kind = {"resistance": "high", "support": "low"}
-        pivot_threshold = h.get("max_risk_pct", 5.0)
 
         def _draw_side_trendline(side_key: str, overlay_color: str, label_suffix: str):
             if not trend_info or not trend_info.get(side_key):
                 return
             info = trend_info[side_key]
-            touches = _trendline_touch_points(
-                df, trendline_window_bars, info["slope"], info["intercept"], pivot_kind[side_key], pivot_threshold,
-            )
+            # Touches come straight from trendlines.strongest_trendline_pair()
+            # now -- the SAME pivots that earned the line its "Nx touch"
+            # score, already converted into this window's coordinates (and
+            # trendline_window_bars was expanded, if needed, to make sure
+            # every one of them actually falls inside it). Previously this
+            # recomputed touches independently at chart-render time via
+            # _trendline_touch_points(), using a different pivot threshold
+            # (the horizon's max_risk_pct instead of trendlines.py's own
+            # PIVOT_THRESHOLD_PCT/TOUCH_TOLERANCE_PCT) and restricted to
+            # whatever the (unexpanded) window happened to already cover --
+            # so the label could claim "6x touch" while only 2-3 diamonds
+            # were ever actually drawable. Using the real detection-time
+            # touches directly makes the diamonds always match the label.
+            touches = info.get("touches", [])
             _draw_trendline(ax, recent_len, trendline_window_bars, info["slope"], info["intercept"],
                              overlay_color, f"Trendline ({info['strength']}x){label_suffix}", touch_points=touches,
                              label_x=strategy_label_x, occupied=_strategy_label_occupied, min_gap=_strategy_min_gap)

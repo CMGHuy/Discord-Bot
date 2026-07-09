@@ -477,7 +477,7 @@ async def config_watcher():
                         )
                         label = (
                             f"🔬 **Analyzing** (UI trigger) — {progress.done}/{progress.total} "
-                            f"tickers ({progress.pct}%){ticker_bit}{found_bit}"
+                            f"ticker·horizon combo(s) ({progress.pct}%){ticker_bit}{found_bit}"
                         )
                     if label != last_shown:
                         try:
