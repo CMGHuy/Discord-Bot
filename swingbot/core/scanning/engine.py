@@ -476,22 +476,24 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # meant to run for weeks/months were actually closing within
             # hours/days.
             #
-            # First attempt used the horizon's FULL sr_target_min_pct as the
-            # hard floor (e.g. requiring a genuine 15-22% target for anything
-            # 4w or longer) -- that turned out to be too strict: a real
-            # support/resistance level that far away is rare on most tickers
-            # most days, so /check started coming up empty across the board.
-            # Even at HALF of the horizon's own target-min, it was still
-            # coming up too strict -- dropped further to 30% of the horizon's
-            # target-min, e.g. 9m now needs ~6.6% instead of ~11%/22%. Still
-            # meaningfully wider than the old flat 3% for longer horizons (so
-            # trades don't insta-close), but loose enough that qualifying
-            # setups should show up regularly. The max stop widening (the
-            # ceiling, not a floor) is left at the horizon's full
-            # max_risk_pct -- widening a ceiling can only let MORE scenarios
-            # qualify, never fewer, so it was never part of the "why did this
-            # go to zero" problem.
-            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.3)
+            # Progressively loosened after each round came back too strict:
+            # full sr_target_min_pct (100%) -> too strict (15-22% targets are
+            # rare) -> half (50%) -> still too strict -> 30% -> still not
+            # enough trade plans. Now at 15% of the horizon's own target-min,
+            # e.g. 9m needs only ~3.3% instead of ~6.6%/11%/22%. This is only
+            # barely above config.MIN_REWARD_PCT (3%) for most horizons now --
+            # still SOME horizon-awareness (longer horizons ask for a little
+            # more room than shorter ones) rather than being fully flat again,
+            # but the floor itself is no longer doing much of the "stop
+            # trades from closing too fast" work on its own. If trades are
+            # still closing too quickly after this, the near-TP timeout
+            # scaling (performance.py's check_near_tp_timeout) and the
+            # confidence/expectancy gate are the other levers actually worth
+            # revisiting -- this min-reward floor is close to its practical
+            # floor already. The max stop widening (the ceiling, not a floor)
+            # is left at the horizon's full max_risk_pct -- widening a
+            # ceiling can only let MORE scenarios qualify, never fewer.
+            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.15)
             effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
             scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                                 atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
