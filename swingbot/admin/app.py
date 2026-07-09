@@ -195,14 +195,17 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 def _format_duration_hms(total_seconds: float) -> str:
     """
     Human-readable elapsed-time label with day/hour/MINUTE granularity --
-    e.g. "12 minutes", "4 hours 20 minutes", "1 day 5 hours 32 minutes" --
-    used everywhere a "how long has this been open/how long was this held"
-    figure is shown (dashboard's Open Trades + Trade History Days columns).
-    Whole-calendar-days-only (as this used to show) reads as "0" for
-    anything opened/closed same-day regardless of whether that was 10
-    minutes or 23 hours -- this is precise down to the minute instead, and
-    always surfaces hours+minutes even once the duration spans full days,
-    rather than dropping them once a coarser unit is available.
+    e.g. "12m", "4h 20m", "1d 5h 32m" -- used everywhere a "how long has
+    this been open/how long was this held" figure is shown (dashboard's
+    Open Trades + Trade History Holding columns, plus the Avg holding
+    period stat card). Short d/h/m suffixes (not the old spelled-out
+    "4 hours 20 minutes") so the figure stays compact in a narrow table
+    column. Whole-calendar-days-only (as this used to show, before d/h/m
+    granularity was added at all) reads as "0" for anything opened/closed
+    same-day regardless of whether that was 10 minutes or 23 hours -- this
+    is precise down to the minute instead, and always surfaces hours+
+    minutes even once the duration spans full days, rather than dropping
+    them once a coarser unit is available.
     """
     total_seconds = max(0.0, total_seconds)
     total_minutes = int(total_seconds // 60)
@@ -210,10 +213,10 @@ def _format_duration_hms(total_seconds: float) -> str:
     hours, minutes = divmod(rem, 60)
     parts = []
     if days:
-        parts.append(f"{days} day{'s' if days != 1 else ''}")
+        parts.append(f"{days}d")
     if hours or days:
-        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
-    parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+        parts.append(f"{hours}h")
+    parts.append(f"{minutes}m")
     return ' '.join(parts)
 
 

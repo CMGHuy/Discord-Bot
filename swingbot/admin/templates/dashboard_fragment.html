@@ -196,7 +196,13 @@
     </div>
   </div>
 
-  {% if open_trades %}
+  {# NOTE: rendered unconditionally regardless of whether open_trades is
+     currently empty -- same fix as the closed-trades history block below.
+     This table/pagination <script> tag must be part of the very first page
+     load every time, or window.refreshOpenTradesTable() never gets defined
+     and Prev/Next/sort silently stop working for the rest of the browser
+     session once a trade opens later (scripts inserted via morphdom never
+     execute). The JS already handles a zero-row table fine. #}
   <div style="overflow-x:auto;">
   <table id="trades-table">
     <thead>
@@ -222,7 +228,7 @@
           title="Unrealized gain/loss in account currency = shares (snapshotted when this trade was opened) x (current price − entry price), direction-adjusted.">
         Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
       </th>
-      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Time since opened, down to the minute">Days <span class="sort-arrow" data-col-id="days"></span></th>
+      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Holding period -- time since opened, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="action">Action</th>
     </tr>
@@ -309,7 +315,7 @@
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
 
-      <td title="Planned entry price for this trade">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td title="Planned entry price for this trade" style="color:#6ea8fe;font-weight:600;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
 
       {# Current price — direction-aware color + blink when live #}
       {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
@@ -561,7 +567,7 @@
   window.refreshOpenTradesTable();
   </script>
 
-  {% else %}
+  {% if not open_trades %}
   <div style="padding: 28px 0; text-align: center; color: #5a6275;">
     No open trades right now. Run <code>!check</code> in Discord to scan.
   </div>
@@ -587,7 +593,27 @@
     </span>
   </p>
 
-  {% if closed_trades %}
+  {# NOTE: this whole block (filters/table/pagination/script) used to be
+     wrapped in "{% if closed_trades %}", with a plain placeholder <div> in
+     the {% else %} branch when there were none. That's exactly what broke
+     pagination (and sorting, and filtering): whether this <script> tag
+     exists in the page AT ALL depended on closed_trades being non-empty at
+     the moment of the very first full-page load. If you loaded the
+     dashboard while there happened to be zero closed trades (e.g. fresh
+     "Today only" mode early in the day) and a trade closed later, the next
+     auto-refresh's morphdom patch ADDS this script tag to the DOM for the
+     first time -- but a <script> element that arrives via DOM patching
+     (morphdom, innerHTML, etc.) never executes, only ones present in the
+     original parsed HTML or freshly created via document.createElement do.
+     So window.refreshClosedTradesTable() was never defined, every button/
+     dropdown below rendered and looked normal, and clicking Prev/Next
+     silently did nothing for the rest of that session -- only a full
+     manual page reload (with closed_trades already non-empty at that
+     point) would ever make it work. Rendering this block unconditionally
+     guarantees the script is part of the very first page load every time,
+     regardless of whether there happen to be 0 or 500 closed trades right
+     now; the table/pagination JS already handles an empty result set fine
+     (see render()'s "No matching trades" case). #}
 
   {# ── Filter + pagination toolbar ── #}
   <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
@@ -663,7 +689,7 @@
       <th data-col-id="pnlpct" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
       <th data-col-id="gainloss" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
       <th data-col-id="r" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
-      <th data-col-id="days" onclick="sortClosedTable(this)" style="text-align:right;" title="Time held, from open to close, down to the minute">Days <span class="sort-arrow" data-col-id="days"></span></th>
+      <th data-col-id="days" onclick="sortClosedTable(this)" style="text-align:right;" title="Holding period -- time held, from open to close, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" onclick="sortClosedTable(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="closed" onclick="sortClosedTable(this)">Closed <span class="sort-arrow" data-col-id="closed"></span></th>
       <th style="width:60px;"></th>
@@ -677,7 +703,7 @@
     {%- set c_strat = strategy_map.get(t.id, t.strategy) -%}
     {%- set pnl_amt = t.get('realized_pnl_amount') -%}
     {%- set pos_val = t.get('position_value') -%}
-    <tr class="clickable"
+    <tr class="clickable" id="ct-row-{{ t.id }}"
         data-outcome="{{ t.status }}"
         data-ticker="{{ t.ticker }}"
         data-strategy="{{ c_strat }}"
@@ -687,8 +713,8 @@
         onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
       <td class="muted" title="Row number, per the table's current sort order"><span class="row-num">{{ loop.index }}</span></td>
       <td title="{% if t.status == 'win' %}Closed profitably by hitting its take-profit target{% elif t.status == 'loss' %}Closed at a loss by hitting its stop-loss{% else %}Closed manually (e.g. via the ✕ button or the near-TP timeout), not by hitting stop or target{% endif %}">
-        {% if t.status == 'win' %}<span class="outcome-win">WIN</span>
-        {% elif t.status == 'loss' %}<span class="outcome-loss">LOSS</span>
+        {% if t.status == 'win' %}<span class="outcome-win">W</span>
+        {% elif t.status == 'loss' %}<span class="outcome-loss">L</span>
         {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
       <td title="{{ t.ticker }} -- click this row to open the trade's detail page"><strong>{{ t.ticker }}</strong></td>
@@ -701,7 +727,7 @@
         </span>
       </td>
       <td title="Confidence level Lv{{ t.confidence_level }} of 5 at the time this trade was opened"><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
-      <td style="text-align:right;" class="muted" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td style="text-align:right;color:#6ea8fe;font-weight:600;" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
       <td style="text-align:right;" data-sort="{{ t.exit_price if t.exit_price else -1 }}"
           title="{{ 'Actual fill price when this trade closed' if t.exit_price else 'No exit price recorded for this trade' }}">
         {%- if t.exit_price -%}{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
@@ -755,6 +781,7 @@
     <span id="ct-info" class="muted" style="font-size:12px;"></span>
   </div>
 
+  {% if closed_trades %}
   <div class="row" style="margin-top:12px;">
     <form method="post" action="{{ url_for('clear_trade_history') }}"
           onsubmit="return confirm('Delete all {{ closed_trades | length }} closed trade record(s)? This cannot be undone.');">
@@ -762,6 +789,7 @@
     </form>
     <span class="muted" style="font-size:12px;">Open trades are not affected.</span>
   </div>
+  {% endif %}
 
   <script>
   (function() {
@@ -923,9 +951,9 @@
   })();
   </script>
 
-  {% else %}
-  <div style="padding:20px 0;text-align:center;color:#5a6275;">
+  {% if not closed_trades %}
+  <p class="muted" style="text-align:center;padding:8px 0 0;">
     No closed trades yet. Trades are marked win/loss automatically when price hits stop or target.
-  </div>
+  </p>
   {% endif %}
 </div>

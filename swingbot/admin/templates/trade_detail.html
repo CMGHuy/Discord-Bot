@@ -2,7 +2,7 @@
 {% block body %}
 <a href="{{ url_for('index') }}" class="back-link">&#8592; Back to dashboard</a>
 
-<div class="card" style="margin-top: 16px;">
+<div class="card" style="margin-top: 16px; margin-bottom: 18px;">
   <p class="card-title" style="display:flex; align-items:center; gap:8px;">
     {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
   </p>
@@ -27,12 +27,12 @@
    tallest cell by default (align-items: stretch), so the shorter of the
    two always grows to match the taller one's bottom edge instead of the
    two columns drifting out of sync as content length differs. #}
-<div class="detail-two-col" style="display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:auto; gap:16px;">
+<div class="detail-two-col" style="display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:auto; gap:18px;">
 
   <div class="card" style="margin-top:0; grid-column:1; grid-row:1;">
     <p class="card-title">&#127919; Trade plan</p>
     <table class="kv">
-      <tr><td>Entry (at alert time)</td><td>{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
+      <tr><td>Entry (at alert time)</td><td style="color:#6ea8fe;font-weight:600;">{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
       <tr><td>Stop loss</td><td style="color:#da6d6d;">{{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
       <tr><td>{{ level_word }} 1 (Target)</td><td style="color:#6dda9e;">{{ cur }}{{ "%.2f"|format(t.take_profit) }}</td></tr>
       {% if t.target2 %}
@@ -69,7 +69,16 @@
     {% endif %}
   </div>
 
-  <div class="card" style="margin-top:0; grid-column:1; grid-row:2;">
+  {# align-self:start (row 2 only) -- row 1 (Trade plan / Why this trade)
+     is deliberately left stretched (see the block comment above the grid),
+     but Setup is usually much shorter than Confidence score breakdown
+     (which lists 8-10 factors), and default grid stretch was padding
+     Setup's card out to match that height -- a big blank gap under its
+     last table row that had nothing to do with Setup's own content. With
+     align-self:start each card in this row just sizes to its own content;
+     the row's grid track is still as tall as the taller card, but the
+     shorter one no longer stretches its own box (and border) to fill it. #}
+  <div class="card" style="margin-top:0; margin-bottom:0; grid-column:1; grid-row:2; align-self:start;">
     <p class="card-title">Setup</p>
     <table class="kv">
       <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
@@ -85,8 +94,16 @@
         {% for c in t.confirmed_by %}{{ c.strategy }} ({{ c.horizon_key }}){% if not loop.last %}, {% endif %}{% endfor %}
       </td></tr>
       {% endif %}
-      <tr><td>Status</td><td>{{ t.status | upper }}</td></tr>
-      <tr><td>Opened</td><td title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }} (Berlin)</td></tr>
+      <tr><td>Status</td><td>
+        {%- if t.status == 'win' -%}
+        <span style="color:#6dda9e; font-weight:700;">WIN</span>
+        {%- elif t.status == 'loss' -%}
+        <span style="color:#da6d6d; font-weight:700;">LOSS</span>
+        {%- else -%}
+        {{ t.status | upper }}
+        {%- endif -%}
+      </td></tr>
+      <tr><td>Opened</td><td title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }} (Berlin) @ {{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
       {% if t.status != 'open' %}
       <tr><td>Closed</td><td>{{ t.closed_at | berlin_time if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
       {% endif %}
@@ -99,7 +116,7 @@
   </div>
 
   {% if conf_breakdown %}
-  <div class="card" style="margin-top:0; grid-column:2; grid-row:2;">
+  <div class="card" style="margin-top:0; margin-bottom:0; grid-column:2; grid-row:2; align-self:start;">
     <p class="card-title">&#128300; Confidence score breakdown</p>
     <p class="muted" style="margin-top:0;margin-bottom:12px;">Raw scoring detail behind the confidence level. See swingbot/core/confidence.py for factor definitions.</p>
     <table class="kv">

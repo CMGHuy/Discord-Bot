@@ -186,6 +186,17 @@
         // once" -- it goes stale until the tab regains focus, or blank if
         // morphdom ever failed to preserve the subtree for any reason).
         if (typeof renderSessionBanner === 'function') { renderSessionBanner(); }
+        // Quick "this just refreshed" flash on the stat cards (see .card.
+        // just-updated / @keyframes card-flash in style.css) -- a subtle
+        // live-data cue for an auto-refreshing page. Re-triggering a CSS
+        // animation on an element that already has the class requires
+        // forcing a reflow between removing and re-adding it, or the
+        // browser just no-ops the second addClass since nothing "changed".
+        document.querySelectorAll('.stat-card').forEach(function(el) {
+          el.classList.remove('just-updated');
+          void el.offsetWidth;   // force reflow so the next line's class-add is seen as a fresh animation start
+          el.classList.add('just-updated');
+        });
       })
       .catch(function() {});
   }

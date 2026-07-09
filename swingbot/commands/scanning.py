@@ -250,11 +250,40 @@ async def _session_scan_tick():
         # that got this removed the first time.
         open_count = trade_log.get_stats()["open"]
         if f:
-            not_ready_str = ", ".join(not_ready_parts) if not_ready_parts else "none held back"
+            # Rewritten for clarity -- the old one-line version packed
+            # "qualifying" and "awaiting confirmation" next to each other
+            # with no explanation, which reads as a contradiction ("if it
+            # qualified, why wasn't it shown?"). They're not mutually
+            # exclusive: "qualifying" = passed every hard requirement
+            # (min strategies confirmed, min confidence, min reward:risk,
+            # etc.); "awaiting confirmation" is a SUBSET of qualifying --
+            # a scenario that passed everything but hasn't yet reappeared
+            # for SIGNAL_CONFIRMATION_SCANS consecutive scans in a row
+            # (the automatic scan's debounce filter, meant to skip
+            # intraday flicker -- see engine.py's module docstring).
+            # "below min strategies"/"below min confidence" are separate
+            # FAILURE tallies, not a partition of scenarios_found -- one
+            # scenario can fail more than one requirement at once, so
+            # those numbers can (and often do) add up to more than the
+            # total scenario count. Spelling all of this out in the
+            # message itself so the numbers don't need a code-read to make
+            # sense of.
+            awaiting = f.get("awaiting_confirmation", 0)
+            confirm_note = (
+                f" (needs to reappear {config.SIGNAL_CONFIRMATION_SCANS} scan(s) in a row before it posts)"
+                if awaiting else ""
+            )
+            fail_bits = []
+            if f.get("failed_min_confluence", 0):
+                fail_bits.append(f"{f['failed_min_confluence']} below min strategies")
+            if f.get("failed_min_confidence", 0):
+                fail_bits.append(f"{f['failed_min_confidence']} below min confidence")
+            fail_str = f" · ❌ failed a requirement: {', '.join(fail_bits)}" if fail_bits else ""
             healthcheck = (
-                f"💓 **Healthcheck** ({now_str}) — 📡 {f['tickers']} tickers scanned, "
-                f"🧮 {f['scenarios_found']} scenario(s) found (✅ {f['fully_qualifying']} qualifying, "
-                f"{not_ready_str}) → nothing new this tick · 📂 {open_count} open trade(s)"
+                f"💓 **Healthcheck** ({now_str}) — 📡 {f['tickers']} tickers scanned → "
+                f"🧮 {f['scenarios_found']} scenario(s) found, ✅ {f['fully_qualifying']} fully qualifying "
+                f"(of which ⏳ {awaiting} still awaiting confirmation{confirm_note}){fail_str} "
+                f"→ nothing new this tick · 📂 {open_count} open trade(s)"
             )
         else:
             healthcheck = f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new · 📂 {open_count} open trade(s)"

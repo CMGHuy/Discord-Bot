@@ -590,11 +590,12 @@ function berlinDateOf(iso)   { return iso ? berlinDateStr(new Date(iso)) : null;
 function berlinDow(iso)      { return iso ? _berlinDowFmt.format(new Date(iso)) : null; }
 
 /* Human-readable "how long was this held" label with day/hour/MINUTE
-   granularity -- e.g. "12 minutes", "4 hours 20 minutes", "1 day 5 hours
-   32 minutes" -- mirrors app.py's _format_duration_hms() exactly, so the
-   Trade Log table's Days column reads the same way as the dashboard's
-   Open Trades + Trade History Days columns. `holdingDays` is the fractional
-   day count already provided per-trade by get_chart_data(). */
+   granularity -- e.g. "12m", "4h 20m", "1d 5h 32m" -- mirrors app.py's
+   _format_duration_hms() exactly (short d/h/m suffixes, not spelled-out
+   "hours"/"minutes"), so the Trade Log table's Holding column reads the
+   same way as the dashboard's Open Trades + Trade History Holding columns
+   and the Avg Hold stat card. `holdingDays` is the fractional day count
+   already provided per-trade by get_chart_data(). */
 function formatHoldingDuration(holdingDays) {
   if (holdingDays == null) return null;
   const totalSeconds = Math.max(0, holdingDays * 86400);
@@ -604,9 +605,9 @@ function formatHoldingDuration(holdingDays) {
   const hours = Math.floor(rem / 60);
   const minutes = rem % 60;
   const parts = [];
-  if (days) parts.push(`${days} day${days!==1?'s':''}`);
-  if (hours || days) parts.push(`${hours} hour${hours!==1?'s':''}`);
-  parts.push(`${minutes} minute${minutes!==1?'s':''}`);
+  if (days) parts.push(`${days}d`);
+  if (hours || days) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
   return parts.join(' ');
 }
 function berlinYmdParts(date) {

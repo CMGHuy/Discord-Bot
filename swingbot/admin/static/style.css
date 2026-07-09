@@ -89,6 +89,33 @@ a { color: #6ea8fe; }
 .card {
   background: #13161d; border: 1px solid #1f2330; border-radius: 12px;
   padding: 22px 26px; margin-bottom: 22px;
+  /* Subtle one-time entrance + a gentle hover "lift" -- small, tasteful
+     motion cues rather than anything flashy, so the page reads as
+     responsive/alive without becoming distracting on a data-dense screen
+     that auto-refreshes every few seconds. animation-fill-mode isn't
+     needed since the keyframe already ends at the resting state. */
+  animation: card-in 0.32s ease-out both;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.28);
+  border-color: #262c3d;
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* A card that was just morphdom-patched with fresh data (see the
+   dashboard's refresh JS, which toggles this class briefly) gets a quick
+   accent-color flash on its left edge -- a lightweight "this just updated"
+   cue for an auto-refreshing page, without re-animating the whole card
+   (which would be distracting every 15s) or requiring the user to spot a
+   changed number themselves. */
+.just-updated { animation: card-flash 0.9s ease-out; }
+@keyframes card-flash {
+  0%   { box-shadow: inset 3px 0 0 0 #6ea8fe, 0 4px 18px rgba(110,168,254,0.15); }
+  100% { box-shadow: inset 3px 0 0 0 rgba(110,168,254,0), 0 0 0 0 rgba(0,0,0,0); }
 }
 .card-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
@@ -104,10 +131,15 @@ a { color: #6ea8fe; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { color: #5a6275; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
      padding: 6px 10px; border-bottom: 1px solid #1f2330; white-space: nowrap; text-align: left; }
-td { padding: 9px 10px; border-bottom: 1px solid #1a1e27; vertical-align: middle; }
+td { padding: 9px 10px; border-bottom: 1px solid #1a1e27; vertical-align: middle; transition: background 0.12s ease; }
 tr:last-child td { border-bottom: none; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: #181c26; }
+/* Slight left-nudge on hover -- a small, tactile "this row is about to be
+   clicked" cue on top of the background change, consistent with the
+   card-hover lift above. Kept to 2px so it never causes text to visually
+   collide with the row above/below. */
+tr.clickable:hover td:first-child { padding-left: 12px; }
 
 /* Draggable column headers (Dashboard's open-trades table) -- native HTML5
    drag-and-drop, see dashboard_fragment.html/dashboard.html for the JS.
