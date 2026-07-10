@@ -110,3 +110,58 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
             if "bearish" not in directions:
                 bearish = _off(df)
     return bullish, bearish
+
+
+DEFAULT_PARAMS["Fibonacci"] = {
+    "ratios": (0.382, 0.5, 0.618),   # 23.6% too shallow, 78.6% = failed impulse
+    "rsi_bull": (35, 58),
+    "rsi_bear": (42, 65),
+}
+
+
+def fibonacci_entries(df, horizon_key, params=None):
+    """Retracement bounce WITH swing-direction awareness: a bullish bounce is
+    only valid when the up-impulse is the recent structure (swing low set
+    BEFORE swing high). The old rolling-max/min version fired 'bullish' on
+    retracements of downtrends, where the fib level is overhead resistance."""
+    p = _params("Fibonacci", params)
+    h = HORIZONS[horizon_key]
+    lookback = h["fib_lookback"]
+    g = compute_shared_gates(df)
+    close, high, low = df["Close"], df["High"], df["Low"]
+
+    swing_high = high.rolling(lookback).max()
+    swing_low = low.rolling(lookback).min()
+    rng = swing_high - swing_low
+
+    # Swing direction: where in the window did the extremes happen?
+    hi_pos = _rolling_argmax_pos(high, lookback)
+    lo_pos = _rolling_argmin_pos(low, lookback)
+    up_impulse = (hi_pos > lo_pos)       # low first, then high -> uptrend pullback
+    down_impulse = (lo_pos > hi_pos)
+
+    levels = pd.DataFrame({r: swing_high - r * rng for r in p["ratios"]})
+    nearest_distance = levels.sub(close, axis=0).abs().min(axis=1)
+    distance_pct = (nearest_distance / rng * 100).replace([np.inf, -np.inf], np.nan)
+    is_testing = (distance_pct <= FIB_TOLERANCE_PCT) & rng.gt(0)
+
+    pulled_back_bull = close.shift(5) > close.shift(1)
+    bouncing_bull = close > close.shift(1)
+    pulled_back_bear = close.shift(5) < close.shift(1)
+    bouncing_bear = close < close.shift(1)
+    upper_half = close >= (high + low) / 2   # bounce bar closes strong
+    lower_half = close <= (high + low) / 2
+
+    rsi14 = g["rsi14"]
+    bullish = (is_testing & up_impulse & pulled_back_bull & bouncing_bull & upper_half
+               & g["bull_regime"] & g["trend50_bull"]
+               & rsi14.between(*p["rsi_bull"])
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (is_testing & down_impulse & pulled_back_bear & bouncing_bear & lower_half
+               & g["bear_regime"] & g["trend50_bear"]
+               & rsi14.between(*p["rsi_bear"])
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["Fibonacci"] = fibonacci_entries

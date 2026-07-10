@@ -73,3 +73,33 @@ def test_entries_for_applies_direction_and_horizon_gates(monkeypatch, uptrend_df
     monkeypatch.setitem(ef.STRATEGY_GATES, "Stub", {"horizons": ("2m",)})
     bull, bear = ef.entries_for("Stub", uptrend_df, "4w")
     assert not bull.any() and not bear.any()
+
+
+def _v_shape_down_then_flat():
+    # Peak early (bar 350), decline to bar 470, small bounce at the end.
+    # The swing HIGH precedes the swing LOW inside any recent window ->
+    # down-impulse -> the old code would call a bounce here "bullish
+    # retracement"; the fixed code must not.
+    closes = np.concatenate([
+        100 * 1.002 ** np.arange(350),                       # up to ~201
+        100 * 1.002 ** 349 * 0.995 ** np.arange(1, 121),     # down ~45%
+        np.full(29, 100 * 1.002 ** 349 * 0.995 ** 120 * 1.002),
+    ])
+    return make_ohlcv(closes, spread_pct=2.0)
+
+
+def test_fibonacci_no_bullish_entries_on_down_impulse():
+    from swingbot.core.entry_filters import fibonacci_entries
+    df = _v_shape_down_then_flat()
+    bull, bear = fibonacci_entries(df, "4w")
+    assert_entry_invariants(bull, bear, df)
+    # last 40 bars: price is bouncing off a decline -- swing direction is
+    # DOWN, so no bullish fib-retracement entries are allowed there
+    assert not bull.iloc[-40:].any()
+
+
+def test_fibonacci_bullish_requires_bull_regime(downtrend_df):
+    from swingbot.core.entry_filters import fibonacci_entries
+    bull, bear = fibonacci_entries(downtrend_df, "4w")
+    assert_entry_invariants(bull, bear, downtrend_df)
+    assert not bull.any()
