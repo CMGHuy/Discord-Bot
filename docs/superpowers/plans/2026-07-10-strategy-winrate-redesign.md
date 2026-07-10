@@ -1714,7 +1714,7 @@ git commit -m "feat: Elliott Wave entries with wave-2 depth gate (wave0 recorded
 **Interfaces:**
 - `_vectorized_entries(df, strategy, horizon_key)` keeps its exact signature (`backtest_confluence.py` imports it) but becomes a delegation. All per-strategy `if strategy == ...` blocks and their local indicator code are DELETED from `backtest.py`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_vectorized_entries_delegates_to_entry_filters(market_df):
@@ -1728,12 +1728,12 @@ def test_vectorized_entries_delegates_to_entry_filters(market_df):
         assert b1.equals(b2) and s1.equals(s2), strat
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_backtest_engine.py::test_vectorized_entries_delegates_to_entry_filters -v`
 Expected: FAIL — old inline logic differs from `entry_filters` (e.g., Fibonacci direction fix).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the entire `_vectorized_entries` function in `backtest.py` (keep the name and signature, delete all per-strategy blocks) with:
 
@@ -1748,9 +1748,9 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 Remove now-unused imports from `backtest.py` (`ema`, `rsi`, `rolling_vwap`, `elliott_wave3_entries` — keep `atr`; keep `HORIZONS`, `MIN_BARS`; keep `FIB_TOLERANCE_PCT`/`SR_VOLUME_MULTIPLE` only if still referenced by `_trade_plan_at`, check with grep).
 
-- [ ] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS (engine tests from Task 3 still pass because they monkeypatch `_vectorized_entries` itself).
+- [x] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS (engine tests from Task 3 still pass because they monkeypatch `_vectorized_entries` itself).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/backtest.py tests/test_backtest_engine.py
