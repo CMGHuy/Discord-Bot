@@ -61,3 +61,6 @@ flask==3.1.3
 # installed even if you never mount the socket -- the button just stays
 # disabled and the rest of the admin UI works normally.
 docker==7.1.0
+
+# Test-only dependency (not needed at bot runtime)
+pytest>=8.0
