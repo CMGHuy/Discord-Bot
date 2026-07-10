@@ -1868,7 +1868,7 @@ git commit -m "feat: live signal triggers now use the shared entry filters"
 - Consumes: `BacktestSummary.scratches` from Task 3.
 - The pooled 80% flag becomes ✅ only when `win_rate >= 80 AND expectancy > 0 AND (scratches+timeouts) <= 50% of closed trades`.
 
-- [ ] **Step 1: Update `_format_backtest_table`** — add `Scr`/`TO` columns:
+- [x] **Step 1: Update `_format_backtest_table`** — add `Scr`/`TO` columns:
 
 ```python
 def _format_backtest_table(header, summaries):
@@ -1889,7 +1889,7 @@ def _format_backtest_table(header, summaries):
     return "\n".join(lines)
 ```
 
-- [ ] **Step 2: Update `_format_per_strategy_winrate`**:
+- [x] **Step 2: Update `_format_per_strategy_winrate`**:
 
 ```python
 def _format_per_strategy_winrate(summaries):
@@ -1934,7 +1934,7 @@ def _format_per_strategy_winrate(summaries):
     return "\n".join(lines)
 ```
 
-- [ ] **Step 3: Rewrite the win-rate-vs-expectancy help text** (~line 324) — replace the paragraph explaining that 80% can be "mechanically cleared" at tiny R:R with:
+- [x] **Step 3: Rewrite the win-rate-vs-expectancy help text** (~line 324) — replace the paragraph explaining that 80% can be "mechanically cleared" at tiny R:R with:
 
 ```
 Targets are sized at 0.35–0.40× the stop distance (see STRATEGY_RR_OVERRIDE);
@@ -1944,12 +1944,12 @@ covers half the distance to target, the stop moves to entry — those exits are
 in expectancy. Timeouts are marked to market, not ignored.
 ```
 
-- [ ] **Step 4: Run the suite + import check**
+- [x] **Step 4: Run the suite + import check**
 
 Run: `python -m pytest tests -v && python -c "import swingbot.commands.backtest"`
 Expected: PASS / clean import.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/commands/backtest.py
