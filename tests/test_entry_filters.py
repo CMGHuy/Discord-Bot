@@ -166,3 +166,34 @@ def test_ma_ribbon_slope_agreement(market_df):
     slow_sma = market_df["Close"].rolling(slow_p).mean()
     fired = bull[bull].index
     assert (slow_sma.loc[fired] > slow_sma.shift(10).loc[fired]).all()
+
+
+GATED_BY_MA50.extend(["Support/Resistance", "Break & Retest"])
+
+
+def test_sr_bullish_breakout_bar_quality(market_df):
+    """Every S/R bullish entry must close in the top 40% of its bar and not
+    gap more than 3% above the broken level."""
+    from swingbot.core.entry_filters import support_resistance_entries, DEFAULT_PARAMS
+    from swingbot.core.strategy_types import HORIZONS
+    bull, bear = support_resistance_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    lb = HORIZONS["4w"]["sr_lookback"]
+    resistance = market_df["High"].rolling(lb).max().shift(1)
+    frac = DEFAULT_PARAMS["Support/Resistance"]["close_frac"]
+    for ts in bull[bull].index:
+        row = market_df.loc[ts]
+        rng = row["High"] - row["Low"]
+        assert row["Close"] >= row["High"] - frac * rng
+        assert row["Open"] <= resistance.loc[ts] * 1.03
+
+
+def test_break_retest_entry_bar_bounces(market_df):
+    """B&R bullish entries must close above the prior bar's high (the retest
+    has already turned, we are not catching the falling knife into the level)."""
+    from swingbot.core.entry_filters import break_retest_entries
+    bull, bear = break_retest_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    prev_high = market_df["High"].shift(1)
+    fired = bull[bull].index
+    assert (market_df["Close"].loc[fired] > prev_high.loc[fired]).all()

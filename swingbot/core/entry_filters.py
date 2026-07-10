@@ -315,3 +315,99 @@ def ma_ribbon_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["MA Ribbon"] = ma_ribbon_entries
+
+
+DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}
+
+
+def support_resistance_entries(df, horizon_key, params=None):
+    p = _params("Support/Resistance", params)
+    h = HORIZONS[horizon_key]
+    g = compute_shared_gates(df)
+    close, high, low, open_ = df["Close"], df["High"], df["Low"], df["Open"]
+    lookback = h["sr_lookback"]
+
+    resistance = high.rolling(lookback).max().shift(1)
+    support = low.rolling(lookback).min().shift(1)
+    vol_avg20 = df["Volume"].rolling(20).mean()
+    volume_confirmed = (df["Volume"] / vol_avg20) >= SR_VOLUME_MULTIPLE
+    crossed_up = (close.shift(1) <= resistance.shift(1)) & (close > resistance)
+    crossed_down = (close.shift(1) >= support.shift(1)) & (close < support)
+
+    # Base quality: the 10 bars BEFORE the breakout were a tight range.
+    base_range = (high.rolling(10).max() - low.rolling(10).min()).shift(1)
+    base_tight = base_range <= g["atr14"] * p["base_atr"]
+
+    # Breakout bar quality: closes near its high (bull) / low (bear).
+    bar_rng = (high - low).replace(0, np.nan)
+    strong_close_bull = close >= high - p["close_frac"] * bar_rng
+    strong_close_bear = close <= low + p["close_frac"] * bar_rng
+
+    # No exhaustion gap: don't buy a bar that OPENED far beyond the level.
+    no_gap_bull = open_ <= resistance * (1 + p["gap_pct"] / 100)
+    no_gap_bear = open_ >= support * (1 - p["gap_pct"] / 100)
+
+    bullish = (crossed_up & volume_confirmed & base_tight & strong_close_bull & no_gap_bull
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"]).fillna(False)
+    bearish = (crossed_down & volume_confirmed & base_tight & strong_close_bear & no_gap_bear
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["Support/Resistance"] = support_resistance_entries
+
+
+BRT_RECENT_BARS = {
+    "2w": 10, "4w": 15, "2m": 20, "3m": 25,
+    "4m": 27, "5m": 28, "6m": 30, "7m": 32, "8m": 33, "9m": 35,
+}
+BRT_RETEST_PCT = {
+    "2w": 1.0, "4w": 1.5, "2m": 1.5, "3m": 1.0,
+    "4m": 1.5, "5m": 1.5, "6m": 1.5, "7m": 1.5, "8m": 1.5, "9m": 1.5,
+}
+
+DEFAULT_PARAMS["Break & Retest"] = {"hold_tol_pct": 0.5}
+
+
+def break_retest_entries(df, horizon_key, params=None):
+    p = _params("Break & Retest", params)
+    h = HORIZONS[horizon_key]
+    g = compute_shared_gates(df)
+    close, high, low = df["Close"], df["High"], df["Low"]
+    lookback = h["sr_lookback"]
+
+    resistance = high.rolling(lookback).max().shift(lookback)
+    support = low.rolling(lookback).min().shift(lookback)
+    vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
+    recent = BRT_RECENT_BARS.get(horizon_key, 10)
+
+    broke_up = (high.rolling(recent).max().shift(1) > resistance) & \
+               (vol_ratio.rolling(recent).max().shift(1) >= SR_VOLUME_MULTIPLE)
+    broke_dn = (low.rolling(recent).min().shift(1) < support) & \
+               (vol_ratio.rolling(recent).max().shift(1) >= SR_VOLUME_MULTIPLE)
+
+    dist_to_res = (close - resistance) / resistance.replace(0, np.nan) * 100
+    dist_to_sup = (close - support) / support.replace(0, np.nan) * 100
+    retest_pct = BRT_RETEST_PCT.get(horizon_key, 1.0)
+
+    # The retest must HOLD the level and the entry bar must have turned:
+    held_level_bull = low >= resistance * (1 - p["hold_tol_pct"] / 100)
+    held_level_bear = high <= support * (1 + p["hold_tol_pct"] / 100)
+    turned_bull = close > high.shift(1)
+    turned_bear = close < low.shift(1)
+    rsi14 = g["rsi14"]
+
+    bullish = (broke_up & dist_to_res.between(0, retest_pct) & held_level_bull & turned_bull
+               & rsi14.between(42, 63)
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"]).fillna(False)
+    bearish = (broke_dn & dist_to_sup.between(-retest_pct, 0) & held_level_bear & turned_bear
+               & rsi14.between(37, 58)
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["Break & Retest"] = break_retest_entries
