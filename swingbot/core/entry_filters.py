@@ -165,3 +165,76 @@ def fibonacci_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["Fibonacci"] = fibonacci_entries
+
+
+DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0}
+
+
+def ema_cross_entries(df, horizon_key, params=None):
+    p = _params("EMA Crossover", params)
+    h = HORIZONS[horizon_key]
+    g = compute_shared_gates(df)
+    close = df["Close"]
+    fast = ema(close, h["ema_fast"])
+    slow = ema(close, h["ema_slow"])
+    diff = fast - slow
+    # 2-bar hold: crossed last bar AND held today (filters one-bar fakeouts)
+    held_bull = (diff.shift(2) <= 0) & (diff.shift(1) > 0) & (diff > 0)
+    held_bear = (diff.shift(2) >= 0) & (diff.shift(1) < 0) & (diff < 0)
+
+    rsi14 = g["rsi14"]
+    rsi_dipped = rsi14.rolling(5).min().shift(1) < p["rsi_dip"]          # real pullback preceded
+    rsi_surged = rsi14.rolling(5).max().shift(1) > (100 - p["rsi_dip"])
+    m = macd(close)
+    mom_bull = (m["macd"] > 0) | (rsi14 > 60)
+    mom_bear = (m["macd"] < 0) | (rsi14 < 40)
+    slow_rising = slow > slow.shift(5)      # cross inside a falling slow EMA is a trap
+    slow_falling = slow < slow.shift(5)
+    not_extended = (close - fast).abs() <= g["atr14"] * p["ext_atr"]
+
+    bullish = (held_bull & slow_rising & not_extended & (rsi14 > 50) & rsi_dipped & mom_bull
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (held_bear & slow_falling & not_extended & (rsi14 < 50) & rsi_surged & mom_bear
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["EMA Crossover"] = ema_cross_entries
+
+
+DEFAULT_PARAMS["VWAP"] = {"ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2}
+
+
+def vwap_entries(df, horizon_key, params=None):
+    p = _params("VWAP", params)
+    h = HORIZONS[horizon_key]
+    g = compute_shared_gates(df)
+    close = df["Close"]
+    vwap = rolling_vwap(df, h["vwap_window"])
+    diff = close - vwap
+
+    hold = p["hold_bars_2w"] if horizon_key == "2w" else p["hold_bars_other"]
+    held_bull = (diff.shift(hold) <= 0)
+    held_bear = (diff.shift(hold) >= 0)
+    for k in range(hold):
+        held_bull = held_bull & (diff.shift(k) > 0)
+        held_bear = held_bear & (diff.shift(k) < 0)
+
+    vwap_up = vwap > vwap.shift(3)
+    vwap_down = vwap < vwap.shift(3)
+    ext = (close - vwap).abs() / vwap.replace(0, np.nan) * 100
+    not_extended = ext <= p["ext_pct"]       # reclaim near value, don't chase
+    rsi14 = g["rsi14"]
+
+    bullish = (held_bull & vwap_up & not_extended & rsi14.between(50, 65)
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (held_bear & vwap_down & not_extended & rsi14.between(35, 50)
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["VWAP"] = vwap_entries

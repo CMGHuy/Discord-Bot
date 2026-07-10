@@ -103,3 +103,40 @@ def test_fibonacci_bullish_requires_bull_regime(downtrend_df):
     bull, bear = fibonacci_entries(downtrend_df, "4w")
     assert_entry_invariants(bull, bear, downtrend_df)
     assert not bull.any()
+
+
+GATED_BY_MA50 = ["EMA Crossover", "VWAP", "Fibonacci"]  # extended by later tasks
+
+
+def test_bullish_entries_respect_trend_gates(market_df):
+    """Wiring invariant: every bullish entry bar must satisfy the shared
+    trend gates the strategy declares (close above the 50- and 200-SMA)."""
+    from swingbot.core.entry_filters import ENTRY_FUNCS, compute_shared_gates
+    g = compute_shared_gates(market_df)
+    for strat in GATED_BY_MA50:
+        if strat not in ENTRY_FUNCS:
+            continue
+        bull, bear = ENTRY_FUNCS[strat](market_df, "4w")
+        assert_entry_invariants(bull, bear, market_df)
+        fired = bull[bull].index
+        assert g["trend50_bull"].loc[fired].all(), f"{strat}: bull entry below 50-SMA"
+        assert g["bull_regime"].loc[fired].all(), f"{strat}: bull entry outside bull regime"
+
+
+def test_ema_cross_not_extended(market_df):
+    """No bullish EMA entry may be more than ext_atr ATRs above the fast EMA."""
+    from swingbot.core.entry_filters import ema_cross_entries, compute_shared_gates, DEFAULT_PARAMS
+    from swingbot.core.indicators import ema
+    from swingbot.core.strategy_types import HORIZONS
+    g = compute_shared_gates(market_df)
+    bull, _ = ema_cross_entries(market_df, "4w")
+    fast = ema(market_df["Close"], HORIZONS["4w"]["ema_fast"])
+    cap = DEFAULT_PARAMS["EMA Crossover"]["ext_atr"]
+    ext = (market_df["Close"] - fast).abs() / g["atr14"]
+    assert (ext[bull] <= cap + 1e-9).all()
+
+
+def test_vwap_entries_flat_market_produces_nothing(flat_df):
+    from swingbot.core.entry_filters import vwap_entries
+    bull, bear = vwap_entries(flat_df, "4w")
+    assert not bull.any() and not bear.any()   # atr_floor gate blocks dead tape
