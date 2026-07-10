@@ -1358,7 +1358,7 @@ git commit -m "feat: S/R breakout base-quality + Break&Retest hold-and-turn entr
 **Interfaces:**
 - Produces: `rsi_entries`; `DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}`. NOTE: RSI deliberately does NOT use `bull_regime`/`trend50` (dip-buying happens below the averages) — it uses `bull_regime_slope_only`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_rsi_bullish_requires_confirmation_bar(market_df):
@@ -1384,9 +1384,9 @@ def test_rsi_no_bullish_in_sustained_downtrend(downtrend_df):
     assert not bull.any()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k rsi_ -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k rsi_ -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}
@@ -1431,9 +1431,9 @@ def rsi_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["RSI"] = rsi_entries
 ```
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
