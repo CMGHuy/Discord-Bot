@@ -269,7 +269,7 @@ git commit -m "feat: single-source R:R overrides (0.35-0.40) + breakeven/gating 
 - `win_rate` definition unchanged (`wins/(wins+losses)`); `expectancy_r` now averages `r_multiple` over ALL closed trades; `evaluated` stays `wins+losses`.
 - Consumes: `BREAKEVEN_TRIGGER_FRACTION` from Task 2.
 
-- [ ] **Step 1: Write the failing tests** (`tests/test_backtest_engine.py`)
+- [x] **Step 1: Write the failing tests** (`tests/test_backtest_engine.py`)
 
 The tests force one entry at a known bar by monkeypatching `_vectorized_entries`, on data crafted so ATR is deterministic (constant closes, fixed spread → ATR(14) = spread). With close=100, spread 1%: ATR=1.0, risk = 2×ATR = 2 (2w cap is 3% so uncapped), stop=98, target=100 + 2×0.35 = 100.70, break-even trigger = 100.35.
 
@@ -342,12 +342,12 @@ def test_timeout_is_marked_to_market_and_in_expectancy(monkeypatch):
     assert s.win_rate is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/test_backtest_engine.py -v`
 Expected: FAIL — `AttributeError: 'BacktestSummary' object has no attribute 'scratches'` (and/or timeout trades having `exit_price=None`).
 
-- [ ] **Step 3: Implement the engine changes in `backtest.py`**
+- [x] **Step 3: Implement the engine changes in `backtest.py`**
 
 3a. Add to `BacktestSummary` after `timeouts: int` (NO default — later fields like `win_rate` have no defaults, and a defaulted field before them is a dataclass error):
 
@@ -489,12 +489,12 @@ Update the two zero-trade early-return constructions in `run_backtest` (and the 
             summary.avg_return_pct = summary.avg_r_multiple = summary.avg_holding_days = None
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_backtest_engine.py tests/test_entry_filters.py -v`
 Expected: PASS (all).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/backtest.py tests/test_backtest_engine.py
