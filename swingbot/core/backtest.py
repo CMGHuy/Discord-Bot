@@ -28,27 +28,10 @@ import pandas as pd
 
 from .indicators import ema, rsi, rolling_vwap, atr, elliott_wave3_entries
 from .strategy import HORIZONS, MIN_BARS, RSI_OVERBOUGHT, RSI_OVERSOLD, FIB_TOLERANCE_PCT, SR_VOLUME_MULTIPLE
+from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 
 STRUCTURE_BUFFER_ATR = 0.25  # extra cushion beyond swing high/low, in units of ATR -- same as trade_plan.py
 SR_VOLUME_STRENGTH_CEILING = 3.0  # same as trade_plan.py
-
-# Per-strategy reward:risk override used in _trade_plan_at.
-# Win-rate tuned: at R:R=X, random-walk gives 1/(1+X) win rate.
-# Any directional signal edge pushes above that floor.
-# Target: >=80% win rate per strategy across backtested data.
-STRATEGY_RR_OVERRIDE: dict[str, float] = {
-    "EMA Crossover":      0.10,   # 91% random-walk floor; bearish gate: ma200_down_120
-    "VWAP":               0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "Fibonacci":          0.10,   # signal fires near resistance too; tight target compensates
-    "Support/Resistance": 0.12,
-    "RSI":                0.10,   # 91% floor; ma200 shift extended to 120 bars
-    "MACD":               0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "Elliott Wave":       0.10,   # 91% floor; RSI-rising filter improves signal quality
-    "MA Ribbon":          0.12,
-    "Break & Retest":     0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "RSI Divergence":     0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "Volume Profile":     0.10,   # 91% floor (was 0.12); bearish gate: ma200_down_120
-}
 
 
 @dataclass

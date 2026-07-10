@@ -206,6 +206,39 @@ HORIZONS = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Reward:risk per strategy -- SINGLE SOURCE for backtest.py AND trade_plan.py.
+# HARD FLOOR 0.30: break-even win rate at R:R=X is 1/(1+X); at 0.30 that is
+# 76.9%, so an 80% win rate is profitable. Below 0.30 a strategy can clear
+# 80% win rate and still lose money -- never tune below the floor.
+# Mean-reversion-at-structure strategies get 0.40 (they enter at a level, so
+# the bounce has room); trend/breakout strategies get 0.35.
+# ---------------------------------------------------------------------------
+STRATEGY_RR_OVERRIDE: dict[str, float] = {
+    "EMA Crossover":      0.35,
+    "VWAP":               0.35,
+    "Fibonacci":          0.40,
+    "Support/Resistance": 0.35,
+    "RSI":                0.40,
+    "MACD":               0.35,
+    "Elliott Wave":       0.35,
+    "MA Ribbon":          0.35,
+    "Break & Retest":     0.35,
+    "RSI Divergence":     0.40,
+    "Volume Profile":     0.40,
+}
+
+# When a trade's favorable excursion covers this fraction of the distance to
+# target, the stop moves to entry (subsequent bars only). Exits at the moved
+# stop are "scratch" (~0R), not losses. See backtest.py exit engine.
+BREAKEVEN_TRIGGER_FRACTION = 0.5
+
+# Per-strategy gating decided by TRAIN-window tuning (Task 16 fills this in).
+# {"Strategy Name": {"directions": ("bullish",), "horizons": ("4w", "2m")}}
+# A missing key means both directions, all horizons. entry_filters.entries_for
+# applies the mask, so backtest and live signals both respect it.
+STRATEGY_GATES: dict[str, dict] = {}
+
 # Minimum bars of history required for each horizon's slowest calculation
 MIN_BARS = {
     "2w": 20,
