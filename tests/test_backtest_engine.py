@@ -64,3 +64,14 @@ def test_timeout_is_marked_to_market_and_in_expectancy(monkeypatch):
     assert t.r_multiple < 0              # drifted down -> negative
     assert s.expectancy_r is not None and s.expectancy_r < 0
     assert s.win_rate is None
+
+
+def test_vectorized_entries_delegates_to_entry_filters(market_df):
+    """backtest must produce byte-identical entries to entry_filters for
+    every strategy -- no drift, that is the whole point of the redesign."""
+    from swingbot.core.backtest import _vectorized_entries, ALL_STRATEGIES
+    from swingbot.core.entry_filters import entries_for
+    for strat in ALL_STRATEGIES:
+        b1, s1 = _vectorized_entries(market_df, strat, "4w")
+        b2, s2 = entries_for(strat, market_df, "4w")
+        assert b1.equals(b2) and s1.equals(s2), strat
