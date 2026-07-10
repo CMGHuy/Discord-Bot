@@ -453,3 +453,95 @@ def rsi_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["RSI"] = rsi_entries
+
+
+DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 40}
+
+
+def rsi_divergence_entries(df, horizon_key, params=None):
+    """Hidden divergence (trend continuation), rolling formulation, plus a
+    confirmation: RSI has actually started turning in the trade direction.
+    Divergence alone marks potential -- the reclaim marks the entry."""
+    p = _params("RSI Divergence", params)
+    g = compute_shared_gates(df)
+    close = df["Close"]
+    rsi14 = g["rsi14"]
+    lb = 20
+    reclaim = p["rsi_reclaim"]
+
+    price_hl = close > close.rolling(lb).min().shift(lb)    # higher low
+    rsi_ll = rsi14 < rsi14.rolling(lb).min().shift(lb)      # RSI lower low
+    price_lh = close < close.rolling(lb).max().shift(lb)
+    rsi_hh = rsi14 > rsi14.rolling(lb).max().shift(lb)
+
+    turn_bull = (rsi14 > reclaim) & (rsi14 > rsi14.shift(1))
+    turn_bear = (rsi14 < (100 - reclaim)) & (rsi14 < rsi14.shift(1))
+
+    bullish = (price_hl & rsi_ll & turn_bull & rsi14.between(28, 52)
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (price_lh & rsi_hh & turn_bear & rsi14.between(48, 72)
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["RSI Divergence"] = rsi_divergence_entries
+
+
+def _vectorized_hvn(df, lookback, n_bins=20):
+    """Per-bar High Volume Node price AND its share of window volume (%).
+    Same numpy approach as the old backtest.py loop, extended to keep the
+    winning bucket's volume share so node significance can gate entries."""
+    _high, _low = df["High"].values, df["Low"].values
+    _vol = df["Volume"].values
+    _mid = (_high + _low) / 2
+    n = len(df)
+    hvn = np.full(n, np.nan)
+    share = np.full(n, np.nan)
+    for i in range(lookback, n):
+        lo_idx = i - lookback
+        pmin = _low[lo_idx:i].min()
+        pmax = _high[lo_idx:i].max()
+        rng = pmax - pmin
+        if rng <= 0:
+            continue
+        idx = np.minimum(((_mid[lo_idx:i] - pmin) / rng * n_bins).astype(int), n_bins - 1)
+        bins = np.bincount(idx, weights=_vol[lo_idx:i], minlength=n_bins)
+        total = bins.sum()
+        if total <= 0:
+            continue
+        k = bins.argmax()
+        hvn[i] = pmin + (k + 0.5) * rng / n_bins
+        share[i] = bins[k] / total * 100
+    return pd.Series(hvn, index=df.index), pd.Series(share, index=df.index)
+
+
+DEFAULT_PARAMS["Volume Profile"] = {"node_share": 8.0, "prox_pct": 1.5}
+
+
+def volume_profile_entries(df, horizon_key, params=None):
+    p = _params("Volume Profile", params)
+    h = HORIZONS[horizon_key]
+    g = compute_shared_gates(df)
+    close = df["Close"]
+
+    hvn, share = _vectorized_hvn(df, h["sr_lookback"])
+    dist_pct = (close - hvn) / hvn.replace(0, np.nan) * 100
+    significant = share >= p["node_share"]      # marginal argmax nodes are noise
+    rsi14 = g["rsi14"]
+    bounce_bull = close > close.shift(1)
+    bounce_bear = close < close.shift(1)
+
+    bullish = (dist_pct.between(0, p["prox_pct"]) & significant & bounce_bull
+               & rsi14.between(44, 64)
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (dist_pct.between(-p["prox_pct"], 0) & significant & bounce_bear
+               & rsi14.between(36, 56)
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["Volume Profile"] = volume_profile_entries

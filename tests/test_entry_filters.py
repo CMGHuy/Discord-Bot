@@ -220,3 +220,40 @@ def test_rsi_no_bullish_in_sustained_downtrend(downtrend_df):
     from swingbot.core.entry_filters import rsi_entries
     bull, _ = rsi_entries(downtrend_df, "4w")
     assert not bull.any()
+
+
+GATED_BY_MA50.extend(["RSI Divergence", "Volume Profile"])
+
+
+def test_hvn_share_sums_correctly():
+    """On a series that trades one price 80% of the time, the HVN share must
+    reflect that dominance."""
+    from swingbot.core.entry_filters import _vectorized_hvn
+    closes = np.where(np.arange(300) % 5 == 0, 110.0, 100.0)  # 20% at 110
+    df = make_ohlcv(closes, spread_pct=0.5)
+    hvn, share = _vectorized_hvn(df, lookback=60)
+    assert hvn.iloc[-1] == pytest.approx(100.0, rel=0.05)
+    assert share.iloc[-1] > 50.0
+
+
+def test_volume_profile_entries_respect_node_share(market_df):
+    from swingbot.core.entry_filters import volume_profile_entries, _vectorized_hvn, DEFAULT_PARAMS
+    from swingbot.core.strategy_types import HORIZONS
+    bull, bear = volume_profile_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    _, share = _vectorized_hvn(market_df, HORIZONS["4w"]["sr_lookback"])
+    min_share = DEFAULT_PARAMS["Volume Profile"]["node_share"]
+    fired = bull[bull].index
+    assert (share.loc[fired] >= min_share).all()
+
+
+def test_rsi_divergence_bull_entries_have_turning_rsi(market_df):
+    from swingbot.core.entry_filters import rsi_divergence_entries, DEFAULT_PARAMS
+    from swingbot.core.indicators import rsi as rsi_fn
+    bull, bear = rsi_divergence_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    r = rsi_fn(market_df["Close"], 14)
+    reclaim = DEFAULT_PARAMS["RSI Divergence"]["rsi_reclaim"]
+    fired = bull[bull].index
+    assert (r.loc[fired] > reclaim).all()
+    assert (r.loc[fired] > r.shift(1).loc[fired]).all()
