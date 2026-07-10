@@ -411,3 +411,45 @@ def break_retest_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["Break & Retest"] = break_retest_entries
+
+
+DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}
+
+
+def rsi_entries(df, horizon_key, params=None):
+    """Oversold bounce inside a structurally healthy uptrend. Dip-buying by
+    construction happens BELOW the short MAs, so this strategy uses the
+    slope-only regime gate (200-SMA rising) instead of close>MA gates."""
+    p = _params("RSI", params)
+    g = compute_shared_gates(df)
+    close, high, low = df["Close"], df["High"], df["Low"]
+    rsi14 = g["rsi14"]
+    os_, ob = p["os_level"], p["ob_level"]
+
+    consec_oversold = (rsi14.shift(1) < os_) & (rsi14.shift(2) < os_)
+    consec_overbought = (rsi14.shift(1) > ob) & (rsi14.shift(2) > ob)
+    crossed_up = consec_oversold & (rsi14 >= os_)
+    crossed_down = consec_overbought & (rsi14 <= ob)
+
+    if p["confirm"] == "prev_high":
+        confirm_bull = close > high.shift(1)
+        confirm_bear = close < low.shift(1)
+    else:  # "prev_close"
+        confirm_bull = close > close.shift(1)
+        confirm_bear = close < close.shift(1)
+
+    bounce_started = close > close.shift(3)     # not a falling knife
+    fade_started = close < close.shift(3)
+    ma200 = g["ma200"]
+    ma200_down = (ma200 < ma200.shift(120)).fillna(False)
+
+    bullish = (crossed_up & g["bull_regime_slope_only"] & bounce_started & confirm_bull
+               & (rsi14 < 40)
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (crossed_down & ma200_down & fade_started & confirm_bear
+               & (rsi14 > 60)
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["RSI"] = rsi_entries

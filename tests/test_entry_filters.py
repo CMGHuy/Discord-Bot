@@ -197,3 +197,26 @@ def test_break_retest_entry_bar_bounces(market_df):
     prev_high = market_df["High"].shift(1)
     fired = bull[bull].index
     assert (market_df["Close"].loc[fired] > prev_high.loc[fired]).all()
+
+
+def test_rsi_bullish_requires_confirmation_bar(market_df):
+    from swingbot.core.entry_filters import rsi_entries
+    bull, bear = rsi_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    prev_high = market_df["High"].shift(1)
+    fired = bull[bull].index
+    assert (market_df["Close"].loc[fired] > prev_high.loc[fired]).all()
+
+
+def test_rsi_bullish_requires_rising_200sma(market_df):
+    from swingbot.core.entry_filters import rsi_entries, compute_shared_gates
+    g = compute_shared_gates(market_df)
+    bull, _ = rsi_entries(market_df, "4w")
+    fired = bull[bull].index
+    assert g["bull_regime_slope_only"].loc[fired].all()
+
+
+def test_rsi_no_bullish_in_sustained_downtrend(downtrend_df):
+    from swingbot.core.entry_filters import rsi_entries
+    bull, _ = rsi_entries(downtrend_df, "4w")
+    assert not bull.any()
