@@ -1074,7 +1074,7 @@ git commit -m "feat: EMA Crossover + VWAP entries with slope, extension and mome
 **Interfaces:**
 - Produces: `macd_entries`, `ma_ribbon_entries`; `DEFAULT_PARAMS["MACD"] = {"ext_atr": 1.0}`, `DEFAULT_PARAMS["MA Ribbon"] = {"ext_pct": 8.0}`; registry entries. `RIBBON_PERIODS_BY_HORIZON` module dict (moved from the duplicated inline tables).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_macd_bullish_entries_have_rising_histogram(market_df):
@@ -1100,9 +1100,9 @@ def test_ma_ribbon_slope_agreement(market_df):
     assert (slow_sma.loc[fired] > slow_sma.shift(10).loc[fired]).all()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "macd or ribbon" -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "macd or ribbon" -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["MACD"] = {"ext_atr": 1.0}
@@ -1184,9 +1184,9 @@ ENTRY_FUNCS["MA Ribbon"] = ma_ribbon_entries
 
 Also update the test-file constant: `GATED_BY_MA50 = ["EMA Crossover", "VWAP", "Fibonacci", "MACD", "MA Ribbon"]`.
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
