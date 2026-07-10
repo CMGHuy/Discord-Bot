@@ -1204,7 +1204,7 @@ git commit -m "feat: MACD + MA Ribbon entries with acceleration and slope filter
 **Interfaces:**
 - Produces: `support_resistance_entries`, `break_retest_entries`; `DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}`, `DEFAULT_PARAMS["Break & Retest"] = {"hold_tol_pct": 0.5}`; `BRT_RECENT_BARS` and `BRT_RETEST_PCT` module dicts (shared with signals.py later).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_sr_bullish_breakout_bar_quality(market_df):
@@ -1235,9 +1235,9 @@ def test_break_retest_entry_bar_bounces(market_df):
     assert (market_df["Close"].loc[fired] > prev_high.loc[fired]).all()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "sr_ or retest" -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "sr_ or retest" -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}
@@ -1338,9 +1338,9 @@ ENTRY_FUNCS["Break & Retest"] = break_retest_entries
 
 Extend the test constant: `GATED_BY_MA50 = [..., "Support/Resistance", "Break & Retest"]`.
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
