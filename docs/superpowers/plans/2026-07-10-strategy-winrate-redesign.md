@@ -610,7 +610,7 @@ git commit -m "feat: trade_plan consumes shared R:R override + break-even manage
   - `entries_for(strategy, df, horizon_key, params=None) -> tuple[pd.Series, pd.Series]` — dispatch + `STRATEGY_GATES` masking.
   - `_rolling_argmax_pos(s, lookback)` / `_rolling_argmin_pos(s, lookback)` helpers (used by Fibonacci, unit-tested here).
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_entry_filters.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_entry_filters.py`)
 
 ```python
 import numpy as np
@@ -669,12 +669,12 @@ def test_entries_for_applies_direction_and_horizon_gates(monkeypatch, uptrend_df
     assert not bull.any() and not bear.any()
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.entry_filters'`.
 
-- [ ] **Step 3: Create `swingbot/core/entry_filters.py`**
+- [x] **Step 3: Create `swingbot/core/entry_filters.py`**
 
 ```python
 """
@@ -791,12 +791,12 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
     return bullish, bearish
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
