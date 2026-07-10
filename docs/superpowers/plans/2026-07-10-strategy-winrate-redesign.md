@@ -513,7 +513,7 @@ git commit -m "feat: break-even exit engine, scratch outcome, timeout mark-to-ma
 - `TradePlan` gains `management_note: str` with default `MANAGEMENT_NOTE` (a module constant) — no construction sites need editing.
 - Both ATR-sizing helpers now use `STRATEGY_RR_OVERRIDE.get(result.strategy, h["reward_risk_ratio"])`.
 
-- [ ] **Step 1: Write the failing test** (`tests/test_trade_plan.py`)
+- [x] **Step 1: Write the failing test** (`tests/test_trade_plan.py`)
 
 ```python
 import numpy as np
@@ -551,12 +551,12 @@ def test_plan_carries_management_note():
     assert "stop to entry" in MANAGEMENT_NOTE
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_trade_plan.py -v`
 Expected: FAIL — `ImportError: cannot import name 'MANAGEMENT_NOTE'` (and the R:R assertion would fail with the horizon ratio 0.50).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. Add to `trade_plan.py` imports: `from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_RR_OVERRIDE` and define below the existing constants:
 
@@ -582,12 +582,12 @@ MANAGEMENT_NOTE = (
 
 where `strategy_name` is the strategy string available in that helper's scope — pass `result.strategy` down if the helper doesn't already receive it (check its call sites in `compute_trade_plan` and thread the parameter through).
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_trade_plan.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/trade_plan.py tests/test_trade_plan.py
