@@ -1769,7 +1769,7 @@ git commit -m "refactor: backtest entries delegate to entry_filters (kills live/
 - Consumes: `entries_for` from Task 5. Add `from .entry_filters import entries_for` to `signals.py` imports.
 - Every signal function keeps its exact signature and `SignalResult` shape.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_live_signals_agree_with_entry_filters(market_df):
@@ -1787,12 +1787,12 @@ def test_live_signals_agree_with_entry_filters(market_df):
                 assert res.trend == ("bullish" if bull.iloc[-1] else "bearish")
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py::test_live_signals_agree_with_entry_filters -v`
 Expected: FAIL for at least some strategies (live logic is currently much looser).
 
-- [ ] **Step 3: Implement — same mechanical change in each of the 11 functions**
+- [x] **Step 3: Implement — same mechanical change in each of the 11 functions**
 
 The pattern: compute `bull_e, bear_e = entries_for("<Strategy Name>", df, horizon_key)` and set `trend`/`triggered` from the LAST bar; keep the function's existing indicator computations only where the `details` dict or bias fallback needs them. Exact replacement for each function's trigger block:
 
@@ -1848,9 +1848,9 @@ The pattern: compute `bull_e, bear_e = entries_for("<Strategy Name>", df, horizo
 
 `rsi_signal`, `macd_signal`, `elliott_wave_signal`, `ma_ribbon_signal`, `break_retest_signal`, `rsi_divergence_signal`, `volume_profile_signal` — identical mechanical replacement with their strategy names (`"RSI"`, `"MACD"`, `"Elliott Wave"`, `"MA Ribbon"`, `"Break & Retest"`, `"RSI Divergence"`, `"Volume Profile"`), keeping each function's existing `else`-branch bias line and `details` construction. For `rsi_divergence_signal`, the divergence-scan loops remain solely to populate `details` when triggered; the `triggered` flag itself must come from `entries_for`.
 
-- [ ] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
+- [x] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/signals.py tests/test_entry_filters.py
