@@ -288,3 +288,18 @@ def test_elliott_wave2_depth_gate(market_df):
         lv = levels[j]
         depth = abs(lv["wave1"] - lv["wave2"]) / abs(lv["wave1"] - lv["wave0"])
         assert p["depth_min"] <= depth <= p["depth_max"]
+
+
+def test_live_signals_agree_with_entry_filters(market_df):
+    """For every strategy and a spread of horizons, the live signal's
+    `triggered` flag must equal the last bar of the entry-filter series."""
+    from swingbot.core.strategy import STRATEGY_FUNCS
+    from swingbot.core.entry_filters import entries_for
+    for strat, func in STRATEGY_FUNCS.items():
+        for hk in ("2w", "4w", "2m"):
+            res = func("TEST", market_df, hk)
+            bull, bear = entries_for(strat, market_df, hk)
+            expected = bool(bull.iloc[-1] or bear.iloc[-1])
+            assert res.triggered == expected, f"{strat}/{hk}"
+            if expected:
+                assert res.trend == ("bullish" if bull.iloc[-1] else "bearish")

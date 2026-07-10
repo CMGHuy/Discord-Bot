@@ -20,11 +20,9 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from .entry_filters import entries_for, RIBBON_PERIODS_BY_HORIZON
 from .indicators import ema, macd, rsi, rolling_vwap, fibonacci_levels, elliott_wave3_entries, zigzag_pivots
-from .strategy_types import (
-    FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, RSI_OVERBOUGHT, RSI_OVERSOLD,
-    SR_VOLUME_MULTIPLE, SignalResult,
-)
+from .strategy_types import HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE, SignalResult
 
 
 # ---------------------------------------------------------------------------
@@ -37,15 +35,13 @@ def ema_cross_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalR
     slow = ema(close, h["ema_slow"])
     rsi14 = rsi(close, 14)
 
-    prev_diff = fast.iloc[-2] - slow.iloc[-2]
     curr_diff = fast.iloc[-1] - slow.iloc[-1]
-    crossed_up = prev_diff <= 0 and curr_diff > 0
-    crossed_down = prev_diff >= 0 and curr_diff < 0
     curr_rsi = float(rsi14.iloc[-1])
 
-    if crossed_up and curr_rsi < RSI_OVERBOUGHT:
+    bull_e, bear_e = entries_for("EMA Crossover", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif crossed_down:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
     else:
         trend, triggered = ("bullish" if curr_diff > 0 else "bearish"), False
@@ -74,17 +70,15 @@ def vwap_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalResult
     close = df["Close"]
     vwap = rolling_vwap(df, h["vwap_window"])
 
-    prev_diff = close.iloc[-2] - vwap.iloc[-2]
     curr_diff = close.iloc[-1] - vwap.iloc[-1]
-    crossed_up = prev_diff <= 0 and curr_diff > 0
-    crossed_down = prev_diff >= 0 and curr_diff < 0
 
-    if crossed_up:
+    bull_e, bear_e = entries_for("VWAP", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif crossed_down:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
     else:
-        trend, triggered = ("bullish" if curr_diff > 0 else "bearish"), False
+        trend, triggered = ("bullish" if curr_diff >= 0 else "bearish"), False
 
     return SignalResult(
         ticker=ticker,
@@ -108,7 +102,6 @@ def fibonacci_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalR
     h = HORIZONS[horizon_key]
     close_series = df["Close"]
     close = float(close_series.iloc[-1])
-    prev_ref = float(close_series.iloc[-4]) if len(close_series) >= 4 else float(close_series.iloc[-2])
 
     fib = fibonacci_levels(df, h["fib_lookback"])
     levels = fib["levels"]
@@ -124,15 +117,13 @@ def fibonacci_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalR
 
     nearest_ratio, nearest_price = min(levels.items(), key=lambda kv: abs(kv[1] - close))
     distance_pct = abs(nearest_price - close) / swing_range * 100
-    is_testing_level = distance_pct <= FIB_TOLERANCE_PCT
 
-    moving_up = close > prev_ref
-    if is_testing_level and moving_up:
+    bull_e, bear_e = entries_for("Fibonacci", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif is_testing_level and not moving_up:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
     else:
-        # No fresh test right now -- report bias only, don't alert
         midpoint = levels[0.5]
         trend, triggered = ("bullish" if close > midpoint else "bearish"), False
 
@@ -171,24 +162,17 @@ def support_resistance_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -
     resistance = float(resistance_series.iloc[-1])
     support = float(support_series.iloc[-1])
 
-    prev_close = float(close_series.iloc[-2]) if len(close_series) >= 2 else close
-    prev_resistance = float(resistance_series.iloc[-2]) if len(resistance_series) >= 2 else resistance
-    prev_support = float(support_series.iloc[-2]) if len(support_series) >= 2 else support
-
     vol_avg20 = float(df["Volume"].tail(20).mean())
     today_vol = float(df["Volume"].iloc[-1])
     volume_ratio = today_vol / vol_avg20 if vol_avg20 > 0 else 1.0
     volume_confirmed = volume_ratio >= SR_VOLUME_MULTIPLE
 
-    breakout_up = (close > resistance) and (prev_close <= prev_resistance) and volume_confirmed
-    breakdown_down = (close < support) and (prev_close >= prev_support) and volume_confirmed
-
-    if breakout_up:
+    bull_e, bear_e = entries_for("Support/Resistance", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif breakdown_down:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
     else:
-        # No fresh breakout -- report bias only (which side of the range is price on)
         midpoint = (resistance + support) / 2 if pd.notna(resistance) and pd.notna(support) else close
         trend, triggered = ("bullish" if close >= midpoint else "bearish"), False
 
@@ -218,15 +202,12 @@ def rsi_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalResult:
     close = float(close_series.iloc[-1])
 
     rsi14 = rsi(close_series, 14)
-    prev_rsi = float(rsi14.iloc[-2]) if len(rsi14) >= 2 else float(rsi14.iloc[-1])
     curr_rsi = float(rsi14.iloc[-1])
 
-    crossed_up = prev_rsi < RSI_OVERSOLD <= curr_rsi
-    crossed_down = prev_rsi > RSI_OVERBOUGHT >= curr_rsi
-
-    if crossed_up:
+    bull_e, bear_e = entries_for("RSI", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif crossed_down:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
     else:
         # No fresh reversal -- lean toward the side RSI is closer to reclaiming
@@ -268,23 +249,14 @@ def macd_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalResult
 
     m = macd(close_series, fast=fast_p, slow=slow_p, signal=sig_p)
     macd_curr = float(m["macd"].iloc[-1])
-    macd_prev = float(m["macd"].iloc[-2])
     sig_curr = float(m["signal"].iloc[-1])
-    sig_prev = float(m["signal"].iloc[-2])
     hist_curr = float(m["histogram"].iloc[-1])
     hist_prev = float(m["histogram"].iloc[-2])
 
-    # Fresh crossover: MACD crossed its signal line this bar
-    crossed_up = macd_prev <= sig_prev and macd_curr > sig_curr
-    crossed_down = macd_prev >= sig_prev and macd_curr < sig_curr
-
-    # Histogram reversal: histogram changed sign (even stronger signal)
-    hist_turned_positive = hist_prev <= 0 and hist_curr > 0
-    hist_turned_negative = hist_prev >= 0 and hist_curr < 0
-
-    if crossed_up or hist_turned_positive:
+    bull_e, bear_e = entries_for("MACD", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif crossed_down or hist_turned_negative:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
     else:
         # No fresh cross -- report current bias only
@@ -321,10 +293,11 @@ def elliott_wave_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Sign
     threshold_pct = h["max_risk_pct"]  # reuse the horizon's risk scale for pivot granularity
     close = float(df["Close"].iloc[-1])
 
-    bullish_series, bearish_series, entry_levels = elliott_wave3_entries(df, threshold_pct)
+    _, _, entry_levels = elliott_wave3_entries(df, threshold_pct)
     last_idx = len(df) - 1
-    is_bull_trigger = bool(bullish_series.iloc[-1])
-    is_bear_trigger = bool(bearish_series.iloc[-1])
+    bull_e, bear_e = entries_for("Elliott Wave", df, horizon_key)
+    is_bull_trigger = bool(bull_e.iloc[-1])
+    is_bear_trigger = bool(bear_e.iloc[-1])
 
     pivots = zigzag_pivots(df, threshold_pct)
     details = {}
@@ -370,19 +343,7 @@ def ma_ribbon_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalR
     close = df["Close"]
     cur_price = float(close.iloc[-1])
 
-    horizon_to_ribbon = {
-        "2w": (10, 20, 50),
-        "4w": (10, 20, 50),
-        "2m": (20, 50, 100),
-        "3m": (20, 50, 200),
-        "4m": (30, 67, 200),
-        "5m": (40, 83, 200),
-        "6m": (50, 100, 200),
-        "7m": (60, 117, 200),
-        "8m": (70, 133, 200),
-        "9m": (80, 150, 200),
-    }
-    fast_p, mid_p, slow_p = horizon_to_ribbon.get(horizon_key, (10, 20, 50))
+    fast_p, mid_p, slow_p = RIBBON_PERIODS_BY_HORIZON.get(horizon_key, (10, 20, 50))
 
     if len(close) < slow_p + 2:
         return SignalResult(
@@ -395,22 +356,17 @@ def ma_ribbon_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalR
     mid  = ema(close, mid_p)
     slow_sma = close.rolling(slow_p).mean()
 
-    fast_curr, fast_prev = float(fast.iloc[-1]), float(fast.iloc[-2])
-    mid_curr,  mid_prev  = float(mid.iloc[-1]),  float(mid.iloc[-2])
+    fast_curr = float(fast.iloc[-1])
+    mid_curr  = float(mid.iloc[-1])
     slow_curr = float(slow_sma.iloc[-1])
-
-    crossed_up   = fast_prev <= mid_prev and fast_curr > mid_curr
-    crossed_down = fast_prev >= mid_prev and fast_curr < mid_curr
     all_above_slow = fast_curr > slow_curr and mid_curr > slow_curr
     all_below_slow = fast_curr < slow_curr and mid_curr < slow_curr
 
-    if crossed_up and all_above_slow:
+    bull_e, bear_e = entries_for("MA Ribbon", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-    elif crossed_down and all_below_slow:
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
-    elif crossed_up or crossed_down:
-        trend = "bullish" if crossed_up else "bearish"
-        triggered = False
     else:
         trend = "bullish" if fast_curr > mid_curr else "bearish"
         triggered = False
@@ -466,20 +422,17 @@ def break_retest_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Sign
     bear_break  = recent[(recent["Low"] < support) & (recent_vols > vol_thresh)]
     dist_to_sup = (recent_close - support) / support * 100
 
-    if len(bull_break) and 0 <= dist_to_res < 2.5:
+    bull_e, bear_e = entries_for("Break & Retest", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
-        details = {
-            "Resistance level": round(resistance, 2),
-            "Distance above level": f"+{dist_to_res:.1f}%",
-            "Breakout volume x avg": f"{float(bull_break['Volume'].max()) / avg_vol:.1f}x",
-        }
-    elif len(bear_break) and -2.5 < dist_to_sup <= 0:
+        details = {"Resistance level": round(resistance, 2), "Distance above level": f"+{dist_to_res:.1f}%"}
+        if len(bull_break):
+            details["Breakout volume x avg"] = f"{float(bull_break['Volume'].max()) / avg_vol:.1f}x"
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
-        details = {
-            "Support level": round(support, 2),
-            "Distance below level": f"{dist_to_sup:.1f}%",
-            "Breakdown volume x avg": f"{float(bear_break['Volume'].max()) / avg_vol:.1f}x",
-        }
+        details = {"Support level": round(support, 2), "Distance below level": f"{dist_to_sup:.1f}%"}
+        if len(bear_break):
+            details["Breakdown volume x avg"] = f"{float(bear_break['Volume'].max()) / avg_vol:.1f}x"
     else:
         trend = "bullish" if recent_close > (resistance + support) / 2 else "bearish"
         triggered = False
@@ -530,18 +483,24 @@ def rsi_divergence_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Si
     price_highs = _swing_highs(w_close)
     rsi_highs   = _swing_highs(w_rsi)
 
-    trend = "bullish" if curr_rsi > 50 else "bearish"
-    triggered = False
+    bull_e, bear_e = entries_for("RSI Divergence", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
+        trend, triggered = "bullish", True
+    elif bool(bear_e.iloc[-1]):
+        trend, triggered = "bearish", True
+    else:
+        trend, triggered = ("bullish" if curr_rsi > 50 else "bearish"), False
     details = {"RSI(14)": round(curr_rsi, 1)}
 
-    # Hidden bullish: price makes higher low, RSI makes lower low
-    if len(price_lows) >= 2 and len(rsi_lows) >= 2:
+    # Hidden bullish: price makes higher low, RSI makes lower low -- this
+    # scan only enriches `details` for display; `triggered` above already
+    # came from entries_for so live and backtest can't drift.
+    if triggered and trend == "bullish" and len(price_lows) >= 2 and len(rsi_lows) >= 2:
         pl1_i, pl1_v = price_lows[-2]
         pl2_i, pl2_v = price_lows[-1]
         near1 = [rv for ri, rv in rsi_lows if abs(ri - pl1_i) <= 5]
         near2 = [rv for ri, rv in rsi_lows if abs(ri - pl2_i) <= 5]
         if near1 and near2 and pl2_v > pl1_v and near2[-1] < near1[-1]:
-            trend, triggered = "bullish", True
             details.update({
                 "Pattern": "Hidden bullish divergence",
                 "Price lows": f"{round(pl1_v, 2)} → {round(pl2_v, 2)} (higher)",
@@ -553,13 +512,12 @@ def rsi_divergence_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Si
             })
 
     # Hidden bearish: price makes lower high, RSI makes higher high
-    if not triggered and len(price_highs) >= 2 and len(rsi_highs) >= 2:
+    if triggered and trend == "bearish" and len(price_highs) >= 2 and len(rsi_highs) >= 2:
         ph1_i, ph1_v = price_highs[-2]
         ph2_i, ph2_v = price_highs[-1]
         near1 = [rv for ri, rv in rsi_highs if abs(ri - ph1_i) <= 5]
         near2 = [rv for ri, rv in rsi_highs if abs(ri - ph2_i) <= 5]
         if near1 and near2 and ph2_v < ph1_v and near2[-1] > near1[-1]:
-            trend, triggered = "bearish", True
             details.update({
                 "Pattern": "Hidden bearish divergence",
                 "Price highs": f"{round(ph1_v, 2)} → {round(ph2_v, 2)} (lower)",
@@ -699,14 +657,15 @@ def volume_profile_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Si
     dist_pct  = (close - hvn_price) / hvn_price * 100
     vol_share = f"{vol_share_pct:.0f}% of period volume" if vol_share_pct else "n/a"
 
-    if 0 < dist_pct < 1.5:        # price within 1.5% above HVN → floor support (tighter = fewer false signals)
+    bull_e, bear_e = entries_for("Volume Profile", df, horizon_key)
+    if bool(bull_e.iloc[-1]):
         trend, triggered = "bullish", True
         details = {
             "HVN level": round(hvn_price, 2),
             "Distance above HVN": f"+{dist_pct:.1f}%",
             "HVN volume share": vol_share,
         }
-    elif -1.5 < dist_pct < 0:     # price within 1.5% below HVN → ceiling resistance (tighter = fewer false signals)
+    elif bool(bear_e.iloc[-1]):
         trend, triggered = "bearish", True
         details = {
             "HVN level": round(hvn_price, 2),
