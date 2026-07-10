@@ -238,3 +238,80 @@ def vwap_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["VWAP"] = vwap_entries
+
+
+DEFAULT_PARAMS["MACD"] = {"ext_atr": 1.0}
+
+
+def macd_entries(df, horizon_key, params=None):
+    p = _params("MACD", params)
+    g = compute_shared_gates(df)
+    close = df["Close"]
+    fast_p, slow_p, sig_p = MACD_PERIODS_BY_HORIZON.get(horizon_key, (12, 26, 9))
+    m = macd(close, fast=fast_p, slow=slow_p, signal=sig_p)
+    macd_line, hist = m["macd"], m["histogram"]
+    diff = macd_line - m["signal"]
+
+    crossed_up = (diff.shift(1) <= 0) & (diff > 0)
+    crossed_down = (diff.shift(1) >= 0) & (diff < 0)
+    hist_held_bull = (hist.shift(2) <= 0) & (hist.shift(1) > 0) & (hist > 0)
+    hist_held_bear = (hist.shift(2) >= 0) & (hist.shift(1) < 0) & (hist < 0)
+    hist_rising2 = (hist > hist.shift(1)) & (hist.shift(1) > hist.shift(2))   # accelerating
+    hist_falling2 = (hist < hist.shift(1)) & (hist.shift(1) < hist.shift(2))
+    not_extended = (close - ema(close, fast_p)).abs() <= g["atr14"] * p["ext_atr"]
+    rsi14 = g["rsi14"]
+
+    bullish = ((crossed_up | hist_held_bull) & hist_rising2 & (macd_line > 0)
+               & (rsi14 > 50) & not_extended
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = ((crossed_down | hist_held_bear) & hist_falling2 & (macd_line < 0)
+               & (rsi14 < 50) & not_extended
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["MACD"] = macd_entries
+
+
+# Ribbon periods per horizon -- shared with signals.py (which had its own copy)
+RIBBON_PERIODS_BY_HORIZON = {
+    "2w": (10, 20, 50), "4w": (10, 20, 50),
+    "2m": (20, 50, 100), "3m": (20, 50, 200),
+    "4m": (30, 67, 200), "5m": (40, 83, 200), "6m": (50, 100, 200),
+    "7m": (60, 117, 200), "8m": (70, 133, 200), "9m": (80, 150, 200),
+}
+
+DEFAULT_PARAMS["MA Ribbon"] = {"ext_pct": 8.0}
+
+
+def ma_ribbon_entries(df, horizon_key, params=None):
+    p = _params("MA Ribbon", params)
+    g = compute_shared_gates(df)
+    close = df["Close"]
+    fast_p, mid_p, slow_p = RIBBON_PERIODS_BY_HORIZON.get(horizon_key, (10, 20, 50))
+    fast = ema(close, fast_p)
+    mid = ema(close, mid_p)
+    slow_sma = close.rolling(slow_p).mean()
+    diff = fast - mid
+
+    crossed_up = (diff.shift(1) <= 0) & (diff > 0) & (fast > slow_sma) & (mid > slow_sma)
+    crossed_down = (diff.shift(1) >= 0) & (diff < 0) & (fast < slow_sma) & (mid < slow_sma)
+    slow_rising = slow_sma > slow_sma.shift(10)    # alignment without slope = chop trap
+    slow_falling = slow_sma < slow_sma.shift(10)
+    rsi14 = g["rsi14"]
+    not_ext_bull = (close <= slow_sma * (1 + p["ext_pct"] / 100)) & rsi14.between(48, 70)
+    not_ext_bear = (close >= slow_sma * (1 - p["ext_pct"] / 100)) & rsi14.between(30, 52)
+    m = macd(close)
+
+    bullish = (crossed_up & slow_rising & not_ext_bull & (m["macd"] > 0)
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (crossed_down & slow_falling & not_ext_bear & (m["macd"] < 0)
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["MA Ribbon"] = ma_ribbon_entries

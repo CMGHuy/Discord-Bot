@@ -140,3 +140,29 @@ def test_vwap_entries_flat_market_produces_nothing(flat_df):
     from swingbot.core.entry_filters import vwap_entries
     bull, bear = vwap_entries(flat_df, "4w")
     assert not bull.any() and not bear.any()   # atr_floor gate blocks dead tape
+
+
+GATED_BY_MA50.extend(["MACD", "MA Ribbon"])
+
+
+def test_macd_bullish_entries_have_rising_histogram(market_df):
+    from swingbot.core.entry_filters import macd_entries
+    from swingbot.core.indicators import macd as macd_fn
+    from swingbot.core.strategy_types import MACD_PERIODS_BY_HORIZON
+    bull, bear = macd_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    f, s, sig = MACD_PERIODS_BY_HORIZON["4w"]
+    hist = macd_fn(market_df["Close"], fast=f, slow=s, signal=sig)["histogram"]
+    fired = bull[bull].index
+    assert (hist.loc[fired] > hist.shift(1).loc[fired]).all()
+    assert (hist.shift(1).loc[fired] > hist.shift(2).loc[fired]).all()
+
+
+def test_ma_ribbon_slope_agreement(market_df):
+    from swingbot.core.entry_filters import ma_ribbon_entries, RIBBON_PERIODS_BY_HORIZON
+    bull, bear = ma_ribbon_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+    _, _, slow_p = RIBBON_PERIODS_BY_HORIZON["4w"]
+    slow_sma = market_df["Close"].rolling(slow_p).mean()
+    fired = bull[bull].index
+    assert (slow_sma.loc[fired] > slow_sma.shift(10).loc[fired]).all()
