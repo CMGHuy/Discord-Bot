@@ -933,7 +933,7 @@ git commit -m "feat: Fibonacci entries with swing-direction fix + bounce-bar qua
 **Interfaces:**
 - Produces: `ema_cross_entries`, `vwap_entries`; `DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0}`, `DEFAULT_PARAMS["VWAP"] = {"ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2}`; registry entries.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 GATED_BY_MA50 = ["EMA Crossover", "VWAP", "Fibonacci"]  # extended by later tasks
@@ -973,12 +973,12 @@ def test_vwap_entries_flat_market_produces_nothing(flat_df):
     assert not bull.any() and not bear.any()   # atr_floor gate blocks dead tape
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py -k "ema or vwap or trend_gates" -v`
 Expected: FAIL — `ImportError: cannot import name 'ema_cross_entries'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0}
@@ -1054,9 +1054,9 @@ def vwap_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["VWAP"] = vwap_entries
 ```
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
