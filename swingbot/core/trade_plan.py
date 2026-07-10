@@ -38,6 +38,7 @@ import pandas as pd
 
 from .indicators import atr, ema, fibonacci_levels, rolling_vwap
 from .strategy import HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE, compute_hvn_level
+from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_RR_OVERRIDE
 
 ATR_PERIOD = 14
 STRUCTURE_BUFFER_ATR = 0.25  # extra cushion beyond swing high/low, in units of ATR
@@ -48,6 +49,12 @@ SR_VOLUME_STRENGTH_CEILING = 3.0
 # How far price must be extended from a strategy's reference level before we
 # suggest waiting for a pullback/retest instead of chasing it
 ENTRY_EXTENSION_THRESHOLD_PCT = 1.5
+
+MANAGEMENT_NOTE = (
+    f"After price covers {BREAKEVEN_TRIGGER_FRACTION:.0%} of the distance to target, "
+    "move the stop to entry. A break-even exit is a scratch, not a loss -- this is "
+    "the rule the backtest numbers assume."
+)
 
 
 @dataclass
@@ -62,6 +69,7 @@ class TradePlan:
     reward_per_share: float
     risk_reward_ratio: float
     method: str
+    management_note: str = MANAGEMENT_NOTE
 
 
 def compute_trade_plan(result, df: pd.DataFrame) -> TradePlan:
@@ -85,7 +93,7 @@ def compute_trade_plan(result, df: pd.DataFrame) -> TradePlan:
         stop_loss, take_profit, method = _elliott_wave_plan(result, h, entry, atr_val, is_bull)
 
     else:
-        stop_loss, take_profit, method = _volatility_plan(h, entry, atr_val, is_bull)
+        stop_loss, take_profit, method = _volatility_plan(h, entry, atr_val, is_bull, result.strategy)
 
     risk_per_share = abs(entry - stop_loss)
     reward_per_share = abs(take_profit - entry)
@@ -413,16 +421,16 @@ def _elliott_wave_plan(result, h, entry, atr_val, is_bull):
         method += f"; stop capped at {max_risk_pct}% of entry (wave 2 pivot was unrealistically far away)"
 
     risk_now = abs(entry - stop_loss)
-    rr = h["reward_risk_ratio"]
+    rr = STRATEGY_RR_OVERRIDE.get(result.strategy, h["reward_risk_ratio"])
     take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
     method += f"; target = {rr:.1f}:1 reward:risk (wave 3 length isn't reliably predictable, so this uses the horizon's standard ratio rather than a wave-count projection)"
 
     return stop_loss, take_profit, method
 
 
-def _volatility_plan(h, entry, atr_val, is_bull):
+def _volatility_plan(h, entry, atr_val, is_bull, strategy_name=None):
     risk_distance = h["atr_stop_multiple"] * atr_val
-    rr = h["reward_risk_ratio"]
+    rr = STRATEGY_RR_OVERRIDE.get(strategy_name, h["reward_risk_ratio"])
 
     max_risk_pct = h["max_risk_pct"]
     max_risk_amount = entry * (max_risk_pct / 100)
