@@ -80,6 +80,25 @@ CLUSTER_TOLERANCE_PCT = 1.5
 # candidate levels -- older pivots are less relevant to price right now.
 MAX_RECENT_PIVOTS = 8
 
+# Target 2 ("stretch target", the level beyond target 1) is only ever
+# "whichever cluster is next in the sorted level list past target 1" --
+# with no distance check at all. Most of the time that's fine (levels
+# tend to be roughly evenly spread), but a few sources can legitimately
+# sit MUCH closer to current price than every other candidate: Bollinger
+# Bands especially, since they're a live bar-by-bar rolling series --
+# during a volatility squeeze the upper/lower band can compress right up
+# against price while every other (structural, historical) level stays
+# at its normal distance. When THAT compressed level becomes target 1,
+# the next real level past it (target 2) can end up many times farther
+# from target 1 than target 1 itself is from entry -- a "stretch target"
+# that isn't a sensible continuation of the first leg's move at all, just
+# whatever the next unrelated level down the line happens to be. Capping
+# target 2's own leg (target 1 -> target 2) to at most this multiple of
+# the first leg (entry -> target 1) keeps it a plausible "if it keeps
+# going" extension; past that, target 2 is simply left unset (already a
+# supported state) rather than shown as a wildly disproportionate stretch.
+MAX_TARGET2_LEG_MULTIPLE = 3.0
+
 
 @dataclass
 class Level:
@@ -494,9 +513,16 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
             target2_price = target2_dist = target2_sources = None
             if len(resistances) > 1:
                 t2 = resistances[1]
-                target2_price = t2.price
-                target2_dist = (t2.price - current_price) / current_price * 100
-                target2_sources = t2.sources
+                leg1 = t1.price - current_price          # entry -> target 1 (positive: t1 is above price)
+                leg2 = t2.price - t1.price                # target 1 -> target 2
+                # See MAX_TARGET2_LEG_MULTIPLE's docstring -- drop target 2
+                # rather than show a wildly disproportionate stretch target
+                # (the common trigger: target 1 sitting unusually close to
+                # price, e.g. a Bollinger-band squeeze).
+                if leg1 > 0 and leg2 <= leg1 * MAX_TARGET2_LEG_MULTIPLE:
+                    target2_price = t2.price
+                    target2_dist = (t2.price - current_price) / current_price * 100
+                    target2_sources = t2.sources
             scenarios.append(Scenario(
                 direction="bullish", entry=current_price, market_price=current_price,
                 stop_loss=stop_price, stop_sources=stop_sources,
@@ -516,9 +542,13 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
             target2_price = target2_dist = target2_sources = None
             if len(supports) > 1:
                 t2 = supports[1]
-                target2_price = t2.price
-                target2_dist = (current_price - t2.price) / current_price * 100
-                target2_sources = t2.sources
+                leg1 = current_price - t1.price           # entry -> target 1 (positive: t1 is below price)
+                leg2 = t1.price - t2.price                 # target 1 -> target 2
+                # See MAX_TARGET2_LEG_MULTIPLE's docstring.
+                if leg1 > 0 and leg2 <= leg1 * MAX_TARGET2_LEG_MULTIPLE:
+                    target2_price = t2.price
+                    target2_dist = (current_price - t2.price) / current_price * 100
+                    target2_sources = t2.sources
             scenarios.append(Scenario(
                 direction="bearish", entry=current_price, market_price=current_price,
                 stop_loss=stop_price, stop_sources=stop_sources,

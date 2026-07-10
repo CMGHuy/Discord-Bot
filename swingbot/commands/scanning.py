@@ -3,6 +3,7 @@ import asyncio
 import datetime as dt
 import json
 import os
+import random
 import time
 
 import discord
@@ -25,6 +26,136 @@ _TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
 _MANUAL_CLOSE_QUEUE   = os.path.join(config.DATA_DIR, "manual_close_notify.json")
 _PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 _HEARTBEAT_FILE = os.path.join(config.DATA_DIR, "bot_heartbeat.json")
+
+# Tracks whether the trading session (in_session()) was active as of the
+# last tick, so _check_session_transition() can tell "just opened"/"just
+# closed" apart from "still open"/"still closed" -- None means "not
+# established yet" (right after a bot (re)start), which deliberately
+# suppresses the very first check: a restart that happens to land
+# mid-session shouldn't fire a false "welcome" the moment it reconnects.
+_session_was_active: bool | None = None
+
+# Healthcheck messages sent so far in the CURRENT hour bucket, and which
+# bucket that is -- see _post_healthcheck()'s hourly-cleanup logic.
+# In-memory only (not persisted across restarts): a bot restart simply
+# starts a fresh bucket, so at most the prior hour's healthchecks linger
+# an extra cycle rather than being cleaned up immediately -- an acceptable
+# trade-off for what's purely a channel-tidiness feature.
+_healthcheck_msgs: list = []
+_healthcheck_hour_bucket: tuple | None = None
+
+# Session welcome/goodbye message pools -- see _check_session_transition().
+# One is picked at random each time rather than always sending the exact
+# same line, so a person watching the channel every day doesn't get the
+# same two sentences on repeat for months. Deliberately mixed in tone
+# (motivational / funny / supportive / reflective) rather than picking
+# one register and sticking to it -- variety in TONE, not just wording,
+# is what actually keeps it feeling alive instead of like a slightly
+# reworded template. Every entry uses the same {start}/{end}/{interval}/
+# {open_count}/{plural} placeholders so any one of them can be picked and
+# .format()-ed the same way regardless of which it is.
+_WELCOME_MESSAGES = (
+    "☀️ **Rise and grind!** The trading session is open ({start:02d}:00–{end:02d}:00 Europe/Berlin), "
+    "scanning every {interval} min. 📂 {open_count} open trade{plural} carried over from before. "
+    "Let's make today count! 🚀",
+
+    "🐷 **Oink oink, it's go time!** Session's open ({start:02d}:00–{end:02d}:00 Europe/Berlin), scanning "
+    "every {interval} min. 📂 {open_count} open trade{plural} riding shotgun from yesterday. "
+    "May the charts be ever in your favor! 📈",
+
+    "🤝 **You've got this.** The session just opened ({start:02d}:00–{end:02d}:00 Europe/Berlin) — I'll be "
+    "scanning every {interval} min so you don't have to stare at candles all day. 📂 {open_count} open "
+    "trade{plural} still in play. One good decision at a time. 💪",
+
+    "🌱 **A new session, a fresh set of possibilities.** Open {start:02d}:00–{end:02d}:00 Europe/Berlin, "
+    "scanning every {interval} min. 📂 {open_count} open trade{plural} from before. Discipline compounds "
+    "just like returns do. 🌿",
+
+    "☕ **Coffee's brewed, charts are loaded.** Session's live ({start:02d}:00–{end:02d}:00 Europe/Berlin), "
+    "scanning every {interval} min. 📂 {open_count} open trade{plural} already on the board. "
+    "Let's not do anything *I'd* regret. 😅",
+
+    "🔥 **Let's go!** Trading session open ({start:02d}:00–{end:02d}:00 Europe/Berlin), scanning every "
+    "{interval} min. 📂 {open_count} open trade{plural} carried in. Small consistent wins beat big risky "
+    "swings. 🏆",
+
+    "🫶 **Good morning.** Whatever yesterday looked like, today's a clean slate. Session's open "
+    "({start:02d}:00–{end:02d}:00 Europe/Berlin), scanning every {interval} min, 📂 {open_count} open "
+    "trade{plural} still open. I'm watching the markets with you. 👀",
+
+    "🚨 **Attention: humans and bots alike.** The market has clocked in ({start:02d}:00–{end:02d}:00 "
+    "Europe/Berlin) and so have I, scanning every {interval} min. 📂 {open_count} open trade{plural} "
+    "pending. Try not to fat-finger anything today. 😄",
+
+    "📖 **Every session is a new page.** Open {start:02d}:00–{end:02d}:00 Europe/Berlin, scanning every "
+    "{interval} min. 📂 {open_count} open trade{plural} from before. Write a good one. ✍️",
+
+    "⚡ **Session's live!** {start:02d}:00–{end:02d}:00 Europe/Berlin, scanning every {interval} min, "
+    "📂 {open_count} open trade{plural} in play. Stay patient, stay sharp, trust the process. 🎯",
+
+    "🐸 **Ribbit.** (That's frog for \"the market's open\".) {start:02d}:00–{end:02d}:00 Europe/Berlin, "
+    "scanning every {interval} min. 📂 {open_count} open trade{plural} hopping along from yesterday. "
+    "Let's catch some good setups. 🪰",
+
+    "🌤️ **However you're feeling today, I've got the scanning covered.** Session open {start:02d}:00–"
+    "{end:02d}:00 Europe/Berlin, every {interval} min. 📂 {open_count} open trade{plural} still on watch. "
+    "Take care of yourself first, the charts will wait. 💛",
+
+    "🧭 **The market doesn't care about yesterday — only today's decisions matter.** Session open "
+    "{start:02d}:00–{end:02d}:00 Europe/Berlin, scanning every {interval} min. 📂 {open_count} open "
+    "trade{plural} carried over. Trade with intention. 🎈",
+
+    "🥐 **Bonjour, traders.** The session has opened its little croissant shop for the day "
+    "({start:02d}:00–{end:02d}:00 Europe/Berlin), scanning every {interval} min. 📂 {open_count} open "
+    "trade{plural} still baking from before. Bon appétit, or whatever the trading equivalent is. 🥖",
+)
+
+_GOODBYE_MESSAGES = (
+    "🌙 **That's a wrap.** Session's closed for today, back at {start:02d}:00 Europe/Berlin tomorrow. "
+    "📂 {open_count} open trade{plural} still being watched overnight. However today went, you showed up "
+    "— that counts. 👋",
+
+    "😴 **The market has officially gone to bed.** See you at {start:02d}:00 Europe/Berlin. 📂 {open_count} "
+    "open trade{plural} sleeping with one eye open overnight. Try to do the same. 🛌",
+
+    "🏁 **Session closed.** Back at {start:02d}:00 Europe/Berlin tomorrow. 📂 {open_count} open "
+    "trade{plural} still on watch. Whatever today's result, tomorrow's a new setup. Keep going. 💪",
+
+    "🌇 **Another session in the books.** Reopens {start:02d}:00 Europe/Berlin. 📂 {open_count} open "
+    "trade{plural} carrying overnight. Not every day needs to be a win — consistency is the real trade. 🌱",
+
+    "🦉 **The night owls take over now.** (Just kidding, nobody's trading, go to sleep.) Back at "
+    "{start:02d}:00 Europe/Berlin. 📂 {open_count} open trade{plural} on overnight watch. 🌌",
+
+    "🤗 **Session's done for today.** Whatever the charts did, you did your part. Reopens {start:02d}:00 "
+    "Europe/Berlin. 📂 {open_count} open trade{plural} still being tracked overnight. Rest up, you "
+    "earned it. 💤",
+
+    "🌟 **Markets closed, but the grind doesn't stop.** Back at {start:02d}:00 Europe/Berlin. "
+    "📂 {open_count} open trade{plural} riding through the night. Review, reflect, come back sharper. 📚",
+
+    "🍕 **Trading's done, dinner's calling.** See you at {start:02d}:00 Europe/Berlin. 📂 {open_count} "
+    "open trade{plural} still open, unlike my patience for hunger right now. 😋",
+
+    "🕯️ **The session closes, but the lessons stay with you.** Reopens {start:02d}:00 Europe/Berlin. "
+    "📂 {open_count} open trade{plural} watched overnight. Every day in the market teaches something, "
+    "if you're paying attention. 🎓",
+
+    "🌆 **That's it for today — well done just for showing up.** Back at {start:02d}:00 Europe/Berlin. "
+    "📂 {open_count} open trade{plural} being watched overnight. See you tomorrow. 💙",
+
+    "🎬 **And... cut!** That's a wrap on today's episode of \"Watching Candles Move.\" Next one airs "
+    "{start:02d}:00 Europe/Berlin. 📂 {open_count} open trade{plural} still in the plot. 🍿",
+
+    "🚀 **Session closed — but growth doesn't clock out.** Back at {start:02d}:00 Europe/Berlin. "
+    "📂 {open_count} open trade{plural} still flying overnight. See you tomorrow, ready to go again. 🌠",
+
+    "🌌 **The market rests, and so should you.** Reopens {start:02d}:00 Europe/Berlin. 📂 {open_count} "
+    "open trade{plural} quietly held overnight. Patience is a position too. 🙏",
+
+    "🧦 **Market's closed, socks are off.** Back at {start:02d}:00 Europe/Berlin. 📂 {open_count} open "
+    "trade{plural} still open somewhere out there in the dark. Sleep well. 😴",
+)
 
 
 def _write_heartbeat() -> None:
@@ -139,6 +270,95 @@ async def _refresh_presence():
         log.debug("Could not update Discord presence: %s", e)
 
 
+async def _check_session_transition(channel) -> None:
+    """
+    Fires a warm welcome message the moment the trading session (see
+    in_session()/config.SESSION_START_HOUR/SESSION_END_HOUR) opens for
+    the day, and a warm goodbye the moment it closes -- distinct from
+    the one-time "Bot online" message (posted once when the PROCESS
+    starts, regardless of session state -- see session_scan's on_ready
+    handler) and from daily_recap (an analytical end-of-day retrospective,
+    not a goodbye). Checked every tick, even while scanning is paused --
+    the session boundary is about market hours, not whether the bot is
+    actively scanning right now.
+
+    _session_was_active starts as None specifically so a bot restart
+    that happens to land mid-session doesn't fire a false "welcome" the
+    instant it reconnects -- the first tick after (re)start just records
+    the current state as a baseline, no message, and only ticks AFTER
+    that can be a genuine transition.
+
+    Which exact message gets sent is randomized every time (see
+    _WELCOME_MESSAGES/_GOODBYE_MESSAGES) -- picking one of a wide, mixed-
+    tone pool instead of always sending the same fixed line is what makes
+    it feel like a fresh, living message instead of a canned template,
+    even though the underlying event (session open/close) is the same
+    every day.
+    """
+    global _session_was_active
+    active = in_session()
+    if _session_was_active is None:
+        _session_was_active = active
+        return
+    if active == _session_was_active:
+        return
+
+    open_count = trade_log.get_stats()["open"]
+    plural = "" if open_count == 1 else "s"
+    pool = _WELCOME_MESSAGES if active else _GOODBYE_MESSAGES
+    message = random.choice(pool).format(
+        start=config.SESSION_START_HOUR, end=config.SESSION_END_HOUR,
+        interval=config.SCAN_INTERVAL_MINUTES, open_count=open_count, plural=plural,
+    )
+    try:
+        await channel.send(message)
+    except Exception as e:
+        log.warning("Could not post session welcome/goodbye message: %s", e)
+    _session_was_active = active
+
+
+async def _post_healthcheck(channel, text: str) -> None:
+    """
+    Posts the per-tick healthcheck message and keeps the channel from
+    accumulating them indefinitely: at most one CLOCK HOUR's worth of
+    healthchecks stay visible at a time. The moment the wall-clock hour
+    rolls over (Europe/Berlin, matching the rest of the session-window
+    logic), every healthcheck message sent during the PREVIOUS hour is
+    deleted before this tick's new one goes up -- so on a busy watchlist
+    scanning every few minutes, the channel doesn't slowly fill up with
+    dozens of near-identical "nothing new" lines over the course of a
+    day; at most the current hour's ticks are ever visible.
+
+    In-memory bucket tracking only (_healthcheck_msgs/_healthcheck_hour_
+    bucket) -- a bot restart just starts a fresh bucket, so the very last
+    hour's messages before a restart may briefly outlive their hour, a
+    harmless one-time exception.
+    """
+    global _healthcheck_msgs, _healthcheck_hour_bucket
+    now = dt.datetime.now(SESSION_TZ)
+    hour_bucket = (now.date(), now.hour)
+
+    if _healthcheck_hour_bucket is not None and hour_bucket != _healthcheck_hour_bucket:
+        for old_msg in _healthcheck_msgs:
+            try:
+                await old_msg.delete()
+            except Exception:
+                pass  # already gone, or too old/no permission -- not worth failing the tick over
+        _healthcheck_msgs = []
+    _healthcheck_hour_bucket = hour_bucket
+
+    try:
+        # silent=True -- a routine per-tick heartbeat, not something worth
+        # a push notification/sound every SCAN_INTERVAL_MINUTES. Sets
+        # Discord's own "suppress notifications" message flag, so it still
+        # posts and appears in the channel normally, it just doesn't
+        # ping/buzz the user's devices the way a real alert still should.
+        msg = await channel.send(text, silent=True)
+        _healthcheck_msgs.append(msg)
+    except Exception as e:
+        log.warning("Could not post healthcheck message: %s", e)
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -169,18 +389,25 @@ async def _session_scan_tick():
     # status dot even when the bot is paused or outside the session window.
     _write_heartbeat()
 
+    # Resolved once, up front, so the session welcome/goodbye check below
+    # can run regardless of pause state (the session boundary is about
+    # market hours, not whether scanning itself is paused) -- the rest of
+    # the tick still early-returns on paused/off-session/missing-config
+    # exactly as before.
+    channel = None
+    if config.DISCORD_CHANNEL_TRADES_ID:
+        channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
+    if channel is not None:
+        await _check_session_transition(channel)
+
     if is_scan_paused():
         log.debug("session_scan tick skipped -- scanning is paused")
         return
     if not in_session():
         log.debug("session_scan tick skipped -- outside the session window")
         return
-    if not config.DISCORD_CHANNEL_TRADES_ID:
-        log.warning("DISCORD_CHANNEL_TRADES_ID not set; skipping scheduled post.")
-        return
-    channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
     if channel is None:
-        log.warning("Could not find channel %s", config.DISCORD_CHANNEL_TRADES_ID)
+        log.warning("DISCORD_CHANNEL_TRADES_ID not set or channel not found; skipping scheduled post.")
         return
 
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
@@ -278,25 +505,24 @@ async def _session_scan_tick():
                 fail_bits.append(f"{f['failed_min_confluence']} below min strategies")
             if f.get("failed_min_confidence", 0):
                 fail_bits.append(f"{f['failed_min_confidence']} below min confidence")
-            fail_str = f" · ❌ failed a requirement: {', '.join(fail_bits)}" if fail_bits else ""
+            bullets = [
+                f"📡 {f['tickers']} tickers scanned",
+                f"🧮 {f['scenarios_found']} scenario(s) found",
+                f"✅ {f['fully_qualifying']} fully qualifying (⏳ {awaiting} still awaiting confirmation{confirm_note})",
+            ]
+            if fail_bits:
+                bullets.append(f"❌ failed a requirement: {', '.join(fail_bits)}")
+            bullets.append(f"📂 {open_count} open trade(s)")
             healthcheck = (
-                f"💓 **Healthcheck** ({now_str}) — 📡 {f['tickers']} tickers scanned → "
-                f"🧮 {f['scenarios_found']} scenario(s) found, ✅ {f['fully_qualifying']} fully qualifying "
-                f"(of which ⏳ {awaiting} still awaiting confirmation{confirm_note}){fail_str} "
-                f"→ nothing new this tick · 📂 {open_count} open trade(s)"
+                f"💓 **Healthcheck** ({now_str}) — nothing new this tick\n"
+                + "\n".join(f"• {b}" for b in bullets)
             )
         else:
-            healthcheck = f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new · 📂 {open_count} open trade(s)"
-        try:
-            # silent=True -- a routine per-tick heartbeat, not something
-            # worth a push notification/sound every SCAN_INTERVAL_MINUTES.
-            # Sets Discord's own "suppress notifications" message flag, so
-            # it still posts and appears in the channel normally, it just
-            # doesn't ping/buzz the user's devices the way a real alert
-            # (new trade plan, trade closed, etc.) still should.
-            await channel.send(healthcheck, silent=True)
-        except Exception as e:
-            log.warning("Could not post healthcheck message: %s", e)
+            healthcheck = (
+                f"💓 **Healthcheck** ({now_str}) — scan complete, nothing new\n"
+                f"• 📂 {open_count} open trade(s)"
+            )
+        await _post_healthcheck(channel, healthcheck)
 
     # Refresh again now that this tick's own scan may have changed the open-
     # trade count (a trade closing mid-scan shouldn't have to wait for next
