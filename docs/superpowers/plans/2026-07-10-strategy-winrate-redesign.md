@@ -1609,7 +1609,7 @@ git commit -m "feat: RSI Divergence reclaim confirmation + Volume Profile node s
 - `elliott_wave3_entries` `entry_levels` values become `{"wave0": p0, "wave1": p1, "wave2": p2}` (additive — existing consumers read `wave1`/`wave2` and keep working).
 - Produces: `elliott_wave_entries`; `DEFAULT_PARAMS["Elliott Wave"] = {"depth_min": 0.30, "depth_max": 0.80}`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_elliott_entry_levels_include_wave0(market_df):
@@ -1643,9 +1643,9 @@ def test_elliott_wave2_depth_gate(market_df):
         assert p["depth_min"] <= depth <= p["depth_max"]
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k elliott -v` — Expected: FAIL (wave0 KeyError / ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k elliott -v` — Expected: FAIL (wave0 KeyError / ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. In `indicators.py`, change both `entry_levels[j] = {"wave1": p1, "wave2": p2}` lines (255 and 261) to:
 
@@ -1694,9 +1694,9 @@ def elliott_wave_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Elliott Wave"] = elliott_wave_entries
 ```
 
-- [ ] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
+- [x] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/indicators.py swingbot/core/entry_filters.py tests/test_entry_filters.py
