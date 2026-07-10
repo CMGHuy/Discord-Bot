@@ -814,7 +814,7 @@ git commit -m "feat: entry_filters module - shared gates, dispatcher, gating mas
 **Interfaces:**
 - Produces: `fibonacci_entries(df, horizon_key, params=None)`; `DEFAULT_PARAMS["Fibonacci"] = {"ratios": (0.382, 0.5, 0.618), "rsi_bull": (35, 58), "rsi_bear": (42, 65)}`; `ENTRY_FUNCS["Fibonacci"]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def _v_shape_down_then_flat():
@@ -847,12 +847,12 @@ def test_fibonacci_bullish_requires_bull_regime(downtrend_df):
     assert not bull.any()
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py -k fibonacci -v`
 Expected: FAIL — `ImportError: cannot import name 'fibonacci_entries'`.
 
-- [ ] **Step 3: Implement** (append to `entry_filters.py`, and register)
+- [x] **Step 3: Implement** (append to `entry_filters.py`, and register)
 
 ```python
 DEFAULT_PARAMS["Fibonacci"] = {
@@ -910,12 +910,12 @@ def fibonacci_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Fibonacci"] = fibonacci_entries
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
