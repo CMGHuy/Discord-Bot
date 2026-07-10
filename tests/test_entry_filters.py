@@ -257,3 +257,34 @@ def test_rsi_divergence_bull_entries_have_turning_rsi(market_df):
     fired = bull[bull].index
     assert (r.loc[fired] > reclaim).all()
     assert (r.loc[fired] > r.shift(1).loc[fired]).all()
+
+
+def test_elliott_entry_levels_include_wave0(market_df):
+    from swingbot.core.indicators import elliott_wave3_entries
+    _, _, levels = elliott_wave3_entries(market_df, 7.0)
+    for lv in levels.values():
+        assert set(lv) == {"wave0", "wave1", "wave2"}
+
+
+def test_elliott_only_fires_on_4w(market_df):
+    from swingbot.core.entry_filters import elliott_wave_entries
+    for hk in ("2w", "2m", "3m", "6m"):
+        bull, bear = elliott_wave_entries(market_df, hk)
+        assert not bull.any() and not bear.any()
+    bull, bear = elliott_wave_entries(market_df, "4w")
+    assert_entry_invariants(bull, bear, market_df)
+
+
+def test_elliott_wave2_depth_gate(market_df):
+    """Every fired entry must correspond to a wave-2 retracing 30-80% of wave 1."""
+    from swingbot.core.entry_filters import elliott_wave_entries, DEFAULT_PARAMS
+    from swingbot.core.indicators import elliott_wave3_entries
+    from swingbot.core.strategy_types import HORIZONS
+    bull, bear = elliott_wave_entries(market_df, "4w")
+    _, _, levels = elliott_wave3_entries(market_df, HORIZONS["4w"]["max_risk_pct"])
+    p = DEFAULT_PARAMS["Elliott Wave"]
+    positions = {market_df.index.get_loc(ts) for ts in bull[bull].index.union(bear[bear].index)}
+    for j in positions:
+        lv = levels[j]
+        depth = abs(lv["wave1"] - lv["wave2"]) / abs(lv["wave1"] - lv["wave0"])
+        assert p["depth_min"] <= depth <= p["depth_max"]

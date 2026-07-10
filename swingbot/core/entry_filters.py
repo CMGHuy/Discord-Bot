@@ -545,3 +545,41 @@ def volume_profile_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS["Volume Profile"] = volume_profile_entries
+
+
+DEFAULT_PARAMS["Elliott Wave"] = {"depth_min": 0.30, "depth_max": 0.80}
+
+
+def elliott_wave_entries(df, horizon_key, params=None):
+    """Wave-3 breakout approximation. Only the 4w horizon fires: 2w pivots
+    are noise, >=2m pivot approximation degrades (documented in the old
+    backtest). Adds the textbook wave-2 depth check (30-80% of wave 1)."""
+    p = _params("Elliott Wave", params)
+    if horizon_key != "4w":
+        return _off(df), _off(df)
+    g = compute_shared_gates(df)
+    threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
+    bull_raw, bear_raw, levels = elliott_wave3_entries(df, threshold_pct)
+
+    depth_ok = _off(df)
+    for j, lv in levels.items():
+        impulse = abs(lv["wave1"] - lv["wave0"])
+        if impulse <= 0:
+            continue
+        depth = abs(lv["wave1"] - lv["wave2"]) / impulse
+        depth_ok.iloc[j] = p["depth_min"] <= depth <= p["depth_max"]
+
+    rsi14 = g["rsi14"]
+    rsi_rising = rsi14 > rsi14.shift(2)
+    rsi_falling = rsi14 < rsi14.shift(2)
+
+    bullish = (bull_raw & depth_ok & (rsi14 > 55) & rsi_rising
+               & g["bull_regime"] & g["trend50_bull"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    bearish = (bear_raw & depth_ok & (rsi14 < 45) & rsi_falling
+               & g["bear_regime"] & g["trend50_bear"]
+               & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+    return bullish, bearish
+
+
+ENTRY_FUNCS["Elliott Wave"] = elliott_wave_entries
