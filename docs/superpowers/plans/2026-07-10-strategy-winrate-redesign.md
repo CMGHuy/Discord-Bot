@@ -1451,7 +1451,7 @@ git commit -m "feat: RSI dip-buy entries with confirmation bar + slope-only regi
 **Interfaces:**
 - Produces: `rsi_divergence_entries`, `volume_profile_entries`; `DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 40}`, `DEFAULT_PARAMS["Volume Profile"] = {"node_share": 8.0, "prox_pct": 1.5}`; helper `_vectorized_hvn(df, lookback, n_bins=20) -> tuple[pd.Series, pd.Series]` returning (hvn_price, hvn_share_pct) per bar.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_hvn_share_sums_correctly():
@@ -1488,9 +1488,9 @@ def test_rsi_divergence_bull_entries_have_turning_rsi(market_df):
     assert (r.loc[fired] > r.shift(1).loc[fired]).all()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "hvn or profile or divergence" -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "hvn or profile or divergence" -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 40}
@@ -1587,9 +1587,9 @@ ENTRY_FUNCS["Volume Profile"] = volume_profile_entries
 
 Extend the test constant: `GATED_BY_MA50 = [..., "RSI Divergence", "Volume Profile"]`.
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
