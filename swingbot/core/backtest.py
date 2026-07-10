@@ -42,7 +42,7 @@ class BacktestTrade:
     entry: float
     stop_loss: float
     take_profit: float
-    outcome: str          # "win" | "loss" | "timeout"
+    outcome: str          # "win" | "loss" | "scratch" | "timeout"
     exit_price: float | None
     return_pct: float | None
     r_multiple: float | None
@@ -59,6 +59,7 @@ class BacktestSummary:
     wins: int
     losses: int
     timeouts: int
+    scratches: int
     win_rate: float | None
     avg_return_pct: float | None
     avg_r_multiple: float | None
@@ -463,7 +464,7 @@ def run_backtest(
     if len(df) < min_bars + 10:
         return BacktestSummary(
             ticker=ticker, strategy=strategy, horizon_key=horizon_key,
-            total_signals=0, evaluated=0, wins=0, losses=0, timeouts=0,
+            total_signals=0, evaluated=0, wins=0, losses=0, timeouts=0, scratches=0,
             win_rate=None, avg_return_pct=None, avg_r_multiple=None,
             expectancy_r=None, max_drawdown_pct=None, avg_holding_days=None,
         )
@@ -512,33 +513,45 @@ def run_backtest(
         if risk_per_share <= 0:
             continue
 
+        close_vals = df["Close"].values
         outcome, exit_price, exit_i = "timeout", None, None
         max_holding_days = HORIZONS[horizon_key]["max_holding_days"]
         end = min(i + max_holding_days, n - 1)
+
+        target_dist = abs(take_profit - entry)
+        if direction == "bullish":
+            be_trigger = entry + BREAKEVEN_TRIGGER_FRACTION * target_dist
+        else:
+            be_trigger = entry - BREAKEVEN_TRIGGER_FRACTION * target_dist
+        stop_moved = False
+
         for j in range(i + 1, end + 1):
             hi, lo = float(high[j]), float(low[j])
+            cur_stop = entry if stop_moved else stop_loss
             if direction == "bullish":
-                hit_stop = lo <= stop_loss
+                hit_stop = lo <= cur_stop
                 hit_target = hi >= take_profit
+                reached_trigger = hi >= be_trigger
             else:
-                hit_stop = hi >= stop_loss
+                hit_stop = hi >= cur_stop
                 hit_target = lo <= take_profit
+                reached_trigger = lo <= be_trigger
 
+            # Conservative ordering: stop first (original stop still governs
+            # the bar that first reaches the trigger), then target. The moved
+            # stop only protects bars AFTER the trigger bar.
             if hit_stop:
-                outcome, exit_price, exit_i = "loss", stop_loss, j
+                outcome = "scratch" if stop_moved else "loss"
+                exit_price, exit_i = cur_stop, j
                 break
-            elif hit_target:
+            if hit_target:
                 outcome, exit_price, exit_i = "win", take_profit, j
                 break
+            if reached_trigger and not stop_moved:
+                stop_moved = True
 
         if outcome == "timeout":
-            _open_until = end
-            trades.append(BacktestTrade(
-                entry_date=str(df.index[i].date()), exit_date=None, direction=direction,
-                entry=round(entry, 4), stop_loss=round(stop_loss, 4), take_profit=round(take_profit, 4),
-                outcome="timeout", exit_price=None, return_pct=None, r_multiple=None, holding_days=None,
-            ))
-            continue
+            exit_price, exit_i = float(close_vals[end]), end
 
         _open_until = exit_i
         sign = 1 if direction == "bullish" else -1
@@ -547,33 +560,32 @@ def run_backtest(
         holding_days = exit_i - i
 
         trades.append(BacktestTrade(
-            entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()), direction=direction,
-            entry=round(entry, 4), stop_loss=round(stop_loss, 4), take_profit=round(take_profit, 4),
-            outcome=outcome, exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
+            entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
+            direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
+            take_profit=round(take_profit, 4), outcome=outcome,
+            exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
         ))
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
-    wins = [t for t in evaluated_trades if t.outcome == "win"]
-    losses = [t for t in evaluated_trades if t.outcome == "loss"]
-    timeouts = [t for t in trades if t.outcome == "timeout"]
+    wins      = [t for t in evaluated_trades if t.outcome == "win"]
+    losses    = [t for t in evaluated_trades if t.outcome == "loss"]
+    scratches = [t for t in trades if t.outcome == "scratch"]
+    timeouts  = [t for t in trades if t.outcome == "timeout"]
 
     win_rate = len(wins) / len(evaluated_trades) * 100 if evaluated_trades else None
-    avg_return_pct = float(np.mean([t.return_pct for t in evaluated_trades])) if evaluated_trades else None
-    avg_r_multiple = float(np.mean([t.r_multiple for t in evaluated_trades])) if evaluated_trades else None
+    avg_return_pct   = float(np.mean([t.return_pct   for t in evaluated_trades])) if evaluated_trades else None
+    avg_r_multiple   = float(np.mean([t.r_multiple   for t in evaluated_trades])) if evaluated_trades else None
     avg_holding_days = float(np.mean([t.holding_days for t in evaluated_trades])) if evaluated_trades else None
 
-    expectancy_r = None
-    if evaluated_trades:
-        p_win = len(wins) / len(evaluated_trades)
-        avg_win_r  = float(np.mean([t.r_multiple for t in wins]))  if wins  else 0.0
-        avg_loss_r = float(np.mean([t.r_multiple for t in losses])) if losses else 0.0
-        expectancy_r = p_win * avg_win_r + (1 - p_win) * avg_loss_r
+    # Expectancy over ALL closed trades -- wins, losses, scratches (~0R) and
+    # timeouts (marked to market). This is the "does it make money" number.
+    expectancy_r = float(np.mean([t.r_multiple for t in trades])) if trades else None
 
     max_drawdown_pct = None
-    if evaluated_trades:
+    if trades:
         equity = [1.0]
-        for t in evaluated_trades:
+        for t in trades:
             equity.append(equity[-1] * (1 + t.return_pct / 100))
         equity = np.array(equity)
         running_max = np.maximum.accumulate(equity)
@@ -584,6 +596,7 @@ def run_backtest(
         ticker=ticker, strategy=strategy, horizon_key=horizon_key,
         total_signals=total_signals, evaluated=len(evaluated_trades),
         wins=len(wins), losses=len(losses), timeouts=len(timeouts),
+        scratches=len(scratches),
         win_rate=win_rate, avg_return_pct=avg_return_pct, avg_r_multiple=avg_r_multiple,
         expectancy_r=expectancy_r, max_drawdown_pct=max_drawdown_pct,
         avg_holding_days=avg_holding_days, trades=trades,
@@ -627,34 +640,34 @@ def run_backtest_daterange(
             t for t in summary.trades
             if from_dt <= t.entry_date <= to_dt
         ]
-        ev = [t for t in summary.trades if t.outcome in ("win", "loss")]
-        wins    = [t for t in ev if t.outcome == "win"]
-        losses  = [t for t in ev if t.outcome == "loss"]
-        timeouts = [t for t in summary.trades if t.outcome == "timeout"]
+        ev       = [t for t in summary.trades if t.outcome in ("win", "loss")]
+        wins     = [t for t in ev if t.outcome == "win"]
+        losses   = [t for t in ev if t.outcome == "loss"]
+        scratches = [t for t in summary.trades if t.outcome == "scratch"]
+        timeouts  = [t for t in summary.trades if t.outcome == "timeout"]
         summary.total_signals = len(summary.trades)
         summary.evaluated     = len(ev)
         summary.wins          = len(wins)
         summary.losses        = len(losses)
         summary.timeouts      = len(timeouts)
+        summary.scratches     = len(scratches)
         summary.win_rate      = len(wins) / len(ev) * 100 if ev else None
-        if ev:
-            summary.avg_return_pct   = float(np.mean([t.return_pct for t in ev]))
-            summary.avg_r_multiple   = float(np.mean([t.r_multiple for t in ev]))
-            summary.avg_holding_days = float(np.mean([t.holding_days for t in ev]))
-            p_win = len(wins) / len(ev)
-            avg_win_r  = float(np.mean([t.r_multiple for t in wins]))  if wins  else 0.0
-            avg_loss_r = float(np.mean([t.r_multiple for t in losses])) if losses else 0.0
-            summary.expectancy_r = p_win * avg_win_r + (1 - p_win) * avg_loss_r
+        if summary.trades:
+            summary.expectancy_r   = float(np.mean([t.r_multiple for t in summary.trades]))
             equity = [1.0]
-            for t in ev:
+            for t in summary.trades:
                 equity.append(equity[-1] * (1 + t.return_pct / 100))
             equity = np.array(equity)
             running_max = np.maximum.accumulate(equity)
-            drawdowns = (equity - running_max) / running_max
-            summary.max_drawdown_pct = float(drawdowns.min() * 100)
+            summary.max_drawdown_pct = float(((equity - running_max) / running_max).min() * 100)
+        else:
+            summary.expectancy_r = summary.max_drawdown_pct = None
+        if ev:
+            summary.avg_return_pct   = float(np.mean([t.return_pct   for t in ev]))
+            summary.avg_r_multiple   = float(np.mean([t.r_multiple   for t in ev]))
+            summary.avg_holding_days = float(np.mean([t.holding_days for t in ev]))
         else:
             summary.avg_return_pct = summary.avg_r_multiple = summary.avg_holding_days = None
-            summary.expectancy_r = summary.max_drawdown_pct = None
     return summary
 
 
