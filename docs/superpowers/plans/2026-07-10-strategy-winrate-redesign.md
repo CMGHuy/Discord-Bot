@@ -54,7 +54,7 @@
 **Interfaces:**
 - Produces: `make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01") -> pd.DataFrame` with columns `Open/High/Low/Close/Volume`, business-day DatetimeIndex; `make_trend_df(n, daily_pct, start_price=100.0, spread_pct=2.0) -> pd.DataFrame`; fixtures `uptrend_df`, `downtrend_df`, `flat_df`, `market_df`; helper `assert_entry_invariants(bull, bear, df)`.
 
-- [ ] **Step 1: Install pytest and record the dependency**
+- [x] **Step 1: Install pytest and record the dependency**
 
 Run: `python -m pip install pytest`
 
@@ -65,7 +65,7 @@ Append to `requirements.txt`:
 pytest>=8.0
 ```
 
-- [ ] **Step 2: Create `tests/__init__.py` (empty) and `tests/conftest.py`**
+- [x] **Step 2: Create `tests/__init__.py` (empty) and `tests/conftest.py`**
 
 ```python
 """Shared synthetic-OHLCV builders for backtest/entry-filter tests.
@@ -134,12 +134,12 @@ def market_df():
     return make_ohlcv(closes, spread_pct=2.0, volumes=vols)
 ```
 
-- [ ] **Step 3: Smoke-run pytest**
+- [x] **Step 3: Smoke-run pytest**
 
 Run: `python -m pytest tests -v`
 Expected: `no tests ran` (exit code 5 is fine — collection works, no tests yet).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add requirements.txt tests/__init__.py tests/conftest.py
@@ -162,7 +162,7 @@ git commit -m "test: add pytest + synthetic OHLCV builders for strategy redesign
   - `STRATEGY_GATES: dict[str, dict]` — `{strategy: {"directions": tuple[str, ...], "horizons": tuple[str, ...]}}`, empty until Task 16
 - `swingbot.core.backtest` continues to expose `STRATEGY_RR_OVERRIDE` (re-export) so `from swingbot.core.backtest import STRATEGY_RR_OVERRIDE` keeps working.
 
-- [ ] **Step 1: Write the failing test** (`tests/test_entry_filters.py`)
+- [x] **Step 1: Write the failing test** (`tests/test_entry_filters.py`)
 
 ```python
 """Tests for strategy_types constants and entry_filters."""
@@ -186,12 +186,12 @@ def test_strategy_gates_shape():
         assert set(gates) <= {"directions", "horizons"}
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: FAIL — `ImportError: cannot import name 'STRATEGY_RR_OVERRIDE' from 'swingbot.core.strategy_types'`.
 
-- [ ] **Step 3: Add constants to `strategy_types.py`** (append after `MACD_PERIODS_BY_HORIZON`)
+- [x] **Step 3: Add constants to `strategy_types.py`** (append after `MACD_PERIODS_BY_HORIZON`)
 
 ```python
 # ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 STRATEGY_GATES: dict[str, dict] = {}
 ```
 
-- [ ] **Step 4: Replace the local table in `backtest.py`**
+- [x] **Step 4: Replace the local table in `backtest.py`**
 
 Delete lines 35–51 (the `STRATEGY_RR_OVERRIDE = {...}` block and its comment). Change line 30 from:
 
@@ -243,12 +243,12 @@ from .strategy import HORIZONS, MIN_BARS, RSI_OVERBOUGHT, RSI_OVERSOLD, FIB_TOLE
 from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: PASS (both tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/strategy_types.py swingbot/core/backtest.py tests/test_entry_filters.py
