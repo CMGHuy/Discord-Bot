@@ -455,7 +455,7 @@ def rsi_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["RSI"] = rsi_entries
 
 
-DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 40}
+DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45}
 
 
 def rsi_divergence_entries(df, horizon_key, params=None):

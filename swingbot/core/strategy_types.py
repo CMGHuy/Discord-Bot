@@ -233,11 +233,32 @@ STRATEGY_RR_OVERRIDE: dict[str, float] = {
 # stop are "scratch" (~0R), not losses. See backtest.py exit engine.
 BREAKEVEN_TRIGGER_FRACTION = 0.5
 
-# Per-strategy gating decided by TRAIN-window tuning (Task 16 fills this in).
+# Per-strategy gating decided by TRAIN-window tuning (Task 19, train window
+# 2020-01-01..2023-12-31, docs/superpowers/results/2026-07-train-tuning.md).
 # {"Strategy Name": {"directions": ("bullish",), "horizons": ("4w", "2m")}}
 # A missing key means both directions, all horizons. entry_filters.entries_for
 # applies the mask, so backtest and live signals both respect it.
-STRATEGY_GATES: dict[str, dict] = {}
+#
+# EMA Crossover and Elliott Wave could not be gated to a passing train config
+# (best reachable subset: EMA Crossover bullish+4w only reaches N=28 < 30;
+# Elliott Wave only fires on 4w and bullish-only there is WR=74.1 ExpR=-0.001)
+# -- left ungated and documented as FAILING in the results doc.
+STRATEGY_GATES: dict[str, dict] = {
+    # bullish-only: N=286 WR=81.8 ExpR=+0.106 excl=27% (train)
+    "Fibonacci": {"directions": ("bullish",)},
+    # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train)
+    "RSI": {"directions": ("bullish",)},
+    # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train)
+    "MA Ribbon": {"directions": ("bullish",)},
+    # bullish + {4w,6m,7m,8m,9m}: N=139 WR=82.0 ExpR=+0.086 excl=20% (train)
+    "VWAP": {"directions": ("bullish",), "horizons": ("4w", "6m", "7m", "8m", "9m")},
+    # bullish + {2m,3m}: N=273 WR=80.6 ExpR=+0.060 excl=32% (train)
+    "Support/Resistance": {"directions": ("bullish",), "horizons": ("2m", "3m")},
+    # bullish + {3m,4m,7m,8m,9m}: N=145 WR=83.4 ExpR=+0.094 excl=26% (train)
+    "MACD": {"directions": ("bullish",), "horizons": ("3m", "4m", "7m", "8m", "9m")},
+    # bullish + {7m}: N=73 WR=82.2 ExpR=+0.106 excl=30% (train)
+    "Volume Profile": {"directions": ("bullish",), "horizons": ("7m",)},
+}
 
 # Minimum bars of history required for each horizon's slowest calculation
 MIN_BARS = {
