@@ -382,3 +382,50 @@ def record_transition(plan: TradePlanV2, new_status: str, reason: str | None = N
         raise ValueError(f"illegal transition {plan.status} -> {new_status}")
     plan.status = new_status
     plan.status_history.append({"status": new_status, "reason": reason, "at": at})
+
+
+# ---------------------------------------------------------------------------
+# Stop-entry trigger + expiry semantics -- single source of truth for a
+# pending stop_entry plan's bar-by-bar fate. Phase 2's exit simulator and
+# Phase 5's live plan manager both call these instead of re-deriving the
+# comparisons, so keep the boundary-equality behavior exactly as documented
+# below (each one was a deliberate spec choice, not an oversight).
+# ---------------------------------------------------------------------------
+
+def trigger_hit(plan: TradePlanV2, bar_high: float, bar_low: float) -> bool:
+    """True when this bar touched the stop_entry trigger. Bullish triggers
+    are breakouts above trigger_price (bar_high >= trigger_price); bearish
+    triggers are breakdowns below it (bar_low <= trigger_price). Touching
+    the trigger exactly counts as a hit."""
+    is_bull = plan.direction == "bullish"
+    if is_bull:
+        return bar_high >= plan.trigger_price
+    return bar_low <= plan.trigger_price
+
+
+def fill_price(plan: TradePlanV2, bar_open: float) -> float:
+    """Worst-of fill for the bar that triggered: if the open already gapped
+    through the trigger, you fill at the (worse) open; otherwise you fill
+    at the trigger itself -- never better than trigger_price."""
+    is_bull = plan.direction == "bullish"
+    if is_bull:
+        return max(bar_open, plan.trigger_price)
+    return min(bar_open, plan.trigger_price)
+
+
+def pending_expired(plan: TradePlanV2, bars_since_created: int) -> bool:
+    """True once a still-pending stop_entry plan has waited longer than its
+    expiry_bars window. Equality does not count as expired -- the plan gets
+    the full expiry_bars-th bar to still trigger."""
+    return bars_since_created > plan.expiry_bars
+
+
+def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
+    """True when price closes through the stop while the plan is still
+    pending (trigger never fired) -- the setup's thesis broke before entry.
+    Bullish: close <= stop_loss; bearish: close >= stop_loss. Closing
+    exactly on the stop counts as invalidated."""
+    is_bull = plan.direction == "bullish"
+    if is_bull:
+        return bar_close <= plan.stop_loss
+    return bar_close >= plan.stop_loss
