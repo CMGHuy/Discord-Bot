@@ -1,10 +1,16 @@
 """Task 21: single-leg exit-walk tests for the shared exit simulator.
 
 Only the win/loss single-leg (scale_out=False) path is in scope here.
-Golden fixtures use a market entry (fills at signal bar's close) so the
-entry phase is unambiguous, then walk straight to either TP1 (win) or the
-stop (loss) with no break-even trigger involved. Scratch/timeout/same-bar
-ordering are Task 22's scope, not tested here.
+Most golden fixtures use a market entry (fills at signal bar's close) so
+the entry phase is unambiguous, then walk straight to either TP1 (win) or
+the stop (loss) with no break-even trigger involved. Scratch/timeout/
+same-bar ordering are Task 22's scope, not tested here.
+
+One additional fixture (below) covers a stop_entry plan's fill flowing
+into this same single-leg walk -- the fill bar establishes entry_index/
+entry_price per Task 18's trigger_hit/fill_price semantics, and the walk
+then proceeds exactly as it would for a market entry starting at
+entry_index+1.
 """
 import pytest
 
@@ -76,6 +82,42 @@ def test_bullish_market_straight_drop_to_stop_is_a_loss():
     assert result.legs[0]["exit_price"] == 95.0
     assert result.legs[0]["fraction"] == pytest.approx(1.0)
     assert result.legs[0]["r"] == pytest.approx(-1.0)
+
+
+# ---------------------------------------------------------------------------
+# stop_entry fill flowing into the single-leg walk
+# ---------------------------------------------------------------------------
+
+def test_bullish_stop_entry_fill_flows_into_single_leg_walk_to_tp1_win():
+    # Bar 1 doesn't yet reach the trigger; bar 2 gaps above it and fills at
+    # max(open, trigger) = 106.0 (Task 18 semantics). risk = 106-101 = 5,
+    # target_dist = 116-106 = 10 -> rr = 2. The walk then starts at
+    # entry_index+1 (bar 3), same as a market entry would, and runs to a
+    # clean TP1 win -- the fill bar itself is never re-checked for stop/tp1.
+    df = make_ohlcv([
+        100.0,                          # 0: signal bar
+        (100.0, 104.0, 99.0, 103.0),    # 1: High 104 < trigger 105 -- no fill
+        (106.0, 107.0, 105.5, 106.5),   # 2: gaps above trigger -- fills at Open=106.0
+        (106.0, 109.0, 105.0, 108.0),   # 3: no stop/target touch, BE trigger (111) not reached
+        (108.0, 112.0, 107.0, 111.0),   # 4: no stop/target touch, High 112 >= BE trigger 111 -- stop moves
+        (111.0, 117.0, 110.0, 114.0),   # 5: High 117 >= tp1 116 -- win
+    ])
+    plan = _plan(entry_type="stop_entry", direction="bullish",
+                 trigger_price=105.0, stop_loss=101.0, tp1=116.0, expiry_bars=5)
+
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=False)
+
+    risk = 106.0 - 101.0
+    rr = (116.0 - 106.0) / risk
+    assert result.outcome == "win"
+    assert result.entry_index == 2
+    assert result.entry_price == 106.0
+    assert result.exit_index == 5
+    assert result.r_total == pytest.approx(rr)
+    assert len(result.legs) == 1
+    assert result.legs[0]["exit_price"] == 116.0
+    assert result.legs[0]["fraction"] == pytest.approx(1.0)
+    assert result.legs[0]["r"] == pytest.approx(rr)
 
 
 # ---------------------------------------------------------------------------
