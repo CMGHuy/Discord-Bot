@@ -321,6 +321,21 @@ FIELDS: list[Field] = [
                "signal to Level 2 (and thus below the default MIN_ALERT_CONFIDENCE_LEVEL=3 gate). "
                "Set 0 to disable the penalty while keeping the counter-trend label visible."),
 
+    # --- Plan Engine v2 (rollout flags, spec 2026-07-11-unified-plan-engine-design) ---
+    Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",
+          type="select", default="off", options=["off", "shadow", "on"],
+          help="off = legacy behavior. shadow = v2 plans are computed and logged to "
+               "data/shadow_plans.jsonl during scans but NOT posted (parity evidence for cutover). "
+               "on = scan alerts price and emit v2 plans (badges, TP1/TP2, entry triggers)."),
+    Field("SCALE_OUT_ENABLED", "SCALE_OUT_ENABLED", "Plan Engine v2", "Scale-out exits enabled",
+          type="checkbox", default="false",
+          help="At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 "
+               "with a chandelier ATR trail. Enable only after PLAN_ENGINE_V2=on has run cleanly."),
+    Field("INTRADAY_MANAGER_V2", "INTRADAY_MANAGER_V2", "Plan Engine v2", "Intraday plan manager enabled",
+          type="checkbox", default="false",
+          help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "
+               "moves, TP1 partials, runner trail, invalidation - with a Discord alert per transition."),
+
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
           default="admin", hot_reloadable=False,
@@ -356,6 +371,13 @@ def _cast(f: Field, raw: str):
         return raw.upper()
     if f.attr in ("MIN_ALERT_CONFIDENCE_LEVEL", "SECONDARY_ALERT_MIN_CONFIDENCE"):
         return int(raw)
+    if f.attr == "PLAN_ENGINE_V2":
+        v = str(raw).lower()
+        if v not in ("off", "shadow", "on"):
+            logging.getLogger("swingbot.config").warning(
+                "invalid PLAN_ENGINE_V2=%r, falling back to 'off'", raw)
+            return "off"
+        return v
     caster = _CASTERS.get(f.type)
     return caster(raw) if caster else raw
 
