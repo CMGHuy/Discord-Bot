@@ -434,13 +434,14 @@ def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
 # ---------------------------------------------------------------------------
 # Phase 2: exit model v2 (hybrid scale-out). simulate_exit is the shared
 # bar-by-bar walk that backtest.py and (eventually) the live plan manager
-# both call. Task 20 builds the ENTRY phase only -- how a signal becomes a
-# filled trade (or a not_triggered stop_entry) -- reusing the Task 18
-# trigger/fill/expiry/invalidation helpers above rather than re-deriving
-# them. The exit walk (win/loss/scratch/timeout/scale-out legs) is Tasks
-# 21-22; until that lands, a successful entry raises NotImplementedError
-# with the resolved entry_index/entry_price attached to the exception so
-# tests can assert the entry phase resolved correctly.
+# both call. Task 20 built the ENTRY phase -- how a signal becomes a filled
+# trade (or a not_triggered stop_entry) -- reusing the Task 18 trigger/fill/
+# expiry/invalidation helpers above rather than re-deriving them. Task 21
+# adds the single-leg (scale_out=False) exit walk's win/loss cases, extracted
+# verbatim from backtest.py's run_backtest loop so scale_out=False reproduces
+# that reference exactly. Scratch/timeout polish and same-bar-ordering edge
+# cases beyond what falls out of the verbatim extraction, plus scale-out legs,
+# are Task 22+.
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -466,6 +467,90 @@ def _not_triggered() -> ExitResult:
     )
 
 
+def _single_leg_exit_walk(
+    df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
+) -> ExitResult:
+    """Round-1 (scale_out=False) exit walk: extracted verbatim from
+    backtest.py's run_backtest loop. Walks bars entry_index+1 .. min(entry_index
+    + max_holding_days, n-1), tracking a break-even stop move once favorable
+    excursion reaches breakeven_trigger_fraction * |tp1 - entry| (the moved
+    stop only protects bars AFTER the trigger bar -- not the trigger bar
+    itself). Same-bar ordering is conservative: stop is checked before target.
+    win -> r = +rr where rr = |tp1 - entry| / risk; loss (stop hit pre-BE
+    move) -> r = -1.0; scratch (stop hit post-BE move) -> r = 0.0; timeout ->
+    r marked to the last scanned bar's close. Single leg always carries
+    fraction=1.0 (round-1 has no partial exits)."""
+    high = df["High"].values
+    low = df["Low"].values
+    close = df["Close"].values
+    n = len(df)
+
+    is_bull = plan.direction == "bullish"
+    sign = 1 if is_bull else -1
+    stop_loss = plan.stop_loss
+    tp1 = plan.tp1
+    risk = abs(entry_price - stop_loss)
+    target_dist = abs(tp1 - entry_price)
+    rr = target_dist / risk if risk > 0 else 0.0
+
+    if is_bull:
+        be_trigger = entry_price + plan.breakeven_trigger_fraction * target_dist
+    else:
+        be_trigger = entry_price - plan.breakeven_trigger_fraction * target_dist
+    stop_moved = False
+
+    end = min(entry_index + max_holding_days, n - 1)
+    outcome, exit_price, exit_index = "timeout", None, None
+
+    for j in range(entry_index + 1, end + 1):
+        hi, lo = float(high[j]), float(low[j])
+        cur_stop = entry_price if stop_moved else stop_loss
+        if is_bull:
+            hit_stop = lo <= cur_stop
+            hit_target = hi >= tp1
+            reached_trigger = hi >= be_trigger
+        else:
+            hit_stop = hi >= cur_stop
+            hit_target = lo <= tp1
+            reached_trigger = lo <= be_trigger
+
+        # Conservative ordering: stop first (original stop still governs the
+        # bar that first reaches the trigger), then target. The moved stop
+        # only protects bars AFTER the trigger bar.
+        if hit_stop:
+            outcome = "scratch" if stop_moved else "loss"
+            exit_price, exit_index = cur_stop, j
+            break
+        if hit_target:
+            outcome, exit_price, exit_index = "win", tp1, j
+            break
+        if reached_trigger and not stop_moved:
+            stop_moved = True
+
+    if outcome == "timeout":
+        exit_price, exit_index = float(close[end]), end
+
+    if outcome == "win":
+        r, reason = rr, "tp1"
+    elif outcome == "loss":
+        r, reason = -1.0, "stop"
+    elif outcome == "scratch":
+        r, reason = 0.0, "breakeven_stop"
+    else:  # timeout
+        r = (exit_price - entry_price) * sign / risk if risk > 0 else 0.0
+        reason = "timeout"
+
+    return ExitResult(
+        outcome=outcome,
+        runner_outcome=None,
+        entry_index=entry_index,
+        exit_index=exit_index,
+        entry_price=entry_price,
+        r_total=r,
+        legs=[{"fraction": 1.0, "exit_price": exit_price, "r": r, "reason": reason}],
+    )
+
+
 def simulate_exit(
     df,
     signal_index: int,
@@ -474,33 +559,35 @@ def simulate_exit(
     scale_out: bool = False,
     max_holding_days: int | None = None,
 ) -> ExitResult:
-    """Entry phase of the shared exit simulator (Task 20).
+    """Shared entry + exit simulator (Tasks 18/20/21).
 
-    ``market`` entries fill immediately at the signal bar's close; the exit
-    walk (from signal_index + 1 onward) is Tasks 21-22 and is not yet
-    implemented -- raises NotImplementedError with entry_index/entry_price
-    attached once the entry is established.
-
+    ``market`` entries fill immediately at the signal bar's close.
     ``stop_entry`` entries scan forward from signal_index + 1 through the
     plan's expiry window looking for a trigger touch (Task 18's
     ``trigger_hit``/``fill_price``). If the plan invalidates (closes through
     the stop) or expires before triggering, this returns a terminal
-    ``ExitResult("not_triggered", ...)`` -- both cases are fully handled by
-    this task. A fill establishes entry_index/entry_price and then raises
-    NotImplementedError the same way a market fill does, since the exit
-    walk beyond that point is out of scope here.
+    ``ExitResult("not_triggered", ...)``.
+
+    Once entry is established, ``scale_out=False`` (the default) walks the
+    single-leg round-1 exit (Task 21): win (TP1 touched), loss (stop hit
+    before the break-even move), scratch (stop hit after the break-even
+    move), or timeout -- extracted verbatim from backtest.py's run_backtest
+    loop. ``scale_out=True`` (multi-leg partial exits) is Task 24+ and still
+    raises NotImplementedError with entry_index/entry_price attached.
     """
-    # Resolved eagerly per the interface contract even though the entry
-    # phase doesn't consume it yet -- Tasks 21-22's exit walk uses it to
-    # bound the timeout scan.
+    # Resolved eagerly per the interface contract -- both the single-leg
+    # (Task 21) and scale-out (Task 24+) exit walks use it to bound the
+    # timeout scan.
     if max_holding_days is None:
         max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
 
     if plan.entry_type == "market":
         entry_index = signal_index
         entry_price = float(df["Close"].values[signal_index])
+        if not scale_out:
+            return _single_leg_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
         err = NotImplementedError(
-            "simulate_exit: exit walk not implemented yet (Tasks 21-22); "
+            "simulate_exit: scale-out exit walk not implemented yet (Task 24+); "
             f"market entry established at entry_index={entry_index}, "
             f"entry_price={entry_price}"
         )
@@ -524,8 +611,10 @@ def simulate_exit(
         if trigger_hit(plan, float(high[j]), float(low[j])):
             entry_index = j
             entry_price = fill_price(plan, float(open_[j]))
+            if not scale_out:
+                return _single_leg_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
             err = NotImplementedError(
-                "simulate_exit: exit walk not implemented yet (Tasks 21-22); "
+                "simulate_exit: scale-out exit walk not implemented yet (Task 24+); "
                 f"stop_entry filled at entry_index={entry_index}, "
                 f"entry_price={entry_price}"
             )

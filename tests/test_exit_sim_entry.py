@@ -1,10 +1,12 @@
 """Task 20: entry-phase tests for the shared exit simulator.
 
 Only the ENTRY phase is in scope here (market fill / stop_entry fill /
-stop_entry not_triggered via expiry or pre-fill invalidation). A
-successful fill (market or stop_entry) raises NotImplementedError with
-entry_index/entry_price attached to the exception, since the exit walk
-itself is Tasks 21-22 -- deliberately out of scope for this task.
+stop_entry not_triggered via expiry or pre-fill invalidation). Since Task
+21, a successful fill's default (scale_out=False) path proceeds into the
+single-leg exit walk instead of raising -- so these tests pass
+scale_out=True to isolate entry resolution and confirm the scale-out path
+(Task 24+) still raises NotImplementedError with entry_index/entry_price
+attached to the exception.
 """
 import pytest
 
@@ -30,12 +32,12 @@ def _plan(**kw):
 # market entry
 # ---------------------------------------------------------------------------
 
-def test_market_entry_establishes_index_and_price_then_raises_not_implemented():
+def test_market_entry_establishes_index_and_price_then_scale_out_raises_not_implemented():
     df = make_ohlcv([100.0, 101.0, 102.5, 103.0, 104.0])
     plan = _plan(entry_type="market")
 
     with pytest.raises(NotImplementedError) as exc_info:
-        simulate_exit(df, signal_index=2, plan=plan)
+        simulate_exit(df, signal_index=2, plan=plan, scale_out=True)
 
     assert exc_info.value.entry_index == 2
     assert exc_info.value.entry_price == 102.5
@@ -57,7 +59,7 @@ def test_stop_entry_fills_on_bar_whose_high_crosses_trigger_at_max_open_trigger(
                  trigger_price=105.0, stop_loss=95.0, expiry_bars=5)
 
     with pytest.raises(NotImplementedError) as exc_info:
-        simulate_exit(df, signal_index=0, plan=plan)
+        simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
 
     assert exc_info.value.entry_index == 2
     assert exc_info.value.entry_price == 106.0  # max(open=106.0, trigger=105.0)
