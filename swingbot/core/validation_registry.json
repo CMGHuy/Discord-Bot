@@ -1,0 +1,13 @@
+[
+  {"source": "strategy", "strategy": "Break & Retest", "horizon": null, "status": "VALIDATED", "n": 148, "win_rate": 83.8, "expectancy_r": 0.094, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "EMA Crossover", "horizon": null, "status": "WEAK", "n": 78, "win_rate": 76.9, "expectancy_r": 0.032, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "Elliott Wave", "horizon": null, "status": "WEAK", "n": 159, "win_rate": 74.8, "expectancy_r": 0.008, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "Fibonacci", "horizon": null, "status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.105, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "MA Ribbon", "horizon": null, "status": "WEAK", "n": 137, "win_rate": 78.1, "expectancy_r": 0.039, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "MACD", "horizon": null, "status": "VALIDATED", "n": 123, "win_rate": 81.3, "expectancy_r": 0.071, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "RSI", "horizon": null, "status": "WEAK", "n": 414, "win_rate": 68.4, "expectancy_r": -0.030, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "RSI Divergence", "horizon": null, "status": "WEAK", "n": 1101, "win_rate": 75.8, "expectancy_r": 0.045, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "Support/Resistance", "horizon": null, "status": "VALIDATED", "n": 190, "win_rate": 86.8, "expectancy_r": 0.117, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "VWAP", "horizon": null, "status": "VALIDATED", "n": 77, "win_rate": 80.5, "expectancy_r": 0.064, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"},
+  {"source": "strategy", "strategy": "Volume Profile", "horizon": null, "status": "VALIDATED", "n": 47, "win_rate": 83.0, "expectancy_r": 0.136, "window": "2024-01-01..2025-12-31", "run_date": "2026-07-10"}
+]
