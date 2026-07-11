@@ -10,6 +10,14 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-11-unified-plan-engine-design.md` — read it before starting any task.
 
+## Progress
+
+> Updated by the executing session after each phase/task batch. Resume from the first unchecked task.
+>
+> - **Branch:** `feature/plan-engine-v2`
+> - **Completed:** Tasks 1–15 (Phase 0, Phase 1 sizing extraction) — 2026-07-11
+> - **Next:** Task 16
+
 ## Global Constraints
 
 - **Windows:** TRAIN = 2020-01-01..2023-12-31; VALIDATION = 2024-01-01..2025-12-31. Tune on TRAIN only. VALIDATION is run **once per component** (exit model v2, confluence gates, each rescue strategy) with pre-registered gates; results reported as-is, never retuned after.
