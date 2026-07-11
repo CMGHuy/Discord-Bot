@@ -490,6 +490,9 @@ def simulate_exit(
     NotImplementedError the same way a market fill does, since the exit
     walk beyond that point is out of scope here.
     """
+    # Resolved eagerly per the interface contract even though the entry
+    # phase doesn't consume it yet -- Tasks 21-22's exit walk uses it to
+    # bound the timeout scan.
     if max_holding_days is None:
         max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
 
