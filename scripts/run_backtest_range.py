@@ -56,6 +56,42 @@ def passes(stats, min_n):
             and stats["excluded_share"] <= 0.5)
 
 
+def build_registry_records(summaries, *, source, window, run_date,
+                           horizon=None, pass_wr=80.0, min_n=15):
+    """Turn pooled per-strategy summaries into validation-registry records.
+
+    A record is VALIDATED only when it clears the acceptance gates on the
+    window it was measured on; everything else (including tiny-N) is WEAK.
+    """
+    recs = []
+    for s in summaries:
+        wr = s.get("win_rate")
+        er = s.get("expectancy_r")
+        validated = (wr is not None and wr >= pass_wr
+                     and er is not None and er > 0
+                     and s["n"] >= min_n)
+        recs.append({"source": source, "strategy": s["strategy"], "horizon": horizon,
+                     "status": "VALIDATED" if validated else "WEAK",
+                     "n": s["n"],
+                     "win_rate": round(wr, 1) if wr is not None else 0.0,
+                     "expectancy_r": round(er, 3) if er is not None else 0.0,
+                     "window": window, "run_date": run_date})
+    return recs
+
+
+def merge_registry(path, new_records):
+    """Merge records into the registry JSON, replacing same-key entries."""
+    path = Path(path)
+    existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    new_keys = {(r["source"], r["strategy"], r.get("horizon")) for r in new_records}
+    kept = [r for r in existing
+            if (r["source"], r["strategy"], r.get("horizon")) not in new_keys]
+    merged = sorted(kept + new_records,
+                    key=lambda r: (r["source"], r["strategy"], str(r.get("horizon"))))
+    path.write_text(json.dumps(merged, indent=1) + "\n", encoding="utf-8")
+    return merged
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--train", action="store_true")
@@ -64,7 +100,14 @@ def main():
     ap.add_argument("--to", dest="date_to")
     ap.add_argument("--strategy", default=None)
     ap.add_argument("--json", dest="json_out", default=None)
+    ap.add_argument("--emit-registry", dest="emit_registry", default=None,
+                    help="path to validation_registry.json to merge records into")
+    ap.add_argument("--run-date", dest="run_date", default=None,
+                    help="YYYY-MM-DD stamped on emitted registry records "
+                         "(required with --emit-registry; explicit for reproducibility)")
     args = ap.parse_args()
+    if args.emit_registry and not args.run_date:
+        ap.error("--emit-registry requires --run-date")
 
     if args.train:
         date_from, date_to, min_n, label = *TRAIN, 30, "TRAIN"
@@ -123,6 +166,13 @@ def main():
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(
             {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, indent=2))
+    if args.emit_registry:
+        summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
+                      "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
+        merge_registry(args.emit_registry, build_registry_records(
+            summaries, source="strategy", window=f"{date_from}..{date_to}",
+            run_date=args.run_date, min_n=min_n))
+        print(f"Merged {len(summaries)} records into {args.emit_registry}")
     print("\nSaved backtest_range_summary.txt")
 
 
