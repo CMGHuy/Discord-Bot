@@ -220,9 +220,8 @@ share):
   2020-2023 window that a train-only evaluation would have missed. Per the
   task constraint, no gate/param was adjusted in response; this is reported,
   not fixed, here.
-- **Five strategies (VWAP, Fibonacci, Support/Resistance, MACD, Volume
-  Profile, Break & Retest -- six, including the ungated one) held up**
-  within a few points of their train numbers, several actually improving
+- **Six strategies (VWAP, Fibonacci, Support/Resistance, MACD, Volume
+  Profile, Break & Retest) held up** within a few points of their train numbers, several actually improving
   (Support/Resistance ExpR +0.060 -> +0.117; Break & Retest +0.061 ->
   +0.094). Fibonacci in particular is nearly identical across both windows,
   the strongest evidence of a real, non-overfit edge.

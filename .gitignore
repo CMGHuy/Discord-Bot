@@ -12,3 +12,5 @@ market_data/
 data/backtest_cache/
 .vscode/
 logs/
+backtest_range_summary.txt
+validation_results.json
