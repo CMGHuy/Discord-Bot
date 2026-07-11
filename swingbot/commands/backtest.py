@@ -100,56 +100,60 @@ def _sync_backtest_watchlist(tickers, horizon, strategy_norm, date_from, date_to
 
 def _format_backtest_table(header, summaries):
     lines = [header, "```"]
-    lines.append(f"{'Strategy':18s} {'Horiz':5s} {'Sig':>4s} {'Eval':>4s} {'Win%':>6s} {'ExpR':>6s} {'MaxDD%':>7s} {'AvgDays':>7s}")
+    lines.append(f"{'Strategy':18s} {'Horiz':5s} {'Sig':>4s} {'Eval':>4s} {'Scr':>4s} {'TO':>4s} {'Win%':>6s} {'ExpR':>6s} {'MaxDD%':>7s} {'AvgDays':>7s}")
     for s in summaries:
         wr = f"{s.win_rate:.0f}" if s.win_rate is not None else "n/a"
         er = f"{s.expectancy_r:.2f}" if s.expectancy_r is not None else "n/a"
         dd = f"{s.max_drawdown_pct:.1f}" if s.max_drawdown_pct is not None else "n/a"
         ad = f"{s.avg_holding_days:.0f}" if s.avg_holding_days is not None else "n/a"
-        lines.append(f"{s.strategy:18s} {s.horizon_key:5s} {s.total_signals:4d} {s.evaluated:4d} {wr:>6s} {er:>6s} {dd:>7s} {ad:>7s}")
+        lines.append(f"{s.strategy:18s} {s.horizon_key:5s} {s.total_signals:4d} {s.evaluated:4d} {s.scratches:4d} {s.timeouts:4d} {wr:>6s} {er:>6s} {dd:>7s} {ad:>7s}")
     lines.append("```")
     lines.append(
-        "Sig=signals, Eval=closed trades, Win%=win rate, ExpR=expectancy in R (>0 = profitable on avg), "
-        "MaxDD%=peak-to-trough drawdown, AvgDays=avg hold.\n"
-        "⚠️ Overlapping trades counted independently, no fees/slippage, survivorship bias."
+        "Sig=signals, Eval=win+loss trades, Scr=break-even scratches, TO=timeouts (marked to market), "
+        "Win%=wins/(wins+losses), ExpR=expectancy in R over ALL closed trades (>0 = profitable).\n"
+        "⚠️ No fees/slippage, survivorship bias."
     )
     return "\n".join(lines)
 
 
 def _format_per_strategy_winrate(summaries):
-    """
-    Collapse a list of BacktestSummary (one per strategy x horizon) down to
-    one row per STRATEGY, combining every horizon it was tested on. This is
-    the number that answers "does this strategy hit 80% win rate", since a
-    per-horizon table can hide a strategy's overall picture across 5 rows.
-    """
+    """One row per STRATEGY (all horizons pooled) -- the number that answers
+    'does this strategy hit 80% win rate AND make money'. The flag requires
+    all three: win rate >= 80, expectancy > 0, and scratches+timeouts <= 50%
+    of closed trades (else the win rate is resting on excluded trades)."""
     from collections import defaultdict
-    agg = defaultdict(lambda: {"evaluated": 0, "wins": 0, "losses": 0, "r_weighted": 0.0})
+    agg = defaultdict(lambda: {"evaluated": 0, "wins": 0, "losses": 0,
+                               "scratches": 0, "timeouts": 0, "r_weighted": 0.0})
     for s in summaries:
-        if not s.evaluated:
+        closed = s.evaluated + s.scratches + s.timeouts
+        if not closed:
             continue
         a = agg[s.strategy]
         a["evaluated"] += s.evaluated
         a["wins"] += s.wins
         a["losses"] += s.losses
+        a["scratches"] += s.scratches
+        a["timeouts"] += s.timeouts
         if s.expectancy_r is not None:
-            a["r_weighted"] += s.expectancy_r * s.evaluated
+            a["r_weighted"] += s.expectancy_r * closed
 
     lines = ["**Win rate by strategy** (all horizons combined):", "```",
-             f"{'Strategy':20s} {'Eval':>5s} {'Win%':>6s} {'ExpR':>7s}  80%+"]
+             f"{'Strategy':20s} {'Eval':>5s} {'Scr':>4s} {'TO':>4s} {'Win%':>6s} {'ExpR':>7s}  Pass"]
     for strat in ALL_STRATEGIES:
         a = agg.get(strat)
-        if not a or a["evaluated"] == 0:
-            lines.append(f"{strat:20s} {'0':>5s}      n/a      n/a  —")
+        closed = (a["evaluated"] + a["scratches"] + a["timeouts"]) if a else 0
+        if not closed or a["evaluated"] == 0:
+            lines.append(f"{strat:20s} {'0':>5s} {'':>4s} {'':>4s}    n/a     n/a  —")
             continue
         wr = a["wins"] / a["evaluated"] * 100
-        er = a["r_weighted"] / a["evaluated"]
-        flag = "✅" if wr >= 80 else "❌"
-        lines.append(f"{strat:20s} {a['evaluated']:5d} {wr:5.1f}% {er:+7.3f}  {flag}")
+        er = a["r_weighted"] / closed
+        excluded_share = (a["scratches"] + a["timeouts"]) / closed
+        flag = "✅" if (wr >= 80 and er > 0 and excluded_share <= 0.5) else "❌"
+        lines.append(f"{strat:20s} {a['evaluated']:5d} {a['scratches']:4d} {a['timeouts']:4d} {wr:5.1f}% {er:+7.3f}  {flag}")
     lines.append("```")
     lines.append(
-        "ExpR = expectancy in R, weighted by trade count (>0 = profitable on average "
-        "per unit risked; a high win rate alone does not mean that)."
+        "Pass = win rate ≥80% AND expectancy >0 AND ≤50% of closed trades excluded "
+        "(scratches/timeouts). ExpR is averaged over ALL closed trades."
     )
     return "\n".join(lines)
 
@@ -320,12 +324,13 @@ def _sync_confluence_watchlist(tickers, min_agree, rr, date_from, date_to):
 async def backtestconfluence_cmd(ctx, *args):
     """
     Alternative to !backtest / !backtestwatchlist: instead of trusting any
-    single strategy (which needs an artificially tiny 0.10-0.12 reward:risk
-    to mechanically clear 80% win rate -- and still comes out net-negative
-    expectancy over 2024, see core/backtest.py's module docstring), this
-    only takes a trade when >=min_agree of the 11 strategies fire the same
-    direction on the same day, using a real reward:risk target (default
-    0.25 -- the exact ratio where 80% win rate is break-even).
+    single strategy (whose own targets are sized at 0.35-0.40x the stop
+    distance -- see core/strategy_types.STRATEGY_RR_OVERRIDE, and the
+    exit engine's break-even/scratch rule in core/backtest.py's module
+    docstring), this only takes a trade when >=min_agree of the 11
+    strategies fire the same direction on the same day, using a real
+    reward:risk target (default 0.25 -- the exact ratio where 80% win
+    rate is break-even).
 
     Usage: !backtestconfluence [min_agree] [rr] [from:YYYY-MM-DD] [to:YYYY-MM-DD]
     Defaults: min_agree=2, rr=0.25, full available history.

@@ -54,7 +54,7 @@
 **Interfaces:**
 - Produces: `make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01") -> pd.DataFrame` with columns `Open/High/Low/Close/Volume`, business-day DatetimeIndex; `make_trend_df(n, daily_pct, start_price=100.0, spread_pct=2.0) -> pd.DataFrame`; fixtures `uptrend_df`, `downtrend_df`, `flat_df`, `market_df`; helper `assert_entry_invariants(bull, bear, df)`.
 
-- [ ] **Step 1: Install pytest and record the dependency**
+- [x] **Step 1: Install pytest and record the dependency**
 
 Run: `python -m pip install pytest`
 
@@ -65,7 +65,7 @@ Append to `requirements.txt`:
 pytest>=8.0
 ```
 
-- [ ] **Step 2: Create `tests/__init__.py` (empty) and `tests/conftest.py`**
+- [x] **Step 2: Create `tests/__init__.py` (empty) and `tests/conftest.py`**
 
 ```python
 """Shared synthetic-OHLCV builders for backtest/entry-filter tests.
@@ -134,12 +134,12 @@ def market_df():
     return make_ohlcv(closes, spread_pct=2.0, volumes=vols)
 ```
 
-- [ ] **Step 3: Smoke-run pytest**
+- [x] **Step 3: Smoke-run pytest**
 
 Run: `python -m pytest tests -v`
 Expected: `no tests ran` (exit code 5 is fine — collection works, no tests yet).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add requirements.txt tests/__init__.py tests/conftest.py
@@ -162,7 +162,7 @@ git commit -m "test: add pytest + synthetic OHLCV builders for strategy redesign
   - `STRATEGY_GATES: dict[str, dict]` — `{strategy: {"directions": tuple[str, ...], "horizons": tuple[str, ...]}}`, empty until Task 16
 - `swingbot.core.backtest` continues to expose `STRATEGY_RR_OVERRIDE` (re-export) so `from swingbot.core.backtest import STRATEGY_RR_OVERRIDE` keeps working.
 
-- [ ] **Step 1: Write the failing test** (`tests/test_entry_filters.py`)
+- [x] **Step 1: Write the failing test** (`tests/test_entry_filters.py`)
 
 ```python
 """Tests for strategy_types constants and entry_filters."""
@@ -186,12 +186,12 @@ def test_strategy_gates_shape():
         assert set(gates) <= {"directions", "horizons"}
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: FAIL — `ImportError: cannot import name 'STRATEGY_RR_OVERRIDE' from 'swingbot.core.strategy_types'`.
 
-- [ ] **Step 3: Add constants to `strategy_types.py`** (append after `MACD_PERIODS_BY_HORIZON`)
+- [x] **Step 3: Add constants to `strategy_types.py`** (append after `MACD_PERIODS_BY_HORIZON`)
 
 ```python
 # ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 STRATEGY_GATES: dict[str, dict] = {}
 ```
 
-- [ ] **Step 4: Replace the local table in `backtest.py`**
+- [x] **Step 4: Replace the local table in `backtest.py`**
 
 Delete lines 35–51 (the `STRATEGY_RR_OVERRIDE = {...}` block and its comment). Change line 30 from:
 
@@ -243,12 +243,12 @@ from .strategy import HORIZONS, MIN_BARS, RSI_OVERBOUGHT, RSI_OVERSOLD, FIB_TOLE
 from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: PASS (both tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/strategy_types.py swingbot/core/backtest.py tests/test_entry_filters.py
@@ -269,7 +269,7 @@ git commit -m "feat: single-source R:R overrides (0.35-0.40) + breakeven/gating 
 - `win_rate` definition unchanged (`wins/(wins+losses)`); `expectancy_r` now averages `r_multiple` over ALL closed trades; `evaluated` stays `wins+losses`.
 - Consumes: `BREAKEVEN_TRIGGER_FRACTION` from Task 2.
 
-- [ ] **Step 1: Write the failing tests** (`tests/test_backtest_engine.py`)
+- [x] **Step 1: Write the failing tests** (`tests/test_backtest_engine.py`)
 
 The tests force one entry at a known bar by monkeypatching `_vectorized_entries`, on data crafted so ATR is deterministic (constant closes, fixed spread → ATR(14) = spread). With close=100, spread 1%: ATR=1.0, risk = 2×ATR = 2 (2w cap is 3% so uncapped), stop=98, target=100 + 2×0.35 = 100.70, break-even trigger = 100.35.
 
@@ -342,12 +342,12 @@ def test_timeout_is_marked_to_market_and_in_expectancy(monkeypatch):
     assert s.win_rate is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/test_backtest_engine.py -v`
 Expected: FAIL — `AttributeError: 'BacktestSummary' object has no attribute 'scratches'` (and/or timeout trades having `exit_price=None`).
 
-- [ ] **Step 3: Implement the engine changes in `backtest.py`**
+- [x] **Step 3: Implement the engine changes in `backtest.py`**
 
 3a. Add to `BacktestSummary` after `timeouts: int` (NO default — later fields like `win_rate` have no defaults, and a defaulted field before them is a dataclass error):
 
@@ -489,12 +489,12 @@ Update the two zero-trade early-return constructions in `run_backtest` (and the 
             summary.avg_return_pct = summary.avg_r_multiple = summary.avg_holding_days = None
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_backtest_engine.py tests/test_entry_filters.py -v`
 Expected: PASS (all).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/backtest.py tests/test_backtest_engine.py
@@ -513,7 +513,7 @@ git commit -m "feat: break-even exit engine, scratch outcome, timeout mark-to-ma
 - `TradePlan` gains `management_note: str` with default `MANAGEMENT_NOTE` (a module constant) — no construction sites need editing.
 - Both ATR-sizing helpers now use `STRATEGY_RR_OVERRIDE.get(result.strategy, h["reward_risk_ratio"])`.
 
-- [ ] **Step 1: Write the failing test** (`tests/test_trade_plan.py`)
+- [x] **Step 1: Write the failing test** (`tests/test_trade_plan.py`)
 
 ```python
 import numpy as np
@@ -551,12 +551,12 @@ def test_plan_carries_management_note():
     assert "stop to entry" in MANAGEMENT_NOTE
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_trade_plan.py -v`
 Expected: FAIL — `ImportError: cannot import name 'MANAGEMENT_NOTE'` (and the R:R assertion would fail with the horizon ratio 0.50).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. Add to `trade_plan.py` imports: `from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_RR_OVERRIDE` and define below the existing constants:
 
@@ -582,12 +582,12 @@ MANAGEMENT_NOTE = (
 
 where `strategy_name` is the strategy string available in that helper's scope — pass `result.strategy` down if the helper doesn't already receive it (check its call sites in `compute_trade_plan` and thread the parameter through).
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_trade_plan.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/trade_plan.py tests/test_trade_plan.py
@@ -610,7 +610,7 @@ git commit -m "feat: trade_plan consumes shared R:R override + break-even manage
   - `entries_for(strategy, df, horizon_key, params=None) -> tuple[pd.Series, pd.Series]` — dispatch + `STRATEGY_GATES` masking.
   - `_rolling_argmax_pos(s, lookback)` / `_rolling_argmin_pos(s, lookback)` helpers (used by Fibonacci, unit-tested here).
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_entry_filters.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_entry_filters.py`)
 
 ```python
 import numpy as np
@@ -669,12 +669,12 @@ def test_entries_for_applies_direction_and_horizon_gates(monkeypatch, uptrend_df
     assert not bull.any() and not bear.any()
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.entry_filters'`.
 
-- [ ] **Step 3: Create `swingbot/core/entry_filters.py`**
+- [x] **Step 3: Create `swingbot/core/entry_filters.py`**
 
 ```python
 """
@@ -791,12 +791,12 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
     return bullish, bearish
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -814,7 +814,7 @@ git commit -m "feat: entry_filters module - shared gates, dispatcher, gating mas
 **Interfaces:**
 - Produces: `fibonacci_entries(df, horizon_key, params=None)`; `DEFAULT_PARAMS["Fibonacci"] = {"ratios": (0.382, 0.5, 0.618), "rsi_bull": (35, 58), "rsi_bear": (42, 65)}`; `ENTRY_FUNCS["Fibonacci"]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def _v_shape_down_then_flat():
@@ -847,12 +847,12 @@ def test_fibonacci_bullish_requires_bull_regime(downtrend_df):
     assert not bull.any()
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py -k fibonacci -v`
 Expected: FAIL — `ImportError: cannot import name 'fibonacci_entries'`.
 
-- [ ] **Step 3: Implement** (append to `entry_filters.py`, and register)
+- [x] **Step 3: Implement** (append to `entry_filters.py`, and register)
 
 ```python
 DEFAULT_PARAMS["Fibonacci"] = {
@@ -910,12 +910,12 @@ def fibonacci_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Fibonacci"] = fibonacci_entries
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_entry_filters.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -933,7 +933,7 @@ git commit -m "feat: Fibonacci entries with swing-direction fix + bounce-bar qua
 **Interfaces:**
 - Produces: `ema_cross_entries`, `vwap_entries`; `DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0}`, `DEFAULT_PARAMS["VWAP"] = {"ext_pct": 1.5, "hold_bars_2w": 3, "hold_bars_other": 2}`; registry entries.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 GATED_BY_MA50 = ["EMA Crossover", "VWAP", "Fibonacci"]  # extended by later tasks
@@ -973,12 +973,12 @@ def test_vwap_entries_flat_market_produces_nothing(flat_df):
     assert not bull.any() and not bear.any()   # atr_floor gate blocks dead tape
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py -k "ema or vwap or trend_gates" -v`
 Expected: FAIL — `ImportError: cannot import name 'ema_cross_entries'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0}
@@ -1054,9 +1054,9 @@ def vwap_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["VWAP"] = vwap_entries
 ```
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -1074,7 +1074,7 @@ git commit -m "feat: EMA Crossover + VWAP entries with slope, extension and mome
 **Interfaces:**
 - Produces: `macd_entries`, `ma_ribbon_entries`; `DEFAULT_PARAMS["MACD"] = {"ext_atr": 1.0}`, `DEFAULT_PARAMS["MA Ribbon"] = {"ext_pct": 8.0}`; registry entries. `RIBBON_PERIODS_BY_HORIZON` module dict (moved from the duplicated inline tables).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_macd_bullish_entries_have_rising_histogram(market_df):
@@ -1100,9 +1100,9 @@ def test_ma_ribbon_slope_agreement(market_df):
     assert (slow_sma.loc[fired] > slow_sma.shift(10).loc[fired]).all()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "macd or ribbon" -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "macd or ribbon" -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["MACD"] = {"ext_atr": 1.0}
@@ -1184,9 +1184,9 @@ ENTRY_FUNCS["MA Ribbon"] = ma_ribbon_entries
 
 Also update the test-file constant: `GATED_BY_MA50 = ["EMA Crossover", "VWAP", "Fibonacci", "MACD", "MA Ribbon"]`.
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -1204,7 +1204,7 @@ git commit -m "feat: MACD + MA Ribbon entries with acceleration and slope filter
 **Interfaces:**
 - Produces: `support_resistance_entries`, `break_retest_entries`; `DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}`, `DEFAULT_PARAMS["Break & Retest"] = {"hold_tol_pct": 0.5}`; `BRT_RECENT_BARS` and `BRT_RETEST_PCT` module dicts (shared with signals.py later).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_sr_bullish_breakout_bar_quality(market_df):
@@ -1235,9 +1235,9 @@ def test_break_retest_entry_bar_bounces(market_df):
     assert (market_df["Close"].loc[fired] > prev_high.loc[fired]).all()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "sr_ or retest" -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "sr_ or retest" -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["Support/Resistance"] = {"base_atr": 4.0, "close_frac": 0.4, "gap_pct": 3.0}
@@ -1338,9 +1338,9 @@ ENTRY_FUNCS["Break & Retest"] = break_retest_entries
 
 Extend the test constant: `GATED_BY_MA50 = [..., "Support/Resistance", "Break & Retest"]`.
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -1358,7 +1358,7 @@ git commit -m "feat: S/R breakout base-quality + Break&Retest hold-and-turn entr
 **Interfaces:**
 - Produces: `rsi_entries`; `DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}`. NOTE: RSI deliberately does NOT use `bull_regime`/`trend50` (dip-buying happens below the averages) — it uses `bull_regime_slope_only`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_rsi_bullish_requires_confirmation_bar(market_df):
@@ -1384,9 +1384,9 @@ def test_rsi_no_bullish_in_sustained_downtrend(downtrend_df):
     assert not bull.any()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k rsi_ -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k rsi_ -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}
@@ -1431,9 +1431,9 @@ def rsi_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["RSI"] = rsi_entries
 ```
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -1451,7 +1451,7 @@ git commit -m "feat: RSI dip-buy entries with confirmation bar + slope-only regi
 **Interfaces:**
 - Produces: `rsi_divergence_entries`, `volume_profile_entries`; `DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 40}`, `DEFAULT_PARAMS["Volume Profile"] = {"node_share": 8.0, "prox_pct": 1.5}`; helper `_vectorized_hvn(df, lookback, n_bins=20) -> tuple[pd.Series, pd.Series]` returning (hvn_price, hvn_share_pct) per bar.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_hvn_share_sums_correctly():
@@ -1488,9 +1488,9 @@ def test_rsi_divergence_bull_entries_have_turning_rsi(market_df):
     assert (r.loc[fired] > r.shift(1).loc[fired]).all()
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "hvn or profile or divergence" -v` — Expected: FAIL (ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k "hvn or profile or divergence" -v` — Expected: FAIL (ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 40}
@@ -1587,9 +1587,9 @@ ENTRY_FUNCS["Volume Profile"] = volume_profile_entries
 
 Extend the test constant: `GATED_BY_MA50 = [..., "RSI Divergence", "Volume Profile"]`.
 
-- [ ] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
+- [x] **Step 4: Run tests** — `python -m pytest tests/test_entry_filters.py -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -1609,7 +1609,7 @@ git commit -m "feat: RSI Divergence reclaim confirmation + Volume Profile node s
 - `elliott_wave3_entries` `entry_levels` values become `{"wave0": p0, "wave1": p1, "wave2": p2}` (additive — existing consumers read `wave1`/`wave2` and keep working).
 - Produces: `elliott_wave_entries`; `DEFAULT_PARAMS["Elliott Wave"] = {"depth_min": 0.30, "depth_max": 0.80}`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_elliott_entry_levels_include_wave0(market_df):
@@ -1643,9 +1643,9 @@ def test_elliott_wave2_depth_gate(market_df):
         assert p["depth_min"] <= depth <= p["depth_max"]
 ```
 
-- [ ] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k elliott -v` — Expected: FAIL (wave0 KeyError / ImportError).
+- [x] **Step 2: Run to verify failure** — `python -m pytest tests/test_entry_filters.py -k elliott -v` — Expected: FAIL (wave0 KeyError / ImportError).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. In `indicators.py`, change both `entry_levels[j] = {"wave1": p1, "wave2": p2}` lines (255 and 261) to:
 
@@ -1694,9 +1694,9 @@ def elliott_wave_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Elliott Wave"] = elliott_wave_entries
 ```
 
-- [ ] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
+- [x] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/indicators.py swingbot/core/entry_filters.py tests/test_entry_filters.py
@@ -1714,7 +1714,7 @@ git commit -m "feat: Elliott Wave entries with wave-2 depth gate (wave0 recorded
 **Interfaces:**
 - `_vectorized_entries(df, strategy, horizon_key)` keeps its exact signature (`backtest_confluence.py` imports it) but becomes a delegation. All per-strategy `if strategy == ...` blocks and their local indicator code are DELETED from `backtest.py`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_vectorized_entries_delegates_to_entry_filters(market_df):
@@ -1728,12 +1728,12 @@ def test_vectorized_entries_delegates_to_entry_filters(market_df):
         assert b1.equals(b2) and s1.equals(s2), strat
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_backtest_engine.py::test_vectorized_entries_delegates_to_entry_filters -v`
 Expected: FAIL — old inline logic differs from `entry_filters` (e.g., Fibonacci direction fix).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the entire `_vectorized_entries` function in `backtest.py` (keep the name and signature, delete all per-strategy blocks) with:
 
@@ -1748,9 +1748,9 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 Remove now-unused imports from `backtest.py` (`ema`, `rsi`, `rolling_vwap`, `elliott_wave3_entries` — keep `atr`; keep `HORIZONS`, `MIN_BARS`; keep `FIB_TOLERANCE_PCT`/`SR_VOLUME_MULTIPLE` only if still referenced by `_trade_plan_at`, check with grep).
 
-- [ ] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS (engine tests from Task 3 still pass because they monkeypatch `_vectorized_entries` itself).
+- [x] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS (engine tests from Task 3 still pass because they monkeypatch `_vectorized_entries` itself).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/backtest.py tests/test_backtest_engine.py
@@ -1769,7 +1769,7 @@ git commit -m "refactor: backtest entries delegate to entry_filters (kills live/
 - Consumes: `entries_for` from Task 5. Add `from .entry_filters import entries_for` to `signals.py` imports.
 - Every signal function keeps its exact signature and `SignalResult` shape.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_live_signals_agree_with_entry_filters(market_df):
@@ -1787,12 +1787,12 @@ def test_live_signals_agree_with_entry_filters(market_df):
                 assert res.trend == ("bullish" if bull.iloc[-1] else "bearish")
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `python -m pytest tests/test_entry_filters.py::test_live_signals_agree_with_entry_filters -v`
 Expected: FAIL for at least some strategies (live logic is currently much looser).
 
-- [ ] **Step 3: Implement — same mechanical change in each of the 11 functions**
+- [x] **Step 3: Implement — same mechanical change in each of the 11 functions**
 
 The pattern: compute `bull_e, bear_e = entries_for("<Strategy Name>", df, horizon_key)` and set `trend`/`triggered` from the LAST bar; keep the function's existing indicator computations only where the `details` dict or bias fallback needs them. Exact replacement for each function's trigger block:
 
@@ -1848,9 +1848,9 @@ The pattern: compute `bull_e, bear_e = entries_for("<Strategy Name>", df, horizo
 
 `rsi_signal`, `macd_signal`, `elliott_wave_signal`, `ma_ribbon_signal`, `break_retest_signal`, `rsi_divergence_signal`, `volume_profile_signal` — identical mechanical replacement with their strategy names (`"RSI"`, `"MACD"`, `"Elliott Wave"`, `"MA Ribbon"`, `"Break & Retest"`, `"RSI Divergence"`, `"Volume Profile"`), keeping each function's existing `else`-branch bias line and `details` construction. For `rsi_divergence_signal`, the divergence-scan loops remain solely to populate `details` when triggered; the `triggered` flag itself must come from `entries_for`.
 
-- [ ] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
+- [x] **Step 4: Run the whole suite** — `python -m pytest tests -v` — Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/signals.py tests/test_entry_filters.py
@@ -1868,7 +1868,7 @@ git commit -m "feat: live signal triggers now use the shared entry filters"
 - Consumes: `BacktestSummary.scratches` from Task 3.
 - The pooled 80% flag becomes ✅ only when `win_rate >= 80 AND expectancy > 0 AND (scratches+timeouts) <= 50% of closed trades`.
 
-- [ ] **Step 1: Update `_format_backtest_table`** — add `Scr`/`TO` columns:
+- [x] **Step 1: Update `_format_backtest_table`** — add `Scr`/`TO` columns:
 
 ```python
 def _format_backtest_table(header, summaries):
@@ -1889,7 +1889,7 @@ def _format_backtest_table(header, summaries):
     return "\n".join(lines)
 ```
 
-- [ ] **Step 2: Update `_format_per_strategy_winrate`**:
+- [x] **Step 2: Update `_format_per_strategy_winrate`**:
 
 ```python
 def _format_per_strategy_winrate(summaries):
@@ -1934,7 +1934,7 @@ def _format_per_strategy_winrate(summaries):
     return "\n".join(lines)
 ```
 
-- [ ] **Step 3: Rewrite the win-rate-vs-expectancy help text** (~line 324) — replace the paragraph explaining that 80% can be "mechanically cleared" at tiny R:R with:
+- [x] **Step 3: Rewrite the win-rate-vs-expectancy help text** (~line 324) — replace the paragraph explaining that 80% can be "mechanically cleared" at tiny R:R with:
 
 ```
 Targets are sized at 0.35–0.40× the stop distance (see STRATEGY_RR_OVERRIDE);
@@ -1944,12 +1944,12 @@ covers half the distance to target, the stop moves to entry — those exits are
 in expectancy. Timeouts are marked to market, not ignored.
 ```
 
-- [ ] **Step 4: Run the suite + import check**
+- [x] **Step 4: Run the suite + import check**
 
 Run: `python -m pytest tests -v && python -c "import swingbot.commands.backtest"`
 Expected: PASS / clean import.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/commands/backtest.py

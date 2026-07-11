@@ -206,6 +206,60 @@ HORIZONS = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Reward:risk per strategy -- SINGLE SOURCE for backtest.py AND trade_plan.py.
+# HARD FLOOR 0.30: break-even win rate at R:R=X is 1/(1+X); at 0.30 that is
+# 76.9%, so an 80% win rate is profitable. Below 0.30 a strategy can clear
+# 80% win rate and still lose money -- never tune below the floor.
+# Mean-reversion-at-structure strategies get 0.40 (they enter at a level, so
+# the bounce has room); trend/breakout strategies get 0.35.
+# ---------------------------------------------------------------------------
+STRATEGY_RR_OVERRIDE: dict[str, float] = {
+    "EMA Crossover":      0.35,
+    "VWAP":               0.35,
+    "Fibonacci":          0.40,
+    "Support/Resistance": 0.35,
+    "RSI":                0.40,
+    "MACD":               0.35,
+    "Elliott Wave":       0.35,
+    "MA Ribbon":          0.35,
+    "Break & Retest":     0.35,
+    "RSI Divergence":     0.40,
+    "Volume Profile":     0.40,
+}
+
+# When a trade's favorable excursion covers this fraction of the distance to
+# target, the stop moves to entry (subsequent bars only). Exits at the moved
+# stop are "scratch" (~0R), not losses. See backtest.py exit engine.
+BREAKEVEN_TRIGGER_FRACTION = 0.5
+
+# Per-strategy gating decided by TRAIN-window tuning (Task 19, train window
+# 2020-01-01..2023-12-31, docs/superpowers/results/2026-07-train-tuning.md).
+# {"Strategy Name": {"directions": ("bullish",), "horizons": ("4w", "2m")}}
+# A missing key means both directions, all horizons. entry_filters.entries_for
+# applies the mask, so backtest and live signals both respect it.
+#
+# EMA Crossover and Elliott Wave could not be gated to a passing train config
+# (best reachable subset: EMA Crossover bullish+4w only reaches N=28 < 30;
+# Elliott Wave only fires on 4w and bullish-only there is WR=74.1 ExpR=-0.001)
+# -- left ungated and documented as FAILING in the results doc.
+STRATEGY_GATES: dict[str, dict] = {
+    # bullish-only: N=286 WR=81.8 ExpR=+0.106 excl=27% (train)
+    "Fibonacci": {"directions": ("bullish",)},
+    # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train)
+    "RSI": {"directions": ("bullish",)},
+    # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train)
+    "MA Ribbon": {"directions": ("bullish",)},
+    # bullish + {4w,6m,7m,8m,9m}: N=139 WR=82.0 ExpR=+0.086 excl=20% (train)
+    "VWAP": {"directions": ("bullish",), "horizons": ("4w", "6m", "7m", "8m", "9m")},
+    # bullish + {2m,3m}: N=273 WR=80.6 ExpR=+0.060 excl=32% (train)
+    "Support/Resistance": {"directions": ("bullish",), "horizons": ("2m", "3m")},
+    # bullish + {3m,4m,7m,8m,9m}: N=145 WR=83.4 ExpR=+0.094 excl=26% (train)
+    "MACD": {"directions": ("bullish",), "horizons": ("3m", "4m", "7m", "8m", "9m")},
+    # bullish + {7m}: N=73 WR=82.2 ExpR=+0.106 excl=30% (train)
+    "Volume Profile": {"directions": ("bullish",), "horizons": ("7m",)},
+}
+
 # Minimum bars of history required for each horizon's slowest calculation
 MIN_BARS = {
     "2w": 20,

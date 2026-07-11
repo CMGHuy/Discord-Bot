@@ -5,10 +5,44 @@ Replays a strategy+horizon combination over historical data using the same
 signal-detection and trade-plan logic as the live bot, then walks forward
 bar-by-bar from each entry to see whether the stop-loss or take-profit was
 hit first (same conservative "stop wins same-day ties" rule used live).
+Entries themselves come from `entry_filters.entries_for` (via
+`_vectorized_entries` below) -- the SAME function the live scanner
+(`signals.py`) calls, so a change to entry logic changes backtest and live
+signals together; they cannot silently drift apart.
 
 This answers the question the live `!performance` command can't yet answer
 early on: "if this strategy had been running for the last N years, would it
 have actually worked?"
+
+Four-outcome taxonomy: every closed trade lands in exactly one bucket.
+  - "win"     -- take-profit hit before stop-loss.
+  - "loss"    -- stop-loss hit before the break-even trigger was reached.
+  - "scratch" -- stop-loss hit AFTER the break-even trigger moved the stop
+    to entry; realized ~0R, not a loss. See BREAKEVEN_TRIGGER_FRACTION in
+    strategy_types.py: once favorable excursion covers that fraction of the
+    distance to target, the stop moves to entry for all subsequent bars.
+  - "timeout" -- neither stop nor target hit within max_holding_days; the
+    trade is marked to market at the closing price on the last bar.
+`win_rate` is computed over win+loss only (scratch/timeout are excluded from
+the numerator/denominator by design -- they didn't "beat the market", they
+were defended). `expectancy_r` is computed over ALL closed trades (wins,
+losses, scratches ~0R, and marked-to-market timeouts) -- that is the "does
+this strategy make money" number, and the one gated on for PASS/FAIL.
+
+R:R floor rationale (`STRATEGY_RR_OVERRIDE`, strategy_types.py): break-even
+win rate at reward:risk ratio X is 1/(1+X); at the hard floor of X=0.30 that
+is 76.9%, so the acceptance bar of WR>=80% is still profitable at the floor.
+R:R is never tuned below 0.30 -- a strategy could clear 80% win rate and
+still lose money if R:R dropped further, which would defeat the point of
+gating on win rate at all.
+
+Per-strategy entry-direction/horizon restrictions (`STRATEGY_GATES`,
+strategy_types.py) were selected by tuning on a 2020-2023 TRAIN window only
+and confirmed once against a 2024-2025 held-out VALIDATION window (see
+`docs/superpowers/results/2026-07-train-tuning.md` and
+`2026-07-validation.md`). Some strategies that passed on train did not
+reproduce on validation -- that gap is reported honestly in the validation
+doc, not papered over by retuning after the fact.
 
 Important limitations (stated plainly, not buried):
   - Trades are evaluated independently; overlapping trades on the same
@@ -19,6 +53,10 @@ Important limitations (stated plainly, not buried):
     they occurred, which is a simplification, not a portfolio simulation.
   - Survivorship bias applies (yfinance only returns tickers that still
     exist today).
+  - Even the strategies that PASS here were tuned/gated against a finite
+    2020-2025 sample; three (RSI, MA Ribbon, RSI Divergence) passed the
+    train window but failed the held-out validation window, a reminder
+    that "passes on cached history" is not a promise of future performance.
 This is a directional sanity check, not a guarantee of future performance.
 """
 from dataclasses import dataclass, field
@@ -26,29 +64,12 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .indicators import ema, rsi, rolling_vwap, atr, elliott_wave3_entries
-from .strategy import HORIZONS, MIN_BARS, RSI_OVERBOUGHT, RSI_OVERSOLD, FIB_TOLERANCE_PCT, SR_VOLUME_MULTIPLE
+from .indicators import atr, elliott_wave3_entries
+from .strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE
+from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 
 STRUCTURE_BUFFER_ATR = 0.25  # extra cushion beyond swing high/low, in units of ATR -- same as trade_plan.py
 SR_VOLUME_STRENGTH_CEILING = 3.0  # same as trade_plan.py
-
-# Per-strategy reward:risk override used in _trade_plan_at.
-# Win-rate tuned: at R:R=X, random-walk gives 1/(1+X) win rate.
-# Any directional signal edge pushes above that floor.
-# Target: >=80% win rate per strategy across backtested data.
-STRATEGY_RR_OVERRIDE: dict[str, float] = {
-    "EMA Crossover":      0.10,   # 91% random-walk floor; bearish gate: ma200_down_120
-    "VWAP":               0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "Fibonacci":          0.10,   # signal fires near resistance too; tight target compensates
-    "Support/Resistance": 0.12,
-    "RSI":                0.10,   # 91% floor; ma200 shift extended to 120 bars
-    "MACD":               0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "Elliott Wave":       0.10,   # 91% floor; RSI-rising filter improves signal quality
-    "MA Ribbon":          0.12,
-    "Break & Retest":     0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "RSI Divergence":     0.10,   # 91% floor (was 0.15); bearish gate: ma200_down_120
-    "Volume Profile":     0.10,   # 91% floor (was 0.12); bearish gate: ma200_down_120
-}
 
 
 @dataclass
@@ -59,7 +80,7 @@ class BacktestTrade:
     entry: float
     stop_loss: float
     take_profit: float
-    outcome: str          # "win" | "loss" | "timeout"
+    outcome: str          # "win" | "loss" | "scratch" | "timeout"
     exit_price: float | None
     return_pct: float | None
     r_multiple: float | None
@@ -76,6 +97,7 @@ class BacktestSummary:
     wins: int
     losses: int
     timeouts: int
+    scratches: int
     win_rate: float | None
     avg_return_pct: float | None
     avg_r_multiple: float | None
@@ -86,280 +108,11 @@ class BacktestSummary:
 
 
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
-    """
-    Returns two boolean Series (bullish_entries, bearish_entries) indexed like df.
-
-    Signal quality filters applied to every strategy:
-      1. Trend alignment: 50 SMA direction for trend-following strategies;
-         200 SMA for RSI (mean-reversion needs only the broader trend intact).
-      2. Minimum ATR: skips signals when market is too flat (ATR < 0.7% of price),
-         because flat markets produce whipsaws that blow up both directions.
-      3. Volume confirmation: entry bar must have >= 90% of 20-day avg volume
-         (avoids thin-tape moves that reverse on the next active session).
-      4. Per-strategy extra conditions (RSI range, MACD zero-line, EMA hold, etc.)
-         tuned to filter out the highest-risk subsets of each signal type.
-
-    Reward:risk is set per STRATEGY_RR_OVERRIDE (tight targets maximise win rate).
-    """
-    h = HORIZONS[horizon_key]
-    close = df["Close"]
-    rsi14  = rsi(close, 14)
-    atr14  = atr(df, 14)
-    atr_ok     = ((atr14 / close.replace(0, np.nan)) >= 0.007).fillna(False)
-    vol_avg    = df["Volume"].rolling(20).mean()
-    vol_ok     = (df["Volume"] >= vol_avg * 0.9).fillna(False)
-    vol_surge  = (df["Volume"] >= vol_avg * 1.2).fillna(False)
-    ma50       = close.rolling(50).mean()
-    ma200      = close.rolling(200).mean()
-    above_50   = (close > ma50).fillna(False)
-    below_50   = (close < ma50).fillna(False)
-    above_200  = (close > ma200).fillna(False)
-    below_200  = (close < ma200).fillna(False)
-    # Long-term bear gate used by all bearish signals: 200 SMA must have been declining
-    # for at least 120 bars (~6 months). Suppresses counter-trend shorts in bull markets.
-    ma200_down_120 = (ma200 < ma200.shift(120)).fillna(False)
-
-    if strategy == "EMA Crossover":
-        fast = ema(close, h["ema_fast"])
-        slow = ema(close, h["ema_slow"])
-        diff = fast - slow
-        # 2-bar hold: crossover happened last bar AND held today (filters fake-outs)
-        held_bull = (diff.shift(2) <= 0) & (diff.shift(1) > 0) & (diff > 0)
-        held_bear = (diff.shift(2) >= 0) & (diff.shift(1) < 0) & (diff < 0)
-        # Prior-pullback filter: RSI must have dipped below 45 in the 5 bars before the
-        # cross, confirming there was an actual pullback (not a signal at the top of a run).
-        rsi_dipped  = rsi14.rolling(5).min().shift(1) < 45
-        rsi_surged  = rsi14.rolling(5).max().shift(1) > 55
-        from swingbot.core.indicators import macd as _macd_ema
-        try:
-            _me = _macd_ema(close)
-            macd_pos = _me["macd"] > 0
-            macd_neg = _me["macd"] < 0
-        except Exception:
-            macd_pos = macd_neg = pd.Series(True, index=close.index)
-        # MACD positive OR RSI > 60 as alternative momentum confirm
-        mom_bull = macd_pos | (rsi14 > 60)
-        mom_bear = macd_neg | (rsi14 < 40)
-        bullish = (held_bull & above_50 & (rsi14 > 50) & rsi_dipped & mom_bull & atr_ok & vol_ok).fillna(False)
-        bearish = (held_bear & below_50 & (rsi14 < 50) & rsi_surged & mom_bear & ma200_down_120 & atr_ok & vol_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "VWAP":
-        vwap = rolling_vwap(df, h["vwap_window"])
-        diff = close - vwap
-        # 3-bar hold for 2w (noisier VWAP window); 2-bar hold for longer horizons
-        if horizon_key == "2w":
-            held_bull = (diff.shift(3) <= 0) & (diff.shift(2) > 0) & (diff.shift(1) > 0) & (diff > 0)
-            held_bear = (diff.shift(3) >= 0) & (diff.shift(2) < 0) & (diff.shift(1) < 0) & (diff < 0)
-        else:
-            held_bull = (diff.shift(2) <= 0) & (diff.shift(1) > 0) & (diff > 0)
-            held_bear = (diff.shift(2) >= 0) & (diff.shift(1) < 0) & (diff < 0)
-        # VWAP trending in same direction confirms momentum
-        vwap_trending_up   = vwap > vwap.shift(3)
-        vwap_trending_down = vwap < vwap.shift(3)
-        bullish = (held_bull & above_50 & (rsi14 > 50) & vwap_trending_up   & atr_ok & vol_ok).fillna(False)
-        bearish = (held_bear & below_50 & (rsi14 < 50) & vwap_trending_down & ma200_down_120 & atr_ok & vol_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "Fibonacci":
-        lookback = h["fib_lookback"]
-        swing_high = df["High"].rolling(lookback).max()
-        swing_low  = df["Low"].rolling(lookback).min()
-        rng = swing_high - swing_low
-        ratios = [0.236, 0.382, 0.5, 0.618, 0.786]
-        levels_df = pd.DataFrame({r: swing_high - r * rng for r in ratios})
-        nearest_distance = levels_df.sub(close, axis=0).abs().min(axis=1)
-        distance_pct = (nearest_distance / rng * 100).replace([np.inf, -np.inf], np.nan)
-        is_testing = (distance_pct <= FIB_TOLERANCE_PCT) & rng.gt(0)
-        # Retracement bounce: price was higher 5 bars ago (pulled back to Fib support),
-        # and is now starting to tick up (bounce beginning). Avoids signals where
-        # price is approaching a Fib level from BELOW (resistance, not support).
-        pulled_back_bull = close.shift(5) > close.shift(1)
-        bouncing_bull    = close > close.shift(1)
-        pulled_back_bear = close.shift(5) < close.shift(1)
-        bouncing_bear    = close < close.shift(1)
-        bullish = (is_testing & pulled_back_bull & bouncing_bull & above_50 & rsi14.between(35, 58) & atr_ok).fillna(False)
-        bearish = (is_testing & pulled_back_bear & bouncing_bear & below_50 & rsi14.between(42, 65) & atr_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "Support/Resistance":
-        lookback = h["sr_lookback"]
-        resistance = df["High"].rolling(lookback).max().shift(1)
-        support    = df["Low"].rolling(lookback).min().shift(1)
-        vol_avg20  = df["Volume"].rolling(20).mean()
-        volume_confirmed = (df["Volume"] / vol_avg20) >= SR_VOLUME_MULTIPLE
-        crossed_up   = (close.shift(1) <= resistance.shift(1)) & (close > resistance)
-        crossed_down = (close.shift(1) >= support.shift(1))    & (close < support)
-        # Volatility regime: skip breakouts during spike regimes (ATR elevated vs 60-bar avg).
-        atr_calm = (atr14 <= atr14.rolling(60).mean() * 1.4).fillna(True)
-        bullish = (crossed_up   & volume_confirmed & above_50 & atr_ok & atr_calm).fillna(False)
-        bearish = (crossed_down & volume_confirmed & below_50 & atr_ok & atr_calm).fillna(False)
-        return bullish, bearish
-
-    if strategy == "RSI":
-        # 2-bar confirmation at RSI<35: catches strong oversold events with enough signals.
-        # 3-bar at RSI<30 is structurally incompatible with uptrend filters (crashes always
-        # push price below all SMAs by bar 3). RSI<35 for 2 bars still filters whipsaws
-        # while firing more often in quality setups.
-        consec_oversold   = (rsi14.shift(1) < 35) & (rsi14.shift(2) < 35)
-        consec_overbought = (rsi14.shift(1) > 65) & (rsi14.shift(2) > 65)
-        crossed_up   = consec_oversold   & (rsi14 >= 35)
-        crossed_down = consec_overbought & (rsi14 <= 65)
-        # ATR-calm: skip high-volatility regimes (crash spikes cause false bounces)
-        atr_calm = (atr14 <= atr14.rolling(60).mean() * 1.5).fillna(True)
-        # Long-term trend: 200 SMA must be sloping up over 60 bars.
-        # This fires even during a sharp crash in a bull market (COVID-style dip-and-recover),
-        # because the 200 SMA is still trending up from prior months.
-        ma200_up   = (ma200 > ma200.shift(120)).fillna(False)
-        ma200_down = (ma200 < ma200.shift(120)).fillna(False)
-        # Recovery confirmation: price must have started reversing (not still in freefall).
-        # Bullish: close above where it was 3 bars ago. Bearish: below 3 bars ago.
-        # This prevents catching falling knives where RSI bounces but price continues down.
-        bounce_started = close > close.shift(3)
-        fade_started   = close < close.shift(3)
-        bullish = (crossed_up   & ma200_up   & bounce_started & (rsi14 < 40) & atr_ok & atr_calm).fillna(False)
-        bearish = (crossed_down & ma200_down & fade_started   & (rsi14 > 60) & atr_ok & atr_calm).fillna(False)
-        return bullish, bearish
-
-    if strategy == "MACD":
-        from swingbot.core.indicators import macd as _macd_fn
-        horizon_to_macd = {
-            "2w": (8, 17, 9), "4w": (12, 26, 9), "2m": (12, 26, 9),
-            "3m": (19, 39, 9), "4m": (21, 43, 9), "5m": (24, 48, 9),
-            "6m": (26, 52, 9), "7m": (28, 56, 9), "8m": (31, 61, 9),
-            "9m": (33, 65, 9),
-        }
-        fast_p, slow_p, sig_p = horizon_to_macd.get(horizon_key, (12, 26, 9))
-        _m = _macd_fn(close, fast=fast_p, slow=slow_p, signal=sig_p)
-        macd_line, signal_line, hist = _m["macd"], _m["signal"], _m["histogram"]
-        diff = macd_line - signal_line
-        crossed_up   = (diff.shift(1) <= 0) & (diff > 0)
-        crossed_down = (diff.shift(1) >= 0) & (diff < 0)
-        # 2-bar histogram hold filters single-bar histogram whipsaws
-        hist_held_bull = (hist.shift(2) <= 0) & (hist.shift(1) > 0) & (hist > 0)
-        hist_held_bear = (hist.shift(2) >= 0) & (hist.shift(1) < 0) & (hist < 0)
-        # Zero-line filter: only bullish signals when MACD is above zero (momentum regime)
-        bullish = ((crossed_up | hist_held_bull) & above_50 & (macd_line > 0) & (rsi14 > 50) & atr_ok).fillna(False)
-        bearish = ((crossed_down | hist_held_bear) & below_50 & (macd_line < 0) & (rsi14 < 50) & ma200_down_120 & atr_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "Elliott Wave":
-        # Simplified wave detection works best at the intermediate 4w horizon.
-        # 2w is too noisy (rapid oscillations create false wave patterns),
-        # 2m/3m/6m are too coarse (pattern approximation degrades). Only 4w fires.
-        if horizon_key in ("2w", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m"):
-            empty = pd.Series(False, index=df.index)
-            return empty, empty
-        threshold_pct = h["max_risk_pct"]
-        bullish_raw, bearish_raw, _ = elliott_wave3_entries(df, threshold_pct)
-        # Trend + momentum confirmation: RSI>55 for 4w (longer holds need strong momentum).
-        # RSI must be rising -- confirms momentum is building behind the wave.
-        rsi_rising  = rsi14 > rsi14.shift(2)
-        rsi_falling = rsi14 < rsi14.shift(2)
-        bullish = (bullish_raw & above_50 & (rsi14 > 55) & rsi_rising  & atr_ok & vol_ok).fillna(False)
-        bearish = (bearish_raw & below_50 & (rsi14 < 45) & rsi_falling & atr_ok & vol_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "MA Ribbon":
-        horizon_to_ribbon = {
-            "2w": (10, 20, 50), "4w": (10, 20, 50),
-            "2m": (20, 50, 100), "3m": (20, 50, 200),
-            "4m": (30, 67, 200), "5m": (40, 83, 200),
-            "6m": (50, 100, 200),
-            "7m": (60, 117, 200), "8m": (70, 133, 200), "9m": (80, 150, 200),
-        }
-        fast_p, mid_p, slow_p = horizon_to_ribbon.get(horizon_key, (10, 20, 50))
-        fast = ema(close, fast_p)
-        mid  = ema(close, mid_p)
-        slow_sma = close.rolling(slow_p).mean()
-        diff = fast - mid
-        crossed_up   = (diff.shift(1) <= 0) & (diff > 0) & (fast > slow_sma) & (mid > slow_sma)
-        crossed_down = (diff.shift(1) >= 0) & (diff < 0) & (fast < slow_sma) & (mid < slow_sma)
-        # "Not extended" filter: price within 8% of slow SMA, RSI in moderate zone
-        not_extended_bull = (close <= slow_sma * 1.08) & rsi14.between(48, 70)
-        not_extended_bear = (close >= slow_sma * 0.92) & rsi14.between(30, 52)
-        from swingbot.core.indicators import macd as _macd_rib
-        try:
-            _mr = _macd_rib(close)
-            macd_pos_r = _mr["macd"] > 0
-            macd_neg_r = _mr["macd"] < 0
-        except Exception:
-            macd_pos_r = macd_neg_r = pd.Series(True, index=close.index)
-        bullish = (crossed_up   & above_50 & not_extended_bull & macd_pos_r & atr_ok & vol_ok).fillna(False)
-        bearish = (crossed_down & below_50 & not_extended_bear & macd_neg_r & atr_ok & vol_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "Break & Retest":
-        lookback = h["sr_lookback"]
-        resistance = df["High"].rolling(lookback).max().shift(lookback)
-        support    = df["Low"].rolling(lookback).min().shift(lookback)
-        vol_avg    = df["Volume"].rolling(20).mean()
-        vol_ratio  = df["Volume"] / vol_avg
-        recent_bars = {
-            "2w": 10, "4w": 15, "2m": 20, "3m": 25,
-            "4m": 27, "5m": 28, "6m": 30, "7m": 32, "8m": 33, "9m": 35,
-        }.get(horizon_key, 10)
-        broke_up = (df["High"].rolling(recent_bars).max().shift(1) > resistance) & (vol_ratio.rolling(recent_bars).max().shift(1) >= SR_VOLUME_MULTIPLE)
-        broke_dn = (df["Low"].rolling(recent_bars).min().shift(1) < support)    & (vol_ratio.rolling(recent_bars).max().shift(1) >= SR_VOLUME_MULTIPLE)
-        dist_to_res = (close - resistance) / resistance.replace(0, np.nan) * 100
-        dist_to_sup = (close - support)    / support.replace(0, np.nan)    * 100
-        atr_calm_brt = (atr14 <= atr14.rolling(60).mean() * 1.4).fillna(True)
-        # Tighter retest zone for noisy horizons (2w, 3m); wider for clean ones (4w, 2m).
-        retest_pct = {
-            "2w": 1.0, "4w": 1.5, "2m": 1.5, "3m": 1.0,
-            "4m": 1.5, "5m": 1.5, "6m": 1.5, "7m": 1.5, "8m": 1.5, "9m": 1.5,
-        }.get(horizon_key, 1.0)
-        bullish = (broke_up & dist_to_res.between(0, retest_pct) & above_50 & rsi14.between(42, 63) & atr_ok & atr_calm_brt).fillna(False)
-        bearish = (broke_dn & dist_to_sup.between(-retest_pct, 0) & below_50 & rsi14.between(37, 58) & ma200_down_120 & atr_ok & atr_calm_brt).fillna(False)
-        return bullish, bearish
-
-    if strategy == "RSI Divergence":
-        lb = 20
-        # Bullish divergence: price makes higher low but RSI makes lower low -> momentum building
-        # Bearish divergence: price makes lower high but RSI makes higher high -> exhaustion
-        price_hl = close > close.rolling(lb).min().shift(lb)
-        rsi_ll   = rsi14 < rsi14.rolling(lb).min().shift(lb)
-        price_lh = close < close.rolling(lb).max().shift(lb)
-        rsi_hh   = rsi14 > rsi14.rolling(lb).max().shift(lb)
-        # Bullish: trend must be up (above MA50), bearish: require confirmed 6-month downtrend
-        bullish = (above_50 & price_hl & rsi_ll & rsi14.between(28, 52) & atr_ok & vol_ok).fillna(False)
-        bearish = (ma200_down_120 & price_lh & rsi_hh & rsi14.between(48, 72) & atr_ok & vol_ok).fillna(False)
-        return bullish, bearish
-
-    if strategy == "Volume Profile":
-        lookback = h["sr_lookback"]
-        # Vectorized HVN calc (numpy, no per-bar DataFrame.iterrows()) -- identical
-        # bins/HVN definition as the original, ~150x faster. iterrows() on a
-        # `lookback`-row window for every single bar in the series made this by
-        # far the slowest strategy to backtest (O(n * lookback) with heavy
-        # pandas overhead); this does the same math on raw numpy arrays.
-        _high = df["High"].values
-        _low = df["Low"].values
-        _vol = df["Volume"].values
-        _mid = (_high + _low) / 2
-        _n_bars = len(df)
-        _n_bins = 20
-        _hvn = np.full(_n_bars, np.nan)
-        for _i in range(lookback, _n_bars):
-            _lo_idx = _i - lookback
-            _pmin = _low[_lo_idx:_i].min()
-            _pmax = _high[_lo_idx:_i].max()
-            _rng = _pmax - _pmin
-            if _rng <= 0:
-                continue
-            _m = _mid[_lo_idx:_i]
-            _idx = np.minimum(((_m - _pmin) / _rng * _n_bins).astype(int), _n_bins - 1)
-            _bins = np.bincount(_idx, weights=_vol[_lo_idx:_i], minlength=_n_bins)
-            _hvn[_i] = _pmin + (_bins.argmax() + 0.5) * _rng / _n_bins
-        hvn_series = pd.Series(_hvn, index=df.index)
-        dist_pct = (close - hvn_series) / hvn_series.replace(0, np.nan) * 100
-        # RSI range filter ensures we're entering at a value level, not chasing extremes.
-        # Bearish also requires confirmed 6-month downtrend via ma200_down_120.
-        bullish = (dist_pct.between(0, 1.5) & above_50 & rsi14.between(44, 64) & atr_ok & vol_ok).fillna(False)
-        bearish = (dist_pct.between(-1.5, 0) & below_50 & rsi14.between(36, 56) & ma200_down_120 & atr_ok & vol_ok).fillna(False)
-        return bullish, bearish
-
-    raise ValueError(f"Unknown strategy: {strategy}")
+    """Single source of entry logic lives in entry_filters.py -- shared with
+    the live scanner so backtest and live signals cannot drift. Kept as a
+    named function here because backtest_confluence.py imports it."""
+    from .entry_filters import entries_for
+    return entries_for(strategy, df, horizon_key)
 
 
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
@@ -480,7 +233,7 @@ def run_backtest(
     if len(df) < min_bars + 10:
         return BacktestSummary(
             ticker=ticker, strategy=strategy, horizon_key=horizon_key,
-            total_signals=0, evaluated=0, wins=0, losses=0, timeouts=0,
+            total_signals=0, evaluated=0, wins=0, losses=0, timeouts=0, scratches=0,
             win_rate=None, avg_return_pct=None, avg_r_multiple=None,
             expectancy_r=None, max_drawdown_pct=None, avg_holding_days=None,
         )
@@ -529,33 +282,45 @@ def run_backtest(
         if risk_per_share <= 0:
             continue
 
+        close_vals = df["Close"].values
         outcome, exit_price, exit_i = "timeout", None, None
         max_holding_days = HORIZONS[horizon_key]["max_holding_days"]
         end = min(i + max_holding_days, n - 1)
+
+        target_dist = abs(take_profit - entry)
+        if direction == "bullish":
+            be_trigger = entry + BREAKEVEN_TRIGGER_FRACTION * target_dist
+        else:
+            be_trigger = entry - BREAKEVEN_TRIGGER_FRACTION * target_dist
+        stop_moved = False
+
         for j in range(i + 1, end + 1):
             hi, lo = float(high[j]), float(low[j])
+            cur_stop = entry if stop_moved else stop_loss
             if direction == "bullish":
-                hit_stop = lo <= stop_loss
+                hit_stop = lo <= cur_stop
                 hit_target = hi >= take_profit
+                reached_trigger = hi >= be_trigger
             else:
-                hit_stop = hi >= stop_loss
+                hit_stop = hi >= cur_stop
                 hit_target = lo <= take_profit
+                reached_trigger = lo <= be_trigger
 
+            # Conservative ordering: stop first (original stop still governs
+            # the bar that first reaches the trigger), then target. The moved
+            # stop only protects bars AFTER the trigger bar.
             if hit_stop:
-                outcome, exit_price, exit_i = "loss", stop_loss, j
+                outcome = "scratch" if stop_moved else "loss"
+                exit_price, exit_i = cur_stop, j
                 break
-            elif hit_target:
+            if hit_target:
                 outcome, exit_price, exit_i = "win", take_profit, j
                 break
+            if reached_trigger and not stop_moved:
+                stop_moved = True
 
         if outcome == "timeout":
-            _open_until = end
-            trades.append(BacktestTrade(
-                entry_date=str(df.index[i].date()), exit_date=None, direction=direction,
-                entry=round(entry, 4), stop_loss=round(stop_loss, 4), take_profit=round(take_profit, 4),
-                outcome="timeout", exit_price=None, return_pct=None, r_multiple=None, holding_days=None,
-            ))
-            continue
+            exit_price, exit_i = float(close_vals[end]), end
 
         _open_until = exit_i
         sign = 1 if direction == "bullish" else -1
@@ -564,33 +329,32 @@ def run_backtest(
         holding_days = exit_i - i
 
         trades.append(BacktestTrade(
-            entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()), direction=direction,
-            entry=round(entry, 4), stop_loss=round(stop_loss, 4), take_profit=round(take_profit, 4),
-            outcome=outcome, exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
+            entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
+            direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
+            take_profit=round(take_profit, 4), outcome=outcome,
+            exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
         ))
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
-    wins = [t for t in evaluated_trades if t.outcome == "win"]
-    losses = [t for t in evaluated_trades if t.outcome == "loss"]
-    timeouts = [t for t in trades if t.outcome == "timeout"]
+    wins      = [t for t in evaluated_trades if t.outcome == "win"]
+    losses    = [t for t in evaluated_trades if t.outcome == "loss"]
+    scratches = [t for t in trades if t.outcome == "scratch"]
+    timeouts  = [t for t in trades if t.outcome == "timeout"]
 
     win_rate = len(wins) / len(evaluated_trades) * 100 if evaluated_trades else None
-    avg_return_pct = float(np.mean([t.return_pct for t in evaluated_trades])) if evaluated_trades else None
-    avg_r_multiple = float(np.mean([t.r_multiple for t in evaluated_trades])) if evaluated_trades else None
+    avg_return_pct   = float(np.mean([t.return_pct   for t in evaluated_trades])) if evaluated_trades else None
+    avg_r_multiple   = float(np.mean([t.r_multiple   for t in evaluated_trades])) if evaluated_trades else None
     avg_holding_days = float(np.mean([t.holding_days for t in evaluated_trades])) if evaluated_trades else None
 
-    expectancy_r = None
-    if evaluated_trades:
-        p_win = len(wins) / len(evaluated_trades)
-        avg_win_r  = float(np.mean([t.r_multiple for t in wins]))  if wins  else 0.0
-        avg_loss_r = float(np.mean([t.r_multiple for t in losses])) if losses else 0.0
-        expectancy_r = p_win * avg_win_r + (1 - p_win) * avg_loss_r
+    # Expectancy over ALL closed trades -- wins, losses, scratches (~0R) and
+    # timeouts (marked to market). This is the "does it make money" number.
+    expectancy_r = float(np.mean([t.r_multiple for t in trades])) if trades else None
 
     max_drawdown_pct = None
-    if evaluated_trades:
+    if trades:
         equity = [1.0]
-        for t in evaluated_trades:
+        for t in trades:
             equity.append(equity[-1] * (1 + t.return_pct / 100))
         equity = np.array(equity)
         running_max = np.maximum.accumulate(equity)
@@ -601,6 +365,7 @@ def run_backtest(
         ticker=ticker, strategy=strategy, horizon_key=horizon_key,
         total_signals=total_signals, evaluated=len(evaluated_trades),
         wins=len(wins), losses=len(losses), timeouts=len(timeouts),
+        scratches=len(scratches),
         win_rate=win_rate, avg_return_pct=avg_return_pct, avg_r_multiple=avg_r_multiple,
         expectancy_r=expectancy_r, max_drawdown_pct=max_drawdown_pct,
         avg_holding_days=avg_holding_days, trades=trades,
@@ -644,34 +409,34 @@ def run_backtest_daterange(
             t for t in summary.trades
             if from_dt <= t.entry_date <= to_dt
         ]
-        ev = [t for t in summary.trades if t.outcome in ("win", "loss")]
-        wins    = [t for t in ev if t.outcome == "win"]
-        losses  = [t for t in ev if t.outcome == "loss"]
-        timeouts = [t for t in summary.trades if t.outcome == "timeout"]
+        ev       = [t for t in summary.trades if t.outcome in ("win", "loss")]
+        wins     = [t for t in ev if t.outcome == "win"]
+        losses   = [t for t in ev if t.outcome == "loss"]
+        scratches = [t for t in summary.trades if t.outcome == "scratch"]
+        timeouts  = [t for t in summary.trades if t.outcome == "timeout"]
         summary.total_signals = len(summary.trades)
         summary.evaluated     = len(ev)
         summary.wins          = len(wins)
         summary.losses        = len(losses)
         summary.timeouts      = len(timeouts)
+        summary.scratches     = len(scratches)
         summary.win_rate      = len(wins) / len(ev) * 100 if ev else None
-        if ev:
-            summary.avg_return_pct   = float(np.mean([t.return_pct for t in ev]))
-            summary.avg_r_multiple   = float(np.mean([t.r_multiple for t in ev]))
-            summary.avg_holding_days = float(np.mean([t.holding_days for t in ev]))
-            p_win = len(wins) / len(ev)
-            avg_win_r  = float(np.mean([t.r_multiple for t in wins]))  if wins  else 0.0
-            avg_loss_r = float(np.mean([t.r_multiple for t in losses])) if losses else 0.0
-            summary.expectancy_r = p_win * avg_win_r + (1 - p_win) * avg_loss_r
+        if summary.trades:
+            summary.expectancy_r   = float(np.mean([t.r_multiple for t in summary.trades]))
             equity = [1.0]
-            for t in ev:
+            for t in summary.trades:
                 equity.append(equity[-1] * (1 + t.return_pct / 100))
             equity = np.array(equity)
             running_max = np.maximum.accumulate(equity)
-            drawdowns = (equity - running_max) / running_max
-            summary.max_drawdown_pct = float(drawdowns.min() * 100)
+            summary.max_drawdown_pct = float(((equity - running_max) / running_max).min() * 100)
+        else:
+            summary.expectancy_r = summary.max_drawdown_pct = None
+        if ev:
+            summary.avg_return_pct   = float(np.mean([t.return_pct   for t in ev]))
+            summary.avg_r_multiple   = float(np.mean([t.r_multiple   for t in ev]))
+            summary.avg_holding_days = float(np.mean([t.holding_days for t in ev]))
         else:
             summary.avg_return_pct = summary.avg_r_multiple = summary.avg_holding_days = None
-            summary.expectancy_r = summary.max_drawdown_pct = None
     return summary
 
 

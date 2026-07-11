@@ -1,0 +1,112 @@
+== TRAIN 2020-01-01 .. 2023-12-31 | pass: WR>=80, ExpR>0, N>=30, excl<=50% ==
+Strategy                   N   Win%    ExpR   Scr    TO  Excl%  PASS
+EMA Crossover            111   68.5  -0.056    40     0    26%  FAIL
+VWAP                     454   75.1  +0.011   130     0    22%  FAIL
+Fibonacci                473   77.2  +0.060   161     0    25%  FAIL
+Support/Resistance      1849   77.7  +0.034   791     3    30%  FAIL
+RSI                     1095   77.0  +0.057   403     0    27%  FAIL
+MACD                     990   74.6  +0.006   288     0    23%  FAIL
+Elliott Wave             317   75.7  +0.015   121     1    28%  FAIL
+MA Ribbon                371   78.4  +0.045   116     0    24%  FAIL
+Break & Retest           357   80.4  +0.061   143     0    29%  PASS
+RSI Divergence          1816   80.2  +0.090   651     0    26%  PASS
+Volume Profile          2633   74.2  +0.028  1057     1    29%  FAIL
+
+-- per strategy x horizon (for gating decisions) --
+Strategy               Horiz      N   Win%    ExpR
+Break & Retest         2m        49   89.8  +0.133
+Break & Retest         2w        34   70.6  -0.034
+Break & Retest         3m        21   76.2  +0.018
+Break & Retest         4m        42   78.6  +0.046
+Break & Retest         4w        85   77.6  +0.036
+Break & Retest         5m        35   77.1  +0.027
+Break & Retest         6m        30   86.7  +0.131
+Break & Retest         7m        25   92.0  +0.189
+Break & Retest         8m        17   82.4  +0.079
+Break & Retest         9m        19   73.7  -0.004
+EMA Crossover          2m        10   70.0  -0.032
+EMA Crossover          2w        57   61.4  -0.141
+EMA Crossover          3m         3   66.7  -0.100
+EMA Crossover          4w        40   80.0  +0.052
+EMA Crossover          5m         1    0.0  -1.000
+Elliott Wave           4w       317   75.7  +0.015
+Fibonacci              2m        49   73.5  +0.020
+Fibonacci              2w        90   68.9  -0.030
+Fibonacci              3m        43   83.7  +0.123
+Fibonacci              4m        46   84.8  +0.154
+Fibonacci              4w       134   81.3  +0.101
+Fibonacci              5m        34   82.4  +0.116
+Fibonacci              6m        28   75.0  +0.036
+Fibonacci              7m        16   68.8  -0.022
+Fibonacci              8m        17   70.6  -0.008
+Fibonacci              9m        16   68.8  -0.026
+MA Ribbon              2m        18   88.9  +0.124
+MA Ribbon              2w       130   72.3  -0.020
+MA Ribbon              3m        22   81.8  +0.059
+MA Ribbon              4m        32   84.4  +0.111
+MA Ribbon              4w       118   79.7  +0.058
+MA Ribbon              5m        18   88.9  +0.157
+MA Ribbon              6m        16   62.5  -0.132
+MA Ribbon              7m         9  100.0  +0.263
+MA Ribbon              8m         3  100.0  +0.210
+MA Ribbon              9m         5   80.0  +0.040
+MACD                   2m       166   74.7  +0.006
+MACD                   2w       390   72.1  -0.024
+MACD                   3m        52   76.9  +0.026
+MACD                   4m        48   77.1  +0.028
+MACD                   4w       171   74.3  +0.002
+MACD                   5m        39   74.4  +0.003
+MACD                   6m        34   73.5  -0.005
+MACD                   7m        34   82.4  +0.076
+MACD                   8m        28   85.7  +0.105
+MACD                   9m        28   85.7  +0.110
+RSI                    2m       109   75.2  +0.039
+RSI                    2w       130   72.3  +0.011
+RSI                    3m       108   78.7  +0.073
+RSI                    4m       107   78.5  +0.071
+RSI                    4w       108   74.1  +0.027
+RSI                    5m       107   78.5  +0.071
+RSI                    6m       107   78.5  +0.071
+RSI                    7m       107   78.5  +0.071
+RSI                    8m       107   78.5  +0.071
+RSI                    9m       105   78.1  +0.066
+RSI Divergence         2m       179   81.0  +0.098
+RSI Divergence         2w       219   72.6  +0.014
+RSI Divergence         3m       177   81.4  +0.100
+RSI Divergence         4m       178   80.9  +0.096
+RSI Divergence         4w       183   80.3  +0.092
+RSI Divergence         5m       176   81.8  +0.104
+RSI Divergence         6m       177   81.4  +0.100
+RSI Divergence         7m       177   81.4  +0.100
+RSI Divergence         8m       177   81.4  +0.100
+RSI Divergence         9m       173   81.5  +0.100
+Support/Resistance     2m       202   80.2  +0.057
+Support/Resistance     2w       371   68.5  -0.066
+Support/Resistance     3m       174   82.2  +0.074
+Support/Resistance     4m       158   80.4  +0.056
+Support/Resistance     4w       266   79.7  +0.054
+Support/Resistance     5m       145   79.3  +0.045
+Support/Resistance     6m       142   78.9  +0.041
+Support/Resistance     7m       137   78.8  +0.041
+Support/Resistance     8m       133   79.7  +0.048
+Support/Resistance     9m       121   80.2  +0.051
+VWAP                   2m        59   69.5  -0.047
+VWAP                   2w       129   72.1  -0.022
+VWAP                   3m        34   73.5  -0.005
+VWAP                   4m        20   80.0  +0.057
+VWAP                   4w        97   77.3  +0.034
+VWAP                   5m        21   71.4  -0.028
+VWAP                   6m        22   81.8  +0.070
+VWAP                   7m        30   86.7  +0.134
+VWAP                   8m        26   76.9  +0.031
+VWAP                   9m        16   75.0  +0.011
+Volume Profile         2m       348   75.9  +0.043
+Volume Profile         2w       749   72.2  +0.008
+Volume Profile         3m       238   72.3  +0.008
+Volume Profile         4m       203   74.4  +0.027
+Volume Profile         4w       478   75.3  +0.038
+Volume Profile         5m       167   73.7  +0.020
+Volume Profile         6m       143   72.0  +0.006
+Volume Profile         7m       116   81.9  +0.098
+Volume Profile         8m       100   78.0  +0.062
+Volume Profile         9m        91   74.7  +0.032

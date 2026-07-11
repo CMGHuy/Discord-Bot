@@ -252,13 +252,13 @@ def elliott_wave3_entries(df: pd.DataFrame, threshold_pct: float):
             for j in range(idx2 + 1, n):
                 if close[j] > p1 and close[j - 1] <= p1:
                     bullish.iloc[j] = True
-                    entry_levels[j] = {"wave1": p1, "wave2": p2}
+                    entry_levels[j] = {"wave0": p0, "wave1": p1, "wave2": p2}
                     break
         elif kind0 == "high" and kind1 == "low" and kind2 == "high" and p2 < p0:
             for j in range(idx2 + 1, n):
                 if close[j] < p1 and close[j - 1] >= p1:
                     bearish.iloc[j] = True
-                    entry_levels[j] = {"wave1": p1, "wave2": p2}
+                    entry_levels[j] = {"wave0": p0, "wave1": p1, "wave2": p2}
                     break
 
     return bullish, bearish, entry_levels
