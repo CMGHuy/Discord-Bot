@@ -13,6 +13,13 @@ def _fake_result(strategy, horizon="4w", trend="bullish", close=100.0):
     )
 
 
+def test_compute_trade_plan_is_deprecated():
+    from swingbot.core.trade_plan import compute_trade_plan
+    df = make_trend_df(300, +0.1)
+    with pytest.warns(DeprecationWarning):
+        compute_trade_plan(_fake_result("VWAP", close=float(df["Close"].iloc[-1])), df)
+
+
 def test_atr_sized_plan_uses_strategy_rr_override():
     from swingbot.core.trade_plan import compute_trade_plan
     from swingbot.core.strategy_types import STRATEGY_RR_OVERRIDE

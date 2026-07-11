@@ -32,6 +32,7 @@ This is a mechanical, rule-based sizing -- not a guarantee the trade
 will play out this way. It exists to make each alert concrete and
 back-testable, not to promise an outcome.
 """
+import warnings
 from dataclasses import dataclass
 
 import pandas as pd
@@ -73,6 +74,10 @@ class TradePlan:
 
 
 def compute_trade_plan(result, df: pd.DataFrame) -> TradePlan:
+    warnings.warn(
+        "compute_trade_plan is deprecated; sizing lives in "
+        "plan_engine.build_strategy_plan (deleted at v2 cutover, plan Task 91)",
+        DeprecationWarning, stacklevel=2)
     h = HORIZONS[result.horizon_key]
     is_bull = result.trend == "bullish"
     market_price = result.close
@@ -334,77 +339,37 @@ def _suggested_entry(result, df, market_price, h):
 
 
 def _fibonacci_plan(result, h, entry, atr_val, is_bull):
-    swing_high = result.details["Swing high"]
-    swing_low = result.details["Swing low"]
-    buffer = STRUCTURE_BUFFER_ATR * atr_val
+    from .plan_engine import _fibonacci_plan as _pe_fibonacci_plan
 
-    if is_bull:
-        stop_loss = swing_low - buffer
-        take_profit = swing_high
-    else:
-        stop_loss = swing_high + buffer
-        take_profit = swing_low
-
+    direction = "bullish" if is_bull else "bearish"
+    stop_loss, take_profit = _pe_fibonacci_plan(
+        entry, atr_val, result.details["Swing high"], result.details["Swing low"],
+        direction, result.horizon_key)
+    override_rr = STRATEGY_RR_OVERRIDE.get(result.strategy)
     method = (
         f"Structure-based ({h['label']}): stop beyond the swing low/high "
-        f"(from the last {h['fib_lookback']} bars), target the opposite end of the range"
+        f"(from the last {h['fib_lookback']} bars), risk-capped at {h['max_risk_pct']}% of entry"
+        + (f"; target = {override_rr:.1f}:1 reward:risk (per-strategy override)"
+           if override_rr is not None else
+           f"; target bounded {h['min_structure_rr']}-{h['max_structure_rr']}:1 for this horizon")
     )
-
-    max_risk_pct = h["max_risk_pct"]
-    max_risk_amount = entry * (max_risk_pct / 100)
-    risk_now = abs(entry - stop_loss)
-    if risk_now > max_risk_amount:
-        stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
-        method += f"; stop capped at {max_risk_pct}% of entry (swing low/high was unrealistically far away)"
-
-    risk_now = abs(entry - stop_loss)
-    override_rr = STRATEGY_RR_OVERRIDE.get(result.strategy)
-    if override_rr is not None:
-        take_profit = entry + risk_now * override_rr if is_bull else entry - risk_now * override_rr
-        method += f"; target = {override_rr:.1f}:1 reward:risk (per-strategy override)"
-    else:
-        min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
-        reward_now = abs(take_profit - entry)
-        target_rr = reward_now / risk_now if risk_now > 0 else min_rr
-        target_rr = max(min_rr, min(max_rr, target_rr))
-        if abs(target_rr - (reward_now / risk_now if risk_now > 0 else 0)) > 1e-9:
-            bounded_reward = risk_now * target_rr
-            take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
-            method += f"; target set to {target_rr:.1f}:1 reward:risk (bounded {min_rr}-{max_rr}:1 for this horizon)"
-
     return stop_loss, take_profit, method
 
 
 def _support_resistance_plan(result, h, entry, is_bull):
-    stop_pct = h["sr_stop_pct"]
-    target_min_pct = h["sr_target_min_pct"]
-    target_max_pct = h["sr_target_max_pct"]
+    from .plan_engine import _sr_plan as _pe_sr_plan
 
+    direction = "bullish" if is_bull else "bearish"
     volume_ratio = result.details.get("Volume ratio", SR_VOLUME_MULTIPLE)
-    strength = (volume_ratio - SR_VOLUME_MULTIPLE) / (SR_VOLUME_STRENGTH_CEILING - SR_VOLUME_MULTIPLE)
-    strength = max(0.0, min(1.0, strength))
-    target_pct = target_min_pct + (target_max_pct - target_min_pct) * strength
-
-    if is_bull:
-        stop_loss = entry * (1 - stop_pct / 100)
-    else:
-        stop_loss = entry * (1 + stop_pct / 100)
-
+    stop_loss, take_profit = _pe_sr_plan(entry, volume_ratio, direction, result.horizon_key)
     override_rr = STRATEGY_RR_OVERRIDE.get(result.strategy)
-    if override_rr is not None:
-        risk = abs(entry - stop_loss)
-        take_profit = entry + risk * override_rr if is_bull else entry - risk * override_rr
-        method = (
-            f"Breakout sizing ({h['label']}): stop fixed at {stop_pct}% of entry, "
-            f"target = {override_rr:.1f}:1 reward:risk (per-strategy override)"
-        )
-    else:
-        take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
-        method = (
-            f"Breakout sizing ({h['label']}): stop fixed at {stop_pct}% of entry, "
-            f"target {target_pct:.0f}% (scaled between {target_min_pct:.0f}-{target_max_pct:.0f}% "
-            f"by breakout volume strength -- {volume_ratio:.1f}x the 20-day average)"
-        )
+    method = (
+        f"Breakout sizing ({h['label']}): stop fixed at {h['sr_stop_pct']}% of entry, "
+        + (f"target = {override_rr:.1f}:1 reward:risk (per-strategy override)"
+           if override_rr is not None else
+           f"target scaled {h['sr_target_min_pct']:.0f}-{h['sr_target_max_pct']:.0f}% by breakout "
+           f"volume strength ({volume_ratio:.1f}x the 20-day average)")
+    )
     return stop_loss, take_profit, method
 
 
@@ -416,51 +381,31 @@ def _elliott_wave_plan(result, h, entry, atr_val, is_bull):
     since wave 3 length isn't reliably predictable from wave 1 alone
     without a full discretionary count.
     """
-    buffer = STRUCTURE_BUFFER_ATR * atr_val
-    if is_bull:
-        wave2_low = result.details["Wave 2 low"]
-        stop_loss = wave2_low - buffer
-    else:
-        wave2_high = result.details["Wave 2 high"]
-        stop_loss = wave2_high + buffer
+    from .plan_engine import _elliott_plan as _pe_elliott_plan
 
-    method = f"Elliott Wave sizing ({h['label']}): stop beyond the wave 2 pivot (invalidation point)"
-
-    max_risk_pct = h["max_risk_pct"]
-    max_risk_amount = entry * (max_risk_pct / 100)
-    risk_now = abs(entry - stop_loss)
-    if risk_now > max_risk_amount:
-        stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
-        method += f"; stop capped at {max_risk_pct}% of entry (wave 2 pivot was unrealistically far away)"
-
-    risk_now = abs(entry - stop_loss)
+    direction = "bullish" if is_bull else "bearish"
+    wave2 = result.details["Wave 2 low"] if is_bull else result.details["Wave 2 high"]
+    stop_loss, take_profit = _pe_elliott_plan(entry, atr_val, wave2, direction, result.horizon_key)
     rr = STRATEGY_RR_OVERRIDE.get(result.strategy, h["reward_risk_ratio"])
-    take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
-    method += f"; target = {rr:.1f}:1 reward:risk (wave 3 length isn't reliably predictable, so this uses the horizon's standard ratio rather than a wave-count projection)"
-
+    method = (
+        f"Elliott Wave sizing ({h['label']}): stop beyond the wave 2 pivot (invalidation "
+        f"point), risk-capped at {h['max_risk_pct']}% of entry; target = {rr:.1f}:1 "
+        f"reward:risk (wave 3 length isn't reliably predictable, so this uses the "
+        f"strategy's standard ratio rather than a wave-count projection)"
+    )
     return stop_loss, take_profit, method
 
 
-def _volatility_plan(h, entry, atr_val, is_bull, strategy_name=None):
-    risk_distance = h["atr_stop_multiple"] * atr_val
+def _volatility_plan(h, entry, atr_val, is_bull, strategy_name=None, horizon_key=None):
+    from .plan_engine import _atr_plan as _pe_atr_plan
+
+    if horizon_key is None:  # tolerate old call sites during migration
+        horizon_key = next(k for k, v in HORIZONS.items() if v is h)
+    direction = "bullish" if is_bull else "bearish"
+    stop_loss, take_profit = _pe_atr_plan(entry, atr_val, direction, horizon_key, strategy_name)
     rr = STRATEGY_RR_OVERRIDE.get(strategy_name, h["reward_risk_ratio"])
-
-    max_risk_pct = h["max_risk_pct"]
-    max_risk_amount = entry * (max_risk_pct / 100)
-    capped_note = ""
-    if risk_distance > max_risk_amount:
-        risk_distance = max_risk_amount
-        capped_note = f"; stop capped at {max_risk_pct}% of entry"
-
-    if is_bull:
-        stop_loss = entry - risk_distance
-        take_profit = entry + risk_distance * rr
-    else:
-        stop_loss = entry + risk_distance
-        take_profit = entry - risk_distance * rr
-
     method = (
-        f"Volatility-based ({h['label']}): stop = {h['atr_stop_multiple']}x ATR(14), "
-        f"target = {rr:.1f}:1 reward:risk{capped_note}"
+        f"Volatility-based ({h['label']}): stop = {h['atr_stop_multiple']}x ATR(14) "
+        f"(capped at {h['max_risk_pct']}% of entry), target = {rr:.1f}:1 reward:risk"
     )
     return stop_loss, take_profit, method
