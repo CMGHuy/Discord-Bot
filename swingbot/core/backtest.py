@@ -5,10 +5,44 @@ Replays a strategy+horizon combination over historical data using the same
 signal-detection and trade-plan logic as the live bot, then walks forward
 bar-by-bar from each entry to see whether the stop-loss or take-profit was
 hit first (same conservative "stop wins same-day ties" rule used live).
+Entries themselves come from `entry_filters.entries_for` (via
+`_vectorized_entries` below) -- the SAME function the live scanner
+(`signals.py`) calls, so a change to entry logic changes backtest and live
+signals together; they cannot silently drift apart.
 
 This answers the question the live `!performance` command can't yet answer
 early on: "if this strategy had been running for the last N years, would it
 have actually worked?"
+
+Four-outcome taxonomy: every closed trade lands in exactly one bucket.
+  - "win"     -- take-profit hit before stop-loss.
+  - "loss"    -- stop-loss hit before the break-even trigger was reached.
+  - "scratch" -- stop-loss hit AFTER the break-even trigger moved the stop
+    to entry; realized ~0R, not a loss. See BREAKEVEN_TRIGGER_FRACTION in
+    strategy_types.py: once favorable excursion covers that fraction of the
+    distance to target, the stop moves to entry for all subsequent bars.
+  - "timeout" -- neither stop nor target hit within max_holding_days; the
+    trade is marked to market at the closing price on the last bar.
+`win_rate` is computed over win+loss only (scratch/timeout are excluded from
+the numerator/denominator by design -- they didn't "beat the market", they
+were defended). `expectancy_r` is computed over ALL closed trades (wins,
+losses, scratches ~0R, and marked-to-market timeouts) -- that is the "does
+this strategy make money" number, and the one gated on for PASS/FAIL.
+
+R:R floor rationale (`STRATEGY_RR_OVERRIDE`, strategy_types.py): break-even
+win rate at reward:risk ratio X is 1/(1+X); at the hard floor of X=0.30 that
+is 76.9%, so the acceptance bar of WR>=80% is still profitable at the floor.
+R:R is never tuned below 0.30 -- a strategy could clear 80% win rate and
+still lose money if R:R dropped further, which would defeat the point of
+gating on win rate at all.
+
+Per-strategy entry-direction/horizon restrictions (`STRATEGY_GATES`,
+strategy_types.py) were selected by tuning on a 2020-2023 TRAIN window only
+and confirmed once against a 2024-2025 held-out VALIDATION window (see
+`docs/superpowers/results/2026-07-train-tuning.md` and
+`2026-07-validation.md`). Some strategies that passed on train did not
+reproduce on validation -- that gap is reported honestly in the validation
+doc, not papered over by retuning after the fact.
 
 Important limitations (stated plainly, not buried):
   - Trades are evaluated independently; overlapping trades on the same
@@ -19,6 +53,10 @@ Important limitations (stated plainly, not buried):
     they occurred, which is a simplification, not a portfolio simulation.
   - Survivorship bias applies (yfinance only returns tickers that still
     exist today).
+  - Even the strategies that PASS here were tuned/gated against a finite
+    2020-2025 sample; three (RSI, MA Ribbon, RSI Divergence) passed the
+    train window but failed the held-out validation window, a reminder
+    that "passes on cached history" is not a promise of future performance.
 This is a directional sanity check, not a guarantee of future performance.
 """
 from dataclasses import dataclass, field
