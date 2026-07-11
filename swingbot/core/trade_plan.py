@@ -357,15 +357,20 @@ def _fibonacci_plan(result, h, entry, atr_val, is_bull):
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
         method += f"; stop capped at {max_risk_pct}% of entry (swing low/high was unrealistically far away)"
 
-    min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
     risk_now = abs(entry - stop_loss)
-    reward_now = abs(take_profit - entry)
-    target_rr = reward_now / risk_now if risk_now > 0 else min_rr
-    target_rr = max(min_rr, min(max_rr, target_rr))
-    if abs(target_rr - (reward_now / risk_now if risk_now > 0 else 0)) > 1e-9:
-        bounded_reward = risk_now * target_rr
-        take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
-        method += f"; target set to {target_rr:.1f}:1 reward:risk (bounded {min_rr}-{max_rr}:1 for this horizon)"
+    override_rr = STRATEGY_RR_OVERRIDE.get(result.strategy)
+    if override_rr is not None:
+        take_profit = entry + risk_now * override_rr if is_bull else entry - risk_now * override_rr
+        method += f"; target = {override_rr:.1f}:1 reward:risk (per-strategy override)"
+    else:
+        min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
+        reward_now = abs(take_profit - entry)
+        target_rr = reward_now / risk_now if risk_now > 0 else min_rr
+        target_rr = max(min_rr, min(max_rr, target_rr))
+        if abs(target_rr - (reward_now / risk_now if risk_now > 0 else 0)) > 1e-9:
+            bounded_reward = risk_now * target_rr
+            take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
+            method += f"; target set to {target_rr:.1f}:1 reward:risk (bounded {min_rr}-{max_rr}:1 for this horizon)"
 
     return stop_loss, take_profit, method
 
@@ -382,16 +387,24 @@ def _support_resistance_plan(result, h, entry, is_bull):
 
     if is_bull:
         stop_loss = entry * (1 - stop_pct / 100)
-        take_profit = entry * (1 + target_pct / 100)
     else:
         stop_loss = entry * (1 + stop_pct / 100)
-        take_profit = entry * (1 - target_pct / 100)
 
-    method = (
-        f"Breakout sizing ({h['label']}): stop fixed at {stop_pct}% of entry, "
-        f"target {target_pct:.0f}% (scaled between {target_min_pct:.0f}-{target_max_pct:.0f}% "
-        f"by breakout volume strength -- {volume_ratio:.1f}x the 20-day average)"
-    )
+    override_rr = STRATEGY_RR_OVERRIDE.get(result.strategy)
+    if override_rr is not None:
+        risk = abs(entry - stop_loss)
+        take_profit = entry + risk * override_rr if is_bull else entry - risk * override_rr
+        method = (
+            f"Breakout sizing ({h['label']}): stop fixed at {stop_pct}% of entry, "
+            f"target = {override_rr:.1f}:1 reward:risk (per-strategy override)"
+        )
+    else:
+        take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
+        method = (
+            f"Breakout sizing ({h['label']}): stop fixed at {stop_pct}% of entry, "
+            f"target {target_pct:.0f}% (scaled between {target_min_pct:.0f}-{target_max_pct:.0f}% "
+            f"by breakout volume strength -- {volume_ratio:.1f}x the 20-day average)"
+        )
     return stop_loss, take_profit, method
 
 
