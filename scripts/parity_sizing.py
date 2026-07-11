@@ -20,6 +20,14 @@ Prints the count compared, the max abs deviation seen, and the mismatch
 count (deviation > 1e-6); exits 1 if any mismatch is found. A mismatch here
 is a real correctness bug in the plan_engine extraction -- investigate it,
 do not loosen TOLERANCE or edit the frozen reference to make this pass.
+
+KNOWN EXCEPTION: plan_engine._rr_for() applies an RR_FLOOR = 0.30 clamp that
+the frozen legacy_trade_plan_at does not. This is currently inert (no real
+strategy/horizon R:R approaches 0.30), so mismatches from this clamp are not
+observed today. If a mismatch ever traces back to this specific RR_FLOOR clamp,
+that divergence is EXPECTED — the frozen module represents pre-clamp legacy
+behavior and must remain unchanged. Do not edit legacy_trade_plan_at or loosen
+TOLERANCE because of RR_FLOOR differences.
 """
 import sys
 import warnings

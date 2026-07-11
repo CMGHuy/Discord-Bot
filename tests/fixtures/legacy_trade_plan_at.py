@@ -21,6 +21,14 @@ their own identical copy today). They are reproduced here as literals
 instead of imported from plan_engine.py, which would silently couple this
 "old" reference to the "new" implementation it is supposed to be
 independent of.
+
+KNOWN INTENTIONAL DIVERGENCE: plan_engine._rr_for() applies an RR_FLOOR = 0.30
+clamp to the reward:risk ratio, which this frozen module does NOT have. This
+is currently inert because no real strategy/horizon ever approaches an R:R of
+0.30 (STRATEGY_RR_OVERRIDE min is 0.35, HORIZONS reward_risk_ratio min is 0.40).
+If a future mismatch trace-back points to this specific clamp, that divergence
+is EXPECTED and intentional — do not edit this frozen reference to add the floor;
+it represents the pre-floor legacy behavior that must remain frozen.
 """
 import numpy as np
 
