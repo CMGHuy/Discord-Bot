@@ -429,3 +429,108 @@ def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
     if is_bull:
         return bar_close <= plan.stop_loss
     return bar_close >= plan.stop_loss
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: exit model v2 (hybrid scale-out). simulate_exit is the shared
+# bar-by-bar walk that backtest.py and (eventually) the live plan manager
+# both call. Task 20 builds the ENTRY phase only -- how a signal becomes a
+# filled trade (or a not_triggered stop_entry) -- reusing the Task 18
+# trigger/fill/expiry/invalidation helpers above rather than re-deriving
+# them. The exit walk (win/loss/scratch/timeout/scale-out legs) is Tasks
+# 21-22; until that lands, a successful entry raises NotImplementedError
+# with the resolved entry_index/entry_price attached to the exception so
+# tests can assert the entry phase resolved correctly.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ExitResult:
+    outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"
+    runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|None
+    entry_index: int | None
+    exit_index: int | None
+    entry_price: float | None
+    r_total: float               # sum over legs of fraction * signed_r
+    legs: list                   # [{"fraction","exit_price","r","reason"}]
+
+
+def _not_triggered() -> ExitResult:
+    return ExitResult(
+        outcome="not_triggered",
+        runner_outcome=None,
+        entry_index=None,
+        exit_index=None,
+        entry_price=None,
+        r_total=0.0,
+        legs=[],
+    )
+
+
+def simulate_exit(
+    df,
+    signal_index: int,
+    plan: TradePlanV2,
+    *,
+    scale_out: bool = False,
+    max_holding_days: int | None = None,
+) -> ExitResult:
+    """Entry phase of the shared exit simulator (Task 20).
+
+    ``market`` entries fill immediately at the signal bar's close; the exit
+    walk (from signal_index + 1 onward) is Tasks 21-22 and is not yet
+    implemented -- raises NotImplementedError with entry_index/entry_price
+    attached once the entry is established.
+
+    ``stop_entry`` entries scan forward from signal_index + 1 through the
+    plan's expiry window looking for a trigger touch (Task 18's
+    ``trigger_hit``/``fill_price``). If the plan invalidates (closes through
+    the stop) or expires before triggering, this returns a terminal
+    ``ExitResult("not_triggered", ...)`` -- both cases are fully handled by
+    this task. A fill establishes entry_index/entry_price and then raises
+    NotImplementedError the same way a market fill does, since the exit
+    walk beyond that point is out of scope here.
+    """
+    if max_holding_days is None:
+        max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
+
+    if plan.entry_type == "market":
+        entry_index = signal_index
+        entry_price = float(df["Close"].values[signal_index])
+        err = NotImplementedError(
+            "simulate_exit: exit walk not implemented yet (Tasks 21-22); "
+            f"market entry established at entry_index={entry_index}, "
+            f"entry_price={entry_price}"
+        )
+        err.entry_index = entry_index
+        err.entry_price = entry_price
+        raise err
+
+    # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
+    # trigger touch, watching for pre-fill invalidation along the way.
+    high = df["High"].values
+    low = df["Low"].values
+    open_ = df["Open"].values
+    close = df["Close"].values
+    n = len(df)
+
+    j = signal_index + 1
+    while j < n:
+        bars_since_created = j - signal_index
+        if pending_expired(plan, bars_since_created):
+            break
+        if trigger_hit(plan, float(high[j]), float(low[j])):
+            entry_index = j
+            entry_price = fill_price(plan, float(open_[j]))
+            err = NotImplementedError(
+                "simulate_exit: exit walk not implemented yet (Tasks 21-22); "
+                f"stop_entry filled at entry_index={entry_index}, "
+                f"entry_price={entry_price}"
+            )
+            err.entry_index = entry_index
+            err.entry_price = entry_price
+            raise err
+        if pending_invalidated(plan, float(close[j])):
+            return _not_triggered()
+        j += 1
+
+    return _not_triggered()
