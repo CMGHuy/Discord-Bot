@@ -268,6 +268,79 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     return plan
 
 
+# ---------------------------------------------------------------------------
+# Confluence-source plans — built from a levels.build_scenarios() Scenario
+# rather than a per-bar strategy signal.
+# ---------------------------------------------------------------------------
+
+CONFLUENCE_BREAKOUT_LOOKBACK = 20  # same fixed window levels.py's own Donchian candidate uses
+
+
+def scenario_is_breakout(scenario, df) -> bool:
+    """
+    True when hitting the scenario's own target requires price to make a
+    new local extreme -- i.e. the target sits beyond the recent N-bar
+    trading range (the same 20-bar Donchian-style window levels.py already
+    sources a candidate level from; see collect_candidate_levels), rather
+    than just completing a move inside a range that already contains it.
+    Breakout-direction scenarios get a stop-entry trigger instead of an
+    immediate market fill (see build_confluence_plan).
+
+    The lookback excludes the in-progress last bar (`.shift(1)`), matching
+    collect_candidate_levels's own Donchian computation.
+    """
+    is_bull = scenario.direction == "bullish"
+    if is_bull:
+        recent_extreme = df["High"].rolling(CONFLUENCE_BREAKOUT_LOOKBACK).max().shift(1).iloc[-1]
+        if not np.isfinite(recent_extreme):
+            return False
+        return scenario.take_profit > float(recent_extreme)
+    recent_extreme = df["Low"].rolling(CONFLUENCE_BREAKOUT_LOOKBACK).min().shift(1).iloc[-1]
+    if not np.isfinite(recent_extreme):
+        return False
+    return scenario.take_profit < float(recent_extreme)
+
+
+def build_confluence_plan(scenario, df, *, ticker, horizon_key,
+                          primary_strategy) -> TradePlanV2:
+    """THE constructor for confluence-source plans (a levels.build_scenarios
+    Scenario). TP1 is RECOMPUTED under the unified exit policy rather than
+    reusing the scenario's own target -- see spec §5; the scenario's own
+    take_profit survives as tp2 only when it still lies beyond the new TP1.
+    `strategy` is a placeholder attribution until Task 38 wires the real
+    generating strategy through."""
+    entry = scenario.entry
+    is_bull = scenario.direction == "bullish"
+    risk = abs(entry - scenario.stop_loss)
+    rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)
+    tp1 = entry + risk * rr if is_bull else entry - risk * rr
+
+    tp2 = None
+    if scenario.take_profit is not None:
+        beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
+        if beyond_tp1:
+            tp2 = scenario.take_profit
+
+    entry_type = "stop_entry" if scenario_is_breakout(scenario, df) else "market"
+    created_at = df.index[-1].date().isoformat()
+
+    plan = TradePlanV2(
+        plan_id=str(uuid.uuid4()), ticker=ticker, created_at=created_at,
+        source="confluence", strategy=primary_strategy, horizon_key=horizon_key,
+        direction=scenario.direction, entry_type=entry_type, trigger_price=entry,
+        entry_price=entry if entry_type == "market" else None,
+        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=scenario.stop_loss, tp1=tp1,
+        tp1_fraction=TP1_FRACTION, tp2=tp2,
+        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+    )
+    if entry_type == "market":
+        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    stamp_badge(plan)
+    return plan
+
+
 # Strategy-source plans enter at the signal close ("market") — this is the
 # entry the round-1 validation measured. Task 30's TRAIN grid may flip
 # breakout-class strategies to stop_entry iff it clears the acceptance gates.
