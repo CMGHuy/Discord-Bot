@@ -116,101 +116,33 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
 
 
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
-    close = df["Close"]
-    entry = float(close.iloc[i])
-    atr_val = float(atr_series.iloc[i])
-    if not np.isfinite(atr_val) or atr_val <= 0:
-        atr_val = entry * 0.02
-    is_bull = direction == "bullish"
-    h = HORIZONS[horizon_key]
+    """Sizing lives in plan_engine (single source of truth shared with live
+    plans); this wrapper only picks the branch from the precomputed series.
+    Parity with the original inline implementation is locked by
+    tests/test_plan_engine_sizing.py."""
+    from .plan_engine import (
+        _atr_plan,
+        _elliott_plan,
+        _fibonacci_plan,
+        _safe_atr_value,
+        _sr_plan,
+    )
+
+    entry = float(df["Close"].iloc[i])
+    atr_val = _safe_atr_value(entry, float(atr_series.iloc[i]))
 
     if strategy == "Fibonacci" and swing_high_series is not None:
-        swing_high = float(swing_high_series.iloc[i])
-        swing_low = float(swing_low_series.iloc[i])
-        buffer = STRUCTURE_BUFFER_ATR * atr_val
-        if is_bull:
-            stop_loss = swing_low - buffer
-            take_profit = swing_high
-        else:
-            stop_loss = swing_high + buffer
-            take_profit = swing_low
-
-        max_risk_amount = entry * (h["max_risk_pct"] / 100)
-        risk_now = abs(entry - stop_loss)
-        if risk_now > max_risk_amount:
-            stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
-
-        risk_now = abs(entry - stop_loss)
-        # Per-strategy override takes priority over structure-based R:R bounds
-        override_rr_fib = STRATEGY_RR_OVERRIDE.get(strategy)
-        if override_rr_fib is not None:
-            take_profit = entry + risk_now * override_rr_fib if is_bull else entry - risk_now * override_rr_fib
-        else:
-            min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
-            reward_now = abs(take_profit - entry)
-            target_rr = reward_now / risk_now if risk_now > 0 else min_rr
-            target_rr = max(min_rr, min(max_rr, target_rr))
-            bounded_reward = risk_now * target_rr
-            take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
-
+        stop_loss, take_profit = _fibonacci_plan(
+            entry, atr_val, float(swing_high_series.iloc[i]),
+            float(swing_low_series.iloc[i]), direction, horizon_key)
     elif strategy == "Support/Resistance" and volume_ratio_series is not None:
-        volume_ratio = float(volume_ratio_series.iloc[i])
-        if not np.isfinite(volume_ratio):
-            volume_ratio = SR_VOLUME_MULTIPLE
-
-        stop_pct = h["sr_stop_pct"]
-        target_min_pct, target_max_pct = h["sr_target_min_pct"], h["sr_target_max_pct"]
-        strength = (volume_ratio - SR_VOLUME_MULTIPLE) / (SR_VOLUME_STRENGTH_CEILING - SR_VOLUME_MULTIPLE)
-        strength = max(0.0, min(1.0, strength))
-        target_pct = target_min_pct + (target_max_pct - target_min_pct) * strength
-
-        if is_bull:
-            stop_loss = entry * (1 - stop_pct / 100)
-        else:
-            stop_loss = entry * (1 + stop_pct / 100)
-        # Apply per-strategy R:R override if set (overrides sr_target_pct calculation)
-        override_rr_sr = STRATEGY_RR_OVERRIDE.get(strategy)
-        if override_rr_sr is not None:
-            risk = abs(entry - stop_loss)
-            take_profit = entry + risk * override_rr_sr if is_bull else entry - risk * override_rr_sr
-        else:
-            take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
-
+        stop_loss, take_profit = _sr_plan(
+            entry, float(volume_ratio_series.iloc[i]), direction, horizon_key)
     elif strategy == "Elliott Wave" and entry_levels and i in entry_levels:
-        lv = entry_levels[i]
-        buffer = STRUCTURE_BUFFER_ATR * atr_val
-        if is_bull:
-            stop_loss = lv["wave2"] - buffer
-        else:
-            stop_loss = lv["wave2"] + buffer
-
-        max_risk_amount = entry * (h["max_risk_pct"] / 100)
-        risk_now = abs(entry - stop_loss)
-        if risk_now > max_risk_amount:
-            stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
-
-        risk_now = abs(entry - stop_loss)
-        # Per-strategy override takes priority; fall back to HORIZONS reward_risk_ratio
-        rr_override = STRATEGY_RR_OVERRIDE.get(strategy)
-        rr = rr_override if rr_override is not None else h["reward_risk_ratio"]
-        take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
-
+        stop_loss, take_profit = _elliott_plan(
+            entry, atr_val, entry_levels[i]["wave2"], direction, horizon_key)
     else:
-        risk_distance = h["atr_stop_multiple"] * atr_val
-        # Use per-strategy R:R override if defined; otherwise fall back to HORIZONS value
-        rr_override = STRATEGY_RR_OVERRIDE.get(strategy)
-        rr = rr_override if rr_override is not None else h["reward_risk_ratio"]
-
-        max_risk_amount = entry * (h["max_risk_pct"] / 100)
-        if risk_distance > max_risk_amount:
-            risk_distance = max_risk_amount
-
-        if is_bull:
-            stop_loss = entry - risk_distance
-            take_profit = entry + risk_distance * rr
-        else:
-            stop_loss = entry + risk_distance
-            take_profit = entry - risk_distance * rr
+        stop_loss, take_profit = _atr_plan(entry, atr_val, direction, horizon_key, strategy)
 
     return entry, stop_loss, take_profit
 
