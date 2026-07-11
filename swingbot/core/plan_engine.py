@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
 from swingbot.core.registry import Badge, get_badge
 from swingbot.core.strategy_types import (
     BREAKEVEN_TRIGGER_FRACTION,
@@ -171,6 +172,42 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
     return stop_loss, take_profit
 
 
+# ---------------------------------------------------------------------------
+# TP2 selection — the next structural level beyond TP1 (levels.py already
+# does the clustering; this just picks a target and caps the leg).
+# ---------------------------------------------------------------------------
+
+def select_tp2(levels_above: list, levels_below: list, direction: str,
+               entry: float, tp1: float) -> float | None:
+    """
+    First clustered level strictly beyond TP1 in the trade direction — the
+    "if it keeps going" stretch target. `levels_above`/`levels_below` are
+    plain price floats (already-clustered `Level.price` values, e.g. from
+    `levels.build_level_map` — callers extract `.price` before calling this;
+    reuse that clustering, don't reimplement it here).
+
+    None if no level sits beyond TP1 on the trade-direction side, or if the
+    TP1 -> candidate leg exceeds `MAX_TARGET2_LEG_MULTIPLE` times the
+    entry -> TP1 leg — the same "don't show a wildly disproportionate
+    runner" cap levels.py's own target-2 selection uses (see its docstring).
+    """
+    leg1 = abs(tp1 - entry)
+    if leg1 <= 0:
+        return None
+
+    is_bull = direction == "bullish"
+    candidates = levels_above if is_bull else levels_below
+    beyond = [p for p in candidates if (p > tp1 if is_bull else p < tp1)]
+    if not beyond:
+        return None
+
+    candidate = min(beyond) if is_bull else max(beyond)
+    leg2 = abs(candidate - tp1)
+    if leg2 > leg1 * MAX_TARGET2_LEG_MULTIPLE:
+        return None
+    return candidate
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None) -> TradePlanV2 | None:
     """THE constructor for strategy-source plans. Returns None when the
@@ -208,13 +245,19 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
 
     entry_type = entry_type_for(strategy, "strategy")
     created_at = df.index[index].date().isoformat()
+    tp2 = None
+    if level_map is not None:
+        supports, resistances = level_map
+        levels_above = [lv.price for lv in resistances]
+        levels_below = [lv.price for lv in supports]
+        tp2 = select_tp2(levels_above, levels_below, direction, close, tp1)
     plan = TradePlanV2(
         plan_id=str(uuid.uuid4()), ticker=ticker, created_at=created_at,
         source="strategy", strategy=strategy, horizon_key=horizon_key,
         direction=direction, entry_type=entry_type, trigger_price=close,
         entry_price=close if entry_type == "market" else None,
         expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop, tp1=tp1,
-        tp1_fraction=TP1_FRACTION, tp2=None,
+        tp1_fraction=TP1_FRACTION, tp2=tp2,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
         trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
         tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
