@@ -15,8 +15,9 @@
 > Updated by the executing session after each phase/task batch. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/plan-engine-v2`
-> - **Completed:** Tasks 1–15 (Phase 0, Phase 1 sizing extraction) — 2026-07-11
-> - **Next:** Task 16
+> - **Completed:** Tasks 1–21 (Phase 0; Phase 1 sizing extraction; Phase 2 entry phase + single-leg win/loss walk) — 2026-07-11 (git: `bb16669` = Task 21, `f27a29f` = stop_entry→single-leg coverage)
+> - **Next:** Task 22
+> - **2026-07-12:** plan expanded with full implementation code per task. For Tasks ≤21 the code blocks show the AS-BUILT implementation from the repo (signatures differ in places from the original sketch — the repo is authoritative). For Tasks ≥22 the code is the intended implementation; adapt only where the codebase contradicts it, and note deviations here.
 
 ## Global Constraints
 
@@ -84,7 +85,7 @@ commands/
 **Interfaces:**
 - Produces: `make_ohlcv(closes, *, start="2024-01-02", spread=0.01, volume=1_000_000) -> pd.DataFrame` — each element of `closes` is a float (Open=Close=c, High=c*(1+spread), Low=c*(1-spread)) or a 4-tuple `(open, high, low, close)`. Columns `Open,High,Low,Close,Volume`, business-day DatetimeIndex. Used by every exit-model and manager test in this plan.
 
-- [ ] **Step 1: Read `tests/conftest.py` to confirm the OHLCV column convention matches; write the failing test**
+- [x] **Step 1: Read `tests/conftest.py` to confirm the OHLCV column convention matches; write the failing test**
 
 ```python
 # tests/test_helpers.py
@@ -104,9 +105,9 @@ def test_make_ohlcv_tuples():
     assert df["High"].iloc[0] == 105 and df["Low"].iloc[0] == 99
 ```
 
-- [ ] **Step 2: Run `python -m pytest tests/test_helpers.py -v` — expect FAIL (no module `tests.helpers`)**
+- [x] **Step 2: Run `python -m pytest tests/test_helpers.py -v` — expect FAIL (no module `tests.helpers`)**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # tests/helpers.py
@@ -126,9 +127,9 @@ def make_ohlcv(closes, *, start="2024-01-02", spread=0.01, volume=1_000_000):
     return pd.DataFrame(rows, columns=["Open", "High", "Low", "Close", "Volume"], index=idx)
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_helpers.py -v` — expect 2 PASS**
+- [x] **Step 4: Run `python -m pytest tests/test_helpers.py -v` — expect 2 PASS**
 
-- [ ] **Step 5: Commit** — `git add tests/helpers.py tests/test_helpers.py && git commit -m "test: synthetic OHLCV builder for plan-engine tests"`
+- [x] **Step 5: Commit** — `git add tests/helpers.py tests/test_helpers.py && git commit -m "test: synthetic OHLCV builder for plan-engine tests"`
 
 ### Task 2: TradePlanV2 dataclass + lifecycle transitions
 
@@ -139,7 +140,7 @@ def make_ohlcv(closes, *, start="2024-01-02", spread=0.01, volume=1_000_000):
 **Interfaces:**
 - Produces: `PlanStatus` (str constants `PENDING, ACTIVE, PARTIAL, CLOSED, CANCELLED`); `TradePlanV2` dataclass with exactly the fields below; `record_transition(plan, new_status, reason=None, at=None)` which validates legal transitions and appends `{"status","reason","at"}` to `plan.status_history`. All later tasks import these from `swingbot.core.plan_engine`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_plan_engine_model.py
@@ -178,9 +179,9 @@ def test_pending_can_cancel():
     assert p.status == PlanStatus.CANCELLED
 ```
 
-- [ ] **Step 2: Run `python -m pytest tests/test_plan_engine_model.py -v` — expect FAIL (module missing)**
+- [x] **Step 2: Run `python -m pytest tests/test_plan_engine_model.py -v` — expect FAIL (module missing)**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # swingbot/core/plan_engine.py
@@ -245,9 +246,9 @@ def record_transition(plan: TradePlanV2, new_status: str, reason: str | None = N
     plan.status_history.append({"status": new_status, "reason": reason, "at": at})
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_plan_engine_model.py -v` — expect 3 PASS**
+- [x] **Step 4: Run `python -m pytest tests/test_plan_engine_model.py -v` — expect 3 PASS**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: TradePlanV2 model with lifecycle transitions"`
+- [x] **Step 5: Commit** — `git commit -m "feat: TradePlanV2 model with lifecycle transitions"`
 
 ### Task 3: Validation registry (seed + loader)
 
@@ -259,7 +260,7 @@ def record_transition(plan: TradePlanV2, new_status: str, reason: str | None = N
 - Produces: `Badge` dataclass (`status, n, win_rate, expectancy_r, window, run_date`); `get_badge(source, strategy, horizon_key=None) -> Badge` — most-specific match: exact `(source, strategy, horizon)` record first, else `(source, strategy, horizon=null)` pooled record, else a default `Badge(status="WEAK", n=0, ...)`. `load_registry(path=None)` cached with `reload_registry()` for tests.
 - Seed data: the round-1 validation table (`docs/superpowers/results/2026-07-validation.md`): VALIDATED — VWAP 77/80.5/+0.064, Fibonacci 206/81.6/+0.105, Support/Resistance 190/86.8/+0.117, MACD 123/81.3/+0.071, Volume Profile 47/83.0/+0.136, Break & Retest 148/83.8/+0.094; WEAK — RSI 414/68.4/-0.030, MA Ribbon 137/78.1/+0.039, RSI Divergence 1101/75.8/+0.045, EMA Crossover 78/76.9/+0.032, Elliott Wave 159/74.8/+0.008. All `source="strategy"`, `horizon=null`, `window="2024-01-01..2025-12-31"`, `run_date="2026-07-10"`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_registry.py
@@ -284,9 +285,9 @@ def test_all_eleven_strategies_present():
     assert len(strategies) == 11
 ```
 
-- [ ] **Step 2: Run `python -m pytest tests/test_registry.py -v` — expect FAIL**
+- [x] **Step 2: Run `python -m pytest tests/test_registry.py -v` — expect FAIL**
 
-- [ ] **Step 3: Write `validation_registry.json` (list of records) and `registry.py`**
+- [x] **Step 3: Write `validation_registry.json` (list of records) and `registry.py`**
 
 ```python
 # swingbot/core/registry.py
@@ -351,9 +352,9 @@ Registry JSON record shape (write all 11 seed records):
 ]
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_registry.py -v` — expect 4 PASS**
+- [x] **Step 4: Run `python -m pytest tests/test_registry.py -v` — expect 4 PASS**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: validation registry seeded from round-1 OOS results"`
+- [x] **Step 5: Commit** — `git commit -m "feat: validation registry seeded from round-1 OOS results"`
 
 ### Task 4: `--emit-registry` in the acceptance harness
 
@@ -365,7 +366,7 @@ Registry JSON record shape (write all 11 seed records):
 - Consumes: the per-strategy summary dict the script already builds for its table (N, win%, ExpR per strategy).
 - Produces: `build_registry_records(summaries, *, source, window, run_date, pass_wr=80.0, min_n=15) -> list[dict]` (pure function, importable) and a `--emit-registry PATH` CLI flag that merges new records into the JSON (replacing records with the same `(source, strategy, horizon)` key, preserving others).
 
-- [ ] **Step 1: Write the failing test for the pure function**
+- [x] **Step 1: Write the failing test for the pure function**
 
 ```python
 # tests/test_emit_registry.py
@@ -388,9 +389,9 @@ def test_build_registry_records_status():
     assert by["Tiny"]["status"] == "WEAK"  # N below floor never VALIDATED
 ```
 
-- [ ] **Step 2: Run — expect FAIL (no `build_registry_records`)**
+- [x] **Step 2: Run — expect FAIL (no `build_registry_records`)**
 
-- [ ] **Step 3: Implement in `run_backtest_range.py`**
+- [x] **Step 3: Implement in `run_backtest_range.py`**
 
 ```python
 def build_registry_records(summaries, *, source, window, run_date,
@@ -409,9 +410,9 @@ def build_registry_records(summaries, *, source, window, run_date,
 
 Add argparse flag `--emit-registry` (default None); after the summary table is built, if set: load existing JSON, drop records whose `(source, strategy, horizon)` matches a new one, append new records, write back sorted by (source, strategy). `run_date` comes from a required `--run-date YYYY-MM-DD` argument when `--emit-registry` is used (no `datetime.now()` — keeps runs reproducible).
 
-- [ ] **Step 4: Run `python -m pytest tests/test_emit_registry.py -v` — expect PASS. Also `python scripts/run_backtest_range.py --help` shows the new flags.**
+- [x] **Step 4: Run `python -m pytest tests/test_emit_registry.py -v` — expect PASS. Also `python scripts/run_backtest_range.py --help` shows the new flags.**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: acceptance harness emits validation registry records"`
+- [x] **Step 5: Commit** — `git commit -m "feat: acceptance harness emits validation registry records"`
 
 ### Task 5: Feature flags in config
 
@@ -422,7 +423,7 @@ Add argparse flag `--emit-registry` (default None); after the summary table is b
 **Interfaces:**
 - Produces: `config.PLAN_ENGINE_V2` (str: `"off" | "shadow" | "on"`, default `"off"`), `config.SCALE_OUT_ENABLED` (bool, default False), `config.INTRADAY_MANAGER_V2` (bool, default False). Hot-reloadable via the existing `.env` watcher; visible in the admin UI like every other FIELDS entry.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_config_flags.py
@@ -440,13 +441,13 @@ def test_plan_engine_v2_is_enum_like():
 
 (Adapt the second assertion to the actual FIELDS descriptor schema — if FIELDS entries are tuples/objects rather than dicts, mirror how existing enum-ish fields like log level are declared. The behavior requirement is fixed: only `off|shadow|on` accepted, invalid values fall back to `off` with a warning log.)
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
-- [ ] **Step 3: Add the three FIELDS entries + module attributes following the existing pattern (env-var backed, admin-UI metadata: group "Plan Engine v2", descriptions from the spec §10).**
+- [x] **Step 3: Add the three FIELDS entries + module attributes following the existing pattern (env-var backed, admin-UI metadata: group "Plan Engine v2", descriptions from the spec §10).**
 
-- [ ] **Step 4: Run `python -m pytest tests/test_config_flags.py -v` — PASS; `make check` passes.**
+- [x] **Step 4: Run `python -m pytest tests/test_config_flags.py -v` — PASS; `make check` passes.**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: PLAN_ENGINE_V2 / SCALE_OUT_ENABLED / INTRADAY_MANAGER_V2 flags"`
+- [x] **Step 5: Commit** — `git commit -m "feat: PLAN_ENGINE_V2 / SCALE_OUT_ENABLED / INTRADAY_MANAGER_V2 flags"`
 
 ### Task 6: Entry-type classification map
 
@@ -457,7 +458,7 @@ def test_plan_engine_v2_is_enum_like():
 **Interfaces:**
 - Produces: `STRATEGY_ENTRY_TYPE: dict[str, str]` and `entry_type_for(strategy, source) -> str`. Initial mapping (per spec §8; breakout-class candidates are graded on TRAIN in Task 30 and this map is only changed there): **all strategy-source plans start as `"market"`** (identical to the validated round-1 entry-at-close), `entry_type_for(_, source="confluence")` returns `"stop_entry"` for breakout-direction scenarios (decided by the caller passing `scenario_kind`, see Task 17/18).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_entry_type.py
@@ -471,7 +472,7 @@ def test_confluence_source_stop_entry():
     assert entry_type_for("Support/Resistance", "confluence") == "stop_entry"
 ```
 
-- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+- [x] **Step 2: Run — FAIL. Step 3: Implement:**
 
 ```python
 # in plan_engine.py
@@ -487,8 +488,8 @@ def entry_type_for(strategy: str, source: str) -> str:
     return STRATEGY_ENTRY_TYPE.get(strategy, "market")
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_entry_type.py -v` — PASS.**
-- [ ] **Step 5: Commit** — `git commit -m "feat: entry-type classification for plan sources"`
+- [x] **Step 4: Run `python -m pytest tests/test_entry_type.py -v` — PASS.**
+- [x] **Step 5: Commit** — `git commit -m "feat: entry-type classification for plan sources"`
 
 ### Task 7: Badge stamping + WEAK caution copy
 
@@ -508,7 +509,7 @@ WEAK_CAUTION_TEXT = (
 )
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_badge_stamp.py
@@ -532,9 +533,9 @@ def test_stats_line():
     assert "N=206" in line and "81.6%" in line
 ```
 
-- [ ] **Step 2: Run — FAIL. Step 3: Implement `stamp_badge` (lookup by `plan.source, plan.strategy, plan.horizon_key`; store `{"status","n","win_rate","expectancy_r","window"}` in `badge_stats`) and `badge_stats_line`. Step 4: Run — 3 PASS.**
+- [x] **Step 2: Run — FAIL. Step 3: Implement `stamp_badge` (lookup by `plan.source, plan.strategy, plan.horizon_key`; store `{"status","n","win_rate","expectancy_r","window"}` in `badge_stats`) and `badge_stats_line`. Step 4: Run — 3 PASS.**
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: badge stamping with registry-backed OOS stats"`
+- [x] **Step 5: Commit** — `git commit -m "feat: badge stamping with registry-backed OOS stats"`
 
 # Phase 1 — Unified sizing (Tasks 8–19)
 
@@ -550,7 +551,7 @@ Sizing moves out of `backtest._trade_plan_at` (`backtest.py:118-215`) into `plan
 - Consumes: `strategy_types.HORIZONS[h]` keys `atr_stop_multiple`; `strategy_types.STRATEGY_RR_OVERRIDE`; the ATR(14) series (Wilder) — extract the exact ATR computation `backtest.py` uses (it builds `atr_series` before the loop; copy that formula, do not invent a new one).
 - Produces: `_atr(df, period=14) -> pd.Series`; `_atr_plan(close, atr_value, direction, horizon_key, strategy) -> tuple[stop, tp1]` where `stop = close ∓ atr_stop_multiple × atr_value` and `tp1 = close ± rr × risk` with `rr = STRATEGY_RR_OVERRIDE.get(strategy, HORIZONS[h]["reward_risk_ratio"])`, floored at 0.30 (`strategy_types.py:211-215`).
 
-- [ ] **Step 1: Write the failing golden test**
+- [x] **Step 1: Write the failing golden test**
 
 ```python
 # tests/test_plan_engine_sizing.py
@@ -576,8 +577,8 @@ def test_rr_floor_applies():
     assert (tp1 - 100.0) / (100.0 - stop) >= 0.30 - 1e-9
 ```
 
-- [ ] **Step 2: Run — FAIL. Step 3: Implement `_atr` + `_atr_plan` by extracting the exact arithmetic from `backtest._trade_plan_at`'s default branch (`backtest.py:201-215` region). Step 4: Run — 3 PASS.**
-- [ ] **Step 5: Commit** — `git commit -m "feat: ATR sizing builder extracted into plan_engine"`
+- [x] **Step 2: Run — FAIL. Step 3: Implement `_atr` + `_atr_plan` by extracting the exact arithmetic from `backtest._trade_plan_at`'s default branch (`backtest.py:201-215` region). Step 4: Run — 3 PASS.**
+- [x] **Step 5: Commit** — `git commit -m "feat: ATR sizing builder extracted into plan_engine"`
 
 ### Task 9: Fibonacci structural sizing builder
 
@@ -585,35 +586,165 @@ def test_rr_floor_applies():
 - Modify: `swingbot/core/plan_engine.py`
 - Test: `tests/test_plan_engine_sizing.py` (append)
 
-**Interfaces:**
-- Consumes: the Fibonacci branch of `backtest._trade_plan_at` (`backtest.py:~145-171`, incl. the `STRATEGY_RR_OVERRIDE` wiring from commit 686d08d) and its twin in `trade_plan._fibonacci_plan` (`trade_plan.py:361-364`) — these two must produce identical numbers today; extract ONE implementation.
-- Produces: `_fibonacci_plan(df, i, direction, horizon_key) -> tuple[stop, tp1] | None` (None when no valid swing structure — same conditions as the reference).
+**Interfaces (as built):**
+- Consumes: the Fibonacci branch of the pre-extraction `backtest._trade_plan_at` and its twin `trade_plan._fibonacci_plan` — these two produced identical numbers; ONE implementation was extracted.
+- Produces: `_fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key) -> tuple[stop, tp1]` — pure arithmetic. The CALLER supplies the rolling swing high/low and checks them for NaN (the backtest hands in its precomputed series; `build_strategy_plan` computes them on demand and returns None itself when they're not finite), so one function serves both without touching a DataFrame.
 
-- [ ] **Step 1: Write a characterization test: build a 60-bar trending frame with `make_ohlcv`, call the extracted function and the ORIGINAL `backtest._trade_plan_at` (temporarily imported) at the same index, assert stop/tp1 equal to 1e-9. Include a flat frame asserting both return None.**
-- [ ] **Step 2: Run — FAIL. Step 3: Extract the implementation verbatim (structural swing stop, RR override target). Step 4: Run — PASS.**
-- [ ] **Step 5: Commit** — `git commit -m "feat: Fibonacci structural sizing in plan_engine (parity-tested)"`
+- [x] **Step 1: Write the failing parity test** (appended to `tests/test_plan_engine_sizing.py`, which already holds the module fixtures `df` — an 80-bar `make_ohlcv` uptrend — `atr_series`, reference bar `I = 79`, and helper `_entry_atr`):
+
+```python
+# tests/test_plan_engine_sizing.py (append)
+@pytest.mark.parametrize("direction", ["bullish", "bearish"])
+def test_fibonacci_parity(df, atr_series, direction):
+    hk = "4w"
+    lookback = HORIZONS[hk]["fib_lookback"]
+    sh = df["High"].rolling(lookback).max()
+    sl = df["Low"].rolling(lookback).min()
+    ref_entry, ref_stop, ref_tp = backtest._trade_plan_at(
+        df, I, direction, "Fibonacci", hk, atr_series, sh, sl)
+    entry, atr_val = _entry_atr(df, atr_series)
+    stop, tp = _fibonacci_plan(entry, atr_val, float(sh.iloc[I]), float(sl.iloc[I]),
+                               direction, hk)
+    assert (stop, tp) == pytest.approx((ref_stop, ref_tp), abs=1e-9)
+```
+
+- [x] **Step 2: Run — FAIL (no `_fibonacci_plan` in plan_engine). Step 3: Extract the implementation verbatim into `plan_engine.py`** (module constants `STRUCTURE_BUFFER_ATR = 0.25` and `RR_FLOOR = 0.30` land here too — same numbers backtest.py used):
+
+```python
+# swingbot/core/plan_engine.py
+def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key):
+    """Structural sizing off the fib swing, risk-capped, R:R-override target."""
+    h = HORIZONS[horizon_key]
+    is_bull = direction == "bullish"
+    buffer = STRUCTURE_BUFFER_ATR * atr_val
+    if is_bull:
+        stop_loss, take_profit = swing_low - buffer, swing_high
+    else:
+        stop_loss, take_profit = swing_high + buffer, swing_low
+
+    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    if abs(entry - stop_loss) > max_risk_amount:
+        stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+
+    risk_now = abs(entry - stop_loss)
+    override = STRATEGY_RR_OVERRIDE.get("Fibonacci")
+    if override is not None:
+        take_profit = entry + risk_now * override if is_bull else entry - risk_now * override
+    else:
+        min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
+        reward_now = abs(take_profit - entry)
+        target_rr = reward_now / risk_now if risk_now > 0 else min_rr
+        target_rr = max(min_rr, min(max_rr, target_rr))
+        bounded_reward = risk_now * target_rr
+        take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
+    return stop_loss, take_profit
+```
+
+- [x] **Step 4: Run — PASS.**
+- [x] **Step 5: Commit** — `git commit -m "feat: Fibonacci structural sizing in plan_engine (parity-tested)"`
 
 ### Task 10: Support/Resistance fixed-% sizing builder
 
 **Files:** Modify `swingbot/core/plan_engine.py`; test in `tests/test_plan_engine_sizing.py`.
 
-**Interfaces:**
-- Consumes: S/R branch (`backtest.py:~172-196`; uses `HORIZONS[h]["sr_stop_pct"]`, `sr_target_min_pct/max_pct`, RR override) and `trade_plan._support_resistance_plan` (`trade_plan.py:393-400`).
-- Produces: `_sr_plan(close, direction, horizon_key) -> tuple[stop, tp1]`.
+**Interfaces (as built):**
+- Consumes: the S/R branch of the pre-extraction `backtest._trade_plan_at` (uses `HORIZONS[h]["sr_stop_pct"]`, `sr_target_min_pct/max_pct`, RR override) and `trade_plan._support_resistance_plan`.
+- Produces: `_sr_plan(entry, volume_ratio, direction, horizon_key) -> tuple[stop, tp1]` — the caller supplies the bar's volume/20-day-average ratio (NaN handled inside, falling back to `SR_VOLUME_MULTIPLE`); module constant `SR_VOLUME_STRENGTH_CEILING = 3.0`.
 
-- [ ] **Step 1: Characterization test vs `backtest._trade_plan_at` exactly as Task 9 (same frame, strategy `"Support/Resistance"`), plus a golden assertion that `stop == close * (1 - sr_stop_pct)` for bullish.**
-- [ ] **Step 2: Run — FAIL. Step 3: Extract. Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: S/R sizing in plan_engine"`
+- [x] **Step 1: Write the failing parity test** (parametrized over volume ratios incl. NaN — the NaN case is the one that catches a lazy extraction):
+
+```python
+# tests/test_plan_engine_sizing.py (append)
+@pytest.mark.parametrize("ratio", [0.5, 1.0, 2.5, np.nan])
+def test_sr_parity(df, atr_series, ratio):
+    hk = "3m"
+    vr = df["Close"] * 0 + ratio  # constant series
+    ref_entry, ref_stop, ref_tp = backtest._trade_plan_at(
+        df, I, "bullish", "Support/Resistance", hk, atr_series,
+        volume_ratio_series=vr)
+    entry, atr_val = _entry_atr(df, atr_series)
+    stop, tp = _sr_plan(entry, ratio, "bullish", hk)
+    assert (stop, tp) == pytest.approx((ref_stop, ref_tp), abs=1e-9)
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Extract:**
+
+```python
+# swingbot/core/plan_engine.py
+def _sr_plan(entry, volume_ratio, direction, horizon_key):
+    """Fixed-percent stop; target from volume strength unless R:R override set."""
+    from swingbot.core.strategy import SR_VOLUME_MULTIPLE
+
+    h = HORIZONS[horizon_key]
+    is_bull = direction == "bullish"
+    if not np.isfinite(volume_ratio):
+        volume_ratio = SR_VOLUME_MULTIPLE
+
+    stop_pct = h["sr_stop_pct"]
+    strength = (volume_ratio - SR_VOLUME_MULTIPLE) / (SR_VOLUME_STRENGTH_CEILING - SR_VOLUME_MULTIPLE)
+    strength = max(0.0, min(1.0, strength))
+    target_pct = h["sr_target_min_pct"] + (h["sr_target_max_pct"] - h["sr_target_min_pct"]) * strength
+
+    stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
+    override = STRATEGY_RR_OVERRIDE.get("Support/Resistance")
+    if override is not None:
+        risk = abs(entry - stop_loss)
+        take_profit = entry + risk * override if is_bull else entry - risk * override
+    else:
+        take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
+    return stop_loss, take_profit
+```
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: S/R sizing in plan_engine"`
 
 ### Task 11: Elliott wave-2 sizing builder
 
 **Files:** Modify `swingbot/core/plan_engine.py`; test in `tests/test_plan_engine_sizing.py`.
 
-**Interfaces:**
-- Consumes: Elliott branch (`backtest.py:~194-200`; wave-2 stop, RR override from `trade_plan._elliott_wave_plan` `trade_plan.py:437`).
-- Produces: `_elliott_plan(df, i, direction, horizon_key) -> tuple[stop, tp1] | None`.
+**Interfaces (as built):**
+- Consumes: the Elliott branch of the pre-extraction `backtest._trade_plan_at` (wave-2 stop, RR override; twin in `trade_plan._elliott_wave_plan`).
+- Produces: `_elliott_plan(entry, atr_val, wave2, direction, horizon_key) -> tuple[stop, tp1]` — the caller supplies the wave-2 price (the backtest from `elliott_wave3_entries`' `entry_levels[i]["wave2"]`; `build_strategy_plan` returns None itself when the bar has no entry level).
 
-- [ ] **Step 1: Characterization test vs `backtest._trade_plan_at` (strategy `"Elliott Wave"`) on a synthetic 5-wave frame; None case on flat data.**
-- [ ] **Step 2: Run — FAIL. Step 3: Extract. Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: Elliott wave-2 sizing in plan_engine"`
+- [x] **Step 1: Write the failing parity test** (a fabricated `entry_levels` dict keeps the fixture deterministic — no real 5-wave detection needed to prove arithmetic parity):
+
+```python
+# tests/test_plan_engine_sizing.py (append)
+@pytest.mark.parametrize("direction", ["bullish", "bearish"])
+def test_elliott_parity(df, atr_series, direction):
+    hk = "4w"
+    wave2 = 95.0 if direction == "bullish" else 145.0
+    entry_levels = {I: {"wave2": wave2}}
+    ref_entry, ref_stop, ref_tp = backtest._trade_plan_at(
+        df, I, direction, "Elliott Wave", hk, atr_series, entry_levels=entry_levels)
+    entry, atr_val = _entry_atr(df, atr_series)
+    stop, tp = _elliott_plan(entry, atr_val, wave2, direction, hk)
+    assert (stop, tp) == pytest.approx((ref_stop, ref_tp), abs=1e-9)
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Extract:**
+
+```python
+# swingbot/core/plan_engine.py
+def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
+    """Stop beyond wave-2 (buffered, risk-capped); R:R-override target."""
+    h = HORIZONS[horizon_key]
+    is_bull = direction == "bullish"
+    buffer = STRUCTURE_BUFFER_ATR * atr_val
+    stop_loss = wave2 - buffer if is_bull else wave2 + buffer
+
+    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    if abs(entry - stop_loss) > max_risk_amount:
+        stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+
+    risk_now = abs(entry - stop_loss)
+    rr = _rr_for("Elliott Wave", horizon_key)
+    take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
+    return stop_loss, take_profit
+```
+
+(`_rr_for(strategy, horizon_key)` is the tiny shared helper added alongside Task 8: `max(STRATEGY_RR_OVERRIDE.get(strategy) or HORIZONS[hk]["reward_risk_ratio"], RR_FLOOR)` — one place for the override-or-horizon-R:R-with-floor lookup.)
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: Elliott wave-2 sizing in plan_engine"`
 
 ### Task 12: `build_strategy_plan` dispatcher
 
@@ -632,7 +763,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
 
 Behavior: dispatch by strategy family (Fibonacci → `_fibonacci_plan`, `Support/Resistance` → `_sr_plan`, `Elliott Wave` → `_elliott_plan`, else `_atr_plan` with `_atr(df)` at `index`); `trigger_price = float(df["Close"].iloc[index])`; `entry_type = entry_type_for(strategy, "strategy")`; `entry_price = trigger_price` when `entry_type == "market"` else None; `tp1_fraction=0.5`, `breakeven_trigger_fraction=0.5` (import the constant from `strategy_types`), `trail_atr_mult=2.5`, `tp2=None` (filled by Task 16), `expiry_bars=5`; `created_at = df.index[index].date().isoformat()`; status PENDING for stop_entry, ACTIVE for market (with a transition recorded); badge stamped via `stamp_badge`; quality fields zeroed (wired in Task 51). Returns None when the family builder returns None.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_build_strategy_plan.py
@@ -657,7 +788,73 @@ def test_weak_strategy_still_builds():
     assert p is not None and p.badge == "WEAK"
 ```
 
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: build_strategy_plan single constructor"`
+- [x] **Step 2: Run — FAIL. Step 3: Implement** (as built; the `level_map=None` kwarg shown here landed in Task 16 — implement without it first):
+
+```python
+# swingbot/core/plan_engine.py
+def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
+                        direction, level_map=None) -> TradePlanV2 | None:
+    """THE constructor for strategy-source plans. Returns None when the
+    strategy has no valid structure at this bar (same conditions as the
+    backtest reference)."""
+    from swingbot.core.indicators import atr as atr_indicator
+    from swingbot.core.indicators import elliott_wave3_entries
+
+    close = float(df["Close"].iloc[index])
+    atr_series = atr_indicator(df, 14)
+    atr_val = _safe_atr_value(close, float(atr_series.iloc[index]))
+    h = HORIZONS[horizon_key]
+
+    if strategy == "Fibonacci":
+        lookback = h["fib_lookback"]
+        swing_high = float(df["High"].rolling(lookback).max().iloc[index])
+        swing_low = float(df["Low"].rolling(lookback).min().iloc[index])
+        if not (np.isfinite(swing_high) and np.isfinite(swing_low)):
+            return None
+        stop, tp1 = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key)
+    elif strategy == "Support/Resistance":
+        vol_avg20 = df["Volume"].rolling(20).mean()
+        ratio = float((df["Volume"] / vol_avg20).iloc[index])
+        stop, tp1 = _sr_plan(close, ratio, direction, horizon_key)
+    elif strategy == "Elliott Wave":
+        _, _, entry_levels = elliott_wave3_entries(df, h["max_risk_pct"])
+        if not entry_levels or index not in entry_levels:
+            return None
+        stop, tp1 = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key)
+    else:
+        stop, tp1 = _atr_plan(close, atr_val, direction, horizon_key, strategy)
+
+    if abs(close - stop) <= 0:
+        return None
+
+    entry_type = entry_type_for(strategy, "strategy")
+    created_at = df.index[index].date().isoformat()
+    tp2 = None
+    if level_map is not None:                      # Task 16
+        supports, resistances = level_map
+        levels_above = [lv.price for lv in resistances]
+        levels_below = [lv.price for lv in supports]
+        tp2 = select_tp2(levels_above, levels_below, direction, close, tp1)
+    plan = TradePlanV2(
+        plan_id=str(uuid.uuid4()), ticker=ticker, created_at=created_at,
+        source="strategy", strategy=strategy, horizon_key=horizon_key,
+        direction=direction, entry_type=entry_type, trigger_price=close,
+        entry_price=close if entry_type == "market" else None,
+        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop, tp1=tp1,
+        tp1_fraction=TP1_FRACTION, tp2=tp2,
+        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+    )
+    if entry_type == "market":
+        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    stamp_badge(plan)
+    return plan
+```
+
+Module constants introduced here: `TRAIL_ATR_MULT = 2.5`, `TP1_FRACTION = 0.5`, `DEFAULT_EXPIRY_BARS = 5` (all at the top of `plan_engine.py`; `BREAKEVEN_TRIGGER_FRACTION` is imported from `strategy_types`).
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: build_strategy_plan single constructor"`
 
 ### Task 13: Backtest-parity harness (script + test)
 
@@ -665,13 +862,91 @@ def test_weak_strategy_still_builds():
 - Create: `scripts/parity_sizing.py`
 - Test: `tests/test_sizing_parity.py`
 
-**Interfaces:**
-- Consumes: cached CSV OHLCV (`scripts/fetch_backtest_data.py` output), `backtest._vectorized_entries`, `backtest._trade_plan_at`, `plan_engine.build_strategy_plan`.
-- Produces: `scripts/parity_sizing.py` — for every ticker in the cache, every strategy, every horizon, every entry bar on TRAIN: compare `(stop, tp1)` old vs new; print max abs deviation and count of mismatches > 1e-6; exit code 1 on any mismatch. The pytest version runs the same loop on 3 tickers only (fast).
+**Interfaces (as built):**
+- Consumes: cached CSV OHLCV (`scripts/fetch_backtest_data.py` output), `backtest._vectorized_entries`, `backtest._trade_plan_at`, and — the key design decision — `tests/fixtures/legacy_trade_plan_at.py`: a **frozen verbatim copy** of `_trade_plan_at` as it stood pre-extraction (commit `ac91654`). After Task 14 rewires the live `_trade_plan_at` to delegate to plan_engine, comparing "old vs new" through the live function would be plan_engine comparing itself to itself; the frozen copy is the only independent reference that keeps proving extraction correctness forever.
+- Produces: `scripts/parity_sizing.py` — every cached ticker × every strategy × every horizon × every TRAIN entry bar: compare `(stop, tp1)` frozen-legacy vs current; print max abs deviation and count of mismatches > 1e-6; exit 1 on any mismatch. `tests/test_sizing_parity.py` runs the same loop on 3 tickers × 2 horizons (fast), skipping when the cache directory is absent.
 
-- [ ] **Step 1: Write `tests/test_sizing_parity.py` — parametrized over 3 cached tickers × all 11 strategies × horizons `{"4w","3m"}`; skip (pytest.mark.skipif) when the CSV cache directory is absent so CI without data stays green.**
-- [ ] **Step 2: Run — FAIL (script/test missing). Step 3: Implement both. Step 4: Run `python -m pytest tests/test_sizing_parity.py -v` — PASS; run `python scripts/parity_sizing.py` — expect `mismatches: 0`.**
-- [ ] **Step 5: Commit** — `git commit -m "test: sizing parity harness old backtest vs plan_engine"`
+- [x] **Step 1: Freeze the legacy implementation** — copy the entire pre-Task-14 `_trade_plan_at` body (including its inline Fibonacci/S-R/Elliott/ATR arithmetic and the module constants it reads) into `tests/fixtures/legacy_trade_plan_at.py` as `legacy_trade_plan_at(...)` with the identical signature. Then write the failing test:
+
+```python
+# tests/test_sizing_parity.py (key parts; full file mirrors this shape)
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import pytest
+
+from swingbot.core import backtest
+from swingbot.core.backtest import ALL_STRATEGIES
+from swingbot.core.indicators import atr, elliott_wave3_entries
+from swingbot.core.strategy_types import HORIZONS, MIN_BARS
+from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
+
+ROOT = Path(__file__).resolve().parent.parent
+CACHE_DIR = ROOT / "data" / "backtest_cache"
+TOLERANCE = 1e-6
+HORIZON_KEYS = ["4w", "3m"]
+SAMPLE_TICKERS = ["AAPL", "MSFT", "TSLA"]
+
+pytestmark = pytest.mark.skipif(
+    not CACHE_DIR.is_dir(),
+    reason="data/backtest_cache/ not present -- no OHLCV cache to run parity against",
+)
+
+def _load_cached(ticker):
+    path = CACHE_DIR / f"{ticker}.csv"
+    if not path.exists():
+        return None
+    df = pd.read_csv(path, index_col="Date", parse_dates=True)
+    return df if len(df) else None
+
+def _precomputed_series(df, strategy, horizon_key):
+    """Mirrors the precomputation run_backtest() does before calling
+    _trade_plan_at for each bar."""
+    atr_series = atr(df, 14)
+    swing_high_series = swing_low_series = None
+    if strategy == "Fibonacci":
+        lookback = HORIZONS[horizon_key]["fib_lookback"]
+        swing_high_series = df["High"].rolling(lookback).max()
+        swing_low_series = df["Low"].rolling(lookback).min()
+    volume_ratio_series = None
+    if strategy == "Support/Resistance":
+        volume_ratio_series = df["Volume"] / df["Volume"].rolling(20).mean()
+    entry_levels = None
+    if strategy == "Elliott Wave":
+        _, _, entry_levels = elliott_wave3_entries(df, HORIZONS[horizon_key]["max_risk_pct"])
+    return atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels
+
+@pytest.mark.parametrize("horizon_key", HORIZON_KEYS)
+@pytest.mark.parametrize("strategy", ALL_STRATEGIES)
+@pytest.mark.parametrize("ticker", SAMPLE_TICKERS)
+def test_sizing_parity(ticker, strategy, horizon_key):
+    df = _load_cached(ticker)
+    if df is None:
+        pytest.skip(f"{ticker}.csv not present in data/backtest_cache/")
+    min_bars = MIN_BARS[horizon_key]
+    if len(df) < min_bars + 10:
+        pytest.skip(f"{ticker}: not enough bars for {horizon_key}")
+
+    bullish, bearish = backtest._vectorized_entries(df, strategy, horizon_key)
+    series = _precomputed_series(df, strategy, horizon_key)
+
+    checked = 0
+    for i in np.where(bullish.values | bearish.values)[0]:
+        if i < min_bars:
+            continue
+        direction = "bullish" if bullish.values[i] else "bearish"
+        _, old_stop, old_tp = legacy_trade_plan_at(df, i, direction, strategy, horizon_key, *series)
+        _, new_stop, new_tp = backtest._trade_plan_at(df, i, direction, strategy, horizon_key, *series)
+        assert old_stop == pytest.approx(new_stop, abs=TOLERANCE)
+        assert old_tp == pytest.approx(new_tp, abs=TOLERANCE)
+        checked += 1
+    if checked == 0:
+        pytest.skip(f"no entry signals for {ticker}/{strategy}/{horizon_key}")
+```
+
+- [x] **Step 2: Write `scripts/parity_sizing.py`** — same loop, but over `sorted(CACHE_DIR.glob("*.csv"))`, all `HORIZONS`, restricted to TRAIN entry dates (`"2020-01-01" <= df.index[i] <= "2023-12-31"`); tally `max_dev` and `mismatches`; final line `print(f"checked: {checked}  max_dev: {max_dev:.2e}  mismatches: {n_mismatch}")`; `sys.exit(1 if n_mismatch else 0)`.
+- [x] **Step 3: Run `python -m pytest tests/test_sizing_parity.py -v` — PASS; `python scripts/parity_sizing.py` — `mismatches: 0`.**
+- [x] **Step 5: Commit** — `git commit -m "test: sizing parity harness old backtest vs plan_engine"`
 
 ### Task 14: `backtest._trade_plan_at` delegates to plan_engine
 
@@ -683,10 +958,45 @@ def test_weak_strategy_still_builds():
 - Consumes: `plan_engine` family builders (NOT `build_strategy_plan` — the backtest needs raw `(stop, tp1)` per bar without dataclass overhead).
 - Produces: `_trade_plan_at` keeps its exact signature and return shape but its body dispatches to `plan_engine._fibonacci_plan/_sr_plan/_elliott_plan/_atr_plan`. The duplicated arithmetic is deleted.
 
-- [ ] **Step 1: With parity tests from Task 13 in place (they now compare a function against itself indirectly — keep them, they guard future edits), replace the body.**
-- [ ] **Step 2: Run full suite `python -m pytest tests/ -q` + `python scripts/parity_sizing.py` — all green, 0 mismatches.**
-- [ ] **Step 3: Run a TRAIN backtest smoke: `python scripts/run_backtest_range.py --train` — table must be IDENTICAL to the committed table in `docs/superpowers/results/2026-07-train-tuning.md` (same N/Win%/ExpR per strategy). Paste the diff into the commit message if anything differs — do not proceed on differences.**
-- [ ] **Step 4: Commit** — `git commit -m "refactor: backtest sizing delegates to plan_engine (train table byte-identical)"`
+- [x] **Step 1: Replace the body** (the Task 13 frozen-legacy parity tests keep guarding this forever — they compare against the pre-extraction copy, not the delegating function). As built:
+
+```python
+# swingbot/core/backtest.py
+def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series,
+                   swing_high_series=None, swing_low_series=None,
+                   volume_ratio_series=None, entry_levels=None):
+    """Sizing lives in plan_engine (single source of truth shared with live
+    plans); this wrapper only picks the branch from the precomputed series.
+    Parity with the original inline implementation is locked by
+    tests/test_plan_engine_sizing.py."""
+    from .plan_engine import (
+        _atr_plan, _elliott_plan, _fibonacci_plan, _safe_atr_value, _sr_plan,
+    )
+
+    entry = float(df["Close"].iloc[i])
+    atr_val = _safe_atr_value(entry, float(atr_series.iloc[i]))
+
+    if strategy == "Fibonacci" and swing_high_series is not None:
+        stop_loss, take_profit = _fibonacci_plan(
+            entry, atr_val, float(swing_high_series.iloc[i]),
+            float(swing_low_series.iloc[i]), direction, horizon_key)
+    elif strategy == "Support/Resistance" and volume_ratio_series is not None:
+        stop_loss, take_profit = _sr_plan(
+            entry, float(volume_ratio_series.iloc[i]), direction, horizon_key)
+    elif strategy == "Elliott Wave" and entry_levels and i in entry_levels:
+        stop_loss, take_profit = _elliott_plan(
+            entry, atr_val, entry_levels[i]["wave2"], direction, horizon_key)
+    else:
+        stop_loss, take_profit = _atr_plan(entry, atr_val, direction, horizon_key, strategy)
+
+    return entry, stop_loss, take_profit
+```
+
+The duplicated inline arithmetic (the old Fibonacci/S-R/Elliott/ATR blocks and their local constants) is deleted from `backtest.py`; `STRUCTURE_BUFFER_ATR`/`SR_VOLUME_STRENGTH_CEILING` remain re-exported there only if something still imports them (grep first).
+
+- [x] **Step 2: Run full suite `python -m pytest tests/ -q` + `python scripts/parity_sizing.py` — all green, 0 mismatches.**
+- [x] **Step 3: Run a TRAIN backtest smoke: `python scripts/run_backtest_range.py --train` — table must be IDENTICAL to the committed table in `docs/superpowers/results/2026-07-train-tuning.md` (same N/Win%/ExpR per strategy). Paste the diff into the commit message if anything differs — do not proceed on differences.**
+- [x] **Step 4: Commit** — `git commit -m "refactor: backtest sizing delegates to plan_engine (train table byte-identical)"`
 
 ### Task 15: `trade_plan.py` becomes a deprecation shim
 
@@ -696,7 +1006,55 @@ def test_weak_strategy_still_builds():
 **Interfaces:**
 - Produces: `compute_trade_plan(result, df)` still importable (it has zero production callers — `trade_plan.py:75`) but implemented as a thin wrapper over `build_strategy_plan`, emitting a `DeprecationWarning`. `tests/test_trade_plan.py` updated to assert the warning and numeric parity with `build_strategy_plan`. Deleted entirely in Task 91.
 
-- [ ] **Step 1: Update tests to expect `DeprecationWarning` + parity. Step 2: Run — FAIL. Step 3: Implement shim. Step 4: Run — PASS. Step 5: Commit** — `git commit -m "refactor: trade_plan.py is a deprecation shim over plan_engine"`
+- [x] **Step 1: Update `tests/test_trade_plan.py` to expect the warning + numeric parity:**
+
+```python
+# tests/test_trade_plan.py (new shape)
+import warnings
+import pytest
+from swingbot.core.strategy_types import SignalResult
+from swingbot.core.trade_plan import compute_trade_plan
+from swingbot.core.plan_engine import build_strategy_plan
+from tests.helpers import make_ohlcv
+
+def _result(df, strategy="MACD"):
+    return SignalResult(ticker="AAPL", strategy=strategy, horizon_key="4w",
+                        horizon_label="4-week swing", trend="bullish",
+                        triggered=True, close=float(df["Close"].iloc[-1]))
+
+def test_shim_warns_and_matches_plan_engine():
+    df = make_ohlcv([100 + i * 0.5 for i in range(80)])
+    with pytest.warns(DeprecationWarning):
+        legacy = compute_trade_plan(_result(df), df)
+    v2 = build_strategy_plan(df, len(df) - 1, ticker="AAPL", strategy="MACD",
+                             horizon_key="4w", direction="bullish")
+    assert legacy.stop_loss == pytest.approx(v2.stop_loss)
+    assert legacy.take_profit == pytest.approx(v2.tp1)
+```
+
+- [x] **Step 2: Run — FAIL (no warning yet). Step 3: Implement the shim** — `compute_trade_plan(result, df)` keeps its `TradePlan` return type but its body becomes:
+
+```python
+# swingbot/core/trade_plan.py (body of compute_trade_plan)
+import warnings
+
+def compute_trade_plan(result, df: pd.DataFrame) -> TradePlan:
+    warnings.warn(
+        "trade_plan.compute_trade_plan is deprecated; use "
+        "plan_engine.build_strategy_plan (deleted at v2 cutover, plan Task 91)",
+        DeprecationWarning, stacklevel=2)
+    plan = build_strategy_plan(
+        df, len(df) - 1, ticker=result.ticker, strategy=result.strategy,
+        horizon_key=result.horizon_key, direction=result.trend)
+    if plan is None:
+        return None
+    return TradePlan(entry=plan.trigger_price, stop_loss=plan.stop_loss,
+                     take_profit=plan.tp1, ...)  # map remaining TradePlan fields 1:1
+```
+
+The private `_fibonacci_plan/_support_resistance_plan/_elliott_wave_plan` twins in this file are deleted (their logic lives in plan_engine now); anything else in the module that only fed them goes too. Zero production callers exist (`trade_plan.py:75`), so nothing outside tests changes.
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "refactor: trade_plan.py is a deprecation shim over plan_engine"`
 
 ### Task 16: TP2 selection (next structural level)
 
@@ -704,12 +1062,63 @@ def test_weak_strategy_still_builds():
 - Modify: `swingbot/core/plan_engine.py`
 - Test: `tests/test_tp2.py`
 
-**Interfaces:**
-- Consumes: `levels.build_level_map(ticker, df, horizon_key)` (read `levels.py` first; reuse its clustered `Level` list — do NOT reimplement clustering).
-- Produces: `select_tp2(levels_above, levels_below, direction, entry, tp1) -> float | None` — first clustered level strictly beyond TP1 in the trade direction; None if none within `3 × (tp1 - entry)` distance (avoids absurd runners); and `build_strategy_plan` gains optional kwarg `level_map=None` — when provided, `tp2` is filled via `select_tp2`.
+**Interfaces (as built):**
+- Consumes: `levels.build_level_map(df, h, current_price)` output — the clustered `Level` lists (callers extract `.price` floats before calling; clustering is NOT reimplemented). The leg cap reuses `levels.MAX_TARGET2_LEG_MULTIPLE` (3.0) — the exact same "don't show a wildly disproportionate runner" rule levels.py's own target-2 selection applies, so strategy-plan TP2s and scenario target-2s obey one rule.
+- Produces: `select_tp2(levels_above, levels_below, direction, entry, tp1) -> float | None`; `build_strategy_plan` gains optional kwarg `level_map=None` (a `(supports, resistances)` tuple) — when provided, `tp2` is filled via `select_tp2` (see the Task 12 code block, which already shows the wiring).
 
-- [ ] **Step 1: Write the failing test (pure function; fabricate level price lists `[104.0, 108.0]` etc., entry=100, tp1=102 → tp2=104; no level beyond tp1 → None; level at 120 with cap 3×2=6 → None).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: TP2 selection from structural levels"`
+- [x] **Step 1: Write the failing test:**
+
+```python
+# tests/test_tp2.py
+from swingbot.core.plan_engine import select_tp2
+
+def test_first_level_beyond_tp1_wins():
+    assert select_tp2([104.0, 108.0], [], "bullish", 100.0, 102.0) == 104.0
+
+def test_bearish_mirror():
+    assert select_tp2([], [96.0, 92.0], "bearish", 100.0, 98.0) == 96.0
+
+def test_no_level_beyond_tp1_is_none():
+    assert select_tp2([101.5], [], "bullish", 100.0, 102.0) is None
+
+def test_leg_cap_drops_absurd_runner():
+    # leg1 = 2.0; candidate leg2 = 120 - 102 = 18 > 3 x 2 -> None
+    assert select_tp2([120.0], [], "bullish", 100.0, 102.0) is None
+
+def test_zero_leg1_is_none():
+    assert select_tp2([104.0], [], "bullish", 100.0, 100.0) is None
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/plan_engine.py
+from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
+
+def select_tp2(levels_above: list, levels_below: list, direction: str,
+               entry: float, tp1: float) -> float | None:
+    """First clustered level strictly beyond TP1 in the trade direction --
+    the "if it keeps going" stretch target. None if no level sits beyond
+    TP1 on the trade-direction side, or if the TP1 -> candidate leg exceeds
+    MAX_TARGET2_LEG_MULTIPLE x the entry -> TP1 leg."""
+    leg1 = abs(tp1 - entry)
+    if leg1 <= 0:
+        return None
+
+    is_bull = direction == "bullish"
+    candidates = levels_above if is_bull else levels_below
+    beyond = [p for p in candidates if (p > tp1 if is_bull else p < tp1)]
+    if not beyond:
+        return None
+
+    candidate = min(beyond) if is_bull else max(beyond)
+    leg2 = abs(candidate - tp1)
+    if leg2 > leg1 * MAX_TARGET2_LEG_MULTIPLE:
+        return None
+    return candidate
+```
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: TP2 selection from structural levels"`
 
 ### Task 17: `build_confluence_plan` from a Scenario
 
@@ -726,10 +1135,120 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy) -> TradePlanV2
 ```
 
-Mapping: `source="confluence"`; `strategy=primary_strategy` (real attribution, Task 38); `trigger_price = scenario.entry`; `entry_type = "stop_entry"` when the scenario is a breakout (target beyond recent range — the scenario's direction relative to its nearest level; expose a boolean `scenario_is_breakout(scenario, df)` helper), else `"market"`; `stop_loss = scenario.stop_loss`; **TP1 is recomputed** as `entry ± rr × risk` with `rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)` (unified exit policy — the scenario's own `take_profit` becomes `tp2` when beyond TP1, else `tp2=None`); badge via `stamp_badge` (source `"confluence"` → WEAK until Task 42 registers validation).
+Mapping: `source="confluence"`; `strategy=primary_strategy` (real attribution, Task 38); `trigger_price = scenario.entry`; `entry_type = "stop_entry"` when the scenario is a breakout, else `"market"`; `stop_loss = scenario.stop_loss`; **TP1 is recomputed** as `entry ± rr × risk` with `rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)` (unified exit policy — the scenario's own `take_profit` becomes `tp2` when beyond TP1, else `tp2=None`); badge via `stamp_badge` (source `"confluence"` → WEAK until Task 42 registers validation).
 
-- [ ] **Step 1: Write the failing test with a stub scenario (use `types.SimpleNamespace` with the real field names) asserting the TP1 recomputation math, tp2 assignment, badge="WEAK" pre-registry.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement (+`scenario_is_breakout`). Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: confluence scenarios build TradePlanV2 with unified TP1"`
+- [x] **Step 1: Write the failing test** (stub scenario via `SimpleNamespace` with the REAL `levels.Scenario` field names — `entry`, `stop_loss`, `take_profit`, `direction`):
+
+```python
+# tests/test_build_confluence_plan.py
+from types import SimpleNamespace
+import pytest
+from swingbot.core.plan_engine import build_confluence_plan, scenario_is_breakout, PlanStatus
+from swingbot.core.strategy_types import STRATEGY_RR_OVERRIDE
+from tests.helpers import make_ohlcv
+
+def _scenario(**kw):
+    base = dict(direction="bullish", entry=100.0, stop_loss=95.0, take_profit=112.0)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+def _range_df():
+    # 30 flat bars: recent 20-bar high ~101, so take_profit=112 is a breakout
+    return make_ohlcv([100.0] * 30)
+
+def test_tp1_recomputed_under_unified_policy():
+    df = _range_df()
+    p = build_confluence_plan(_scenario(), df, ticker="AAPL", horizon_key="4w",
+                              primary_strategy="Fibonacci")
+    rr = STRATEGY_RR_OVERRIDE["Fibonacci"]          # 0.40
+    assert p.tp1 == pytest.approx(100.0 + 5.0 * rr) # entry + risk*rr = 102.0
+    assert p.tp2 == 112.0                            # scenario target beyond TP1 -> tp2
+    assert p.source == "confluence" and p.badge == "WEAK"
+
+def test_scenario_target_below_tp1_means_no_tp2():
+    df = _range_df()
+    p = build_confluence_plan(_scenario(take_profit=101.0), df, ticker="AAPL",
+                              horizon_key="4w", primary_strategy="Fibonacci")
+    assert p.tp2 is None
+
+def test_breakout_scenario_is_stop_entry_and_pending():
+    df = _range_df()
+    s = _scenario(take_profit=112.0)   # beyond the 20-bar high -> breakout
+    assert scenario_is_breakout(s, df) is True
+    p = build_confluence_plan(s, df, ticker="AAPL", horizon_key="4w",
+                              primary_strategy="Fibonacci")
+    assert p.entry_type == "stop_entry"
+    assert p.status == PlanStatus.PENDING and p.entry_price is None
+
+def test_range_bound_scenario_is_market_and_active():
+    # target inside the recent range -> immediate market entry
+    df = make_ohlcv([100 + (i % 10) for i in range(30)])   # range 100..109
+    s = _scenario(take_profit=105.0, stop_loss=98.0)
+    assert scenario_is_breakout(s, df) is False
+    p = build_confluence_plan(s, df, ticker="AAPL", horizon_key="4w",
+                              primary_strategy="VWAP")
+    assert p.entry_type == "market" and p.status == PlanStatus.ACTIVE
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Implement** (as built — `scenario_is_breakout` uses the same 20-bar Donchian window `levels.collect_candidate_levels` uses, excluding the in-progress last bar via `.shift(1)`):
+
+```python
+# swingbot/core/plan_engine.py
+CONFLUENCE_BREAKOUT_LOOKBACK = 20  # same fixed window levels.py's Donchian candidate uses
+
+def scenario_is_breakout(scenario, df) -> bool:
+    """True when hitting the scenario's own target requires price to make a
+    new local extreme -- i.e. the target sits beyond the recent 20-bar range."""
+    is_bull = scenario.direction == "bullish"
+    if is_bull:
+        recent_extreme = df["High"].rolling(CONFLUENCE_BREAKOUT_LOOKBACK).max().shift(1).iloc[-1]
+        if not np.isfinite(recent_extreme):
+            return False
+        return scenario.take_profit > float(recent_extreme)
+    recent_extreme = df["Low"].rolling(CONFLUENCE_BREAKOUT_LOOKBACK).min().shift(1).iloc[-1]
+    if not np.isfinite(recent_extreme):
+        return False
+    return scenario.take_profit < float(recent_extreme)
+
+
+def build_confluence_plan(scenario, df, *, ticker, horizon_key,
+                          primary_strategy) -> TradePlanV2:
+    """THE constructor for confluence-source plans. TP1 is RECOMPUTED under
+    the unified exit policy; the scenario's own take_profit survives as tp2
+    only when it still lies beyond the new TP1."""
+    entry = scenario.entry
+    is_bull = scenario.direction == "bullish"
+    risk = abs(entry - scenario.stop_loss)
+    rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)
+    tp1 = entry + risk * rr if is_bull else entry - risk * rr
+
+    tp2 = None
+    if scenario.take_profit is not None:
+        beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
+        if beyond_tp1:
+            tp2 = scenario.take_profit
+
+    entry_type = "stop_entry" if scenario_is_breakout(scenario, df) else "market"
+    created_at = df.index[-1].date().isoformat()
+
+    plan = TradePlanV2(
+        plan_id=str(uuid.uuid4()), ticker=ticker, created_at=created_at,
+        source="confluence", strategy=primary_strategy, horizon_key=horizon_key,
+        direction=scenario.direction, entry_type=entry_type, trigger_price=entry,
+        entry_price=entry if entry_type == "market" else None,
+        expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=scenario.stop_loss, tp1=tp1,
+        tp1_fraction=TP1_FRACTION, tp2=tp2,
+        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+    )
+    if entry_type == "market":
+        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    stamp_badge(plan)
+    return plan
+```
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: confluence scenarios build TradePlanV2 with unified TP1"`
 
 ### Task 18: Stop-entry trigger + expiry semantics
 
@@ -751,14 +1270,95 @@ def pending_invalidated(plan, bar_close) -> bool
     # bullish: close <= stop_loss before trigger; bearish mirrored
 ```
 
-- [ ] **Step 1: Write failing tests for all four helpers, both directions, boundary equality cases (`bar_high == trigger` → hit; `bars_since_created == expiry_bars` → not expired; `== stop_loss` → invalidated).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: shared trigger/fill/expiry/invalidation semantics"`
+- [x] **Step 1: Write failing tests for all four helpers, both directions, boundary equality cases:**
+
+```python
+# tests/test_trigger_semantics.py
+import pytest
+from swingbot.core.plan_engine import (
+    trigger_hit, fill_price, pending_expired, pending_invalidated,
+)
+from tests.test_plan_engine_model import _plan   # the shared plan factory
+
+def _bull(**kw):
+    return _plan(entry_type="stop_entry", direction="bullish",
+                 trigger_price=105.0, stop_loss=95.0, expiry_bars=5, **kw)
+
+def _bear(**kw):
+    return _plan(entry_type="stop_entry", direction="bearish",
+                 trigger_price=95.0, stop_loss=105.0, expiry_bars=5, **kw)
+
+# trigger_hit — touching the trigger exactly counts as a hit
+def test_trigger_hit_bullish_boundary():
+    assert trigger_hit(_bull(), bar_high=105.0, bar_low=100.0) is True
+    assert trigger_hit(_bull(), bar_high=104.99, bar_low=100.0) is False
+
+def test_trigger_hit_bearish_boundary():
+    assert trigger_hit(_bear(), bar_high=100.0, bar_low=95.0) is True
+    assert trigger_hit(_bear(), bar_high=100.0, bar_low=95.01) is False
+
+# fill_price — never better than the trigger
+def test_fill_price_worst_of():
+    assert fill_price(_bull(), bar_open=106.0) == 106.0   # gapped through
+    assert fill_price(_bull(), bar_open=104.0) == 105.0   # traded up to it
+    assert fill_price(_bear(), bar_open=93.0) == 93.0
+    assert fill_price(_bear(), bar_open=97.0) == 95.0
+
+# pending_expired — equality does NOT count as expired (full expiry_bars-th bar)
+def test_pending_expired_boundary():
+    assert pending_expired(_bull(), bars_since_created=5) is False
+    assert pending_expired(_bull(), bars_since_created=6) is True
+
+# pending_invalidated — closing exactly on the stop counts
+def test_pending_invalidated_boundary():
+    assert pending_invalidated(_bull(), bar_close=95.0) is True
+    assert pending_invalidated(_bull(), bar_close=95.01) is False
+    assert pending_invalidated(_bear(), bar_close=105.0) is True
+    assert pending_invalidated(_bear(), bar_close=104.99) is False
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Implement** (each boundary choice is deliberate spec, documented in the docstrings):
+
+```python
+# swingbot/core/plan_engine.py
+def trigger_hit(plan: TradePlanV2, bar_high: float, bar_low: float) -> bool:
+    """True when this bar touched the stop_entry trigger. Touching the
+    trigger exactly counts as a hit."""
+    if plan.direction == "bullish":
+        return bar_high >= plan.trigger_price
+    return bar_low <= plan.trigger_price
+
+
+def fill_price(plan: TradePlanV2, bar_open: float) -> float:
+    """Worst-of fill for the bar that triggered: if the open already gapped
+    through the trigger, you fill at the (worse) open; otherwise at the
+    trigger itself -- never better than trigger_price."""
+    if plan.direction == "bullish":
+        return max(bar_open, plan.trigger_price)
+    return min(bar_open, plan.trigger_price)
+
+
+def pending_expired(plan: TradePlanV2, bars_since_created: int) -> bool:
+    """Equality does not count as expired -- the plan gets the full
+    expiry_bars-th bar to still trigger."""
+    return bars_since_created > plan.expiry_bars
+
+
+def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
+    """True when price closes through the stop while still pending -- the
+    setup's thesis broke before entry. Closing exactly on the stop counts."""
+    if plan.direction == "bullish":
+        return bar_close <= plan.stop_loss
+    return bar_close >= plan.stop_loss
+```
+
+- [x] **Step 4: Run — PASS. Step 5: Commit** — `git commit -m "feat: shared trigger/fill/expiry/invalidation semantics"`
 
 ### Task 19: Phase 1 checkpoint
 
-- [ ] **Step 1: `python -m pytest tests/ -q` — all pass. `make check` — passes. `python scripts/parity_sizing.py` — 0 mismatches.**
-- [ ] **Step 2: `python scripts/run_backtest_range.py --train` — still byte-identical to the committed train table.**
-- [ ] **Step 3: Commit any stragglers; tag the checkpoint in the commit message** — `git commit --allow-empty -m "checkpoint: phase 1 complete — unified sizing, parity proven"`
+- [x] **Step 1: `python -m pytest tests/ -q` — all pass. `make check` — passes. `python scripts/parity_sizing.py` — 0 mismatches.**
+- [x] **Step 2: `python scripts/run_backtest_range.py --train` — still byte-identical to the committed train table.**
+- [x] **Step 3: Commit any stragglers; tag the checkpoint in the commit message** — `git commit --allow-empty -m "checkpoint: phase 1 complete — unified sizing, parity proven"`
 
 # Phase 2 — Exit model v2: hybrid scale-out (Tasks 20–33)
 
@@ -788,26 +1388,342 @@ def simulate_exit(df, signal_index, plan, *, scale_out=False,
                   max_holding_days=None) -> ExitResult
 ```
 
-Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[signal_index]`, exits evaluated from `signal_index+1` (round-1 convention). `stop_entry` → scan `signal_index+1 .. signal_index+plan.expiry_bars` using `trigger_hit`/`fill_price` (Task 18); no fill → `ExitResult("not_triggered", ...)`; invalidation before fill (via `pending_invalidated` on closes) → `not_triggered` with `legs=[]`. `max_holding_days` defaults to `HORIZONS[plan.horizon_key]["max_holding_days"]`.
+Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[signal_index]`, exits evaluated from `signal_index+1` (round-1 convention). `stop_entry` → scan `signal_index+1 .. signal_index+plan.expiry_bars` using `trigger_hit`/`fill_price` (Task 18); no fill → `ExitResult("not_triggered", ...)`; invalidation before fill (via `pending_invalidated` on closes) → `not_triggered` with `legs=[]`. `max_holding_days` defaults to `HORIZONS[plan.horizon_key]["max_holding_days"]` (resolved eagerly at the top of `simulate_exit` — both the single-leg and scale-out walks use it to bound the timeout scan).
 
-- [ ] **Step 1: Failing tests: market entry indexes; stop_entry fills on the bar whose High crosses trigger at `max(Open, trigger)`; expiry produces `not_triggered`; pre-fill invalidation produces `not_triggered`.** (Build frames with `make_ohlcv` tuples for precise High/Low control.)
-- [ ] **Step 2: Run — FAIL. Step 3: Implement entry phase only (raise `NotImplementedError` after fill for now). Step 4: Entry tests PASS. Step 5: Commit** — `git commit -m "feat: exit simulator entry phase (market + stop-entry)"`
+- [x] **Step 1: Failing tests** (`make_ohlcv` tuples give precise High/Low control; a NotImplementedError carrying `entry_index`/`entry_price` as attributes stands in for the not-yet-built exit walk):
+
+```python
+# tests/test_exit_sim_entry.py (key fixtures; the committed file has the same shape)
+import pytest
+from swingbot.core.plan_engine import TradePlanV2, PlanStatus, simulate_exit
+from tests.helpers import make_ohlcv
+
+def _plan(**kw):
+    base = dict(
+        plan_id="p1", ticker="AAPL", created_at="2024-01-02", source="strategy",
+        strategy="Fibonacci", horizon_key="2w", direction="bullish",
+        entry_type="market", trigger_price=100.0, entry_price=None, expiry_bars=3,
+        stop_loss=95.0, tp1=102.0, tp1_fraction=0.5, tp2=105.0,
+        breakeven_trigger_fraction=0.5, trail_atr_mult=2.5,
+        quality_score=0, quality_breakdown=[], tier="C",
+        badge="WEAK", badge_stats={}, status=PlanStatus.PENDING, status_history=[],
+    )
+    base.update(kw)
+    return TradePlanV2(**base)
+
+def test_market_entry_establishes_index_and_price():
+    df = make_ohlcv([100.0, 101.0, 102.5, 103.0, 104.0])
+    with pytest.raises(NotImplementedError) as exc_info:
+        simulate_exit(df, signal_index=2, plan=_plan(entry_type="market"), scale_out=True)
+    assert exc_info.value.entry_index == 2
+    assert exc_info.value.entry_price == 102.5
+
+def test_stop_entry_fills_on_bar_whose_high_crosses_trigger_at_max_open_trigger():
+    df = make_ohlcv([
+        100.0,                          # 0: signal bar
+        (100.0, 104.0, 99.0, 103.0),    # 1: High 104 < trigger 105 -- no fill
+        (106.0, 107.0, 105.5, 106.5),   # 2: gaps above trigger -- fills at Open
+        (107.0, 108.0, 106.0, 107.5),   # 3: unreached (loop exited)
+    ])
+    plan = _plan(entry_type="stop_entry", trigger_price=105.0, expiry_bars=5)
+    with pytest.raises(NotImplementedError) as exc_info:
+        simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert exc_info.value.entry_index == 2
+    assert exc_info.value.entry_price == 106.0  # max(open=106.0, trigger=105.0)
+
+def test_stop_entry_expiry_produces_not_triggered_with_empty_legs():
+    # expiry_bars=2: only bars 1-2 scanned. Bar 3 WOULD trigger -- proving the
+    # scan stopped at the expiry boundary, not just at end of data.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 103.0, 99.0, 101.0),   # 1: High < trigger
+        (101.0, 104.0, 100.0, 102.0),  # 2: High < trigger (last scanned bar)
+        (106.0, 107.0, 105.5, 106.5),  # 3: past expiry
+    ])
+    plan = _plan(entry_type="stop_entry", trigger_price=105.0, expiry_bars=2)
+    result = simulate_exit(df, signal_index=0, plan=plan)
+    assert result.outcome == "not_triggered"
+    assert result.entry_index is None and result.entry_price is None
+    assert result.r_total == 0.0 and result.legs == []
+
+def test_stop_entry_pre_fill_invalidation_produces_not_triggered():
+    df = make_ohlcv([
+        100.0,
+        (99.0, 103.0, 98.0, 96.0),     # 1: close 96 above stop 95 -- still pending
+        (95.0, 96.0, 90.0, 94.0),      # 2: close 94 <= stop 95 -- invalidated
+        (106.0, 107.0, 105.5, 106.5),  # 3: would trigger, never reached
+    ])
+    plan = _plan(entry_type="stop_entry", trigger_price=105.0, expiry_bars=5)
+    result = simulate_exit(df, signal_index=0, plan=plan)
+    assert result.outcome == "not_triggered" and result.legs == []
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Implement entry phase** (as built — the `ExitResult` dataclass, `_not_triggered()` helper, and `simulate_exit`'s entry resolution; the fill path raises `NotImplementedError` with `entry_index`/`entry_price` attached until Task 21 lands the walk):
+
+```python
+# swingbot/core/plan_engine.py
+@dataclass
+class ExitResult:
+    outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"
+    runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|None
+    entry_index: int | None
+    exit_index: int | None
+    entry_price: float | None
+    r_total: float               # sum over legs of fraction * signed_r
+    legs: list                   # [{"fraction","exit_price","r","reason"}]
+
+
+def _not_triggered() -> ExitResult:
+    return ExitResult(outcome="not_triggered", runner_outcome=None, entry_index=None,
+                      exit_index=None, entry_price=None, r_total=0.0, legs=[])
+
+
+def simulate_exit(df, signal_index: int, plan: TradePlanV2, *,
+                  scale_out: bool = False,
+                  max_holding_days: int | None = None) -> ExitResult:
+    if max_holding_days is None:
+        max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
+
+    if plan.entry_type == "market":
+        entry_index = signal_index
+        entry_price = float(df["Close"].values[signal_index])
+        return _dispatch_exit_walk(df, entry_index, entry_price, plan,
+                                   max_holding_days, scale_out)
+
+    # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
+    # trigger touch, watching for pre-fill invalidation along the way.
+    high, low = df["High"].values, df["Low"].values
+    open_, close = df["Open"].values, df["Close"].values
+    n = len(df)
+    j = signal_index + 1
+    while j < n:
+        if pending_expired(plan, j - signal_index):
+            break
+        if trigger_hit(plan, float(high[j]), float(low[j])):
+            return _dispatch_exit_walk(df, j, fill_price(plan, float(open_[j])),
+                                       plan, max_holding_days, scale_out)
+        if pending_invalidated(plan, float(close[j])):
+            return _not_triggered()
+        j += 1
+    return _not_triggered()
+```
+
+(In the committed Task-20 code the dispatch is inline; `_dispatch_exit_walk` here stands for "single-leg walk when `scale_out=False` (Task 21), scale-out walk when True (Task 24+), NotImplementedError with `entry_index`/`entry_price` attributes until each lands".)
+
+- [x] **Step 4: Entry tests PASS. Step 5: Commit** — `git commit -m "feat: exit simulator entry phase (market + stop-entry)"`
 
 ### Task 21: Single-leg exits — win and loss
 
 **Files:** Modify `swingbot/core/plan_engine.py`; test `tests/test_exit_sim_single.py`.
 
-**Interfaces:** Round-1 semantics, extracted verbatim from `backtest.py:297-321`: iterate bars after entry; BE trigger when favorable excursion ≥ `plan.breakeven_trigger_fraction × |tp1 − entry|` (High for bullish), stop moves to entry for SUBSEQUENT bars; same-bar conservative ordering (stop checked before target); `win` when TP1 touched, `r = +rr` (`(tp1−entry)/risk`); `loss` when stop hit pre-BE, `r = −1.0`.
+**Interfaces:** Round-1 semantics, extracted verbatim from `backtest.run_backtest`'s exit loop: iterate bars after entry; BE trigger when favorable excursion ≥ `plan.breakeven_trigger_fraction × |tp1 − entry|` (High for bullish), stop moves to entry for SUBSEQUENT bars; same-bar conservative ordering (stop checked before target); `win` when TP1 touched, `r = +rr` (`(tp1−entry)/risk`); `loss` when stop hit pre-BE, `r = −1.0`.
 
-- [ ] **Step 1: Golden fixtures (bullish + bearish mirrors): (a) straight run to TP1 → `outcome=="win"`, `r_total == pytest.approx(rr)`, one leg; (b) straight drop to stop → `loss`, `r_total == -1.0`.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement single-leg body (scale_out=False path). Step 4: PASS. Step 5: Commit** — `git commit -m "feat: single-leg win/loss exits (round-1 semantics)"`
+- [x] **Step 1: Golden fixtures (bullish + bearish mirrors + a stop_entry fill flowing into the walk):**
+
+```python
+# tests/test_exit_sim_single.py (bullish cases; bearish mirrors identical shape)
+def test_bullish_market_straight_run_to_tp1_is_a_win():
+    # entry fills at bar 0's close (100.0). stop=95.0, tp1=110.0 -> risk=5, rr=2.
+    df = make_ohlcv([
+        100.0,                          # 0: signal/entry bar, entry_price=100.0
+        (100.0, 103.0, 99.0, 102.0),    # 1: no stop/target touch
+        (102.0, 106.0, 101.0, 105.0),   # 2: no stop/target touch
+        (105.0, 111.0, 104.0, 108.0),   # 3: High 111 >= tp1 110 -- win
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    rr = (110.0 - 100.0) / (100.0 - 95.0)
+    assert result.outcome == "win"
+    assert (result.entry_index, result.exit_index) == (0, 3)
+    assert result.r_total == pytest.approx(rr)
+    assert result.legs == [{"fraction": 1.0, "exit_price": 110.0,
+                            "r": pytest.approx(rr), "reason": "tp1"}]
+
+def test_bullish_market_straight_drop_to_stop_is_a_loss():
+    df = make_ohlcv([
+        100.0,
+        (100.0, 101.0, 98.0, 99.0),     # 1: favorable excursion too small for BE
+        (99.0, 100.0, 96.0, 97.0),      # 2: no touch
+        (97.0, 98.0, 94.0, 95.5),       # 3: Low 94 <= stop 95 -- loss
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "loss"
+    assert result.r_total == pytest.approx(-1.0)
+    assert result.legs[0]["exit_price"] == 95.0 and result.legs[0]["reason"] == "stop"
+
+def test_bullish_stop_entry_fill_flows_into_single_leg_walk_to_tp1_win():
+    # Bar 2 gaps above the 105 trigger, fills at max(open, trigger)=106.0
+    # (Task 18 semantics); the walk then starts at entry_index+1 -- the fill
+    # bar itself is never re-checked for stop/tp1.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 104.0, 99.0, 103.0),    # 1: no fill
+        (106.0, 107.0, 105.5, 106.5),   # 2: fills at Open=106.0
+        (106.0, 109.0, 105.0, 108.0),   # 3: BE trigger (111) not reached
+        (108.0, 112.0, 107.0, 111.0),   # 4: High 112 >= BE trigger 111 -- stop moves
+        (111.0, 117.0, 110.0, 114.0),   # 5: High 117 >= tp1 116 -- win
+    ])
+    plan = _plan(entry_type="stop_entry", trigger_price=105.0,
+                 stop_loss=101.0, tp1=116.0, expiry_bars=5)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=False)
+    assert result.outcome == "win"
+    assert (result.entry_index, result.entry_price) == (2, 106.0)
+    assert result.r_total == pytest.approx((116.0 - 106.0) / (106.0 - 101.0))
+```
+
+- [x] **Step 2: Run — FAIL. Step 3: Implement the single-leg walk** (as built — this is the verbatim extraction of `run_backtest`'s exit loop, reshaped around a plan; note it already computes scratch/timeout too, which Task 22 pins with tests):
+
+```python
+# swingbot/core/plan_engine.py
+def _single_leg_exit_walk(df, entry_index: int, entry_price: float,
+                          plan: TradePlanV2, max_holding_days: int) -> ExitResult:
+    """Round-1 (scale_out=False) exit walk, extracted verbatim from
+    backtest.run_backtest. Single leg always carries fraction=1.0."""
+    high, low, close = df["High"].values, df["Low"].values, df["Close"].values
+    n = len(df)
+
+    is_bull = plan.direction == "bullish"
+    sign = 1 if is_bull else -1
+    stop_loss, tp1 = plan.stop_loss, plan.tp1
+    risk = abs(entry_price - stop_loss)
+    target_dist = abs(tp1 - entry_price)
+    rr = target_dist / risk if risk > 0 else 0.0
+
+    if is_bull:
+        be_trigger = entry_price + plan.breakeven_trigger_fraction * target_dist
+    else:
+        be_trigger = entry_price - plan.breakeven_trigger_fraction * target_dist
+    stop_moved = False
+
+    end = min(entry_index + max_holding_days, n - 1)
+    outcome, exit_price, exit_index = "timeout", None, None
+
+    for j in range(entry_index + 1, end + 1):
+        hi, lo = float(high[j]), float(low[j])
+        cur_stop = entry_price if stop_moved else stop_loss
+        if is_bull:
+            hit_stop, hit_target = lo <= cur_stop, hi >= tp1
+            reached_trigger = hi >= be_trigger
+        else:
+            hit_stop, hit_target = hi >= cur_stop, lo <= tp1
+            reached_trigger = lo <= be_trigger
+
+        # Conservative ordering: stop first (original stop still governs the
+        # bar that first reaches the trigger), then target. The moved stop
+        # only protects bars AFTER the trigger bar.
+        if hit_stop:
+            outcome = "scratch" if stop_moved else "loss"
+            exit_price, exit_index = cur_stop, j
+            break
+        if hit_target:
+            outcome, exit_price, exit_index = "win", tp1, j
+            break
+        if reached_trigger and not stop_moved:
+            stop_moved = True
+
+    if outcome == "timeout":
+        exit_price, exit_index = float(close[end]), end
+
+    if outcome == "win":
+        r, reason = rr, "tp1"
+    elif outcome == "loss":
+        r, reason = -1.0, "stop"
+    elif outcome == "scratch":
+        r, reason = 0.0, "breakeven_stop"
+    else:  # timeout
+        r = (exit_price - entry_price) * sign / risk if risk > 0 else 0.0
+        reason = "timeout"
+
+    return ExitResult(outcome=outcome, runner_outcome=None, entry_index=entry_index,
+                      exit_index=exit_index, entry_price=entry_price, r_total=r,
+                      legs=[{"fraction": 1.0, "exit_price": exit_price, "r": r,
+                             "reason": reason}])
+```
+
+`simulate_exit`'s two fill sites route to this when `scale_out=False`; the `scale_out=True` path keeps raising `NotImplementedError` (with `entry_index`/`entry_price` attached) until Task 24.
+
+- [x] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: single-leg win/loss exits (round-1 semantics)"`
 
 ### Task 22: Single-leg exits — scratch, timeout, same-bar ordering
 
-**Files:** as Task 21.
+**Files:** as Task 21 (append to `tests/test_exit_sim_single.py`).
 
-- [ ] **Step 1: Golden fixtures: (a) rally past BE trigger then fall to entry → `scratch`, `r_total == 0.0`; (b) drift sideways past `max_holding_days` → `timeout`, `r_total` = mark-to-market R at last close; (c) one bar whose High ≥ tp1 AND Low ≤ stop → conservative: `loss` (pre-BE) — assert explicitly.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: scratch/timeout/same-bar-conservative exits"`
+> The Task-21 `_single_leg_exit_walk` already computes scratch/timeout/same-bar ordering (they fell out of the verbatim extraction). This task PINS that behavior with tests — expect them to pass immediately; if any fails, the walk (not the test) deviated from the backtest reference and must be fixed.
+
+- [ ] **Step 1: Golden fixtures:**
+
+```python
+# tests/test_exit_sim_single.py (append)
+def test_bullish_scratch_after_breakeven_move():
+    # entry 100, stop 95, tp1 110 -> BE trigger = 100 + 0.5*10 = 105.
+    # Bar 1 reaches 106 (arms the BE move; original stop still governs that
+    # bar), bar 2 falls back through entry -> stop at 100.0, scratch, 0R.
+    df = make_ohlcv([
+        100.0,                          # 0: entry bar
+        (100.0, 106.0, 99.5, 105.0),    # 1: High 106 >= 105 -- BE armed
+        (104.0, 104.5, 99.0, 100.5),    # 2: Low 99 <= moved stop 100 -- scratch
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "scratch"
+    assert result.exit_index == 2
+    assert result.r_total == pytest.approx(0.0, abs=1e-9)
+    assert result.legs[0]["exit_price"] == 100.0
+    assert result.legs[0]["reason"] == "breakeven_stop"
+
+def test_original_stop_governs_the_bar_that_arms_the_be_move():
+    # The SAME bar reaches the BE trigger AND falls back through entry: the
+    # moved stop only protects SUBSEQUENT bars, so this is NOT a scratch --
+    # the walk continues (no touch of original stop 95 / tp1 110 that bar).
+    df = make_ohlcv([
+        100.0,
+        (100.0, 106.0, 99.0, 100.5),    # 1: arms BE AND trades below entry -- no exit
+        (100.0, 100.5, 99.5, 100.0),    # 2: Low 99.5 <= moved stop 100 -- scratch here
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "scratch" and result.exit_index == 2
+
+def test_timeout_marks_to_market_at_last_scanned_close():
+    # 2w horizon: max_holding_days=14. Sideways drift, never touching
+    # stop/target/BE-trigger -> timeout at bar entry+14, r = drift/risk.
+    closes = [100.0] + [(99.8, 100.4, 99.4, 99.8)] * 20
+    df = make_ohlcv(closes)
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0,
+                                      horizon_key="2w"))
+    assert result.outcome == "timeout"
+    assert result.exit_index == 14                       # entry_index + max_holding_days
+    assert result.r_total == pytest.approx((99.8 - 100.0) / 5.0)
+    assert result.legs[0]["reason"] == "timeout"
+
+def test_same_bar_stop_and_target_is_conservative_loss():
+    # One bar spans BOTH stop and tp1 pre-BE: stop is checked first -> loss.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 94.0, 100.0),    # 1: High >= 110 AND Low <= 95
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "loss"
+    assert result.r_total == pytest.approx(-1.0)
+
+def test_bearish_scratch_mirror():
+    # entry 100, stop 105, tp1 90 -> BE trigger = 100 - 0.5*10 = 95.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 100.5, 94.0, 95.5),     # 1: Low 94 <= 95 -- BE armed
+        (96.0, 100.5, 95.5, 100.2),     # 2: High 100.5 >= moved stop 100 -- scratch
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bearish", stop_loss=105.0, tp1=90.0))
+    assert result.outcome == "scratch"
+    assert result.r_total == pytest.approx(0.0, abs=1e-9)
+```
+
+- [ ] **Step 2: Run `python -m pytest tests/test_exit_sim_single.py -v` — expect PASS immediately (behavior already extracted). Any failure means the walk drifted from `backtest.run_backtest` — fix the WALK, not the test, and re-run the full suite.**
+- [ ] **Step 3: Commit** — `git commit -m "test: scratch/timeout/same-bar-conservative exits pinned"`
 
 ### Task 23: Round-1 parity — v2 simulator vs legacy backtest loop
 
@@ -815,39 +1731,426 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 - Create: `scripts/parity_exits.py`
 - Test: `tests/test_exit_parity.py`
 
-**Interfaces:** For every trade the legacy `run_backtest` produces on cached TRAIN data (3 tickers in the pytest version, full watchlist in the script), run `simulate_exit(scale_out=False)` from the same signal bar with the same plan numbers and assert identical `(outcome, exit_index, r)`.
+**Interfaces:** For every trade the legacy `run_backtest` produces on cached TRAIN data (3 tickers in the pytest version, full watchlist in the script), run `simulate_exit(scale_out=False)` from the same signal bar with the same plan numbers and assert identical `(outcome, exit_index, r)`. Shared helper `_plan_from_backtest_trade(trade, ticker, strategy, horizon_key, df)` builds the market-entry TradePlanV2 carrying the legacy trade's exact stop/tp1.
 
-- [ ] **Step 1: Write test+script. Step 2: Run — expect mismatches to surface; fix `simulate_exit` until zero (the legacy loop is the specification — do not "fix" the legacy side).**
+- [ ] **Step 1: Write the test** (the script is the same loop without ticker/strategy limits):
+
+```python
+# tests/test_exit_parity.py
+from pathlib import Path
+import pandas as pd
+import pytest
+
+from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.plan_engine import TradePlanV2, PlanStatus, simulate_exit
+from swingbot.core.strategy_types import HORIZONS
+
+ROOT = Path(__file__).resolve().parent.parent
+CACHE_DIR = ROOT / "data" / "backtest_cache"
+SAMPLE_TICKERS = ["AAPL", "MSFT", "TSLA"]
+HORIZON_KEYS = ["4w", "3m"]
+
+pytestmark = pytest.mark.skipif(not CACHE_DIR.is_dir(),
+                                reason="no OHLCV cache present")
+
+def _plan_from_backtest_trade(t, ticker, strategy, horizon_key):
+    """Market-entry plan with the legacy trade's exact numbers, so
+    simulate_exit re-walks the identical exit problem."""
+    return TradePlanV2(
+        plan_id="parity", ticker=ticker, created_at=t.entry_date,
+        source="strategy", strategy=strategy, horizon_key=horizon_key,
+        direction=t.direction, entry_type="market", trigger_price=t.entry,
+        entry_price=t.entry, expiry_bars=5, stop_loss=t.stop_loss,
+        tp1=t.take_profit, tp1_fraction=0.5, tp2=None,
+        breakeven_trigger_fraction=0.5, trail_atr_mult=2.5,
+        quality_score=0, quality_breakdown=[], tier="C",
+        badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+    )
+
+@pytest.mark.parametrize("horizon_key", HORIZON_KEYS)
+@pytest.mark.parametrize("strategy", ALL_STRATEGIES)
+@pytest.mark.parametrize("ticker", SAMPLE_TICKERS)
+def test_exit_parity(ticker, strategy, horizon_key):
+    path = CACHE_DIR / f"{ticker}.csv"
+    if not path.exists():
+        pytest.skip(f"{ticker}.csv missing")
+    df = pd.read_csv(path, index_col="Date", parse_dates=True)
+
+    summary = run_backtest(ticker, df, strategy, horizon_key)
+    if not summary.trades:
+        pytest.skip("no trades")
+
+    date_to_idx = {str(d.date()): i for i, d in enumerate(df.index)}
+    for t in summary.trades:
+        i = date_to_idx[t.entry_date]
+        plan = _plan_from_backtest_trade(t, ticker, strategy, horizon_key)
+        res = simulate_exit(df, i, plan, scale_out=False)
+        assert res.outcome == t.outcome, (
+            f"{ticker}/{strategy}/{horizon_key} {t.entry_date}: "
+            f"outcome {res.outcome} != legacy {t.outcome}")
+        assert str(df.index[res.exit_index].date()) == t.exit_date
+        # legacy r_multiple is rounded to 3dp in BacktestTrade
+        assert res.r_total == pytest.approx(t.r_multiple, abs=5e-4)
+```
+
+One subtlety to expect: the legacy loop's entry uses the UNROUNDED close while `BacktestTrade` stores `round(entry, 4)` etc. — build the plan from the rounded values but compare `r` with the 5e-4 tolerance above, or reconstruct the plan from the unrounded `_trade_plan_at` output for exact equality (preferred in the script).
+
+- [ ] **Step 2: Write `scripts/parity_exits.py`** — identical loop over every `CACHE_DIR/*.csv` × all strategies × all horizons, entries restricted to TRAIN dates; per-combo tallies; final `print(f"trades: {n}  mismatches: {m}")`; `sys.exit(1 if m else 0)`. **Run — expect mismatches to surface; fix `simulate_exit` until zero (the legacy loop is the specification — do not "fix" the legacy side).**
 - [ ] **Step 3: `python scripts/parity_exits.py` → `mismatches: 0` on the full watchlist. Step 4: Commit** — `git commit -m "test: exit-simulator parity with legacy backtest loop proven"`
 
 ### Task 24: Scale-out — TP1 partial + break-even runner stop
 
 **Files:** Modify `swingbot/core/plan_engine.py`; test `tests/test_exit_sim_scaleout.py`.
 
-**Interfaces:** With `scale_out=True`: TP1 touch closes `tp1_fraction` at `tp1` (leg 1: `r = +rr`, `reason="tp1"`), transition to runner phase, runner stop starts at `entry_price` (BE). Runner stopped at BE → `outcome="win"`, `runner_outcome="runner_be"`, leg 2 `r = 0.0`, `r_total == rr × tp1_fraction`.
+**Interfaces:** With `scale_out=True`: the pre-TP1 phase is IDENTICAL to the single-leg walk (BE move, stop-first ordering — a stop/scratch/timeout before TP1 produces the same single full-fraction leg as `scale_out=False`, which is what makes Task 28's "identical win/loss/scratch counts" assertion hold). TP1 touch closes `tp1_fraction` at `tp1` (leg 1: `r = +rr`, `reason="tp1"`), transition to runner phase, runner stop starts at `entry_price` (BE) and — like the BE move — only protects bars AFTER the TP1 bar. Runner stopped at BE → `outcome="win"`, `runner_outcome="runner_be"`, leg 2 `r = 0.0`, `r_total == rr × tp1_fraction`.
 
-- [ ] **Step 1: Golden fixture: rise to TP1, fall back to entry → assert `outcome=="win"`, `runner_outcome=="runner_be"`, `r_total == pytest.approx(rr * 0.5)`, `len(legs) == 2`. Bearish mirror.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement runner phase skeleton (BE stop only). Step 4: PASS. Step 5: Commit** — `git commit -m "feat: scale-out TP1 partial with break-even runner"`
+- [ ] **Step 1: Golden fixture:**
+
+```python
+# tests/test_exit_sim_scaleout.py
+import pytest
+from swingbot.core.plan_engine import simulate_exit
+from tests.test_exit_sim_single import _plan
+from tests.helpers import make_ohlcv
+
+def test_bullish_tp1_partial_then_runner_stopped_at_breakeven():
+    # entry 100, stop 95, tp1 110 -> rr = 2. Rise through TP1, fall back to entry.
+    df = make_ohlcv([
+        100.0,                           # 0: entry bar
+        (100.0, 111.0, 99.5, 110.5),     # 1: High 111 >= tp1 110 -- leg 1 banked
+        (110.0, 110.5, 104.0, 105.0),    # 2: above entry -- runner survives
+        (105.0, 105.5, 99.5, 100.5),     # 3: Low 99.5 <= runner stop 100 -- runner_be
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    rr = 2.0
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_be"
+    assert result.exit_index == 3
+    assert result.r_total == pytest.approx(rr * 0.5)
+    assert len(result.legs) == 2
+    assert result.legs[0] == {"fraction": 0.5, "exit_price": 110.0,
+                              "r": pytest.approx(rr), "reason": "tp1"}
+    assert result.legs[1]["r"] == pytest.approx(0.0)
+    assert result.legs[1]["reason"] == "runner_be"
+
+def test_bearish_mirror_runner_be():
+    df = make_ohlcv([
+        100.0,
+        (100.0, 100.5, 89.0, 90.5),      # 1: Low 89 <= tp1 90 -- leg 1 banked
+        (91.0, 100.5, 90.5, 99.5),       # 2: High 100.5 >= runner stop 100 -- runner_be
+    ])
+    plan = _plan(direction="bearish", stop_loss=105.0, tp1=90.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win" and result.runner_outcome == "runner_be"
+    assert result.r_total == pytest.approx(2.0 * 0.5)
+
+def test_pre_tp1_loss_is_identical_to_single_leg():
+    df = make_ohlcv([100.0, (100.0, 101.0, 94.0, 95.0)])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "loss" and result.runner_outcome is None
+    assert result.legs == [{"fraction": 1.0, "exit_price": 95.0,
+                            "r": pytest.approx(-1.0), "reason": "stop"}]
+```
+
+- [ ] **Step 2: Run — FAIL (`NotImplementedError`). Step 3: Implement the scale-out walk skeleton** (replaces the `NotImplementedError` raises at both `simulate_exit` fill sites — route `scale_out=True` here). The full function; TP2 (Task 25) and the chandelier (Task 26) slot into the marked lines:
+
+```python
+# swingbot/core/plan_engine.py
+def _scale_out_exit_walk(df, entry_index: int, entry_price: float,
+                         plan: TradePlanV2, max_holding_days: int) -> ExitResult:
+    """Hybrid scale-out walk (spec §5). Phase 1 (pre-TP1) is byte-identical
+    to _single_leg_exit_walk; a stop/scratch/timeout before TP1 returns the
+    same single full-fraction leg. TP1 touch banks tp1_fraction at tp1 and
+    hands the rest to the runner: stop starts at entry (BE), ratchets up via
+    the chandelier trail (Task 26), exits at TP2 (Task 25) or timeout.
+    The runner can never turn a win negative: its stop never sits below
+    entry (bullish), so leg 2's r is >= 0 by construction."""
+    from swingbot.core.indicators import atr as atr_indicator
+
+    high, low, close = df["High"].values, df["Low"].values, df["Close"].values
+    n = len(df)
+    is_bull = plan.direction == "bullish"
+    sign = 1 if is_bull else -1
+    stop_loss, tp1, tp2 = plan.stop_loss, plan.tp1, plan.tp2
+    risk = abs(entry_price - stop_loss)
+    target_dist = abs(tp1 - entry_price)
+    rr = target_dist / risk if risk > 0 else 0.0
+    frac1 = plan.tp1_fraction
+    frac2 = 1.0 - frac1
+
+    be_trigger = entry_price + sign * plan.breakeven_trigger_fraction * target_dist
+    stop_moved = False
+    end = min(entry_index + max_holding_days, n - 1)
+
+    # ---- phase 1: identical to the single-leg walk until TP1 touches ----
+    tp1_index = None
+    for j in range(entry_index + 1, end + 1):
+        hi, lo = float(high[j]), float(low[j])
+        cur_stop = entry_price if stop_moved else stop_loss
+        if is_bull:
+            hit_stop, hit_target = lo <= cur_stop, hi >= tp1
+            reached_trigger = hi >= be_trigger
+        else:
+            hit_stop, hit_target = hi >= cur_stop, lo <= tp1
+            reached_trigger = lo <= be_trigger
+
+        if hit_stop:  # conservative: stop first, exactly as single-leg
+            outcome = "scratch" if stop_moved else "loss"
+            r = 0.0 if stop_moved else -1.0
+            reason = "breakeven_stop" if stop_moved else "stop"
+            return ExitResult(outcome=outcome, runner_outcome=None,
+                              entry_index=entry_index, exit_index=j,
+                              entry_price=entry_price, r_total=r,
+                              legs=[{"fraction": 1.0, "exit_price": cur_stop,
+                                     "r": r, "reason": reason}])
+        if hit_target:
+            tp1_index = j
+            break
+        if reached_trigger and not stop_moved:
+            stop_moved = True
+
+    if tp1_index is None:  # timeout before TP1 -- identical to single-leg
+        exit_price = float(close[end])
+        r = (exit_price - entry_price) * sign / risk if risk > 0 else 0.0
+        return ExitResult(outcome="timeout", runner_outcome=None,
+                          entry_index=entry_index, exit_index=end,
+                          entry_price=entry_price, r_total=r,
+                          legs=[{"fraction": 1.0, "exit_price": exit_price,
+                                 "r": r, "reason": "timeout"}])
+
+    leg1 = {"fraction": frac1, "exit_price": tp1, "r": rr, "reason": "tp1"}
+
+    # ---- phase 2: runner. Stop starts at entry (BE); protects bars AFTER
+    # the TP1 bar (same "subsequent bars only" convention as the BE move).
+    atr_series = atr_indicator(df, 14)
+    runner_stop = entry_price
+    extreme_close = float(close[tp1_index])   # highest (bull) close since TP1
+    runner_exit = runner_reason = None
+    exit_index = None
+
+    for j in range(tp1_index + 1, end + 1):
+        hi, lo = float(high[j]), float(low[j])
+        # stop first (conservative), then TP2 -- Task 25 adds the TP2 branch,
+        # Task 26 ratchets runner_stop via the chandelier before this check.
+        if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
+            runner_exit, exit_index = runner_stop, j
+            runner_reason = ("runner_be" if runner_stop == entry_price
+                             else "runner_trail")
+            break
+        if tp2 is not None and ((hi >= tp2) if is_bull else (lo <= tp2)):   # Task 25
+            runner_exit, exit_index, runner_reason = tp2, j, "runner_tp2"
+            break
+        # Task 26: ratchet from THIS bar's close for the NEXT bar (no intrabar
+        # lookahead -- the trail a bar is judged against derives only from
+        # closes strictly before it).
+        extreme_close = max(extreme_close, float(close[j])) if is_bull \
+            else min(extreme_close, float(close[j]))
+        atr_val = _safe_atr_value(entry_price, float(atr_series.iloc[j]))
+        trail = chandelier_stop(extreme_close, atr_val, plan.trail_atr_mult,
+                                plan.direction)
+        runner_stop = max(runner_stop, trail) if is_bull else min(runner_stop, trail)
+
+    if runner_exit is None:   # Task 27: runner timeout
+        runner_exit, exit_index, runner_reason = float(close[end]), end, "runner_timeout"
+
+    r2 = (runner_exit - entry_price) * sign / risk if risk > 0 else 0.0
+    leg2 = {"fraction": frac2, "exit_price": runner_exit, "r": r2,
+            "reason": runner_reason}
+    return ExitResult(outcome="win", runner_outcome=runner_reason,
+                      entry_index=entry_index, exit_index=exit_index,
+                      entry_price=entry_price, r_total=frac1 * rr + frac2 * r2,
+                      legs=[leg1, leg2])
+```
+
+For THIS task implement only through the runner-BE branch (comment out the TP2 branch and the chandelier ratchet — leg 2 exits at BE or falls through to timeout); Tasks 25–27 uncomment and pin each piece.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: scale-out TP1 partial with break-even runner"`
 
 ### Task 25: Runner TP2
 
-- [ ] **Step 1: In `tests/test_exit_sim_scaleout.py`: fixture rising through TP1 then TP2 → `runner_outcome=="runner_tp2"`, leg 2 `r = (tp2−entry)/risk`, `r_total == 0.5*rr + 0.5*(tp2−entry)/risk`. `tp2=None` → runner ignores TP2 (trail/BE only). Same-bar TP1-and-stop conservative ordering still holds in runner phase (stop first).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner TP2 exit"`
+**Files:** Modify `swingbot/core/plan_engine.py` (uncomment/land the TP2 branch in `_scale_out_exit_walk` — see the Task 24 listing); test `tests/test_exit_sim_scaleout.py`.
+
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_exit_sim_scaleout.py (append)
+def test_runner_rides_to_tp2():
+    # entry 100, stop 95, tp1 110 (rr=2), tp2 = 118 -> leg2 r = 18/5 = 3.6
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),     # 1: TP1 banked
+        (110.0, 115.0, 109.0, 114.0),    # 2: climbing, runner alive
+        (114.0, 119.0, 113.0, 117.0),    # 3: High 119 >= tp2 118 -- runner_tp2
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=118.0)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win" and result.runner_outcome == "runner_tp2"
+    assert result.exit_index == 3
+    assert result.legs[1]["exit_price"] == 118.0
+    assert result.legs[1]["r"] == pytest.approx(3.6)
+    assert result.r_total == pytest.approx(0.5 * 2.0 + 0.5 * 3.6)
+
+def test_tp2_none_means_runner_ignores_it():
+    # Same tape, tp2=None: bar 3's spike to 119 must NOT close the runner.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),
+        (110.0, 115.0, 109.0, 114.0),
+        (114.0, 119.0, 113.0, 117.0),
+        (117.0, 117.5, 99.0, 100.0),     # 4: collapse to runner stop
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.runner_outcome != "runner_tp2"
+    assert result.exit_index == 4
+
+def test_same_bar_runner_stop_and_tp2_is_conservative_stop_first():
+    # Runner bar spans BOTH the runner stop (100, BE) and tp2: stop wins.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),     # 1: TP1 banked
+        (110.0, 119.0, 99.0, 105.0),     # 2: High >= tp2 118 AND Low <= BE 100
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=118.0)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.runner_outcome == "runner_be"
+    assert result.legs[1]["r"] == pytest.approx(0.0)
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Land the TP2 branch** (it sits AFTER the runner-stop check in the loop — same conservative ordering as phase 1):
+
+```python
+        if tp2 is not None and ((hi >= tp2) if is_bull else (lo <= tp2)):
+            runner_exit, exit_index, runner_reason = tp2, j, "runner_tp2"
+            break
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner TP2 exit"`
 
 ### Task 26: Chandelier trail
 
 **Files:** Modify `swingbot/core/plan_engine.py`; test `tests/test_exit_sim_scaleout.py`.
 
 **Interfaces:**
-- Produces: `chandelier_stop(highest_close_since_tp1, atr_value, mult, direction) -> float` (bullish: `hc − mult×atr`; bearish mirrored). Runner stop each bar = `max(BE, chandelier)` for bullish (`min` bearish); ratchets only toward profit, never backwards. ATR from `_atr(df)` at the current bar.
+- Produces: `chandelier_stop(extreme_close_since_tp1, atr_value, mult, direction) -> float` (bullish: `hc − mult×atr`; bearish mirrored). Runner stop each bar = `max(BE, chandelier)` for bullish (`min` bearish); ratchets only toward profit, never backwards. **No intrabar lookahead:** the trail a bar is judged against derives only from closes strictly before it — the ratchet update runs at the END of each surviving bar (see the Task 24 listing's loop ordering). ATR from `indicators.atr(df, 14)` at the current bar, NaN-guarded via `_safe_atr_value`.
 
-- [ ] **Step 1: Golden fixture: strong rally after TP1 (trail rises above entry), then a pullback pierces the trail but stays above entry → `runner_outcome=="runner_trail"`, leg-2 exit at the trail level, `r_total > 0.5*rr`. Assert the ratchet: a down-bar must not lower the stop.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: chandelier trail for runner leg"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_exit_sim_scaleout.py (append)
+def test_chandelier_trail_locks_in_runner_profit():
+    # Flat-spread bars (make_ohlcv floats: High=c*1.01, Low=c*0.99) keep
+    # ATR(14) ~= 2% of price. entry 100, stop 95, tp1 110, no tp2,
+    # trail_atr_mult=2.5. A strong rally lifts the trail well above entry;
+    # the later plunge pierces the trail but stays above entry -> exit at
+    # the trail level, r_total > 0.5*rr.
+    closes = ([100.0] * 15                  # ATR warmup
+              + [111.0]                     # TP1 banked here
+              + [115.0, 120.0, 126.0, 132.0, 138.0]   # rally ratchets the trail
+              + [120.0])                    # plunge through the trail
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=14, plan=plan, scale_out=True)
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_trail"
+    exit_leg = result.legs[1]
+    assert exit_leg["exit_price"] > 100.0            # trail was above entry
+    assert exit_leg["r"] > 0.0
+    assert result.r_total > 0.5 * 2.0                # better than plain BE runner
+
+def test_trail_never_ratchets_backwards():
+    # After a big up-close ratchets the trail, a down-close must NOT lower it:
+    # the pullback bar that would survive a re-lowered trail must still exit.
+    closes = ([100.0] * 15 + [111.0]
+              + [130.0]        # trail jumps to ~130 - 2.5*ATR
+              + [124.0]        # down-close: trail must NOT drop
+              + [118.0])       # pierces the ratcheted trail -> exit
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=14, plan=plan, scale_out=True)
+    assert result.runner_outcome == "runner_trail"
+    # ratchet floor: the trail set by the 130-close bar, not the 124 one
+    assert result.legs[1]["exit_price"] >= 130.0 - 2.5 * (130.0 * 0.02) - 1.0
+
+def test_chandelier_stop_pure_function():
+    from swingbot.core.plan_engine import chandelier_stop
+    assert chandelier_stop(130.0, 2.0, 2.5, "bullish") == pytest.approx(125.0)
+    assert chandelier_stop(70.0, 2.0, 2.5, "bearish") == pytest.approx(75.0)
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement** — the pure helper plus the ratchet lines already marked in the Task 24 listing:
+
+```python
+# swingbot/core/plan_engine.py
+def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
+                    mult: float, direction: str) -> float:
+    """Classic chandelier exit level for the runner leg: the extreme close
+    since TP1 minus (bullish) / plus (bearish) mult x ATR."""
+    if direction == "bullish":
+        return extreme_close_since_tp1 - mult * atr_value
+    return extreme_close_since_tp1 + mult * atr_value
+```
+
+- [ ] **Step 4: PASS (recheck exact fixture arithmetic against the ATR the helper actually computes — adjust the asserted bounds, never the ordering/ratchet semantics). Step 5: Commit** — `git commit -m "feat: chandelier trail for runner leg"`
 
 ### Task 27: Runner timeout + two-leg accounting invariants
 
-- [ ] **Step 1: Fixtures: (a) runner drifts past `max_holding_days` → `runner_outcome=="runner_timeout"`, leg 2 marked at last close; (b) property-style test over 50 randomized `make_ohlcv` frames (seeded numpy RandomState(42), no `Date.now`): whenever `outcome=="win"` with scale_out, `r_total >= 0.5*rr*0.999` (runner can never turn a win negative — the spec §5 invariant).**
-- [ ] **Step 2: Run — FAIL/flaky until correct. Step 3: Fix. Step 4: PASS. Step 5: Commit** — `git commit -m "test: two-leg invariants — runner never turns a win into a loss"`
+**Files:** Modify `swingbot/core/plan_engine.py` (runner-timeout fallthrough — already sketched in the Task 24 listing); test `tests/test_exit_sim_scaleout.py`.
+
+- [ ] **Step 1: Fixtures:**
+
+```python
+# tests/test_exit_sim_scaleout.py (append)
+import numpy as np
+
+def test_runner_timeout_marks_leg2_at_last_close():
+    # 2w horizon (max_holding_days=14): TP1 on bar 1, then a drift that never
+    # touches BE/trail/tp2 -> runner_timeout at entry+14, leg 2 at that close.
+    closes = [100.0, (100.0, 111.0, 99.5, 110.5)] + [(108.0, 109.0, 107.0, 108.0)] * 20
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None,
+                 horizon_key="2w", trail_atr_mult=50.0)   # trail parked far away
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_timeout"
+    assert result.exit_index == 14
+    assert result.legs[1]["exit_price"] == 108.0
+    assert result.legs[1]["r"] == pytest.approx((108.0 - 100.0) / 5.0)
+
+def test_win_never_goes_negative_property():
+    # 50 seeded random walks: whenever scale_out reports a win, r_total must
+    # be >= 0.5*rr (leg 1 banked; runner floor is BE) -- the spec §5 invariant.
+    rng = np.random.RandomState(42)
+    violations = []
+    for k in range(50):
+        closes = list(100.0 * np.cumprod(1 + rng.normal(0.001, 0.02, 60)))
+        df = make_ohlcv(closes)
+        plan = _plan(direction="bullish",
+                     stop_loss=closes[0] * 0.95, tp1=closes[0] * 1.04,
+                     trigger_price=closes[0], tp2=None, horizon_key="4w")
+        result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+        if result.outcome == "win":
+            rr = (plan.tp1 - closes[0]) / (closes[0] - plan.stop_loss)
+            if result.r_total < 0.5 * rr * 0.999:
+                violations.append((k, result.r_total))
+    assert not violations, violations
+
+def test_legs_fractions_always_sum_to_one():
+    # every terminal ExitResult with legs: fractions sum to 1.0 and
+    # r_total == sum(fraction * r) exactly.
+    closes = [100.0, (100.0, 111.0, 99.5, 110.5), (110.0, 112.0, 99.0, 100.0)]
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert sum(l["fraction"] for l in result.legs) == pytest.approx(1.0)
+    assert result.r_total == pytest.approx(
+        sum(l["fraction"] * l["r"] for l in result.legs))
+```
+
+- [ ] **Step 2: Run — FAIL/flaky until the timeout fallthrough and ratchet interact correctly. Step 3: Fix the WALK until stable (the invariant is law: the runner stop must never sit on the losing side of entry — if the property test finds a violation, the bug is in the ratchet/ordering, not the test).**
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "test: two-leg invariants — runner never turns a win into a loss"`
 
 ### Task 28: Backtest engine gains `exit_model="v2"`
 
@@ -856,17 +2159,107 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 - Test: `tests/test_backtest_engine.py` (append)
 
 **Interfaces:**
-- Produces: `run_backtest(..., exit_model="v1", scale_out=False)`; `"v2"` routes every trade through `simulate_exit` (v1 loop untouched until Task 91); stats dict gains `runner_tp2`, `runner_trail`, `runner_be`, `runner_timeout` counts and `avg_win_r`. `win_rate`/`expectancy_r` definitions unchanged (Global Constraints).
+- Produces: `run_backtest(..., exit_model="v1", scale_out=False, tp2_mode="none")`; `"v2"` routes every trade through `simulate_exit` (v1 loop untouched until Task 91). `BacktestSummary` gains (defaulted, appended AFTER the existing fields so dataclass ordering stays legal): `runner_tp2: int = 0`, `runner_trail: int = 0`, `runner_be: int = 0`, `runner_timeout: int = 0`, `avg_win_r: float | None = None`. `tp2_mode="levels"` computes an as-of level map every 5 bars (`levels.build_level_map` on `df.iloc[:i+1]`) and fills tp2 via `select_tp2` — needed by Task 30's `tp2 ∈ {on, off}` grid axis. `win_rate`/`expectancy_r` definitions unchanged (Global Constraints).
 
-- [ ] **Step 1: Failing test: run both models on one cached ticker, assert v2/scale_out=False equals v1 outcome counts exactly; v2/scale_out=True has identical win/loss/scratch counts (TP1 untouched ⇒ same classification) and `expectancy_r >= v1_expectancy_r - 0.02`.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: backtest exit_model=v2 with runner sub-outcome stats"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_backtest_engine.py (append)
+import pytest
+from pathlib import Path
+import pandas as pd
+from swingbot.core.backtest import run_backtest
+
+CACHE = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
+
+@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
+def test_v2_single_leg_reproduces_v1_exactly():
+    df = pd.read_csv(CACHE / "AAPL.csv", index_col="Date", parse_dates=True)
+    v1 = run_backtest("AAPL", df, "MACD", "4w")
+    v2 = run_backtest("AAPL", df, "MACD", "4w", exit_model="v2", scale_out=False)
+    assert (v1.wins, v1.losses, v1.scratches, v1.timeouts) == \
+           (v2.wins, v2.losses, v2.scratches, v2.timeouts)
+    assert v2.expectancy_r == pytest.approx(v1.expectancy_r, abs=1e-9)
+
+@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
+def test_v2_scale_out_keeps_classification_and_expectancy():
+    df = pd.read_csv(CACHE / "AAPL.csv", index_col="Date", parse_dates=True)
+    v1 = run_backtest("AAPL", df, "MACD", "4w")
+    v2 = run_backtest("AAPL", df, "MACD", "4w", exit_model="v2", scale_out=True)
+    # TP1 unchanged => identical win/loss/scratch classification
+    assert (v1.wins, v1.losses, v1.scratches) == (v2.wins, v2.losses, v2.scratches)
+    # runner sub-outcomes partition the wins
+    assert v2.runner_tp2 + v2.runner_trail + v2.runner_be + v2.runner_timeout == v2.wins
+    # runner floor is BE => expectancy can only drop by rounding noise
+    assert v2.expectancy_r >= v1.expectancy_r - 0.02
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement in `run_backtest`** — after `_trade_plan_at` returns `(entry, stop_loss, take_profit)` for bar `i`, branch on `exit_model`:
+
+```python
+# swingbot/core/backtest.py (inside run_backtest's entry loop)
+if exit_model == "v2":
+    from .plan_engine import (PlanStatus, TradePlanV2, simulate_exit,
+                              select_tp2)
+    tp2 = None
+    if tp2_mode == "levels":
+        # as-of level map, refreshed every 5 bars (levels move slowly)
+        if _lm_cache_key != i // 5:
+            supports, resistances = build_level_map(
+                df.iloc[:i + 1], HORIZONS[horizon_key], entry)
+            _lm_cache_key = i // 5
+        tp2 = select_tp2([lv.price for lv in resistances],
+                         [lv.price for lv in supports],
+                         direction, entry, take_profit)
+    plan = TradePlanV2(
+        plan_id="bt", ticker=ticker, created_at=str(df.index[i].date()),
+        source="strategy", strategy=strategy, horizon_key=horizon_key,
+        direction=direction, entry_type="market", trigger_price=entry,
+        entry_price=entry, expiry_bars=5, stop_loss=stop_loss,
+        tp1=take_profit, tp1_fraction=0.5, tp2=tp2,
+        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+    )
+    res = simulate_exit(df, i, plan, scale_out=scale_out)
+    _open_until = res.exit_index
+    exit_i, exit_price = res.exit_index, res.legs[-1]["exit_price"]
+    outcome, r_multiple = res.outcome, res.r_total
+    runner_counts[res.runner_outcome] = runner_counts.get(res.runner_outcome, 0) + 1 \
+        if res.runner_outcome else runner_counts.get(res.runner_outcome, 0)
+    return_pct = r_multiple * (abs(entry - stop_loss) / entry) * 100
+    trades.append(BacktestTrade(...))   # same rounding as the v1 block
+    continue
+```
+
+(Keep the v1 walk-forward block untouched below it. `runner_counts` is a local dict folded into the summary at the end; `avg_win_r = mean(r over win trades)`. Import `TRAIL_ATR_MULT` from plan_engine.)
+
+- [ ] **Step 4: PASS + full suite green (existing `test_backtest_engine.py` tests must not notice the new kwargs). Step 5: Commit** — `git commit -m "feat: backtest exit_model=v2 with runner sub-outcome stats"`
 
 ### Task 29: Harness flags `--exit-model` / `--scale-out`
 
-**Files:** Modify `scripts/run_backtest_range.py`.
+**Files:** Modify `scripts/run_backtest_range.py` (it already has `--train/--validation/--from/--to/--strategy/--json/--emit-registry/--run-date`).
 
-- [ ] **Step 1: Add flags; report gains columns `AvgWinR` and runner sub-outcome percentages. `--train --exit-model v2` (no scale-out) must reproduce the committed train table.**
-- [ ] **Step 2: Run it; verify identity; commit** — `git commit -m "feat: harness supports v2 exit model + scale-out"`
+- [ ] **Step 1: Add the flags and thread them through:**
+
+```python
+# scripts/run_backtest_range.py (main(), argparse block)
+ap.add_argument("--exit-model", choices=["v1", "v2"], default="v1")
+ap.add_argument("--scale-out", action="store_true")
+ap.add_argument("--tp2", choices=["none", "levels"], default="levels",
+                help="TP2 source for scale-out runs (v2 only)")
+```
+
+Every `run_backtest(...)` call site gains `exit_model=args.exit_model, scale_out=args.scale_out, tp2_mode=(args.tp2 if args.exit_model == "v2" else "none")`. The per-strategy summary table gains columns when `--exit-model v2 --scale-out`:
+
+```
+Strategy              N   Win%   ExpR  AvgWinR  Excl%  tp2%  trail%  be%  rto%
+```
+
+where `tp2/trail/be/rto` are runner sub-outcomes as % of wins (from the new `BacktestSummary` fields, pooled the same way N/Win% already pool). The `--json` payload carries the same numbers per strategy.
+
+- [ ] **Step 2: Verify identity: `python scripts/run_backtest_range.py --train --exit-model v2` (no `--scale-out`) must reproduce the committed train table in `docs/superpowers/results/2026-07-train-tuning.md` line for line. Diff it; do not proceed on differences.**
+- [ ] **Step 3: Commit** — `git commit -m "feat: harness supports v2 exit model + scale-out"`
 
 ### Task 30: TRAIN grid — runner params + breakout entry-type
 
@@ -875,7 +2268,102 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 
 **Interfaces:** Grid, evaluated on TRAIN only, per strategy pooled across its gated horizons: `trail_atr_mult ∈ {2.0, 2.5, 3.0}` × `tp2 ∈ {on, off}` × (breakout-class strategies only: `entry_type ∈ {market, stop_entry}`, breakout-class = `{Break & Retest, Support/Resistance, EMA Crossover}`). **Pre-registered selection rule (fixed now, before running):** among configs where `win_rate >= 80 and expectancy_r > 0 and N >= 30 and excl <= 50%`, pick max `expectancy_r`; if none qualify for a strategy, keep defaults (`2.5, tp2 on, market`). Print the chosen config per strategy with its train stats.
 
-- [ ] **Step 1: Write the script (reuses `run_backtest` v2; loops the grid; no network — cached CSVs).**
+- [ ] **Step 1: Write the script:**
+
+```python
+# scripts/tune_exit_v2.py
+"""TRAIN-only grid for exit-model-v2 runner params + breakout entry-type.
+
+Selection rule is PRE-REGISTERED (see plan Task 30) and printed with the
+output so the result doc can quote it verbatim. Never run this against the
+validation window -- the harness flags for that don't even exist here.
+"""
+import itertools
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from swingbot.core import plan_engine
+from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES
+
+CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
+TRAIN = ("2020-01-01", "2023-12-31")
+BREAKOUT_CLASS = {"Break & Retest", "Support/Resistance", "EMA Crossover"}
+GRID_TRAIL = [2.0, 2.5, 3.0]
+GRID_TP2 = ["levels", "none"]
+RULE = "WR>=80 and ExpR>0 and N>=30 and excl<=50%; max ExpR wins; else keep defaults"
+
+
+def _gated_horizons(strategy):
+    gates = STRATEGY_GATES.get(strategy, {})
+    return list(gates.get("horizons", HORIZONS.keys()))
+
+
+def _pool(summaries):
+    trades = [t for s in summaries for t in s.trades
+              if TRAIN[0] <= t.entry_date <= TRAIN[1]]
+    if not trades:
+        return None
+    ev = [t for t in trades if t.outcome in ("win", "loss")]
+    wins = [t for t in ev if t.outcome == "win"]
+    excl = [t for t in trades if t.outcome in ("scratch", "timeout")]
+    return {
+        "n": len(ev),
+        "win_rate": len(wins) / len(ev) * 100 if ev else 0.0,
+        "expectancy_r": float(np.mean([t.r_multiple for t in trades])),
+        "excl_pct": len(excl) / len(trades) * 100,
+    }
+
+
+def main():
+    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
+              for p in sorted(CACHE_DIR.glob("*.csv"))}
+    print(f"tickers: {len(frames)}  train window: {TRAIN}  rule: {RULE}\n")
+
+    for strategy in ALL_STRATEGIES:
+        entry_axis = ["market", "stop_entry"] if strategy in BREAKOUT_CLASS else ["market"]
+        results = []
+        for trail, tp2_mode, entry_type in itertools.product(GRID_TRAIL, GRID_TP2, entry_axis):
+            plan_engine.TRAIL_ATR_MULT = trail
+            plan_engine.STRATEGY_ENTRY_TYPE[strategy] = entry_type
+            summaries = [
+                run_backtest(tk, df, strategy, hk, exit_model="v2",
+                             scale_out=True, tp2_mode=tp2_mode)
+                for tk, df in frames.items()
+                for hk in _gated_horizons(strategy)
+            ]
+            stats = _pool(summaries)
+            if stats:
+                results.append(((trail, tp2_mode, entry_type), stats))
+                print(f"{strategy:<20} trail={trail} tp2={tp2_mode:<6} entry={entry_type:<10} "
+                      f"N={stats['n']:<4} WR={stats['win_rate']:5.1f} "
+                      f"ExpR={stats['expectancy_r']:+.3f} excl={stats['excl_pct']:4.1f}%")
+        # restore defaults before scoring the next strategy
+        plan_engine.TRAIL_ATR_MULT = 2.5
+        plan_engine.STRATEGY_ENTRY_TYPE.pop(strategy, None)
+
+        qualifying = [(cfg, s) for cfg, s in results
+                      if s["win_rate"] >= 80 and s["expectancy_r"] > 0
+                      and s["n"] >= 30 and s["excl_pct"] <= 50]
+        if qualifying:
+            cfg, s = max(qualifying, key=lambda x: x[1]["expectancy_r"])
+            print(f">>> {strategy}: WINNER trail={cfg[0]} tp2={cfg[1]} entry={cfg[2]} "
+                  f"(N={s['n']} WR={s['win_rate']:.1f} ExpR={s['expectancy_r']:+.3f})\n")
+        else:
+            print(f">>> {strategy}: no config qualifies -- KEEP DEFAULTS (2.5, tp2 on, market)\n")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+(Monkeypatching `plan_engine.TRAIL_ATR_MULT` works because `build_strategy_plan`/the Task 28 plan stub read the module attribute at call time; if Task 28 froze it into a local, thread `trail_atr_mult` through as a `run_backtest` kwarg instead — same grid, cleaner plumbing.)
+
 - [ ] **Step 2: `python scripts/tune_exit_v2.py > docs/superpowers/results/2026-07-exit-v2-train-grid.txt` — capture full output.**
 - [ ] **Step 3: Commit script + raw output** — `git commit -m "feat: exit-v2 train grid (pre-registered selection rule)"`
 
@@ -885,8 +2373,30 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 - Modify: `swingbot/core/plan_engine.py` (constants `TRAIL_ATR_MULT`, per-strategy overrides dict `EXIT_V2_PARAMS` if the grid chose non-defaults; update `STRATEGY_ENTRY_TYPE` if stop_entry won for any breakout-class strategy)
 - Create: `docs/superpowers/results/2026-07-exit-v2-train.md`
 
-- [ ] **Step 1: Encode the grid winners as constants (exact values from Task 30 output). Step 2: Full train run `python scripts/run_backtest_range.py --train --exit-model v2 --scale-out`; write the results doc: full table + chosen params + the pre-registered selection rule text.**
-- [ ] **Step 3: `python -m pytest tests/ -q` green. Step 4: Commit** — `git commit -m "feat: adopt train-window exit-v2 params"`
+- [ ] **Step 1: Encode the grid winners as constants** (exact values from Task 30's output — the numbers below are placeholders showing the SHAPE):
+
+```python
+# swingbot/core/plan_engine.py
+TRAIL_ATR_MULT = 2.5   # global default (grid may confirm or change it)
+
+# Per-strategy exit-v2 overrides chosen by the Task 30 TRAIN grid under the
+# pre-registered rule (docs/superpowers/results/2026-07-exit-v2-train-grid.txt).
+# Missing key = defaults (trail 2.5, tp2 on). NEVER edit from validation data.
+EXIT_V2_PARAMS: dict[str, dict] = {
+    # "Fibonacci": {"trail_atr_mult": 3.0, "tp2": True},
+    # "MACD":      {"trail_atr_mult": 2.0, "tp2": True},
+}
+
+def exit_params_for(strategy: str) -> dict:
+    p = EXIT_V2_PARAMS.get(strategy, {})
+    return {"trail_atr_mult": p.get("trail_atr_mult", TRAIL_ATR_MULT),
+            "tp2": p.get("tp2", True)}
+```
+
+`build_strategy_plan`/`build_confluence_plan` set `trail_atr_mult=exit_params_for(strategy)["trail_atr_mult"]`; the Task 28 backtest stub does the same, and drops tp2 when `exit_params_for(strategy)["tp2"]` is False. If `stop_entry` won for any breakout-class strategy, add it to `STRATEGY_ENTRY_TYPE` here (one line per strategy, with the grid stats in a comment).
+
+- [ ] **Step 2: Full train run `python scripts/run_backtest_range.py --train --exit-model v2 --scale-out`; write `docs/superpowers/results/2026-07-exit-v2-train.md`: full table + chosen params + the pre-registered selection rule text quoted verbatim.**
+- [ ] **Step 3: `python -m pytest tests/ -q` green (Task 28's parity test still passes because scale_out=False ignores all of this). Step 4: Commit** — `git commit -m "feat: adopt train-window exit-v2 params"`
 
 ### Task 32: Exit-v2 VALIDATION (single run)
 
@@ -899,8 +2409,25 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 
 ### Task 33: Regenerate registry from exit-v2 validation
 
-- [ ] **Step 1: `python scripts/run_backtest_range.py --validation --exit-model v2 --scale-out --emit-registry swingbot/core/validation_registry.json --run-date 2026-07-XX` (XX = actual date; reuses the Task 32 run's data — the harness must support `--from-json exit_v2_validation.json` replay to honor run-once; add that flag here).**
-- [ ] **Step 2: `python -m pytest tests/test_registry.py -v` — update seed-era assertions if numbers legitimately moved (only ExpR should move; win rates should match round 1 within rounding).**
+- [ ] **Step 1: Add `--from-json` replay to the harness** so the registry can be regenerated WITHOUT re-running the validation window (run-once discipline):
+
+```python
+# scripts/run_backtest_range.py
+ap.add_argument("--from-json", dest="from_json", default=None,
+                help="replay per-strategy summaries from a previous --json "
+                     "output instead of running the backtest (honors the "
+                     "run-once validation budget)")
+# in main(), before any backtest work:
+if args.from_json:
+    with open(args.from_json, encoding="utf-8") as f:
+        summaries = json.load(f)["summaries"]   # same shape --json wrote
+else:
+    summaries = ...  # existing computation
+```
+
+Then: `python scripts/run_backtest_range.py --from-json exit_v2_validation.json --emit-registry swingbot/core/validation_registry.json --run-date <actual date of the Task 32 run>` — zero new validation exposure.
+
+- [ ] **Step 2: `python -m pytest tests/test_registry.py -v` — update seed-era assertions if numbers legitimately moved (only ExpR should move; win rates should match round 1 within rounding). Any WR shift > 0.5pt means the v2 single-leg/scale-out classification diverged — stop and investigate before committing.**
 - [ ] **Step 3: Commit** — `git commit -m "feat: registry regenerated from exit-v2 validation"`
 
 # Phase 3 — Confluence pipeline under validation (Tasks 34–46)
@@ -909,8 +2436,79 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 
 **Files:** Create `tests/test_levels_scenarios.py`.
 
-- [ ] **Step 1: First-ever tests for the live pipeline: with a deterministic synthetic frame (trend + consolidation so S/R levels exist), assert: scenarios have `entry == current price`; `stop_loss`/`take_profit` on opposite sides; `target_sources`/`stop_sources` non-empty; reward/stop bounds respected (`engine.py:496-497` widening rules). These lock current behavior before we touch anything.**
-- [ ] **Step 2: Run — PASS immediately (characterization). If any assertion fails, the test is wrong — fix the test, not levels.py.**
+- [ ] **Step 1: First-ever tests for the live pipeline — lock current behavior before anything touches it:**
+
+```python
+# tests/test_levels_scenarios.py
+import numpy as np
+import pytest
+from swingbot.core import levels
+from swingbot.core.strategy_types import HORIZONS
+from tests.helpers import make_ohlcv
+
+def _structured_df():
+    """Trend up, then a 60-bar consolidation between ~95 and ~105 -- gives
+    every level source (rolling S/R, Donchian, pivots, Bollinger, fibs)
+    real structure on both sides of price."""
+    rng = np.random.RandomState(7)
+    trend = list(100 * np.cumprod(1 + rng.normal(0.002, 0.01, 120)))
+    box = [trend[-1] * (1 + 0.05 * np.sin(i / 4)) for i in range(60)]
+    return make_ohlcv(trend + box)
+
+@pytest.fixture(scope="module")
+def scenario_env():
+    df = _structured_df()
+    h = HORIZONS["4w"]
+    price = float(df["Close"].iloc[-1])
+    supports, resistances = levels.build_level_map(df, h, price)
+    floor_pct = levels.atr_floor_pct(df, price, h)
+    scenarios = levels.build_scenarios(price, supports, resistances,
+                                       min_reward_pct=1.0, atr_floor=floor_pct,
+                                       min_stop_distance_pct=0.5,
+                                       max_stop_distance_pct=15.0,
+                                       min_risk_reward=0.0)
+    return df, price, scenarios
+
+def test_scenarios_anchor_at_current_price(scenario_env):
+    _, price, scenarios = scenario_env
+    assert scenarios, "fixture must qualify at least one scenario"
+    for s in scenarios:
+        assert s.entry == price and s.market_price == price
+
+def test_stop_and_target_on_opposite_sides(scenario_env):
+    _, price, scenarios = scenario_env
+    for s in scenarios:
+        if s.direction == "bullish":
+            assert s.stop_loss < price < s.take_profit
+        else:
+            assert s.take_profit < price < s.stop_loss
+
+def test_sources_populated_and_constraints_all_true(scenario_env):
+    _, _, scenarios = scenario_env
+    for s in scenarios:
+        assert s.target_sources and s.stop_sources
+        assert s.meets_all_own_constraints   # failing scenarios are never built
+
+def test_target2_leg_cap_respected(scenario_env):
+    _, price, scenarios = scenario_env
+    for s in scenarios:
+        if s.target2_price is None:
+            continue
+        leg1 = abs(s.take_profit - price)
+        leg2 = abs(s.target2_price - s.take_profit)
+        assert leg2 <= leg1 * levels.MAX_TARGET2_LEG_MULTIPLE + 1e-9
+
+def test_hard_requirements_are_hard():
+    # An impossible min_reward must yield zero scenarios -- no soft fallback.
+    df = _structured_df()
+    h = HORIZONS["4w"]
+    price = float(df["Close"].iloc[-1])
+    supports, resistances = levels.build_level_map(df, h, price)
+    assert levels.build_scenarios(price, supports, resistances,
+                                  min_reward_pct=500.0) == []
+```
+
+- [ ] **Step 2: Run — PASS immediately (characterization). If any assertion fails, the test is wrong — fix the test, not levels.py. (Exception: if the fixture produces zero scenarios, tune the FIXTURE's thresholds, which is why they're passed explicitly rather than read from config.)**
 - [ ] **Step 3: Commit** — `git commit -m "test: characterization of levels.build_scenarios"`
 
 ### Task 35: Historical level-map memoization
@@ -918,30 +2516,255 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 **Files:** Create `swingbot/core/backtest_scenarios.py`; test `tests/test_backtest_scenarios.py`.
 
 **Interfaces:**
-- Produces: `levels_asof(ticker, df, bar_index, horizon_key, cache) -> LevelMap` — calls `levels.build_level_map` on `df.iloc[:bar_index+1]` with an LRU/dict cache keyed `(ticker, horizon_key, bar_index // 5)` (recompute every 5 bars — levels move slowly; fidelity/cost tradeoff documented in the docstring).
+- Produces: `levels_asof(ticker, df, bar_index, horizon_key, cache) -> tuple[supports, resistances]` — calls `levels.build_level_map` on `df.iloc[:bar_index+1]` with a dict cache keyed `(ticker, horizon_key, bar_index // 5)` (recompute every 5 bars — levels move slowly; fidelity/cost tradeoff documented in the docstring).
 
-- [ ] **Step 1: Failing test: two calls same key hit cache (assert via injected counting stub); slice never includes future bars (pass a frame where the last bar is an extreme spike; level map at earlier index must not see it).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: memoized as-of level maps for scenario replay"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_backtest_scenarios.py
+from swingbot.core import backtest_scenarios as bs
+from tests.helpers import make_ohlcv
+
+def test_cache_hits_within_5_bar_bucket(monkeypatch):
+    calls = {"n": 0}
+    real = bs.levels.build_level_map
+    def counting(df, h, price):
+        calls["n"] += 1
+        return real(df, h, price)
+    monkeypatch.setattr(bs.levels, "build_level_map", counting)
+
+    df = make_ohlcv([100 + i * 0.3 for i in range(120)])
+    cache = {}
+    bs.levels_asof("AAPL", df, 100, "4w", cache)
+    bs.levels_asof("AAPL", df, 103, "4w", cache)   # same bucket 100//5 == 103//5? no: 20 vs 20 -- yes
+    assert calls["n"] == 1
+    bs.levels_asof("AAPL", df, 105, "4w", cache)   # bucket 21 -- recompute
+    assert calls["n"] == 2
+    bs.levels_asof("MSFT", df, 100, "4w", cache)   # different ticker -- recompute
+    assert calls["n"] == 3
+
+def test_slice_never_sees_future_bars():
+    # Last bar is a 3x spike; the as-of map at an earlier index must not
+    # contain any level anywhere near the spike price.
+    closes = [100.0] * 100 + [300.0]
+    df = make_ohlcv(closes)
+    supports, resistances = bs.levels_asof("AAPL", df, 90, "4w", {})
+    all_prices = [lv.price for lv in supports + resistances]
+    assert all(p < 200 for p in all_prices), all_prices
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/backtest_scenarios.py
+"""Historical replay of the confluence scan (spec §4): rebuild the level
+map as of each bar, run levels.build_scenarios with that bar's close, and
+feed the qualifying scenarios through the SAME plan constructor and exit
+simulator the live scan uses. No lookahead: every computation sees
+df.iloc[:i+1] only."""
+from __future__ import annotations
+
+from swingbot.core import levels
+from swingbot.core.strategy_types import HORIZONS
+
+# Levels move slowly; recomputing the full multi-source level map every bar
+# is ~5x the cost for near-identical output. One recompute per 5 bars is the
+# fidelity/cost tradeoff -- the same granularity the Task 28 backtest tp2
+# lookup uses.
+LEVEL_REFRESH_BARS = 5
+
+
+def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
+    """(supports, resistances) as they looked at bar_index -- computed on
+    df.iloc[:bar_index+1] so the map can never see future bars."""
+    key = (ticker, horizon_key, bar_index // LEVEL_REFRESH_BARS)
+    if key in cache:
+        return cache[key]
+    window = df.iloc[:bar_index + 1]
+    price = float(window["Close"].iloc[-1])
+    result = levels.build_level_map(window, HORIZONS[horizon_key], price)
+    cache[key] = result
+    return result
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: memoized as-of level maps for scenario replay"`
 
 ### Task 36: Scenario replay engine
 
 **Files:** Modify `swingbot/core/backtest_scenarios.py`; test `tests/test_backtest_scenarios.py`.
 
 **Interfaces:**
-- Produces: `replay_scenarios(ticker, df, horizon_key, *, gates) -> list[TradePlanV2]` — for each bar in the window (after warmup `MIN_BARS`): build as-of level map, `build_scenarios` with current price = that bar's close, apply `gates` (dict: `min_confidence`, `required_checks`, `horizons`), convert qualifying scenarios via `build_confluence_plan`, enforce a cooldown (no new plan for a ticker×horizon while one is open or within 5 bars of the last — mirrors live dedup `engine.py:615-632`).
+- Produces: `replay_scenarios(ticker, df, horizon_key, *, gates) -> list[tuple[int, TradePlanV2]]` — `(signal_bar_index, plan)` pairs so Task 37 can hand each plan to `simulate_exit` from its own bar. For each bar after warmup `MIN_BARS[horizon_key]`: as-of level map, `build_scenarios` with that bar's close (using the horizon-widened reward/stop bounds the live scan applies — mirror `engine.py`'s `effective_min_reward = max(config.MIN_REWARD_PCT, h["sr_target_min_pct"] * 0.15)` / `effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h["max_risk_pct"])`, but with the CONFIG values passed in via `gates` so replays are reproducible), gate check, `build_confluence_plan` (primary strategy via Task 38's attribution; before Task 38 lands, `"S/R Confluence"`), cooldown: no new plan for a ticker×horizon×direction within 5 bars of the last accepted one (mirrors live dedup).
 
-- [ ] **Step 1: Failing test on synthetic data: replay returns plans only where gates pass; cooldown enforced (two qualifying bars 2 apart → 1 plan).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: historical scenario replay"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_backtest_scenarios.py (append)
+GATES = {"min_reward_pct": 1.0, "min_stop_distance_pct": 0.5,
+         "max_stop_distance_pct": 15.0, "min_risk_reward": 0.0,
+         "min_confluence": 1, "cooldown_bars": 5}
+
+def test_replay_yields_plans_with_cooldown():
+    # Trend + box structure (same fixture family as test_levels_scenarios):
+    # many consecutive bars qualify, so without the cooldown the replay
+    # would emit a plan nearly every bar.
+    df = _structured_df()           # shared via a small conftest helper or copy
+    out = bs.replay_scenarios("AAPL", df, "4w", gates=GATES)
+    assert out, "fixture must produce at least one plan"
+    seen = {}
+    for idx, plan in out:
+        assert plan.source == "confluence"
+        key = plan.direction
+        if key in seen:
+            assert idx - seen[key] >= GATES["cooldown_bars"], (idx, seen[key])
+        seen[key] = idx
+
+def test_replay_respects_warmup_and_gates():
+    df = _structured_df()
+    out = bs.replay_scenarios("AAPL", df, "4w",
+                              gates=dict(GATES, min_reward_pct=500.0))
+    assert out == []                # impossible gate -> nothing
+    out2 = bs.replay_scenarios("AAPL", df.iloc[:30], "4w", gates=GATES)
+    assert out2 == []               # below MIN_BARS -> nothing
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/backtest_scenarios.py (append)
+from swingbot.core.plan_engine import build_confluence_plan
+from swingbot.core.strategy_types import MIN_BARS
+
+
+def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
+    """(signal_index, TradePlanV2) for every bar where the confluence scan
+    WOULD have emitted a plan, under `gates`, with a per-direction cooldown."""
+    h = HORIZONS[horizon_key]
+    warmup = MIN_BARS[horizon_key]
+    cooldown = gates.get("cooldown_bars", 5)
+    cache: dict = {}
+    out: list = []
+    last_accepted: dict = {}   # direction -> bar index
+
+    for i in range(warmup, len(df)):
+        window = df.iloc[:i + 1]
+        price = float(window["Close"].iloc[-1])
+        supports, resistances = levels_asof(ticker, df, i, horizon_key, cache)
+        # drop levels the later bars created is already impossible (as-of map);
+        # but the map's supports/resistances were split against ITS OWN price --
+        # re-split against this bar's price when the cache bucket lags:
+        all_levels = sorted(supports + resistances, key=lambda lv: lv.price)
+        supports = [lv for lv in all_levels if lv.price < price][::-1]
+        resistances = [lv for lv in all_levels if lv.price > price]
+
+        floor_pct = levels.atr_floor_pct(window, price, h)
+        effective_min_reward = max(gates["min_reward_pct"],
+                                   h.get("sr_target_min_pct", 0) * 0.15)
+        effective_max_stop = max(gates["max_stop_distance_pct"],
+                                 h.get("max_risk_pct", 0))
+        scenarios = levels.build_scenarios(
+            price, supports, resistances, effective_min_reward,
+            atr_floor=floor_pct,
+            min_stop_distance_pct=gates["min_stop_distance_pct"],
+            max_stop_distance_pct=effective_max_stop,
+            min_risk_reward=gates["min_risk_reward"])
+
+        for sc in scenarios:
+            n_confl, families = levels.count_confirming_strategies(
+                window, h, price, sc.take_profit, tolerance_pct=5.0)
+            if n_confl < gates.get("min_confluence", 1):
+                continue
+            last = last_accepted.get(sc.direction)
+            if last is not None and i - last < cooldown:
+                continue
+            plan = build_confluence_plan(
+                sc, window, ticker=ticker, horizon_key=horizon_key,
+                primary_strategy=primary_strategy_for(sc))   # Task 38; until then "S/R Confluence"
+            last_accepted[sc.direction] = i
+            out.append((i, plan))
+    return out
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: historical scenario replay"`
 
 ### Task 37: Scenario outcomes + aggregation
 
 **Files:** Modify `swingbot/core/backtest_scenarios.py`, `scripts/run_backtest_range.py` (`--scenarios` mode).
 
 **Interfaces:**
-- Produces: `run_scenario_backtest(tickers, start, end, *, gates, scale_out=True) -> dict` — feeds each replayed plan through `simulate_exit`, aggregates with the SAME stats shape as `run_backtest` (win_rate/expectancy_r/scratch/timeout/runner counts), keyed per horizon and pooled. `--scenarios` on the harness prints the standard table with `source=confluence`.
+- Produces: `run_scenario_backtest(frames, start, end, *, gates, scale_out=True, horizons=None) -> dict` — feeds each replayed plan through `simulate_exit`, aggregates with the SAME stats shape as `run_backtest` (win_rate/expectancy_r/scratch/timeout/runner counts), keyed per horizon and pooled. `--scenarios` on the harness prints the standard table with `source=confluence`.
 
-- [ ] **Step 1: Failing unit test with a hand-built frame where one scenario must win (TP1 reachable) — assert stats shape and the win.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS + smoke `python scripts/run_backtest_range.py --train --scenarios` runs end-to-end on cached data. Step 5: Commit** — `git commit -m "feat: scenario backtest with unified exit engine"`
+- [ ] **Step 1: Failing unit test:**
+
+```python
+# tests/test_backtest_scenarios.py (append)
+def test_scenario_backtest_stats_shape_and_win():
+    df = _structured_df()
+    stats = bs.run_scenario_backtest({"AAPL": df}, None, None,
+                                     gates=GATES, scale_out=False,
+                                     horizons=["4w"])
+    assert set(stats) >= {"pooled", "by_horizon"}
+    pooled = stats["pooled"]
+    for key in ("n", "wins", "losses", "scratches", "timeouts",
+                "not_triggered", "win_rate", "expectancy_r"):
+        assert key in pooled, key
+    assert pooled["n"] >= 1
+    assert stats["by_horizon"]["4w"]["n"] == pooled["n"]
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/backtest_scenarios.py (append)
+import numpy as np
+from swingbot.core.plan_engine import simulate_exit
+
+def _aggregate(results: list) -> dict:
+    closed = [r for r in results if r.outcome != "not_triggered"]
+    ev = [r for r in closed if r.outcome in ("win", "loss")]
+    wins = [r for r in ev if r.outcome == "win"]
+    runner = {}
+    for r in closed:
+        if r.runner_outcome:
+            runner[r.runner_outcome] = runner.get(r.runner_outcome, 0) + 1
+    return {
+        "n": len(ev),
+        "wins": len(wins),
+        "losses": len(ev) - len(wins),
+        "scratches": sum(1 for r in closed if r.outcome == "scratch"),
+        "timeouts": sum(1 for r in closed if r.outcome == "timeout"),
+        "not_triggered": sum(1 for r in results if r.outcome == "not_triggered"),
+        "win_rate": len(wins) / len(ev) * 100 if ev else None,
+        "expectancy_r": float(np.mean([r.r_total for r in closed])) if closed else None,
+        "runner": runner,
+    }
+
+
+def run_scenario_backtest(frames: dict, start, end, *, gates,
+                          scale_out=True, horizons=None) -> dict:
+    """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
+    dates -- the exit walk may run past `end`, same convention as
+    run_backtest_daterange."""
+    horizons = horizons or list(HORIZONS)
+    results_by_hz: dict = {hk: [] for hk in horizons}
+    for ticker, df in frames.items():
+        for hk in horizons:
+            for i, plan in replay_scenarios(ticker, df, hk, gates=gates):
+                signal_date = str(df.index[i].date())
+                if start and signal_date < start:
+                    continue
+                if end and signal_date > end:
+                    continue
+                results_by_hz[hk].append(simulate_exit(df, i, plan,
+                                                       scale_out=scale_out))
+    all_results = [r for rs in results_by_hz.values() for r in rs]
+    return {"pooled": _aggregate(all_results),
+            "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
+```
+
+Harness wiring in `scripts/run_backtest_range.py`: `ap.add_argument("--scenarios", action="store_true")`; when set, load the cached frames, build `gates` from CLI defaults mirroring live config (`min_reward_pct=config.MIN_REWARD_PCT` etc. — spelled out as literals so replays don't depend on the operator's `.env`), call `run_scenario_backtest` with the window dates, print per-horizon + pooled rows in the standard table with strategy column `confluence/<horizon>`.
+
+- [ ] **Step 4: PASS + smoke `python scripts/run_backtest_range.py --train --scenarios` runs end-to-end on cached data. Step 5: Commit** — `git commit -m "feat: scenario backtest with unified exit engine"`
 
 ### Task 38: Real strategy attribution for scenarios
 
@@ -950,25 +2773,154 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 - Test: `tests/test_attribution.py`
 
 **Interfaces:**
-- Produces: `ScenarioSignal.strategy` carries `primary_strategy_label(target_sources, stop_sources)` instead of hardcoded `"S/R Confluence"`; trades.json records the real label; `build_confluence_plan(..., primary_strategy=...)` receives it. Backward compat: old trades.json records with `"S/R Confluence"` remain readable (grouping code must not KeyError).
+- Produces: `plan_engine.primary_strategy_for(scenario) -> str` — reuses `performance.primary_strategy_label`'s ranking (which delegates to `chart_drawing._pick_primary_source` over `target_sources`/`stop_sources`) but takes a Scenario instead of a trade dict; `ScenarioSignal.strategy` set from it at construction instead of the hardcoded `"S/R Confluence"` default; trades.json records the real label; `build_confluence_plan(..., primary_strategy=...)` and Task 36's `replay_scenarios` receive it. Backward compat: old trades.json records with `"S/R Confluence"` remain readable (grouping code must not KeyError).
 
-- [ ] **Step 1: Failing test: scenario whose target_sources are Fibonacci-dominated → `strategy` label contains "Fibonacci"; old-record compat test.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "fix: real per-scenario strategy attribution end-to-end"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_attribution.py
+from types import SimpleNamespace
+from swingbot.core.plan_engine import primary_strategy_for
+from swingbot.core.performance import primary_strategy_label
+
+def _scenario(target_sources, stop_sources=()):
+    return SimpleNamespace(direction="bullish", entry=100.0, stop_loss=95.0,
+                           take_profit=110.0, target_sources=list(target_sources),
+                           stop_sources=list(stop_sources))
+
+def test_fibonacci_dominated_scenario_attributes_fibonacci():
+    label = primary_strategy_for(_scenario(["Fib 61.8%", "Fib 50.0%", "EMA21"]))
+    assert "Fib" in label or label == "Fibonacci"
+
+def test_agrees_with_performance_label_ranking():
+    # The scenario helper and the trade-dict helper must rank identically --
+    # one METHOD_PRIORITY, two entry points.
+    sources = ["Volume Profile HVN", "EMA21", "Bollinger upper"]
+    assert primary_strategy_for(_scenario(sources)) == \
+           primary_strategy_label({"target_sources": sources, "stop_sources": []})
+
+def test_empty_sources_fall_back_to_confluence_literal():
+    assert primary_strategy_for(_scenario([])) == "S/R Confluence"
+
+def test_old_records_still_group():
+    # grouping code must tolerate the legacy literal
+    assert primary_strategy_label({"strategy": "S/R Confluence"}) == "S/R Confluence"
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/plan_engine.py
+def primary_strategy_for(scenario) -> str:
+    """Real strategy attribution for a confluence scenario: the highest-
+    priority confirming method behind its target (falling back to the stop's
+    methods, then the legacy literal). Delegates the ranking to
+    chart_drawing._pick_primary_source -- ONE priority list for charts,
+    trade rows, and plan attribution. Imported lazily (matplotlib chain)."""
+    from swingbot.core.charts.chart_drawing import _pick_primary_source
+    sources = list(getattr(scenario, "target_sources", []) or []) \
+        + list(getattr(scenario, "stop_sources", []) or [])
+    return _pick_primary_source(sources) or "S/R Confluence"
+```
+
+Wiring (three call sites, grep `ScenarioSignal(` and `build_confluence_plan(`):
+1. `scanning/engine.py` — where each `ScenarioSignal` is constructed, pass `strategy=primary_strategy_for(scenario)`.
+2. The trade-logging block in `engine.py` — `log_trade(..., strategy=item.signal.strategy, ...)` now automatically carries the real label (verify it reads the signal's strategy, not a literal).
+3. `backtest_scenarios.replay_scenarios` — replace the `"S/R Confluence"` placeholder with `primary_strategy_for(sc)`.
+
+- [ ] **Step 4: PASS (plus full suite — `performance.primary_strategy_label` consumers unaffected). Step 5: Commit** — `git commit -m "fix: real per-scenario strategy attribution end-to-end"`
 
 ### Task 39: Confluence gate grid on TRAIN
 
 **Files:** Create `scripts/tune_confluence_gates.py`.
 
-**Interfaces:** Grid on TRAIN, pooled across watchlist: `min_confidence ∈ {3, 4, 5}` × `require_all_requirements ∈ {True, False}` × `horizons ⊆ {4w, 2m, 3m, 4m, 6m}` (evaluate each horizon separately, then the pre-registered rule composes the allowed set). **Pre-registered selection rule:** per horizon, include it iff train `win_rate >= 80 and expectancy_r > 0 and N >= 30 and excl <= 50%`; global config = the (min_confidence, require_all) pair maximizing pooled ExpR among those with ≥2 qualifying horizons; if no pair qualifies, confluence source stays WEAK everywhere and Tasks 41–42 record that honestly.
+**Interfaces:** Grid on TRAIN, pooled across watchlist: `min_confluence ∈ {2, 3, 4}` (distinct confirming strategies — the replay's gate) × `min_risk_reward ∈ {0.0, 0.3}` × `horizons ⊆ {4w, 2m, 3m, 4m, 6m}` (evaluate each horizon separately; the pre-registered rule composes the allowed set). **Pre-registered selection rule:** per horizon, include it iff train `win_rate >= 80 and expectancy_r > 0 and N >= 30 and excl <= 50%`; global config = the (min_confluence, min_risk_reward) pair maximizing pooled ExpR among those with ≥2 qualifying horizons; if no pair qualifies, confluence source stays WEAK everywhere and Tasks 41–42 record that honestly.
 
-- [ ] **Step 1: Write + run: `python scripts/tune_confluence_gates.py > docs/superpowers/results/2026-07-confluence-train-grid.txt`.**
-- [ ] **Step 2: Commit script + output** — `git commit -m "feat: confluence gate grid on train window"`
+- [ ] **Step 1: Write the script:**
+
+```python
+# scripts/tune_confluence_gates.py
+"""TRAIN-only grid for the confluence-scenario gates (plan Task 39).
+Pre-registered selection rule printed with the output; see plan."""
+import itertools
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from swingbot.core.backtest_scenarios import run_scenario_backtest
+
+CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
+TRAIN = ("2020-01-01", "2023-12-31")
+HORIZONS_TO_TEST = ["4w", "2m", "3m", "4m", "6m"]
+GRID_CONFL = [2, 3, 4]
+GRID_RR = [0.0, 0.3]
+BASE_GATES = {"min_reward_pct": 3.0, "min_stop_distance_pct": 2.0,
+              "max_stop_distance_pct": 7.0, "cooldown_bars": 5}
+RULE = ("per horizon: include iff WR>=80 and ExpR>0 and N>=30 and excl<=50%; "
+        "global pair = max pooled ExpR among pairs with >=2 qualifying horizons")
+
+
+def main():
+    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
+              for p in sorted(CACHE_DIR.glob("*.csv"))}
+    print(f"tickers: {len(frames)}  train: {TRAIN}  rule: {RULE}\n")
+
+    for confl, rr in itertools.product(GRID_CONFL, GRID_RR):
+        gates = dict(BASE_GATES, min_confluence=confl, min_risk_reward=rr)
+        stats = run_scenario_backtest(frames, *TRAIN, gates=gates,
+                                      scale_out=True, horizons=HORIZONS_TO_TEST)
+        qualifying = []
+        for hk, s in stats["by_horizon"].items():
+            if s["n"] == 0:
+                continue
+            excl = (s["scratches"] + s["timeouts"]) / max(
+                1, s["n"] + s["scratches"] + s["timeouts"]) * 100
+            ok = (s["win_rate"] or 0) >= 80 and (s["expectancy_r"] or 0) > 0 \
+                and s["n"] >= 30 and excl <= 50
+            print(f"confl={confl} rr={rr} {hk}: N={s['n']:<4} "
+                  f"WR={s['win_rate'] or 0:5.1f} ExpR={s['expectancy_r'] or 0:+.3f} "
+                  f"excl={excl:4.1f}% {'PASS' if ok else 'fail'}")
+            if ok:
+                qualifying.append(hk)
+        p = stats["pooled"]
+        print(f"confl={confl} rr={rr} POOLED: N={p['n']} WR={p['win_rate'] or 0:.1f} "
+              f"ExpR={p['expectancy_r'] or 0:+.3f} qualifying_horizons={qualifying}\n")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 2: Run: `python scripts/tune_confluence_gates.py > docs/superpowers/results/2026-07-confluence-train-grid.txt`; apply the selection rule to the output BY HAND, quoting it in the doc.**
+- [ ] **Step 3: Commit script + output** — `git commit -m "feat: confluence gate grid on train window"`
 
 ### Task 40: Adopt confluence gates + train doc
 
 **Files:** Modify `swingbot/core/backtest_scenarios.py` (module constant `CONFLUENCE_GATES` = grid winner); create `docs/superpowers/results/2026-07-confluence-train.md`.
 
-- [ ] **Step 1: Encode winner; full train scenario run; write doc (table + rule + chosen gates). Step 2: pytest green. Step 3: Commit** — `git commit -m "feat: adopt train-window confluence gates"`
+- [ ] **Step 1: Encode the winner** (values from Task 39's output; the shape):
+
+```python
+# swingbot/core/backtest_scenarios.py
+# Grid winner under the pre-registered Task 39 rule
+# (docs/superpowers/results/2026-07-confluence-train-grid.txt). The live scan
+# (Task 43) and the validation run (Task 41) BOTH read this constant -- the
+# gates that get validated are, by construction, the gates that run live.
+CONFLUENCE_GATES = {
+    "min_reward_pct": 3.0,
+    "min_stop_distance_pct": 2.0,
+    "max_stop_distance_pct": 7.0,
+    "min_risk_reward": 0.0,        # <- grid winner
+    "min_confluence": 3,           # <- grid winner
+    "cooldown_bars": 5,
+    "horizons": ["4w", "2m", "3m"],  # <- qualifying horizons only
+}
+```
+
+- [ ] **Step 2: Full train scenario run with the adopted gates; write the doc (per-horizon + pooled table, the rule quoted verbatim, the chosen gates). Step 3: pytest green. Step 4: Commit** — `git commit -m "feat: adopt train-window confluence gates"`
 
 ### Task 41: Confluence VALIDATION (single run)
 
@@ -987,10 +2939,84 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 - Test: `tests/test_engine_v2_plans.py`
 
 **Interfaces:**
-- Produces: when `config.PLAN_ENGINE_V2 != "off"`, each qualifying scan item also constructs `build_confluence_plan(...)` (+ `select_tp2` from the already-built level map, quality score once Task 51 lands) and attaches it as `item.plan_v2`. With flag `"shadow"` the plan is only logged (Task 86); with `"on"` it replaces the legacy numbers in embeds (Task 89). Flag `"off"` = zero behavior change (assert!).
+- Produces: `ScanItem` gains field `plan_v2: TradePlanV2 | None = None`. A new pure-ish helper `attach_plan_v2(item, scenario, df, ticker, horizon_key) -> None` in `scanning/engine.py`, called from `_sync_run_scan`'s per-scenario block right after the confidence/requirement checks pass: when `config.PLAN_ENGINE_V2 != "off"`, it constructs `build_confluence_plan(scenario, df, ticker=..., horizon_key=..., primary_strategy=primary_strategy_for(scenario))`, fills `tp2` via `select_tp2` from the ALREADY-BUILT level map for this ticker/horizon (don't rebuild it), and sets `item.plan_v2`. Quality inputs wire in at Task 51. With flag `"shadow"` the plan is only logged (Task 86); with `"on"` it replaces the legacy numbers in embeds (Task 89). Flag `"off"` = zero behavior change (assert!).
 
-- [ ] **Step 1: Failing test: run the scenario-processing function with flag off → no `plan_v2`; with shadow → `plan_v2` present and legacy embed numbers unchanged.**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: scan engine constructs v2 plans behind flag"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_engine_v2_plans.py
+from types import SimpleNamespace
+import swingbot.config as config
+from swingbot.core.scanning import engine
+from tests.helpers import make_ohlcv
+
+def _item():
+    return SimpleNamespace(plan_v2=None)   # or a real ScanItem fixture
+
+def _scenario():
+    return SimpleNamespace(direction="bullish", entry=100.0, stop_loss=95.0,
+                           take_profit=110.0, target_sources=["EMA21"],
+                           stop_sources=["Rolling support"])
+
+def test_flag_off_attaches_nothing(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "off")
+    item = _item()
+    engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=([], []))
+    assert item.plan_v2 is None
+
+def test_flag_shadow_attaches_plan_without_touching_legacy(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    item = _item()
+    sc = _scenario()
+    engine.attach_plan_v2(item, sc, make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=([], []))
+    assert item.plan_v2 is not None
+    assert item.plan_v2.source == "confluence"
+    # legacy scenario numbers untouched -- the embed keeps reading these
+    assert sc.entry == 100.0 and sc.take_profit == 110.0
+
+def test_plan_construction_failure_never_kills_the_scan(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(engine, "build_confluence_plan",
+                        lambda *a, **k: 1 / 0)
+    item = _item()
+    engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=([], []))   # must not raise
+    assert item.plan_v2 is None
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/scanning/engine.py
+from swingbot.core.plan_engine import (build_confluence_plan,
+                                       primary_strategy_for, select_tp2)
+
+def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None):
+    """Construct the v2 plan for a qualifying scan item, flag-gated.
+    A v2 construction failure must NEVER break the legacy scan -- log and
+    move on (shadow mode exists precisely to surface such failures safely)."""
+    if config.PLAN_ENGINE_V2 == "off":
+        return
+    try:
+        plan = build_confluence_plan(
+            scenario, df, ticker=ticker, horizon_key=horizon_key,
+            primary_strategy=primary_strategy_for(scenario))
+        if plan.tp2 is None and level_map is not None:
+            supports, resistances = level_map
+            plan.tp2 = select_tp2([lv.price for lv in resistances],
+                                  [lv.price for lv in supports],
+                                  plan.direction, plan.trigger_price, plan.tp1)
+        item.plan_v2 = plan
+    except Exception:
+        log.warning("plan_v2 construction failed for %s/%s", ticker,
+                    horizon_key, exc_info=True)
+```
+
+Call site in `_sync_run_scan` (after the item passes confidence + requirement checks and is appended): `attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))`.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: scan engine constructs v2 plans behind flag"`
 
 ### Task 44: Retire `backtest_confluence.py`
 
@@ -1003,8 +3029,52 @@ Entry phase: `market` → `entry_index = signal_index`, `entry_price = Close[sig
 
 **Files:** Create `tests/test_levels_clustering.py`.
 
-- [ ] **Step 1: Tests for `count_confirming_strategies` and the Level clustering used by `build_level_map` (read `levels.py` clustering block first): deterministic frame → stable cluster count; sources list preserved; confluence count monotone in number of agreeing raw levels.**
-- [ ] **Step 2: PASS immediately (characterization). Step 3: Commit** — `git commit -m "test: level clustering characterization"`
+- [ ] **Step 1: Characterization tests for `_cluster_levels`, `strategy_family`, and `count_confirming_strategies`:**
+
+```python
+# tests/test_levels_clustering.py
+from swingbot.core import levels
+from swingbot.core.strategy_types import HORIZONS
+from tests.helpers import make_ohlcv
+
+def test_cluster_merges_within_tolerance():
+    # 100.0 and 100.5 are within 1.5% -> one cluster; 110 stands alone.
+    clusters = levels._cluster_levels([(100.0, "EMA21"), (100.5, "VWAP"),
+                                       (110.0, "Fib 61.8%")])
+    assert len(clusters) == 2
+    merged = clusters[0]
+    assert merged.price == 100.25                      # mean of the bucket
+    assert sorted(merged.sources) == ["EMA21", "VWAP"]  # sources preserved
+
+def test_cluster_empty_and_singleton():
+    assert levels._cluster_levels([]) == []
+    [only] = levels._cluster_levels([(50.0, "VWAP")])
+    assert only.price == 50.0 and only.sources == ["VWAP"]
+
+def test_strategy_family_collapses_raw_labels():
+    assert levels.strategy_family("Fib 61.8%") == "Fibonacci"
+    assert levels.strategy_family("Swing high") == "Fibonacci"
+    assert levels.strategy_family("EMA21") == "EMA"
+    assert levels.strategy_family("Floor R2") == "Floor Pivot"
+    assert levels.strategy_family("Donchian high") == "Donchian Channel"
+
+def test_confluence_count_monotone_in_agreeing_levels():
+    # Same frame, widening tolerance can only ADD families, never remove.
+    df = make_ohlcv([100 + i * 0.4 for i in range(150)])
+    h = HORIZONS["4w"]
+    price = float(df["Close"].iloc[-1])
+    target = price * 1.05
+    n_tight, fam_tight = levels.count_confirming_strategies(df, h, price, target, 1.0)
+    n_loose, fam_loose = levels.count_confirming_strategies(df, h, price, target, 8.0)
+    assert n_loose >= n_tight
+    assert set(fam_tight) <= set(fam_loose)
+
+def test_confluence_count_falsy_target_is_zero():
+    df = make_ohlcv([100.0] * 60)
+    assert levels.count_confirming_strategies(df, HORIZONS["4w"], 100.0, 0.0, 5.0) == (0, [])
+```
+
+- [ ] **Step 2: PASS immediately (characterization — if an assertion fails, fix the TEST after confirming against a REPL run of the real function). Step 3: Commit** — `git commit -m "test: level clustering characterization"`
 
 ### Task 46: Phase 3 checkpoint
 
@@ -1022,55 +3092,544 @@ All functions pure, all in new `swingbot/core/quality.py`, no I/O, no ML. Compon
 **Interfaces:**
 - Produces: `component_regime(direction, regime) -> int` (regime ∈ `{"bull","bear","neutral"}` from `scanning/regime.get_market_regime` — read its actual return values first and adapt the literals; aligned=15, neutral=8, opposed=0) and `component_htf(direction, htf_bias) -> int` (aligned=15, neutral=8, opposed=0).
 
-- [ ] **Step 1: Failing tests: all 9 direction×regime combos for each component (parametrized).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality components — regime, HTF"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_quality.py
+import pytest
+from swingbot.core import quality
+
+@pytest.mark.parametrize("direction,regime,expected", [
+    ("bullish", "bull", 15), ("bullish", "neutral", 8), ("bullish", "bear", 0),
+    ("bearish", "bear", 15), ("bearish", "neutral", 8), ("bearish", "bull", 0),
+    ("bullish", None, 8),    # unknown regime treated as neutral, never crashes
+])
+def test_component_regime(direction, regime, expected):
+    assert quality.component_regime(direction, regime) == expected
+
+@pytest.mark.parametrize("direction,bias,expected", [
+    ("bullish", "bullish", 15), ("bullish", "neutral", 8), ("bullish", "bearish", 0),
+    ("bearish", "bearish", 15), ("bearish", "neutral", 8), ("bearish", "bullish", 0),
+    ("bearish", None, 8),
+])
+def test_component_htf(direction, bias, expected):
+    assert quality.component_htf(direction, bias) == expected
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/quality.py
+"""Transparent 0-100 plan-quality score (spec §6). Pure functions only --
+no I/O, no config reads, no ML. Component weights may be re-weighted ONLY
+on TRAIN evidence (Tasks 52-53); the breakdown is rendered verbatim in
+embeds, so every point a plan gets is explainable in one line."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+_ALIGNED, _NEUTRAL, _OPPOSED = 15, 8, 0
+
+# regime.get_market_regime labels -> the direction they favor
+_REGIME_DIRECTION = {"bull": "bullish", "bear": "bearish"}
+
+
+def component_regime(direction: str, regime: str | None) -> int:
+    favored = _REGIME_DIRECTION.get(regime)
+    if favored is None:                # neutral / unknown
+        return _NEUTRAL
+    return _ALIGNED if favored == direction else _OPPOSED
+
+
+def component_htf(direction: str, htf_bias: str | None) -> int:
+    if htf_bias not in ("bullish", "bearish"):
+        return _NEUTRAL
+    return _ALIGNED if htf_bias == direction else _OPPOSED
+```
+
+(If `regime.get_market_regime` returns labels other than `bull/bear/neutral` — e.g. a `Regime` object with `.label` `"Risk-on"` — adapt `_REGIME_DIRECTION`'s keys, not the scoring.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality components — regime, HTF"`
 
 ### Task 48: Confluence + volume components
 
-**Interfaces:** `component_confluence(count) -> int` — 0→0, 1→7, 2→12, 3→16, ≥4→20. `component_volume(volume_ratio) -> int` — <0.8→0, 0.8–1.2→4, 1.2–2.0→8, ≥2.0→10 (ratio = bar volume / 20-day mean, computed by caller).
+**Interfaces:** `component_confluence(count) -> int` — 0→0, 1→7, 2→12, 3→16, ≥4→20. `component_volume(volume_ratio) -> int` — <0.8→0, 0.8–1.2→4, 1.2–2.0→8, ≥2.0→10 (ratio = bar volume / 20-day mean, computed by caller; None/NaN → 0).
 
-- [ ] **Step 1: Failing boundary tests (exact thresholds inclusive-lower). Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality components — confluence, volume"`
+- [ ] **Step 1: Failing boundary tests (thresholds inclusive-lower):**
+
+```python
+# tests/test_quality.py (append)
+@pytest.mark.parametrize("count,expected",
+                         [(0, 0), (1, 7), (2, 12), (3, 16), (4, 20), (9, 20)])
+def test_component_confluence(count, expected):
+    assert quality.component_confluence(count) == expected
+
+@pytest.mark.parametrize("ratio,expected", [
+    (0.79, 0), (0.8, 4), (1.19, 4), (1.2, 8), (1.99, 8), (2.0, 10),
+    (None, 0), (float("nan"), 0),
+])
+def test_component_volume(ratio, expected):
+    assert quality.component_volume(ratio) == expected
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/quality.py (append)
+import math
+
+def component_confluence(count: int) -> int:
+    if count >= 4:
+        return 20
+    return {0: 0, 1: 7, 2: 12, 3: 16}[max(0, int(count))]
+
+
+def component_volume(volume_ratio: float | None) -> int:
+    if volume_ratio is None or not math.isfinite(volume_ratio):
+        return 0
+    if volume_ratio >= 2.0:
+        return 10
+    if volume_ratio >= 1.2:
+        return 8
+    if volume_ratio >= 0.8:
+        return 4
+    return 0
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality components — confluence, volume"`
 
 ### Task 49: ATR-percentile + trigger-distance components
 
-**Interfaces:** `component_atr_percentile(pct) -> int` — top decile (≥0.9)→0, 0.7–0.9→5, else→10 (pct = rank of current ATR(14)/Close within trailing 252 bars, helper `atr_percentile(df) -> float` included here). `component_distance(trigger_distance_pct) -> int` — ≤0.5%→10, ≤1.5%→6, ≤3%→3, else 0 (distance from current price to trigger as % — "don't chase").
+**Interfaces:** `component_atr_percentile(pct) -> int` — top decile (≥0.9)→0, 0.7–0.9→5, else→10 (pct = rank of current ATR(14)/Close within trailing 252 bars, helper `atr_percentile(df) -> float | None` included here). `component_distance(trigger_distance_pct) -> int` — ≤0.5%→10, ≤1.5%→6, ≤3%→3, else 0 (distance from current price to trigger as % — "don't chase").
 
-- [ ] **Step 1: Failing tests incl. `atr_percentile` on a frame with a volatility spike at the end (→ high pct). Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality components — ATR percentile, trigger distance"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_quality.py (append)
+import numpy as np
+from tests.helpers import make_ohlcv
+
+@pytest.mark.parametrize("pct,expected",
+                         [(0.95, 0), (0.9, 0), (0.89, 5), (0.7, 5), (0.69, 10),
+                          (0.0, 10), (None, 5)])   # unknown -> middle score
+def test_component_atr_percentile(pct, expected):
+    assert quality.component_atr_percentile(pct) == expected
+
+@pytest.mark.parametrize("dist,expected",
+                         [(0.0, 10), (0.5, 10), (0.51, 6), (1.5, 6),
+                          (1.51, 3), (3.0, 3), (3.01, 0)])
+def test_component_distance(dist, expected):
+    assert quality.component_distance(dist) == expected
+
+def test_atr_percentile_spike_ranks_high():
+    # calm tape, then 20 violently-ranged bars at the end -> current
+    # normalized ATR sits in the top of its trailing distribution.
+    calm = [(100.0, 100.5, 99.5, 100.0)] * 300
+    wild = [(100.0, 112.0, 88.0, 100.0)] * 20
+    df = make_ohlcv(calm + wild)
+    pct = quality.atr_percentile(df)
+    assert pct is not None and pct >= 0.9
+
+def test_atr_percentile_short_frame_is_none():
+    assert quality.atr_percentile(make_ohlcv([100.0] * 20)) is None
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/quality.py (append)
+import pandas as pd
+
+def atr_percentile(df: pd.DataFrame, period: int = 14,
+                   window: int = 252) -> float | None:
+    """Rank of the current normalized ATR (ATR14/Close) within its trailing
+    `window` bars, 0..1. None when there isn't at least window/2 of usable
+    history (early frames shouldn't pretend to know their vol regime)."""
+    from swingbot.core.indicators import atr
+    if len(df) < period + window // 2:
+        return None
+    norm = (atr(df, period) / df["Close"]).dropna()
+    if len(norm) < window // 2:
+        return None
+    tail = norm.iloc[-window:]
+    current = float(tail.iloc[-1])
+    return float((tail <= current).mean())
+
+
+def component_atr_percentile(pct: float | None) -> int:
+    if pct is None:
+        return 5            # unknown vol regime: middle score, never crash
+    if pct >= 0.9:
+        return 0            # top-decile volatility: statistically hostile
+    if pct >= 0.7:
+        return 5
+    return 10
+
+
+def component_distance(trigger_distance_pct: float) -> int:
+    if trigger_distance_pct <= 0.5:
+        return 10
+    if trigger_distance_pct <= 1.5:
+        return 6
+    if trigger_distance_pct <= 3.0:
+        return 3
+    return 0
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality components — ATR percentile, trigger distance"`
 
 ### Task 50: Badge component + aggregate score/tier
 
-**Interfaces:** `component_badge(badge_status) -> int` — VALIDATED→20, WEAK→0. `score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio, atr_pct, trigger_distance_pct, badge_status) -> QualityResult` with `QualityResult(score: int, tier: str, breakdown: list[tuple[str, int]])`; score = clamped sum 0–100; tier A ≥ 75, B ≥ 50, else C. Breakdown lists all 7 components by name — embeds print it verbatim (Task 75).
+**Interfaces:** `component_badge(badge_status) -> int` — VALIDATED→20, WEAK→0. `score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio, atr_pct, trigger_distance_pct, badge_status) -> QualityResult` with `QualityResult(score: int, tier: str, breakdown: list[tuple[str, int]])`; score = clamped sum 0–100; tier A ≥ 75, B ≥ 50, else C. Breakdown lists all 7 components by name — embeds print it verbatim (Task 75). Max possible = 15+15+20+10+10+10+20 = 100, so the clamp only guards future re-weighting.
 
-- [ ] **Step 1: Failing tests: perfect inputs → 100/A; all-zero → 0/C; breakdown has 7 named rows summing to score (pre-clamp). Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: aggregate quality score with transparent breakdown"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_quality.py (append)
+def test_perfect_inputs_score_100_tier_a():
+    r = quality.score_plan(direction="bullish", regime="bull", htf_bias="bullish",
+                           confluence_count=4, volume_ratio=2.5, atr_pct=0.3,
+                           trigger_distance_pct=0.2, badge_status="VALIDATED")
+    assert r.score == 100 and r.tier == "A"
+
+def test_all_zero_inputs_score_0_tier_c():
+    r = quality.score_plan(direction="bullish", regime="bear", htf_bias="bearish",
+                           confluence_count=0, volume_ratio=0.5, atr_pct=0.95,
+                           trigger_distance_pct=5.0, badge_status="WEAK")
+    assert r.score == 0 and r.tier == "C"
+
+def test_breakdown_has_seven_named_rows_summing_to_score():
+    r = quality.score_plan(direction="bullish", regime="neutral", htf_bias="bullish",
+                           confluence_count=2, volume_ratio=1.5, atr_pct=0.5,
+                           trigger_distance_pct=1.0, badge_status="VALIDATED")
+    assert [name for name, _ in r.breakdown] == \
+        ["regime", "htf", "confluence", "volume", "atr_percentile",
+         "trigger_distance", "badge"]
+    assert sum(pts for _, pts in r.breakdown) == r.score
+
+def test_tier_boundaries():
+    assert quality._tier(75) == "A" and quality._tier(74) == "B"
+    assert quality._tier(50) == "B" and quality._tier(49) == "C"
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/quality.py (append)
+@dataclass
+class QualityResult:
+    score: int
+    tier: str
+    breakdown: list   # [(component_name, points)] -- rendered verbatim in embeds
+
+
+def component_badge(badge_status: str) -> int:
+    return 20 if badge_status == "VALIDATED" else 0
+
+
+def _tier(score: int) -> str:
+    if score >= 75:
+        return "A"
+    if score >= 50:
+        return "B"
+    return "C"
+
+
+def score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio,
+               atr_pct, trigger_distance_pct, badge_status) -> QualityResult:
+    breakdown = [
+        ("regime", component_regime(direction, regime)),
+        ("htf", component_htf(direction, htf_bias)),
+        ("confluence", component_confluence(confluence_count)),
+        ("volume", component_volume(volume_ratio)),
+        ("atr_percentile", component_atr_percentile(atr_pct)),
+        ("trigger_distance", component_distance(trigger_distance_pct)),
+        ("badge", component_badge(badge_status)),
+    ]
+    score = max(0, min(100, sum(pts for _, pts in breakdown)))
+    return QualityResult(score=score, tier=_tier(score), breakdown=breakdown)
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: aggregate quality score with transparent breakdown"`
 
 ### Task 51: Wire score into both plan builders
 
 **Files:** Modify `swingbot/core/plan_engine.py` (builders accept `quality_inputs: dict | None`); modify `swingbot/core/scanning/engine.py` (Task 43 block passes real inputs — regime and HTF are already computed in the scan loop; volume ratio and ATR percentile from the ticker df); test `tests/test_quality_wiring.py`.
 
-- [ ] **Step 1: Failing test: `build_strategy_plan(..., quality_inputs={...})` fills `quality_score/tier/breakdown`; None → stays 0/C (never crashes).**
-- [ ] **Step 2: Run — FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality score wired into plan construction"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_quality_wiring.py
+from swingbot.core.plan_engine import build_strategy_plan
+from tests.helpers import make_ohlcv
+
+QI = dict(regime="bull", htf_bias="bullish", confluence_count=3,
+          volume_ratio=1.5, atr_pct=0.4, trigger_distance_pct=0.3)
+
+def test_quality_inputs_fill_score_tier_breakdown():
+    df = make_ohlcv([100 + i * 0.5 for i in range(80)])
+    p = build_strategy_plan(df, 79, ticker="AAPL", strategy="MACD",
+                            horizon_key="4w", direction="bullish",
+                            quality_inputs=QI)
+    assert p.quality_score > 0
+    assert p.tier in ("A", "B", "C")
+    assert len(p.quality_breakdown) == 7
+
+def test_no_quality_inputs_stays_zero_c_and_never_crashes():
+    df = make_ohlcv([100 + i * 0.5 for i in range(80)])
+    p = build_strategy_plan(df, 79, ticker="AAPL", strategy="MACD",
+                            horizon_key="4w", direction="bullish")
+    assert p.quality_score == 0 and p.tier == "C" and p.quality_breakdown == []
+```
+
+- [ ] **Step 2: Run — FAIL. Step 3: Implement** — both builders gain `quality_inputs: dict | None = None`; after `stamp_badge(plan)` (so `badge_status` is real):
+
+```python
+# swingbot/core/plan_engine.py (in build_strategy_plan AND build_confluence_plan,
+# after stamp_badge(plan))
+    if quality_inputs is not None:
+        from swingbot.core.quality import score_plan
+        q = score_plan(direction=plan.direction,
+                       badge_status=plan.badge,
+                       **quality_inputs)
+        plan.quality_score, plan.tier = q.score, q.tier
+        plan.quality_breakdown = q.breakdown
+```
+
+Scan-engine side (`attach_plan_v2`, Task 43): assemble the real inputs it already has in scope and pass them through —
+
+```python
+# swingbot/core/scanning/engine.py (inside attach_plan_v2's try block)
+        vol_ratio = float((df["Volume"] / df["Volume"].rolling(20).mean()).iloc[-1])
+        quality_inputs = dict(
+            regime=(regime.label_key if regime else None),   # match get_regime()'s shape
+            htf_bias=htf_bias,                               # already computed per scan item
+            confluence_count=n_confluence,                   # the count that gated this item
+            volume_ratio=vol_ratio,
+            atr_pct=quality_mod.atr_percentile(df),
+            trigger_distance_pct=abs(plan.trigger_price - current_price)
+                                 / current_price * 100,
+        )
+```
+
+(Adapt the regime/HTF variable names to what `_sync_run_scan` actually holds at that point — they are both computed earlier in the loop; do not recompute.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality score wired into plan construction"`
 
 ### Task 52: Decile audit — score vs realized outcomes
 
 **Files:** Create `scripts/audit_quality_score.py` (part 1).
 
-- [ ] **Step 1: Script: run the v2 TRAIN backtest capturing each trade's quality inputs → score; print a decile table (score decile → N, realized WR, ExpR). Acceptance: WR in the top 3 deciles ≥ WR in the bottom 3; if violated, re-weight components USING TRAIN ONLY, rerun, and record both weight sets in the output.**
+- [ ] **Step 1: Write the script (part 1):**
+
+```python
+# scripts/audit_quality_score.py
+"""Offline audit of the quality score against realized TRAIN outcomes.
+Part 1 (Task 52): decile table. Part 2 (Task 53): numpy logistic audit.
+NEVER imported by swingbot/ -- tests enforce that."""
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from swingbot.core import quality
+from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.plan_engine import build_strategy_plan
+from swingbot.core.registry import get_badge
+from swingbot.core.strategy_types import HORIZONS, MIN_BARS
+
+CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
+TRAIN = ("2020-01-01", "2023-12-31")
+
+
+def collect_scored_trades() -> list[dict]:
+    """One row per TRAIN trade: the 7 quality component inputs (computed
+    as-of the entry bar, no lookahead) + the realized outcome."""
+    rows = []
+    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
+              for p in sorted(CACHE_DIR.glob("*.csv"))}
+    for ticker, df in frames.items():
+        vol_ratio_series = df["Volume"] / df["Volume"].rolling(20).mean()
+        for hk in HORIZONS:
+            for strategy in ALL_STRATEGIES:
+                s = run_backtest(ticker, df, strategy, hk, exit_model="v2",
+                                 scale_out=True)
+                date_to_idx = {str(d.date()): k for k, d in enumerate(df.index)}
+                for t in s.trades:
+                    if not (TRAIN[0] <= t.entry_date <= TRAIN[1]):
+                        continue
+                    i = date_to_idx[t.entry_date]
+                    window = df.iloc[:i + 1]
+                    badge = get_badge("strategy", strategy)
+                    q = quality.score_plan(
+                        direction=t.direction,
+                        regime=None,                       # offline: no SPY regime feed
+                        htf_bias=None,
+                        confluence_count=0,                # strategy-source trades
+                        volume_ratio=float(vol_ratio_series.iloc[i]),
+                        atr_pct=quality.atr_percentile(window),
+                        trigger_distance_pct=0.0,          # market entries
+                        badge_status=badge.status)
+                    rows.append({"score": q.score,
+                                 "components": dict(q.breakdown),
+                                 "outcome": t.outcome,
+                                 "r": t.r_multiple})
+    return rows
+
+
+def decile_table(rows: list[dict]) -> None:
+    print(f"{'decile':<8} {'N':>5} {'WR%':>6} {'ExpR':>7}")
+    for lo in range(0, 100, 10):
+        bucket = [r for r in rows if lo <= r["score"] < lo + 10 or
+                  (lo == 90 and r["score"] == 100)]
+        ev = [r for r in bucket if r["outcome"] in ("win", "loss")]
+        wins = sum(1 for r in ev if r["outcome"] == "win")
+        wr = wins / len(ev) * 100 if ev else float("nan")
+        expr = np.mean([r["r"] for r in bucket]) if bucket else float("nan")
+        print(f"{lo:>2}-{lo + 9:<5} {len(bucket):>5} {wr:>6.1f} {expr:>+7.3f}")
+
+
+if __name__ == "__main__":
+    rows = collect_scored_trades()
+    decile_table(rows)
+```
+
+**Acceptance:** mean WR of the top 3 populated deciles ≥ mean WR of the bottom 3. If violated, re-weight components USING TRAIN ONLY (edit the `quality.py` point tables), rerun, and record BOTH weight sets plus both tables in the output file.
+
 - [ ] **Step 2: Run, save output to `docs/superpowers/results/2026-07-quality-deciles.txt`, commit** — `git commit -m "feat: quality-score decile audit on train"`
 
 ### Task 53: Logistic monotonicity audit (numpy only)
 
 **Files:** Extend `scripts/audit_quality_score.py` (part 2).
 
-- [ ] **Step 1: Pure-numpy logistic regression (gradient descent, ~30 lines — no sklearn, no new deps) of win/loss on the 7 component values over TRAIN trades; print coefficients; FAIL loudly (exit 1) if any component coefficient is negative with |z| > 2 (a component actively hurting). This script is never imported by `swingbot/` — assert that with a test: `grep -r "audit_quality_score" swingbot/` must be empty (write it as a real test using pathlib walk).**
-- [ ] **Step 2: Run on TRAIN; fix component weights on TRAIN evidence if it fails; commit output** — `git commit -m "feat: offline logistic audit of quality components"`
+- [ ] **Step 1: Pure-numpy logistic regression of win/loss on the 7 component values over TRAIN trades:**
+
+```python
+# scripts/audit_quality_score.py (append)
+COMPONENT_NAMES = ["regime", "htf", "confluence", "volume",
+                   "atr_percentile", "trigger_distance", "badge"]
+
+
+def logistic_audit(rows: list[dict]) -> int:
+    """Gradient-descent logistic regression, no sklearn. Returns exit code:
+    1 when any component coefficient is significantly NEGATIVE (|z| > 2) --
+    a component actively hurting the score."""
+    ev = [r for r in rows if r["outcome"] in ("win", "loss")]
+    X = np.array([[r["components"][c] for c in COMPONENT_NAMES] for r in ev],
+                 dtype=float)
+    y = np.array([1.0 if r["outcome"] == "win" else 0.0 for r in ev])
+    # standardize so one learning rate fits all columns
+    mu, sd = X.mean(axis=0), X.std(axis=0)
+    sd[sd == 0] = 1.0
+    Xs = np.c_[np.ones(len(X)), (X - mu) / sd]
+
+    w = np.zeros(Xs.shape[1])
+    for _ in range(20_000):
+        p = 1 / (1 + np.exp(-Xs @ w))
+        w -= 0.05 * (Xs.T @ (p - y)) / len(y)
+
+    # standard errors from the Fisher information matrix
+    p = 1 / (1 + np.exp(-Xs @ w))
+    W = p * (1 - p)
+    cov = np.linalg.pinv(Xs.T @ (Xs * W[:, None]))
+    se = np.sqrt(np.diag(cov))
+    z = w / np.where(se == 0, np.inf, se)
+
+    bad = 0
+    print(f"\n{'component':<18} {'coef':>8} {'z':>7}")
+    for name, coef, zval in zip(["intercept"] + COMPONENT_NAMES, w, z):
+        flag = ""
+        if name != "intercept" and coef < 0 and abs(zval) > 2:
+            flag, bad = "  << HURTING", bad + 1
+        print(f"{name:<18} {coef:>8.3f} {zval:>7.2f}{flag}")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    rows = collect_scored_trades()
+    decile_table(rows)
+    sys.exit(logistic_audit(rows))
+```
+
+And the never-imported-by-swingbot tripwire test:
+
+```python
+# tests/test_quality.py (append)
+def test_audit_script_never_imported_by_swingbot():
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent / "swingbot"
+    offenders = [p for p in root.rglob("*.py")
+                 if "audit_quality_score" in p.read_text(encoding="utf-8")]
+    assert offenders == [], offenders
+```
+
+- [ ] **Step 2: Run on TRAIN; fix component weights on TRAIN evidence if it exits 1; commit output** — `git commit -m "feat: offline logistic audit of quality components"`
 
 ### Task 54: Score in shadow logs + plan serialization
 
 **Files:** Modify `swingbot/core/plan_engine.py`; test `tests/test_plan_serialization.py`.
 
-**Interfaces:** `plan_to_dict(plan) -> dict` / `plan_from_dict(d) -> TradePlanV2` — exact round-trip (all fields incl. breakdown + status_history); used by shadow logger (Task 86), PlanStore (Task 56), and trades.json integration (Task 70).
+**Interfaces:** `plan_to_dict(plan) -> dict` / `plan_from_dict(d) -> TradePlanV2` — exact round-trip (all fields incl. breakdown + status_history); used by shadow logger (Task 86), PlanStore (Task 56), and trades.json integration (Task 70). Forward-compat: `plan_from_dict` tolerates missing NEW fields (later tasks add `working_stop`, `legs_realized`, `runner_high_close` — each with a default) and ignores unknown keys.
 
-- [ ] **Step 1: Failing round-trip test (`plan_from_dict(plan_to_dict(p)) == p` field-by-field). Step 2: FAIL. Step 3: Implement (dataclasses.asdict + explicit reconstruction). Step 4: PASS. Step 5: Commit** — `git commit -m "feat: plan serialization round-trip"`
+- [ ] **Step 1: Failing round-trip test:**
+
+```python
+# tests/test_plan_serialization.py
+import dataclasses
+from swingbot.core.plan_engine import plan_to_dict, plan_from_dict
+from tests.test_plan_engine_model import _plan
+
+def test_exact_round_trip():
+    p = _plan(quality_breakdown=[("regime", 15), ("badge", 20)],
+              status_history=[{"status": "ACTIVE", "reason": "x", "at": "t"}])
+    q = plan_from_dict(plan_to_dict(p))
+    for f in dataclasses.fields(type(p)):
+        # JSON turns breakdown tuples into lists -- normalize before comparing
+        a, b = getattr(p, f.name), getattr(q, f.name)
+        if f.name == "quality_breakdown":
+            a = [list(x) for x in a]
+        assert a == b, f.name
+
+def test_unknown_keys_ignored_and_missing_new_fields_defaulted():
+    d = plan_to_dict(_plan())
+    d["some_future_key"] = 123
+    q = plan_from_dict(d)          # must not raise
+    assert q.plan_id == "p1"
+
+def test_json_safe():
+    import json
+    json.dumps(plan_to_dict(_plan()))   # must not raise
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/plan_engine.py
+import dataclasses
+
+_PLAN_FIELDS = None   # cached field list
+
+def plan_to_dict(plan: TradePlanV2) -> dict:
+    d = dataclasses.asdict(plan)
+    # tuples (quality_breakdown rows) -> lists so json round-trips cleanly
+    d["quality_breakdown"] = [list(row) for row in d.get("quality_breakdown", [])]
+    return d
+
+
+def plan_from_dict(d: dict) -> TradePlanV2:
+    global _PLAN_FIELDS
+    if _PLAN_FIELDS is None:
+        _PLAN_FIELDS = {f.name for f in dataclasses.fields(TradePlanV2)}
+    known = {k: v for k, v in d.items() if k in _PLAN_FIELDS}
+    return TradePlanV2(**known)   # missing fields use dataclass defaults
+```
+
+(Fields WITHOUT dataclass defaults must all be present in any dict this ever reads — they are, since `plan_to_dict` writes every field. Fields added by later tasks MUST carry defaults precisely so old persisted plans keep loading.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: plan serialization round-trip"`
 
 ### Task 55: Phase 4 checkpoint
 
@@ -1085,19 +3644,187 @@ Evolves the 60s `trade_monitor` (`commands/scanning.py:755-825`). All price beha
 **Files:** Create `swingbot/core/plan_store.py`; test `tests/test_plan_store.py`.
 
 **Interfaces:**
-- Produces: `PlanStore(path=DATA_DIR/"plans.json")` with `.add(plan)`, `.get(plan_id)`, `.update(plan)`, `.open_plans() -> list[TradePlanV2]` (status in PENDING/ACTIVE/PARTIAL), `.all()`. Atomic writes (write temp + `os.replace` — same pattern as the existing stores; read `state.py` first and copy its file-locking/atomicity idiom exactly).
+- Produces: `PlanStore(path=None)` (default `config.DATA_DIR/plans.json`) with `.add(plan)`, `.get(plan_id)`, `.update(plan)`, `.open_plans() -> list[TradePlanV2]` (status in PENDING/ACTIVE/PARTIAL), `.all()`. Atomic writes (write temp + `os.replace` — read `state.py` first and copy its locking/atomicity idiom exactly).
 
-- [ ] **Step 1: Failing tests: add/get/update round-trip via `plan_to_dict`; `open_plans` filters; file survives reload; corrupt file → empty store + warning (not a crash).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: PlanStore JSON persistence"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_plan_store.py
+from swingbot.core.plan_engine import PlanStatus, record_transition
+from swingbot.core.plan_store import PlanStore
+from tests.test_plan_engine_model import _plan
+
+def test_add_get_update_roundtrip(tmp_path):
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    p = _plan()
+    store.add(p)
+    got = store.get("p1")
+    assert got is not None and got.ticker == "AAPL"
+
+    record_transition(got, PlanStatus.ACTIVE, reason="fill", at="t1")
+    store.update(got)
+    fresh = PlanStore(path=str(tmp_path / "plans.json"))   # reload from disk
+    assert fresh.get("p1").status == PlanStatus.ACTIVE
+    assert fresh.get("p1").status_history[-1]["reason"] == "fill"
+
+def test_open_plans_filters_terminal_states(tmp_path):
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_plan(plan_id="a"))                                   # PENDING
+    active = _plan(plan_id="b"); record_transition(active, PlanStatus.ACTIVE, at="t")
+    store.add(active)
+    done = _plan(plan_id="c")
+    record_transition(done, PlanStatus.CANCELLED, reason="expired", at="t")
+    store.add(done)
+    assert {p.plan_id for p in store.open_plans()} == {"a", "b"}
+
+def test_update_unknown_plan_raises(tmp_path):
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    import pytest
+    with pytest.raises(KeyError):
+        store.update(_plan(plan_id="ghost"))
+
+def test_corrupt_file_yields_empty_store_not_crash(tmp_path):
+    path = tmp_path / "plans.json"
+    path.write_text("{torn write", encoding="utf-8")
+    store = PlanStore(path=str(path))
+    assert store.all() == []
+
+def test_no_tmp_file_left_behind(tmp_path):
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_plan())
+    assert not (tmp_path / "plans.json.tmp").exists()
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/plan_store.py
+"""JSON persistence for live TradePlanV2 lifecycles (data/plans.json).
+Atomic writes (temp + os.replace) -- a crash mid-write can never leave a
+torn file. Same locking idiom as state.py."""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import threading
+
+from swingbot import config
+from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
+                                       plan_from_dict, plan_to_dict)
+
+log = logging.getLogger("swing-bot.plan_store")
+_LOCK = threading.Lock()
+
+_OPEN_STATUSES = {PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL}
+
+
+class PlanStore:
+    def __init__(self, path: str | None = None):
+        self.path = path or os.path.join(config.DATA_DIR, "plans.json")
+        self._plans: dict[str, dict] = self._load()
+
+    def _load(self) -> dict:
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                records = json.load(f)
+            return {r["plan_id"]: r for r in records}
+        except FileNotFoundError:
+            return {}
+        except (json.JSONDecodeError, KeyError, OSError) as exc:
+            log.warning("plans.json unreadable (%s); starting empty", exc)
+            return {}
+
+    def _save(self) -> None:
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(list(self._plans.values()), f, indent=2)
+        os.replace(tmp, self.path)
+
+    def add(self, plan: TradePlanV2) -> None:
+        with _LOCK:
+            self._plans[plan.plan_id] = plan_to_dict(plan)
+            self._save()
+
+    def get(self, plan_id: str) -> TradePlanV2 | None:
+        d = self._plans.get(plan_id)
+        return plan_from_dict(d) if d else None
+
+    def update(self, plan: TradePlanV2) -> None:
+        with _LOCK:
+            if plan.plan_id not in self._plans:
+                raise KeyError(plan.plan_id)
+            self._plans[plan.plan_id] = plan_to_dict(plan)
+            self._save()
+
+    def open_plans(self) -> list[TradePlanV2]:
+        return [plan_from_dict(d) for d in self._plans.values()
+                if d.get("status") in _OPEN_STATUSES]
+
+    def all(self) -> list[TradePlanV2]:
+        return [plan_from_dict(d) for d in self._plans.values()]
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: PlanStore JSON persistence"`
 
 ### Task 57: FakePriceFeed test harness
 
 **Files:** Create `tests/fake_feed.py`.
 
 **Interfaces:**
-- Produces: `FakePriceFeed(ticks)` where ticks is `[(ticker, price), ...]` consumed in order; `.get_price(ticker) -> float` returns the next tick for that ticker (repeating the last when exhausted); `.set_series(ticker, prices)` convenience. Deterministic, no clock.
+- Produces: `FakePriceFeed(ticks=None)` where ticks is `[(ticker, price), ...]` consumed in order; `.get_price(ticker) -> float` returns the next tick for that ticker (repeating the last when exhausted); `.set_series(ticker, prices)` convenience. Deterministic, no clock.
 
-- [ ] **Step 1: Failing self-test (`tests/test_fake_feed.py`): ordering, per-ticker isolation, exhaustion behavior. Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "test: fake price feed harness"`
+- [ ] **Step 1: Failing self-test:**
+
+```python
+# tests/test_fake_feed.py
+from tests.fake_feed import FakePriceFeed
+
+def test_per_ticker_ordering_and_isolation():
+    feed = FakePriceFeed([("AAPL", 100.0), ("MSFT", 50.0), ("AAPL", 101.0)])
+    assert feed.get_price("AAPL") == 100.0
+    assert feed.get_price("MSFT") == 50.0
+    assert feed.get_price("AAPL") == 101.0
+
+def test_exhaustion_repeats_last():
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [100.0, 105.0])
+    assert [feed.get_price("AAPL") for _ in range(4)] == [100.0, 105.0, 105.0, 105.0]
+
+def test_unknown_ticker_raises():
+    import pytest
+    with pytest.raises(KeyError):
+        FakePriceFeed().get_price("GHOST")
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# tests/fake_feed.py
+"""Deterministic price feed for PlanManager tests -- no network, no clock."""
+from collections import defaultdict, deque
+
+
+class FakePriceFeed:
+    def __init__(self, ticks=None):
+        self._queues: dict[str, deque] = defaultdict(deque)
+        self._last: dict[str, float] = {}
+        for ticker, price in ticks or []:
+            self._queues[ticker].append(float(price))
+
+    def set_series(self, ticker: str, prices) -> None:
+        self._queues[ticker].extend(float(p) for p in prices)
+
+    def get_price(self, ticker: str) -> float:
+        q = self._queues.get(ticker)
+        if q:
+            self._last[ticker] = q.popleft()
+        if ticker not in self._last:
+            raise KeyError(f"no ticks queued for {ticker}")
+        return self._last[ticker]
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "test: fake price feed harness"`
 
 ### Task 58: PlanManager skeleton + PENDING trigger fill
 
@@ -1121,103 +3848,1035 @@ class PlanManager:
 
 `poll()` iterates `store.open_plans()`; PENDING + `trigger_hit`-equivalent on live price (bullish: `price >= trigger_price`) → set `entry_price = max(price, trigger_price)`, transition ACTIVE, emit `"filled"`. Uses ONLY the shared helpers from Task 18 semantics (live price stands in for bar high/low — document the approximation in the docstring).
 
-- [ ] **Step 1: Failing test: pending bullish plan, feed crosses trigger → event `"filled"`, status ACTIVE, entry recorded; feed below trigger → no event.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: PlanManager fills pending stop-entries"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_pending.py
+from swingbot.core.plan_engine import PlanStatus
+from swingbot.core.plan_manager import PlanManager
+from swingbot.core.plan_store import PlanStore
+from tests.fake_feed import FakePriceFeed
+from tests.test_plan_engine_model import _plan
+
+def _pending(**kw):
+    return _plan(entry_type="stop_entry", direction="bullish",
+                 trigger_price=105.0, stop_loss=95.0, tp1=110.0,
+                 expiry_bars=5, **kw)
+
+def _mgr(tmp_path, feed, **kw):
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    return store, PlanManager(store, feed.get_price, **kw)
+
+def test_pending_fills_when_price_crosses_trigger(tmp_path):
+    feed = FakePriceFeed([("AAPL", 106.0)])
+    store, mgr = _mgr(tmp_path, feed)
+    store.add(_pending())
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["filled"]
+    p = store.get("p1")
+    assert p.status == PlanStatus.ACTIVE
+    assert p.entry_price == 106.0        # max(live 106, trigger 105)
+    assert events[0].detail["entry_price"] == 106.0
+
+def test_pending_below_trigger_no_event(tmp_path):
+    feed = FakePriceFeed([("AAPL", 104.0)])
+    store, mgr = _mgr(tmp_path, feed)
+    store.add(_pending())
+    assert mgr.poll() == []
+    assert store.get("p1").status == PlanStatus.PENDING
+
+def test_price_fetch_failure_skips_plan_not_poll(tmp_path):
+    def flaky(ticker):
+        raise TimeoutError("yfinance hiccup")
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    mgr = PlanManager(store, flaky)
+    assert mgr.poll() == []              # no crash, no transition
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/plan_manager.py
+"""Intraday plan-lifecycle manager: evolves the 60s trade_monitor into a
+PENDING -> ACTIVE -> PARTIAL -> CLOSED state machine over PlanStore.
+
+Live-price approximation: poll() sees one price per plan per tick, not a
+bar -- the live price stands in for both bar High and bar Low in the Task
+18 trigger semantics. Between polls a spike can be missed; that is the
+same granularity limitation the existing trade_monitor already has, and
+gap-aware fills (Task 67) handle the overnight case."""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
+                                       record_transition)
+from swingbot.core.plan_store import PlanStore
+
+log = logging.getLogger("swing-bot.plan_manager")
+
+
+@dataclass
+class PlanEvent:
+    plan_id: str
+    transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
+                         # "be_moved"|"tp1_partial"|"closed"
+    detail: dict = field(default_factory=dict)
+
+
+class PlanManager:
+    def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
+                 atr_fn=None, trade_log=None):
+        self.store = store
+        self.price_fn = price_fn            # ticker -> live float
+        self.bar_count_fn = bar_count_fn    # (ticker, created_at) -> bars since
+        self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
+        self.trade_log = trade_log          # TradeLog (Task 70)
+
+    def _now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def poll(self) -> list[PlanEvent]:
+        events: list[PlanEvent] = []
+        for plan in self.store.open_plans():
+            try:
+                price = float(self.price_fn(plan.ticker))
+            except Exception as exc:
+                log.debug("poll: price fetch failed for %s: %s", plan.ticker, exc)
+                continue
+            if not price or price <= 0:
+                continue
+            try:
+                events.extend(self._step(plan, price))
+            except Exception:
+                log.warning("poll: step failed for plan %s", plan.plan_id,
+                            exc_info=True)
+        return events
+
+    # -- per-status handlers -------------------------------------------------
+
+    def _step(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+        if plan.status == PlanStatus.PENDING:
+            return self._step_pending(plan, price)
+        if plan.status == PlanStatus.ACTIVE:
+            return self._step_active(plan, price)     # Tasks 61-63
+        if plan.status == PlanStatus.PARTIAL:
+            return self._step_partial(plan, price)    # Tasks 64-66
+        return []
+
+    def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+        is_bull = plan.direction == "bullish"
+        crossed = price >= plan.trigger_price if is_bull else price <= plan.trigger_price
+        if crossed:
+            fill = max(price, plan.trigger_price) if is_bull \
+                else min(price, plan.trigger_price)
+            plan.entry_price = fill
+            record_transition(plan, PlanStatus.ACTIVE, reason="stop_entry_fill",
+                              at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "filled",
+                              {"entry_price": fill, "live_price": price})]
+        # Task 59 (expiry) and Task 60 (invalidation) slot in here.
+        return []
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: PlanManager fills pending stop-entries"`
 
 ### Task 59: PENDING expiry
 
-- [ ] **Step 1: Failing test (`bar_count_fn` returns bars since `created_at`; > `expiry_bars` → `"cancelled_expired"`, status CANCELLED). Step 2: FAIL. Step 3: Implement using `pending_expired`. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: pending plans expire"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_pending.py (append)
+def test_pending_expires_past_expiry_bars(tmp_path):
+    feed = FakePriceFeed([("AAPL", 100.0)])       # never reaches trigger
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending(expiry_bars=5))
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 6)
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["cancelled_expired"]
+    assert store.get("p1").status == PlanStatus.CANCELLED
+
+def test_pending_at_exactly_expiry_bars_still_live(tmp_path):
+    feed = FakePriceFeed([("AAPL", 100.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending(expiry_bars=5))
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 5)
+    assert mgr.poll() == []                        # boundary: == is NOT expired
+
+def test_no_bar_count_fn_means_no_expiry(tmp_path):
+    feed = FakePriceFeed([("AAPL", 100.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    assert PlanManager(store, feed.get_price).poll() == []
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement in `_step_pending` (before the trigger check — an expired plan must not fill):**
+
+```python
+        if self.bar_count_fn is not None:
+            bars = self.bar_count_fn(plan.ticker, plan.created_at)
+            if pending_expired(plan, bars):
+                record_transition(plan, PlanStatus.CANCELLED, reason="expired",
+                                  at=self._now())
+                self.store.update(plan)
+                return [PlanEvent(plan.plan_id, "cancelled_expired",
+                                  {"bars_waited": bars})]
+```
+
+(`bar_count_fn` in production counts completed daily bars since `created_at` from the ticker's cached df — wired in Task 71.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: pending plans expire"`
 
 ### Task 60: PENDING invalidation
 
-- [ ] **Step 1: Failing test: price closes through stop side before trigger → `"cancelled_invalidated"` (use `pending_invalidated`; live approximation: current price beyond stop_loss). Bearish mirror. Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: pending plans invalidate on setup loss"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_pending.py (append)
+def test_pending_invalidates_when_price_breaks_stop(tmp_path):
+    feed = FakePriceFeed([("AAPL", 94.0)])        # below stop 95, trigger never hit
+    store, mgr = _mgr(tmp_path, feed)
+    store.add(_pending())
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["cancelled_invalidated"]
+    assert store.get("p1").status == PlanStatus.CANCELLED
+
+def test_bearish_pending_invalidates_above_stop(tmp_path):
+    feed = FakePriceFeed([("AAPL", 106.0)])
+    store, mgr = _mgr(tmp_path, feed)
+    store.add(_plan(entry_type="stop_entry", direction="bearish",
+                    trigger_price=95.0, stop_loss=105.0, tp1=90.0))
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["cancelled_invalidated"]
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement in `_step_pending` (after the trigger check — the trigger wins when both could apply on one tick):**
+
+```python
+        if pending_invalidated(plan, price):
+            record_transition(plan, PlanStatus.CANCELLED, reason="invalidated",
+                              at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "cancelled_invalidated",
+                              {"live_price": price})]
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: pending plans invalidate on setup loss"`
 
 ### Task 61: ACTIVE break-even move
 
-- [ ] **Step 1: Failing test: active plan, price reaches `entry + 0.5×(tp1−entry)` → event `"be_moved"`, plan's working stop (new field `working_stop: float` on TradePlanV2, defaulting to `stop_loss` — add it in this task with serialization + PlanStore migration for records missing it) set to `entry_price`. Idempotent: second poll at same price emits nothing.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS (incl. re-run of test_plan_serialization). Step 5: Commit** — `git commit -m "feat: live break-even stop move"`
+**Files:** Modify `swingbot/core/plan_engine.py` (new field), `swingbot/core/plan_manager.py`; test `tests/test_plan_manager_active.py`.
+
+**Interfaces:** New field on TradePlanV2: `working_stop: float | None = None` (None = "use stop_loss"; a DEFAULT so Task 54's `plan_from_dict` keeps loading old records — add a property-style helper `effective_stop(plan) -> float` returning `working_stop if working_stop is not None else stop_loss`).
+
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_active.py
+from swingbot.core.plan_engine import PlanStatus, record_transition
+from swingbot.core.plan_manager import PlanManager
+from swingbot.core.plan_store import PlanStore
+from tests.fake_feed import FakePriceFeed
+from tests.test_plan_engine_model import _plan
+
+def _active(**kw):
+    p = _plan(entry_type="market", direction="bullish", trigger_price=100.0,
+              entry_price=100.0, stop_loss=95.0, tp1=110.0, **kw)
+    record_transition(p, PlanStatus.ACTIVE, reason="market_entry", at="t0")
+    return p
+
+def _env(tmp_path, prices, plan=None):
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", prices)
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(plan or _active())
+    return store, PlanManager(store, feed.get_price)
+
+def test_be_move_at_half_way_to_tp1(tmp_path):
+    # BE trigger = 100 + 0.5*(110-100) = 105
+    store, mgr = _env(tmp_path, [105.0, 105.0])
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["be_moved"]
+    assert store.get("p1").working_stop == 100.0
+    assert mgr.poll() == []               # idempotent at the same price
+
+def test_below_trigger_no_move(tmp_path):
+    store, mgr = _env(tmp_path, [104.9])
+    assert mgr.poll() == []
+    assert store.get("p1").working_stop is None
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement `_step_active` (first branch) + the field:**
+
+```python
+# swingbot/core/plan_manager.py
+def _step_active(self, plan, price) -> list[PlanEvent]:
+    is_bull = plan.direction == "bullish"
+    sign = 1 if is_bull else -1
+    entry = plan.entry_price
+    target_dist = abs(plan.tp1 - entry)
+    be_trigger = entry + sign * plan.breakeven_trigger_fraction * target_dist
+
+    # Tasks 62/63 insert stop-hit and TP1 checks BEFORE this (stop first,
+    # then target, then the BE arm -- same conservative order as the sim).
+
+    reached_be = price >= be_trigger if is_bull else price <= be_trigger
+    if reached_be and plan.working_stop is None:
+        plan.working_stop = entry
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "be_moved",
+                          {"working_stop": entry, "live_price": price})]
+    return []
+```
+
+- [ ] **Step 4: PASS incl. re-run of `tests/test_plan_serialization.py` (new field defaults, old dicts still load). Step 5: Commit** — `git commit -m "feat: live break-even stop move"`
 
 ### Task 62: ACTIVE loss / scratch closes
 
-- [ ] **Step 1: Failing tests: price ≤ working_stop pre-BE → `"closed"` with `detail["reason"]=="loss"`, status CLOSED; post-BE-move stop hit → reason `"scratch"`. Events carry exit price.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: live loss/scratch closes"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_plan_manager_active.py (append)
+def test_stop_hit_pre_be_is_loss(tmp_path):
+    store, mgr = _env(tmp_path, [94.5])
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["reason"] == "loss"
+    assert events[0].detail["exit_price"] == 94.5   # gap-aware: real price, not 95
+    assert store.get("p1").status == PlanStatus.CLOSED
+
+def test_stop_hit_post_be_is_scratch(tmp_path):
+    store, mgr = _env(tmp_path, [105.0, 99.9])      # tick 1 arms BE, tick 2 hits it
+    assert [e.transition for e in mgr.poll()] == ["be_moved"]
+    events = mgr.poll()
+    assert events[0].detail["reason"] == "scratch"
+    assert store.get("p1").status == PlanStatus.CLOSED
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement — insert at the top of `_step_active`:**
+
+```python
+    stop = plan.working_stop if plan.working_stop is not None else plan.stop_loss
+    hit_stop = price <= stop if is_bull else price >= stop
+    if hit_stop:
+        reason = "scratch" if plan.working_stop is not None else "loss"
+        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "closed",
+                          {"reason": reason, "exit_price": price})]
+```
+
+(`exit_price` is the observed live price — a real fill, possibly gapped past the stop; Task 67 pins that convention.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: live loss/scratch closes"`
 
 ### Task 63: TP1 → PARTIAL with leg realization
 
-- [ ] **Step 1: Failing test: price ≥ tp1 → event `"tp1_partial"` (detail: leg fraction 0.5, exit price tp1, leg R = rr), status PARTIAL, `working_stop == entry_price`, new field `legs_realized: list` on the plan (add + serialize as in Task 61).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: live TP1 partial fill"`
+**Interfaces:** New field on TradePlanV2: `legs_realized: list = field(default_factory=list)` (serialized like all fields; old records default to `[]`).
+
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_active.py (append)
+def test_tp1_touch_banks_partial_and_moves_to_partial(tmp_path):
+    store, mgr = _env(tmp_path, [110.5])
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["tp1_partial"]
+    d = events[0].detail
+    assert d["fraction"] == 0.5
+    assert d["exit_price"] == 110.5                  # gap-aware fill
+    assert d["r"] == (110.5 - 100.0) / 5.0
+    p = store.get("p1")
+    assert p.status == PlanStatus.PARTIAL
+    assert p.working_stop == 100.0                   # runner starts at BE
+    assert p.legs_realized == [{"fraction": 0.5, "exit_price": 110.5,
+                                "r": d["r"], "reason": "tp1"}]
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement — between the stop check and the BE arm in `_step_active`:**
+
+```python
+    hit_tp1 = price >= plan.tp1 if is_bull else price <= plan.tp1
+    if hit_tp1:
+        fill = max(price, plan.tp1) if is_bull else min(price, plan.tp1)
+        risk = abs(entry - plan.stop_loss)
+        r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+        leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
+               "r": r1, "reason": "tp1"}
+        plan.legs_realized.append(leg)
+        plan.working_stop = entry                     # runner floor = BE
+        record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
+                          at=self._now())
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
+```
+
+(Wait — bullish TP1 fill: a stop-limit sell can't fill BETTER than observed price; the observed live price IS the fill: `fill = price`. Use `fill = price` and keep the comment explaining why it may exceed tp1 on a gap up — that's a real, favorable fill.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: live TP1 partial fill"`
 
 ### Task 64: PARTIAL runner — BE close
 
-- [ ] **Step 1: Failing test: PARTIAL plan, price back to entry → `"closed"`, reason `"tp1_runner_be"`, second leg r=0, total realized R == 0.5×rr.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner break-even close"`
+**Files:** Modify `swingbot/core/plan_manager.py`; test `tests/test_plan_manager_partial.py`.
+
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_partial.py
+from swingbot.core.plan_engine import PlanStatus
+from swingbot.core.plan_manager import PlanManager
+from swingbot.core.plan_store import PlanStore
+from tests.fake_feed import FakePriceFeed
+from tests.test_plan_manager_active import _active, _env
+
+def _partial_env(tmp_path, prices, tp2=None, atr_fn=None):
+    """Walk a fresh ACTIVE plan through the TP1 partial first (price 110.5),
+    then feed `prices` to the runner."""
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [110.5] + list(prices))
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_active(tp2=tp2))
+    mgr = PlanManager(store, feed.get_price, atr_fn=atr_fn)
+    assert [e.transition for e in mgr.poll()] == ["tp1_partial"]
+    return store, mgr
+
+def test_runner_closes_at_breakeven(tmp_path):
+    store, mgr = _partial_env(tmp_path, [99.9])
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["reason"] == "tp1_runner_be"
+    p = store.get("p1")
+    assert p.status == PlanStatus.CLOSED
+    assert len(p.legs_realized) == 2
+    leg2 = p.legs_realized[1]
+    assert leg2["r"] <= 0.0 or leg2["r"] == pytest.approx(0.0, abs=0.05)
+    # total realized: leg1 banked ~+2.1R on 50% -- the win survives
+    total = sum(l["fraction"] * l["r"] for l in p.legs_realized)
+    assert total >= 0.5 * 2.0 * 0.9
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement `_step_partial` (runner stop only for now):**
+
+```python
+# swingbot/core/plan_manager.py
+def _step_partial(self, plan, price) -> list[PlanEvent]:
+    is_bull = plan.direction == "bullish"
+    sign = 1 if is_bull else -1
+    entry = plan.entry_price
+    risk = abs(entry - plan.stop_loss)
+    stop = plan.working_stop if plan.working_stop is not None else entry
+
+    hit_stop = price <= stop if is_bull else price >= stop
+    if hit_stop:
+        reason = "tp1_runner_be" if stop == entry else "tp1_runner_trail"
+        return self._close_runner(plan, price, reason, risk, sign)
+
+    # Task 65 TP2 check, Task 66 trail ratchet slot in here.
+    return []
+
+def _close_runner(self, plan, fill, reason, risk, sign) -> list[PlanEvent]:
+    r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
+    leg = {"fraction": 1.0 - plan.tp1_fraction, "exit_price": fill,
+           "r": r2, "reason": reason}
+    plan.legs_realized.append(leg)
+    record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+    self.store.update(plan)
+    return [PlanEvent(plan.plan_id, "closed",
+                      dict(leg, reason=reason))]
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner break-even close"`
 
 ### Task 65: PARTIAL runner — TP2
 
-- [ ] **Step 1: Failing test: price ≥ tp2 → `"closed"` reason `"tp1_runner_tp2"`, leg-2 R = (tp2−entry)/risk; plans with tp2=None never emit it.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner TP2 close"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_partial.py (append)
+def test_runner_closes_at_tp2(tmp_path):
+    store, mgr = _partial_env(tmp_path, [118.5], tp2=118.0)
+    events = mgr.poll()
+    assert events[0].detail["reason"] == "tp1_runner_tp2"
+    assert store.get("p1").legs_realized[1]["r"] == pytest.approx((118.5 - 100) / 5)
+
+def test_tp2_none_runner_ignores_high_prices(tmp_path):
+    store, mgr = _partial_env(tmp_path, [140.0], tp2=None)
+    assert mgr.poll() == []          # no trail (no atr_fn), no tp2 -> still open
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement — after the stop check in `_step_partial`:**
+
+```python
+    if plan.tp2 is not None:
+        hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
+        if hit_tp2:
+            return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner TP2 close"`
 
 ### Task 66: PARTIAL runner — chandelier trail
 
-- [ ] **Step 1: Failing test: manager tracks `runner_high_close` (new persisted field, add + serialize); rising prices ratchet `working_stop = max(entry, chandelier_stop(...))` (needs ATR: `PlanManager` gains `atr_fn(ticker) -> float`, faked in tests); pullback through trail → `"closed"` reason `"tp1_runner_trail"` at the trail price.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: live chandelier trail for runner"`
+**Interfaces:** New persisted field `runner_high_close: float | None = None` on TradePlanV2 (tracks the extreme observed price since TP1 — despite the name it holds the bearish extreme LOW for shorts); `PlanManager` gains `atr_fn(ticker) -> float` (None-safe: no atr_fn → BE/TP2-only runner, exactly today's tests).
+
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_plan_manager_partial.py (append)
+def test_trail_ratchets_and_closes(tmp_path):
+    # ATR faked at 2.0, trail_atr_mult=2.5 -> trail = extreme - 5.0.
+    store, mgr = _partial_env(tmp_path, [120.0, 118.0, 114.9],
+                              atr_fn=lambda t: 2.0)
+    assert mgr.poll() == []                      # 120: trail -> max(100, 115)
+    assert store.get("p1").working_stop == 115.0
+    assert mgr.poll() == []                      # 118: above trail; no ratchet down
+    assert store.get("p1").working_stop == 115.0
+    events = mgr.poll()                          # 114.9 <= 115 -> trail close
+    assert events[0].detail["reason"] == "tp1_runner_trail"
+    assert store.get("p1").legs_realized[1]["r"] == pytest.approx((114.9 - 100) / 5)
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement — end of `_step_partial`:**
+
+```python
+    if self.atr_fn is not None:
+        extreme = plan.runner_high_close
+        extreme = price if extreme is None else (max(extreme, price) if is_bull
+                                                 else min(extreme, price))
+        if extreme != plan.runner_high_close:
+            plan.runner_high_close = extreme
+            atr_val = float(self.atr_fn(plan.ticker))
+            trail = chandelier_stop(extreme, atr_val, plan.trail_atr_mult,
+                                    plan.direction)
+            floor = plan.working_stop if plan.working_stop is not None else entry
+            new_stop = max(floor, trail) if is_bull else min(floor, trail)
+            if new_stop != plan.working_stop:
+                plan.working_stop = new_stop
+            self.store.update(plan)
+    return []
+```
+
+(The trail is compared on the NEXT poll — the tick that raises the trail is never judged against its own new level, matching the simulator's no-intrabar-lookahead rule.)
+
+- [ ] **Step 4: PASS (incl. serialization re-run). Step 5: Commit** — `git commit -m "feat: live chandelier trail for runner"`
 
 ### Task 67: Gap-aware fills
 
-- [ ] **Step 1: Failing tests: overnight gap through stop (price_fn jumps from above stop to far below) → close fills at the GAPPED price, not the stop (mirror `performance.py:307-411` conventions — read first, reuse its helper if extractable, else extract it to a shared function in `performance.py` and call from both); gap through tp1 fills leg 1 at gapped price with R computed from actual fill.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: gap-aware fills in plan manager"`
+> `performance.update_open_trades` already fills stops at `min(open, stop)` (bullish) when a bar GAPS through, and live-price closes at the observed price. The PlanManager code from Tasks 62/63 uses the observed live price as the fill, which is the same convention for the polling path. This task PINS the convention with tests and adds the one missing case: the manager consuming a daily bar (via `bar_check` — used at session open to catch overnight gaps before the first poll).
+
+**Files:** Modify `swingbot/core/plan_manager.py`; test `tests/test_plan_manager_gaps.py`.
+
+**Interfaces:** `PlanManager.check_bar(plan_id, bar_open, bar_high, bar_low) -> list[PlanEvent]` — evaluates one completed/overnight bar for an ACTIVE/PARTIAL plan with the same gap fill rule as `performance.update_open_trades`: stop fill = `min(bar_open, stop)` bullish / `max(...)` bearish; TP1 fill = `max(bar_open, tp1)` bullish (a gap UP through the target fills at the better open).
+
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_plan_manager_gaps.py
+import pytest
+from swingbot.core.plan_store import PlanStore
+from swingbot.core.plan_manager import PlanManager
+from tests.fake_feed import FakePriceFeed
+from tests.test_plan_manager_active import _active
+
+def _env(tmp_path):
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_active())          # entry 100, stop 95, tp1 110
+    return store, PlanManager(store, FakePriceFeed([("AAPL", 100.0)]).get_price)
+
+def test_overnight_gap_through_stop_fills_at_open(tmp_path):
+    store, mgr = _env(tmp_path)
+    events = mgr.check_bar("p1", bar_open=91.0, bar_high=93.0, bar_low=90.0)
+    assert events[0].detail["reason"] == "loss"
+    assert events[0].detail["exit_price"] == 91.0     # gapped open, not 95
+    assert store.get("p1").legs_realized[0]["r"] == pytest.approx((91 - 100) / 5)
+
+def test_gap_up_through_tp1_fills_at_open(tmp_path):
+    store, mgr = _env(tmp_path)
+    events = mgr.check_bar("p1", bar_open=113.0, bar_high=114.0, bar_low=112.0)
+    assert events[0].transition == "tp1_partial"
+    assert events[0].detail["exit_price"] == 113.0    # better-than-tp1 real fill
+    assert events[0].detail["r"] == pytest.approx((113 - 100) / 5)
+
+def test_intrabar_touch_fills_at_level(tmp_path):
+    store, mgr = _env(tmp_path)
+    events = mgr.check_bar("p1", bar_open=96.0, bar_high=97.0, bar_low=94.5)
+    assert events[0].detail["exit_price"] == 95.0     # traded down TO the stop
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement `check_bar`** — resolve the plan, then reuse `_step_active`/`_step_partial` logic but with bar semantics: stop touch when `bar_low <= stop` (bullish), fill `min(bar_open, stop)`; TP1 touch when `bar_high >= tp1`, fill `max(bar_open, tp1)`; conservative same-bar ordering (stop before target). Extract the fill arithmetic into module helpers `gap_stop_fill(bar_open, level, direction)` / `gap_target_fill(bar_open, level, direction)` and add a comment in `performance.update_open_trades` pointing at them as the shared convention (don't rewire performance.py's internals here — that's Task 70's integration surface).
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: gap-aware fills in plan manager"`
 
 ### Task 68: trades.json two-leg schema
 
 **Files:** Modify `swingbot/core/performance.py` (schema at `performance.py:209-239`); test `tests/test_trades_schema.py`.
 
 **Interfaces:**
-- Produces: trade records gain optional `legs: [{"fraction","exit_price","exit_time","r","reason"}]` and `plan_id`. `realized_pnl_amount` = Σ legs when legs present, else legacy single-exit math (unchanged). **Migration:** loader tolerates records without `legs` (all existing data). Status vocabulary unchanged (`open|win|loss|closed`) — a PARTIAL plan's trade stays `open` until the runner closes.
+- Produces: trade records gain optional `legs: [{"fraction","exit_price","exit_time","r","reason"}]` and `plan_id` (both absent on legacy rows). New module functions in `performance.py`: `append_leg(trade, leg) -> None` and `settle_legs(trade) -> float | None` (realized P&L = `Σ shares × fraction × (exit − entry) × sign` over legs; None when unsized). `_settle_account_balance` uses `settle_legs` when `trade.get("legs")` else the legacy single-exit math (unchanged). **Migration:** loader tolerates records without `legs` (all existing data). Status vocabulary unchanged (`open|win|loss|closed`) — a PARTIAL plan's trade stays `open` until the runner closes.
 
-- [ ] **Step 1: Failing tests: legacy record loads untouched; two-leg record computes summed P&L; a half-closed trade reports unrealized on the remaining fraction only.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: two-leg trade records with legacy migration"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_trades_schema.py
+import pytest
+from swingbot.core.performance import TradeLog, settle_legs
+
+def _trade(**kw):
+    base = {"id": "t1", "ticker": "AAPL", "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+            "status": "open", "shares": 10.0}
+    base.update(kw)
+    return base
+
+def test_legacy_record_loads_untouched(tmp_path):
+    path = tmp_path / "trades.json"
+    path.write_text('[{"id": "old1", "ticker": "AAPL", "status": "win", '
+                    '"entry": 100, "stop_loss": 95, "take_profit": 110, '
+                    '"direction": "bullish", "exit_price": 110}]')
+    log = TradeLog(path=str(path))
+    stats = log.get_stats()
+    assert stats["wins"] == 1        # no KeyError on missing legs/plan_id
+
+def test_two_leg_pnl_sums_fractions():
+    t = _trade(legs=[
+        {"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1"},
+        {"fraction": 0.5, "exit_price": 100.0, "r": 0.0, "reason": "tp1_runner_be"},
+    ])
+    # 10 shares: leg1 = 10*0.5*(110-100) = 50; leg2 = 0 -> 50.0
+    assert settle_legs(t) == pytest.approx(50.0)
+
+def test_bearish_legs_sign():
+    t = _trade(direction="bearish", entry=100.0,
+               legs=[{"fraction": 1.0, "exit_price": 90.0, "r": 2.0, "reason": "tp1"}])
+    assert settle_legs(t) == pytest.approx(100.0)   # 10 * (100-90)
+
+def test_unsized_trade_settles_none():
+    t = _trade(shares=None, legs=[{"fraction": 1.0, "exit_price": 110.0,
+                                   "r": 2.0, "reason": "tp1"}])
+    assert settle_legs(t) is None
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/performance.py
+def settle_legs(t: dict) -> float | None:
+    """Realized currency P&L for a two-leg (v2) trade: each leg closes
+    `fraction` of the snapshotted share count at its own exit price. None
+    when the trade never got a sizing snapshot (same rule as legacy)."""
+    shares, entry = t.get("shares"), t.get("entry")
+    legs = t.get("legs") or []
+    if not shares or entry is None or not legs:
+        return None
+    sign = 1 if t.get("direction") == "bullish" else -1
+    return round(sum(shares * leg["fraction"] * (leg["exit_price"] - entry) * sign
+                     for leg in legs), 2)
+
+
+def append_leg(t: dict, leg: dict) -> None:
+    t.setdefault("legs", []).append(leg)
+```
+
+`log_trade`'s record dict gains `"plan_id": plan_id, "legs": []` (new optional kwarg `plan_id=None`); `_settle_account_balance` starts with `pnl_amount = settle_legs(t)` and falls back to the legacy single-exit computation when it returns None AND `exit_price` is set.
+
+- [ ] **Step 4: PASS + full suite (TradeLog is everywhere). Step 5: Commit** — `git commit -m "feat: two-leg trade records with legacy migration"`
 
 ### Task 69: Account math for legs
 
-**Files:** Modify `swingbot/core/account.py` (self-healing balance, `account.py:38-55`); test `tests/test_account_legs.py`.
+**Files:** Modify `swingbot/core/account.py` (`_sum_realized_pnl` — the self-healing balance recompute that re-derives balance from trades.json); test `tests/test_account_legs.py`.
 
-- [ ] **Step 1: Failing golden test: base 10_000; trade risks 100 (risk_pct sizing via `compute_position_size` — read `account.py:405-515` and use its exact rounding); TP1 leg at rr=0.35 on 50% → realized +17.50; runner BE → +0; balance == 10_017.50. Assert the self-healing recompute gives the same number after reload.**
-- [ ] **Step 2: FAIL. Step 3: Implement (Σ legs inside the balance recompute). Step 4: PASS. Step 5: Commit** — `git commit -m "feat: per-leg realized P&L in account balance"`
+- [ ] **Step 1: Failing golden test:**
+
+```python
+# tests/test_account_legs.py
+import json
+import pytest
+from swingbot.core import account
+
+def test_self_healing_recompute_sums_legs(tmp_path, monkeypatch):
+    # A two-leg closed trade whose realized_pnl_amount was written by
+    # settle_legs: base 10_000, 100 risked, rr=0.35, TP1 on 50% -> +17.50,
+    # runner BE -> +0. The self-healing recompute must reproduce +17.50
+    # from the record itself.
+    trades = [{
+        "id": "t1", "ticker": "AAPL", "direction": "bullish", "status": "win",
+        "entry": 100.0, "stop_loss": 99.0, "take_profit": 100.35,
+        "shares": 100.0,                       # risk 100 @ 1.0/share
+        "realized_pnl_amount": 17.50,
+        "legs": [
+            {"fraction": 0.5, "exit_price": 100.35, "r": 0.35, "reason": "tp1"},
+            {"fraction": 0.5, "exit_price": 100.0, "r": 0.0,
+             "reason": "tp1_runner_be"},
+        ],
+    }]
+    path = tmp_path / "trades.json"
+    path.write_text(json.dumps(trades))
+    assert account._sum_realized_pnl(trades_path=str(path)) == pytest.approx(17.50)
+
+def test_recompute_falls_back_to_settle_legs_when_amount_missing(tmp_path):
+    # Older v2 rows might carry legs but no realized_pnl_amount (e.g. a crash
+    # between leg append and settle) -- the recompute derives it from legs.
+    trades = [{
+        "id": "t2", "ticker": "AAPL", "direction": "bullish", "status": "win",
+        "entry": 100.0, "stop_loss": 99.0, "shares": 100.0,
+        "realized_pnl_amount": None,
+        "legs": [{"fraction": 0.5, "exit_price": 100.35, "r": 0.35,
+                  "reason": "tp1"},
+                 {"fraction": 0.5, "exit_price": 100.0, "r": 0.0,
+                  "reason": "tp1_runner_be"}],
+    }]
+    path = tmp_path / "trades.json"
+    path.write_text(json.dumps(trades))
+    assert account._sum_realized_pnl(trades_path=str(path)) == pytest.approx(17.50)
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — inside `_sum_realized_pnl`'s per-trade loop, before the legacy math:
+
+```python
+# swingbot/core/account.py (inside _sum_realized_pnl)
+        amount = t.get("realized_pnl_amount")
+        if amount is None and t.get("legs"):
+            from swingbot.core.performance import settle_legs
+            amount = settle_legs(t)
+        if amount is not None:
+            total += amount
+            continue
+        # ... existing legacy single-exit reconstruction unchanged ...
+```
+
+(Import inside the function — account.py must not import performance.py at module level; performance already imports account, and a top-level back-import would be a cycle.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: per-leg realized P&L in account balance"`
 
 ### Task 70: TradeLog integration for v2 plans
 
 **Files:** Modify `swingbot/core/performance.py`, `swingbot/core/plan_manager.py`; test `tests/test_tradelog_v2.py`.
 
-**Interfaces:** `PlanManager` accepts optional `trade_log: TradeLog`; on `"filled"` → `log_trade` (with `plan_id`, sizing snapshot as today `performance.py:186-263`); on `"tp1_partial"` → append leg; on `"closed"` → final leg + status win/loss per outcome reason (win = any `tp1_*` reason; loss = `"loss"`; scratch/others → `closed`). PENDING plans are NOT trades (no log until fill).
+**Interfaces:** `PlanManager` accepts optional `trade_log: TradeLog` (already a constructor param since Task 58); on `"filled"` → `log_trade(..., plan_id=plan.plan_id)` (sizing snapshot happens inside log_trade as today); on `"tp1_partial"` → `append_leg` + save; on `"closed"` → final leg + status: win = any `tp1_*` reason, loss = `"loss"`, scratch/others → `"closed"`; `_settle_account_balance` runs on the close (it now understands legs, Task 68/69). Market-entry plans log their trade at plan creation (the scan engine already does this at cutover — Task 89); the manager's job is stop_entry fills + all leg events. PENDING plans are NOT trades (no log until fill).
 
-- [ ] **Step 1: Failing test with FakePriceFeed walking a full fill→TP1→trail close; assert trades.json record has 2 legs, status `win`, plan_id linked.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: plan lifecycle writes two-leg paper trades"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_tradelog_v2.py
+from swingbot.core.performance import TradeLog
+from swingbot.core.plan_manager import PlanManager
+from swingbot.core.plan_store import PlanStore
+from tests.fake_feed import FakePriceFeed
+from tests.test_plan_manager_pending import _pending
+
+def test_full_lifecycle_writes_two_leg_win(tmp_path):
+    feed = FakePriceFeed()
+    feed.set_series("AAPL", [
+        106.0,    # fill (trigger 105)
+        116.0,    # tp1 partial (tp1 110 -> touched; entry 106, stop 95)
+        140.0,    # runner ratchets trail well above entry
+        118.0,    # pierces trail -> tp1_runner_trail close
+    ])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    store.add(_pending(tp1=110.0, tp2=None))
+    mgr = PlanManager(store, feed.get_price, atr_fn=lambda t: 2.0,
+                      trade_log=log)
+
+    transitions = []
+    for _ in range(4):
+        transitions.extend(e.transition for e in mgr.poll())
+    assert transitions == ["filled", "tp1_partial", "closed"] or \
+           transitions == ["filled", "tp1_partial", "be_moved", "closed"]
+
+    log.refresh()
+    [t] = [t for t in log.get_trades(limit=10) if t.get("plan_id") == "p1"]
+    assert t["status"] == "win"
+    assert len(t["legs"]) == 2
+    assert t["legs"][0]["reason"] == "tp1"
+    assert t["legs"][1]["reason"].startswith("tp1_runner")
+    assert t["realized_pnl_amount"] is not None or t["shares"] is None
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — in `PlanManager`, a small `_on_event` hook called before returning events:
+
+```python
+# swingbot/core/plan_manager.py
+def _on_event(self, plan, event: PlanEvent) -> None:
+    if self.trade_log is None:
+        return
+    try:
+        if event.transition == "filled":
+            trade_id = self.trade_log.log_trade(
+                ticker=plan.ticker, strategy=plan.strategy,
+                horizon_key=plan.horizon_key, direction=plan.direction,
+                confidence_level=None, confidence_label=None,
+                entry=plan.entry_price, stop_loss=plan.stop_loss,
+                take_profit=plan.tp1, target2=plan.tp2,
+                plan_id=plan.plan_id)
+            event.detail["trade_id"] = trade_id
+        elif event.transition == "tp1_partial":
+            self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
+        elif event.transition == "closed":
+            reason = event.detail["reason"]
+            status = ("win" if reason.startswith("tp1_")
+                      else "loss" if reason == "loss" else "closed")
+            self.trade_log.close_plan_trade(plan.plan_id, event.detail, status)
+    except Exception:
+        log.warning("trade-log hook failed for plan %s", plan.plan_id,
+                    exc_info=True)   # bookkeeping must never break the manager
+```
+
+`TradeLog` gains two lock-guarded helpers: `append_leg_by_plan(plan_id, leg)` (find the open trade with this plan_id, `append_leg`, `_save`) and `close_plan_trade(plan_id, leg, status)` (append the final leg — skip when the close carries no leg, i.e. a pre-TP1 loss/scratch closes the ORIGINAL single position: synthesize `{"fraction": 1.0, "exit_price": ..., "r": ..., "reason": ...}` from the event detail — set `status`, `exit_price`, `closed_at`, then `_settle_account_balance` + `_save`).
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: plan lifecycle writes two-leg paper trades"`
 
 ### Task 71: Wire PlanManager into the 60s loop
 
 **Files:** Modify `swingbot/commands/scanning.py` (`trade_monitor` loop, 755-825); test `tests/test_trade_monitor_wiring.py`.
 
-**Interfaces:** When `config.INTRADAY_MANAGER_V2` is True, `trade_monitor` additionally constructs (once, module-level lazy singleton) `PlanManager(PlanStore(), data.get_current_price, atr_fn=...)` and calls `poll()`, dispatching events to the alert sender (Task 72). Flag False → byte-identical legacy behavior (assert no PlanStore file is even created).
+**Interfaces:** When `config.INTRADAY_MANAGER_V2` is True, `trade_monitor` additionally calls a NEW sync function `run_manager_tick() -> list[PlanEvent]` (in `swingbot/core/plan_manager.py`) via `asyncio.to_thread`, then dispatches its events to the alert sender (Task 72). `run_manager_tick` lazily constructs a module singleton `PlanManager(PlanStore(), get_current_price, atr_fn=_live_atr, bar_count_fn=_bars_since, trade_log=trade_log)`. Flag False → byte-identical legacy behavior (assert no `data/plans.json` is even created).
 
-- [ ] **Step 1: Failing test (async loop body invoked directly with flag on/off, discord objects mocked as the existing tests mock them — read how `tests/` currently fake the bot; if they don't, isolate the poll-dispatch into a sync function `run_manager_tick()` and test THAT).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: intraday manager wired into trade_monitor behind flag"`
+- [ ] **Step 1: Failing test** (test the sync tick, not the discord loop):
+
+```python
+# tests/test_trade_monitor_wiring.py
+import os
+import swingbot.config as config
+from swingbot.core import plan_manager as pm
+
+def test_flag_off_is_a_noop(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "INTRADAY_MANAGER_V2", False)
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    pm._MANAGER = None                       # reset the singleton
+    assert pm.run_manager_tick() == []
+    assert not os.path.exists(tmp_path / "plans.json")   # not even created
+
+def test_flag_on_polls_open_plans(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "INTRADAY_MANAGER_V2", True)
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    pm._MANAGER = None
+    from swingbot.core.plan_store import PlanStore
+    from tests.test_plan_manager_pending import _pending
+    PlanStore().add(_pending())
+    monkeypatch.setattr(pm, "_price_fn", lambda t: 106.0)   # injectable feed
+    events = pm.run_manager_tick()
+    assert [e.transition for e in events] == ["filled"]
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/plan_manager.py (module tail)
+_MANAGER: PlanManager | None = None
+
+def _price_fn(ticker):                      # module-level so tests can patch it
+    from swingbot.core.data import get_current_price
+    return get_current_price(ticker)
+
+def _live_atr(ticker):
+    from swingbot.core.data import get_daily_data
+    from swingbot.core.indicators import atr
+    df = get_daily_data(ticker)
+    return float(atr(df, 14).iloc[-1])
+
+def _bars_since(ticker, created_at):
+    from swingbot.core.data import get_daily_data
+    df = get_daily_data(ticker)
+    return int((df.index.tz_localize(None) > created_at).sum()) \
+        if df.index.tz is None else int((df.index > created_at).sum())
+
+def run_manager_tick() -> list[PlanEvent]:
+    """One synchronous manager tick -- the trade_monitor loop calls this via
+    asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
+    file creation)."""
+    global _MANAGER
+    from swingbot import config
+    if not config.INTRADAY_MANAGER_V2:
+        return []
+    if _MANAGER is None:
+        from swingbot.core.performance import TradeLog
+        _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
+                               bar_count_fn=_bars_since, trade_log=TradeLog())
+    return _MANAGER.poll()
+```
+
+`trade_monitor` (commands/scanning.py) gains, after the near-TP block:
+
+```python
+    # v2 plan lifecycle tick (flag-gated; no-op while INTRADAY_MANAGER_V2=false)
+    try:
+        plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
+    except Exception as exc:
+        log.warning("trade_monitor: plan manager tick failed: %s", exc)
+        plan_events = []
+    if plan_events:
+        await notify_plan_events(bot, plan_events)   # Task 72
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: intraday manager wired into trade_monitor behind flag"`
 
 ### Task 72: Discord transition alerts
 
 **Files:** Modify `swingbot/core/scanning/embeds.py` (new functions), `swingbot/commands/scanning.py`; test `tests/test_transition_embeds.py`.
 
 **Interfaces:**
-- Produces: `build_plan_event_embed(plan, event) -> discord.Embed` — per transition: 🎯 filled ("ENTRY TRIGGERED"), ⏱ expired, ❌ invalidated, 🛡 BE moved, 💰 TP1 banked (leg P&L, "runner active, stop at break-even"), plus closes with reason-specific copy. Entries → `DISCORD_CHANNEL_TRADES_ID`; everything else → `DISCORD_CHANNEL_TRADES_HISTORY_ID` (existing routing convention).
+- Produces: `build_plan_event_embed(plan, event) -> discord.Embed` and `async notify_plan_events(bot, events)` in `scanning/embeds.py`. Per transition: 🎯 filled ("ENTRY TRIGGERED"), ⏱ expired, ❌ invalidated, 🛡 BE moved, 💰 TP1 banked (leg P&L, "runner active, stop at break-even"), plus closes with reason-specific copy. Entries (`"filled"`) → `DISCORD_CHANNEL_TRADES_ID`; everything else → `DISCORD_CHANNEL_TRADES_HISTORY_ID` (existing routing convention).
 
-- [ ] **Step 1: Failing tests asserting title/field content per event type (embeds are plain objects — assert `.title`, `.fields`).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: lifecycle transition alerts"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_transition_embeds.py
+from swingbot.core.plan_manager import PlanEvent
+from swingbot.core.scanning.embeds import build_plan_event_embed
+from tests.test_plan_engine_model import _plan
+
+def _embed(transition, detail=None, **plan_kw):
+    return build_plan_event_embed(_plan(**plan_kw),
+                                  PlanEvent("p1", transition, detail or {}))
+
+def test_filled_embed():
+    e = _embed("filled", {"entry_price": 106.0})
+    assert "ENTRY TRIGGERED" in e.title and "🎯" in e.title
+    assert any("106" in (f.value or "") for f in e.fields)
+
+def test_expired_and_invalidated_embeds():
+    assert "⏱" in _embed("cancelled_expired", {"bars_waited": 6}).title
+    assert "❌" in _embed("cancelled_invalidated", {"live_price": 94.0}).title
+
+def test_be_moved_embed():
+    e = _embed("be_moved", {"working_stop": 100.0})
+    assert "🛡" in e.title
+    assert any("100" in (f.value or "") for f in e.fields)
+
+def test_tp1_partial_embed_mentions_runner():
+    e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0})
+    assert "💰" in e.title
+    joined = " ".join(f.value or "" for f in e.fields)
+    assert "runner" in joined.lower() and "break-even" in joined.lower()
+
+def test_close_reasons_have_distinct_copy():
+    titles = {r: _embed("closed", {"reason": r, "exit_price": 100.0}).title
+              for r in ("loss", "scratch", "tp1_runner_be", "tp1_runner_tp2",
+                        "tp1_runner_trail")}
+    assert len(set(titles.values())) == 5
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/scanning/embeds.py
+_EVENT_STYLE = {
+    "filled":                ("🎯 ENTRY TRIGGERED — {ticker}", discord.Color.blue()),
+    "cancelled_expired":     ("⏱ Plan expired — {ticker}", discord.Color.dark_grey()),
+    "cancelled_invalidated": ("❌ Plan invalidated — {ticker}", discord.Color.dark_red()),
+    "be_moved":              ("🛡 Stop moved to break-even — {ticker}", discord.Color.teal()),
+    "tp1_partial":           ("💰 TP1 banked — {ticker}", discord.Color.gold()),
+}
+_CLOSE_STYLE = {
+    "loss":            ("🔴 Stopped out — {ticker}", discord.Color.red()),
+    "scratch":         ("⚪ Scratched at break-even — {ticker}", discord.Color.light_grey()),
+    "tp1_runner_be":   ("🟢 Win — runner closed at break-even — {ticker}", discord.Color.green()),
+    "tp1_runner_tp2":  ("🟢🟢 Win — runner hit TP2 — {ticker}", discord.Color.green()),
+    "tp1_runner_trail":("🟢 Win — trail locked profit — {ticker}", discord.Color.green()),
+}
+
+def build_plan_event_embed(plan, event) -> discord.Embed:
+    if event.transition == "closed":
+        template, color = _CLOSE_STYLE.get(
+            event.detail.get("reason"),
+            ("Plan closed — {ticker}", discord.Color.light_grey()))
+    else:
+        template, color = _EVENT_STYLE[event.transition]
+    embed = discord.Embed(title=template.format(ticker=plan.ticker), color=color)
+    embed.add_field(name="Plan", value=(
+        f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
+        f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
+    d = event.detail
+    if event.transition == "filled":
+        embed.add_field(name="Entry", value=f"{d['entry_price']:.2f}")
+        embed.add_field(name="Stop", value=f"{plan.stop_loss:.2f}")
+        embed.add_field(name="TP1", value=f"{plan.tp1:.2f}")
+    elif event.transition == "be_moved":
+        embed.add_field(name="New stop", value=f"{d['working_stop']:.2f} (entry)")
+    elif event.transition == "tp1_partial":
+        embed.add_field(name="Banked",
+                        value=f"{d['fraction']:.0%} @ {d['exit_price']:.2f} "
+                              f"({d['r']:+.2f}R)")
+        embed.add_field(name="Runner",
+                        value="runner active, stop at break-even", inline=False)
+    elif event.transition == "closed":
+        embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
+    embed.set_footer(text=f"plan {plan.plan_id[:8]}")
+    return embed
+
+
+async def notify_plan_events(bot, events):
+    """Route fills to the alerts channel, everything else to history --
+    same split notify_closed_trades already uses."""
+    from swingbot.core.plan_store import PlanStore
+    store = PlanStore()
+    for event in events:
+        plan = store.get(event.plan_id)
+        if plan is None:
+            continue
+        channel_id = (config.DISCORD_CHANNEL_TRADES_ID
+                      if event.transition == "filled"
+                      else config.DISCORD_CHANNEL_TRADES_HISTORY_ID)
+        channel = bot.get_channel(int(channel_id)) if channel_id else None
+        if channel is not None:
+            await channel.send(embed=build_plan_event_embed(plan, event))
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: lifecycle transition alerts"`
 
 ### Task 73: Near-TP legacy bypass for v2 plans
 
-**Files:** Modify `swingbot/core/performance.py` (`check_near_tp_timeout`, 713-880).
+**Files:** Modify `swingbot/core/performance.py` (`check_near_tp_timeout`); test `tests/test_near_tp_bypass.py`.
 
-- [ ] **Step 1: Failing test: trades carrying a `plan_id` are SKIPPED by the legacy near-TP stall logic (the runner/trail owns that decision now); legacy trades unaffected.**
-- [ ] **Step 2: FAIL. Step 3: Implement (one guard clause). Step 4: PASS. Step 5: Commit** — `git commit -m "fix: near-TP timeout skips manager-owned trades"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_near_tp_bypass.py
+import json
+from swingbot.core.performance import TradeLog
+
+def _near_tp_trade(plan_id=None):
+    t = {"id": "t1", "ticker": "AAPL", "direction": "bullish", "status": "open",
+         "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+         "opened_at": "2026-07-01T10:00:00+00:00",
+         "near_tp_since": "2026-07-01T10:00:00+00:00", "near_tp_snapshots": []}
+    if plan_id:
+        t["plan_id"] = plan_id
+    return t
+
+def test_manager_owned_trades_skip_near_tp_timeout(tmp_path):
+    path = tmp_path / "trades.json"
+    path.write_text(json.dumps([_near_tp_trade(plan_id="p1")]))
+    log = TradeLog(path=str(path))
+    # 109.5 = 95% of the way to target; stall clock long expired
+    closed = log.check_near_tp_timeout("AAPL", live_price=109.5)
+    assert closed == []                       # runner/trail owns this decision
+
+def test_legacy_trades_still_timeout(tmp_path):
+    path = tmp_path / "trades.json"
+    path.write_text(json.dumps([_near_tp_trade()]))
+    log = TradeLog(path=str(path))
+    closed = log.check_near_tp_timeout("AAPL", live_price=109.5)
+    assert len(closed) == 1                   # unchanged legacy behavior
+```
+
+(Adapt the fixture's `near_tp_since` age to whatever `NEAR_TP_TIMEOUT_MINUTES` demands — set it far enough in the past that the legacy trade DOES close, proving the guard is what spares the v2 one.)
+
+- [ ] **Step 2: FAIL. Step 3: Implement (one guard clause at the top of `check_near_tp_timeout`'s per-trade loop):**
+
+```python
+            if t.get("plan_id"):
+                # v2 manager-owned trade: the runner/trail (plan_manager)
+                # owns the "stalled near target" decision now -- double
+                # management would close the runner out from under it.
+                continue
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "fix: near-TP timeout skips manager-owned trades"`
 
 # Phase 6 — Discord UX (Tasks 74–85)
 
@@ -1227,25 +4886,218 @@ class PlanManager:
 
 **Files:** Modify `swingbot/core/scanning/embeds.py`; test `tests/test_embeds_badges.py`.
 
-**Interfaces:** When an item has `plan_v2`: the embed gains a top line `✅ VALIDATED — OOS 2024-2025: N=206, WR 81.6%, ExpR +0.105` (via `badge_stats_line`) or the full `WEAK_CAUTION_TEXT` block (rendered verbatim, bold). No `plan_v2` → embed unchanged (legacy path intact until cutover).
+**Interfaces:** When an item has `plan_v2`: the embed gains a top field `✅ VALIDATED — OOS 2024-2025: N=206, WR 81.6%, ExpR +0.105` (via `badge_stats_line`) or the full `WEAK_CAUTION_TEXT` block (rendered verbatim, bold). No `plan_v2` → embed unchanged (legacy path intact until cutover). Pure helper `badge_field_for(plan) -> tuple[str, str] | None` (name, value) is the unit under test; `build_embed` inserts it as the FIRST field when the item carries a plan.
 
-- [ ] **Step 1: Failing tests: validated plan → badge line with correct numbers; weak plan → caution text verbatim; no plan_v2 → identical embed to before (snapshot compare against a captured legacy embed dict).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: validation badges on scan alerts"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_embeds_badges.py
+from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, stamp_badge
+from swingbot.core.scanning.embeds import badge_field_for
+from tests.test_plan_engine_model import _plan
+
+def test_validated_badge_line_carries_registry_numbers():
+    p = _plan(strategy="Fibonacci")
+    stamp_badge(p)
+    name, value = badge_field_for(p)
+    assert name.startswith("✅ VALIDATED")
+    assert "N=206" in value and "81.6%" in value and "+0.105" in value
+
+def test_weak_plan_renders_caution_text_verbatim():
+    p = _plan(strategy="RSI")
+    stamp_badge(p)
+    name, value = badge_field_for(p)
+    assert name.startswith("⚠️ WEAK")
+    expected = WEAK_CAUTION_TEXT.format(win_rate=p.badge_stats["win_rate"],
+                                        n=p.badge_stats["n"])
+    assert expected in value
+
+def test_no_plan_returns_none():
+    assert badge_field_for(None) is None
+```
+
+Plus one integration assertion in the same file: build a legacy scan-item fixture WITHOUT `plan_v2`, call `build_embed`, and compare `embed.to_dict()` against the same call before this task's change (capture the dict in the test itself by constructing the expectation from the current builder — i.e. assert the badge field name never appears).
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/scanning/embeds.py
+from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
+from swingbot.core.registry import Badge
+
+def badge_field_for(plan) -> tuple[str, str] | None:
+    """(field_name, field_value) for a v2 plan's pedigree, or None."""
+    if plan is None:
+        return None
+    stats = plan.badge_stats or {}
+    badge = Badge(status=plan.badge, n=stats.get("n", 0),
+                  win_rate=stats.get("win_rate", 0.0),
+                  expectancy_r=stats.get("expectancy_r", 0.0),
+                  window=stats.get("window", ""))
+    if plan.badge == "VALIDATED":
+        return ("✅ VALIDATED", badge_stats_line(badge))
+    caution = WEAK_CAUTION_TEXT.format(win_rate=badge.win_rate, n=badge.n)
+    return ("⚠️ WEAK", f"**{caution}**")
+```
+
+In `build_embed` (right after the embed is constructed, before other fields): `field = badge_field_for(getattr(item, "plan_v2", None))` → `embed.insert_field_at(0, name=field[0], value=field[1], inline=False)` when not None.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: validation badges on scan alerts"`
 
 ### Task 75: Quality breakdown in embeds
 
-- [ ] **Step 1: Failing test: embed shows `Quality: 82/100 (Tier A)` plus a compact breakdown line per component (`regime +15 · HTF +8 · confluence +20 …`) from `quality_breakdown` — exact rendering fixed here: middle-dot separated, signed ints.**
-- [ ] **Step 2: FAIL. Step 3: Implement in `_build_trade_plan_table` region. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality breakdown in alerts"`
+**Files:** Modify `swingbot/core/scanning/embeds.py`; test `tests/test_embeds_badges.py` (append).
+
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_embeds_badges.py (append)
+from swingbot.core.scanning.embeds import quality_lines
+
+def test_quality_lines_exact_rendering():
+    p = _plan(quality_score=82, tier="A",
+              quality_breakdown=[("regime", 15), ("htf", 8), ("confluence", 20),
+                                 ("volume", 8), ("atr_percentile", 10),
+                                 ("trigger_distance", 6), ("badge", 20)])
+    header, detail = quality_lines(p)
+    assert header == "Quality: 82/100 (Tier A)"
+    assert detail == ("regime +15 · htf +8 · confluence +20 · volume +8 · "
+                      "atr_percentile +10 · trigger_distance +6 · badge +20")
+
+def test_quality_lines_empty_breakdown():
+    assert quality_lines(_plan()) is None    # unscored plan -> no field
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/scanning/embeds.py
+def quality_lines(plan) -> tuple[str, str] | None:
+    """('Quality: 82/100 (Tier A)', 'regime +15 · htf +8 · ...') or None
+    for unscored plans. Middle-dot separated, signed ints -- rendering is
+    FIXED here; every consumer prints these two strings verbatim."""
+    if plan is None or not plan.quality_breakdown:
+        return None
+    header = f"Quality: {plan.quality_score}/100 (Tier {plan.tier})"
+    detail = " · ".join(f"{name} {pts:+d}" for name, pts in plan.quality_breakdown)
+    return header, detail
+```
+
+`build_embed` adds the field (after the badge field, Task 74): name = header, value = detail.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: quality breakdown in alerts"`
 
 ### Task 76: Entry-trigger wording
 
-- [ ] **Step 1: Failing test: stop_entry bullish → row `Entry: BUY STOP above 102.50 (expires in 5 bars)`; market → `Entry: market ~101.20`. Bearish mirrors (`SELL STOP below`).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: explicit entry-trigger semantics in embeds"`
+**Files:** Modify `swingbot/core/scanning/embeds.py`; test `tests/test_embeds_badges.py` (append).
+
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_embeds_badges.py (append)
+from swingbot.core.scanning.embeds import entry_line
+
+def test_entry_line_stop_entry_bullish():
+    p = _plan(entry_type="stop_entry", direction="bullish",
+              trigger_price=102.5, expiry_bars=5)
+    assert entry_line(p) == "Entry: BUY STOP above 102.50 (expires in 5 bars)"
+
+def test_entry_line_stop_entry_bearish():
+    p = _plan(entry_type="stop_entry", direction="bearish",
+              trigger_price=98.5, expiry_bars=3)
+    assert entry_line(p) == "Entry: SELL STOP below 98.50 (expires in 3 bars)"
+
+def test_entry_line_market():
+    p = _plan(entry_type="market", trigger_price=101.2)
+    assert entry_line(p) == "Entry: market ~101.20"
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/scanning/embeds.py
+def entry_line(plan) -> str:
+    if plan.entry_type == "stop_entry":
+        side = "BUY STOP above" if plan.direction == "bullish" else "SELL STOP below"
+        return (f"Entry: {side} {plan.trigger_price:.2f} "
+                f"(expires in {plan.expiry_bars} bars)")
+    return f"Entry: market ~{plan.trigger_price:.2f}"
+```
+
+Wire into `_build_trade_plan_table`'s entry row when the item has `plan_v2`.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: explicit entry-trigger semantics in embeds"`
 
 ### Task 77: Two-leg sizing display
 
-- [ ] **Step 1: Failing test: table shows TP1 row (`50% @ 102.00 → +$17.50`) and runner row (`50% → TP2 105.00 / trail`), using `account.compute_position_size` exactly as the legacy table does (`embeds.py:227-307` — same account snapshot source).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: two-leg sizing in trade-plan table"`
+**Files:** Modify `swingbot/core/scanning/embeds.py` (`_build_trade_plan_table`); test `tests/test_embeds_badges.py` (append).
+
+- [ ] **Step 1: Failing test** (pure helper, sized off the same `account.compute_position_size` snapshot the legacy table uses):
+
+```python
+# tests/test_embeds_badges.py (append)
+from swingbot.core.scanning.embeds import leg_rows
+
+def test_leg_rows_show_both_legs(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    p = _plan(entry_type="market", trigger_price=100.0, entry_price=100.0,
+              stop_loss=99.0, tp1=100.35, tp2=105.0)
+    tp1_row, runner_row = leg_rows(p, currency="$")
+    assert tp1_row == "50% @ 100.35 → +$17.50"
+    assert runner_row == "50% → TP2 105.00 / trail"
+
+def test_leg_rows_no_tp2(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: {"shares": 100.0,
+                                             "position_value": 10_000.0,
+                                             "mode": "risk_pct"})
+    p = _plan(trigger_price=100.0, stop_loss=99.0, tp1=100.35, tp2=None)
+    _, runner_row = leg_rows(p, currency="$")
+    assert runner_row == "50% → trail"
+
+def test_leg_rows_unsized(monkeypatch):
+    import swingbot.core.scanning.embeds as embeds
+    monkeypatch.setattr(embeds.account, "compute_position_size",
+                        lambda entry, stop: None)
+    tp1_row, _ = leg_rows(_plan(trigger_price=100.0, stop_loss=99.0,
+                                tp1=100.35), currency="$")
+    assert "@ 100.35" in tp1_row and "$" not in tp1_row   # price shown, no P&L
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/scanning/embeds.py
+def leg_rows(plan, currency: str) -> tuple[str, str]:
+    """('50% @ 102.00 → +$17.50', '50% → TP2 105.00 / trail') for the
+    two-leg sizing block. P&L uses the SAME sizing snapshot source as the
+    legacy table (account.compute_position_size at render time)."""
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    frac1 = plan.tp1_fraction
+    try:
+        sizing = account.compute_position_size(entry, plan.stop_loss)
+    except Exception:
+        sizing = None
+    tp1_pct = f"{frac1:.0%} @ {plan.tp1:.2f}"
+    if sizing and sizing.get("shares"):
+        sign = 1 if plan.direction == "bullish" else -1
+        pnl = sizing["shares"] * frac1 * (plan.tp1 - entry) * sign
+        tp1_row = f"{tp1_pct} → {'+' if pnl >= 0 else ''}{currency}{abs(pnl):,.2f}"
+    else:
+        tp1_row = tp1_pct
+    runner = f"{1 - frac1:.0%} → " + (f"TP2 {plan.tp2:.2f} / trail"
+                                      if plan.tp2 else "trail")
+    return tp1_row, runner
+```
+
+Rendered as two extra rows in `_build_trade_plan_table` when the item carries `plan_v2` (ANSI styling matching the surrounding table).
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: two-leg sizing in trade-plan table"`
 
 ### Task 78: `!ticker` mini trade plans
 
@@ -1253,16 +5105,143 @@ class PlanManager:
 
 **Interfaces:** For each `SignalResult` with `triggered=True`, `!ticker` builds `build_strategy_plan` (+ badge, quality if level map available) and appends a compact plan line under the bias table: `MACD 4w ✅ 81.3% | entry 101.20 stop 99.10 tp1 101.94 tp2 104.00`. Non-triggered rows unchanged. Long output stays under Discord's 2000-char/embed limits (reuse the existing chunking in info.py — read how the bias table already paginates).
 
-- [ ] **Step 1: Failing test on the plan-line formatter (pure function `format_signal_plan_line(plan) -> str`).**
-- [ ] **Step 2: FAIL. Step 3: Implement + wire. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: !ticker shows engine-built mini plans with badges"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_info_plans.py
+from swingbot.commands.info import format_signal_plan_line
+from tests.test_plan_engine_model import _plan
+
+def test_plan_line_validated_with_tp2():
+    p = _plan(strategy="MACD", horizon_key="4w", badge="VALIDATED",
+              badge_stats={"win_rate": 81.3, "n": 123},
+              trigger_price=101.2, stop_loss=99.1, tp1=101.94, tp2=104.0)
+    assert format_signal_plan_line(p) == \
+        "MACD 4w ✅ 81.3% | entry 101.20 stop 99.10 tp1 101.94 tp2 104.00"
+
+def test_plan_line_weak_no_tp2():
+    p = _plan(strategy="RSI", horizon_key="2m", badge="WEAK",
+              badge_stats={"win_rate": 68.4, "n": 414},
+              trigger_price=50.0, stop_loss=48.0, tp1=50.8, tp2=None)
+    assert format_signal_plan_line(p) == \
+        "RSI 2m ⚠️ 68.4% | entry 50.00 stop 48.00 tp1 50.80"
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement + wire:**
+
+```python
+# swingbot/commands/info.py
+def format_signal_plan_line(plan) -> str:
+    icon = "✅" if plan.badge == "VALIDATED" else "⚠️"
+    wr = plan.badge_stats.get("win_rate", 0.0)
+    line = (f"{plan.strategy} {plan.horizon_key} {icon} {wr:.1f}% | "
+            f"entry {plan.trigger_price:.2f} stop {plan.stop_loss:.2f} "
+            f"tp1 {plan.tp1:.2f}")
+    if plan.tp2 is not None:
+        line += f" tp2 {plan.tp2:.2f}"
+    return line
+```
+
+Wiring in the `!ticker` handler: after the bias table is assembled, for each triggered `SignalResult` call `build_strategy_plan(df, len(df)-1, ticker=..., strategy=r.strategy, horizon_key=r.horizon_key, direction=r.trend)` (skip None returns), collect `format_signal_plan_line(plan)` lines under a `**Trade plans**` heading, and feed them through the same chunker the bias table already uses.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: !ticker shows engine-built mini plans with badges"`
 
 ### Task 79: `!plans` lifecycle board
 
 **Files:** Create `swingbot/commands/plans.py`; modify `bot.py` (import the module like the other command modules); test `tests/test_plans_command.py`.
 
-**Interfaces:** `!plans` renders PlanStore's open plans grouped by status: PENDING (ticker, trigger, expiry countdown), ACTIVE (entry, working stop, distance to TP1 in %), PARTIAL (banked leg P&L, trail level). Empty → "No live plans." Formatter is a pure function `format_plans_board(plans) -> str` (testable without discord).
+**Interfaces:** `!plans` renders PlanStore's open plans grouped by status: PENDING (ticker, trigger, expiry countdown), ACTIVE (entry, working stop, distance to TP1 in %), PARTIAL (banked leg P&L in R, trail level). Empty → "No live plans." Formatter is a pure function `format_plans_board(plans, prices=None) -> str` (testable without discord; `prices` optional dict for the distance-to-TP1 column).
 
-- [ ] **Step 1: Failing tests for the formatter (one plan in each state + empty). Step 2: FAIL. Step 3: Implement command + formatter. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: !plans lifecycle board"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_plans_command.py
+from swingbot.core.plan_engine import PlanStatus, record_transition
+from swingbot.commands.plans import format_plans_board
+from tests.test_plan_engine_model import _plan
+
+def test_empty_board():
+    assert format_plans_board([]) == "No live plans."
+
+def test_board_groups_by_status():
+    pending = _plan(plan_id="a", ticker="AAPL", entry_type="stop_entry",
+                    trigger_price=105.0, expiry_bars=5)
+    active = _plan(plan_id="b", ticker="MSFT", entry_price=100.0)
+    record_transition(active, PlanStatus.ACTIVE, at="t")
+    partial = _plan(plan_id="c", ticker="NVDA", entry_price=100.0,
+                    legs_realized=[{"fraction": 0.5, "exit_price": 110.0,
+                                    "r": 2.0, "reason": "tp1"}],
+                    working_stop=100.0)
+    record_transition(partial, PlanStatus.ACTIVE, at="t")
+    record_transition(partial, PlanStatus.PARTIAL, at="t")
+
+    board = format_plans_board([pending, active, partial],
+                               prices={"MSFT": 104.0})
+    assert board.index("PENDING") < board.index("AAPL")
+    assert board.index("ACTIVE") < board.index("MSFT")
+    assert board.index("PARTIAL") < board.index("NVDA")
+    assert "trigger 105.00" in board
+    assert "banked +2.00R on 50%" in board
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/commands/plans.py
+"""!plans -- live plan-lifecycle board over PlanStore."""
+from discord.ext import commands
+
+from swingbot.core.plan_engine import PlanStatus
+from swingbot.core.plan_store import PlanStore
+
+
+def format_plans_board(plans, prices=None) -> str:
+    prices = prices or {}
+    if not plans:
+        return "No live plans."
+    groups = {PlanStatus.PENDING: [], PlanStatus.ACTIVE: [], PlanStatus.PARTIAL: []}
+    for p in plans:
+        if p.status in groups:
+            groups[p.status].append(p)
+
+    lines = []
+    for status, rows in groups.items():
+        if not rows:
+            continue
+        lines.append(f"**{status}** ({len(rows)})")
+        for p in rows:
+            icon = "✅" if p.badge == "VALIDATED" else "⚠️"
+            if status == PlanStatus.PENDING:
+                lines.append(f"{icon} `{p.ticker}` {p.direction} — "
+                             f"trigger {p.trigger_price:.2f}, "
+                             f"expires after {p.expiry_bars} bars")
+            elif status == PlanStatus.ACTIVE:
+                stop = p.working_stop if p.working_stop is not None else p.stop_loss
+                extra = ""
+                live = prices.get(p.ticker)
+                if live:
+                    extra = f", {abs(p.tp1 - live) / live * 100:.1f}% to TP1"
+                lines.append(f"{icon} `{p.ticker}` {p.direction} — "
+                             f"entry {p.entry_price:.2f}, stop {stop:.2f}{extra}")
+            else:  # PARTIAL
+                leg = p.legs_realized[0] if p.legs_realized else None
+                banked = (f"banked {leg['r']:+.2f}R on {leg['fraction']:.0%}"
+                          if leg else "banked")
+                lines.append(f"{icon} `{p.ticker}` {p.direction} — {banked}, "
+                             f"trail {p.working_stop:.2f}")
+    return "\n".join(lines)
+
+
+def setup(bot):
+    @bot.command(name="plans")
+    async def plans_cmd(ctx):
+        store = PlanStore()
+        await ctx.send(format_plans_board(store.open_plans())[:1990])
+```
+
+(Match the actual command-module registration idiom used by the other `swingbot/commands/*.py` files — read one before wiring `bot.py`.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: !plans lifecycle board"`
 
 ### Task 80: `/plans` slash registration
 
@@ -1274,29 +5253,235 @@ class PlanManager:
 
 **Files:** Modify `swingbot/core/charts/trade_chart.py` (+ `chart_drawing.py` if line-styling helpers live there — read `_pick_primary_source` region first); test `tests/test_trade_chart_v2.py`.
 
-**Interfaces:** `generate_trade_chart` accepts optional `plan_v2`; when present draws: dashed trigger line (labeled `BUY STOP`), TP1 line, TP2 line (dotted), shaded zone entry→TP1 (reward leg 1), lighter zone TP1→TP2. Without `plan_v2` → output unchanged.
+**Interfaces:** `generate_trade_chart` accepts optional `plan_v2`; when present draws: dashed trigger line (labeled `BUY STOP`/`SELL STOP` for stop_entry plans), TP1 line, TP2 line (dotted), shaded zone entry→TP1 (reward leg 1), lighter zone TP1→TP2. Without `plan_v2` → output unchanged.
 
-- [ ] **Step 1: Failing test: chart renders to a temp PNG without error for a plan with/without tp2 (smoke — mplfinance output is not pixel-asserted; assert file exists and is >10KB, matching how existing chart tests work if any, else this convention).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: v2 plan overlays on trade charts"`
+- [ ] **Step 1: Failing test:**
+
+```python
+# tests/test_trade_chart_v2.py
+import os
+import pytest
+from swingbot.core.charts.trade_chart import generate_trade_chart
+from tests.helpers import make_ohlcv
+from tests.test_plan_engine_model import _plan
+
+@pytest.mark.parametrize("tp2", [104.0, None])
+def test_chart_renders_with_plan_overlays(tmp_path, tp2, monkeypatch):
+    monkeypatch.setattr("swingbot.config.TRADE_CHART_DIR", str(tmp_path))
+    df = make_ohlcv([100 + i * 0.2 for i in range(120)])
+    plan = _plan(entry_type="stop_entry", trigger_price=102.5,
+                 stop_loss=98.0, tp1=103.5, tp2=tp2)
+    path = generate_trade_chart("AAPL", df, entry=102.5, stop_loss=98.0,
+                                take_profit=103.5, plan_v2=plan)
+    assert path and os.path.exists(path)
+    assert os.path.getsize(path) > 10_000     # non-trivial PNG (convention)
+
+def test_chart_without_plan_unchanged(tmp_path, monkeypatch):
+    monkeypatch.setattr("swingbot.config.TRADE_CHART_DIR", str(tmp_path))
+    df = make_ohlcv([100 + i * 0.2 for i in range(120)])
+    path = generate_trade_chart("AAPL", df, entry=102.5, stop_loss=98.0,
+                                take_profit=103.5)
+    assert path and os.path.exists(path)      # legacy call keeps working
+```
+
+(Adapt the `generate_trade_chart` positional args to its real signature — read it first; the test's contract is only "renders with and without plan_v2".)
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — in `generate_trade_chart`, after the existing level lines are drawn, when `plan_v2 is not None`:
+
+```python
+# swingbot/core/charts/trade_chart.py (inside the axes-drawing block)
+    if plan_v2 is not None:
+        entry_lvl = plan_v2.entry_price or plan_v2.trigger_price
+        if plan_v2.entry_type == "stop_entry":
+            label = "BUY STOP" if plan_v2.direction == "bullish" else "SELL STOP"
+            ax.axhline(plan_v2.trigger_price, linestyle="--", linewidth=1.2,
+                       color=ENTRY_COLOR)
+            ax.annotate(label, xy=(0.99, plan_v2.trigger_price),
+                        xycoords=("axes fraction", "data"),
+                        ha="right", va="bottom", fontsize=8, color=ENTRY_COLOR)
+        ax.axhline(plan_v2.tp1, linewidth=1.0, color=TARGET_COLOR)
+        ax.axhspan(min(entry_lvl, plan_v2.tp1), max(entry_lvl, plan_v2.tp1),
+                   alpha=0.08, color=TARGET_COLOR)          # leg-1 reward zone
+        if plan_v2.tp2 is not None:
+            ax.axhline(plan_v2.tp2, linestyle=":", linewidth=1.0,
+                       color=TARGET_COLOR)
+            ax.axhspan(min(plan_v2.tp1, plan_v2.tp2),
+                       max(plan_v2.tp1, plan_v2.tp2),
+                       alpha=0.05, color=TARGET_COLOR)      # runner zone
+```
+
+(Use the color constants `chart_style.py` actually exports — grep for the existing entry/target line colors and reuse them.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: v2 plan overlays on trade charts"`
 
 ### Task 82: Charts — trail on PARTIAL trades
 
-- [ ] **Step 1: Failing smoke test: PARTIAL plan with `runner_high_close` set renders a trail line + "TP1 banked" annotation at the tp1 level.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner trail on partial-trade charts"`
+**Files:** Modify `swingbot/core/charts/trade_chart.py`; test `tests/test_trade_chart_v2.py` (append).
+
+- [ ] **Step 1: Failing smoke test:**
+
+```python
+# tests/test_trade_chart_v2.py (append)
+def test_partial_plan_renders_trail_and_banked_annotation(tmp_path, monkeypatch):
+    monkeypatch.setattr("swingbot.config.TRADE_CHART_DIR", str(tmp_path))
+    from swingbot.core.plan_engine import PlanStatus, record_transition
+    df = make_ohlcv([100 + i * 0.3 for i in range(120)])
+    plan = _plan(entry_price=100.0, stop_loss=95.0, tp1=110.0,
+                 working_stop=112.0, runner_high_close=float(df["Close"].max()))
+    record_transition(plan, PlanStatus.ACTIVE, at="t")
+    record_transition(plan, PlanStatus.PARTIAL, at="t")
+    path = generate_trade_chart("AAPL", df, entry=100.0, stop_loss=95.0,
+                                take_profit=110.0, plan_v2=plan)
+    assert path and os.path.getsize(path) > 10_000
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — extend the Task 81 overlay block:
+
+```python
+        if plan_v2.status == "PARTIAL":
+            # working trail level (already ratcheted by the manager)
+            if plan_v2.working_stop is not None:
+                ax.axhline(plan_v2.working_stop, linestyle=":", linewidth=1.4,
+                           color=CURRENT_PRICE_COLOR)
+                ax.annotate("trail", xy=(0.99, plan_v2.working_stop),
+                            xycoords=("axes fraction", "data"), ha="right",
+                            va="bottom", fontsize=8, color=CURRENT_PRICE_COLOR)
+            ax.annotate("TP1 banked ✓", xy=(0.01, plan_v2.tp1),
+                        xycoords=("axes fraction", "data"), ha="left",
+                        va="bottom", fontsize=8, color=TARGET_COLOR)
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: runner trail on partial-trade charts"`
 
 ### Task 83: `!pnl` / `!trades` legs display
 
 **Files:** Modify `swingbot/commands/trades.py`; test `tests/test_trades_display.py`.
 
-- [ ] **Step 1: Failing formatter tests: a two-leg trade row shows `+17.50 (TP1 50%) / runner open` while open, and combined realized after close; `!pnl` sums legs correctly (reuse Task 68/69 math — display only, no recomputation).**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: leg-aware trades and pnl display"`
+- [ ] **Step 1: Failing formatter tests** (extract/locate the row formatter `trades.py` uses for each trade line — if it's inline, extract `format_trade_row(t, currency) -> str` first, characterize it on a legacy trade, THEN extend):
+
+```python
+# tests/test_trades_display.py
+from swingbot.commands.trades import format_trade_row
+
+def _legs_trade(status="open", legs=None):
+    return {"id": "t1", "ticker": "AAPL", "direction": "bullish",
+            "status": status, "entry": 100.0, "stop_loss": 99.0,
+            "take_profit": 100.35, "shares": 100.0, "plan_id": "p1",
+            "realized_pnl_amount": 17.50 if status != "open" else None,
+            "legs": legs or []}
+
+def test_half_closed_trade_shows_banked_leg_and_open_runner():
+    t = _legs_trade(legs=[{"fraction": 0.5, "exit_price": 100.35,
+                           "r": 0.35, "reason": "tp1"}])
+    row = format_trade_row(t, currency="$")
+    assert "+$17.50 (TP1 50%)" in row and "runner open" in row
+
+def test_closed_two_leg_trade_shows_combined_realized():
+    t = _legs_trade(status="win", legs=[
+        {"fraction": 0.5, "exit_price": 100.35, "r": 0.35, "reason": "tp1"},
+        {"fraction": 0.5, "exit_price": 100.0, "r": 0.0, "reason": "tp1_runner_be"}])
+    row = format_trade_row(t, currency="$")
+    assert "+$17.50" in row                # summed realized, no recomputation
+
+def test_legacy_trade_row_unchanged():
+    t = {"id": "t2", "ticker": "MSFT", "direction": "bullish", "status": "win",
+         "entry": 50.0, "exit_price": 52.0, "stop_loss": 48.0,
+         "take_profit": 52.0, "realized_pnl_amount": 40.0}
+    assert "legs" not in format_trade_row(t, currency="$").lower()
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — in the row formatter, when `t.get("legs")`:
+
+```python
+    legs = t.get("legs") or []
+    if legs and t.get("status") == "open":
+        banked = sum((t.get("shares") or 0) * l["fraction"]
+                     * (l["exit_price"] - t["entry"])
+                     * (1 if t["direction"] == "bullish" else -1) for l in legs)
+        frac = sum(l["fraction"] for l in legs)
+        suffix = (f" +{currency}{banked:,.2f} (TP1 {frac:.0%}) / runner open")
+    elif legs:
+        suffix = f" {'+' if t['realized_pnl_amount'] >= 0 else ''}" \
+                 f"{currency}{abs(t['realized_pnl_amount']):,.2f}"
+```
+
+`!pnl` needs NO math change (it reads `realized_pnl_amount`, which Task 68 already sums over legs) — add only a test proving that.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: leg-aware trades and pnl display"`
 
 ### Task 84: Retrospective covers v2 plans
 
 **Files:** Modify `swingbot/core/retrospective.py`; test `tests/test_retrospective_v2.py`.
 
-- [ ] **Step 1: Failing test: daily recap counts TP1-banked runners as wins (reason prefix `tp1_`), reports runner sub-outcomes in a new line (`runners: 2 tp2, 1 trail, 1 be`), and splits stats VALIDATED vs WEAK sources.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: retrospective reports runner outcomes and badge split"`
+- [ ] **Step 1: Failing test** (target the pure summarizer, added as `summarize_runner_outcomes(closed_trades) -> str | None` + `summarize_badge_split(closed_trades) -> str | None`; the recap builder appends both lines when non-None):
+
+```python
+# tests/test_retrospective_v2.py
+from swingbot.core.retrospective import (summarize_runner_outcomes,
+                                         summarize_badge_split)
+
+def _v2(reason, badge="VALIDATED"):
+    return {"status": "win" if reason.startswith("tp1_") else "loss",
+            "plan_id": "p", "badge": badge,
+            "legs": [{"fraction": 0.5, "exit_price": 0, "r": 0.35,
+                      "reason": "tp1"},
+                     {"fraction": 0.5, "exit_price": 0, "r": 0.0,
+                      "reason": reason}]}
+
+def test_runner_outcomes_line():
+    closed = [_v2("tp1_runner_tp2"), _v2("tp1_runner_tp2"),
+              _v2("tp1_runner_trail"), _v2("tp1_runner_be")]
+    assert summarize_runner_outcomes(closed) == "runners: 2 tp2, 1 trail, 1 be"
+
+def test_no_v2_trades_no_line():
+    assert summarize_runner_outcomes([{"status": "win"}]) is None
+
+def test_badge_split_line():
+    closed = [_v2("tp1_runner_be"), _v2("tp1_runner_be", badge="WEAK"),
+              {"status": "loss", "badge": "WEAK"}]
+    line = summarize_badge_split(closed)
+    assert "VALIDATED" in line and "WEAK" in line and "1W" in line
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement:**
+
+```python
+# swingbot/core/retrospective.py
+def summarize_runner_outcomes(closed: list) -> str | None:
+    counts = {"tp2": 0, "trail": 0, "be": 0, "timeout": 0}
+    for t in closed:
+        for leg in t.get("legs") or []:
+            reason = leg.get("reason", "")
+            if reason.startswith("tp1_runner_"):
+                counts[reason.removeprefix("tp1_runner_")] += 1
+    if not any(counts.values()):
+        return None
+    parts = [f"{n} {k}" for k, n in counts.items() if n]
+    return "runners: " + ", ".join(parts)
+
+
+def summarize_badge_split(closed: list) -> str | None:
+    buckets: dict = {}
+    for t in closed:
+        badge = t.get("badge")
+        if not badge:
+            continue
+        b = buckets.setdefault(badge, {"w": 0, "l": 0})
+        if t.get("status") == "win":
+            b["w"] += 1
+        elif t.get("status") == "loss":
+            b["l"] += 1
+    if not buckets:
+        return None
+    return " · ".join(f"{badge}: {b['w']}W/{b['l']}L"
+                      for badge, b in sorted(buckets.items()))
+```
+
+Wire both into `build_daily_retrospective`'s summary section (append each line when non-None). Win counting needs NO change — a TP1-banked runner trade already carries `status="win"` (Task 70 set it from the `tp1_*` reason).
+
+(`badge` lands on trade records via the cockpit plan's Task A12; until that merges, read it from `t.get("badge")` and accept None — the split line simply stays absent for records without it.)
+
+- [ ] **Step 4: PASS (existing retrospective tests stay green). Step 5: Commit** — `git commit -m "feat: retrospective reports runner outcomes and badge split"`
 
 ### Task 85: Phase 6 checkpoint — manual smoke
 
@@ -1310,17 +5495,132 @@ class PlanManager:
 
 **Files:** Modify `swingbot/core/scanning/engine.py`; create `swingbot/core/shadow_log.py`; test `tests/test_shadow_log.py`.
 
-**Interfaces:** `shadow_log.append(plan, legacy_scenario_summary, path=DATA_DIR/"shadow_plans.jsonl")` — one JSON line per scan item when `PLAN_ENGINE_V2 == "shadow"`: `{ts_scan, ticker, horizon, plan: plan_to_dict(...), legacy: {entry, stop, tp, target2, confidence}}`. Append-only, atomic per line, size-capped at 50MB with rotation to `.1`.
+**Interfaces:** `shadow_log.append(plan, legacy_scenario_summary, path=None)` — one JSON line per scan item when `PLAN_ENGINE_V2 == "shadow"`: `{ts_scan, ticker, horizon, plan: plan_to_dict(...), legacy: {entry, stop, tp, target2, confidence}}`. Append-only, atomic per line, size-capped at 50MB with rotation to `.1`.
 
-- [ ] **Step 1: Failing tests: line format, rotation trigger, flag off → no file. Step 2: FAIL. Step 3: Implement + wire into the Task 43 block. Step 4: PASS. Step 5: Commit** — `git commit -m "feat: shadow-mode plan logging"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_shadow_log.py
+import json
+import os
+from swingbot.core import shadow_log
+from tests.test_plan_engine_model import _plan
+
+LEGACY = {"entry": 100.0, "stop": 95.0, "tp": 106.0, "target2": None,
+          "confidence": 4}
+
+def test_line_format(tmp_path):
+    path = str(tmp_path / "shadow_plans.jsonl")
+    shadow_log.append(_plan(), LEGACY, path=path)
+    shadow_log.append(_plan(plan_id="p2"), LEGACY, path=path)
+    lines = open(path, encoding="utf-8").read().splitlines()
+    assert len(lines) == 2
+    rec = json.loads(lines[0])
+    assert set(rec) == {"ts_scan", "ticker", "horizon", "plan", "legacy"}
+    assert rec["plan"]["plan_id"] == "p1"
+    assert rec["legacy"]["confidence"] == 4
+
+def test_rotation_at_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(shadow_log, "MAX_BYTES", 500)
+    path = str(tmp_path / "shadow_plans.jsonl")
+    for i in range(10):
+        shadow_log.append(_plan(plan_id=f"p{i}"), LEGACY, path=path)
+    assert os.path.exists(path + ".1")            # rotated once full
+    assert os.path.getsize(path) < 500 + 2_000    # fresh file stays small
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement + wire:**
+
+```python
+# swingbot/core/shadow_log.py
+"""Shadow-mode plan log: one JSONL line per scan item comparing the v2 plan
+against the legacy scenario numbers it would replace. Read by
+scripts/shadow_parity_report.py; the cutover decision (Task 88) is made on
+this file's evidence."""
+import json
+import os
+from datetime import datetime, timezone
+
+from swingbot import config
+from swingbot.core.plan_engine import plan_to_dict
+
+MAX_BYTES = 50 * 1024 * 1024
+
+
+def _default_path() -> str:
+    return os.path.join(config.DATA_DIR, "shadow_plans.jsonl")
+
+
+def append(plan, legacy_scenario_summary: dict, path: str | None = None) -> None:
+    path = path or _default_path()
+    if os.path.exists(path) and os.path.getsize(path) >= MAX_BYTES:
+        os.replace(path, path + ".1")            # single rotation slot
+    record = {
+        "ts_scan": datetime.now(timezone.utc).isoformat(),
+        "ticker": plan.ticker,
+        "horizon": plan.horizon_key,
+        "plan": plan_to_dict(plan),
+        "legacy": legacy_scenario_summary,
+    }
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")       # one write() call per line
+```
+
+Wiring — in `attach_plan_v2` (Task 43), after `item.plan_v2 = plan`:
+
+```python
+        if config.PLAN_ENGINE_V2 == "shadow":
+            shadow_log.append(plan, {
+                "entry": scenario.entry, "stop": scenario.stop_loss,
+                "tp": scenario.take_profit, "target2": scenario.target2_price,
+                "confidence": getattr(item, "confidence_level", None),
+            })
+```
+
+(Inside the same try/except — a shadow-log failure must never break the scan.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat: shadow-mode plan logging"`
 
 ### Task 87: Parity report script
 
 **Files:** Create `scripts/shadow_parity_report.py`.
 
-**Interfaces:** Reads `shadow_plans.jsonl`; prints per-session and cumulative: item counts (legacy vs v2 would-emit), median/95p deltas for entry/stop/TP1 vs legacy entry/stop/tp, badge distribution, quality-tier distribution, and a list of the 10 largest divergences with tickers/dates. Exit 0 always (informational).
+**Interfaces:** Reads `shadow_plans.jsonl`; prints per-day and cumulative: item counts, median/95p percentage deltas for entry/stop/TP1 vs legacy entry/stop/tp, badge distribution, quality-tier distribution, `INVARIANT VIOLATION` count (stop on wrong side of entry, TP1 on wrong side — the Task 88 gate reads this number), and the 10 largest divergences with tickers/dates. Exit 0 always (informational). Core logic in importable `summarize(records: list[dict]) -> dict`.
 
-- [ ] **Step 1: Write with a unit test on a fixture JSONL (3 fabricated lines → assert computed deltas). Step 2: FAIL→PASS. Step 3: Commit** — `git commit -m "feat: shadow parity report"`
+- [ ] **Step 1: Write with a unit test:**
+
+```python
+# tests/test_shadow_parity_report.py
+import importlib.util, pathlib
+spec = importlib.util.spec_from_file_location(
+    "spr", pathlib.Path("scripts/shadow_parity_report.py"))
+spr = importlib.util.module_from_spec(spec); spec.loader.exec_module(spr)
+
+def _rec(entry_v2, entry_legacy, stop_v2=95.0, badge="VALIDATED",
+         direction="bullish"):
+    return {"ts_scan": "2026-07-12T10:00:00+00:00", "ticker": "AAPL",
+            "horizon": "4w",
+            "plan": {"trigger_price": entry_v2, "stop_loss": stop_v2,
+                     "tp1": entry_v2 + 2.0, "direction": direction,
+                     "badge": badge, "tier": "B"},
+            "legacy": {"entry": entry_legacy, "stop": 95.0,
+                       "tp": entry_legacy + 6.0, "target2": None,
+                       "confidence": 4}}
+
+def test_summarize_deltas_and_badges():
+    s = spr.summarize([_rec(100.0, 100.0), _rec(101.0, 100.0),
+                       _rec(102.0, 100.0, badge="WEAK")])
+    assert s["n"] == 3
+    assert s["entry_delta_pct"]["median"] == 1.0     # [0, 1, 2]% -> median 1
+    assert s["badges"] == {"VALIDATED": 2, "WEAK": 1}
+    assert s["invariant_violations"] == 0
+
+def test_invariant_violation_flagged():
+    bad = _rec(100.0, 100.0, stop_v2=105.0)           # bullish stop ABOVE entry
+    assert spr.summarize([bad])["invariant_violations"] == 1
+```
+
+- [ ] **Step 2: Implement** — `summarize` computes, per record: `abs(plan.trigger_price − legacy.entry)/legacy.entry*100` (same for stop/tp1), numpy median/95p over each; badge/tier counters; invariant check (`stop_loss < trigger_price < tp1` for bullish, mirrored bearish — violations collected with ticker/date); top-10 divergences by entry delta. `main()` reads the JSONL (+ `.1` rotation file when present), groups by `ts_scan[:10]`, prints per-day then cumulative summaries. **FAIL→PASS. Step 3: Commit** — `git commit -m "feat: shadow parity report"`
 
 ### Task 88: Run shadow for ≥5 sessions (operational gate)
 
@@ -1332,8 +5632,49 @@ class PlanManager:
 
 **Files:** Modify `swingbot/core/scanning/engine.py`, `swingbot/core/scanning/embeds.py`.
 
-- [ ] **Step 1: With flag `on`: embeds/charts/paper-trade logging use `plan_v2` numbers (trigger/stop/tp1/tp2) instead of the legacy scenario numbers; trade logged with plan_id. Failing test first: flag on → embed numbers == plan numbers.**
-- [ ] **Step 2: FAIL→PASS. Step 3: Deploy `PLAN_ENGINE_V2=on` (SCALE_OUT + MANAGER still off — single-leg live behavior, but v2-priced plans). Watch one session in the test guild.**
+- [ ] **Step 1: Failing test first:**
+
+```python
+# tests/test_cutover.py
+import swingbot.config as config
+from swingbot.core.scanning.embeds import plan_numbers_for_display
+
+def test_flag_on_display_numbers_come_from_plan(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    from tests.test_plan_engine_model import _plan
+    item_plan = _plan(trigger_price=101.0, stop_loss=96.0, tp1=103.0, tp2=108.0)
+    legacy = {"entry": 100.0, "stop_loss": 95.0, "take_profit": 106.0,
+              "target2": None}
+    nums = plan_numbers_for_display(item_plan, legacy)
+    assert nums == {"entry": 101.0, "stop_loss": 96.0,
+                    "take_profit": 103.0, "target2": 108.0}
+
+def test_flag_shadow_display_numbers_stay_legacy(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    from tests.test_plan_engine_model import _plan
+    nums = plan_numbers_for_display(_plan(), {"entry": 100.0, "stop_loss": 95.0,
+                                              "take_profit": 106.0,
+                                              "target2": None})
+    assert nums["entry"] == 100.0
+```
+
+- [ ] **Step 2: Implement** — one funnel function so the cutover is a single decision point instead of scattered ifs:
+
+```python
+# swingbot/core/scanning/embeds.py
+def plan_numbers_for_display(plan, legacy: dict) -> dict:
+    """THE cutover switch: which numbers do embeds/charts/trade-logging
+    show? flag != 'on' or no plan -> legacy scenario numbers (today's
+    behavior); 'on' -> the v2 plan's numbers."""
+    if config.PLAN_ENGINE_V2 != "on" or plan is None:
+        return dict(legacy)
+    return {"entry": plan.trigger_price, "stop_loss": plan.stop_loss,
+            "take_profit": plan.tp1, "target2": plan.tp2}
+```
+
+Every consumer of the scenario's numbers in the alert path (`build_embed`'s plan table, `generate_trade_chart` args, the `log_trade` call — grep the `_sync_run_scan` alert-item block) routes through it; `log_trade` additionally gets `plan_id=item.plan_v2.plan_id` when the flag is on. **FAIL→PASS.**
+
+- [ ] **Step 3: Deploy `PLAN_ENGINE_V2=on` (SCALE_OUT + MANAGER still off — single-leg live behavior, but v2-priced plans). Watch one session in the test guild.**
 - [ ] **Step 4: Commit** — `git commit -m "feat: cutover — scan alerts emit v2 plans"`
 
 ### Task 90: Enable scale-out + intraday manager (operational)
@@ -1418,10 +5759,85 @@ Gate composition inside the RSI entry function (after existing masks): `mask &= 
 
 **Files:** Modify `swingbot/core/entry_filters.py`; test `tests/test_rescue_rsi_div.py`.
 
-**Interfaces:** `DEFAULT_PARAMS["RSI Divergence"]` gains `{"min_volume_ratio": 1.2, "min_reclaim_strength": 0.5}`. Gate on the reclaim bar (the existing `rsi_reclaim=45` bar — locate it in the entry fn): `volume / volume.rolling(20).mean() >= min_volume_ratio` AND `close >= swing_low + min_reclaim_strength * (prior_swing_mid - swing_low)` where `prior_swing_mid` is the midpoint of the divergence's two swing lows (both already computed by the existing divergence detection — reuse its variables, don't re-detect).
+**Interfaces:** `DEFAULT_PARAMS["RSI Divergence"]` gains `{"min_volume_ratio": None, "min_reclaim_strength": None}` (None = gate off, backward compatible; the grid adopts real numbers). Gate on the reclaim bar (the existing `rsi_reclaim=45` bar — locate it in `rsi_divergence_entries`): `volume / volume.rolling(20).mean() >= min_volume_ratio` AND `close >= swing_low + min_reclaim_strength * (prior_swing_mid - swing_low)` where `prior_swing_mid` is the midpoint of the divergence's two swing lows (both already computed by the existing divergence detection — reuse its variables, don't re-detect).
 
-- [ ] **Step 1: Failing tests: low-volume reclaim suppressed; strong-volume + deep reclaim passes; gate off ⇒ current behavior; no-lookahead check.**
-- [ ] **Step 2: FAIL. Step 3: Implement (compose into the existing divergence mask). Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): RSI Divergence confirmation-quality gate"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_rescue_rsi_div.py
+import numpy as np
+from swingbot.core.entry_filters import rsi_divergence_entries
+from tests.conftest import make_ohlcv
+
+def _divergence_frame(reclaim_volume_mult=1.0, reclaim_close_frac=0.9):
+    """Sell-off to swing low 1, weak bounce, LOWER swing low 2 with HIGHER
+    RSI (the divergence), then a reclaim bar whose volume and close depth
+    are the parameters under test. Deterministic; tune the shape in a REPL
+    against the real detector until the ungated function fires exactly one
+    bullish entry on the reclaim bar, then freeze it."""
+    closes = ([100 - i for i in range(20)]          # sell-off -> low ~80
+              + [82, 84, 86, 84, 82]                # bounce
+              + [81, 80, 79, 78.5, 78]              # lower low, momentum fading
+              + [78 + (86 - 78) * reclaim_close_frac])   # reclaim bar
+    vols = [1_000_000.0] * (len(closes) - 1) + [1_000_000.0 * reclaim_volume_mult]
+    return make_ohlcv(closes, volumes=vols)
+
+def test_low_volume_reclaim_suppressed_when_gated():
+    df = _divergence_frame(reclaim_volume_mult=0.8)
+    bull_off, _ = rsi_divergence_entries(df, "4w")
+    bull_on, _ = rsi_divergence_entries(df, "4w",
+        params={"rsi_reclaim": 45, "min_volume_ratio": 1.2,
+                "min_reclaim_strength": 0.5})
+    assert not bull_on.iloc[-1]
+    assert bull_on.sum() <= bull_off.sum()
+
+def test_strong_volume_deep_reclaim_passes():
+    df = _divergence_frame(reclaim_volume_mult=2.0, reclaim_close_frac=0.9)
+    bull_on, _ = rsi_divergence_entries(df, "4w",
+        params={"rsi_reclaim": 45, "min_volume_ratio": 1.2,
+                "min_reclaim_strength": 0.5})
+    bull_off, _ = rsi_divergence_entries(df, "4w")
+    assert bull_on.iloc[-1] == bull_off.iloc[-1]     # gate lets the good one through
+
+def test_gate_off_is_byte_identical():
+    df = _divergence_frame()
+    off1, _ = rsi_divergence_entries(df, "4w")
+    off2, _ = rsi_divergence_entries(df, "4w",
+        params={"rsi_reclaim": 45, "min_volume_ratio": None,
+                "min_reclaim_strength": None})
+    assert (off1 == off2).all()
+
+def test_no_lookahead():
+    # Truncating the frame must not change earlier bars' signals -- the
+    # same shift-check pattern tests/test_entry_filters.py already uses.
+    df = _divergence_frame(reclaim_volume_mult=2.0)
+    full, _ = rsi_divergence_entries(df, "4w",
+        params={"rsi_reclaim": 45, "min_volume_ratio": 1.2,
+                "min_reclaim_strength": 0.5})
+    trunc, _ = rsi_divergence_entries(df.iloc[:-1], "4w",
+        params={"rsi_reclaim": 45, "min_volume_ratio": 1.2,
+                "min_reclaim_strength": 0.5})
+    assert (full.iloc[:-1] == trunc).all()
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — inside `rsi_divergence_entries`, after the existing divergence mask is built (variable names below are stand-ins; reuse the REAL swing-low variables the detector already holds):
+
+```python
+    # --- rescue gate (Task 98): confirmation quality on the reclaim bar ---
+    min_vr = p.get("min_volume_ratio")
+    min_rs = p.get("min_reclaim_strength")
+    if min_vr is not None:
+        vol_ratio = (df["Volume"] / df["Volume"].rolling(20).mean())
+        bull &= (vol_ratio >= min_vr).fillna(False)
+    if min_rs is not None:
+        prior_swing_mid = (swing_low1_price + swing_low2_price) / 2
+        reclaim_floor = swing_low2_price + min_rs * (prior_swing_mid - swing_low2_price)
+        bull &= (df["Close"] >= reclaim_floor).fillna(False)
+```
+
+(Bearish mirror if the detector emits bearish divergences; if it's bullish-only today, gate only `bull` and say so in a comment.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): RSI Divergence confirmation-quality gate"`
 
 ### Task 99: RSI Divergence — TRAIN grid
 
@@ -1436,10 +5852,73 @@ Gate composition inside the RSI entry function (after existing masks): `mask &= 
 
 **Files:** Modify `swingbot/core/entry_filters.py`; test `tests/test_rescue_ribbon.py`.
 
-**Interfaces:** `DEFAULT_PARAMS["MA Ribbon"]` gains `{"min_width_pctile": 0.4, "require_expanding": True}`. Ribbon width = `(max(emas) - min(emas)) / close` over the ribbon EMAs the entry fn already computes; gate: width's rank within trailing 126 bars ≥ `min_width_pctile` AND (when `require_expanding`) `width.diff(3) > 0`.
+**Interfaces:** `DEFAULT_PARAMS["MA Ribbon"]` gains `{"min_width_pctile": None, "require_expanding": False}` (None/False = off, backward compatible). Ribbon width = `(max(emas) - min(emas)) / close` over the ribbon EMAs the entry fn already computes; gate: width's rank within trailing 126 bars ≥ `min_width_pctile` AND (when `require_expanding`) `width.diff(3) > 0`.
 
-- [ ] **Step 1: Failing tests: chop frame (compressed ribbon) suppressed; expanding trend passes; off ⇒ unchanged; no-lookahead.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): MA Ribbon expansion gate"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_rescue_ribbon.py
+import numpy as np
+from swingbot.core.entry_filters import ma_ribbon_entries
+from tests.conftest import make_ohlcv, make_trend_df
+
+GATED = {"ext_pct": 8.0, "min_width_pctile": 0.4, "require_expanding": True}
+
+def test_chop_frame_suppressed_when_gated():
+    # tight sideways chop -> ribbon compressed -> width percentile low
+    rng = np.random.default_rng(3)
+    closes = 100 + np.cumsum(rng.normal(0, 0.1, 400))
+    df = make_ohlcv(closes)
+    bull_on, bear_on = ma_ribbon_entries(df, "4w", params=GATED)
+    bull_off, bear_off = ma_ribbon_entries(df, "4w")
+    assert bull_on.sum() <= bull_off.sum()
+    assert not bull_on.iloc[-30:].any()      # late chop bars all gated out
+
+def test_expanding_trend_passes():
+    df = make_trend_df(400, +0.4)            # strong steady uptrend
+    bull_on, _ = ma_ribbon_entries(df, "4w", params=GATED)
+    bull_off, _ = ma_ribbon_entries(df, "4w")
+    fired_off = bull_off[bull_off].index
+    # every ungated entry late enough to have percentile history survives
+    late = [d for d in fired_off if bull_off.index.get_loc(d) > 200]
+    assert all(bull_on.loc[d] for d in late)
+
+def test_gate_off_is_byte_identical():
+    df = make_trend_df(300, +0.2)
+    a, _ = ma_ribbon_entries(df, "4w")
+    b, _ = ma_ribbon_entries(df, "4w",
+        params={"ext_pct": 8.0, "min_width_pctile": None,
+                "require_expanding": False})
+    assert (a == b).all()
+
+def test_no_lookahead():
+    df = make_trend_df(300, +0.3)
+    full, _ = ma_ribbon_entries(df, "4w", params=GATED)
+    trunc, _ = ma_ribbon_entries(df.iloc[:-1], "4w", params=GATED)
+    assert (full.iloc[:-1] == trunc).all()
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — inside `ma_ribbon_entries`, after the existing masks (`emas` = the list of ribbon EMA Series the function already computes):
+
+```python
+    # --- rescue gate (Task 101): only trade an EXPANDING ribbon ---
+    min_wp = p.get("min_width_pctile")
+    req_exp = p.get("require_expanding")
+    if min_wp is not None or req_exp:
+        ribbon = pd.concat(emas, axis=1)
+        width = (ribbon.max(axis=1) - ribbon.min(axis=1)) / df["Close"]
+        if min_wp is not None:
+            pct = width.rolling(126).rank(pct=True)
+            gate = (pct >= min_wp).fillna(False)
+            bull &= gate
+            bear &= gate
+        if req_exp:
+            expanding = (width.diff(3) > 0).fillna(False)
+            bull &= expanding
+            bear &= expanding
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): MA Ribbon expansion gate"`
 
 ### Task 102: MA Ribbon — TRAIN grid
 
@@ -1453,10 +5932,88 @@ Gate composition inside the RSI entry function (after existing masks): `mask &= 
 
 **Files:** Modify `swingbot/core/entry_filters.py` (and the wave detection it calls — likely in `signals.py` or a helper; locate the wave-2 identification first); test `tests/test_rescue_elliott.py`.
 
-**Interfaces:** `DEFAULT_PARAMS["Elliott Wave"]` gains `{"w2_min_retrace": 0.382, "w2_max_retrace": 0.786, "w2_max_duration_ratio": 1.0}`. Gate: wave-2 retrace of wave-1 within [min, max]; wave-2 bar-count ≤ ratio × wave-1 bar-count; reject entries where wave-2 low overlaps wave-1 origin (classic EW invalidation).
+**Interfaces:** `DEFAULT_PARAMS["Elliott Wave"]` gains `{"w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None}` (None = off). Gate: wave-2 retrace of wave-1 within [min, max]; wave-2 bar-count ≤ ratio × wave-1 bar-count; reject entries where wave-2 low overlaps wave-1 origin (classic EW invalidation — enforced whenever ANY of the three params is set). The wave points (wave0 origin, wave1 top, wave2 low and their bar indices) are already identified by `indicators.elliott_wave3_entries` (it records `wave0` since round 1) — gate on ITS output, don't re-detect.
 
-- [ ] **Step 1: Failing tests: synthetic 5-wave frame passing all three checks → entry allowed; deep 90% retrace → suppressed; slow wave-2 (duration 2×) → suppressed; overlap → suppressed; off ⇒ unchanged.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): Elliott strict wave-2 validation"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_rescue_elliott.py
+from swingbot.core.entry_filters import elliott_wave_entries
+from tests.conftest import make_ohlcv
+
+GATED = {"depth_min": 0.30, "depth_max": 0.80,
+         "w2_min_retrace": 0.382, "w2_max_retrace": 0.786,
+         "w2_max_duration_ratio": 1.0}
+
+def _five_wave(retrace=0.5, w2_bars=5, w1_bars=10, overlap=False):
+    """wave0 at 100, wave1 to 120 over w1_bars, wave2 retracing `retrace`
+    of wave1 over w2_bars (below 100 when overlap=True), then wave-3 launch."""
+    w1 = [100 + 20 * (i + 1) / w1_bars for i in range(w1_bars)]
+    w2_low = 120 - 20 * retrace if not overlap else 99.0
+    w2 = [120 - (120 - w2_low) * (i + 1) / w2_bars for i in range(w2_bars)]
+    launch = [w2_low + 3 * (i + 1) for i in range(8)]
+    return make_ohlcv([100.0] * 30 + w1 + w2 + launch)
+
+def test_textbook_wave2_passes():
+    df = _five_wave(retrace=0.5, w2_bars=5)
+    bull_off, _ = elliott_wave_entries(df, "4w")
+    bull_on, _ = elliott_wave_entries(df, "4w", params=GATED)
+    assert bull_off.any(), "fixture must fire ungated (tune shape first)"
+    assert bull_on.any()                      # good wave-2 survives the gate
+
+def test_deep_retrace_suppressed():
+    df = _five_wave(retrace=0.9)
+    bull_on, _ = elliott_wave_entries(df, "4w", params=GATED)
+    assert not bull_on.any()
+
+def test_slow_wave2_suppressed():
+    df = _five_wave(retrace=0.5, w2_bars=20, w1_bars=10)   # duration 2x wave1
+    bull_on, _ = elliott_wave_entries(df, "4w", params=GATED)
+    assert not bull_on.any()
+
+def test_overlap_suppressed():
+    df = _five_wave(overlap=True)
+    bull_on, _ = elliott_wave_entries(df, "4w", params=GATED)
+    assert not bull_on.any()
+
+def test_gate_off_is_byte_identical():
+    df = _five_wave()
+    a, _ = elliott_wave_entries(df, "4w")
+    b, _ = elliott_wave_entries(df, "4w",
+        params={"depth_min": 0.30, "depth_max": 0.80,
+                "w2_min_retrace": None, "w2_max_retrace": None,
+                "w2_max_duration_ratio": None})
+    assert (a == b).all()
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — in `elliott_wave_entries`, after `elliott_wave3_entries` returns its `entry_levels` dict (each level record carries `wave0`, `wave1`, `wave2` prices and — add if missing — their bar indices):
+
+```python
+    # --- rescue gate (Task 104): strict wave-2 validation ---
+    w2_min = p.get("w2_min_retrace")
+    w2_max = p.get("w2_max_retrace")
+    dur_ratio = p.get("w2_max_duration_ratio")
+    if any(v is not None for v in (w2_min, w2_max, dur_ratio)):
+        for i, lvl in list(entry_levels.items()):
+            wave1_len = lvl["wave1"] - lvl["wave0"]
+            if wave1_len <= 0:
+                bad = True
+            else:
+                retrace = (lvl["wave1"] - lvl["wave2"]) / wave1_len
+                bad = ((w2_min is not None and retrace < w2_min)
+                       or (w2_max is not None and retrace > w2_max)
+                       or (dur_ratio is not None and
+                           (lvl["wave2_idx"] - lvl["wave1_idx"])
+                           > dur_ratio * (lvl["wave1_idx"] - lvl["wave0_idx"]))
+                       or lvl["wave2"] <= lvl["wave0"])   # overlap invalidation
+            if bad:
+                bull.iloc[i] = False
+                entry_levels.pop(i)
+```
+
+(If `elliott_wave3_entries` doesn't yet record the bar indices, extend IT to include `wave0_idx/wave1_idx/wave2_idx` in each entry-level record — it has them in hand during detection; that's a pure addition, existing consumers ignore extra keys.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): Elliott strict wave-2 validation"`
 
 ### Task 105: Elliott Wave — TRAIN grid
 
@@ -1472,8 +6029,92 @@ Gate composition inside the RSI entry function (after existing masks): `mask &= 
 
 **Interfaces:** `DEFAULT_PARAMS["EMA Crossover"]` gains `{"entry_mode": "cross", "pullback_max_bars": 10}`. Mode `"pullback"`: after a bullish cross, the entry bar is NOT the cross bar but the first bar within `pullback_max_bars` where Low touches the fast EMA and Close > fast EMA (first-touch-and-hold). No touch within the window → no entry. Bearish mirrored. `"cross"` (default) ⇒ exactly current behavior.
 
-- [ ] **Step 1: Failing tests: cross-then-pullback frame → entry on the touch bar (assert index); no-pullback runaway → no entry; mode "cross" ⇒ byte-identical mask to today; no-lookahead.**
-- [ ] **Step 2: FAIL. Step 3: Implement. Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): EMA Crossover pullback entry mode"`
+- [ ] **Step 1: Failing tests:**
+
+```python
+# tests/test_rescue_ema.py
+import numpy as np
+from swingbot.core.entry_filters import ema_cross_entries
+from swingbot.core.indicators import ema
+from swingbot.core.strategy_types import HORIZONS
+from tests.conftest import make_ohlcv
+
+PULLBACK = {"rsi_dip": 45, "ext_atr": 1.0,
+            "entry_mode": "pullback", "pullback_max_bars": 10}
+
+def _cross_then_pullback():
+    """Downtrend, sharp reversal producing a bullish fast/slow cross, then a
+    3-bar dip whose Low tags the fast EMA while the Close holds above it,
+    then continuation. Verify in a REPL that the ungated function fires on
+    the cross bar, then freeze the shape."""
+    down = [120 - i for i in range(30)]
+    up = [90 + 2.5 * i for i in range(12)]          # forces the cross
+    dip = [up[-1] - 2, up[-1] - 4, up[-1] - 3]      # tags the fast EMA
+    cont = [up[-1] + i for i in range(6)]
+    return make_ohlcv(down + up + dip + cont)
+
+def test_pullback_mode_enters_on_touch_bar_not_cross_bar():
+    df = _cross_then_pullback()
+    bull_cross, _ = ema_cross_entries(df, "4w")
+    bull_pb, _ = ema_cross_entries(df, "4w", params=PULLBACK)
+    assert bull_cross.any()
+    cross_i = int(np.where(bull_cross.values)[0][0])
+    assert not bull_pb.iloc[cross_i]                 # not the cross bar
+    pb_idx = np.where(bull_pb.values)[0]
+    assert len(pb_idx) >= 1
+    assert 0 < pb_idx[0] - cross_i <= 10             # inside the window
+    # the entry bar really is a touch-and-hold of the fast EMA
+    fast = ema(df["Close"], HORIZONS["4w"]["ema_fast"])
+    i = pb_idx[0]
+    assert df["Low"].iloc[i] <= fast.iloc[i] <= df["Close"].iloc[i]
+
+def test_runaway_with_no_pullback_never_enters():
+    down = [120 - i for i in range(30)]
+    moon = [90 + 4 * i for i in range(25)]           # never comes back
+    df = make_ohlcv(down + moon)
+    bull_pb, _ = ema_cross_entries(df, "4w", params=PULLBACK)
+    assert not bull_pb.any()
+
+def test_cross_mode_is_byte_identical():
+    df = _cross_then_pullback()
+    a, _ = ema_cross_entries(df, "4w")
+    b, _ = ema_cross_entries(df, "4w",
+        params={"rsi_dip": 45, "ext_atr": 1.0, "entry_mode": "cross",
+                "pullback_max_bars": 10})
+    assert (a == b).all()
+
+def test_no_lookahead():
+    df = _cross_then_pullback()
+    full, _ = ema_cross_entries(df, "4w", params=PULLBACK)
+    trunc, _ = ema_cross_entries(df.iloc[:-1], "4w", params=PULLBACK)
+    assert (full.iloc[:-1] == trunc).all()
+```
+
+- [ ] **Step 2: FAIL. Step 3: Implement** — in `ema_cross_entries`, after the existing cross masks are built (`bull`/`bear` = the cross-bar masks; `fast` = the fast-EMA Series):
+
+```python
+    # --- rescue mode (Task 107): enter on the pullback, not the cross ---
+    if p.get("entry_mode") == "pullback":
+        window = int(p.get("pullback_max_bars", 10))
+        touched_bull = (df["Low"] <= fast) & (df["Close"] > fast)
+        touched_bear = (df["High"] >= fast) & (df["Close"] < fast)
+
+        def _first_touch_after(cross_mask, touch_mask):
+            out = pd.Series(False, index=df.index)
+            for ci in np.where(cross_mask.values)[0]:
+                for j in range(ci + 1, min(ci + 1 + window, len(df))):
+                    if touch_mask.values[j]:
+                        out.iloc[j] = True
+                        break                     # first touch only
+            return out
+
+        bull = _first_touch_after(bull, touched_bull).fillna(False)
+        bear = _first_touch_after(bear, touched_bear).fillna(False)
+```
+
+(Loop over cross indices is fine — crosses are sparse; keep the `.fillna(False)` invariant.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `git commit -m "feat(rescue): EMA Crossover pullback entry mode"`
 
 ### Task 108: EMA Crossover — TRAIN grid
 
