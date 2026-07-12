@@ -109,3 +109,25 @@ def test_v2_scale_out_keeps_classification_and_expectancy():
     assert v2.runner_tp2 + v2.runner_trail + v2.runner_be + v2.runner_timeout == v2.wins
     # runner floor is BE => expectancy can only drop by rounding noise
     assert v2.expectancy_r >= v1.expectancy_r - 0.02
+
+@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
+def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
+    # Regression pin (code review finding): return_pct must be derived from
+    # the blended r_multiple, not from legs[-1]'s exit price alone -- a
+    # multi-leg scale-out win's return spans both legs, and computing it
+    # from only the runner leg's price silently drops the TP1 leg entirely
+    # (e.g. a runner_be win, where the runner leg's exit price equals the
+    # entry price, was reported as a flat 0.0% return despite a real,
+    # positive-R win).
+    df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
+    v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
+    for t in v2.trades:
+        if t.outcome != "win":
+            continue
+        risk_per_share = abs(t.entry - t.stop_loss)
+        implied_return_pct = round(t.r_multiple * (risk_per_share / t.entry) * 100, 3)
+        assert t.return_pct == pytest.approx(implied_return_pct)
+    # At least one runner_be win must exist in this fixture and must show a
+    # nonzero return_pct (the exact case the bug reported as 0.0%).
+    be_wins = [t for t in v2.trades if t.outcome == "win" and t.r_multiple < 0.5]
+    assert be_wins and all(t.return_pct != 0.0 for t in be_wins)

@@ -210,6 +210,10 @@ def run_backtest(
     _lm_cache_key = None
     _lm_supports: list = []
     _lm_resistances: list = []
+    if exit_model == "v2":
+        from .plan_engine import (
+            TRAIL_ATR_MULT, PlanStatus, TradePlanV2, select_tp2, simulate_exit,
+        )
 
     entry_idx = np.where((bullish_entries.values | bearish_entries.values))[0]
     _open_until: int = -1  # bar index after which the current trade has exited
@@ -230,10 +234,6 @@ def run_backtest(
             continue
 
         if exit_model == "v2":
-            from .plan_engine import (
-                TRAIL_ATR_MULT, PlanStatus, TradePlanV2, select_tp2, simulate_exit,
-            )
-
             tp2 = None
             if tp2_mode == "levels":
                 cache_key = i // 5
@@ -265,8 +265,11 @@ def run_backtest(
                 runner_counts[res.runner_outcome] = runner_counts.get(res.runner_outcome, 0) + 1
 
             _open_until = exit_i
-            sign = 1 if direction == "bullish" else -1
-            return_pct = (exit_price - entry) / entry * sign * 100
+            # Derived from r_multiple (the fraction-weighted blend across
+            # legs), NOT from legs[-1]'s exit price alone -- a multi-leg
+            # scale-out win's return spans both legs, which a single exit
+            # price can't represent.
+            return_pct = r_multiple * (risk_per_share / entry) * 100
             holding_days = exit_i - i
 
             trades.append(BacktestTrade(
