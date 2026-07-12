@@ -46,6 +46,7 @@ def pool(trades):
         "win_rate": len(wins) / len(ev) * 100 if ev else None,
         "expectancy_r": float(np.mean([t.r_multiple for t in trades])) if trades else None,
         "excluded_share": (len(scr) + len(to)) / closed if closed else 0.0,
+        "avg_win_r": float(np.mean([t.r_multiple for t in wins])) if wins else None,
     }
 
 
@@ -105,6 +106,10 @@ def main():
     ap.add_argument("--run-date", dest="run_date", default=None,
                     help="YYYY-MM-DD stamped on emitted registry records "
                          "(required with --emit-registry; explicit for reproducibility)")
+    ap.add_argument("--exit-model", dest="exit_model", choices=["v1", "v2"], default="v1")
+    ap.add_argument("--scale-out", dest="scale_out", action="store_true")
+    ap.add_argument("--tp2", dest="tp2", choices=["none", "levels"], default="levels",
+                    help="TP2 source for scale-out runs (v2 only)")
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
@@ -121,6 +126,15 @@ def main():
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
     by_strategy = defaultdict(list)
     by_combo = defaultdict(list)
+    # Runner sub-outcome counts (v2 + scale-out only). These come off
+    # BacktestSummary as run-level aggregates, not per-trade fields, so
+    # unlike by_strategy/by_combo above they are NOT filtered to the
+    # date window -- they reflect every trade the cached CSV produced for
+    # that (ticker, horizon), same as the live table's tp2%/trail%/be%/rto%
+    # columns below.
+    runner_by_strategy = defaultdict(lambda: {"tp2": 0, "trail": 0, "be": 0, "timeout": 0, "wins": 0})
+    show_runner_cols = args.exit_model == "v2" and args.scale_out
+    tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
     tickers = sorted(load_watchlist())
     for ti, ticker in enumerate(tickers, 1):
@@ -131,24 +145,62 @@ def main():
         for hk in HORIZONS:
             for strat in strategies:
                 try:
-                    s = run_backtest(ticker, df, strat, hk, one_at_a_time=True)
+                    s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,
+                                      exit_model=args.exit_model, scale_out=args.scale_out,
+                                      tp2_mode=tp2_mode)
                 except Exception as e:
                     print(f"    ! {strat}/{hk}: {e}")
                     continue
                 tr = window_trades(s, date_from, date_to)
                 by_strategy[strat].extend(tr)
                 by_combo[(strat, hk)].extend(tr)
+                if show_runner_cols:
+                    rb = runner_by_strategy[strat]
+                    rb["tp2"] += s.runner_tp2
+                    rb["trail"] += s.runner_trail
+                    rb["be"] += s.runner_be
+                    rb["timeout"] += s.runner_timeout
+                    rb["wins"] += s.wins
 
+    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s}"
+    if show_runner_cols:
+        header += f" {'AvgWinR':>7s}"
+    header += f" {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}"
+    if show_runner_cols:
+        header += f" {'tp2%':>6s} {'trail%':>6s} {'be%':>6s} {'rto%':>6s}"
+    header += "  PASS"
     lines = [f"== {label} {date_from} .. {date_to} | pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==",
-             f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"]
+             header]
     results = {}
     for strat in strategies:
         st = pool(by_strategy[strat])
-        results[strat] = st
+        results[strat] = dict(st)
         wr = f"{st['win_rate']:.1f}" if st["win_rate"] is not None else "n/a"
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         flag = "PASS" if passes(st, min_n) else "FAIL"
-        lines.append(f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s} {st['scratches']:5d} {st['timeouts']:5d} {st['excluded_share']*100:5.0f}%  {flag}")
+        row = f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s}"
+        if show_runner_cols:
+            awr = f"{st['avg_win_r']:+.3f}" if st["avg_win_r"] is not None else "n/a"
+            row += f" {awr:>7s}"
+        row += f" {st['scratches']:5d} {st['timeouts']:5d} {st['excluded_share']*100:5.0f}%"
+        if show_runner_cols:
+            rb = runner_by_strategy[strat]
+
+            def runner_pct(count, _rb=rb):
+                return f"{count / _rb['wins'] * 100:5.1f}%" if _rb["wins"] else "n/a"
+
+            tp2_pct, trail_pct, be_pct, rto_pct = (
+                runner_pct(rb["tp2"]), runner_pct(rb["trail"]),
+                runner_pct(rb["be"]), runner_pct(rb["timeout"]))
+            row += f" {tp2_pct:>6s} {trail_pct:>6s} {be_pct:>6s} {rto_pct:>6s}"
+            results[strat].update({
+                "runner_tp2_pct": (rb["tp2"] / rb["wins"] * 100) if rb["wins"] else None,
+                "runner_trail_pct": (rb["trail"] / rb["wins"] * 100) if rb["wins"] else None,
+                "runner_be_pct": (rb["be"] / rb["wins"] * 100) if rb["wins"] else None,
+                "runner_timeout_pct": (rb["timeout"] / rb["wins"] * 100) if rb["wins"] else None,
+            })
+        row += f"  {flag}"
+        lines.append(row)
 
     lines.append("\n-- per strategy x horizon (for gating decisions) --")
     lines.append(f"{'Strategy':22s} {'Horiz':6s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s}")
