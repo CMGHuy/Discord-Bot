@@ -646,8 +646,11 @@ def _scale_out_exit_walk(
     tp2 = plan.tp2
     extreme_close = float(close[tp1_index])
     atr_series = atr_indicator(df, 14)
+    checked_stop = runner_stop   # the level checked against the CURRENT bar; stays
+                                 # at the initial BE value if the loop below never runs
 
     for j in range(tp1_index + 1, end + 1):
+        checked_stop = runner_stop   # snapshot BEFORE this bar's own ratchet
         hi, lo = float(high[j]), float(low[j])
         if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
             runner_exit, exit_index = runner_stop, j
@@ -665,13 +668,12 @@ def _scale_out_exit_walk(
         runner_stop = max(runner_stop, trail) if is_bull else min(runner_stop, trail)
 
     if runner_exit is None:   # Task 27 pins the runner-timeout case with tests
-        # Degenerate case: tp1_index == end means the runner loop above never
-        # ran (empty range), so close[end] was never checked against the
-        # runner's protective stop. Clamp to runner_stop -- a no-op in every
-        # other case (the loop's own stop-check would already have fired and
-        # exited via break otherwise), but it floors this edge case at BE.
+        # Clamp to checked_stop (the level actually checked against the last
+        # bar walked, or the initial BE if the loop never ran) -- NOT the
+        # live runner_stop, which may already be ratcheted past what that
+        # bar's own low/high were ever tested against.
         exit_px = float(close[end])
-        runner_exit = max(exit_px, runner_stop) if is_bull else min(exit_px, runner_stop)
+        runner_exit = max(exit_px, checked_stop) if is_bull else min(exit_px, checked_stop)
         exit_index, runner_reason = end, "runner_timeout"
 
     r2 = round((runner_exit - entry_price) * sign / risk, 3)

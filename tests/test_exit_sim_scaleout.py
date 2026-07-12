@@ -230,6 +230,66 @@ def test_runner_timeout_floors_at_protective_stop_when_tp1_on_last_bar():
     assert result.r_total >= 0.5 * rr - 1e-9   # the invariant the bug violated
 
 
+def test_runner_timeout_uses_checked_stop_not_post_ratchet_trail():
+    # Second-order bug found in review of the first Task 27 fix (commit
+    # ab86151): the runner-timeout clamp used the POST-ratchet runner_stop
+    # (computed from the final bar's own close/ATR, which is never checked
+    # against that bar's low/high -- there's no next iteration to check it
+    # in) instead of the stop level actually CHECKED against that bar. When
+    # ATR narrows late in the window, the post-ratchet trail can climb
+    # ABOVE the bar's actual close, inflating the reported exit price past
+    # a level the bar never validated as a trigger.
+    #
+    # Fixture: extreme_close peaks at 108 right after TP1 (bar 1), then a
+    # gradual quiet decline (small per-bar ranges, so no ATR spike) brings
+    # price down to the final bar, which closes at 104.0 with a low of
+    # 103.5. The dataframe is exactly 14 rows, so `end` is capped at index
+    # 13 by `n - 1` (not by the 2w horizon's max_holding_days=14): bar 13
+    # is both the last bar walked AND the first bar where real ATR(14)
+    # stops being NaN (the fallback-ATR-based ratchet floors runner_stop
+    # at 108 - 2.5*2.0 = 103.0 through bars 2-12 -- that 103.0 is
+    # "checked_stop", the value actually checked against bar 13's low).
+    # Bar 13's own end-of-iteration ratchet uses the now-real ATR(14),
+    # computed below directly via swingbot.core.indicators.atr (not
+    # hand-waved): atr(14)[13] == 1.488244065325937, giving a POST-ratchet
+    # trail of 108 - 2.5*1.488244065325937 == 104.27938983668516 -- ABOVE
+    # the bar's actual close (104.0) and never checked against any
+    # subsequent bar (there isn't one). Pre-fix, the clamp reported
+    # 104.27938983668516 (a price the bar never closed at); post-fix it
+    # must report the real close, 104.0.
+    from swingbot.core.indicators import atr as atr_indicator
+
+    decline = [108.0 - 0.4 * k for k in range(1, 12)]   # 11 bars: 107.6 .. 103.6
+    closes = ([100.0, (100.0, 111.0, 99.5, 108.0)]              # 0: entry, 1: TP1 touch (peak close=108)
+              + [(c, c * 1.002, c * 0.998, c) for c in decline]  # 2-12: gradual quiet decline
+              + [(103.7, 104.5, 103.5, 104.0)])                 # 13 (=end, n=14 rows): timeout bar
+    df = make_ohlcv(closes)
+    assert len(df) == 14
+
+    # Verify the real ATR(14) value driving the post-ratchet (buggy) trail
+    # on this exact constructed df, rather than hand-waving the arithmetic.
+    atr13 = float(atr_indicator(df, 14).iloc[13])
+    assert atr13 == pytest.approx(1.488244065325937)
+    checked_stop = 108.0 - 2.5 * 2.0          # fallback-ATR ratchet, pinned through bars 2-12
+    post_ratchet_trail = 108.0 - 2.5 * atr13  # the buggy (unchecked) value
+    assert checked_stop == pytest.approx(103.0)
+    assert post_ratchet_trail == pytest.approx(104.27938983668516)
+    assert checked_stop < 104.0 < post_ratchet_trail   # close sits strictly between the two
+
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None,
+                 horizon_key="2w")
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    rr = 2.0
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_timeout"
+    assert result.exit_index == 13
+    # Fixed: reports the bar's real close (104.0), NOT the inflated
+    # post-ratchet trail (104.27938983668516) that was never checked.
+    assert result.legs[1]["exit_price"] == pytest.approx(104.0)
+    assert result.legs[1]["r"] == pytest.approx(0.8)
+    assert result.r_total == pytest.approx(0.5 * rr + 0.5 * 0.8)
+
+
 def test_legs_fractions_always_sum_to_one():
     # every terminal ExitResult with legs: fractions sum to 1.0 and
     # r_total == sum(fraction * r) exactly.
