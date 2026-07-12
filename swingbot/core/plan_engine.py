@@ -446,7 +446,7 @@ def pending_invalidated(plan: TradePlanV2, bar_close: float) -> bool:
 
 @dataclass
 class ExitResult:
-    outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"
+    outcome: str                 # "win"|"loss"|"scratch"|"timeout"|"not_triggered"|"no_trade"
     runner_outcome: str | None   # "runner_tp2"|"runner_trail"|"runner_be"|"runner_timeout"|None
     entry_index: int | None
     exit_index: int | None
@@ -490,8 +490,12 @@ def _single_leg_exit_walk(
     stop_loss = plan.stop_loss
     tp1 = plan.tp1
     risk = abs(entry_price - stop_loss)
+    if risk <= 0:
+        return ExitResult(outcome="no_trade", runner_outcome=None,
+                          entry_index=entry_index, exit_index=None,
+                          entry_price=entry_price, r_total=0.0, legs=[])
     target_dist = abs(tp1 - entry_price)
-    rr = target_dist / risk if risk > 0 else 0.0
+    rr = target_dist / risk
 
     if is_bull:
         be_trigger = entry_price + plan.breakeven_trigger_fraction * target_dist
@@ -537,8 +541,10 @@ def _single_leg_exit_walk(
     elif outcome == "scratch":
         r, reason = 0.0, "breakeven_stop"
     else:  # timeout
-        r = (exit_price - entry_price) * sign / risk if risk > 0 else 0.0
+        r = (exit_price - entry_price) * sign / risk
         reason = "timeout"
+
+    r = round(r, 3)
 
     return ExitResult(
         outcome=outcome,

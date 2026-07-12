@@ -84,6 +84,22 @@ def test_bullish_market_straight_drop_to_stop_is_a_loss():
     assert result.legs[0]["r"] == pytest.approx(-1.0)
 
 
+def test_bullish_zero_risk_is_no_trade():
+    # stop_loss == entry_price -- risk is non-positive, so the legacy loop
+    # this was ported from skips the signal entirely: no trade recorded.
+    df = make_ohlcv([
+        100.0,                          # 0: signal/entry bar, entry_price=100.0
+        (100.0, 103.0, 99.0, 102.0),    # 1: irrelevant, walk should never start
+    ])
+    plan = _plan(direction="bullish", stop_loss=100.0, tp1=110.0)
+
+    result = simulate_exit(df, signal_index=0, plan=plan)
+
+    assert result.outcome == "no_trade"
+    assert result.r_total == 0.0
+    assert result.legs == []
+
+
 # ---------------------------------------------------------------------------
 # stop_entry fill flowing into the single-leg walk
 # ---------------------------------------------------------------------------
