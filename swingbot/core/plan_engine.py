@@ -557,15 +557,27 @@ def _single_leg_exit_walk(
     )
 
 
+def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
+                    mult: float, direction: str) -> float:
+    """Classic chandelier exit level for the runner leg: the extreme close
+    since TP1 minus (bullish) / plus (bearish) mult x ATR."""
+    if direction == "bullish":
+        return extreme_close_since_tp1 - mult * atr_value
+    return extreme_close_since_tp1 + mult * atr_value
+
+
 def _scale_out_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
 ) -> ExitResult:
     """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
     to _single_leg_exit_walk; a stop/scratch/timeout before TP1 returns the
     same single full-fraction leg. TP1 touch banks tp1_fraction at tp1 and
-    hands the rest to the runner: stop starts at entry (BE). Task 24 scope:
-    the runner stop stays fixed at BE for the whole runner phase (no trail
-    ratchet, no TP2 check yet -- Tasks 25-27 add those pieces back in)."""
+    hands the rest to the runner: stop starts at entry (BE) and ratchets
+    toward profit via a chandelier trail (Task 26) as the runner rides, with
+    an optional TP2 target (Task 25). Task 27 still owes runner-timeout
+    test coverage."""
+    from swingbot.core.indicators import atr as atr_indicator
+
     high, low, close = df["High"].values, df["Low"].values, df["Close"].values
     n = len(df)
     is_bull = plan.direction == "bullish"
@@ -625,23 +637,32 @@ def _scale_out_exit_walk(
 
     # ---- phase 2: runner. Stop starts at entry (BE); protects bars AFTER
     # the TP1 bar (same "subsequent bars only" convention as the BE move).
-    # Task 24 scope only: fixed BE stop, no trail ratchet, no TP2 check --
-    # Task 25 adds the TP2 branch, Task 26 adds the chandelier ratchet
-    # (uncommenting/extending this loop, not rewriting it).
+    # Task 25 added the TP2 branch; Task 26 adds the chandelier ratchet: the
+    # stop trails the extreme close since TP1 by trail_atr_mult x ATR(14),
+    # only ever moving toward profit (never back down toward BE).
     runner_stop = entry_price
     runner_exit = runner_reason = None
     exit_index = None
     tp2 = plan.tp2
+    extreme_close = float(close[tp1_index])
+    atr_series = atr_indicator(df, 14)
 
     for j in range(tp1_index + 1, end + 1):
         hi, lo = float(high[j]), float(low[j])
         if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
             runner_exit, exit_index = runner_stop, j
-            runner_reason = "runner_be"
+            runner_reason = "runner_be" if runner_stop == entry_price else "runner_trail"
             break
         if tp2 is not None and ((hi >= tp2) if is_bull else (lo <= tp2)):
             runner_exit, exit_index, runner_reason = tp2, j, "runner_tp2"
             break
+        # No exit this bar: ratchet the stop for the NEXT iteration using
+        # THIS bar's close only -- no intrabar lookahead.
+        extreme_close = (max(extreme_close, float(close[j])) if is_bull
+                          else min(extreme_close, float(close[j])))
+        atr_val = _safe_atr_value(entry_price, float(atr_series.iloc[j]))
+        trail = chandelier_stop(extreme_close, atr_val, plan.trail_atr_mult, plan.direction)
+        runner_stop = max(runner_stop, trail) if is_bull else min(runner_stop, trail)
 
     if runner_exit is None:   # Task 27 pins the runner-timeout case with tests
         runner_exit, exit_index, runner_reason = float(close[end]), end, "runner_timeout"
@@ -679,8 +700,9 @@ def simulate_exit(
     move), or timeout -- extracted verbatim from backtest.py's run_backtest
     loop. ``scale_out=True`` walks the hybrid scale-out exit (Task 24+):
     pre-TP1 phase is identical to the single-leg walk; TP1 touch banks
-    tp1_fraction and hands the rest to a break-even runner (TP2 and the
-    chandelier trail are Tasks 25/26).
+    tp1_fraction and hands the rest to a runner whose stop starts at
+    break-even, ratchets via a chandelier ATR trail (Task 26), and can also
+    exit at an optional TP2 (Task 25).
     """
     # Resolved eagerly per the interface contract -- both the single-leg
     # (Task 21) and scale-out (Task 24+) exit walks use it to bound the
