@@ -157,3 +157,56 @@ def test_chandelier_stop_pure_function():
     from swingbot.core.plan_engine import chandelier_stop
     assert chandelier_stop(130.0, 2.0, 2.5, "bullish") == pytest.approx(125.0)
     assert chandelier_stop(70.0, 2.0, 2.5, "bearish") == pytest.approx(75.0)
+
+
+# ---------------------------------------------------------------------------
+# Task 27: runner-timeout fallthrough + two-leg accounting invariants
+# ---------------------------------------------------------------------------
+
+import numpy as np
+
+
+def test_runner_timeout_marks_leg2_at_last_close():
+    # 2w horizon (max_holding_days=14): TP1 on bar 1, then a drift that never
+    # touches BE/trail/tp2 -> runner_timeout at entry+14, leg 2 at that close.
+    closes = [100.0, (100.0, 111.0, 99.5, 110.5)] + [(108.0, 109.0, 107.0, 108.0)] * 20
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None,
+                 horizon_key="2w", trail_atr_mult=50.0)   # trail parked far away
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_timeout"
+    assert result.exit_index == 14
+    assert result.legs[1]["exit_price"] == 108.0
+    assert result.legs[1]["r"] == pytest.approx((108.0 - 100.0) / 5.0)
+
+
+def test_win_never_goes_negative_property():
+    # 50 seeded random walks: whenever scale_out reports a win, r_total must
+    # be >= 0.5*rr (leg 1 banked; runner floor is BE) -- the spec §5 invariant.
+    rng = np.random.RandomState(42)
+    violations = []
+    for k in range(50):
+        closes = list(100.0 * np.cumprod(1 + rng.normal(0.001, 0.02, 60)))
+        df = make_ohlcv(closes)
+        plan = _plan(direction="bullish",
+                     stop_loss=closes[0] * 0.95, tp1=closes[0] * 1.04,
+                     trigger_price=closes[0], tp2=None, horizon_key="4w")
+        result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+        if result.outcome == "win":
+            rr = (plan.tp1 - closes[0]) / (closes[0] - plan.stop_loss)
+            if result.r_total < 0.5 * rr * 0.999:
+                violations.append((k, result.r_total))
+    assert not violations, violations
+
+
+def test_legs_fractions_always_sum_to_one():
+    # every terminal ExitResult with legs: fractions sum to 1.0 and
+    # r_total == sum(fraction * r) exactly.
+    closes = [100.0, (100.0, 111.0, 99.5, 110.5), (110.0, 112.0, 99.0, 100.0)]
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert sum(l["fraction"] for l in result.legs) == pytest.approx(1.0)
+    assert result.r_total == pytest.approx(
+        sum(l["fraction"] * l["r"] for l in result.legs))
