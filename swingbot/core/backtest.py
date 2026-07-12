@@ -82,6 +82,7 @@ class BacktestTrade:
     return_pct: float | None
     r_multiple: float | None
     holding_days: int | None
+    runner_outcome: str | None = None
 
 
 @dataclass
@@ -278,6 +279,7 @@ def run_backtest(
                 take_profit=round(take_profit, 4), outcome=outcome,
                 exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
                 r_multiple=round(r_multiple, 3), holding_days=holding_days,
+                runner_outcome=res.runner_outcome,
             ))
             continue
 

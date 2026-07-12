@@ -126,12 +126,11 @@ def main():
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
     by_strategy = defaultdict(list)
     by_combo = defaultdict(list)
-    # Runner sub-outcome counts (v2 + scale-out only). These come off
-    # BacktestSummary as run-level aggregates, not per-trade fields, so
-    # unlike by_strategy/by_combo above they are NOT filtered to the
-    # date window -- they reflect every trade the cached CSV produced for
-    # that (ticker, horizon), same as the live table's tp2%/trail%/be%/rto%
-    # columns below.
+    # Runner sub-outcome counts (v2 + scale-out only). `runner_outcome` is
+    # stamped per-trade on BacktestTrade (v2 branch only), so these ARE
+    # filtered to the date window exactly like by_strategy/by_combo above --
+    # derived from `tr` (window_trades' output), not from the unfiltered
+    # BacktestSummary.runner_tp2/trail/be/timeout run-level aggregates.
     runner_by_strategy = defaultdict(lambda: {"tp2": 0, "trail": 0, "be": 0, "timeout": 0, "wins": 0})
     show_runner_cols = args.exit_model == "v2" and args.scale_out
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
@@ -156,11 +155,11 @@ def main():
                 by_combo[(strat, hk)].extend(tr)
                 if show_runner_cols:
                     rb = runner_by_strategy[strat]
-                    rb["tp2"] += s.runner_tp2
-                    rb["trail"] += s.runner_trail
-                    rb["be"] += s.runner_be
-                    rb["timeout"] += s.runner_timeout
-                    rb["wins"] += s.wins
+                    rb["tp2"] += sum(1 for t in tr if t.runner_outcome == "runner_tp2")
+                    rb["trail"] += sum(1 for t in tr if t.runner_outcome == "runner_trail")
+                    rb["be"] += sum(1 for t in tr if t.runner_outcome == "runner_be")
+                    rb["timeout"] += sum(1 for t in tr if t.runner_outcome == "runner_timeout")
+                    rb["wins"] += sum(1 for t in tr if t.outcome == "win")
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s}"
     if show_runner_cols:

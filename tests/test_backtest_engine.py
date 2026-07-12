@@ -131,3 +131,44 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     # nonzero return_pct (the exact case the bug reported as 0.0%).
     be_wins = [t for t in v2.trades if t.outcome == "win" and t.r_multiple < 0.5]
     assert be_wins and all(t.return_pct != 0.0 for t in be_wins)
+
+@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
+def test_v2_scale_out_stamps_per_trade_runner_outcome():
+    # Regression pin: scripts/run_backtest_range.py's runner_by_strategy
+    # table must be built from a per-trade field so it can be filtered to
+    # the --from/--to date window (via window_trades()), unlike the
+    # unfiltered run-level BacktestSummary.runner_tp2/trail/be/timeout
+    # aggregates it used to read. That per-trade field is
+    # BacktestTrade.runner_outcome, stamped on the v2/scale-out branch of
+    # run_backtest from res.runner_outcome. Before this fix, BacktestTrade
+    # had no such field at all, so this attribute wouldn't have existed --
+    # any harness code trying to sum it per-window would have failed
+    # (or, pre-fix, the harness read s.runner_tp2 etc. straight off the
+    # unfiltered summary and could never have been scoped to a window no
+    # matter what it did to `tr`).
+    df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
+    v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
+    assert v2.wins > 0  # otherwise this test can't exercise anything
+    for t in v2.trades:
+        if t.outcome == "win":
+            assert t.runner_outcome in (
+                "runner_tp2", "runner_trail", "runner_be", "runner_timeout"
+            ), t
+        else:
+            assert t.runner_outcome is None, t
+    # Cross-check: the per-trade partition of wins must reproduce the exact
+    # same counts as the run-level aggregate (they describe the same run,
+    # just at different granularity) -- this is the invariant the harness
+    # fix depends on being true.
+    per_trade_counts = {
+        "runner_tp2": 0, "runner_trail": 0, "runner_be": 0, "runner_timeout": 0,
+    }
+    for t in v2.trades:
+        if t.runner_outcome:
+            per_trade_counts[t.runner_outcome] += 1
+    assert per_trade_counts == {
+        "runner_tp2": v2.runner_tp2,
+        "runner_trail": v2.runner_trail,
+        "runner_be": v2.runner_be,
+        "runner_timeout": v2.runner_timeout,
+    }
