@@ -557,6 +557,101 @@ def _single_leg_exit_walk(
     )
 
 
+def _scale_out_exit_walk(
+    df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
+) -> ExitResult:
+    """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
+    to _single_leg_exit_walk; a stop/scratch/timeout before TP1 returns the
+    same single full-fraction leg. TP1 touch banks tp1_fraction at tp1 and
+    hands the rest to the runner: stop starts at entry (BE). Task 24 scope:
+    the runner stop stays fixed at BE for the whole runner phase (no trail
+    ratchet, no TP2 check yet -- Tasks 25-27 add those pieces back in)."""
+    high, low, close = df["High"].values, df["Low"].values, df["Close"].values
+    n = len(df)
+    is_bull = plan.direction == "bullish"
+    sign = 1 if is_bull else -1
+    stop_loss, tp1 = plan.stop_loss, plan.tp1
+    risk = abs(entry_price - stop_loss)
+    if risk <= 0:
+        return ExitResult(outcome="no_trade", runner_outcome=None,
+                          entry_index=entry_index, exit_index=None,
+                          entry_price=entry_price, r_total=0.0, legs=[])
+    target_dist = abs(tp1 - entry_price)
+    rr = target_dist / risk
+    frac1 = plan.tp1_fraction
+    frac2 = 1.0 - frac1
+
+    be_trigger = entry_price + sign * plan.breakeven_trigger_fraction * target_dist
+    stop_moved = False
+    end = min(entry_index + max_holding_days, n - 1)
+
+    # ---- phase 1: identical to the single-leg walk until TP1 touches ----
+    tp1_index = None
+    for j in range(entry_index + 1, end + 1):
+        hi, lo = float(high[j]), float(low[j])
+        cur_stop = entry_price if stop_moved else stop_loss
+        if is_bull:
+            hit_stop, hit_target = lo <= cur_stop, hi >= tp1
+            reached_trigger = hi >= be_trigger
+        else:
+            hit_stop, hit_target = hi >= cur_stop, lo <= tp1
+            reached_trigger = lo <= be_trigger
+
+        if hit_stop:  # conservative: stop first, exactly as single-leg
+            outcome = "scratch" if stop_moved else "loss"
+            r = round(0.0 if stop_moved else -1.0, 3)
+            reason = "breakeven_stop" if stop_moved else "stop"
+            return ExitResult(outcome=outcome, runner_outcome=None,
+                              entry_index=entry_index, exit_index=j,
+                              entry_price=entry_price, r_total=r,
+                              legs=[{"fraction": 1.0, "exit_price": cur_stop,
+                                     "r": r, "reason": reason}])
+        if hit_target:
+            tp1_index = j
+            break
+        if reached_trigger and not stop_moved:
+            stop_moved = True
+
+    if tp1_index is None:   # timeout before TP1 -- identical to single-leg
+        exit_price = float(close[end])
+        r = round((exit_price - entry_price) * sign / risk, 3)
+        return ExitResult(outcome="timeout", runner_outcome=None,
+                          entry_index=entry_index, exit_index=end,
+                          entry_price=entry_price, r_total=r,
+                          legs=[{"fraction": 1.0, "exit_price": exit_price,
+                                 "r": r, "reason": "timeout"}])
+
+    leg1 = {"fraction": frac1, "exit_price": tp1, "r": round(rr, 3), "reason": "tp1"}
+
+    # ---- phase 2: runner. Stop starts at entry (BE); protects bars AFTER
+    # the TP1 bar (same "subsequent bars only" convention as the BE move).
+    # Task 24 scope only: fixed BE stop, no trail ratchet, no TP2 check --
+    # Task 25 adds the TP2 branch, Task 26 adds the chandelier ratchet
+    # (uncommenting/extending this loop, not rewriting it).
+    runner_stop = entry_price
+    runner_exit = runner_reason = None
+    exit_index = None
+
+    for j in range(tp1_index + 1, end + 1):
+        hi, lo = float(high[j]), float(low[j])
+        if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
+            runner_exit, exit_index = runner_stop, j
+            runner_reason = "runner_be"
+            break
+
+    if runner_exit is None:   # Task 27 pins the runner-timeout case with tests
+        runner_exit, exit_index, runner_reason = float(close[end]), end, "runner_timeout"
+
+    r2 = round((runner_exit - entry_price) * sign / risk, 3)
+    leg2 = {"fraction": frac2, "exit_price": runner_exit, "r": r2,
+            "reason": runner_reason}
+    return ExitResult(outcome="win", runner_outcome=runner_reason,
+                      entry_index=entry_index, exit_index=exit_index,
+                      entry_price=entry_price,
+                      r_total=round(frac1 * rr + frac2 * r2, 3),
+                      legs=[leg1, leg2])
+
+
 def simulate_exit(
     df,
     signal_index: int,
@@ -565,7 +660,7 @@ def simulate_exit(
     scale_out: bool = False,
     max_holding_days: int | None = None,
 ) -> ExitResult:
-    """Shared entry + exit simulator (Tasks 18/20/21).
+    """Shared entry + exit simulator (Tasks 18/20/21/24).
 
     ``market`` entries fill immediately at the signal bar's close.
     ``stop_entry`` entries scan forward from signal_index + 1 through the
@@ -578,8 +673,10 @@ def simulate_exit(
     single-leg round-1 exit (Task 21): win (TP1 touched), loss (stop hit
     before the break-even move), scratch (stop hit after the break-even
     move), or timeout -- extracted verbatim from backtest.py's run_backtest
-    loop. ``scale_out=True`` (multi-leg partial exits) is Task 24+ and still
-    raises NotImplementedError with entry_index/entry_price attached.
+    loop. ``scale_out=True`` walks the hybrid scale-out exit (Task 24+):
+    pre-TP1 phase is identical to the single-leg walk; TP1 touch banks
+    tp1_fraction and hands the rest to a break-even runner (TP2 and the
+    chandelier trail are Tasks 25/26).
     """
     # Resolved eagerly per the interface contract -- both the single-leg
     # (Task 21) and scale-out (Task 24+) exit walks use it to bound the
@@ -592,14 +689,7 @@ def simulate_exit(
         entry_price = float(df["Close"].values[signal_index])
         if not scale_out:
             return _single_leg_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
-        err = NotImplementedError(
-            "simulate_exit: scale-out exit walk not implemented yet (Task 24+); "
-            f"market entry established at entry_index={entry_index}, "
-            f"entry_price={entry_price}"
-        )
-        err.entry_index = entry_index
-        err.entry_price = entry_price
-        raise err
+        return _scale_out_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
 
     # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
     # trigger touch, watching for pre-fill invalidation along the way.
@@ -619,14 +709,7 @@ def simulate_exit(
             entry_price = fill_price(plan, float(open_[j]))
             if not scale_out:
                 return _single_leg_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
-            err = NotImplementedError(
-                "simulate_exit: scale-out exit walk not implemented yet (Task 24+); "
-                f"stop_entry filled at entry_index={entry_index}, "
-                f"entry_price={entry_price}"
-            )
-            err.entry_index = entry_index
-            err.entry_price = entry_price
-            raise err
+            return _scale_out_exit_walk(df, entry_index, entry_price, plan, max_holding_days)
         if pending_invalidated(plan, float(close[j])):
             return _not_triggered()
         j += 1
