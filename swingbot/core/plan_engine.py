@@ -631,12 +631,16 @@ def _scale_out_exit_walk(
     runner_stop = entry_price
     runner_exit = runner_reason = None
     exit_index = None
+    tp2 = plan.tp2
 
     for j in range(tp1_index + 1, end + 1):
         hi, lo = float(high[j]), float(low[j])
         if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
             runner_exit, exit_index = runner_stop, j
             runner_reason = "runner_be"
+            break
+        if tp2 is not None and ((hi >= tp2) if is_bull else (lo <= tp2)):
+            runner_exit, exit_index, runner_reason = tp2, j, "runner_tp2"
             break
 
     if runner_exit is None:   # Task 27 pins the runner-timeout case with tests

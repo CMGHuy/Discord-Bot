@@ -53,3 +53,48 @@ def test_pre_tp1_loss_is_identical_to_single_leg():
     assert result.outcome == "loss" and result.runner_outcome is None
     assert result.legs == [{"fraction": 1.0, "exit_price": 95.0,
                             "r": pytest.approx(-1.0), "reason": "stop"}]
+
+
+def test_runner_rides_to_tp2():
+    # entry 100, stop 95, tp1 110 (rr=2), tp2 = 118 -> leg2 r = 18/5 = 3.6
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),     # 1: TP1 banked
+        (110.0, 115.0, 109.0, 114.0),    # 2: climbing, runner alive
+        (114.0, 119.0, 113.0, 117.0),    # 3: High 119 >= tp2 118 -- runner_tp2
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=118.0)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win" and result.runner_outcome == "runner_tp2"
+    assert result.exit_index == 3
+    assert result.legs[1]["exit_price"] == 118.0
+    assert result.legs[1]["r"] == pytest.approx(3.6)
+    assert result.r_total == pytest.approx(0.5 * 2.0 + 0.5 * 3.6)
+
+
+def test_tp2_none_means_runner_ignores_it():
+    # Same tape, tp2=None: bar 3's spike to 119 must NOT close the runner.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),
+        (110.0, 115.0, 109.0, 114.0),
+        (114.0, 119.0, 113.0, 117.0),
+        (117.0, 117.5, 99.0, 100.0),     # 4: collapse to runner stop
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.runner_outcome != "runner_tp2"
+    assert result.exit_index == 4
+
+
+def test_same_bar_runner_stop_and_tp2_is_conservative_stop_first():
+    # Runner bar spans BOTH the runner stop (100, BE) and tp2: stop wins.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),     # 1: TP1 banked
+        (110.0, 119.0, 99.0, 105.0),     # 2: High >= tp2 118 AND Low <= BE 100
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=118.0)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.runner_outcome == "runner_be"
+    assert result.legs[1]["r"] == pytest.approx(0.0)
