@@ -1,76 +1,21 @@
-import numpy as np
 import pytest
-
-from tests.conftest import make_trend_df
-
-
-def _fake_result(strategy, horizon="4w", trend="bullish", close=100.0):
-    from swingbot.core.strategy_types import HORIZONS, SignalResult
-    return SignalResult(
-        ticker="TEST", strategy=strategy, horizon_key=horizon,
-        horizon_label=HORIZONS[horizon]["label"], trend=trend,
-        triggered=True, close=close, details={},
-    )
+from swingbot.core.strategy_types import SignalResult
+from swingbot.core.trade_plan import compute_trade_plan
+from swingbot.core.plan_engine import build_strategy_plan
+from tests.helpers import make_ohlcv
 
 
-def test_compute_trade_plan_is_deprecated():
-    from swingbot.core.trade_plan import compute_trade_plan
-    df = make_trend_df(300, +0.1)
+def _result(df, strategy="MACD"):
+    return SignalResult(ticker="AAPL", strategy=strategy, horizon_key="4w",
+                        horizon_label="4-week swing", trend="bullish",
+                        triggered=True, close=float(df["Close"].iloc[-1]))
+
+
+def test_shim_warns_and_matches_plan_engine():
+    df = make_ohlcv([100 + i * 0.5 for i in range(80)])
     with pytest.warns(DeprecationWarning):
-        compute_trade_plan(_fake_result("VWAP", close=float(df["Close"].iloc[-1])), df)
-
-
-def test_atr_sized_plan_uses_strategy_rr_override():
-    from swingbot.core.trade_plan import compute_trade_plan
-    from swingbot.core.strategy_types import STRATEGY_RR_OVERRIDE
-
-    df = make_trend_df(300, +0.1)
-    result = _fake_result("EMA Crossover", close=float(df["Close"].iloc[-1]))
-    plan = compute_trade_plan(result, df)
-    reward = abs(plan.take_profit - plan.entry)
-    risk = abs(plan.entry - plan.stop_loss)
-    assert reward / risk == pytest.approx(STRATEGY_RR_OVERRIDE["EMA Crossover"], rel=0.01)
-
-
-def test_plan_carries_management_note():
-    from swingbot.core.trade_plan import compute_trade_plan, MANAGEMENT_NOTE
-    df = make_trend_df(300, +0.1)
-    plan = compute_trade_plan(_fake_result("VWAP", close=float(df["Close"].iloc[-1])), df)
-    assert plan.management_note == MANAGEMENT_NOTE
-    assert "stop to entry" in MANAGEMENT_NOTE
-
-
-def test_fibonacci_plan_uses_strategy_rr_override():
-    from swingbot.core.trade_plan import compute_trade_plan
-    from swingbot.core.strategy_types import HORIZONS, SignalResult, STRATEGY_RR_OVERRIDE
-
-    df = make_trend_df(300, +0.1)
-    close = float(df["Close"].iloc[-1])
-    result = SignalResult(
-        ticker="TEST", strategy="Fibonacci", horizon_key="4w",
-        horizon_label=HORIZONS["4w"]["label"], trend="bullish",
-        triggered=True, close=close,
-        details={"Swing high": close * 1.3, "Swing low": close * 0.7},
-    )
-    plan = compute_trade_plan(result, df)
-    reward = abs(plan.take_profit - plan.entry)
-    risk = abs(plan.entry - plan.stop_loss)
-    assert reward / risk == pytest.approx(STRATEGY_RR_OVERRIDE["Fibonacci"], rel=0.01)
-
-
-def test_support_resistance_plan_uses_strategy_rr_override():
-    from swingbot.core.trade_plan import compute_trade_plan
-    from swingbot.core.strategy_types import HORIZONS, SignalResult, STRATEGY_RR_OVERRIDE
-
-    df = make_trend_df(300, +0.1)
-    close = float(df["Close"].iloc[-1])
-    result = SignalResult(
-        ticker="TEST", strategy="Support/Resistance", horizon_key="4w",
-        horizon_label=HORIZONS["4w"]["label"], trend="bullish",
-        triggered=True, close=close,
-        details={"Resistance": close * 0.99, "Support": close * 0.9, "Volume ratio": 2.0},
-    )
-    plan = compute_trade_plan(result, df)
-    reward = abs(plan.take_profit - plan.entry)
-    risk = abs(plan.entry - plan.stop_loss)
-    assert reward / risk == pytest.approx(STRATEGY_RR_OVERRIDE["Support/Resistance"], rel=0.01)
+        legacy = compute_trade_plan(_result(df), df)
+    v2 = build_strategy_plan(df, len(df) - 1, ticker="AAPL", strategy="MACD",
+                             horizon_key="4w", direction="bullish")
+    assert legacy.stop_loss == pytest.approx(v2.stop_loss)
+    assert legacy.take_profit == pytest.approx(v2.tp1)
