@@ -75,3 +75,37 @@ def test_vectorized_entries_delegates_to_entry_filters(market_df):
         b1, s1 = _vectorized_entries(market_df, strat, "4w")
         b2, s2 = entries_for(strat, market_df, "4w")
         assert b1.equals(b2) and s1.equals(s2), strat
+
+
+# tests/test_backtest_engine.py (append)
+import pytest
+from pathlib import Path
+import pandas as pd
+from swingbot.core.backtest import run_backtest
+
+CACHE = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
+
+# NOTE: MACD/4w produces zero raw entry signals on every cached ticker checked
+# on this branch (AAPL, MSFT, TSLA, NVDA, AMD, AMZN) -- a pre-existing
+# entry-filter gating condition unrelated to this task -- so these golden
+# fixtures use TSLA/Elliott Wave/4w, which produces a real win/loss/scratch mix.
+@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
+def test_v2_single_leg_reproduces_v1_exactly():
+    df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
+    v1 = run_backtest("TSLA", df, "Elliott Wave", "4w")
+    v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=False)
+    assert (v1.wins, v1.losses, v1.scratches, v1.timeouts) == \
+           (v2.wins, v2.losses, v2.scratches, v2.timeouts)
+    assert v2.expectancy_r == pytest.approx(v1.expectancy_r, abs=1e-9)
+
+@pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
+def test_v2_scale_out_keeps_classification_and_expectancy():
+    df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
+    v1 = run_backtest("TSLA", df, "Elliott Wave", "4w")
+    v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
+    # TP1 unchanged => identical win/loss/scratch classification
+    assert (v1.wins, v1.losses, v1.scratches) == (v2.wins, v2.losses, v2.scratches)
+    # runner sub-outcomes partition the wins
+    assert v2.runner_tp2 + v2.runner_trail + v2.runner_be + v2.runner_timeout == v2.wins
+    # runner floor is BE => expectancy can only drop by rounding noise
+    assert v2.expectancy_r >= v1.expectancy_r - 0.02

@@ -102,6 +102,11 @@ class BacktestSummary:
     max_drawdown_pct: float | None
     avg_holding_days: float | None
     trades: list = field(default_factory=list)
+    runner_tp2: int = 0
+    runner_trail: int = 0
+    runner_be: int = 0
+    runner_timeout: int = 0
+    avg_win_r: float | None = None
 
 
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
@@ -150,6 +155,9 @@ def run_backtest(
     strategy: str,
     horizon_key: str,
     one_at_a_time: bool = True,
+    exit_model: str = "v1",
+    scale_out: bool = False,
+    tp2_mode: str = "none",
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -157,6 +165,12 @@ def run_backtest(
     one_at_a_time: if True (default), skip new entry signals while a prior trade
     from the same (strategy, horizon) pair is still open. This simulates realistic
     trading where you don't stack multiple overlapping positions on the same setup.
+
+    exit_model: "v1" (default) walks the inline stop/target/BE-trigger loop
+    below exactly as it always has. "v2" routes every trade through
+    `plan_engine.simulate_exit` instead; the v1 loop is left completely
+    untouched and remains the default until it is deleted at Task 91.
+    `scale_out` and `tp2_mode` are only meaningful when `exit_model="v2"`.
     """
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
@@ -192,6 +206,10 @@ def run_backtest(
 
     trades: list[BacktestTrade] = []
     total_signals = 0
+    runner_counts: dict[str, int] = {}
+    _lm_cache_key = None
+    _lm_supports: list = []
+    _lm_resistances: list = []
 
     entry_idx = np.where((bullish_entries.values | bearish_entries.values))[0]
     _open_until: int = -1  # bar index after which the current trade has exited
@@ -211,6 +229,56 @@ def run_backtest(
         if risk_per_share <= 0:
             continue
 
+        if exit_model == "v2":
+            from .plan_engine import (
+                TRAIL_ATR_MULT, PlanStatus, TradePlanV2, select_tp2, simulate_exit,
+            )
+
+            tp2 = None
+            if tp2_mode == "levels":
+                cache_key = i // 5
+                if cache_key != _lm_cache_key:
+                    from .levels import build_level_map
+                    _lm_supports, _lm_resistances = build_level_map(
+                        df.iloc[:i + 1], HORIZONS[horizon_key], entry)
+                    _lm_cache_key = cache_key
+                tp2 = select_tp2(
+                    [lv.price for lv in _lm_resistances],
+                    [lv.price for lv in _lm_supports],
+                    direction, entry, take_profit)
+
+            plan = TradePlanV2(
+                plan_id="bt", ticker=ticker, created_at=str(df.index[i].date()),
+                source="strategy", strategy=strategy, horizon_key=horizon_key,
+                direction=direction, entry_type="market", trigger_price=entry,
+                entry_price=entry, expiry_bars=5, stop_loss=stop_loss,
+                tp1=take_profit, tp1_fraction=0.5, tp2=tp2,
+                breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+                trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+                tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+            )
+            res = simulate_exit(df, i, plan, scale_out=scale_out)
+            exit_i = res.exit_index
+            exit_price = res.legs[-1]["exit_price"]
+            outcome, r_multiple = res.outcome, res.r_total
+            if res.runner_outcome:
+                runner_counts[res.runner_outcome] = runner_counts.get(res.runner_outcome, 0) + 1
+
+            _open_until = exit_i
+            sign = 1 if direction == "bullish" else -1
+            return_pct = (exit_price - entry) / entry * sign * 100
+            holding_days = exit_i - i
+
+            trades.append(BacktestTrade(
+                entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
+                direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
+                take_profit=round(take_profit, 4), outcome=outcome,
+                exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
+                r_multiple=round(r_multiple, 3), holding_days=holding_days,
+            ))
+            continue
+
+        # ---- v1 walk-forward loop (unchanged below) ----
         close_vals = df["Close"].values
         outcome, exit_price, exit_i = "timeout", None, None
         max_holding_days = HORIZONS[horizon_key]["max_holding_days"]
@@ -298,6 +366,11 @@ def run_backtest(
         win_rate=win_rate, avg_return_pct=avg_return_pct, avg_r_multiple=avg_r_multiple,
         expectancy_r=expectancy_r, max_drawdown_pct=max_drawdown_pct,
         avg_holding_days=avg_holding_days, trades=trades,
+        runner_tp2=runner_counts.get("runner_tp2", 0),
+        runner_trail=runner_counts.get("runner_trail", 0),
+        runner_be=runner_counts.get("runner_be", 0),
+        runner_timeout=runner_counts.get("runner_timeout", 0),
+        avg_win_r=float(np.mean([t.r_multiple for t in wins])) if wins else None,
     )
 
 
