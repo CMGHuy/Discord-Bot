@@ -200,6 +200,36 @@ def test_win_never_goes_negative_property():
     assert not violations, violations
 
 
+def test_runner_timeout_floors_at_protective_stop_when_tp1_on_last_bar():
+    # Degenerate edge case (Task 27 review fix): TP1 is touched on the LAST
+    # bar of the holding window (tp1_index == end), so the runner-phase loop
+    # `for j in range(tp1_index + 1, end + 1)` is empty and runner_stop is
+    # never ratcheted past its initial BE value. Before the fix, the
+    # runner-timeout fallthrough used close[end] unclamped -- and close[end]
+    # is the TP1 bar's own close, never checked against any stop. Here it
+    # closes BELOW entry (96 < 100), which would have made leg 2's r
+    # negative and violated the "win never turns negative" invariant
+    # (r_total would be 0.6, below the 0.5*rr=1.0 floor).
+    # entry=100, stop=95, tp1=110 (rr=2), 2w horizon (max_holding_days=14).
+    closes = ([100.0]                        # 0: entry bar
+              + [100.0] * 13                 # 1-13: flat, no stop/target touch
+              + [(100.0, 110.0, 96.0, 96.0)]) # 14: last bar -- touches tp1,
+                                              #     low stays above stop, close < entry
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None,
+                 horizon_key="2w")
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    rr = 2.0
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_timeout"
+    assert result.exit_index == 14
+    # Clamped to runner_stop (BE = entry_price = 100), not the raw close (96).
+    assert result.legs[1]["exit_price"] == pytest.approx(100.0)
+    assert result.legs[1]["r"] == pytest.approx(0.0)
+    assert result.r_total == pytest.approx(0.5 * rr)
+    assert result.r_total >= 0.5 * rr - 1e-9   # the invariant the bug violated
+
+
 def test_legs_fractions_always_sum_to_one():
     # every terminal ExitResult with legs: fractions sum to 1.0 and
     # r_total == sum(fraction * r) exactly.

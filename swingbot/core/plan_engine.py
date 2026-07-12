@@ -665,7 +665,14 @@ def _scale_out_exit_walk(
         runner_stop = max(runner_stop, trail) if is_bull else min(runner_stop, trail)
 
     if runner_exit is None:   # Task 27 pins the runner-timeout case with tests
-        runner_exit, exit_index, runner_reason = float(close[end]), end, "runner_timeout"
+        # Degenerate case: tp1_index == end means the runner loop above never
+        # ran (empty range), so close[end] was never checked against the
+        # runner's protective stop. Clamp to runner_stop -- a no-op in every
+        # other case (the loop's own stop-check would already have fired and
+        # exited via break otherwise), but it floors this edge case at BE.
+        exit_px = float(close[end])
+        runner_exit = max(exit_px, runner_stop) if is_bull else min(exit_px, runner_stop)
+        exit_index, runner_reason = end, "runner_timeout"
 
     r2 = round((runner_exit - entry_price) * sign / risk, 3)
     leg2 = {"fraction": frac2, "exit_price": runner_exit, "r": r2,
