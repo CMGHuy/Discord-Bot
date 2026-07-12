@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from fetch_backtest_data import load_cached, load_watchlist
-from swingbot.core.backtest import ALL_STRATEGIES, _trade_plan_at, _vectorized_entries, run_backtest
+from swingbot.core.backtest import ALL_STRATEGIES, _trade_plan_at, run_backtest
 from swingbot.core.indicators import atr, elliott_wave3_entries
 from swingbot.core.plan_engine import PlanStatus, TradePlanV2, simulate_exit
 from swingbot.core.strategy_types import HORIZONS
