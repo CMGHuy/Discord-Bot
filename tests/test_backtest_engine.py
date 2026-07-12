@@ -6,13 +6,13 @@ from tests.conftest import make_ohlcv
 
 
 def _run_with_forced_entry(monkeypatch, df, entry_bar, direction="bullish",
-                           strategy="EMA Crossover", horizon="2w"):
+                           strategy="EMA Crossover", horizon="2w", **kwargs):
     import swingbot.core.backtest as bt
     bull = pd.Series(False, index=df.index)
     bear = pd.Series(False, index=df.index)
     (bull if direction == "bullish" else bear).iloc[entry_bar] = True
     monkeypatch.setattr(bt, "_vectorized_entries", lambda *a, **k: (bull, bear))
-    return bt.run_backtest("TEST", df, strategy, horizon)
+    return bt.run_backtest("TEST", df, strategy, horizon, **kwargs)
 
 
 def test_scratch_when_trigger_reached_then_returns_to_entry(monkeypatch):
@@ -64,6 +64,36 @@ def test_timeout_is_marked_to_market_and_in_expectancy(monkeypatch):
     assert t.r_multiple < 0              # drifted down -> negative
     assert s.expectancy_r is not None and s.expectancy_r < 0
     assert s.win_rate is None
+
+
+def test_v2_stop_entry_that_never_triggers_is_silently_dropped(monkeypatch):
+    """Task 30 prereq regression: backtest.py's v2 branch must call
+    plan_engine.entry_type_for(strategy, "strategy") instead of hardcoding
+    entry_type="market" (Task 30's TRAIN grid monkeypatches
+    STRATEGY_ENTRY_TYPE for breakout-class strategies and expects this to
+    actually route through stop_entry fill logic). Once entry_type can be
+    "stop_entry", simulate_exit can return outcome="not_triggered"
+    (exit_index=None, legs=[]) for a signal whose trigger never touches
+    within the expiry window -- backtest.py must not crash on that (no
+    exit_index to subtract, no legs[-1] to index) and must not count it as
+    a trade; it simply never happened.
+
+    Flat at 100 through the signal bar (entry=100, 2w ATR-stop ~98 via the
+    same flat/spread-1% setup as the sibling tests above); then bars
+    entry_bar+1..+5 (the stop_entry's expiry_bars=5 window, hardcoded in
+    backtest.py's v2 branch) drop to 99 -- high=99.495 stays below the
+    bullish trigger_price of 100 (never triggers) and close=99 stays above
+    the 98 stop (never invalidates either) -- so the plan expires pending,
+    genuinely never entering a trade.
+    """
+    import swingbot.core.plan_engine as plan_engine
+    closes = np.full(60, 100.0)
+    closes[41:46] = 99.0
+    df = make_ohlcv(closes, spread_pct=1.0)
+    monkeypatch.setitem(plan_engine.STRATEGY_ENTRY_TYPE, "EMA Crossover", "stop_entry")
+    s = _run_with_forced_entry(monkeypatch, df, entry_bar=40, exit_model="v2", scale_out=False)
+    assert s.trades == []
+    assert s.wins == s.losses == s.scratches == s.timeouts == 0
 
 
 def test_vectorized_entries_delegates_to_entry_filters(market_df):

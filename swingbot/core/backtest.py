@@ -213,7 +213,8 @@ def run_backtest(
     _lm_resistances: list = []
     if exit_model == "v2":
         from .plan_engine import (
-            TRAIL_ATR_MULT, PlanStatus, TradePlanV2, select_tp2, simulate_exit,
+            TRAIL_ATR_MULT, PlanStatus, TradePlanV2, entry_type_for, select_tp2,
+            simulate_exit,
         )
 
     entry_idx = np.where((bullish_entries.values | bearish_entries.values))[0]
@@ -248,17 +249,26 @@ def run_backtest(
                     [lv.price for lv in _lm_supports],
                     direction, entry, take_profit)
 
+            entry_type = entry_type_for(strategy, "strategy")
             plan = TradePlanV2(
                 plan_id="bt", ticker=ticker, created_at=str(df.index[i].date()),
                 source="strategy", strategy=strategy, horizon_key=horizon_key,
-                direction=direction, entry_type="market", trigger_price=entry,
-                entry_price=entry, expiry_bars=5, stop_loss=stop_loss,
+                direction=direction, entry_type=entry_type, trigger_price=entry,
+                entry_price=entry if entry_type == "market" else None,
+                expiry_bars=5, stop_loss=stop_loss,
                 tp1=take_profit, tp1_fraction=0.5, tp2=tp2,
                 breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
                 trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
                 tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
             )
             res = simulate_exit(df, i, plan, scale_out=scale_out)
+            # A stop_entry plan that never triggers before expiry ("not_triggered")
+            # or whose realized entry has zero/negative risk ("no_trade") produced
+            # no real trade -- exit_index is None and legs is [] in both cases, so
+            # there is nothing to append or count. Same treatment as the
+            # risk_per_share <= 0 guard above.
+            if res.outcome in ("not_triggered", "no_trade"):
+                continue
             exit_i = res.exit_index
             exit_price = res.legs[-1]["exit_price"]
             outcome, r_multiple = res.outcome, res.r_total
