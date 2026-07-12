@@ -68,9 +68,6 @@ from .indicators import atr, elliott_wave3_entries
 from .strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE
 from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 
-STRUCTURE_BUFFER_ATR = 0.25  # extra cushion beyond swing high/low, in units of ATR -- same as trade_plan.py
-SR_VOLUME_STRENGTH_CEILING = 3.0  # same as trade_plan.py
-
 
 @dataclass
 class BacktestTrade:
