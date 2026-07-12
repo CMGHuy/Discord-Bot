@@ -186,3 +186,78 @@ def test_bearish_market_straight_rally_to_stop_is_a_loss():
     assert result.legs[0]["exit_price"] == 105.0
     assert result.legs[0]["fraction"] == pytest.approx(1.0)
     assert result.legs[0]["r"] == pytest.approx(-1.0)
+
+
+# ---------------------------------------------------------------------------
+# Task 22: scratch, timeout, same-bar ordering
+# ---------------------------------------------------------------------------
+
+def test_bullish_scratch_after_breakeven_move():
+    # entry 100, stop 95, tp1 110 -> BE trigger = 100 + 0.5*10 = 105.
+    # Bar 1 reaches 106 (arms the BE move; original stop still governs that
+    # bar), bar 2 falls back through entry -> stop at 100.0, scratch, 0R.
+    df = make_ohlcv([
+        100.0,                          # 0: entry bar
+        (100.0, 106.0, 99.5, 105.0),    # 1: High 106 >= 105 -- BE armed
+        (104.0, 104.5, 99.0, 100.5),    # 2: Low 99 <= moved stop 100 -- scratch
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "scratch"
+    assert result.exit_index == 2
+    assert result.r_total == pytest.approx(0.0, abs=1e-9)
+    assert result.legs[0]["exit_price"] == 100.0
+    assert result.legs[0]["reason"] == "breakeven_stop"
+
+
+def test_original_stop_governs_the_bar_that_arms_the_be_move():
+    # The SAME bar reaches the BE trigger AND falls back through entry: the
+    # moved stop only protects SUBSEQUENT bars, so this is NOT a scratch --
+    # the walk continues (no touch of original stop 95 / tp1 110 that bar).
+    df = make_ohlcv([
+        100.0,
+        (100.0, 106.0, 99.0, 100.5),    # 1: arms BE AND trades below entry -- no exit
+        (100.0, 100.5, 99.5, 100.0),    # 2: Low 99.5 <= moved stop 100 -- scratch here
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "scratch" and result.exit_index == 2
+
+
+def test_timeout_marks_to_market_at_last_scanned_close():
+    # 2w horizon: max_holding_days=14. Sideways drift, never touching
+    # stop/target/BE-trigger -> timeout at bar entry+14, r = drift/risk.
+    closes = [100.0] + [(99.8, 100.4, 99.4, 99.8)] * 20
+    df = make_ohlcv(closes)
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0,
+                                      horizon_key="2w"))
+    assert result.outcome == "timeout"
+    assert result.exit_index == 14                       # entry_index + max_holding_days
+    assert result.r_total == pytest.approx((99.8 - 100.0) / 5.0)
+    assert result.legs[0]["reason"] == "timeout"
+
+
+def test_same_bar_stop_and_target_is_conservative_loss():
+    # One bar spans BOTH stop and tp1 pre-BE: stop is checked first -> loss.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 94.0, 100.0),    # 1: High >= 110 AND Low <= 95
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bullish", stop_loss=95.0, tp1=110.0))
+    assert result.outcome == "loss"
+    assert result.r_total == pytest.approx(-1.0)
+
+
+def test_bearish_scratch_mirror():
+    # entry 100, stop 105, tp1 90 -> BE trigger = 100 - 0.5*10 = 95.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 100.5, 94.0, 95.5),     # 1: Low 94 <= 95 -- BE armed
+        (96.0, 100.5, 95.5, 100.2),     # 2: High 100.5 >= moved stop 100 -- scratch
+    ])
+    result = simulate_exit(df, signal_index=0,
+                           plan=_plan(direction="bearish", stop_loss=105.0, tp1=90.0))
+    assert result.outcome == "scratch"
+    assert result.r_total == pytest.approx(0.0, abs=1e-9)
