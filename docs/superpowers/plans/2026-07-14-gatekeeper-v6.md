@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (Tasks G1–G216).
 
-**Goal:** Push per-strategy win rate to the highest level the data honestly supports — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated gate (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual), and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Shadow mode first; nothing blocks a live alert until fold evidence + a 2-week live shadow say it should.
+**Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
+
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
 **Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
@@ -16,6 +18,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
 - **WR is reported next to expectancy and N, always.** Any surface this plan builds that shows a win rate without its sample size and expectancy is a bug (same rule as cockpit-v3).
 - **The 2024–2025 validation window stays burned.** All tuning here runs on TRAIN folds (2018–2023, anchored, per edge-engine E39 rules). The single pre-registered validation shot belongs to edge-engine E92; this plan feeds it, never spends it.
+- **The path to 95% runs through the operator, not through suppression.** In inform mode the bot's raw WR doesn't change — what changes is that every alert carries its tier and its red flags, so the operator can choose to act only on A+/A setups. The tier ladder measures what following the checklist *would have* earned (`!tierwr`, shadow reports); the human applies it. Enforcement is available later if the operator wants the bot to apply it mechanically.
 
 ## Progress
 
@@ -35,7 +38,9 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 
 - **Optimization target for every tuned threshold:** maximize WR **subject to** pooled fold expectancy_r ≥ baseline − 0.02R and N ≥ 30 per fold. WR alone never picks a parameter.
 - **Pre-registered fold gate (identical to edge-engine):** anchored expanding folds, train 2018→fold-start, test years 2021/2022/2023; a check/threshold is promoted only if it improves the target in ≥ 2 of 3 folds and no fold degrades expectancy by > 0.05R. Failures are documented in `docs/superpowers/results/` and dropped — no second grid on the same hypothesis.
-- **Every new gate/filter/flag is a config Field, default off.** Shadow mode (log, don't block) precedes live mode for every blocking behavior. Nothing is suppressed silently: blocked/downgraded candidates are always visible somewhere (`!blocked`, admin log, retrospective line).
+- **Inform-first, always.** The checklist never prevents a plan from being created or alerted unless the operator has explicitly opted into `enforce` mode. Negative signals are rendered on the alert; the human decides. Any task that drops/holds/blocks anything applies **only** in enforce mode (or behind its own dedicated opt-in flag) — every such task carries an inform-mode regression test proving the alert still ships annotated.
+- **Every strict constraint is tunable from the settings page.** Each check's thresholds are config Fields (registry-driven, G79) with min/max/step and a help text naming the relax direction; `GATE_STRICTNESS` presets (strict/balanced/relaxed) reseed them in one click. Defaults ship at **balanced**, chosen so the G97 baseline census shows a healthy tier mix — never a wall of C.
+- **Every new flag is a config Field, default off** (master switches; per-check toggles default on but do nothing user-visible until `MACRO_ENABLED`/`GATE_ENABLED`). Nothing is suppressed silently in any mode: annotated/held/blocked candidates are always visible somewhere (`!blocked`, admin log, retrospective line).
 - **No network in the test suite.** All providers are tested via monkeypatched `requests`/stub clients and fixture payloads; real calls live only in `scripts/*_smoke*.py` and backfill scripts.
 - **Provider failure never degrades scanning.** Every fetch has a timeout (default 5s), on-disk TTL cache fallback, and a "stale/unknown" degradation path; a scan with zero working data providers must still complete (G43 is the proof).
 - **API keys are config Fields (sensitive), never logged, never committed.** Free-tier quotas are budgeted and metered (G200).
@@ -163,7 +168,7 @@ def test_wilson_needs_n_59_for_proven_90():
 - Test: `tests/test_gate_config.py`
 
 **Interfaces:**
-- Produces Fields (section `"Gatekeeper"`, all default off/neutral): `GATE_ENABLED` (checkbox, false — master switch, shadow-only until G106), `GATE_MODE` (select `shadow`|`enforce`, default `shadow`), `GATE_MIN_TIER` (select `A+`|`A`|`B`|`C`, default `C` = block nothing), `MACRO_ENABLED` (checkbox, false), `FRED_API_KEY` (password, sensitive), `MACRO_SNAPSHOT_TTL_MIN` (int, 30, min 5), `GATE_BLACKOUT_ENABLED` (checkbox, false). (`FINNHUB_API_KEY` already exists from llm-advisor L10; if that plan is unmerged, add it here with the same shape.)
+- Produces Fields (section `"Gatekeeper"`, all default off/neutral): `GATE_ENABLED` (checkbox, false — master switch), `GATE_MODE` (select `shadow`|`inform`|`enforce`, default `inform` — inform renders the checklist on every alert and never blocks; enforce is opt-in and guarded by G170), `GATE_MIN_TIER` (select `A+`|`A`|`B`|`C`, default `C`; **consulted only in enforce mode**), `GATE_STRICTNESS` (select `strict`|`balanced`|`relaxed`, default `balanced` — preset seeding for the G79 threshold fields), `MACRO_ENABLED` (checkbox, false), `FRED_API_KEY` (password, sensitive), `MACRO_SNAPSHOT_TTL_MIN` (int, 30, min 5), `GATE_BLACKOUT_ENABLED` (checkbox, false — annotate-only; holding entries additionally requires `GATE_BLACKOUT_ENFORCE`, G120). (`FINNHUB_API_KEY` already exists from llm-advisor L10; if that plan is unmerged, add it here with the same shape.)
 
 - [ ] **Step 1: Failing test** — each key present in `{f.key for f in config.FIELDS}`, section label correct, defaults as specified, key fields marked sensitive.
 - [ ] **Step 2–4: Implement, PASS, commit** — `feat: Gatekeeper config section (default off)`
@@ -214,7 +219,7 @@ class GateResult:
 - Test: `tests/test_gate_registry.py`
 
 **Interfaces:**
-- Produces: `CHECKS: dict[str, CheckSpec]` — `CheckSpec(check_id, section, weight, hard_block: bool, applies_to: tuple[str,...] | None, backtestable: bool, config_flag: str)`; one entry per check built in Phases G1–G2 (registered incrementally — each later task adds its row and this module's test asserts registry consistency: unique ids, sections valid, weights ≥ 0, every `config_flag` exists in `config.FIELDS`). `applies_to=None` = all strategies. `enabled_checks(strategy) -> list[CheckSpec]`.
+- Produces: `CHECKS: dict[str, CheckSpec]` — `CheckSpec(check_id, section, weight, hard_block: bool, applies_to: tuple[str,...] | None, backtestable: bool, config_flag: str, thresholds: dict[str, ThresholdSpec])` where `ThresholdSpec(name, default, min, max, step, relax_direction: str, presets: dict[str, float])` (`presets` carries the strict/balanced/relaxed values; `relax_direction` is the help-text sentence, e.g. "raise to allow later entries"). Check functions read thresholds via `spec.threshold(name)` (config-Field-backed, G79) — never module constants; one entry per check built in Phases G1–G2 (registered incrementally — each later task adds its row and this module's test asserts registry consistency: unique ids, sections valid, weights ≥ 0, every `config_flag` exists in `config.FIELDS`). `applies_to=None` = all strategies. `enabled_checks(strategy) -> list[CheckSpec]`.
 - Hard-block policy: `hard_block=True` checks (news whipsaw inside blackout, kill-switch conflict, unconfirmed signal bar) force tier C on `fail` even at score 100.
 
 - [ ] **Step 1: Failing tests** — registry invariants; `enabled_checks` filters by strategy + config flag off.
@@ -613,7 +618,7 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 
 # Phase G2 — The checklist engine: every box becomes a check (G45–G88)
 
-One module per checklist section; one task per check. Every check task follows the same contract: pure function `(df_daily, plan, macro_snap, **ctx) -> CheckResult`, registered in `registry.CHECKS` with its weight/policy row, tested against the G7 golden scenarios, and given a config Field `GATE_CHECK_<ID>` (checkbox, default on — the master `GATE_ENABLED`/`GATE_MODE` still governs whether anything blocks). Weights in parentheses are initial values; G78 calibrates, G96+ validates.
+One module per checklist section; one task per check. Every check task follows the same contract: pure function `(df_daily, plan, macro_snap, **ctx) -> CheckResult`, registered in `registry.CHECKS` with its weight/policy row, tested against the G7 golden scenarios, and given a config Field `GATE_CHECK_<ID>` (checkbox, default on — the master `GATE_ENABLED`/`GATE_MODE` still governs visibility, and nothing blocks outside opt-in enforce). **Every numeric cutoff named in these tasks (volume multiples, ATR bands, percentiles, wick ratios, RSI/ADX bounds, distances, day counts) is a `ThresholdSpec`** (G5) with strict/balanced/relaxed preset values — the numbers written below are the *balanced* defaults, tunable from the settings page (G79/G180), never hardcoded. Weights in parentheses are initial values; G78 calibrates, G96+ validates. Statuses are information: `fail` renders as ⛔ on the alert; it stops nothing by itself.
 
 ## Section 1 — Higher-timeframe context
 
@@ -873,8 +878,8 @@ Red-flag checks live in `swingbot/core/gate/redflags.py`, ids prefixed `rf_`, se
 
 **Files:** Modify `swingbot/core/gate/registry.py`, `score.py`; test `tests/test_gate_run.py`
 
-**Interfaces:** `decide(result: GateResult, mode: str, min_tier: str) -> str` — returns `"pass"` | `"downgrade"` | `"block"`: shadow mode always returns `"pass"` (with the would-be decision recorded in the result via `result.to_dict()["shadow_decision"]`); enforce mode blocks below `GATE_MIN_TIER` or on any hard block, downgrades (WEAK-style de-emphasis, cockpit rule 6) one tier above the block line.
-- [ ] **Step 1–4: TDD (shadow never blocks; enforce matrix over tiers × hard blocks), commit** — `feat: gate decision policy (shadow/enforce)`
+**Interfaces:** `decide(result: GateResult, mode: str, min_tier: str) -> str` — returns `"pass"` | `"downgrade"` | `"block"`: **shadow and inform modes always return `"pass"`** (the would-be enforce decision is recorded on the result as `advisory_decision` — inform mode renders it as information, e.g. "⛔ enforce would block this: 2 red flags"); only enforce mode may return `"downgrade"`/`"block"` (below `GATE_MIN_TIER` or on a hard block; downgrade = WEAK-style de-emphasis, cockpit rule 6, one tier above the block line).
+- [ ] **Step 1–4: TDD (shadow AND inform never block — property test over random results; enforce matrix over tiers × hard blocks; advisory_decision always populated), commit** — `feat: gate decision policy (shadow/inform/enforce)`
 
 ### Task G77: Soft-flag sizing suggestion
 
@@ -891,12 +896,16 @@ Red-flag checks live in `swingbot/core/gate/redflags.py`, ids prefixed `rf_`, se
 - [ ] **Step 1: The test battery** — run `run_checklist` across all G7 scenarios × both directions with a neutral macro snap and assert the *ordering* invariants (not absolute scores): clean with-trend confluence setup > range-bounce setup > counter-trend setup > `breakout_and_fail`/`dead_cat`; every red-flag scenario lands tier ≤ B; the clean setup lands ≥ A. If orderings fail, adjust registry weights (weights are the free variable; detectors are not) and record final weights in a table comment.
 - [ ] **Step 2: PASS. Step 3: Commit** — `test: checklist ordering calibration over golden scenarios`
 
-### Task G79: Tier-cut config fields
+### Task G79: Tier-cut, threshold & strictness-preset config fields
 
-**Files:** Modify `swingbot/config.py`; test `tests/test_gate_config.py`
+**Files:** Modify `swingbot/config.py`, `swingbot/core/gate/registry.py`; test `tests/test_gate_config.py`
 
-**Interfaces:** Fields `GATE_TIER_APLUS_CUT` (float, 90.0), `GATE_TIER_A_CUT` (75.0), `GATE_TIER_B_CUT` (55.0) + per-check `GATE_CHECK_*` checkboxes for every registered check id (generated from the registry — one loop, asserted complete by test), all in the Gatekeeper section.
-- [ ] **Step 1–4: TDD (every registry id has a field; cuts ordered), commit** — `feat: tier cuts + per-check config`
+**Interfaces:**
+- Fields `GATE_TIER_APLUS_CUT` (float, 90.0), `GATE_TIER_A_CUT` (75.0), `GATE_TIER_B_CUT` (55.0) + per-check `GATE_CHECK_*` checkboxes for every registered check id (generated from the registry — one loop, asserted complete by test), all in the Gatekeeper section.
+- **Per-check threshold Fields**, generated from every `ThresholdSpec` in the registry (G5): key pattern `GATE_TH_{CHECK_ID}_{NAME}` (float/int, with the spec's min/max/step and the relax-direction sentence as help text). This is the "loosen it from the settings page" surface: every strict number in Phase G2 — volume multiples, ATR bands and percentile cuts, confluence minimum, chase distance, RR floor, wick ratios, bounce/gap percentages, blackout hours, RSI/ADX bounds — lives here, none are hardcoded. `spec.threshold(name)` resolves Field value → preset default.
+- `apply_strictness_preset(level: str) -> dict[str, float]` — returns (and `config` setter applies) every threshold's `presets[level]` value; **relaxed** is deliberately generous (roughly: warn where balanced fails, pass where balanced warns) so a relaxed profile always lets plans through; **strict** is the A+-hunting profile. Changing `GATE_STRICTNESS` reseeds only thresholds the operator hasn't individually overridden (override tracking = value ≠ any preset value, noted in help text).
+- [ ] **Step 1: Failing tests** — every registry check id has its enable Field; every ThresholdSpec has its Field with correct bounds; cuts ordered; preset application golden (relaxed ≥ balanced ≥ strict in the relax direction for every threshold — property test over the registry); individually-overridden threshold survives a preset switch.
+- [ ] **Step 2–4: Implement, PASS, commit** — `feat: tier cuts + registry-driven thresholds + strictness presets`
 
 ### Task G80: Per-strategy applicability matrix finalized
 
@@ -1077,13 +1086,13 @@ Where the 95% question gets answered with folds instead of hope. Everything here
 **Files:** Create `docs/superpowers/results/2026-07-gate-decision.md`
 
 - [ ] **Step 1: Write the memo from G97–G101 evidence, per strategy:** chosen min-tier + cuts (or "no cut qualifies"), fold table, the explicit sentence per strategy: *"A+ tier fold WR = X% (Wilson LB Y%, N=Z) — this {does/does not} support a 95-class label"*, aggregate WR before/after at the chosen cuts, signals kept. Where the ladder tops out below target, the memo says exactly that and what evidence would change it (more N, new checks — not looser math).
-- [ ] **Step 2: Apply the surviving cuts to config Field *defaults* (still `GATE_MODE=shadow`, `GATE_ENABLED` still false). Commit** — `docs: gate TRAIN decision memo + shadow-mode defaults`
+- [ ] **Step 2: Apply the surviving cuts to config Field *defaults* (`GATE_MODE` stays `inform` — cuts only label tiers on alerts; nothing starts blocking). Also sanity-check the balanced preset against the census: if balanced thresholds put < 30% of TRAIN signals at tier ≥ B, loosen the balanced presets (G79) and note it in the memo — defaults must never starve the alert flow. Commit** — `docs: gate TRAIN decision memo + inform-mode defaults`
 
 ### Task G103: Shadow mode live wiring
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_gate_shadow.py`
 
-**Interfaces:** with `GATE_ENABLED=true, GATE_MODE=shadow`: every scan candidate gets `run_checklist` (full live inputs — news, portfolio, macro snap), result attached to the plan + `shadow_log` line (G81); alerts completely unchanged (byte-compare test on the embed). The checklist field does NOT render in shadow (G122 adds rendering when mode/flags allow).
+**Interfaces:** with `GATE_ENABLED=true`: every scan candidate gets `run_checklist` (full live inputs — news, portfolio, macro snap), result attached to the plan + `shadow_log` line (G81) in **all modes** (the shadow log is the evidence stream regardless of mode). In `shadow` mode alerts are completely unchanged (byte-compare test on the embed); in `inform`/`enforce` the rendering tasks (G122–G124) take over. The checklist field does NOT render in shadow (G123 defines the render matrix).
 - [ ] **Step 1–4: TDD (shadow logs written; embeds byte-identical), commit** — `feat: live shadow-mode gate`
 
 ### Task G104: Shadow comparison report
@@ -1098,15 +1107,15 @@ Where the 95% question gets answered with folds instead of hope. Everything here
 
 **Files:** Modify `docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md` (checkboxes section)
 
-- [ ] **Step 1: Append the operational checklist to the targets doc:** enforce mode may be enabled only when: ≥ 14 calendar days shadow, ≥ 15 would-have-blocked decisions, blocked-cohort WR < passed-cohort WR (directionally right), no live crash/timeout attributable to the gate, G104 report attached. Sign-off = a dated line in the doc.
+- [ ] **Step 1: Append the operational checklist to the targets doc** (relevant **only if** the operator ever chooses to leave inform mode — enforce is optional forever): enforce may be enabled only when: ≥ 14 calendar days in inform/shadow with logging, ≥ 15 would-have-blocked decisions, blocked-cohort WR < passed-cohort WR (directionally right), no live crash/timeout attributable to the gate, G104 report attached. Sign-off = a dated line in the doc.
 - [ ] **Step 2: Commit** — `docs: shadow→enforce promotion gate (pre-registered)`
 
-### Task G106: Enforce-mode switch
+### Task G106: Enforce-mode switch (OPTIONAL — opt-in, never the default)
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_gate_enforce.py`
 
-**Interfaces:** `GATE_MODE=enforce`: `decide()` (G76) verdicts apply — `block` → candidate dropped from alerts, `blocked_log` line + counted in telemetry (G135); `downgrade` → alert ships WEAK-style de-emphasized (amber, caution line — reuse the cockpit WEAK rendering path) with the checklist field showing why. Blocking **never** deletes the plan record — blocked plans are stored with status `blocked` for the audit trail.
-- [ ] **Step 1–4: TDD (block drops alert but stores plan; downgrade renders de-emphasized; shadow regression untouched), commit** — `feat: enforce-mode gate`
+**Interfaces:** `GATE_MODE=enforce` (operator-chosen, guarded by the G105 evidence gate via G170): `decide()` (G76) verdicts apply — `block` → candidate dropped from alerts, `blocked_log` line + counted in telemetry (G135); `downgrade` → alert ships WEAK-style de-emphasized (amber, caution line — reuse the cockpit WEAK rendering path) with the checklist field showing why. Blocking **never** deletes the plan record — blocked plans are stored with status `blocked` for the audit trail. **Inform-mode regression test in this task:** the same failing candidate under `inform` still alerts, annotated, unblocked.
+- [ ] **Step 1–4: TDD (block drops alert but stores plan; downgrade renders de-emphasized; inform + shadow regressions untouched), commit** — `feat: optional enforce mode`
 
 ### Task G107: Validation-shot interface (deferred to edge E92)
 
@@ -1208,15 +1217,15 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** when `GATE_BLACKOUT_ENABLED` and an importance-3 event falls within the blackout window at scan time: scan still runs, but new **entries** are marked `held_for_event` (plan created, alert says "⏸ held — CPI 08:30 ET tomorrow; releases after the print") and auto-released by the monitor loop once `hours_until(event) < -GATE_BLACKOUT_HOURS_AFTER`. Shadow-mode variant only annotates.
-- [ ] **Step 1–4: TDD (hold set + release path on a clock stub; flag off unchanged), commit** — `feat: event blackout hold/release`
+**Interfaces:** when `GATE_BLACKOUT_ENABLED` and an importance-3 event falls within the blackout window at scan time: **default behavior is annotation** — the plan is created and alerted normally with a prominent warning line ("⚠️ CPI 08:30 ET tomorrow — historically whipsaw-prone; consider waiting for the print"). Only when `GATE_BLACKOUT_ENFORCE` (new checkbox Field, default false) is *also* on are new entries marked `held_for_event` (plan created, alert says "⏸ held — releases after the print") and auto-released by the monitor loop once `hours_until(event) < -GATE_BLACKOUT_HOURS_AFTER`. Stale event calendar (> 7 days unrefreshed) auto-disables holding with a WARN — annotation continues.
+- [ ] **Step 1–4: TDD (annotate-only default; hold + release only with enforce flag, on a clock stub; stale-calendar fallback; flags off unchanged), commit** — `feat: event blackout annotate-first, hold opt-in`
 
 ### Task G121: Per-candidate gate evaluation in the scan path
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread, same place llm-advisor L14 hooks), applies `decide()` per mode (G76/G103/G106 semantics unified here), attaches results (G81). Extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** (unknown-never-blocks is a hard invariant, tested here).
-- [ ] **Step 1–4: TDD (invariant test; mode matrix; exception in gate → alert ships ungated + log), commit** — `feat: gate evaluation in scan path (unknown never blocks)`
+**Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread, same place llm-advisor L14 hooks), applies `decide()` per mode (G76/G103/G106 semantics unified here — shadow/inform always pass), attaches results (G81). Two hard invariants tested here: (1) **inform mode never drops an alert** — property test over arbitrary GateResults including all-fail/hard-block ones; (2) extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** even in enforce mode.
+- [ ] **Step 1–4: TDD (both invariants; mode matrix; exception in gate → alert ships ungated + log), commit** — `feat: gate evaluation in scan path (inform never drops, unknown never blocks)`
 
 ### Task G122: Alert embed — macro context field
 
@@ -1229,8 +1238,8 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 
 **Files:** Modify `embeds.py`; test `tests/test_embeds_gate.py`
 
-**Interfaces:** `build_embed(..., gate: dict | None = None)` — renders G82's `checklist_field` + (when any flag fired) `redflag_table` as a second field. Renders only when `GATE_ENABLED` and mode is enforce OR `GATE_SHOW_IN_SHADOW` (new checkbox field, default false — lets the operator preview shadow verdicts). None → byte-identical.
-- [ ] **Step 1–4: TDD (render matrix; regression), commit** — `feat: checklist field on alerts`
+**Interfaces:** `build_embed(..., gate: dict | None = None)` — renders G82's `checklist_field` + (when any flag fired) `redflag_table` as a second field, plus the `advisory_decision` line when enforce-would-have-blocked ("⛔ 2 red flags — plan ships anyway; your call"). Render matrix: `inform` and `enforce` modes render always (**inform is the default — this field is the product**); `shadow` renders only with `GATE_SHOW_IN_SHADOW` (new checkbox field, default false). None → byte-identical.
+- [ ] **Step 1–4: TDD (render matrix incl. inform default; advisory line golden; regression), commit** — `feat: checklist field on alerts (inform-first)`
 
 ### Task G124: Full breakdown surface
 
@@ -1264,14 +1273,14 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 
 **Files:** Modify the plan-trigger path in the monitor loop; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_news_whipsaw, rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column); a new hard block at trigger → entry held per G120 semantics + alert update. The signal was checked at alert time; the world may have changed by trigger time.
-- [ ] **Step 1–4: TDD (CPI appeared between alert and trigger → hold; clean → fires), commit** — `feat: trigger-time re-check`
+**Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_news_whipsaw, rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column). A newly-fired flag at trigger time → **the alert message is updated with the new warning and a ping** ("⚠️ since this alert: CPI now within 18h") — the entry still fires normally; it is held per G120 semantics only when `GATE_BLACKOUT_ENFORCE`/enforce mode says so. The signal was checked at alert time; the world may have changed by trigger time — the operator hears about it either way.
+- [ ] **Step 1–4: TDD (inform: alert updated + entry fires; enforce+blackout-enforce: held; clean → fires silently), commit** — `feat: trigger-time re-check (inform-first)`
 
 ### Task G129: Curated digest respects tiers
 
 **Files:** Modify the digest builder (cockpit insights path); test `tests/test_gate_digest.py`
 
-**Interfaces:** the daily/weekly curated digest includes only tier ≥ A when enforce mode is on (WEAK-rule parity: B/C listed in a compact "watch, don't chase" line, never hidden).
+**Interfaces:** in inform mode the digest lists everything with its tier label leading each row (A+ first); only when enforce mode is on does the curated section restrict to tier ≥ A (WEAK-rule parity: B/C listed in a compact "watch, don't chase" line, never hidden).
 - [ ] **Step 1–4: TDD, commit** — `feat: tier-aware digest`
 
 ### Task G130: Retrospective gains gate lines
@@ -1334,29 +1343,30 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 
 **Files:** Modify `swingbot/config.py`; test `tests/test_gate_config.py`
 
-**Interfaces:** all Phase-G4 fields present + help texts: `GATE_SHOW_IN_SHADOW`, `GATE_BLACKOUT_HOURS_BEFORE/AFTER`, `GATE_EARNINGS_BLACKOUT_DAYS`, `GATE_GUTCHECK_REQUIRED`, `GATE_TIER_SIZING_ENABLED`, `GATE_APLUS_CHANNEL_ID`, `GATE_MIN_DOLLAR_VOL`, `GATE_CHASE_ATR_MAX`, `GATE_MIN_RR`, `GATE_MAX_CORR_POSITIONS`. Test asserts every config key referenced by any gate/macro module exists in FIELDS (import-and-introspect sweep).
+**Interfaces:** all Phase-G4 fields present + help texts: `GATE_SHOW_IN_SHADOW`, `GATE_BLACKOUT_ENFORCE`, `GATE_BLACKOUT_HOURS_BEFORE/AFTER`, `GATE_EARNINGS_BLACKOUT_DAYS`, `GATE_GUTCHECK_REQUIRED`, `GATE_TIER_SIZING_ENABLED`, `GATE_APLUS_CHANNEL_ID`, `GATE_MIN_DOLLAR_VOL`, `GATE_CHASE_ATR_MAX`, `GATE_MIN_RR`, `GATE_MAX_CORR_POSITIONS` (the last four are ThresholdSpec-backed per G79 — asserted to resolve through `spec.threshold`). Test asserts every config key referenced by any gate/macro module exists in FIELDS (import-and-introspect sweep).
 - [ ] **Step 1–4: TDD, commit** — `feat: gate config completeness`
 
 ### Task G139: Startup diagnostics
 
 **Files:** Modify `swingbot/bot_core.py` startup; test `tests/test_gate_telemetry.py`
 
-**Interfaces:** one log block when `GATE_ENABLED` or `MACRO_ENABLED`: mode, min tier, cuts, checks on/off count, FRED/Finnhub key presence, snapshot age, event calendar horizon, quota state — one WARNING per misconfiguration (enforce mode without fold evidence file → auto-fallback to shadow + loud warning; blackout on without event data → warning). Mirrors llm-advisor L30's pattern.
+**Interfaces:** one log block when `GATE_ENABLED` or `MACRO_ENABLED`: mode, min tier, cuts, checks on/off count, FRED/Finnhub key presence, snapshot age, event calendar horizon, quota state — one WARNING per misconfiguration (enforce mode without fold evidence file → auto-fallback to **inform** + loud warning; blackout-enforce on without event data → falls back to annotate-only + warning). Mirrors llm-advisor L30's pattern.
 - [ ] **Step 1–4: TDD (on/off/misconfigured matrix via caplog), commit** — `feat: gate startup diagnostics`
 
 ### Task G140: E2E offline — clean pass path
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — tmp data dir, fake bot, stubbed providers: scan a G7 clean-uptrend candidate with enforce mode + fresh fake snapshot → alert captured with 🌍 and 📋 fields, plan stored with gate+macro stamps, telemetry `evaluated=1 blocked=0`.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e clean-pass path`
+- [ ] **Step 1: The test** — tmp data dir, fake bot, stubbed providers: scan a G7 clean-uptrend candidate in **inform mode (the default)** + fresh fake snapshot → alert captured with 🌍 and 📋 fields (A-tier, no flags), plan stored with gate+macro stamps, telemetry `evaluated=1 blocked=0`.
+- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e clean-pass path (inform)`
 
-### Task G141: E2E offline — blocked path
+### Task G141: E2E offline — flagged-but-ships path (inform) + blocked path (opt-in enforce)
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — a `breakout_and_fail` candidate under enforce + min-tier A → no alert, plan stored status `blocked`, blocked_log line with rf_fake_breakout reason, retrospective line counts it, `!blocked` (stub) lists it.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e blocked path`
+- [ ] **Step 1: The inform test (the product's main path)** — a `breakout_and_fail` candidate in **inform mode** → alert SHIPS with tier C, the ⛔ rf_fake_breakout row in the red-flag table, and the advisory line ("plan ships anyway; your call"); plan stored normally (not blocked); telemetry counts `evaluated=1 flagged=1 blocked=0`.
+- [ ] **Step 2: The enforce test** — the same candidate after opting into enforce + min-tier A → no alert, plan stored status `blocked`, blocked_log line with rf_fake_breakout reason, retrospective line counts it, `!blocked` (stub) lists it.
+- [ ] **Step 3: PASS both. Step 4: Commit** — `test: gate e2e flagged-ships (inform) + blocked (enforce)`
 
 ### Task G142: E2E offline — shadow path
 
@@ -1383,7 +1393,7 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 
 **Files:** Create `docs/gatekeeper-runbook.md`
 
-- [ ] **Step 1: Write it:** flag reference table, shadow→enforce procedure (G105 gate), what each embed field means, how to read `!blocked`/`!tierwr`, the darkness behavior, how to hard-off everything fast (`GATE_ENABLED=false` — one switch).
+- [ ] **Step 1: Write it:** the inform-first philosophy up top (checklist = information, plans always ship by default), flag reference table, mode ladder + the optional enforce procedure (G105 gate), what each embed field means, how to relax strictness from the settings page, how to read `!blocked`/`!tierwr`, the darkness behavior, how to hard-off everything fast (`GATE_ENABLED=false` — one switch).
 - [ ] **Step 2: Commit** — `docs: gatekeeper operator runbook`
 
 ### Task G146: Phase G4 checkpoint
@@ -1636,8 +1646,8 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Modify admin app + nav; create `templates/gate.html`; test `tests/admin/test_gate_pages.py`
 
-**Interfaces:** sections: mode/master switches (with the enforce-guard message surfaced from G170's 409), tier cuts (sliders + current fold-evidence values shown beside for comparison), per-check table (enable toggle, weight read-only + "weights change via evidence, not sliders" note, hard-block badge, applies-to list), blackout window settings. All writes through `/api/gate/config`.
-- [ ] **Step 1–4: TDD (200; toggles POST; enforce guard surfaced), commit** — `feat: /gate config page`
+**Interfaces:** sections: mode/master switches (mode selector with plain-language descriptions — "Inform (default): every plan alerts, checklist annotates" / "Enforce: below-tier plans are held back" — enforce-guard message surfaced from G170's 409), **strictness panel** (the `GATE_STRICTNESS` preset selector with a one-click "Relax all" affordance + per-check threshold sliders generated from the G79 ThresholdSpec fields, each labeled with its relax direction and preset markers on the slider track, overridden thresholds visually badged), tier cuts (sliders + current fold-evidence values shown beside for comparison), per-check table (enable toggle, weight read-only + "weights change via evidence, not sliders" note, hard-block badge, applies-to list), blackout window settings (with the annotate-vs-hold distinction spelled out). All writes through `/api/gate/config`.
+- [ ] **Step 1–4: TDD (200; toggles POST; preset apply POST reseeds thresholds; enforce guard surfaced; slider fields present for every ThresholdSpec), commit** — `feat: /gate config page with strictness presets + threshold sliders`
 
 ### Task G181: Red-flag analytics page `/gate/flags`
 
@@ -1827,7 +1837,7 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Modify `docs/gatekeeper-runbook.md`
 
-- [ ] **Step 1: Write the full ladder as an operator checklist:** shadow → (G105 evidence) → enforce min-tier B → (G206 forward gate) → enforce chosen tiers → tier sizing (G116 evidence) — and the rollback for every rung (single flag each, data preserved, what to watch after). Include the "incident: gate blocked something it shouldn't" procedure (flip to shadow, `!whycheck`, file the check bug, never hand-edit a stored result).
+- [ ] **Step 1: Write the full ladder as an operator checklist:** **inform (default, most operators stop here — the checklist annotates, you decide)** → optionally: (G105 evidence) → enforce min-tier B → (G206 forward gate) → enforce chosen tiers → tier sizing (G116 evidence) — and the rollback for every rung (single flag each, data preserved, what to watch after; every rollback lands back on inform, never on off). Include: the "too strict / no A-tier plans in a week" procedure (switch `GATE_STRICTNESS` to relaxed or drag individual sliders on `/gate` — with the reminder that loosening changes labels, not the underlying stats), and the "incident: enforce blocked something it shouldn't" procedure (flip to inform, `!whycheck`, file the check bug, never hand-edit a stored result).
 - [ ] **Step 2: Commit** — `docs: promotion + rollback ladder`
 
 ### Task G208: Pre-mortem
@@ -1881,14 +1891,14 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Update the Progress block with evidence notes
 
-- [ ] **Step 1: In order, on the real bot with real keys:** (a) `scripts/macro_smoke.py` green; (b) `!macro`, `!calendar`, `!sectors`, `!sentiment`, `!yields`, `!inflation` in a test channel; (c) enable `MACRO_ENABLED` + `GATE_ENABLED` (shadow) → trigger a scan → alert with 🌍 field, shadow log lines appear; (d) `!checklist NVDA` full run; (e) `/macro`, `/gate`, `/events`, `/macro/health` admin pages with live data; (f) blackout dry-run: set a fake imminent event in a test copy of the calendar, verify hold/release; (g) confirm zero blocks occurred in shadow (telemetry) and the darkness test still passes offline.
+- [ ] **Step 1: In order, on the real bot with real keys:** (a) `scripts/macro_smoke.py` green; (b) `!macro`, `!calendar`, `!sectors`, `!sentiment`, `!yields`, `!inflation` in a test channel; (c) enable `MACRO_ENABLED` + `GATE_ENABLED` (**inform mode, the default**) → trigger a scan → alert with 🌍 + 📋 fields, red flags rendered when fired, plan created regardless of tier; (d) `!checklist NVDA` full run; (e) `/macro`, `/gate` (drag a threshold slider, apply the relaxed preset, watch the next scan's tiers shift), `/events`, `/macro/health` admin pages with live data; (f) blackout dry-run: set a fake imminent event in a test copy of the calendar, verify the annotation appears while the plan still ships (and hold/release only with `GATE_BLACKOUT_ENFORCE`); (g) confirm zero blocks occurred in inform mode (telemetry `blocked=0` — the invariant, live) and the darkness test still passes offline.
 - [ ] **Step 2: Note evidence in the Progress block. Commit** — `chore: live smoke evidence`
 
 ### Task G216: Final checkpoint — plan complete
 
 - [ ] **Step 1:** Full suite + `make check` green. All evidence docs committed (baseline, frontier, ablation, decision memo, QA, pre-mortem).
-- [ ] **Step 2:** The enforce-mode promotion is **deliberately not** part of this plan's completion — it waits for the G105 shadow gate to mature on the calendar. The plan is complete when shadow mode runs clean and the evidence pipeline is full.
-- [ ] **Step 3:** Update Progress block (Completed: G1–G216). Commit — `chore: gatekeeper v6 complete (shadow mode live, enforce awaits its gate)`
+- [ ] **Step 2:** Enforce mode is **deliberately not** part of this plan's completion — it is an optional rung the operator may never climb. The plan is complete when **inform mode runs live**: every alert annotated, nothing blocked, thresholds tunable from `/gate`, and the evidence pipeline (`!tierwr`, shadow reports, receipts) full.
+- [ ] **Step 3:** Update Progress block (Completed: G1–G216). Commit — `chore: gatekeeper v6 complete (inform mode live, enforce stays optional)`
 
 ---
 
@@ -1927,4 +1937,6 @@ Every line of the operator's Pre-Trade Entry Checklist, and where it became code
 | Golden rule: volume + follow-through | G54 (volume), G57/G58 (follow-through traps) |
 | "Grab news/sentiment/rotation/CPI/PPI/treasury before every trade" | G9–G44, G39 (pre-scan), G119, G122, G147–G152 |
 | "Size down significantly if boxes unchecked" | G77, G116, G117 |
-| "Improve winrate toward 95%" | G1, G2, G93–G102, G114, G204 — the ladder, measured |
+| "Checklist informs, never gates — plan always ships, user decides" | G76, G106, G120, G121, G123, G128, G141 |
+| "Settings fields to relax the strict constraints" | G5 (ThresholdSpec), G79 (fields + presets), G180 (sliders + one-click relax) |
+| "Improve winrate toward 95%" (final target) | G1, G2, G93–G102, G114, G204 — the ladder, measured |
