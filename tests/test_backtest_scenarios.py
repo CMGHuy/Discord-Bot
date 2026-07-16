@@ -75,3 +75,17 @@ def test_replay_respects_warmup_and_gates():
     assert out == []                # impossible gate -> nothing
     out2 = bs.replay_scenarios("AAPL", df.iloc[:30], "4w", gates=GATES)
     assert out2 == []               # below MIN_BARS -> nothing
+
+
+def test_scenario_backtest_stats_shape_and_win():
+    df = _structured_df()
+    stats = bs.run_scenario_backtest({"AAPL": df}, None, None,
+                                     gates=GATES, scale_out=False,
+                                     horizons=["4w"])
+    assert set(stats) >= {"pooled", "by_horizon"}
+    pooled = stats["pooled"]
+    for key in ("n", "wins", "losses", "scratches", "timeouts",
+                "not_triggered", "win_rate", "expectancy_r"):
+        assert key in pooled, key
+    assert pooled["n"] >= 1
+    assert stats["by_horizon"]["4w"]["n"] == pooled["n"]
