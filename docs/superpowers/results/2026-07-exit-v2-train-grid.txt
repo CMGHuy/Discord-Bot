@@ -1,0 +1,108 @@
+tickers: 75  train window: ('2020-01-01', '2023-12-31')  rule: WR>=80 and ExpR>0 and N>=30 and excl<=50%; max ExpR wins; else keep defaults
+
+EMA Crossover        trail=2.0 tp2=levels entry=market     N=110  WR= 68.2 ExpR=-0.059 excl=26.7%
+EMA Crossover        trail=2.0 tp2=levels entry=stop_entry N=113  WR= 68.1 ExpR=-0.116 excl=14.4%
+EMA Crossover        trail=2.0 tp2=none   entry=market     N=110  WR= 68.2 ExpR=+0.066 excl=26.7%
+EMA Crossover        trail=2.0 tp2=none   entry=stop_entry N=113  WR= 68.1 ExpR=-0.003 excl=14.4%
+EMA Crossover        trail=2.5 tp2=levels entry=market     N=110  WR= 68.2 ExpR=-0.059 excl=26.7%
+EMA Crossover        trail=2.5 tp2=levels entry=stop_entry N=113  WR= 68.1 ExpR=-0.116 excl=14.4%
+EMA Crossover        trail=2.5 tp2=none   entry=market     N=110  WR= 68.2 ExpR=+0.048 excl=26.7%
+EMA Crossover        trail=2.5 tp2=none   entry=stop_entry N=113  WR= 68.1 ExpR=-0.019 excl=14.4%
+EMA Crossover        trail=3.0 tp2=levels entry=market     N=110  WR= 68.2 ExpR=-0.059 excl=26.7%
+EMA Crossover        trail=3.0 tp2=levels entry=stop_entry N=113  WR= 68.1 ExpR=-0.116 excl=14.4%
+EMA Crossover        trail=3.0 tp2=none   entry=market     N=110  WR= 68.2 ExpR=+0.032 excl=26.7%
+EMA Crossover        trail=3.0 tp2=none   entry=stop_entry N=113  WR= 68.1 ExpR=-0.023 excl=14.4%
+>>> EMA Crossover: no config qualifies -- KEEP DEFAULTS (2.5, tp2 on, market)
+
+VWAP                 trail=2.0 tp2=levels entry=market     N=137  WR= 82.5 ExpR=+0.105 excl=20.3%
+VWAP                 trail=2.0 tp2=none   entry=market     N=137  WR= 82.5 ExpR=+0.208 excl=20.3%
+VWAP                 trail=2.5 tp2=levels entry=market     N=137  WR= 82.5 ExpR=+0.105 excl=20.3%
+VWAP                 trail=2.5 tp2=none   entry=market     N=136  WR= 83.1 ExpR=+0.216 excl=20.5%
+VWAP                 trail=3.0 tp2=levels entry=market     N=137  WR= 82.5 ExpR=+0.105 excl=20.3%
+VWAP                 trail=3.0 tp2=none   entry=market     N=136  WR= 83.1 ExpR=+0.215 excl=20.5%
+>>> VWAP: WINNER trail=2.5 tp2=none entry=market (N=136 WR=83.1 ExpR=+0.216)
+
+Fibonacci            trail=2.0 tp2=levels entry=market     N=286  WR= 81.8 ExpR=+0.100 excl=27.0%
+Fibonacci            trail=2.0 tp2=none   entry=market     N=286  WR= 81.8 ExpR=+0.182 excl=27.0%
+Fibonacci            trail=2.5 tp2=levels entry=market     N=286  WR= 81.8 ExpR=+0.100 excl=27.0%
+Fibonacci            trail=2.5 tp2=none   entry=market     N=283  WR= 82.0 ExpR=+0.183 excl=27.2%
+Fibonacci            trail=3.0 tp2=levels entry=market     N=286  WR= 81.8 ExpR=+0.100 excl=27.0%
+Fibonacci            trail=3.0 tp2=none   entry=market     N=279  WR= 81.7 ExpR=+0.183 excl=27.2%
+>>> Fibonacci: WINNER trail=3.0 tp2=none entry=market (N=279 WR=81.7 ExpR=+0.183)
+
+Support/Resistance   trail=2.0 tp2=levels entry=market     N=265  WR= 80.0 ExpR=+0.103 excl=32.6%
+Support/Resistance   trail=2.0 tp2=levels entry=stop_entry N=276  WR= 83.3 ExpR=+0.091 excl=22.7%
+Support/Resistance   trail=2.0 tp2=none   entry=market     N=265  WR= 80.0 ExpR=+0.099 excl=32.6%
+Support/Resistance   trail=2.0 tp2=none   entry=stop_entry N=275  WR= 83.3 ExpR=+0.088 excl=22.8%
+Support/Resistance   trail=2.5 tp2=levels entry=market     N=265  WR= 80.0 ExpR=+0.103 excl=32.6%
+Support/Resistance   trail=2.5 tp2=levels entry=stop_entry N=276  WR= 83.3 ExpR=+0.095 excl=22.7%
+Support/Resistance   trail=2.5 tp2=none   entry=market     N=265  WR= 80.0 ExpR=+0.096 excl=32.6%
+Support/Resistance   trail=2.5 tp2=none   entry=stop_entry N=275  WR= 83.3 ExpR=+0.087 excl=22.8%
+Support/Resistance   trail=3.0 tp2=levels entry=market     N=263  WR= 79.8 ExpR=+0.095 excl=32.2%
+Support/Resistance   trail=3.0 tp2=levels entry=stop_entry N=271  WR= 83.4 ExpR=+0.092 excl=23.0%
+Support/Resistance   trail=3.0 tp2=none   entry=market     N=263  WR= 79.8 ExpR=+0.085 excl=32.2%
+Support/Resistance   trail=3.0 tp2=none   entry=stop_entry N=270  WR= 83.3 ExpR=+0.079 excl=23.1%
+>>> Support/Resistance: WINNER trail=2.5 tp2=levels entry=market (N=265 WR=80.0 ExpR=+0.103)
+
+RSI                  trail=2.0 tp2=levels entry=market     N=608  WR= 85.2 ExpR=+0.125 excl=27.5%
+RSI                  trail=2.0 tp2=none   entry=market     N=608  WR= 85.2 ExpR=+0.218 excl=27.5%
+RSI                  trail=2.5 tp2=levels entry=market     N=608  WR= 85.2 ExpR=+0.125 excl=27.5%
+RSI                  trail=2.5 tp2=none   entry=market     N=608  WR= 85.2 ExpR=+0.205 excl=27.5%
+RSI                  trail=3.0 tp2=levels entry=market     N=608  WR= 85.2 ExpR=+0.125 excl=27.5%
+RSI                  trail=3.0 tp2=none   entry=market     N=608  WR= 85.2 ExpR=+0.210 excl=27.5%
+>>> RSI: WINNER trail=2.0 tp2=none entry=market (N=608 WR=85.2 ExpR=+0.218)
+
+MACD                 trail=2.0 tp2=levels entry=market     N=145  WR= 83.4 ExpR=+0.090 excl=25.6%
+MACD                 trail=2.0 tp2=none   entry=market     N=145  WR= 83.4 ExpR=+0.081 excl=25.6%
+MACD                 trail=2.5 tp2=levels entry=market     N=145  WR= 83.4 ExpR=+0.089 excl=25.6%
+MACD                 trail=2.5 tp2=none   entry=market     N=145  WR= 83.4 ExpR=+0.073 excl=25.6%
+MACD                 trail=3.0 tp2=levels entry=market     N=145  WR= 83.4 ExpR=+0.088 excl=25.6%
+MACD                 trail=3.0 tp2=none   entry=market     N=144  WR= 83.3 ExpR=+0.088 excl=25.8%
+>>> MACD: WINNER trail=2.0 tp2=levels entry=market (N=145 WR=83.4 ExpR=+0.090)
+
+Elliott Wave         trail=2.0 tp2=levels entry=market     N=314  WR= 75.5 ExpR=+0.036 excl=27.6%
+Elliott Wave         trail=2.0 tp2=none   entry=market     N=311  WR= 75.9 ExpR=+0.089 excl=27.8%
+Elliott Wave         trail=2.5 tp2=levels entry=market     N=314  WR= 75.5 ExpR=+0.042 excl=27.6%
+Elliott Wave         trail=2.5 tp2=none   entry=market     N=311  WR= 75.9 ExpR=+0.099 excl=27.8%
+Elliott Wave         trail=3.0 tp2=levels entry=market     N=314  WR= 75.5 ExpR=+0.042 excl=27.6%
+Elliott Wave         trail=3.0 tp2=none   entry=market     N=311  WR= 75.9 ExpR=+0.094 excl=27.8%
+>>> Elliott Wave: no config qualifies -- KEEP DEFAULTS (2.5, tp2 on, market)
+
+MA Ribbon            trail=2.0 tp2=levels entry=market     N=259  WR= 81.1 ExpR=+0.076 excl=24.7%
+MA Ribbon            trail=2.0 tp2=none   entry=market     N=259  WR= 81.1 ExpR=+0.180 excl=24.7%
+MA Ribbon            trail=2.5 tp2=levels entry=market     N=259  WR= 81.1 ExpR=+0.075 excl=24.7%
+MA Ribbon            trail=2.5 tp2=none   entry=market     N=259  WR= 81.1 ExpR=+0.186 excl=24.7%
+MA Ribbon            trail=3.0 tp2=levels entry=market     N=259  WR= 81.1 ExpR=+0.075 excl=24.7%
+MA Ribbon            trail=3.0 tp2=none   entry=market     N=259  WR= 81.1 ExpR=+0.181 excl=24.7%
+>>> MA Ribbon: WINNER trail=2.5 tp2=none entry=market (N=259 WR=81.1 ExpR=+0.186)
+
+Break & Retest       trail=2.0 tp2=levels entry=market     N=357  WR= 80.4 ExpR=+0.059 excl=28.2%
+Break & Retest       trail=2.0 tp2=levels entry=stop_entry N=378  WR= 81.2 ExpR=+0.015 excl=16.6%
+Break & Retest       trail=2.0 tp2=none   entry=market     N=355  WR= 80.3 ExpR=+0.079 excl=28.3%
+Break & Retest       trail=2.0 tp2=none   entry=stop_entry N=377  WR= 81.2 ExpR=+0.051 excl=16.6%
+Break & Retest       trail=2.5 tp2=levels entry=market     N=357  WR= 80.4 ExpR=+0.065 excl=28.2%
+Break & Retest       trail=2.5 tp2=levels entry=stop_entry N=378  WR= 81.2 ExpR=+0.017 excl=16.6%
+Break & Retest       trail=2.5 tp2=none   entry=market     N=355  WR= 80.3 ExpR=+0.081 excl=28.3%
+Break & Retest       trail=2.5 tp2=none   entry=stop_entry N=377  WR= 81.2 ExpR=+0.058 excl=16.6%
+Break & Retest       trail=3.0 tp2=levels entry=market     N=357  WR= 80.4 ExpR=+0.065 excl=28.2%
+Break & Retest       trail=3.0 tp2=levels entry=stop_entry N=378  WR= 81.2 ExpR=+0.016 excl=16.6%
+Break & Retest       trail=3.0 tp2=none   entry=market     N=355  WR= 80.3 ExpR=+0.085 excl=28.3%
+Break & Retest       trail=3.0 tp2=none   entry=stop_entry N=377  WR= 81.2 ExpR=+0.062 excl=16.6%
+>>> Break & Retest: WINNER trail=3.0 tp2=none entry=market (N=355 WR=80.3 ExpR=+0.085)
+
+RSI Divergence       trail=2.0 tp2=levels entry=market     N=1707 WR= 80.9 ExpR=+0.121 excl=24.2%
+RSI Divergence       trail=2.0 tp2=none   entry=market     N=1702 WR= 81.0 ExpR=+0.218 excl=23.6%
+RSI Divergence       trail=2.5 tp2=levels entry=market     N=1707 WR= 80.9 ExpR=+0.121 excl=24.2%
+RSI Divergence       trail=2.5 tp2=none   entry=market     N=1702 WR= 81.0 ExpR=+0.207 excl=23.6%
+RSI Divergence       trail=3.0 tp2=levels entry=market     N=1707 WR= 80.9 ExpR=+0.121 excl=24.2%
+RSI Divergence       trail=3.0 tp2=none   entry=market     N=1702 WR= 81.0 ExpR=+0.217 excl=23.6%
+>>> RSI Divergence: WINNER trail=2.0 tp2=none entry=market (N=1702 WR=81.0 ExpR=+0.218)
+
+Volume Profile       trail=2.0 tp2=levels entry=market     N=73   WR= 82.2 ExpR=+0.106 excl=29.8%
+Volume Profile       trail=2.0 tp2=none   entry=market     N=73   WR= 82.2 ExpR=+0.138 excl=29.8%
+Volume Profile       trail=2.5 tp2=levels entry=market     N=73   WR= 82.2 ExpR=+0.103 excl=29.8%
+Volume Profile       trail=2.5 tp2=none   entry=market     N=73   WR= 82.2 ExpR=+0.169 excl=29.8%
+Volume Profile       trail=3.0 tp2=levels entry=market     N=73   WR= 82.2 ExpR=+0.101 excl=29.8%
+Volume Profile       trail=3.0 tp2=none   entry=market     N=73   WR= 82.2 ExpR=+0.180 excl=29.8%
+>>> Volume Profile: WINNER trail=3.0 tp2=none entry=market (N=73 WR=82.2 ExpR=+0.180)
+
