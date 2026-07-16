@@ -6,7 +6,8 @@ df.iloc[:i+1] only."""
 from __future__ import annotations
 
 from swingbot.core import levels
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.plan_engine import build_confluence_plan
+from swingbot.core.strategy_types import HORIZONS, MIN_BARS
 
 # Levels move slowly; recomputing the full multi-source level map every bar
 # is ~5x the cost for near-identical output. One recompute per 5 bars is the
@@ -26,3 +27,60 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
     result = levels.build_level_map(window, HORIZONS[horizon_key], price)
     cache[key] = result
     return result
+
+
+def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
+    """(signal_index, TradePlanV2) for every bar where the confluence scan
+    WOULD have emitted a plan, under `gates`, with a per-direction cooldown.
+
+    No lookahead: every computation below is scoped to `window = df.iloc[:i+1]`
+    (or `levels_asof`, which enforces the same slice internally) -- never
+    `df.iloc[-1]` or any index beyond `i`.
+    """
+    h = HORIZONS[horizon_key]
+    warmup = MIN_BARS[horizon_key]
+    cooldown = gates.get("cooldown_bars", 5)
+    cache: dict = {}
+    out: list = []
+    last_accepted: dict = {}   # direction -> bar index
+
+    for i in range(warmup, len(df)):
+        window = df.iloc[:i + 1]
+        price = float(window["Close"].iloc[-1])
+        supports, resistances = levels_asof(ticker, df, i, horizon_key, cache)
+        # drop levels the later bars created is already impossible (as-of map);
+        # but the map's supports/resistances were split against ITS OWN price --
+        # re-split against this bar's price when the cache bucket lags:
+        all_levels = sorted(supports + resistances, key=lambda lv: lv.price)
+        supports = [lv for lv in all_levels if lv.price < price][::-1]
+        resistances = [lv for lv in all_levels if lv.price > price]
+
+        floor_pct = levels.atr_floor_pct(window, price, h)
+        effective_min_reward = max(gates["min_reward_pct"],
+                                   h.get("sr_target_min_pct", 0) * 0.15)
+        effective_max_stop = max(gates["max_stop_distance_pct"],
+                                 h.get("max_risk_pct", 0))
+        scenarios = levels.build_scenarios(
+            price, supports, resistances, effective_min_reward,
+            atr_floor=floor_pct,
+            min_stop_distance_pct=gates["min_stop_distance_pct"],
+            max_stop_distance_pct=effective_max_stop,
+            min_risk_reward=gates["min_risk_reward"])
+
+        for sc in scenarios:
+            n_confl, families = levels.count_confirming_strategies(
+                window, h, price, sc.take_profit, tolerance_pct=5.0)
+            if n_confl < gates.get("min_confluence", 1):
+                continue
+            last = last_accepted.get(sc.direction)
+            if last is not None and i - last < cooldown:
+                continue
+            plan = build_confluence_plan(
+                sc, window, ticker=ticker, horizon_key=horizon_key,
+                # Task 38 will wire real strategy attribution via
+                # primary_strategy_for(sc); until then, the plan's own
+                # documented fallback literal.
+                primary_strategy="S/R Confluence")
+            last_accepted[sc.direction] = i
+            out.append((i, plan))
+    return out
