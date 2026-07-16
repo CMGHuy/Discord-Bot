@@ -151,15 +151,160 @@ def test_wilson_needs_n_59_for_proven_90():
     assert wilson_lower_bound(35, 35) < 0.90
 ```
 
-- [ ] **Step 2: Run — FAIL (module missing). Step 3: Implement the four pure functions (docstrings show the hand-derived golden numbers). Step 4: PASS. Step 5: Commit** — `feat: gate win-rate arithmetic (breakeven, implied E, filter precision, Wilson)`
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_gate_wr_math.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'swingbot.core.gate'`
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/__init__.py
+"""Gatekeeper — pre-trade checklist engine. Public API grows in G75."""
+```
+
+```python
+# swingbot/core/gate/wr_math.py
+"""Win-rate arithmetic every gate surface must share.
+
+Golden numbers (hand-derived, mirrored in tests):
+- breakeven_wr(1.5) = 100/(1+1.5) = 40.0
+- implied_expectancy(95, 1.5) = 0.95*1.5 - 0.05*1.0 = +1.375R
+- required_filter_precision(85, 95) = 1 - (85*5)/(95*15) = 0.7018
+- wilson_lower_bound uses the CONTINUITY-CORRECTED Wilson interval
+  (Newcombe 1998). The plain Wilson bound gives 35/35 -> 0.901 which
+  would falsely "prove" 90% from 35 trades; the corrected bound gives
+  35/35 -> 0.877 and 59/59 -> 0.924, which is the conservatism the
+  95%-label rule (G2, G204) is built on.
+"""
+import math
+
+
+def breakeven_wr(rr: float) -> float:
+    """WR (percent) where expectancy = 0 for a fixed reward:risk ratio."""
+    return 100.0 / (1.0 + rr)
+
+
+def implied_expectancy(wr_pct: float, avg_win_r: float, avg_loss_r: float = 1.0) -> float:
+    """Expectancy in R implied by a WR and average win/loss sizes."""
+    p = wr_pct / 100.0
+    return p * avg_win_r - (1.0 - p) * avg_loss_r
+
+
+def required_filter_precision(base_wr: float, target_wr: float) -> float:
+    """Fraction of losers a filter must remove (keeping every winner)
+    to lift base_wr to target_wr. Derivation: keep W winners, remove
+    fraction f of L losers; W/(W+L(1-f)) = t  =>  f = 1 - (b(100-t))/(t(100-b))
+    with b, t as percentages."""
+    b, t = base_wr, target_wr
+    return 1.0 - (b * (100.0 - t)) / (t * (100.0 - b))
+
+
+def wilson_lower_bound(wins: int, n: int, z: float = 1.96) -> float:
+    """Continuity-corrected Wilson score lower bound — the WR (as a
+    fraction) a sample actually *proves* at ~95% confidence. Returns 0.0
+    for n == 0 or wins == 0."""
+    if n == 0 or wins == 0:
+        return 0.0
+    p = wins / n
+    num = (
+        2 * n * p + z * z - 1
+        - z * math.sqrt(z * z - 2 - 1 / n + 4 * p * (n * (1 - p) + 1))
+    )
+    return max(0.0, num / (2 * (n + z * z)))
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_gate_wr_math.py -v`
+Expected: 4 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/ tests/test_gate_wr_math.py
+git commit -m "feat: gate win-rate arithmetic (breakeven, implied E, filter precision, Wilson)"
+```
 
 ### Task G2: Pre-registered targets & promotion gates document
 
 **Files:**
 - Create: `docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md`
 
-- [ ] **Step 1: Write the frozen targets doc** — verbatim content: the tier ladder (A+ ≥ 90% pooled fold WR aspiration with 95-class labeling rule, A ≥ target band, B = baseline, C = skip-in-live), the fold gate (≥2/3 folds, ≤0.05R degradation, N≥30), the shadow gate (2 calendar weeks live shadow, ≥ 15 shadow decisions, blocked cohort's realized WR must be *lower* than the passed cohort's), the all-strategies aggregate target (+3–8 WR pts at ≤40% signal loss), and the explicit non-promise sentence: *"95% is a label a tier can earn from N≥59 proven samples (Wilson LB > 90%) — never a setting."* Include the checklist→task traceability appendix pointer (end of this plan).
-- [ ] **Step 2: Commit** — `docs: gatekeeper v6 pre-registered targets (frozen before data contact)`
+- [ ] **Step 1: Write the frozen targets doc** — this exact content:
+
+```markdown
+# Gatekeeper v6 — Pre-registered targets & promotion gates
+
+**Frozen 2026-07-14, before any data contact.** After the first baseline
+census (Task G97) runs, evidence may be appended (dated) but targets may
+never be moved.
+
+## The non-promise
+
+> **"95% is a label a tier can earn from N ≥ 59 proven samples
+> (Wilson LB > 90%) — never a setting."**
+
+Win rate is trivially inflated by shrinking targets and widening stops;
+that destroys expectancy and the account with it. Every WR gain must come
+from *not taking bad trades*. The exit geometry validated in
+plan-engine-v2 is untouchable.
+
+## Tier ladder
+
+| Tier | Meaning | Pre-registered target (pooled TRAIN folds) |
+|---|---|---|
+| A+ | Every box checked, zero red flags | WR ≥ 90% with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline. **"95-class" label** may be applied only when the continuity-corrected Wilson lower bound (z=1.96) exceeds 0.90 — at ~95% observed WR that takes N ≥ 59. |
+| A | Score ≥ A-cut, no hard blocks | WR ≥ baseline + 5 pts, expectancy_r ≥ baseline − 0.02R |
+| B | Score ≥ B-cut | ≈ baseline (the unfiltered strategy) |
+| C | Below B-cut, or any hard block | Skip-in-live candidate. Measured and always visible — never silently hidden. |
+
+## Fold gate (identical to edge-engine-v4)
+
+Anchored expanding folds — train 2018→fold-start, test years 2021 / 2022 / 2023.
+A check or threshold is promoted only if:
+
+- it improves the optimization target in ≥ 2 of 3 folds, and
+- no fold degrades expectancy_r by > 0.05R, and
+- N ≥ 30 per fold behind every quoted WR.
+
+Optimization target: maximize WR **subject to** pooled fold expectancy_r
+≥ baseline − 0.02R. WR alone never picks a parameter. Failures are
+documented in `docs/superpowers/results/` and dropped — no second grid on
+the same hypothesis.
+
+## All-strategies aggregate target
+
+**+3 to +8 WR points vs. the v2 baseline at ≤ 40% signal loss**, pooled
+TRAIN folds, all strategies together.
+
+## Shadow gate (prerequisite for ever leaving inform mode)
+
+Enforce mode may be considered only after all of:
+
+- ≥ 14 calendar days of live shadow/inform logging,
+- ≥ 15 would-have-blocked decisions on record,
+- the would-have-blocked cohort's realized WR is *lower* than the passed
+  cohort's (the gate is directionally right live),
+- zero live crashes or scan timeouts attributable to the gate.
+
+Operationalized as a dated sign-off checklist in Task G105. Enforce is
+optional forever; plan completion does not depend on it.
+
+## Traceability
+
+Every checklist line maps to its implementing task in
+"Appendix — Checklist-to-task traceability" at the end of
+`docs/superpowers/plans/2026-07-14-gatekeeper-v6.md`.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md
+git commit -m "docs: gatekeeper v6 pre-registered targets (frozen before data contact)"
+```
 
 ### Task G3: Config section "Gatekeeper" — base flags
 
@@ -170,8 +315,117 @@ def test_wilson_needs_n_59_for_proven_90():
 **Interfaces:**
 - Produces Fields (section `"Gatekeeper"`, all default off/neutral): `GATE_ENABLED` (checkbox, false — master switch), `GATE_MODE` (select `shadow`|`inform`|`enforce`, default `inform` — inform renders the checklist on every alert and never blocks; enforce is opt-in and guarded by G170), `GATE_MIN_TIER` (select `A+`|`A`|`B`|`C`, default `C`; **consulted only in enforce mode**), `GATE_STRICTNESS` (select `strict`|`balanced`|`relaxed`, default `balanced` — preset seeding for the G79 threshold fields), `MACRO_ENABLED` (checkbox, false), `FRED_API_KEY` (password, sensitive), `MACRO_SNAPSHOT_TTL_MIN` (int, 30, min 5), `GATE_BLACKOUT_ENABLED` (checkbox, false — annotate-only; holding entries additionally requires `GATE_BLACKOUT_ENFORCE`, G120). (`FINNHUB_API_KEY` already exists from llm-advisor L10; if that plan is unmerged, add it here with the same shape.)
 
-- [ ] **Step 1: Failing test** — each key present in `{f.key for f in config.FIELDS}`, section label correct, defaults as specified, key fields marked sensitive.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: Gatekeeper config section (default off)`
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_gate_config.py
+from swingbot import config
+
+
+def field(key):
+    return next((f for f in config.FIELDS if f.key == key), None)
+
+
+def test_gatekeeper_fields_present_with_defaults():
+    expected = {  # key: (type, default)
+        "GATE_ENABLED": ("checkbox", "false"),
+        "GATE_MODE": ("select", "inform"),
+        "GATE_MIN_TIER": ("select", "C"),
+        "GATE_STRICTNESS": ("select", "balanced"),
+        "MACRO_ENABLED": ("checkbox", "false"),
+        "FRED_API_KEY": ("password", ""),
+        "MACRO_SNAPSHOT_TTL_MIN": ("number", "30"),
+        "GATE_BLACKOUT_ENABLED": ("checkbox", "false"),
+    }
+    for key, (ftype, default) in expected.items():
+        f = field(key)
+        assert f is not None, f"{key} missing from config.FIELDS"
+        assert f.section == "Gatekeeper", key
+        assert f.type == ftype, key
+        assert f.default == default, key
+
+
+def test_select_options_exact():
+    assert [v for v, _ in field("GATE_MODE").options] == ["shadow", "inform", "enforce"]
+    assert [v for v, _ in field("GATE_MIN_TIER").options] == ["A+", "A", "B", "C"]
+    assert [v for v, _ in field("GATE_STRICTNESS").options] == ["strict", "balanced", "relaxed"]
+
+
+def test_api_key_sensitive_and_ttl_floor():
+    assert field("FRED_API_KEY").sensitive is True
+    assert field("MACRO_SNAPSHOT_TTL_MIN").min == 5
+
+
+def test_finnhub_key_exists_somewhere():
+    # From llm-advisor L10 when merged; added here otherwise — either way it must exist.
+    f = field("FINNHUB_API_KEY")
+    assert f is not None and f.sensitive is True
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_gate_config.py -v`
+Expected: FAIL — `assert f is not None` for `GATE_ENABLED`
+
+- [ ] **Step 3: Write the implementation** — append to `FIELDS` in `swingbot/config.py` (new section, after the last existing section):
+
+```python
+    # --- Gatekeeper ---
+    Field("GATE_ENABLED", "GATE_ENABLED", "Gatekeeper", "Gate enabled (master switch)",
+          type="checkbox", default="false",
+          help="Master switch for the pre-trade checklist engine. Off = no gate code runs anywhere."),
+    Field("GATE_MODE", "GATE_MODE", "Gatekeeper", "Gate mode",
+          type="select", default="inform", options=["shadow", "inform", "enforce"],
+          help="shadow: evaluate + log only, alerts unchanged. inform (default): the full checklist is "
+               "rendered on every alert and nothing is ever blocked. enforce: opt-in blocking below "
+               "'Min tier' — guarded by fold + shadow evidence (see the targets doc); never the default."),
+    Field("GATE_MIN_TIER", "GATE_MIN_TIER", "Gatekeeper", "Min tier (enforce mode only)",
+          type="select", default="C", options=["A+", "A", "B", "C"],
+          help="Consulted ONLY in enforce mode: candidates below this tier are held back. "
+               "At the default C nothing is ever blocked by tier."),
+    Field("GATE_STRICTNESS", "GATE_STRICTNESS", "Gatekeeper", "Strictness preset",
+          type="select", default="balanced", options=["strict", "balanced", "relaxed"],
+          help="One-click reseed of every checklist threshold (see /gate). relaxed is deliberately "
+               "generous so plans always flow; strict is the A+-hunting profile. Thresholds you have "
+               "individually overridden survive a preset switch."),
+    Field("MACRO_ENABLED", "MACRO_ENABLED", "Gatekeeper", "Macro context enabled",
+          type="checkbox", default="false",
+          help="Refresh the macro snapshot (news, sentiment, CPI/PPI/PCE, yields, VIX, sectors, "
+               "breadth) before every scan and render the market-context field on alerts."),
+    Field("FRED_API_KEY", "FRED_API_KEY", "Gatekeeper", "FRED API key",
+          type="password", sensitive=True,
+          help="Free key: https://fred.stlouisfed.org/docs/api/api_key.html. Empty = FRED-backed "
+               "series degrade to 'unknown'; scanning is never affected."),
+    Field("MACRO_SNAPSHOT_TTL_MIN", "MACRO_SNAPSHOT_TTL_MIN", "Gatekeeper", "Snapshot TTL (minutes)",
+          type="number", default="30", min=5, step=5,
+          help="A macro snapshot younger than this is reused; older triggers a rebuild before the scan."),
+    Field("GATE_BLACKOUT_ENABLED", "GATE_BLACKOUT_ENABLED", "Gatekeeper", "Event blackout annotations",
+          type="checkbox", default="false",
+          help="Annotate alerts that fall inside a high-impact event window (CPI/NFP/FOMC). "
+               "Annotate-only: actually holding entries additionally requires GATE_BLACKOUT_ENFORCE."),
+```
+
+**Conditional:** if llm-advisor L10 is unmerged at execution time (check: `grep FINNHUB_API_KEY swingbot/config.py`), also add with the same shape:
+
+```python
+    Field("FINNHUB_API_KEY", "FINNHUB_API_KEY", "Gatekeeper", "Finnhub API key",
+          type="password", sensitive=True,
+          help="Free key: https://finnhub.io/register. Powers news, sentiment, and the earnings "
+               "calendar. Empty = those sections degrade to 'unknown'."),
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_gate_config.py -v`
+Expected: 4 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/config.py tests/test_gate_config.py
+git commit -m "feat: Gatekeeper config section (default off)"
+```
 
 ### Task G4: Gate result types
 
@@ -209,8 +463,125 @@ class GateResult:
 
 - `status="unknown"` (provider down / not computable) never counts against the score — it excludes the check's weight from the denominator. This rule is THE degradation contract; test it here.
 
-- [ ] **Step 1: Failing tests** — round-trip `to_dict`/`from_dict`; frozen; unknown-weight exclusion helper `scoreable(checks)` returns only pass/warn/fail.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: gate result types`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_types.py
+import dataclasses
+import json
+
+import pytest
+
+from swingbot.core.gate.types import CheckResult, GateResult, scoreable
+
+
+def _check(status="pass", check_id="htf_alignment", weight=10.0):
+    return CheckResult(check_id=check_id, section="context", status=status,
+                       weight=weight, detail="ok", evidence={"x": 1})
+
+
+def _result():
+    return GateResult(
+        ticker="NVDA", strategy="Break & Retest", as_of="2026-07-14",
+        checks=(_check(), _check(status="unknown", check_id="rf_rumor_spike")),
+        score=87.5, tier="A", hard_blocks=(), macro_stale=False,
+    )
+
+
+def test_round_trip_through_json():
+    r = _result()
+    restored = GateResult.from_dict(json.loads(json.dumps(r.to_dict())))
+    assert restored == r
+
+
+def test_frozen():
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _result().tier = "C"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        _check().status = "fail"
+
+
+def test_scoreable_excludes_unknown():
+    checks = [_check("pass"), _check("warn"), _check("fail"), _check("unknown")]
+    assert [c.status for c in scoreable(checks)] == ["pass", "warn", "fail"]
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_gate_types.py -v`
+Expected: FAIL with `ModuleNotFoundError` / `ImportError` (types module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/types.py
+"""Result dataclasses shared by every gate module. Pure — no I/O, no config."""
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Sequence
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    check_id: str          # e.g. "htf_trend", "rf_fake_breakout"
+    section: str           # "context" | "setup" | "redflag" | "risk" | "timing"
+    status: str            # "pass" | "warn" | "fail" | "unknown"
+    weight: float          # scoring weight, 0 for pure-info checks
+    detail: str            # one human sentence, embed-ready
+    evidence: dict = field(default_factory=dict)   # raw numbers the detail cites
+
+
+def scoreable(checks: Sequence[CheckResult]) -> list[CheckResult]:
+    """THE degradation contract: status='unknown' (provider down / not
+    computable) is excluded entirely — its weight never enters the
+    denominator, so missing data can only widen uncertainty, never
+    penalize a candidate."""
+    return [c for c in checks if c.status in ("pass", "warn", "fail")]
+
+
+@dataclass(frozen=True)
+class GateResult:
+    ticker: str
+    strategy: str
+    as_of: str                     # ISO date of the signal bar
+    checks: tuple[CheckResult, ...]
+    score: float                   # 0-100 (G6)
+    tier: str                      # "A+" | "A" | "B" | "C"
+    hard_blocks: tuple[str, ...]   # check_ids that force C regardless of score
+    macro_stale: bool              # snapshot older than TTL at eval time
+    advisory_decision: str = "pass"  # what enforce WOULD do — set by decide() (G76)
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["checks"] = [asdict(c) for c in self.checks]
+        d["hard_blocks"] = list(self.hard_blocks)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "GateResult":
+        return cls(
+            ticker=d["ticker"], strategy=d["strategy"], as_of=d["as_of"],
+            checks=tuple(CheckResult(**c) for c in d.get("checks", [])),
+            score=float(d["score"]), tier=d["tier"],
+            hard_blocks=tuple(d.get("hard_blocks", ())),
+            macro_stale=bool(d.get("macro_stale", False)),
+            advisory_decision=d.get("advisory_decision", "pass"),
+        )
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_gate_types.py -v`
+Expected: 3 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/types.py tests/test_gate_types.py
+git commit -m "feat: gate result types"
+```
 
 ### Task G5: Check registry + policy table
 
@@ -222,8 +593,183 @@ class GateResult:
 - Produces: `CHECKS: dict[str, CheckSpec]` — `CheckSpec(check_id, section, weight, hard_block: bool, applies_to: tuple[str,...] | None, backtestable: bool, config_flag: str, thresholds: dict[str, ThresholdSpec])` where `ThresholdSpec(name, default, min, max, step, relax_direction: str, presets: dict[str, float])` (`presets` carries the strict/balanced/relaxed values; `relax_direction` is the help-text sentence, e.g. "raise to allow later entries"). Check functions read thresholds via `spec.threshold(name)` (config-Field-backed, G79) — never module constants; one entry per check built in Phases G1–G2 (registered incrementally — each later task adds its row and this module's test asserts registry consistency: unique ids, sections valid, weights ≥ 0, every `config_flag` exists in `config.FIELDS`). `applies_to=None` = all strategies. `enabled_checks(strategy) -> list[CheckSpec]`.
 - Hard-block policy: `hard_block=True` checks (news whipsaw inside blackout, kill-switch conflict, unconfirmed signal bar) force tier C on `fail` even at score 100.
 
-- [ ] **Step 1: Failing tests** — registry invariants; `enabled_checks` filters by strategy + config flag off.
-- [ ] **Step 2–4: Implement with the initial empty-but-typed registry + invariant machinery, PASS, commit** — `feat: gate check registry + policy`
+**Registration convention used by every Phase-G2 check task:** checks call `register(check_id=..., section=..., weight=..., func=..., thresholds={...})` at module import time; `config_flag` is derived automatically as `GATE_CHECK_<ID>`. The per-check enable Fields and per-threshold Fields are *generated* in G79 — until then `enabled_checks` treats a missing flag attr as True, and the "every config_flag exists in config.FIELDS" invariant is asserted from G79's test onward (not here — the fields don't exist yet).
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_registry.py
+import pytest
+
+import swingbot.config as config
+from swingbot.core.gate import registry
+from swingbot.core.gate.registry import ThresholdSpec
+from swingbot.core.gate.types import CheckResult
+
+
+def _dummy_check(df_daily, plan, macro_snap, **ctx):
+    return CheckResult("dummy", "context", "pass", 1.0, "ok", {})
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry(monkeypatch):
+    monkeypatch.setattr(registry, "CHECKS", {})
+    yield
+
+
+def _th(name="rr_min", default=1.5):
+    return ThresholdSpec(name, default, 1.0, 3.0, 0.1,
+                         "lower to accept slimmer targets",
+                         presets={"strict": 2.0, "balanced": default, "relaxed": 1.2})
+
+
+def test_register_derives_flag_and_rejects_duplicates():
+    spec = registry.register(check_id="dummy", section="context", weight=5.0, func=_dummy_check)
+    assert registry.CHECKS["dummy"] is spec
+    assert spec.config_flag == "GATE_CHECK_DUMMY"
+    with pytest.raises(ValueError):
+        registry.register(check_id="dummy", section="context", weight=5.0, func=_dummy_check)
+
+
+def test_validate_registry_invariants():
+    registry.register(check_id="ok", section="setup", weight=1.0, func=_dummy_check,
+                      thresholds={"rr_min": _th()})
+    registry.validate_registry()  # no raise
+    bad = registry.CHECKS["ok"].__class__(
+        check_id="bad", section="not_a_section", weight=1.0,
+        func=_dummy_check, config_flag="GATE_CHECK_BAD")
+    registry.CHECKS["bad"] = bad
+    with pytest.raises(AssertionError):
+        registry.validate_registry()
+
+
+def test_enabled_checks_filters_strategy_and_flag(monkeypatch):
+    registry.register(check_id="allstrats", section="context", weight=1.0, func=_dummy_check)
+    registry.register(check_id="breakout_only", section="redflag", weight=1.0,
+                      func=_dummy_check, applies_to=("Break & Retest",))
+    assert [s.check_id for s in registry.enabled_checks("RSI Divergence")] == ["allstrats"]
+    assert [s.check_id for s in registry.enabled_checks("Break & Retest")] == [
+        "allstrats", "breakout_only"]
+    monkeypatch.setattr(config, "GATE_CHECK_ALLSTRATS", False, raising=False)
+    assert [s.check_id for s in registry.enabled_checks("RSI Divergence")] == []
+
+
+def test_threshold_resolves_config_field_then_spec_default(monkeypatch):
+    spec = registry.register(check_id="th", section="setup", weight=1.0,
+                             func=_dummy_check, thresholds={"rr_min": _th()})
+    assert spec.threshold("rr_min") == 1.5           # no Field yet -> spec default
+    monkeypatch.setattr(config, "GATE_TH_TH_RR_MIN", 1.8, raising=False)
+    assert spec.threshold("rr_min") == 1.8           # Field wins
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_gate_registry.py -v`
+Expected: FAIL with `ImportError` (registry module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/registry.py
+"""Check registry + policy table.
+
+Check modules (Phase G2) register themselves at import time via
+register(); this module owns the invariants. Hard-block policy:
+hard_block=True checks force tier C on `fail` even at score 100
+(enforced by score.assign_tier via the hard_blocks list the
+orchestrator assembles in G75).
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Callable
+
+import swingbot.config as config
+
+SECTIONS = ("context", "setup", "redflag", "risk", "timing")
+PRESET_LEVELS = ("strict", "balanced", "relaxed")
+
+
+@dataclass(frozen=True)
+class ThresholdSpec:
+    name: str
+    default: float          # the *balanced* value
+    min: float
+    max: float
+    step: float
+    relax_direction: str    # help-text sentence, e.g. "raise to allow later entries"
+    presets: dict           # {"strict": x, "balanced": y, "relaxed": z}
+
+
+@dataclass(frozen=True)
+class CheckSpec:
+    check_id: str
+    section: str
+    weight: float
+    func: Callable          # (df_daily, plan, macro_snap, **ctx) -> CheckResult
+    hard_block: bool = False
+    applies_to: tuple | None = None   # exact ALL_STRATEGIES names; None = all
+    backtestable: bool = True         # finalized in G89
+    trigger_recheck: bool = False     # cheap re-check subset (G128)
+    config_flag: str = ""             # GATE_CHECK_<ID>, derived by register()
+    thresholds: dict = field(default_factory=dict)   # name -> ThresholdSpec
+
+    def threshold(self, name: str) -> float:
+        """Config-Field-backed threshold lookup. The Field
+        GATE_TH_{CHECK_ID}_{NAME} is generated in G79; until it exists
+        the spec's balanced default applies. Check functions must use
+        this — never module constants."""
+        spec = self.thresholds[name]
+        attr = f"GATE_TH_{self.check_id.upper()}_{name.upper()}"
+        return float(getattr(config, attr, spec.default))
+
+
+CHECKS: dict[str, CheckSpec] = {}
+
+
+def register(**kw) -> CheckSpec:
+    kw.setdefault("config_flag", f"GATE_CHECK_{kw['check_id'].upper()}")
+    spec = CheckSpec(**kw)
+    if spec.check_id in CHECKS:
+        raise ValueError(f"duplicate check id {spec.check_id!r}")
+    CHECKS[spec.check_id] = spec
+    return spec
+
+
+def validate_registry() -> None:
+    """Invariants asserted by tests after every registration task."""
+    for spec in CHECKS.values():
+        assert spec.section in SECTIONS, f"{spec.check_id}: bad section {spec.section}"
+        assert spec.weight >= 0, f"{spec.check_id}: negative weight"
+        assert spec.config_flag == f"GATE_CHECK_{spec.check_id.upper()}", spec.check_id
+        for th in spec.thresholds.values():
+            assert th.min <= th.default <= th.max, f"{spec.check_id}.{th.name}"
+            assert set(th.presets) == set(PRESET_LEVELS), f"{spec.check_id}.{th.name}"
+
+
+def enabled_checks(strategy: str) -> list[CheckSpec]:
+    out = []
+    for spec in CHECKS.values():
+        if spec.applies_to is not None and strategy not in spec.applies_to:
+            continue
+        if not getattr(config, spec.config_flag, True):   # Field generated in G79
+            continue
+        out.append(spec)
+    return out
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_gate_registry.py -v`
+Expected: 4 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/registry.py tests/test_gate_registry.py
+git commit -m "feat: gate check registry + policy"
+```
 
 ### Task G6: Checklist score + tier assignment
 
@@ -234,8 +780,107 @@ class GateResult:
 **Interfaces:**
 - Produces: `score(checks: Sequence[CheckResult]) -> float` — weighted: pass=1.0, warn=0.5, fail=0.0, unknown excluded from denominator; empty/all-unknown → 50.0 (neutral) with `macro_stale` responsibility on the caller. `assign_tier(score: float, hard_blocks: Sequence[str], *, aplus_cut: float, a_cut: float, b_cut: float) -> str` — cuts come from config (G79); any hard block → "C". `TIER_ORDER = ("A+", "A", "B", "C")`.
 
-- [ ] **Step 1: Failing tests** — golden score for a mixed fixture (2 pass w=10, 1 warn w=10, 1 fail w=20, 1 unknown w=50 → (10+10+5+0)/40*100 = 62.5); hard block forces C at score 100; all-unknown neutral 50.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: checklist scoring + tier ladder`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_score.py
+from swingbot.core.gate.score import assign_tier, score
+from swingbot.core.gate.types import CheckResult
+
+
+def _c(status, weight, cid="c"):
+    return CheckResult(cid, "setup", status, weight, "", {})
+
+
+def test_golden_mixed_score():
+    # (10*1 + 10*1 + 10*0.5 + 20*0 = 25) / 40 * 100 = 62.5 — unknown w=50 excluded
+    checks = [_c("pass", 10, "a"), _c("pass", 10, "b"), _c("warn", 10, "w"),
+              _c("fail", 20, "f"), _c("unknown", 50, "u")]
+    assert score(checks) == 62.5
+
+
+def test_all_unknown_or_empty_is_neutral_50():
+    assert score([_c("unknown", 10), _c("unknown", 20)]) == 50.0
+    assert score([]) == 50.0
+
+
+def test_zero_weight_checks_are_info_only():
+    assert score([_c("fail", 0, "info"), _c("pass", 10, "real")]) == 100.0
+
+
+def test_hard_block_forces_c_even_at_100():
+    assert assign_tier(100.0, ["signal_confirmed"],
+                       aplus_cut=90.0, a_cut=75.0, b_cut=55.0) == "C"
+
+
+def test_tier_cut_boundaries():
+    kw = dict(aplus_cut=90.0, a_cut=75.0, b_cut=55.0)
+    assert assign_tier(95.0, [], **kw) == "A+"
+    assert assign_tier(90.0, [], **kw) == "A+"   # cuts are inclusive
+    assert assign_tier(80.0, [], **kw) == "A"
+    assert assign_tier(60.0, [], **kw) == "B"
+    assert assign_tier(54.9, [], **kw) == "C"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_gate_score.py -v`
+Expected: FAIL with `ImportError` (score module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/score.py
+"""Checklist score 0-100 + tier ladder. Pure functions — cuts arrive as
+arguments (resolved from config Fields by the G75 orchestrator)."""
+from __future__ import annotations
+
+from typing import Sequence
+
+from swingbot.core.gate.types import CheckResult, scoreable
+
+TIER_ORDER = ("A+", "A", "B", "C")
+_STATUS_CREDIT = {"pass": 1.0, "warn": 0.5, "fail": 0.0}
+
+
+def score(checks: Sequence[CheckResult]) -> float:
+    """Weighted score: pass=1.0, warn=0.5, fail=0.0; unknown excluded from
+    the denominator (types.scoreable). Nothing scoreable -> neutral 50.0;
+    the caller carries macro_stale responsibility."""
+    scored = [c for c in scoreable(checks) if c.weight > 0]
+    denom = sum(c.weight for c in scored)
+    if denom == 0:
+        return 50.0
+    got = sum(c.weight * _STATUS_CREDIT[c.status] for c in scored)
+    return round(got / denom * 100.0, 2)
+
+
+def assign_tier(score: float, hard_blocks: Sequence[str], *,
+                aplus_cut: float, a_cut: float, b_cut: float) -> str:
+    """Any hard block -> C regardless of score; otherwise inclusive cuts."""
+    if hard_blocks:
+        return "C"
+    if score >= aplus_cut:
+        return "A+"
+    if score >= a_cut:
+        return "A"
+    if score >= b_cut:
+        return "B"
+    return "C"
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_gate_score.py -v`
+Expected: 5 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/score.py tests/test_gate_score.py
+git commit -m "feat: checklist scoring + tier ladder"
+```
 
 ### Task G7: Golden OHLCV scenario fixture library
 
@@ -246,8 +891,193 @@ class GateResult:
 **Interfaces:**
 - Produces deterministic bar-series builders reused by every detector test (extends `tests/conftest.py`'s real `make_ohlcv(closes, spread_pct, ...)` — verify its actual signature before writing): `uptrend_daily(n=260)`, `downtrend_daily(n=260)`, `range_daily(lo, hi, n=120)`, `breakout_and_fail(level)` (closes back inside next bar, low volume), `sweep_wick(level)` (long lower wick through level, close back above), `dead_cat(n_down=40, bounce_pct=8)` (no higher-low structure), `climax_overbought()` (RSI>75 into resistance), `gap_spike(pct=12)` (news-gap bar, volume 5×), plus weekly resamples `to_weekly(df)`.
 
-- [ ] **Step 1: Failing tests** — each builder's shape assertions (monotone trend slope sign, wick geometry, volume ratios) so detectors built later have trustworthy inputs.
-- [ ] **Step 2–4: Implement, PASS, commit** — `test: golden gate scenario fixtures`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_fixtures.py
+from swingbot.core.indicators import rsi
+from tests.fixtures.gate import (
+    breakout_and_fail, climax_overbought, dead_cat, downtrend_daily,
+    gap_spike, range_daily, sweep_wick, to_weekly, uptrend_daily,
+)
+
+
+def test_trend_slopes():
+    up, down = uptrend_daily(), downtrend_daily()
+    assert up["Close"].iloc[-1] > up["Close"].iloc[0] * 1.5
+    assert down["Close"].iloc[-1] < down["Close"].iloc[0] * 0.6
+    rng = range_daily(90, 110)
+    assert rng["Close"].min() > 85 and rng["Close"].max() < 115
+
+
+def test_breakout_and_fail_geometry():
+    df = breakout_and_fail(level=100.0)
+    assert df["Close"].iloc[-2] > 100.0                 # broke out...
+    assert df["Close"].iloc[-1] < 100.0                 # ...failed back inside next bar
+    assert df["Volume"].iloc[-2] < df["Volume"].iloc[:-2].mean()   # on dead volume
+
+
+def test_sweep_wick_geometry():
+    df = sweep_wick(level=100.0)
+    bar = df.iloc[-2]
+    body = abs(bar["Close"] - bar["Open"])
+    lower_wick = min(bar["Close"], bar["Open"]) - bar["Low"]
+    assert bar["Low"] < 100.0 < bar["Close"]            # swept through, closed back above
+    assert lower_wick >= 1.5 * body
+
+
+def test_dead_cat_geometry():
+    df = dead_cat(bounce_pct=8.0)
+    recent_low = df["Close"].iloc[-25:].min()
+    assert df["Close"].iloc[-1] >= recent_low * 1.05    # >=5% bounce off a recent low
+    assert df["Close"].iloc[-1] < df["Close"].iloc[0]   # still deep below the old range
+
+
+def test_climax_overbought_rsi():
+    assert rsi(climax_overbought()["Close"]).iloc[-1] > 75
+
+
+def test_gap_spike_geometry():
+    df = gap_spike(pct=12.0)
+    assert df["Close"].iloc[-1] / df["Close"].iloc[-2] >= 1.10
+    assert df["Volume"].iloc[-1] >= 4 * df["Volume"].iloc[:-1].mean()
+
+
+def test_to_weekly_shape():
+    wk = to_weekly(uptrend_daily(260))
+    assert 45 <= len(wk) <= 60
+    assert (wk["High"] >= wk["Low"]).all()
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_gate_fixtures.py -v`
+Expected: FAIL with `ImportError` (fixtures package missing)
+
+- [ ] **Step 3: Write the implementation** (if `tests/fixtures/__init__.py` doesn't exist yet, create it empty)
+
+```python
+# tests/fixtures/gate/scenarios.py
+"""Deterministic OHLCV scenario builders for gate detector tests.
+
+All return daily frames in the repo convention (Open,High,Low,Close,Volume,
+DatetimeIndex) built on tests.conftest.make_ohlcv — verify its signature is
+still make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01")
+before extending. make_ohlcv sets Open = prior close and symmetric H/L
+around the close; builders that need asymmetric bars (wicks, gaps) patch
+individual cells afterwards.
+"""
+import numpy as np
+import pandas as pd
+
+from tests.conftest import make_ohlcv
+
+BASE_VOL = 1_000_000.0
+
+
+def uptrend_daily(n=260, start_price=100.0, daily_pct=0.4):
+    closes = start_price * (1 + daily_pct / 100) ** np.arange(n)
+    return make_ohlcv(closes, spread_pct=2.0)
+
+
+def downtrend_daily(n=260, start_price=100.0, daily_pct=0.4):
+    closes = start_price * (1 - daily_pct / 100) ** np.arange(n)
+    return make_ohlcv(closes, spread_pct=2.0)
+
+
+def range_daily(lo=90.0, hi=110.0, n=120):
+    mid, amp = (lo + hi) / 2.0, (hi - lo) / 2.0
+    closes = mid + amp * np.sin(np.arange(n) * 2 * np.pi / 20)
+    return make_ohlcv(closes, spread_pct=1.5)
+
+
+def breakout_and_fail(level=100.0, n=80):
+    """Grind up to the level, close above it on DEAD volume, close back
+    inside the next bar — the rf_fake_breakout golden scenario."""
+    closes = np.concatenate([
+        np.linspace(level * 0.90, level * 0.99, n - 2),
+        [level * 1.02],      # breakout close above the level...
+        [level * 0.985],     # ...next bar closes back inside
+    ])
+    volumes = np.full(n, BASE_VOL)
+    volumes[-2] = BASE_VOL * 0.6
+    return make_ohlcv(closes, spread_pct=1.5, volumes=volumes)
+
+
+def sweep_wick(level=100.0, n=60):
+    """Long lower wick through the level with a close back above, then a
+    no-follow-through bar — the rf_stop_sweep golden scenario."""
+    closes = np.linspace(level * 1.08, level * 1.01, n)
+    df = make_ohlcv(closes, spread_pct=1.0)
+    sweep = df.index[-2]
+    df.loc[sweep, "Open"] = level * 1.010
+    df.loc[sweep, "Close"] = level * 1.005          # body 0.5
+    df.loc[sweep, "Low"] = level * 0.970            # wick 3.5 -> ratio 7x
+    last = df.index[-1]
+    df.loc[last, "Close"] = level * 1.004           # no follow-through
+    df.loc[last, "High"] = level * 1.012
+    return df
+
+
+def dead_cat(n_down=40, bounce_pct=8.0, start_price=150.0):
+    """Flat lead-in (history for 250-bar lookbacks), -1%/day grind, then a
+    V-bounce with no higher-low structure — the rf_dead_cat golden scenario."""
+    lead_in = np.full(220, start_price)
+    down = start_price * (1 - 0.01) ** np.arange(n_down)
+    low = down[-1]
+    bounce = np.linspace(low, low * (1 + bounce_pct / 100), 6)
+    closes = np.concatenate([lead_in, down, bounce[1:]])
+    return make_ohlcv(closes, spread_pct=2.0)
+
+
+def climax_overbought(n=120, level=120.0):
+    """30-bar blow-off into resistance; RSI(14) finishes > 75."""
+    closes = np.concatenate([np.linspace(90, 100, n - 30),
+                             np.linspace(100, level, 30)])
+    return make_ohlcv(closes, spread_pct=1.5)
+
+
+def gap_spike(pct=12.0, n=80):
+    """Flat series, last bar +pct% close-to-close on 5x volume — the
+    rf_rumor_spike geometry scenario."""
+    closes = np.full(n, 100.0)
+    closes[-1] = 100.0 * (1 + pct / 100)
+    volumes = np.full(n, BASE_VOL)
+    volumes[-1] = BASE_VOL * 5
+    return make_ohlcv(closes, spread_pct=1.0, volumes=volumes)
+
+
+def to_weekly(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame({
+        "Open": df["Open"].resample("W-FRI").first(),
+        "High": df["High"].resample("W-FRI").max(),
+        "Low": df["Low"].resample("W-FRI").min(),
+        "Close": df["Close"].resample("W-FRI").last(),
+        "Volume": df["Volume"].resample("W-FRI").sum(),
+    }).dropna()
+```
+
+```python
+# tests/fixtures/gate/__init__.py
+from tests.fixtures.gate.scenarios import (   # noqa: F401
+    BASE_VOL, breakout_and_fail, climax_overbought, dead_cat,
+    downtrend_daily, gap_spike, range_daily, sweep_wick, to_weekly,
+    uptrend_daily,
+)
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_gate_fixtures.py -v`
+Expected: 7 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/fixtures/gate/ tests/test_gate_fixtures.py
+git commit -m "test: golden gate scenario fixtures"
+```
 
 ### Task G8: Phase G0 checkpoint
 
@@ -270,8 +1100,200 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 - Produces: `fetch_json(url, *, params=None, ttl_s=3600, timeout_s=5.0, cache_key=None) -> dict | list | None` — key = sha1 of url+sorted params unless given; cache files `data/macro/cache/{key}.json` via `jsonio` storing `{fetched_at, payload}`; fresh cache → no network; expired cache + fetch failure → **stale payload returned** with module-level `LAST_SERVED_STALE` flag set (snapshot marks `macro_stale`); no cache + failure → None. `purge_cache(max_age_days=30) -> int`.
 - Consumed by: every provider below.
 
-- [ ] **Step 1: Failing tests** — monkeypatched `requests.get`: fresh-hit skips network (counting stub); expiry refetches; failure serves stale; failure without cache → None; purge removes only old files.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: macro http fetch with TTL disk cache + stale fallback`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_httpcache.py
+import os
+import time
+
+import pytest
+
+import swingbot.core.macro.httpcache as httpcache
+
+
+class _Resp:
+    def __init__(self, payload):
+        self._payload = payload
+    def raise_for_status(self):
+        pass
+    def json(self):
+        return self._payload
+
+
+@pytest.fixture
+def cache_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path))
+    httpcache.LAST_SERVED_STALE = False
+    return tmp_path
+
+
+def _counting_get(payload):
+    calls = {"n": 0}
+    def fake_get(url, params=None, timeout=None):
+        calls["n"] += 1
+        return _Resp(payload)
+    return fake_get, calls
+
+
+def test_fresh_cache_skips_network(cache_dir, monkeypatch):
+    fake_get, calls = _counting_get({"v": 1})
+    monkeypatch.setattr(httpcache.requests, "get", fake_get)
+    assert httpcache.fetch_json("https://x.test/a", ttl_s=3600) == {"v": 1}
+    assert httpcache.fetch_json("https://x.test/a", ttl_s=3600) == {"v": 1}
+    assert calls["n"] == 1
+
+
+def test_expired_cache_refetches(cache_dir, monkeypatch):
+    fake_get, calls = _counting_get({"v": 1})
+    monkeypatch.setattr(httpcache.requests, "get", fake_get)
+    httpcache.fetch_json("https://x.test/a", ttl_s=0)
+    httpcache.fetch_json("https://x.test/a", ttl_s=0)
+    assert calls["n"] == 2
+
+
+def test_failure_serves_stale_and_flags(cache_dir, monkeypatch):
+    fake_get, _ = _counting_get({"v": 1})
+    monkeypatch.setattr(httpcache.requests, "get", fake_get)
+    httpcache.fetch_json("https://x.test/a", ttl_s=0)
+    def boom(url, params=None, timeout=None):
+        raise OSError("network down")
+    monkeypatch.setattr(httpcache.requests, "get", boom)
+    assert httpcache.fetch_json("https://x.test/a", ttl_s=0) == {"v": 1}
+    assert httpcache.LAST_SERVED_STALE is True
+
+
+def test_failure_without_cache_returns_none(cache_dir, monkeypatch):
+    def boom(url, params=None, timeout=None):
+        raise OSError("network down")
+    monkeypatch.setattr(httpcache.requests, "get", boom)
+    assert httpcache.fetch_json("https://x.test/never") is None
+
+
+def test_secret_params_never_reach_filenames(cache_dir, monkeypatch):
+    fake_get, _ = _counting_get({"v": 1})
+    monkeypatch.setattr(httpcache.requests, "get", fake_get)
+    httpcache.fetch_json("https://x.test/a", params={"api_key": "SECRET123"})
+    names = "".join(os.listdir(cache_dir))
+    assert "SECRET123" not in names            # keys are sha1-hashed (G201 contract)
+
+
+def test_purge_removes_only_old(cache_dir, monkeypatch):
+    fake_get, _ = _counting_get({"v": 1})
+    monkeypatch.setattr(httpcache.requests, "get", fake_get)
+    httpcache.fetch_json("https://x.test/old")
+    httpcache.fetch_json("https://x.test/new")
+    old_file = sorted(cache_dir.iterdir())[0]
+    past = time.time() - 40 * 86400
+    os.utime(old_file, (past, past))
+    assert httpcache.purge_cache(max_age_days=30) == 1
+    assert len(list(cache_dir.iterdir())) == 1
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_httpcache.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'swingbot.core.macro'`
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/__init__.py
+"""Macro context layer — read-only market data. Public API re-exports
+grow as modules land; snapshot.build_snapshot (G38) is the main entry."""
+```
+
+```python
+# swingbot/core/macro/httpcache.py
+"""fetch_json(): HTTP GET with a TTL disk cache under data/macro/cache/.
+
+Degradation ladder (the contract every provider inherits):
+  fresh cache            -> served, no network
+  expired + fetch ok     -> refreshed
+  expired + fetch FAIL   -> stale payload served, LAST_SERVED_STALE set
+  no cache + fetch FAIL  -> None
+Never raises toward a caller.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import time
+
+import requests
+
+from swingbot import config
+from swingbot.core.jsonio import atomic_write_json, read_json  # cockpit-v3 A1 — verify signature at execution
+
+log = logging.getLogger("swing-bot.macro.httpcache")
+
+CACHE_DIR = os.path.join(config.DATA_DIR, "macro", "cache")
+
+# Set whenever an expired-but-cached payload was served because the
+# network failed; the snapshot builder (G38) reads and resets it.
+LAST_SERVED_STALE = False
+
+
+def _cache_key(url: str, params: dict | None) -> str:
+    # sha1 of url+sorted params: api_key/token values never appear in
+    # filenames in readable form (G201 secrets contract).
+    blob = url + "|" + json.dumps(sorted((params or {}).items()))
+    return hashlib.sha1(blob.encode()).hexdigest()
+
+
+def fetch_json(url, *, params=None, ttl_s=3600, timeout_s=5.0, cache_key=None):
+    global LAST_SERVED_STALE
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    key = cache_key or _cache_key(url, params)
+    path = os.path.join(CACHE_DIR, f"{key}.json")
+    cached = read_json(path, default=None)
+    now = time.time()
+    if cached is not None and now - cached.get("fetched_at", 0) < ttl_s:
+        return cached["payload"]
+    try:
+        resp = requests.get(url, params=params, timeout=timeout_s)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:  # noqa: BLE001 — every failure degrades, never raises
+        # Log the exception TYPE and the bare path only — params (which
+        # carry api keys) and query strings are never logged (G201).
+        log.warning("macro fetch failed (%s): %s", type(exc).__name__, url.split("?")[0])
+        if cached is not None:
+            LAST_SERVED_STALE = True
+            return cached["payload"]
+        return None
+    atomic_write_json(path, {"fetched_at": now, "payload": payload})
+    return payload
+
+
+def purge_cache(max_age_days: int = 30) -> int:
+    """Remove cache files older than max_age_days; returns count removed."""
+    if not os.path.isdir(CACHE_DIR):
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for name in os.listdir(CACHE_DIR):
+        path = os.path.join(CACHE_DIR, name)
+        if os.path.getmtime(path) < cutoff:
+            os.remove(path)
+            removed += 1
+    return removed
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_httpcache.py -v`
+Expected: 6 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/ tests/test_macro_httpcache.py
+git commit -m "feat: macro http fetch with TTL disk cache + stale fallback"
+```
 
 ### Task G10: Provider health ledger
 
@@ -282,8 +1304,173 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `record_call(provider: str, ok: bool, latency_ms: float, from_cache: bool)` → appends `data/macro/health.jsonl`; `provider_status() -> dict[str, dict]` (`{ok_rate_24h, last_ok, last_error, calls_today, cache_hit_rate}`); `is_degraded(provider) -> bool` (ok_rate_24h < 0.5). Wired into `fetch_json` via a `provider=` kwarg (modify G9's signature now, one place).
 
-- [ ] **Step 1: Failing tests** — ledger math over synthetic lines; degraded flip; `fetch_json(provider=...)` records.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: provider health ledger`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_health.py
+import time
+
+import pytest
+
+import swingbot.core.macro.health as health
+import swingbot.core.macro.httpcache as httpcache
+
+
+@pytest.fixture
+def ledger(tmp_path, monkeypatch):
+    monkeypatch.setattr(health, "LEDGER_PATH", str(tmp_path / "health.jsonl"))
+    return tmp_path
+
+
+def test_status_math(ledger):
+    for ok in (True, True, False):
+        health.record_call("fred", ok=ok, latency_ms=42.0, from_cache=False)
+    health.record_call("fred", ok=True, latency_ms=0.0, from_cache=True)
+    s = health.provider_status()["fred"]
+    assert s["ok_rate_24h"] == pytest.approx(2 / 3)
+    assert s["calls_today"] == 3                       # cache hits aren't calls
+    assert s["cache_hit_rate"] == pytest.approx(1 / 4)
+    assert s["last_ok"] is not None and s["last_error"] is not None
+    assert not health.is_degraded("fred")
+
+
+def test_degraded_flip(ledger):
+    for _ in range(3):
+        health.record_call("finnhub", ok=False, latency_ms=10.0, from_cache=False)
+    health.record_call("finnhub", ok=True, latency_ms=10.0, from_cache=False)
+    assert health.is_degraded("finnhub")               # ok_rate 0.25 < 0.5
+
+
+def test_fetch_json_records(tmp_path, ledger, monkeypatch):
+    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path / "cache"))
+
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self): return {"v": 1}
+
+    monkeypatch.setattr(httpcache.requests, "get", lambda *a, **k: _Resp())
+    httpcache.fetch_json("https://x.test/a", provider="fred")
+    assert health.provider_status()["fred"]["calls_today"] == 1
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_health.py -v`
+Expected: FAIL with `ImportError` (health module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/health.py
+"""Provider health ledger — one JSONL line per call attempt (incl. cache hits)."""
+from __future__ import annotations
+
+import json
+import os
+import time
+
+from swingbot import config
+
+LEDGER_PATH = os.path.join(config.DATA_DIR, "macro", "health.jsonl")
+
+
+def record_call(provider: str, ok: bool, latency_ms: float, from_cache: bool) -> None:
+    os.makedirs(os.path.dirname(LEDGER_PATH), exist_ok=True)
+    line = {"ts": time.time(), "provider": provider, "ok": ok,
+            "latency_ms": round(latency_ms, 1), "from_cache": from_cache}
+    with open(LEDGER_PATH, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def _lines(since_s: float | None = None) -> list[dict]:
+    if not os.path.exists(LEDGER_PATH):
+        return []
+    cutoff = (time.time() - since_s) if since_s else 0.0
+    out = []
+    with open(LEDGER_PATH, encoding="utf-8") as fh:
+        for raw in fh:
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                continue
+            if row.get("ts", 0) >= cutoff:
+                out.append(row)
+    return out
+
+
+def provider_status() -> dict[str, dict]:
+    day = _lines(24 * 3600)
+    out: dict[str, dict] = {}
+    for provider in {r["provider"] for r in day if r.get("provider")}:
+        rows = [r for r in day if r["provider"] == provider]
+        network = [r for r in rows if not r["from_cache"]]
+        oks = [r for r in network if r["ok"]]
+        fails = [r for r in network if not r["ok"]]
+        out[provider] = {
+            "ok_rate_24h": (len(oks) / len(network)) if network else 1.0,
+            "last_ok": max((r["ts"] for r in oks), default=None),
+            "last_error": max((r["ts"] for r in fails), default=None),
+            "calls_today": len(network),
+            "cache_hit_rate": sum(r["from_cache"] for r in rows) / len(rows),
+        }
+    return out
+
+
+def is_degraded(provider: str) -> bool:
+    status = provider_status().get(provider)
+    return bool(status and status["ok_rate_24h"] < 0.5)
+```
+
+**And modify `fetch_json` (G9) — the one place every provider goes through** — add the `provider` kwarg + timing:
+
+```python
+# swingbot/core/macro/httpcache.py — fetch_json becomes:
+def fetch_json(url, *, params=None, ttl_s=3600, timeout_s=5.0,
+               cache_key=None, provider=None):
+    global LAST_SERVED_STALE
+    from swingbot.core.macro import health   # local import: no cycle at module load
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    key = cache_key or _cache_key(url, params)
+    path = os.path.join(CACHE_DIR, f"{key}.json")
+    cached = read_json(path, default=None)
+    now = time.time()
+    if cached is not None and now - cached.get("fetched_at", 0) < ttl_s:
+        if provider:
+            health.record_call(provider, ok=True, latency_ms=0.0, from_cache=True)
+        return cached["payload"]
+    t0 = time.time()
+    try:
+        resp = requests.get(url, params=params, timeout=timeout_s)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        if provider:
+            health.record_call(provider, ok=False,
+                               latency_ms=(time.time() - t0) * 1000, from_cache=False)
+        log.warning("macro fetch failed (%s): %s", type(exc).__name__, url.split("?")[0])
+        if cached is not None:
+            LAST_SERVED_STALE = True
+            return cached["payload"]
+        return None
+    if provider:
+        health.record_call(provider, ok=True,
+                           latency_ms=(time.time() - t0) * 1000, from_cache=False)
+    atomic_write_json(path, {"fetched_at": now, "payload": payload})
+    return payload
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_health.py tests/test_macro_httpcache.py -v`
+Expected: all passed (G9's tests must stay green — `provider` defaults to None)
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/health.py swingbot/core/macro/httpcache.py tests/test_macro_health.py
+git commit -m "feat: provider health ledger"
+```
 
 ### Task G11: Quota meter (free-tier budgets)
 
@@ -294,8 +1481,102 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `QUOTAS: dict[str, dict] = {"fred": {"per_minute": 60, "per_day": 5000}, "finnhub": {"per_minute": 50, "per_day": 3000}}` (soft caps under the published free-tier limits); `allow_call(provider, now=None) -> bool` from the ledger; `fetch_json` returns cached/stale/None without network when disallowed. Quota exhaustion is a WARN in health, never an exception.
 
-- [ ] **Step 1: Failing tests** — 51st finnhub call in a minute denied; day rollover resets; denied call still serves cache.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: provider quota meter`
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_health.py`)
+
+```python
+def test_quota_denies_next_finnhub_call_after_50_in_a_minute(ledger):
+    for _ in range(50):
+        health.record_call("finnhub", ok=True, latency_ms=5.0, from_cache=False)
+    assert health.allow_call("finnhub") is False
+    assert health.allow_call("fred") is True            # independent budgets
+
+
+def test_day_rollover_resets(ledger):
+    import json
+    old = time.time() - 2 * 86400
+    line = {"ts": old, "provider": "finnhub", "ok": True,
+            "latency_ms": 5.0, "from_cache": False}
+    with open(health.LEDGER_PATH, "a", encoding="utf-8") as fh:
+        for _ in range(3000):
+            fh.write(json.dumps(line) + "\n")
+    assert health.allow_call("finnhub") is True         # yesterday doesn't count
+
+
+def test_denied_call_serves_cache_not_network(tmp_path, ledger, monkeypatch):
+    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path / "cache"))
+
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self): return {"v": 1}
+
+    calls = {"n": 0}
+    def fake_get(*a, **k):
+        calls["n"] += 1
+        return _Resp()
+    monkeypatch.setattr(httpcache.requests, "get", fake_get)
+    httpcache.fetch_json("https://x.test/q", provider="finnhub")     # seeds cache
+    monkeypatch.setattr(health, "allow_call", lambda p, now=None: False)
+    assert httpcache.fetch_json("https://x.test/q", ttl_s=0, provider="finnhub") == {"v": 1}
+    assert calls["n"] == 1                              # denied call never hit network
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_health.py -v`
+Expected: FAIL with `AttributeError: ... 'allow_call'`
+
+- [ ] **Step 3: Write the implementation** (append to `swingbot/core/macro/health.py`)
+
+```python
+# Soft caps deliberately under the published free-tier limits.
+QUOTAS: dict[str, dict] = {
+    "fred": {"per_minute": 60, "per_day": 5000},
+    "finnhub": {"per_minute": 50, "per_day": 3000},
+}
+
+
+def allow_call(provider: str, now: float | None = None) -> bool:
+    """False when the next network call would breach a budget. Quota
+    exhaustion is a WARN in health, never an exception."""
+    quota = QUOTAS.get(provider)
+    if quota is None:
+        return True
+    now = now if now is not None else time.time()
+    day_key = time.strftime("%Y-%m-%d", time.gmtime(now))
+    minute = day_count = 0
+    for row in _lines():
+        if row.get("provider") != provider or row.get("from_cache"):
+            continue
+        if row["ts"] > now - 60:
+            minute += 1
+        if time.strftime("%Y-%m-%d", time.gmtime(row["ts"])) == day_key:
+            day_count += 1
+    return minute < quota["per_minute"] and day_count < quota["per_day"]
+```
+
+**And in `fetch_json` (httpcache.py)**, insert the quota gate directly after the fresh-cache return, before any network:
+
+```python
+    if provider is not None and not health.allow_call(provider):
+        log.warning("quota: %s call denied — serving cache/None, no network", provider)
+        if cached is not None:
+            LAST_SERVED_STALE = True
+            return cached["payload"]
+        return None
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_health.py tests/test_macro_httpcache.py -v`
+Expected: all passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/health.py swingbot/core/macro/httpcache.py tests/test_macro_health.py
+git commit -m "feat: provider quota meter"
+```
 
 ### Task G12: FRED client
 
@@ -307,8 +1588,150 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 - Produces: `fred_series(series_id: str, *, start: str | None = None, ttl_s=6*3600) -> list[tuple[str, float]] | None` — GET `https://api.stlouisfed.org/fred/series/observations` with `api_key=config.FRED_API_KEY`, `file_type=json`, sorted ascending, `"."` observations skipped; empty key → None without network. `fred_release_dates(release_id: int, *, include_future=True) -> list[str]` (GET `/fred/releases/dates`). `latest(series_id) -> tuple[str, float] | None`; `yoy(series_id) -> float | None` (last vs value 12 monthly observations earlier).
 - Consumed by: G13–G20, G30.
 
-- [ ] **Step 1: Failing tests** — fixture JSON payload parses to sorted pairs; `"."` skipped; yoy golden ((last/year_ago − 1)×100); no key → None, zero network calls.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: FRED client (series, release dates, yoy)`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_fred.py
+import pytest
+
+import swingbot.config as config
+import swingbot.core.macro.fred as fred
+
+FIXTURE = {"observations": [
+    {"date": "2025-05-01", "value": "310.5"},
+    {"date": "2025-06-01", "value": "."},          # FRED's "no data" marker
+    {"date": "2025-07-01", "value": "312.0"},
+    {"date": "2024-07-01", "value": "300.0"},      # out of order on purpose
+]}
+
+
+@pytest.fixture
+def with_key(monkeypatch):
+    monkeypatch.setattr(config, "FRED_API_KEY", "test-key", raising=False)
+
+
+def test_series_parses_sorted_and_skips_dots(with_key, monkeypatch):
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: FIXTURE)
+    assert fred.fred_series("CPIAUCSL") == [
+        ("2024-07-01", 300.0), ("2025-05-01", 310.5), ("2025-07-01", 312.0)]
+
+
+def test_latest(with_key, monkeypatch):
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: FIXTURE)
+    assert fred.latest("CPIAUCSL") == ("2025-07-01", 312.0)
+
+
+def test_yoy_golden(with_key, monkeypatch):
+    # 13 monthly observations: yoy = (last / value-12-obs-earlier - 1) * 100
+    obs = [{"date": f"2025-{m:02d}-01", "value": str(100 + m)} for m in range(1, 13)]
+    obs.append({"date": "2026-01-01", "value": "113.0"})
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: {"observations": obs})
+    assert fred.yoy("X") == pytest.approx((113.0 / 101.0 - 1) * 100)
+
+
+def test_release_dates(with_key, monkeypatch):
+    payload = {"release_dates": [{"release_id": 10, "date": "2026-07-15"},
+                                 {"release_id": 10, "date": "2026-08-12"}]}
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: payload)
+    assert fred.fred_release_dates(10) == ["2026-07-15", "2026-08-12"]
+
+
+def test_no_key_means_none_and_zero_network(monkeypatch):
+    monkeypatch.setattr(config, "FRED_API_KEY", "", raising=False)
+    def boom(*a, **k):
+        raise AssertionError("network path must not be reached without a key")
+    monkeypatch.setattr(fred, "fetch_json", boom)
+    assert fred.fred_series("CPIAUCSL") is None
+    assert fred.fred_release_dates(10) == []
+    assert fred.yoy("CPIAUCSL") is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_fred.py -v`
+Expected: FAIL with `ImportError` (fred module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/fred.py
+"""FRED REST client. Empty API key -> None/[] without touching the network."""
+from __future__ import annotations
+
+from swingbot import config
+from swingbot.core.macro.httpcache import fetch_json
+
+BASE = "https://api.stlouisfed.org/fred"
+
+
+def _key() -> str:
+    return (getattr(config, "FRED_API_KEY", "") or "").strip()
+
+
+def fred_series(series_id: str, *, start: str | None = None,
+                ttl_s: int = 6 * 3600) -> list[tuple[str, float]] | None:
+    if not _key():
+        return None
+    params = {"series_id": series_id, "api_key": _key(),
+              "file_type": "json", "sort_order": "asc"}
+    if start:
+        params["observation_start"] = start
+    data = fetch_json(f"{BASE}/series/observations", params=params,
+                      ttl_s=ttl_s, provider="fred")
+    if not data or "observations" not in data:
+        return None
+    out = []
+    for obs in data["observations"]:
+        if obs.get("value") in (".", "", None):
+            continue
+        try:
+            out.append((obs["date"], float(obs["value"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return sorted(out) or None
+
+
+def fred_release_dates(release_id: int, *, include_future: bool = True) -> list[str]:
+    if not _key():
+        return []
+    params = {"release_id": release_id, "api_key": _key(), "file_type": "json",
+              "sort_order": "asc",
+              "include_release_dates_with_no_data": "true" if include_future else "false"}
+    data = fetch_json(f"{BASE}/releases/dates", params=params,
+                      ttl_s=24 * 3600, provider="fred")
+    if not data:
+        return []
+    return [d["date"] for d in data.get("release_dates", []) if d.get("date")]
+
+
+def latest(series_id: str) -> tuple[str, float] | None:
+    series = fred_series(series_id)
+    return series[-1] if series else None
+
+
+def yoy(series_id: str) -> float | None:
+    """Last observation vs the one 12 monthly observations earlier."""
+    series = fred_series(series_id)
+    if not series or len(series) < 13:
+        return None
+    last, year_ago = series[-1][1], series[-13][1]
+    if year_ago == 0:
+        return None
+    return (last / year_ago - 1.0) * 100.0
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_fred.py -v`
+Expected: 5 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/fred.py tests/test_macro_fred.py
+git commit -m "feat: FRED client (series, release dates, yoy)"
+```
 
 ### Task G13: Inflation series — CPI + Core CPI
 
@@ -319,57 +1742,442 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `SERIES: dict[str, SeriesSpec]` registry — `SeriesSpec(key, fred_id, kind, label, transform)`; first entries `cpi_yoy` (`CPIAUCSL`, transform yoy), `core_cpi_yoy` (`CPILFESL`, yoy), `cpi_mom` (m/m % of last two obs). `get_value(key) -> MacroValue | None` where `MacroValue(key, value, as_of, label, direction)` (`direction` = sign of change vs prior obs). All later series tasks only add registry rows; `get_value` never changes.
 
-- [ ] **Step 1: Failing tests** — registry row shapes; `get_value("cpi_yoy")` over a fixture series → golden value/as_of/direction; missing data → None.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: macro series registry + CPI`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_series.py
+import pytest
+
+import swingbot.core.macro.series as series_mod
+from swingbot.core.macro.series import SERIES, get_value
+
+# 26 monthly CPI observations, accelerating at the end so direction = +1.
+CPI_FIX = ([(f"2024-{m:02d}-01", 300.0 + m) for m in range(1, 13)]
+           + [(f"2025-{m:02d}-01", 315.0 + 2 * m) for m in range(1, 13)]
+           + [("2026-01-01", 345.0), ("2026-02-01", 351.0)])
+
+
+@pytest.fixture
+def fred_stub(monkeypatch):
+    def fake_series(fred_id, **kw):
+        return list(CPI_FIX)
+    monkeypatch.setattr(series_mod.fred, "fred_series", fake_series)
+
+
+def test_registry_rows_shape():
+    for key in ("cpi_yoy", "core_cpi_yoy", "cpi_mom"):
+        spec = SERIES[key]
+        assert spec.key == key and spec.fred_id and spec.label
+        assert spec.kind in series_mod.KINDS or spec.kind == "derived"
+
+
+def test_cpi_yoy_golden(fred_stub):
+    mv = get_value("cpi_yoy")
+    # last=351.0 (2026-02), 12 obs earlier=319.0 (2025-02) -> +10.03%
+    assert mv.value == pytest.approx((351.0 / 319.0 - 1) * 100, abs=0.01)
+    assert mv.as_of == "2026-02-01"
+    assert mv.direction == 1
+    assert mv.label == "CPI YoY %"
+
+
+def test_cpi_mom_golden(fred_stub):
+    mv = get_value("cpi_mom")
+    assert mv.value == pytest.approx((351.0 / 345.0 - 1) * 100, abs=0.01)
+
+
+def test_missing_data_returns_none(monkeypatch):
+    monkeypatch.setattr(series_mod.fred, "fred_series", lambda *a, **k: None)
+    assert get_value("cpi_yoy") is None
+    assert get_value("no_such_key") is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_series.py -v`
+Expected: FAIL with `ImportError` (series module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/series.py
+"""Named macro series registry.
+
+Later tasks (G14-G20) ONLY add SERIES rows (and, rarely, a KINDS
+transform); get_value never changes. kind="derived" rows compute from
+other rows via spec.derive() -> MacroValue | None.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable
+
+from swingbot.core.macro import fred
+
+
+@dataclass(frozen=True)
+class SeriesSpec:
+    key: str
+    fred_id: str
+    kind: str                       # a KINDS name, or "derived"
+    label: str
+    derive: Callable | None = None  # only for kind="derived"
+
+
+@dataclass(frozen=True)
+class MacroValue:
+    key: str
+    value: float
+    as_of: str
+    label: str
+    direction: int                  # sign of change vs prior computable obs
+
+
+def _yoy_at(series, i):
+    if i < 12 or series[i - 12][1] == 0:
+        return None
+    return (series[i][1] / series[i - 12][1] - 1.0) * 100.0
+
+
+def _mom_at(series, i):
+    if i < 1 or series[i - 1][1] == 0:
+        return None
+    return (series[i][1] / series[i - 1][1] - 1.0) * 100.0
+
+
+def _level_at(series, i):
+    return series[i][1]
+
+
+# Transform registry — additive, like SERIES itself (G16 adds "diff").
+KINDS: dict[str, Callable] = {"yoy": _yoy_at, "mom": _mom_at, "level": _level_at}
+
+
+SERIES: dict[str, SeriesSpec] = {
+    "cpi_yoy": SeriesSpec("cpi_yoy", "CPIAUCSL", "yoy", "CPI YoY %"),
+    "core_cpi_yoy": SeriesSpec("core_cpi_yoy", "CPILFESL", "yoy", "Core CPI YoY %"),
+    "cpi_mom": SeriesSpec("cpi_mom", "CPIAUCSL", "mom", "CPI MoM %"),
+}
+
+
+def get_value(key: str) -> MacroValue | None:
+    spec = SERIES.get(key)
+    if spec is None:
+        return None
+    if spec.kind == "derived":
+        return spec.derive()
+    series = fred.fred_series(spec.fred_id)
+    if not series:
+        return None
+    calc = KINDS[spec.kind]
+    i = len(series) - 1
+    value = calc(series, i)
+    if value is None:
+        return None
+    prior = calc(series, i - 1) if i >= 1 else None
+    direction = 0 if prior is None else (value > prior) - (value < prior)
+    return MacroValue(key, round(value, 2), series[i][0], spec.label, direction)
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_series.py -v`
+Expected: 4 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: macro series registry + CPI"
+```
 
 ### Task G14: PPI series
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 - Adds `ppi_yoy` (`PPIFIS` — Final Demand, the headline print), `ppi_mom`, `core_ppi_yoy` (`PPIFES` less foods/energy/trade). Verify both ids resolve in the G40 live smoke; the smoke script prints a loud warning if either 404s.
-- [ ] **Step 1–4: Failing tests (golden yoy/mom over fixtures), implement rows, PASS, commit** — `feat: PPI series`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def test_ppi_rows(fred_stub):
+    assert SERIES["ppi_yoy"].fred_id == "PPIFIS"
+    assert SERIES["core_ppi_yoy"].fred_id == "PPIFES"
+    assert get_value("ppi_yoy").value == pytest.approx((351.0 / 319.0 - 1) * 100, abs=0.01)
+    assert get_value("ppi_mom").value == pytest.approx((351.0 / 345.0 - 1) * 100, abs=0.01)
+```
+
+- [ ] **Step 2: Run — FAIL** (`KeyError: 'ppi_yoy'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — add to the `SERIES` literal:
+
+```python
+    "ppi_yoy": SeriesSpec("ppi_yoy", "PPIFIS", "yoy", "PPI YoY %"),
+    "ppi_mom": SeriesSpec("ppi_mom", "PPIFIS", "mom", "PPI MoM %"),
+    "core_ppi_yoy": SeriesSpec("core_ppi_yoy", "PPIFES", "yoy", "Core PPI YoY %"),
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: PPI series"
+```
 
 ### Task G15: PCE series (the Fed's target measure)
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 - Adds `pce_yoy` (`PCEPI`), `core_pce_yoy` (`PCEPILFE`) + a derived `inflation_vs_target` = core_pce_yoy − 2.0.
-- [ ] **Step 1–4: TDD as above, commit** — `feat: PCE series + target gap`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def test_pce_rows_and_target_gap(fred_stub):
+    core = get_value("core_pce_yoy")
+    gap = get_value("inflation_vs_target")
+    assert SERIES["pce_yoy"].fred_id == "PCEPI"
+    assert gap.value == pytest.approx(core.value - 2.0, abs=0.01)
+    assert gap.as_of == core.as_of
+
+
+def test_target_gap_none_when_core_missing(monkeypatch):
+    monkeypatch.setattr(series_mod.fred, "fred_series", lambda *a, **k: None)
+    assert get_value("inflation_vs_target") is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`KeyError: 'core_pce_yoy'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — rows in the `SERIES` literal plus a derive helper placed **after** `get_value`:
+
+```python
+    "pce_yoy": SeriesSpec("pce_yoy", "PCEPI", "yoy", "PCE YoY %"),
+    "core_pce_yoy": SeriesSpec("core_pce_yoy", "PCEPILFE", "yoy", "Core PCE YoY %"),
+```
+
+```python
+def _pce_vs_target() -> MacroValue | None:
+    core = get_value("core_pce_yoy")
+    if core is None:
+        return None
+    return MacroValue("inflation_vs_target", round(core.value - 2.0, 2),
+                      core.as_of, "Core PCE vs 2% target", core.direction)
+
+
+SERIES["inflation_vs_target"] = SeriesSpec(
+    "inflation_vs_target", "", "derived", "Core PCE vs 2% target",
+    derive=_pce_vs_target)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: PCE series + target gap"
+```
 
 ### Task G16: Labor series
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 - Adds `unemployment` (`UNRATE`), `payrolls_change_k` (`PAYEMS` m/m diff, thousands), `jobless_claims` (`ICSA`, weekly latest).
-- [ ] **Step 1–4: TDD, commit** — `feat: labor market series`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def test_labor_rows(fred_stub):
+    assert SERIES["unemployment"].fred_id == "UNRATE"
+    assert SERIES["jobless_claims"].fred_id == "ICSA"
+    assert get_value("unemployment").value == 351.0            # level kind
+    assert get_value("payrolls_change_k").value == pytest.approx(351.0 - 345.0)  # diff kind
+```
+
+- [ ] **Step 2: Run — FAIL** (`KeyError: 'unemployment'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — new `KINDS` transform + rows:
+
+```python
+def _diff_at(series, i):
+    if i < 1:
+        return None
+    return series[i][1] - series[i - 1][1]
+
+
+KINDS["diff"] = _diff_at
+```
+
+```python
+    "unemployment": SeriesSpec("unemployment", "UNRATE", "level", "Unemployment %"),
+    "payrolls_change_k": SeriesSpec("payrolls_change_k", "PAYEMS", "diff",
+                                    "Payrolls MoM change (k)"),   # PAYEMS is in thousands
+    "jobless_claims": SeriesSpec("jobless_claims", "ICSA", "level", "Initial claims"),
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: labor market series"
+```
 
 ### Task G17: Policy rate series
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 - Adds `fed_funds` (`FEDFUNDS`), `fed_funds_target_upper` (`DFEDTARU`, daily).
-- [ ] **Step 1–4: TDD, commit** — `feat: policy rate series`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def test_policy_rate_rows(fred_stub):
+    assert SERIES["fed_funds"].fred_id == "FEDFUNDS"
+    assert SERIES["fed_funds_target_upper"].fred_id == "DFEDTARU"
+    assert get_value("fed_funds").value == 351.0               # level kind
+```
+
+- [ ] **Step 2: Run — FAIL** (`KeyError: 'fed_funds'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — rows:
+
+```python
+    "fed_funds": SeriesSpec("fed_funds", "FEDFUNDS", "level", "Fed funds %"),
+    "fed_funds_target_upper": SeriesSpec("fed_funds_target_upper", "DFEDTARU",
+                                         "level", "Fed target upper %"),
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: policy rate series"
+```
 
 ### Task G18: Treasury yields
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 - Adds `y3m` (`DGS3MO`), `y2` (`DGS2`), `y10` (`DGS10`), `y30` (`DGS30`) — daily, last non-null.
-- [ ] **Step 1–4: TDD, commit** — `feat: treasury yield series`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def test_treasury_yield_rows(fred_stub):
+    for key, fred_id in (("y3m", "DGS3MO"), ("y2", "DGS2"),
+                         ("y10", "DGS10"), ("y30", "DGS30")):
+        assert SERIES[key].fred_id == fred_id
+        assert SERIES[key].kind == "level"
+    assert get_value("y10").value == 351.0
+```
+
+- [ ] **Step 2: Run — FAIL** (`KeyError: 'y3m'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — rows (daily series; `"."` days are already skipped by `fred_series`, so "level" is the last non-null print):
+
+```python
+    "y3m": SeriesSpec("y3m", "DGS3MO", "level", "3m yield %"),
+    "y2": SeriesSpec("y2", "DGS2", "level", "2y yield %"),
+    "y10": SeriesSpec("y10", "DGS10", "level", "10y yield %"),
+    "y30": SeriesSpec("y30", "DGS30", "level", "30y yield %"),
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: treasury yield series"
+```
 
 ### Task G19: Curve spreads + inversion flags
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 **Interfaces:** derived registry rows `curve_10y2y` (`T10Y2Y` direct), `curve_10y3m` (`T10Y3M`), plus `curve_state() -> str` (`"inverted"` if either spread < 0, `"flat"` if both in [0, 0.25], else `"normal"`).
-- [ ] **Step 1–4: TDD (three-state golden fixtures), commit** — `feat: curve spreads + inversion state`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def _stub_spreads(monkeypatch, values):
+    """values: fred_id -> spread value (None = series unavailable)."""
+    def fake(fred_id, **kw):
+        v = values.get(fred_id)
+        return None if v is None else [("2026-07-13", v), ("2026-07-14", v)]
+    monkeypatch.setattr(series_mod.fred, "fred_series", fake)
+
+
+def test_curve_state_three_states_plus_unknown(monkeypatch):
+    _stub_spreads(monkeypatch, {"T10Y2Y": -0.30, "T10Y3M": 0.50})
+    assert series_mod.curve_state() == "inverted"      # either spread < 0
+    _stub_spreads(monkeypatch, {"T10Y2Y": 0.10, "T10Y3M": 0.20})
+    assert series_mod.curve_state() == "flat"          # both in [0, 0.25]
+    _stub_spreads(monkeypatch, {"T10Y2Y": 0.60, "T10Y3M": 1.10})
+    assert series_mod.curve_state() == "normal"
+    _stub_spreads(monkeypatch, {})
+    assert series_mod.curve_state() == "unknown"       # degradation contract
+```
+
+- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'curve_state'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — rows + state function:
+
+```python
+    "curve_10y2y": SeriesSpec("curve_10y2y", "T10Y2Y", "level", "10y-2y spread"),
+    "curve_10y3m": SeriesSpec("curve_10y3m", "T10Y3M", "level", "10y-3m spread"),
+```
+
+```python
+def curve_state() -> str:
+    """"inverted" if either spread < 0; "flat" if all available in
+    [0, 0.25]; "normal" otherwise; "unknown" when nothing is available."""
+    vals = [mv.value for mv in (get_value("curve_10y2y"), get_value("curve_10y3m")) if mv]
+    if not vals:
+        return "unknown"
+    if any(v < 0 for v in vals):
+        return "inverted"
+    if all(0 <= v <= 0.25 for v in vals):
+        return "flat"
+    return "normal"
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: curve spreads + inversion state"
+```
 
 ### Task G20: Inflation expectations & risk-context series
 
 **Files:** Modify `series.py`; test `tests/test_macro_series.py`
 
 - Adds `breakeven_5y` (`T5YIE`), `breakeven_10y` (`T10YIE`), `dollar_index` (`DTWEXBGS`), `wti` (`DCOILWTICO`).
-- [ ] **Step 1–4: TDD, commit** — `feat: breakevens, dollar, oil series`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_series.py`)
+
+```python
+def test_expectations_and_risk_context_rows(fred_stub):
+    for key, fred_id in (("breakeven_5y", "T5YIE"), ("breakeven_10y", "T10YIE"),
+                         ("dollar_index", "DTWEXBGS"), ("wti", "DCOILWTICO")):
+        assert SERIES[key].fred_id == fred_id
+        assert SERIES[key].kind == "level"
+```
+
+- [ ] **Step 2: Run — FAIL** (`KeyError: 'breakeven_5y'`): `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 3: Implement** — rows:
+
+```python
+    "breakeven_5y": SeriesSpec("breakeven_5y", "T5YIE", "level", "5y breakeven %"),
+    "breakeven_10y": SeriesSpec("breakeven_10y", "T10YIE", "level", "10y breakeven %"),
+    "dollar_index": SeriesSpec("dollar_index", "DTWEXBGS", "level", "Dollar index"),
+    "wti": SeriesSpec("wti", "DCOILWTICO", "level", "WTI crude $"),
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_series.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/series.py tests/test_macro_series.py
+git commit -m "feat: breakevens, dollar, oil series"
+```
 
 ### Task G21: VIX level + term structure
 
@@ -380,8 +2188,120 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `vix_state() -> dict | None` — `{level, percentile_1y, regime, term_structure}`; level from FRED `VIXCLS` (fallback: cached `^VIX` bars via the existing fetch layer); `regime`: `<16 "calm"`, `16–24 "normal"`, `24–32 "elevated"`, `>32 "stress"`; `term_structure`: `"backwardation"` when VIX > VIX3M (`VXVCLS`) else `"contango"` (None if 3M unavailable). Percentile over trailing 252 obs.
 
-- [ ] **Step 1: Failing tests** — regime boundaries; percentile golden; missing 3M degrades to `term_structure=None` not error.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: VIX regime + term structure`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_vix.py
+import pytest
+
+import swingbot.core.macro.vix as vix_mod
+
+
+def _stub(monkeypatch, vix_series, vix3m_series=None):
+    def fake(fred_id, **kw):
+        if fred_id == "VIXCLS":
+            return vix_series
+        if fred_id == "VXVCLS":
+            return vix3m_series
+        return None
+    monkeypatch.setattr(vix_mod.fred, "fred_series", fake)
+
+
+def _series(levels):
+    return [(f"d{i}", float(v)) for i, v in enumerate(levels)]
+
+
+@pytest.mark.parametrize("level,regime", [
+    (12.0, "calm"), (15.99, "calm"), (16.0, "normal"), (23.99, "normal"),
+    (24.0, "elevated"), (31.99, "elevated"), (32.0, "stress"), (80.0, "stress"),
+])
+def test_regime_boundaries(monkeypatch, level, regime):
+    _stub(monkeypatch, _series([20.0] * 300 + [level]))
+    assert vix_mod.vix_state()["regime"] == regime
+
+
+def test_percentile_golden(monkeypatch):
+    # 251 obs at 10..? Make last obs higher than exactly 90% of the window.
+    window = list(range(1, 252))          # 1..251
+    window.append(226)                    # 226 is > 225 of 252 values -> ~89.7
+    _stub(monkeypatch, _series(window))
+    state = vix_mod.vix_state()
+    assert state["percentile_1y"] == pytest.approx(100.0 * 227 / 252, abs=0.1)
+
+
+def test_term_structure(monkeypatch):
+    _stub(monkeypatch, _series([20.0] * 260), _series([25.0] * 260))
+    assert vix_mod.vix_state()["term_structure"] == "contango"       # VIX < VIX3M
+    _stub(monkeypatch, _series([30.0] * 260), _series([25.0] * 260))
+    assert vix_mod.vix_state()["term_structure"] == "backwardation"  # VIX > VIX3M
+    _stub(monkeypatch, _series([20.0] * 260), None)
+    assert vix_mod.vix_state()["term_structure"] is None             # degrades, no error
+
+
+def test_no_data_returns_none(monkeypatch):
+    _stub(monkeypatch, None, None)
+    assert vix_mod.vix_state() is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_vix.py -v`
+Expected: FAIL with `ImportError` (vix module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/vix.py
+"""VIX level, trailing-1y percentile, regime bands, term structure."""
+from __future__ import annotations
+
+from swingbot.core.macro import fred
+
+_REGIME_BANDS = ((16.0, "calm"), (24.0, "normal"), (32.0, "elevated"))
+
+
+def _regime(level: float) -> str:
+    for cut, name in _REGIME_BANDS:
+        if level < cut:
+            return name
+    return "stress"
+
+
+def vix_state(loader=None) -> dict | None:
+    """loader (optional): ticker -> daily OHLCV frame; used as a ^VIX
+    cached-bars fallback when FRED's VIXCLS is unavailable."""
+    series = fred.fred_series("VIXCLS")
+    if not series and loader is not None:
+        bars = loader("^VIX")
+        if bars is not None and len(bars):
+            series = [(str(idx.date()), float(v))
+                      for idx, v in bars["Close"].items()]
+    if not series:
+        return None
+    closes = [v for _, v in series]
+    level = closes[-1]
+    window = closes[-252:]
+    percentile = 100.0 * sum(v <= level for v in window) / len(window)
+    vix3m = fred.fred_series("VXVCLS")
+    term = None
+    if vix3m:
+        term = "backwardation" if level > vix3m[-1][1] else "contango"
+    return {"level": round(level, 2), "percentile_1y": round(percentile, 1),
+            "regime": _regime(level), "term_structure": term}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_vix.py -v`
+Expected: 11 passed (8 regime params + 3)
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/vix.py tests/test_macro_vix.py
+git commit -m "feat: VIX regime + term structure"
+```
 
 ### Task G22: Credit stress (HYG/LQD)
 
@@ -392,8 +2312,106 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `credit_state(bars: dict[str, pd.DataFrame] | None = None) -> dict | None` — ratio HYG/LQD closes (from the existing daily-bar cache; injectable for tests), `{ratio, sma20_slope, state}`; `state = "risk_off"` when ratio < its 20DMA and slope < 0, `"risk_on"` when above and rising, else `"neutral"`.
 
-- [ ] **Step 1: Failing tests** — three-state goldens from synthetic ratio paths; missing either ETF → None.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: credit stress gauge`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_credit.py
+import numpy as np
+
+from swingbot.core.macro.credit import credit_state
+from tests.conftest import make_ohlcv
+
+
+def _bars(hyg_closes, lqd_level=100.0):
+    n = len(hyg_closes)
+    return {"HYG": make_ohlcv(np.asarray(hyg_closes)),
+            "LQD": make_ohlcv(np.full(n, lqd_level))}
+
+
+def test_risk_on_rising_ratio():
+    hyg = 80.0 * (1 + 0.002) ** np.arange(60)      # steadily rising vs flat LQD
+    state = credit_state(_bars(hyg))
+    assert state["state"] == "risk_on"
+    assert state["sma20_slope"] > 0
+
+
+def test_risk_off_falling_ratio():
+    hyg = 80.0 * (1 - 0.002) ** np.arange(60)
+    assert credit_state(_bars(hyg))["state"] == "risk_off"
+
+
+def test_neutral_pop_above_falling_sma():
+    hyg = list(100.0 * (1 - 0.005) ** np.arange(59))
+    hyg.append(hyg[-1] * 1.05)   # one-bar pop above a still-falling 20DMA
+    assert credit_state(_bars(np.asarray(hyg)))["state"] == "neutral"
+
+
+def test_missing_etf_returns_none():
+    assert credit_state({"HYG": make_ohlcv(np.full(60, 80.0))}) is None
+    assert credit_state({}) is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_credit.py -v`
+Expected: FAIL with `ImportError` (credit module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/credit.py
+"""HYG/LQD credit-stress ratio. Risk appetite proxy: high-yield
+outperforming investment-grade = risk_on."""
+from __future__ import annotations
+
+import logging
+
+log = logging.getLogger("swing-bot.macro.credit")
+
+
+def _load_default_bars() -> dict | None:
+    try:
+        # Existing daily-bar cache loader — verify the exact function name
+        # in swingbot/core/data.py at execution time (G23 wires the same one).
+        from swingbot.core.data import load_cached_daily
+        return {t: load_cached_daily(t) for t in ("HYG", "LQD")}
+    except Exception:  # noqa: BLE001 — provider failure never degrades scanning
+        log.warning("credit: cached HYG/LQD bars unavailable")
+        return None
+
+
+def credit_state(bars: dict | None = None) -> dict | None:
+    bars = bars if bars is not None else _load_default_bars()
+    if not bars or bars.get("HYG") is None or bars.get("LQD") is None:
+        return None
+    ratio = (bars["HYG"]["Close"] / bars["LQD"]["Close"]).dropna()
+    if len(ratio) < 26:
+        return None
+    sma20 = ratio.rolling(20).mean()
+    slope = float(sma20.iloc[-1] - sma20.iloc[-6])
+    above = bool(ratio.iloc[-1] > sma20.iloc[-1])
+    if above and slope > 0:
+        state = "risk_on"
+    elif not above and slope < 0:
+        state = "risk_off"
+    else:
+        state = "neutral"
+    return {"ratio": round(float(ratio.iloc[-1]), 4),
+            "sma20_slope": round(slope, 5), "state": state}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_credit.py -v`
+Expected: 4 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/credit.py tests/test_macro_credit.py
+git commit -m "feat: credit stress gauge"
+```
 
 ### Task G23: Sector ETF data plumbing
 
@@ -405,22 +2423,300 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `SECTOR_ETFS = {"XLK": "Technology", "XLF": "Financials", "XLV": "Health Care", "XLY": "Cons. Discretionary", "XLP": "Cons. Staples", "XLE": "Energy", "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities", "XLRE": "Real Estate", "XLC": "Comm. Services"}`, benchmark `SPY`; `sector_bars(loader=None) -> dict[str, pd.DataFrame]` using the existing daily cache loader (injectable).
 
-- [ ] **Step 1: Failing tests** — injectable loader; missing sector skipped with health WARN, not raise.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: sector ETF data plumbing`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_sectors.py
+import numpy as np
+
+from swingbot.core.macro.sectors import SECTOR_ETFS, sector_bars
+from tests.conftest import make_ohlcv
+
+
+def test_sector_universe_complete():
+    assert len(SECTOR_ETFS) == 11
+    assert SECTOR_ETFS["XLK"] == "Technology"
+    assert "XLRE" in SECTOR_ETFS and "XLC" in SECTOR_ETFS
+
+
+def test_injectable_loader_and_missing_sector_skipped(caplog):
+    frames = {t: make_ohlcv(np.full(150, 50.0)) for t in list(SECTOR_ETFS) + ["SPY"]}
+    frames.pop("XLU")                       # simulate a missing cache file
+
+    def loader(ticker):
+        return frames.get(ticker)           # None for XLU
+
+    bars = sector_bars(loader=loader)
+    assert "XLU" not in bars                # skipped, not raised
+    assert "SPY" in bars and "XLK" in bars
+    assert len(bars) == 11                  # 10 sectors + SPY
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_sectors.py -v`
+Expected: FAIL with `ImportError` (sectors module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/sectors.py
+"""11 SPDR sector ETFs: data plumbing, RS ranks (G24), rotation (G25)."""
+from __future__ import annotations
+
+import logging
+
+log = logging.getLogger("swing-bot.macro.sectors")
+
+SECTOR_ETFS = {
+    "XLK": "Technology", "XLF": "Financials", "XLV": "Health Care",
+    "XLY": "Cons. Discretionary", "XLP": "Cons. Staples", "XLE": "Energy",
+    "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
+    "XLRE": "Real Estate", "XLC": "Comm. Services",
+}
+BENCHMARK = "SPY"
+
+
+def _default_loader(ticker):
+    try:
+        # Existing daily-bar cache loader — verify the exact function name
+        # in swingbot/core/data.py at execution time.
+        from swingbot.core.data import load_cached_daily
+        return load_cached_daily(ticker)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def sector_bars(loader=None) -> dict:
+    """{ticker: df} for the 11 sectors + SPY; missing tickers are skipped
+    with a WARN — never a raise (a scan must survive a cold cache)."""
+    loader = loader or _default_loader
+    bars = {}
+    for ticker in list(SECTOR_ETFS) + [BENCHMARK]:
+        df = loader(ticker)
+        if df is None or not len(df):
+            log.warning("sectors: no cached bars for %s — skipped", ticker)
+            continue
+        bars[ticker] = df
+    return bars
+```
+
+**And modify `scripts/fetch_backtest_data.py`:** add the context tickers to its universe so the daily cache covers them:
+
+```python
+# scripts/fetch_backtest_data.py — extend the ticker set:
+CONTEXT_TICKERS = [
+    "SPY", "HYG", "LQD", "^VIX",
+    "XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC",
+]
+# wherever the script assembles its ticker list (verify variable name at
+# execution), append: tickers = sorted(set(tickers) | set(CONTEXT_TICKERS))
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_sectors.py -v`
+Expected: 2 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/sectors.py scripts/fetch_backtest_data.py tests/test_macro_sectors.py
+git commit -m "feat: sector ETF data plumbing"
+```
 
 ### Task G24: Sector relative-strength ranks
 
 **Files:** Modify `sectors.py`; test `tests/test_macro_sectors.py`
 
 **Interfaces:** `sector_rs(bars, windows=(21, 63, 126)) -> list[dict]` — per sector: return over each window minus SPY's, composite = mean of window z-scores, rank 1–11; `leaders(rs_rows, n=3)` / `laggards(rs_rows, n=3)`.
-- [ ] **Step 1–4: TDD (synthetic bars where XLE strictly outperforms → rank 1), commit** — `feat: sector RS ranks`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sectors.py`)
+
+```python
+def _rs_universe():
+    """XLE strictly outperforms (+0.3%/day), SPY flat, everyone else -0.1%/day."""
+    n = 150
+    bars = {"SPY": make_ohlcv(np.full(n, 100.0))}
+    for t in SECTOR_ETFS:
+        pct = 0.003 if t == "XLE" else -0.001
+        bars[t] = make_ohlcv(100.0 * (1 + pct) ** np.arange(n))
+    return bars
+
+
+def test_xle_ranks_first():
+    from swingbot.core.macro.sectors import laggards, leaders, sector_rs
+    rows = sector_rs(_rs_universe())
+    assert len(rows) == 11
+    assert rows[0]["etf"] == "XLE" and rows[0]["rank"] == 1
+    assert all(rows[i]["composite"] >= rows[i + 1]["composite"] for i in range(10))
+    assert leaders(rows)[0]["etf"] == "XLE"
+    assert "XLE" not in [r["etf"] for r in laggards(rows)]
+    for w in (21, 63, 126):
+        assert rows[0][f"rs_{w}"] > 0          # beat SPY on every window
+
+
+def test_rs_short_history_skipped():
+    from swingbot.core.macro.sectors import sector_rs
+    bars = _rs_universe()
+    bars["XLU"] = bars["XLU"].iloc[-50:]       # < max window + 1
+    rows = sector_rs(bars)
+    assert "XLU" not in [r["etf"] for r in rows]
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'sector_rs'`): `python -m pytest tests/test_macro_sectors.py -v`
+- [ ] **Step 3: Write the implementation** (append to `sectors.py`)
+
+```python
+def _window_return_pct(df, w) -> float:
+    c = df["Close"]
+    return float(c.iloc[-1] / c.iloc[-1 - w] - 1.0) * 100.0
+
+
+def sector_rs(bars: dict, windows=(21, 63, 126)) -> list[dict]:
+    """Per sector: return-over-window minus SPY's, composite = mean of
+    per-window z-scores, rank 1..11 (1 = strongest)."""
+    spy = bars.get(BENCHMARK)
+    need = max(windows) + 1
+    if spy is None or len(spy) < need:
+        return []
+    rows = []
+    for etf, name in SECTOR_ETFS.items():
+        df = bars.get(etf)
+        if df is None or len(df) < need:
+            continue
+        rows.append({"etf": etf, "sector": name,
+                     **{f"rs_{w}": round(_window_return_pct(df, w)
+                                         - _window_return_pct(spy, w), 2)
+                        for w in windows}})
+    if not rows:
+        return []
+    for w in windows:
+        vals = [r[f"rs_{w}"] for r in rows]
+        mu = sum(vals) / len(vals)
+        sd = (sum((v - mu) ** 2 for v in vals) / len(vals)) ** 0.5 or 1.0
+        for r in rows:
+            r[f"z_{w}"] = (r[f"rs_{w}"] - mu) / sd
+    for r in rows:
+        r["composite"] = sum(r[f"z_{w}"] for w in windows) / len(windows)
+    rows.sort(key=lambda r: r["composite"], reverse=True)
+    for i, r in enumerate(rows, start=1):
+        r["rank"] = i
+    return rows
+
+
+def leaders(rs_rows: list[dict], n=3) -> list[dict]:
+    return rs_rows[:n]
+
+
+def laggards(rs_rows: list[dict], n=3) -> list[dict]:
+    return rs_rows[-n:]
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sectors.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/sectors.py tests/test_macro_sectors.py
+git commit -m "feat: sector RS ranks"
+```
 
 ### Task G25: Rotation classification + ticker→sector map
 
 **Files:** Modify `sectors.py`; create seed `data/macro/ticker_sectors.json`; test `tests/test_macro_sectors.py`
 
 **Interfaces:** `rotation_state(rs_rows) -> dict` — `{posture, note}`; `posture = "risk_on"` when ≥2 of {XLK, XLY, XLC} in top 4 composite ranks, `"risk_off"` when ≥2 of {XLP, XLU, XLV} in top 4, else `"mixed"`; note names the leaders. `sector_of(ticker) -> str | None` via the static map (seeded for the current scan universe; unknown → None).
-- [ ] **Step 1–4: TDD (three postures from crafted ranks; unknown ticker), commit** — `feat: sector rotation posture`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sectors.py`)
+
+```python
+def _ranked(order):
+    """Build minimal rs_rows in the given etf order (rank 1 first)."""
+    return [{"etf": t, "sector": SECTOR_ETFS[t], "rank": i + 1,
+             "composite": float(len(order) - i)} for i, t in enumerate(order)]
+
+
+def test_rotation_postures():
+    from swingbot.core.macro.sectors import rotation_state
+    risk_on = _ranked(["XLK", "XLY", "XLE", "XLC", "XLF", "XLV", "XLI",
+                       "XLB", "XLP", "XLU", "XLRE"])
+    assert rotation_state(risk_on)["posture"] == "risk_on"     # XLK+XLY+XLC in top 4
+    risk_off = _ranked(["XLP", "XLU", "XLE", "XLV", "XLK", "XLY", "XLC",
+                        "XLF", "XLI", "XLB", "XLRE"])
+    assert rotation_state(risk_off)["posture"] == "risk_off"   # XLP+XLU+XLV in top 4
+    mixed = _ranked(["XLK", "XLP", "XLE", "XLF", "XLY", "XLU", "XLV",
+                     "XLC", "XLI", "XLB", "XLRE"])
+    assert rotation_state(mixed)["posture"] == "mixed"         # 1 of each camp
+    assert "XLK" in rotation_state(risk_on)["note"]            # note names leaders
+
+
+def test_sector_of_static_map(tmp_path, monkeypatch):
+    import swingbot.core.macro.sectors as sectors_mod
+    from swingbot.core.jsonio import atomic_write_json
+    path = tmp_path / "ticker_sectors.json"
+    atomic_write_json(str(path), {"NVDA": "Technology", "XOM": "Energy"})
+    monkeypatch.setattr(sectors_mod, "TICKER_SECTORS_PATH", str(path))
+    sectors_mod._ticker_map_cache = None
+    assert sectors_mod.sector_of("NVDA") == "Technology"
+    assert sectors_mod.sector_of("nvda") == "Technology"       # case-insensitive
+    assert sectors_mod.sector_of("ZZZZ") is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rotation_state'`): `python -m pytest tests/test_macro_sectors.py -v`
+- [ ] **Step 3: Write the implementation** (append to `sectors.py`)
+
+```python
+import os
+
+from swingbot import config
+from swingbot.core.jsonio import read_json
+
+_GROWTH = ("XLK", "XLY", "XLC")
+_DEFENSIVE = ("XLP", "XLU", "XLV")
+
+TICKER_SECTORS_PATH = os.path.join(config.DATA_DIR, "macro", "ticker_sectors.json")
+_ticker_map_cache: dict | None = None
+
+
+def rotation_state(rs_rows: list[dict]) -> dict:
+    if not rs_rows:
+        return {"posture": "unknown", "note": "no sector data"}
+    top4 = [r["etf"] for r in rs_rows[:4]]
+    growth = sum(t in top4 for t in _GROWTH)
+    defensive = sum(t in top4 for t in _DEFENSIVE)
+    if growth >= 2:
+        posture = "risk_on"
+    elif defensive >= 2:
+        posture = "risk_off"
+    else:
+        posture = "mixed"
+    names = ", ".join(f"{r['etf']} ({r['sector']})" for r in rs_rows[:3])
+    return {"posture": posture, "note": f"leaders: {names}"}
+
+
+def sector_of(ticker: str) -> str | None:
+    global _ticker_map_cache
+    if _ticker_map_cache is None:
+        raw = read_json(TICKER_SECTORS_PATH, default={}) or {}
+        _ticker_map_cache = {k.upper(): v for k, v in raw.items()}
+    return _ticker_map_cache.get(ticker.upper())
+```
+
+**And create the seed map** `data/macro/ticker_sectors.json` for the current scan universe (read the live watchlist at execution time — `data/watchlist.json` — and map each ticker to its GICS sector name from `SECTOR_ETFS` values; unknown/ETF tickers may be omitted). Example shape:
+
+```json
+{"AAPL": "Technology", "NVDA": "Technology", "JPM": "Financials",
+ "XOM": "Energy", "UNH": "Health Care", "AMZN": "Cons. Discretionary"}
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sectors.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/sectors.py data/macro/ticker_sectors.json tests/test_macro_sectors.py
+git commit -m "feat: sector rotation posture"
+```
 
 ### Task G26: Breadth internals
 
@@ -431,7 +2727,98 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `breadth(bars: dict[str, pd.DataFrame]) -> dict` — `{pct_above_50dma, pct_above_200dma, n}` over the scan universe's cached bars; `breadth_state(b) -> str` (`"healthy"` ≥60% above 50DMA, `"weak"` ≤40%, else `"mixed"`). (If edge-engine E28 landed, wrap it instead of recomputing — capability check `try: from swingbot.core.edge import factors`.)
 
-- [ ] **Step 1–4: TDD (synthetic universe of 10 tickers, golden pcts), commit** — `feat: breadth internals`
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_macro_breadth.py
+import numpy as np
+
+from swingbot.core.macro.breadth import breadth, breadth_state
+from tests.conftest import make_ohlcv
+
+
+def _universe():
+    """10 tickers with 220 bars: 7 in uptrends (above both DMAs),
+    3 in downtrends (below both)."""
+    bars = {}
+    for i in range(7):
+        bars[f"UP{i}"] = make_ohlcv(100.0 * (1 + 0.002) ** np.arange(220))
+    for i in range(3):
+        bars[f"DN{i}"] = make_ohlcv(100.0 * (1 - 0.002) ** np.arange(220))
+    return bars
+
+
+def test_golden_percentages():
+    b = breadth(_universe())
+    assert b == {"pct_above_50dma": 70.0, "pct_above_200dma": 70.0, "n": 10}
+    assert breadth_state(b) == "healthy"          # >= 60%
+
+
+def test_state_bands():
+    assert breadth_state({"pct_above_50dma": 40.0}) == "weak"
+    assert breadth_state({"pct_above_50dma": 50.0}) == "mixed"
+    assert breadth_state({"pct_above_50dma": None}) == "unknown"
+
+
+def test_short_history_excluded():
+    bars = _universe()
+    bars["NEW"] = make_ohlcv(np.full(100, 50.0))   # < 200 bars: not countable
+    assert breadth(bars)["n"] == 10
+
+
+def test_empty_universe():
+    b = breadth({})
+    assert b["n"] == 0 and b["pct_above_50dma"] is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_breadth.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/breadth.py
+"""% of the scan universe above its 50/200 DMA.
+
+Capability check: if edge-engine E28 breadth factors are merged
+(`swingbot.core.edge.factors`), wrap them instead of recomputing —
+verify at execution; the interface below stays either way.
+"""
+from __future__ import annotations
+
+
+def breadth(bars: dict) -> dict:
+    above50 = above200 = n = 0
+    for df in bars.values():
+        closes = df["Close"]
+        if len(closes) < 200:
+            continue
+        n += 1
+        above50 += bool(closes.iloc[-1] > closes.rolling(50).mean().iloc[-1])
+        above200 += bool(closes.iloc[-1] > closes.rolling(200).mean().iloc[-1])
+    if n == 0:
+        return {"pct_above_50dma": None, "pct_above_200dma": None, "n": 0}
+    return {"pct_above_50dma": round(100.0 * above50 / n, 1),
+            "pct_above_200dma": round(100.0 * above200 / n, 1), "n": n}
+
+
+def breadth_state(b: dict) -> str:
+    pct = b.get("pct_above_50dma")
+    if pct is None:
+        return "unknown"
+    if pct >= 60:
+        return "healthy"
+    if pct <= 40:
+        return "weak"
+    return "mixed"
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_breadth.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/breadth.py tests/test_macro_breadth.py
+git commit -m "feat: breadth internals"
+```
 
 ### Task G27: Risk-on/off composite
 
@@ -442,15 +2829,174 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `risk_composite(vix, credit, rotation, breadth, curve) -> dict` — pure function over the five upstream dicts (any may be None): each contributes −1/0/+1 (vix calm=+1 stress=−1; credit risk_on=+1; rotation risk_on=+1; breadth healthy=+1; curve normal=+1 inverted=−1), score = mean of available × 100 → `{score: -100..100, label: "risk_on"|"neutral"|"risk_off"|"unknown", inputs_used: int, detail: [...]}` (label cuts at ±33; fewer than 2 inputs → `"unknown"`).
 
-- [ ] **Step 1: Failing tests** — all-bull → +100 risk_on; mixed → neutral; one input → unknown; None-tolerance.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: risk-on/off composite`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_composite.py
+from swingbot.core.macro.composite import risk_composite
+
+VIX_CALM = {"level": 13.0, "percentile_1y": 20.0, "regime": "calm", "term_structure": "contango"}
+VIX_STRESS = {"level": 38.0, "percentile_1y": 99.0, "regime": "stress", "term_structure": "backwardation"}
+CREDIT_ON = {"ratio": 0.82, "sma20_slope": 0.001, "state": "risk_on"}
+ROT_ON = {"posture": "risk_on", "note": "leaders: XLK"}
+BREADTH_OK = {"pct_above_50dma": 72.0, "pct_above_200dma": 65.0, "n": 60}
+
+
+def test_all_bull_is_plus_100_risk_on():
+    out = risk_composite(VIX_CALM, CREDIT_ON, ROT_ON, BREADTH_OK, "normal")
+    assert out["score"] == 100 and out["label"] == "risk_on"
+    assert out["inputs_used"] == 5 and len(out["detail"]) == 5
+
+
+def test_mixed_is_neutral():
+    out = risk_composite(VIX_STRESS, CREDIT_ON, {"posture": "mixed", "note": ""},
+                         BREADTH_OK, "inverted")
+    # votes: -1, +1, 0, +1, -1 -> score 0
+    assert out["score"] == 0 and out["label"] == "neutral"
+
+
+def test_single_input_is_unknown():
+    out = risk_composite(VIX_CALM, None, None, None, None)
+    assert out["label"] == "unknown" and out["inputs_used"] == 1
+
+
+def test_none_tolerance_everywhere():
+    out = risk_composite(None, None, None, None, None)
+    assert out == {"score": 0, "label": "unknown", "inputs_used": 0, "detail": []}
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_composite.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/composite.py
+"""Risk-on/off composite — a pure function over the five upstream dicts."""
+from __future__ import annotations
+
+from swingbot.core.macro.breadth import breadth_state
+
+_VIX_VOTE = {"calm": 1, "normal": 0, "elevated": 0, "stress": -1}
+_TRI_VOTE = {"risk_on": 1, "neutral": 0, "mixed": 0, "risk_off": -1,
+             "healthy": 1, "weak": -1,
+             "normal": 1, "flat": 0, "inverted": -1}
+
+
+def risk_composite(vix, credit, rotation, breadth, curve) -> dict:
+    """Each available input votes -1/0/+1; score = mean * 100.
+    Fewer than 2 usable inputs -> label "unknown" (never a guess)."""
+    votes, detail = [], []
+
+    def _vote(value: int, text: str):
+        votes.append(value)
+        detail.append(f"{text} ({value:+d})")
+
+    if vix and vix.get("regime"):
+        _vote(_VIX_VOTE.get(vix["regime"], 0), f"VIX {vix['regime']}")
+    if credit and credit.get("state"):
+        _vote(_TRI_VOTE[credit["state"]], f"credit {credit['state']}")
+    if rotation and rotation.get("posture") in ("risk_on", "mixed", "risk_off"):
+        _vote(_TRI_VOTE[rotation["posture"]], f"rotation {rotation['posture']}")
+    if breadth and breadth.get("pct_above_50dma") is not None:
+        state = breadth_state(breadth)
+        _vote(_TRI_VOTE[state], f"breadth {state}")
+    if curve in ("normal", "flat", "inverted"):
+        _vote(_TRI_VOTE[curve], f"curve {curve}")
+
+    if len(votes) < 2:
+        return {"score": 0, "label": "unknown",
+                "inputs_used": len(votes), "detail": detail}
+    score = round(100.0 * sum(votes) / len(votes))
+    label = "risk_on" if score > 33 else "risk_off" if score < -33 else "neutral"
+    return {"score": score, "label": label,
+            "inputs_used": len(votes), "detail": detail}
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_composite.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/composite.py tests/test_macro_composite.py
+git commit -m "feat: risk-on/off composite"
+```
 
 ### Task G28: Fear/greed-style gauge
 
 **Files:** Modify `composite.py`; test `tests/test_macro_composite.py`
 
 **Interfaces:** `fear_greed(vix, breadth, credit, spy_momentum) -> dict | None` — 0–100 gauge from four 0–100 subcomponents (VIX percentile inverted; breadth pct_above_50; credit ratio percentile; SPY 125d momentum percentile), equal-weight mean of available (≥3 required); labels `<25 extreme fear, <45 fear, ≤55 neutral, ≤75 greed, >75 extreme greed`. Own gauge — no scraping of CNN's.
-- [ ] **Step 1–4: TDD (label boundaries, <3 inputs → None), commit** — `feat: fear/greed gauge`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_composite.py`)
+
+```python
+from swingbot.core.macro.composite import fear_greed
+
+
+def _fg(vix_pct, breadth_pct, credit_pctile, mom_pctile):
+    vix = None if vix_pct is None else {"percentile_1y": vix_pct, "regime": "normal"}
+    b = None if breadth_pct is None else {"pct_above_50dma": breadth_pct}
+    return fear_greed(vix, b, credit_pctile, mom_pctile)
+
+
+def test_label_boundaries():
+    # all four components equal -> value == that number
+    assert _fg(100 - 10, 10, 10, 10)["label"] == "extreme fear"    # 10 < 25
+    assert _fg(100 - 30, 30, 30, 30)["label"] == "fear"            # 30 < 45
+    assert _fg(100 - 50, 50, 50, 50)["label"] == "neutral"         # 45..55
+    assert _fg(100 - 70, 70, 70, 70)["label"] == "greed"           # 56..75
+    assert _fg(100 - 90, 90, 90, 90)["label"] == "extreme greed"   # > 75
+
+
+def test_vix_component_is_inverted():
+    out = _fg(80.0, None, 50.0, 50.0)          # high VIX percentile = fear
+    assert out["components"]["vix"] == 20.0
+
+
+def test_fewer_than_three_inputs_returns_none():
+    assert _fg(50.0, None, None, 50.0) is None
+    assert _fg(None, None, None, None) is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'fear_greed'`): `python -m pytest tests/test_macro_composite.py -v`
+- [ ] **Step 3: Write the implementation** (append to `composite.py`)
+
+```python
+def fear_greed(vix, breadth, credit_pctile, spy_momentum_pctile) -> dict | None:
+    """0-100 gauge from up to four 0-100 subcomponents (equal-weight mean;
+    >= 3 required): inverted VIX 1y percentile, breadth %>50DMA, HYG/LQD
+    ratio percentile, SPY 125d momentum percentile. Our own gauge — no
+    scraping of CNN's."""
+    comps = {}
+    if vix and vix.get("percentile_1y") is not None:
+        comps["vix"] = round(100.0 - vix["percentile_1y"], 1)
+    if breadth and breadth.get("pct_above_50dma") is not None:
+        comps["breadth"] = breadth["pct_above_50dma"]
+    if credit_pctile is not None:
+        comps["credit"] = credit_pctile
+    if spy_momentum_pctile is not None:
+        comps["momentum"] = spy_momentum_pctile
+    if len(comps) < 3:
+        return None
+    value = round(sum(comps.values()) / len(comps), 1)
+    label = ("extreme fear" if value < 25 else "fear" if value < 45 else
+             "neutral" if value <= 55 else "greed" if value <= 75 else
+             "extreme greed")
+    return {"value": value, "label": label, "components": comps}
+```
+
+(The two percentile inputs are computed by the snapshot builder (G38) from
+cached bars: `credit_pctile` = today's HYG/LQD ratio vs its trailing 252
+values; `spy_momentum_pctile` = today's SPY 125-day return vs its own
+trailing 252 values — both via the same `sum(v <= last)/len` percentile
+used in `vix.py`.)
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_composite.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/composite.py tests/test_macro_composite.py
+git commit -m "feat: fear/greed gauge"
+```
 
 ### Task G29: Historical econ event dataset (2018→present)
 
@@ -462,17 +3008,291 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 - Produces: `Event = {date, time_et, kind, label, importance}` with `kind` in `{"fomc", "cpi", "ppi", "nfp", "pce", "opex", "holiday"}`, importance 1–3 (fomc/cpi/nfp = 3). The script builds history from: FOMC — the Fed's published meeting dates hardcoded 2018–2026 (public, finite, stable — a literal list in the script with a source-URL comment; decision days 14:00 ET); CPI/PPI/PCE/NFP — `fred_release_dates()` (release ids: CPI 10, PPI 46, Employment Situation 50, Personal Income & Outlays 54), 08:30 ET. `calendar_events.load_events() -> list[Event]`; `events_between(start, end)`; `events_on(date)`.
 - **This file is what makes the news-whipsaw red flag backtestable** — G90 joins it into the backtest frame.
 
-- [ ] **Step 1: Failing tests** — loader over a fixture file; `events_between` inclusive bounds; kinds/importance validated.
-- [ ] **Step 2: Implement loader + script (script hits network — excluded from the test suite; usage documented in its header).**
-- [ ] **Step 3: Run the script once for real; spot-check (CPI monthly ~mid-month 08:30 ET; 8 FOMC/year). Commit the generated JSON.**
-- [ ] **Step 4: Commit** — `feat: historical econ event calendar 2018→present`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_calendar.py
+import json
+
+import pytest
+
+from swingbot.core.macro.calendar_events import events_between, events_on, load_events
+
+FIXTURE = [
+    {"date": "2026-07-14", "time_et": "08:30", "kind": "cpi", "label": "CPI release", "importance": 3},
+    {"date": "2026-07-29", "time_et": "14:00", "kind": "fomc", "label": "FOMC decision", "importance": 3},
+    {"date": "2026-07-02", "time_et": "08:30", "kind": "nfp", "label": "NFP release", "importance": 3},
+    {"date": "2026-07-17", "time_et": "", "kind": "opex", "label": "OPEX", "importance": 1},
+    {"date": "2026-07-20", "time_et": "08:30", "kind": "bogus", "label": "bad kind", "importance": 3},
+    {"date": "2026-07-21", "time_et": "08:30", "kind": "cpi", "label": "bad importance", "importance": 9},
+]
+
+
+@pytest.fixture
+def events_file(tmp_path):
+    path = tmp_path / "event_history.json"
+    path.write_text(json.dumps(FIXTURE), encoding="utf-8")
+    return str(path)
+
+
+def test_loader_validates_and_sorts(events_file):
+    events = load_events(events_file)
+    # invalid kind + invalid importance dropped; remainder date-sorted
+    assert [e["kind"] for e in events] == ["nfp", "cpi", "opex", "fomc"]
+
+
+def test_events_between_inclusive_bounds(events_file):
+    events = load_events(events_file)
+    window = events_between("2026-07-14", "2026-07-17", events)
+    assert [e["kind"] for e in window] == ["cpi", "opex"]
+
+
+def test_events_on(events_file):
+    events = load_events(events_file)
+    assert events_on("2026-07-29", events)[0]["kind"] == "fomc"
+    assert events_on("2026-07-30", events) == []
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`), then **implement the loader**:
+
+```python
+# swingbot/core/macro/calendar_events.py
+"""Econ event calendar. Event = {date, time_et, kind, label, importance}.
+History is generated by scripts/build_event_history.py; the future edge
+is kept fresh by refresh_future_events (G30)."""
+from __future__ import annotations
+
+import os
+
+from swingbot import config
+from swingbot.core.jsonio import read_json
+
+KINDS = ("fomc", "cpi", "ppi", "nfp", "pce", "opex", "holiday")
+IMPORTANCE = {"fomc": 3, "cpi": 3, "nfp": 3, "ppi": 2, "pce": 2, "opex": 1, "holiday": 1}
+EVENTS_PATH = os.path.join(config.DATA_DIR, "macro", "event_history.json")
+
+
+def load_events(path: str | None = None) -> list[dict]:
+    rows = read_json(path or EVENTS_PATH, default=[]) or []
+    out = []
+    for e in rows:
+        if (e.get("kind") in KINDS and e.get("date")
+                and 1 <= int(e.get("importance", 0)) <= 3):
+            out.append(e)
+    return sorted(out, key=lambda e: (e["date"], e["kind"]))
+
+
+def events_between(start: str, end: str, events: list[dict] | None = None) -> list[dict]:
+    events = load_events() if events is None else events
+    return [e for e in events if start <= e["date"] <= end]   # both bounds inclusive
+
+
+def events_on(date: str, events: list[dict] | None = None) -> list[dict]:
+    return events_between(date, date, events)
+```
+
+**And the generator script** (hits the network — excluded from the test suite; usage in header):
+
+```python
+# scripts/build_event_history.py
+"""Build data/macro/event_history.json (2018 -> currently published future).
+
+USAGE (network; NEVER imported by tests):
+    FRED_API_KEY=... python scripts/build_event_history.py
+
+Sources:
+- FOMC decision days: the Fed's published calendars —
+  https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+  (+ the "historical materials" pages for 2018-2020). Paste the SECOND
+  day of each two-day meeting into FOMC_DECISION_DAYS below (decision at
+  14:00 ET); the validation block rejects a bad paste (the Fed holds 8
+  scheduled meetings/year — 7-9 allowed for unscheduled cuts/additions).
+- CPI/PPI/NFP/PCE: fred_release_dates() — release ids CPI=10, PPI=46,
+  Employment Situation=50, Personal Income & Outlays=54; prints 08:30 ET.
+"""
+import datetime as dt
+import sys
+
+sys.path.insert(0, ".")
+
+from swingbot.core.jsonio import atomic_write_json
+from swingbot.core.macro.calendar_events import EVENTS_PATH, IMPORTANCE
+from swingbot.core.macro.fred import fred_release_dates
+
+# Paste from the Fed's calendar pages (source URLs in the header) —
+# every scheduled decision day 2018-01-31 through the last published
+# future meeting, one ISO date per entry:
+FOMC_DECISION_DAYS: list[str] = [
+    # "2018-01-31", "2018-03-21", "2018-05-02", "2018-06-13", ...
+]
+
+RELEASES = {"cpi": 10, "ppi": 46, "nfp": 50, "pce": 54}
+
+
+def _validate_fomc(days: list[str]) -> None:
+    per_year: dict[str, int] = {}
+    for d in days:
+        dt.date.fromisoformat(d)                      # raises on a bad paste
+        per_year[d[:4]] = per_year.get(d[:4], 0) + 1
+    for year, n in sorted(per_year.items()):
+        current = dt.date.today().year
+        if int(year) < current:                        # future years may be partial
+            assert 7 <= n <= 9, f"{year}: {n} FOMC days — check the paste"
+
+
+def main() -> int:
+    assert FOMC_DECISION_DAYS, "paste the FOMC decision days first (see header)"
+    _validate_fomc(FOMC_DECISION_DAYS)
+    events = [{"date": d, "time_et": "14:00", "kind": "fomc",
+               "label": "FOMC decision", "importance": 3}
+              for d in FOMC_DECISION_DAYS]
+    for kind, release_id in RELEASES.items():
+        dates = fred_release_dates(release_id, include_future=True)
+        assert dates, f"no release dates for {kind} — check FRED_API_KEY"
+        events += [{"date": d, "time_et": "08:30", "kind": kind,
+                    "label": f"{kind.upper()} release",
+                    "importance": IMPORTANCE[kind]}
+                   for d in dates if d >= "2018-01-01"]
+    events.sort(key=lambda e: (e["date"], e["kind"]))
+    atomic_write_json(EVENTS_PATH, events)
+    print(f"wrote {len(events)} events -> {EVENTS_PATH}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+- [ ] **Step 3: Run tests — PASS** (`python -m pytest tests/test_macro_calendar.py -v`). **Then run the script once for real**; spot-check the JSON (CPI monthly ~mid-month 08:30 ET; 8 FOMC decision days/year; NFP first-Friday-ish). Commit the generated `data/macro/event_history.json`.
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/calendar_events.py scripts/build_event_history.py data/macro/event_history.json tests/test_macro_calendar.py
+git commit -m "feat: historical econ event calendar 2018->present"
+```
 
 ### Task G30: Forward event schedule refresh
 
 **Files:** Modify `calendar_events.py`; test `tests/test_macro_calendar.py`
 
 **Interfaces:** `refresh_future_events(days_ahead=45) -> int` — re-pulls `fred_release_dates(include_future=True)` + the static future FOMC list, merges into `event_history.json` (idempotent by (date, kind)), returns rows added; called by the snapshot scheduler (G39) at most daily. `next_event(kinds=None, now=None) -> Event | None`; `hours_until(event, now) -> float` (ET-aware).
-- [ ] **Step 1–4: TDD (merge idempotency, next_event ordering, tz math ET→UTC), commit** — `feat: forward event schedule`
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_calendar.py`)
+
+```python
+import datetime as dt
+
+import swingbot.core.macro.calendar_events as cal
+import swingbot.core.macro.fred as fred
+
+
+def test_refresh_merge_idempotent(tmp_path, monkeypatch):
+    path = tmp_path / "event_history.json"
+    path.write_text(json.dumps([FIXTURE[0]]), encoding="utf-8")   # cpi 2026-07-14 known
+    monkeypatch.setattr(cal, "EVENTS_PATH", str(path))
+    monkeypatch.setattr(cal, "FUTURE_FOMC", ["2026-07-29"])
+    monkeypatch.setattr(fred, "fred_release_dates",
+                        lambda rid, include_future=True: ["2026-07-14", "2026-08-12"])
+    today = dt.date(2026, 7, 10)
+    # 4 kinds x 2 dates = 8 pairs, minus (cpi, 07-14) already present,
+    # plus the future FOMC = 8 rows added.
+    assert cal.refresh_future_events(days_ahead=45, today=today) == 8
+    assert cal.refresh_future_events(days_ahead=45, today=today) == 0   # idempotent
+    assert len(cal.load_events()) == 9
+
+
+def test_next_event_ordering_and_tz_math():
+    events = sorted(FIXTURE[:3], key=lambda e: (e["date"], e["kind"]))
+    now = dt.datetime(2026, 7, 14, 11, 0, tzinfo=dt.timezone.utc)   # 07:00 ET (EDT)
+    nxt = cal.next_event(now=now, events=events)
+    assert nxt["kind"] == "cpi"                       # today's 08:30 ET still ahead
+    # 08:30 ET on 2026-07-14 = 12:30 UTC -> 1.5 h away
+    assert cal.hours_until(nxt, now=now) == pytest.approx(1.5)
+    later = dt.datetime(2026, 7, 14, 13, 0, tzinfo=dt.timezone.utc)
+    assert cal.next_event(now=later, events=events)["kind"] == "fomc"
+    assert cal.next_event(kinds=("nfp",), now=later, events=events) is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'refresh_future_events'`)
+- [ ] **Step 3: Write the implementation** (append to `calendar_events.py`)
+
+```python
+import datetime as dt
+from zoneinfo import ZoneInfo
+
+from swingbot.core.jsonio import atomic_write_json
+
+ET = ZoneInfo("America/New_York")
+
+# Future FOMC decision days beyond what's in event_history.json — update
+# when the Fed publishes next year's calendar (same source URL as
+# scripts/build_event_history.py).
+FUTURE_FOMC: list[str] = []
+
+_RELEASES = {"cpi": 10, "ppi": 46, "nfp": 50, "pce": 54}
+
+
+def refresh_future_events(days_ahead: int = 45, today: dt.date | None = None) -> int:
+    """Merge newly published release dates + FUTURE_FOMC into the events
+    file. Idempotent by (date, kind). Returns rows added. Called by the
+    snapshot scheduler (G39) at most daily."""
+    from swingbot.core.macro import fred as fred_mod
+
+    today = today or dt.date.today()
+    horizon = (today + dt.timedelta(days=days_ahead)).isoformat()
+    start = today.isoformat()
+    existing = load_events()
+    seen = {(e["date"], e["kind"]) for e in existing}
+    added = []
+
+    def _add(date, kind, time_et, label):
+        if start <= date <= horizon and (date, kind) not in seen:
+            added.append({"date": date, "time_et": time_et, "kind": kind,
+                          "label": label, "importance": IMPORTANCE[kind]})
+            seen.add((date, kind))
+
+    for kind, release_id in _RELEASES.items():
+        for date in fred_mod.fred_release_dates(release_id, include_future=True):
+            _add(date, kind, "08:30", f"{kind.upper()} release")
+    for date in FUTURE_FOMC:
+        _add(date, "fomc", "14:00", "FOMC decision")
+    if added:
+        merged = sorted(existing + added, key=lambda e: (e["date"], e["kind"]))
+        atomic_write_json(EVENTS_PATH, merged)
+    return len(added)
+
+
+def _event_dt_utc(event: dict) -> dt.datetime:
+    hh, mm = (int(x) for x in (event.get("time_et") or "09:30").split(":"))
+    d = dt.date.fromisoformat(event["date"])
+    return dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=ET) \
+             .astimezone(dt.timezone.utc)
+
+
+def next_event(kinds=None, now: dt.datetime | None = None,
+               events: list[dict] | None = None) -> dict | None:
+    now = now or dt.datetime.now(dt.timezone.utc)
+    for e in (load_events() if events is None else events):
+        if kinds and e["kind"] not in kinds:
+            continue
+        if _event_dt_utc(e) >= now:
+            return e
+    return None
+
+
+def hours_until(event: dict, now: dt.datetime | None = None) -> float:
+    now = now or dt.datetime.now(dt.timezone.utc)
+    return (_event_dt_utc(event) - now).total_seconds() / 3600.0
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_calendar.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/calendar_events.py tests/test_macro_calendar.py
+git commit -m "feat: forward event schedule"
+```
 
 ### Task G31: Options-expiry calendar
 
@@ -483,8 +3303,87 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `opex_dates(year) -> list[str]` (3rd Fridays, shifted to Thursday when Friday is a market holiday); `is_opex(date) -> bool`; `is_quad_witching(date) -> bool` (3rd Friday of Mar/Jun/Sep/Dec); pure calendar math, no network.
 
-- [ ] **Step 1: Failing tests** — golden: 2026 quad-witching = Mar 20, Jun 18 (Jun 19 Juneteenth → Thursday), Sep 18, Dec 18; `is_opex` true/false pairs.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: opex + quad-witching calendar`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_opex.py
+from swingbot.core.macro.opex import is_opex, is_quad_witching, opex_dates
+
+
+def test_2026_quad_witching_golden():
+    dates = opex_dates(2026)
+    assert dates[2] == "2026-03-20"
+    assert dates[5] == "2026-06-18"     # Jun 19 is Juneteenth -> Thursday
+    assert dates[8] == "2026-09-18"
+    assert dates[11] == "2026-12-18"
+
+
+def test_is_opex_pairs():
+    assert is_opex("2026-06-18") is True
+    assert is_opex("2026-06-19") is False
+    assert is_opex("2026-01-16") is True
+    assert is_opex("2026-01-15") is False
+
+
+def test_quad_witching_only_mar_jun_sep_dec():
+    assert is_quad_witching("2026-03-20") and is_quad_witching("2026-12-18")
+    assert not is_quad_witching("2026-01-16")
+    assert not is_quad_witching("2026-06-19")
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_opex.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/opex.py
+"""Options-expiry / quad-witching calendar. Pure date math, no network.
+
+Expiry = 3rd Friday, shifted to Thursday when that Friday is a market
+holiday. Until G32 lands, _is_holiday covers the fixed-date holidays
+that can land on a Friday; G32 swaps it to sessions.is_holiday (one
+calendar authority)."""
+import datetime as dt
+
+# (month, day) fixed-date market holidays that can fall on a 3rd Friday.
+_FRIDAY_HOLIDAYS = {(1, 1), (6, 19), (7, 4), (12, 25)}
+
+
+def _is_holiday(date: dt.date) -> bool:
+    return (date.month, date.day) in _FRIDAY_HOLIDAYS
+
+
+def _third_friday(year: int, month: int) -> dt.date:
+    first = dt.date(year, month, 1)
+    offset = (4 - first.weekday()) % 7          # days to the first Friday
+    return first + dt.timedelta(days=offset + 14)
+
+
+def opex_dates(year: int) -> list[str]:
+    out = []
+    for month in range(1, 13):
+        day = _third_friday(year, month)
+        if _is_holiday(day):
+            day -= dt.timedelta(days=1)
+        out.append(day.isoformat())
+    return out
+
+
+def is_opex(date: str) -> bool:
+    return date in opex_dates(int(date[:4]))
+
+
+def is_quad_witching(date: str) -> bool:
+    return is_opex(date) and int(date[5:7]) in (3, 6, 9, 12)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_opex.py -v` (3 passed)
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/opex.py tests/test_macro_opex.py
+git commit -m "feat: opex + quad-witching calendar"
+```
 
 ### Task G32: Market sessions — holidays, half-days, thin windows
 
@@ -495,7 +3394,205 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: NYSE holiday/half-day table 2018–2027 (static literal, source comment); `is_holiday(date)`, `is_half_day(date)`, `is_thin_window(dt_et) -> tuple[bool, str]` — true for first 30 min after open, last 10 min before close, half-day afternoons, and the week between Christmas and New Year (reason string for the embed); `session_flag(date, time_et=None) -> dict` (CheckResult-ready).
 
-- [ ] **Step 1–4: TDD (Jul 3 half-day; 09:45 ET thin; 11:00 not), commit** — `feat: session liquidity calendar`
+**Design note:** instead of a hand-typed 10-year table (typo-prone, unverifiable), the calendar is *rule-generated*: nth-weekday math for the floating holidays, the anonymous-Gregorian computus for Good Friday, NYSE observance shifts (Sun→Mon; Sat→Fri except New Year's, which is simply not observed), Juneteenth from 2022, plus a literal `EXTRA_CLOSURES` set for the two mourning closures. Source: https://www.nyse.com/markets/hours-calendars. The interface is exactly as specified.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_sessions.py
+import datetime as dt
+
+from swingbot.core.macro.sessions import (
+    holidays, is_half_day, is_holiday, is_thin_window, session_flag,
+)
+
+
+def test_holiday_rules_2026():
+    h = holidays(2026)
+    assert "2026-01-01" in h                       # New Year's (Thursday)
+    assert "2026-01-19" in h                       # MLK: 3rd Monday
+    assert h["2026-04-03"] == "Good Friday"        # Easter 2026 = Apr 5
+    assert "2026-06-19" in h                       # Juneteenth (Friday)
+    assert "2026-07-03" in h                       # Jul 4 = Saturday -> observed Fri
+    assert "2026-11-26" in h                       # Thanksgiving: 4th Thursday
+    assert "2026-12-25" in h
+
+
+def test_mourning_closures():
+    assert is_holiday("2018-12-05")                # G.H.W. Bush
+    assert is_holiday("2025-01-09")                # J. Carter
+
+
+def test_half_days_2025():
+    assert is_half_day("2025-07-03")               # Jul 4 2025 is a Friday
+    assert is_half_day("2025-11-28")               # day after Thanksgiving
+    assert is_half_day("2025-12-24")               # Christmas Eve (Wednesday)
+    assert not is_half_day("2025-07-04")
+
+
+def test_thin_windows():
+    assert is_thin_window(dt.datetime(2026, 7, 14, 9, 45))[0]      # first 30 min
+    assert not is_thin_window(dt.datetime(2026, 7, 14, 11, 0))[0]  # mid-session
+    assert is_thin_window(dt.datetime(2026, 7, 14, 15, 55))[0]     # last 10 min
+    thin, reason = is_thin_window(dt.datetime(2026, 12, 29, 11, 0))
+    assert thin and "holiday week" in reason
+
+
+def test_session_flag_shapes():
+    assert session_flag("2026-06-19")["flag"] == "holiday"
+    assert session_flag("2025-11-28")["flag"] == "half_day"
+    assert session_flag("2026-07-14", dt.time(9, 45))["flag"] == "thin"
+    assert session_flag("2026-07-14")["flag"] == "normal"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sessions.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/sessions.py
+"""NYSE session calendar: holidays, half-days (13:00 close), thin windows.
+Rule-generated per https://www.nyse.com/markets/hours-calendars ."""
+from __future__ import annotations
+
+import datetime as dt
+
+EXTRA_CLOSURES = {
+    "2018-12-05": "National day of mourning (G.H.W. Bush)",
+    "2025-01-09": "National day of mourning (J. Carter)",
+}
+
+
+def _easter(year: int) -> dt.date:
+    """Anonymous Gregorian computus."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = (h + l - 7 * m + 114) % 31 + 1
+    return dt.date(year, month, day)
+
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> dt.date:
+    first = dt.date(year, month, 1)
+    return first + dt.timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> dt.date:
+    last = (dt.date(year, month + 1, 1) if month < 12
+            else dt.date(year + 1, 1, 1)) - dt.timedelta(days=1)
+    return last - dt.timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def _observed(d: dt.date) -> dt.date:
+    if d.weekday() == 6:                # Sunday -> Monday
+        return d + dt.timedelta(days=1)
+    if d.weekday() == 5:                # Saturday -> Friday
+        return d - dt.timedelta(days=1)
+    return d
+
+
+def holidays(year: int) -> dict[str, str]:
+    out: dict[str, str] = {}
+    ny = dt.date(year, 1, 1)
+    if ny.weekday() == 6:
+        out[(ny + dt.timedelta(days=1)).isoformat()] = "New Year's Day (observed)"
+    elif ny.weekday() != 5:             # on a Saturday it is NOT observed
+        out[ny.isoformat()] = "New Year's Day"
+    out[_nth_weekday(year, 1, 0, 3).isoformat()] = "MLK Day"
+    out[_nth_weekday(year, 2, 0, 3).isoformat()] = "Washington's Birthday"
+    out[(_easter(year) - dt.timedelta(days=2)).isoformat()] = "Good Friday"
+    out[_last_weekday(year, 5, 0).isoformat()] = "Memorial Day"
+    if year >= 2022:
+        out[_observed(dt.date(year, 6, 19)).isoformat()] = "Juneteenth"
+    out[_observed(dt.date(year, 7, 4)).isoformat()] = "Independence Day"
+    out[_nth_weekday(year, 9, 0, 1).isoformat()] = "Labor Day"
+    out[_nth_weekday(year, 11, 3, 4).isoformat()] = "Thanksgiving"
+    out[_observed(dt.date(year, 12, 25)).isoformat()] = "Christmas"
+    for date, label in EXTRA_CLOSURES.items():
+        if date.startswith(str(year)):
+            out[date] = label
+    return out
+
+
+def half_days(year: int) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if dt.date(year, 7, 4).weekday() in (1, 2, 3, 4):   # Jul 4 Tue-Fri -> Jul 3 Mon-Thu
+        out[dt.date(year, 7, 3).isoformat()] = "July 3rd early close"
+    after_tg = _nth_weekday(year, 11, 3, 4) + dt.timedelta(days=1)
+    out[after_tg.isoformat()] = "Day after Thanksgiving"
+    dec24 = dt.date(year, 12, 24)
+    if dec24.weekday() < 5 and dt.date(year, 12, 25).weekday() != 5:
+        out[dec24.isoformat()] = "Christmas Eve early close"
+    return out
+
+
+def is_holiday(date: str) -> bool:
+    return date in holidays(int(date[:4])) 
+
+
+def is_half_day(date: str) -> bool:
+    return date in half_days(int(date[:4]))
+
+
+def is_thin_window(dt_et: dt.datetime) -> tuple[bool, str]:
+    date = dt_et.date().isoformat()
+    if is_holiday(date):
+        return True, "market holiday"
+    t = dt_et.time()
+    if dt.time(9, 30) <= t < dt.time(10, 0):
+        return True, "first 30 min after open"
+    close = dt.time(13, 0) if is_half_day(date) else dt.time(16, 0)
+    last10 = (dt.datetime.combine(dt_et.date(), close)
+              - dt.timedelta(minutes=10)).time()
+    if last10 <= t < close:
+        return True, "last 10 min before close"
+    if is_half_day(date) and t >= dt.time(12, 0):
+        return True, "half-day session"
+    if date[5:7] == "12" and "26" <= date[8:10] <= "31":
+        return True, "holiday week (Christmas -> New Year)"
+    return False, ""
+
+
+def session_flag(date: str, time_et: dt.time | None = None) -> dict:
+    """CheckResult-ready summary used by rf_thin_session (G65)."""
+    year = int(date[:4])
+    if is_holiday(date):
+        return {"flag": "holiday", "detail": holidays(year)[date]}
+    if is_half_day(date):
+        return {"flag": "half_day", "detail": half_days(year)[date]}
+    if time_et is not None:
+        thin, reason = is_thin_window(
+            dt.datetime.combine(dt.date.fromisoformat(date), time_et))
+        if thin:
+            return {"flag": "thin", "detail": reason}
+    return {"flag": "normal", "detail": ""}
+```
+
+**And make sessions the one calendar authority** — replace the interim shim in `opex.py`:
+
+```python
+# swingbot/core/macro/opex.py — _is_holiday becomes:
+def _is_holiday(date: dt.date) -> bool:
+    from swingbot.core.macro.sessions import is_holiday
+    return is_holiday(date.isoformat())
+```
+
+(delete `_FRIDAY_HOLIDAYS`; the G31 goldens must stay green.)
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sessions.py tests/test_macro_opex.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/sessions.py swingbot/core/macro/opex.py tests/test_macro_sessions.py
+git commit -m "feat: session liquidity calendar"
+```
 
 ### Task G33: Earnings calendar provider
 
@@ -506,7 +3603,112 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `days_to_earnings(ticker, now=None) -> int | None` — if llm-advisor's `market_context.py` exists, wrap it (one-implementation rule); else implement here: Finnhub `/calendar/earnings` window ±30d, 6h TTL via `fetch_json(provider="finnhub")`, empty key → None. `earnings_within(ticker, days) -> bool | None` (None when unknown — never a silent False).
 
-- [ ] **Step 1–4: TDD (fixture payload → day math; no key → None, no network), commit** — `feat: earnings calendar provider`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_earnings.py
+import datetime as dt
+
+import swingbot.config as config
+import swingbot.core.macro.earnings as earnings
+
+PAYLOAD = {"earningsCalendar": [
+    {"date": "2026-07-01", "symbol": "NVDA"},      # past
+    {"date": "2026-07-22", "symbol": "NVDA"},      # next
+    {"date": "2026-10-21", "symbol": "NVDA"},
+]}
+
+NOW = dt.date(2026, 7, 14)
+
+
+def _with_key(monkeypatch, payload=PAYLOAD):
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
+    monkeypatch.setattr(earnings, "fetch_json", lambda *a, **k: payload)
+
+
+def test_day_math(monkeypatch):
+    _with_key(monkeypatch)
+    assert earnings.days_to_earnings("NVDA", now=NOW) == 8
+    assert earnings.earnings_within("NVDA", 10, now=NOW) is True
+    assert earnings.earnings_within("NVDA", 3, now=NOW) is False
+
+
+def test_no_future_earnings_is_none(monkeypatch):
+    _with_key(monkeypatch, {"earningsCalendar": [{"date": "2026-07-01"}]})
+    assert earnings.days_to_earnings("NVDA", now=NOW) is None
+
+
+def test_no_key_none_and_no_network(monkeypatch):
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
+    def boom(*a, **k):
+        raise AssertionError("no network without a key")
+    monkeypatch.setattr(earnings, "fetch_json", boom)
+    assert earnings.days_to_earnings("NVDA", now=NOW) is None
+    assert earnings.earnings_within("NVDA", 3, now=NOW) is None   # unknown, never False
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_earnings.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/earnings.py
+"""Earnings calendar provider. One-implementation rule: when llm-advisor's
+market_context (v5 L-phase) is merged, wrap it; else Finnhub directly."""
+from __future__ import annotations
+
+import datetime as dt
+
+from swingbot import config
+from swingbot.core.macro.httpcache import fetch_json
+
+_UNAVAILABLE = object()
+
+
+def _via_advisor(ticker: str, now: dt.date):
+    try:
+        from swingbot.core.advisor import market_context   # capability check
+    except ImportError:
+        return _UNAVAILABLE
+    fn = getattr(market_context, "days_to_earnings", None)
+    return fn(ticker, now=now) if fn else _UNAVAILABLE
+
+
+def days_to_earnings(ticker: str, now: dt.date | None = None) -> int | None:
+    now = now or dt.date.today()
+    advisor = _via_advisor(ticker, now)
+    if advisor is not _UNAVAILABLE:
+        return advisor
+    key = (getattr(config, "FINNHUB_API_KEY", "") or "").strip()
+    if not key:
+        return None
+    params = {"symbol": ticker, "token": key,
+              "from": (now - dt.timedelta(days=30)).isoformat(),
+              "to": (now + dt.timedelta(days=30)).isoformat()}
+    data = fetch_json("https://finnhub.io/api/v1/calendar/earnings",
+                      params=params, ttl_s=6 * 3600, provider="finnhub")
+    if not data:
+        return None
+    dates = sorted(e["date"] for e in data.get("earningsCalendar", [])
+                   if e.get("date"))
+    future = [d for d in dates if d >= now.isoformat()]
+    if not future:
+        return None
+    return (dt.date.fromisoformat(future[0]) - now).days
+
+
+def earnings_within(ticker: str, days: int, now: dt.date | None = None) -> bool | None:
+    d = days_to_earnings(ticker, now=now)
+    return None if d is None else d <= days    # None = unknown, never a silent False
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_earnings.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/earnings.py tests/test_macro_earnings.py
+git commit -m "feat: earnings calendar provider"
+```
 
 ### Task G34: Market news headlines
 
@@ -517,14 +3719,148 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `market_headlines(n=15) -> list[dict]` — Finnhub `/news?category=general`, headline dict `{ts, source, title, url, related}`; 30-min TTL; de-dup by lowercase title prefix (first 60 chars); empty key → `[]`.
 
-- [ ] **Step 1–4: TDD (fixture parse, dedup, cap), commit** — `feat: market news provider`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_news.py
+import swingbot.config as config
+import swingbot.core.macro.news as news
+
+RAW = [
+    {"datetime": 300, "source": "A", "headline": "Fed holds rates steady", "url": "u1", "related": ""},
+    {"datetime": 200, "source": "B", "headline": "FED HOLDS RATES STEADY", "url": "u2", "related": ""},  # dup by prefix
+    {"datetime": 100, "source": "C", "headline": "Oil surges on supply fears", "url": "u3", "related": ""},
+    {"datetime": 50, "source": "D", "headline": "", "url": "u4", "related": ""},                          # empty dropped
+]
+
+
+def test_parse_dedup_cap(monkeypatch):
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
+    monkeypatch.setattr(news, "fetch_json", lambda *a, **k: RAW)
+    rows = news.market_headlines(n=15)
+    assert [r["title"] for r in rows] == ["Fed holds rates steady",
+                                          "Oil surges on supply fears"]
+    assert rows[0] == {"ts": 300, "source": "A", "title": "Fed holds rates steady",
+                       "url": "u1", "related": ""}
+    assert news.market_headlines(n=1) == rows[:1]           # cap respected
+
+
+def test_no_key_returns_empty(monkeypatch):
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
+    def boom(*a, **k):
+        raise AssertionError("no network without a key")
+    monkeypatch.setattr(news, "fetch_json", boom)
+    assert news.market_headlines() == []
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_news.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/news.py
+"""Finnhub market headlines (company headlines arrive in G35)."""
+from __future__ import annotations
+
+import datetime as dt
+
+from swingbot import config
+from swingbot.core.macro.httpcache import fetch_json
+
+BASE = "https://finnhub.io/api/v1"
+
+
+def _key() -> str:
+    return (getattr(config, "FINNHUB_API_KEY", "") or "").strip()
+
+
+def _norm(item: dict) -> dict:
+    return {"ts": item.get("datetime", 0), "source": item.get("source", ""),
+            "title": (item.get("headline") or "").strip(),
+            "url": item.get("url", ""), "related": item.get("related", "")}
+
+
+def _dedup(rows: list[dict], n: int) -> list[dict]:
+    """Newest first, de-duplicated by lowercase 60-char title prefix."""
+    seen, out = set(), []
+    for row in sorted(rows, key=lambda r: r["ts"], reverse=True):
+        prefix = row["title"].lower()[:60]
+        if not row["title"] or prefix in seen:
+            continue
+        seen.add(prefix)
+        out.append(row)
+        if len(out) == n:
+            break
+    return out
+
+
+def market_headlines(n: int = 15) -> list[dict]:
+    if not _key():
+        return []
+    data = fetch_json(f"{BASE}/news", params={"category": "general", "token": _key()},
+                      ttl_s=30 * 60, provider="finnhub")
+    return _dedup([_norm(i) for i in data], n) if isinstance(data, list) else []
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_news.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/news.py tests/test_macro_news.py
+git commit -m "feat: market news provider"
+```
 
 ### Task G35: Company news
 
 **Files:** Modify `news.py`; test `tests/test_macro_news.py`
 
 **Interfaces:** `company_headlines(ticker, days=5, n=10) -> list[dict]` — Finnhub `/company-news`, 2h TTL, same dict shape.
-- [ ] **Step 1–4: TDD, commit** — `feat: company news provider`
+
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_news.py`)
+
+```python
+def test_company_headlines(monkeypatch):
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
+    captured = {}
+    def fake_fetch(url, *, params=None, **kw):
+        captured["url"], captured["params"] = url, params
+        return RAW
+    monkeypatch.setattr(news, "fetch_json", fake_fetch)
+    rows = news.company_headlines("NVDA", days=5, n=10)
+    assert captured["url"].endswith("/company-news")
+    assert captured["params"]["symbol"] == "NVDA"
+    assert len(rows) == 2                                   # dedup applies here too
+
+
+def test_company_headlines_no_key(monkeypatch):
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
+    assert news.company_headlines("NVDA") == []
+```
+
+- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'company_headlines'`)
+- [ ] **Step 3: Write the implementation** (append to `news.py`)
+
+```python
+def company_headlines(ticker: str, days: int = 5, n: int = 10) -> list[dict]:
+    if not _key():
+        return []
+    today = dt.date.today()
+    params = {"symbol": ticker, "token": _key(),
+              "from": (today - dt.timedelta(days=days)).isoformat(),
+              "to": today.isoformat()}
+    data = fetch_json(f"{BASE}/company-news", params=params,
+                      ttl_s=2 * 3600, provider="finnhub")
+    return _dedup([_norm(i) for i in data], n) if isinstance(data, list) else []
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_news.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/news.py tests/test_macro_news.py
+git commit -m "feat: company news provider"
+```
 
 ### Task G36: Headline sentiment scorer (lexicon)
 
@@ -535,15 +3871,175 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `score_headline(title) -> float` in [-1, 1] — transparent finance lexicon (two literal frozensets, ~60 words each: POSITIVE beats/raises/surges/upgrade/record/approval/…, NEGATIVE misses/cuts/plunges/downgrade/probe/recall/bankruptcy/…), hit-count normalized, negation flip for not/no/fails-to within 3 tokens; `aggregate_sentiment(headlines) -> dict` `{score, n, label}` (label cuts ±0.15). Deliberately simple and auditable; the LLM advisor (G132) adds nuance separately and advisorily.
 
-- [ ] **Step 1: Failing tests** — golden titles each direction; negation flip ("fails to beat" → negative); empty → n=0 label neutral.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: lexicon headline sentiment`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_sentiment.py
+from swingbot.core.macro.sentiment import aggregate_sentiment, score_headline
+
+
+def test_golden_directions():
+    assert score_headline("NVDA beats estimates, raises guidance") > 0
+    assert score_headline("Regulator opens probe; shares plunge on recall") < 0
+    assert score_headline("Company holds annual meeting") == 0.0
+
+
+def test_negation_flip():
+    assert score_headline("Company fails to beat estimates") < 0
+    assert score_headline("No probe after review") > 0
+
+
+def test_score_bounds():
+    assert -1.0 <= score_headline("plunges plunges plunges") <= 1.0
+
+
+def test_aggregate():
+    heads = [{"title": "NVDA beats estimates"}, {"title": "Sector rally continues"},
+             {"title": "Weather is mild"}]
+    agg = aggregate_sentiment(heads)
+    assert agg["n"] == 3 and agg["score"] > 0.15 and agg["label"] == "positive"
+    empty = aggregate_sentiment([])
+    assert empty == {"score": 0.0, "n": 0, "label": "neutral"}
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sentiment.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/sentiment.py
+"""Transparent finance-lexicon headline scorer. Deliberately simple and
+auditable; the LLM advisor (G132) adds nuance separately, advisorily."""
+from __future__ import annotations
+
+POSITIVE = frozenset("""
+beats beat raises raised surges surged soars soared upgrade upgraded upgrades
+record rally rallies jumps jumped gains gained wins won win approval approved
+strong tops topped exceeds exceeded outperform outperforms outperformed
+bullish accelerates expands expansion growth profitable breakthrough buyback
+dividend hike hikes partnership secures secured awarded milestone robust
+momentum upbeat optimistic rebound rebounds recovers recovery booming
+""".split())
+
+NEGATIVE = frozenset("""
+misses missed cuts plunges plunged sinks sank tumbles tumbled downgrade
+downgraded downgrades probe probes investigation lawsuit sues sued recall
+recalls bankruptcy default warns warning weak slump slumps layoffs fraud
+halted halt delays delayed loss losses declines declined bearish shortfall
+crash crashes selloff scandal fine fined penalty breach outage disappointing
+downbeat pessimistic slowdown plunge tumble miss falls fell
+""".split())
+
+NEGATIONS = frozenset(("not", "no", "never", "fails", "failed", "without"))
+
+
+def _tokens(title: str) -> list[str]:
+    return [t.strip(".,!?:;()'\"").lower() for t in title.split()]
+
+
+def score_headline(title: str) -> float:
+    """[-1, 1]; hit-count normalized; negation within 3 tokens flips."""
+    tokens = _tokens(title)
+    total = hits = 0
+    for i, tok in enumerate(tokens):
+        val = 1 if tok in POSITIVE else -1 if tok in NEGATIVE else 0
+        if val == 0:
+            continue
+        if any(w in NEGATIONS for w in tokens[max(0, i - 3):i]):
+            val = -val
+        total += val
+        hits += 1
+    if hits == 0:
+        return 0.0
+    return max(-1.0, min(1.0, total / hits))
+
+
+def aggregate_sentiment(headlines: list[dict]) -> dict:
+    """label cuts at +/-0.15."""
+    scores = [score_headline(h.get("title", "")) for h in headlines]
+    if not scores:
+        return {"score": 0.0, "n": 0, "label": "neutral"}
+    score = round(sum(scores) / len(scores), 3)
+    label = "positive" if score > 0.15 else "negative" if score < -0.15 else "neutral"
+    return {"score": score, "n": len(scores), "label": label}
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sentiment.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/sentiment.py tests/test_macro_sentiment.py
+git commit -m "feat: lexicon headline sentiment"
+```
 
 ### Task G37: Rumor vs. confirmed classifier
 
 **Files:** Modify `sentiment.py`; test `tests/test_macro_sentiment.py`
 
 **Interfaces:** `classify_confirmation(headline_title) -> str` — `"rumor"` (matches report(edly)|sources say|rumor|in talks|considering|mulls|according to people familiar), `"confirmed"` (announces|files|reports Q|8-K|SEC filing|earnings|guidance|completes), else `"unclear"`; `rumor_ratio(headlines) -> float`. Feeds rf_rumor_spike (G63) and rf_buy_rumor (G64).
-- [ ] **Step 1–4: TDD (three-way goldens), commit** — `feat: rumor/confirmed headline classifier`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sentiment.py`)
+
+```python
+from swingbot.core.macro.sentiment import classify_confirmation, rumor_ratio
+
+
+def test_three_way_classification():
+    assert classify_confirmation("Apple reportedly in talks to acquire startup") == "rumor"
+    assert classify_confirmation("Sources say merger being considered") == "rumor"
+    assert classify_confirmation("NVDA announces record Q2 earnings") == "confirmed"
+    assert classify_confirmation("Company files 8-K with SEC") == "confirmed"
+    assert classify_confirmation("Shares move higher in afternoon trade") == "unclear"
+    # rumor phrasing wins even when confirmation words also appear
+    assert classify_confirmation("Reportedly set to announce acquisition") == "rumor"
+
+
+def test_rumor_ratio():
+    heads = [{"title": "reportedly in talks"}, {"title": "announces earnings"},
+             {"title": "sources say deal near"}, {"title": "plain headline"}]
+    assert rumor_ratio(heads) == 0.5
+    assert rumor_ratio([]) == 0.0
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'classify_confirmation'`)
+- [ ] **Step 3: Write the implementation** (append to `sentiment.py`)
+
+```python
+import re
+
+_RUMOR = re.compile(
+    r"reportedly|report(s|ed)? that|sources? say|rumou?r|in talks|considering|"
+    r"mulls?|mulling|according to people familiar|weighs?|weighing|exploring|"
+    r"could be|said to be|poised to|set to announce", re.I)
+_CONFIRMED = re.compile(
+    r"announce[sd]?|files?|filed|reports? q[1-4]|8-k|10-[kq]|sec filing|"
+    r"earnings|guidance|completes?|completed|acquires?|acquired|confirms?|"
+    r"confirmed|declares?|launches?|launched|signs?|signed", re.I)
+
+
+def classify_confirmation(headline_title: str) -> str:
+    if _RUMOR.search(headline_title):
+        return "rumor"                 # rumor phrasing outranks confirmation verbs
+    if _CONFIRMED.search(headline_title):
+        return "confirmed"
+    return "unclear"
+
+
+def rumor_ratio(headlines: list[dict]) -> float:
+    if not headlines:
+        return 0.0
+    rumors = sum(classify_confirmation(h.get("title", "")) == "rumor"
+                 for h in headlines)
+    return rumors / len(headlines)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sentiment.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/sentiment.py tests/test_macro_sentiment.py
+git commit -m "feat: rumor/confirmed headline classifier"
+```
 
 ### Task G38: Macro snapshot builder
 
@@ -555,8 +4051,285 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 - Produces: `build_snapshot(*, loaders=None, now=None) -> dict` — assembles every upstream module into ONE dict (each section None-tolerant): `{built_at, stale: bool, inflation: {cpi_yoy, core_cpi_yoy, ppi_yoy, pce_yoy, core_pce_yoy, vs_target}, labor: {...}, rates: {fed_funds, y3m, y2, y10, y30, curve_state}, expectations: {breakeven_5y, breakeven_10y}, risk: {vix, credit, dollar, wti}, composite: {...G27}, fear_greed: {...G28}, sectors: {rs_rows, rotation}, breadth: {...}, events: {next_high_impact, within_24h: [...], today: [...]}, news: {headlines_top5, sentiment, rumor_ratio}, quality_warnings: [...]}`. `save_snapshot(snap)` → `data/macro/macro_snapshot.json` (jsonio) + one summary line appended to `data/macro/snapshot_history.jsonl` (admin trend charts); `load_snapshot(max_age_min=None) -> dict | None`.
 - **The single source every consumer reads** — scan gate, embeds, `!macro`, admin pages, advisor payloads. Nobody re-fetches providers at render time.
 
-- [ ] **Step 1: Failing tests** — all-providers-stubbed build → full shape; all-providers-None build → skeleton with unknowns + `stale=True` (the G43 contract starts here); save/load round-trip; max_age gate.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: macro snapshot (single source of context)`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_snapshot.py
+import datetime as dt
+
+import numpy as np
+import pytest
+
+import swingbot.core.macro.snapshot as snap_mod
+from tests.conftest import make_ohlcv
+
+
+@pytest.fixture
+def paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(snap_mod, "SNAPSHOT_PATH", str(tmp_path / "macro_snapshot.json"))
+    monkeypatch.setattr(snap_mod, "HISTORY_PATH", str(tmp_path / "snapshot_history.jsonl"))
+    return tmp_path
+
+
+@pytest.fixture
+def all_stubbed(monkeypatch):
+    """Every provider returns healthy fixture data — no network anywhere."""
+    monkeypatch.setattr(snap_mod.httpcache, "LAST_SERVED_STALE", False)
+    monkeypatch.setattr(snap_mod.series, "get_value",
+                        lambda key: snap_mod.series.MacroValue(key, 2.5, "2026-07-01", key, 1))
+    monkeypatch.setattr(snap_mod.series, "curve_state", lambda: "normal")
+    monkeypatch.setattr(snap_mod.vix, "vix_state",
+                        lambda loader=None: {"level": 14.0, "percentile_1y": 30.0,
+                                             "regime": "calm", "term_structure": "contango"})
+    monkeypatch.setattr(snap_mod.credit, "credit_state",
+                        lambda bars=None: {"ratio": 0.8, "sma20_slope": 0.001,
+                                           "state": "risk_on"})
+    bars = {t: make_ohlcv(100.0 * (1 + 0.002) ** np.arange(220))
+            for t in list(snap_mod.sectors.SECTOR_ETFS) + ["SPY"]}
+    monkeypatch.setattr(snap_mod.sectors, "sector_bars", lambda loader=None: bars)
+    monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [
+        {"date": "2026-07-15", "time_et": "08:30", "kind": "cpi",
+         "label": "CPI release", "importance": 3}])
+    monkeypatch.setattr(snap_mod.news, "market_headlines",
+                        lambda n=15: [{"ts": 1, "source": "A",
+                                       "title": "Stocks rally on strong earnings",
+                                       "url": "", "related": ""}])
+
+
+def test_full_shape(paths, all_stubbed):
+    now = dt.datetime(2026, 7, 14, 12, 0, tzinfo=dt.timezone.utc)
+    snap = snap_mod.build_snapshot(now=now)
+    for section in ("inflation", "labor", "rates", "expectations", "risk",
+                    "composite", "fear_greed", "sectors", "breadth", "events",
+                    "news", "quality_warnings"):
+        assert section in snap, section
+    assert snap["stale"] is False
+    assert snap["rates"]["curve_state"] == "normal"
+    assert snap["inflation"]["cpi_yoy"]["value"] == 2.5
+    assert snap["events"]["next_high_impact"]["kind"] == "cpi"
+    assert snap["news"]["sentiment"]["label"] == "positive"
+    assert snap["composite"]["label"] == "risk_on"     # calm+credit+rotation+curve
+
+
+def test_total_darkness_skeleton(paths, monkeypatch):
+    monkeypatch.setattr(snap_mod.httpcache, "LAST_SERVED_STALE", False)
+    monkeypatch.setattr(snap_mod.series, "get_value", lambda key: None)
+    monkeypatch.setattr(snap_mod.series, "curve_state", lambda: "unknown")
+    monkeypatch.setattr(snap_mod.vix, "vix_state", lambda loader=None: None)
+    monkeypatch.setattr(snap_mod.credit, "credit_state", lambda bars=None: None)
+    monkeypatch.setattr(snap_mod.sectors, "sector_bars", lambda loader=None: {})
+    monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [])
+    monkeypatch.setattr(snap_mod.news, "market_headlines", lambda n=15: [])
+    snap = snap_mod.build_snapshot()
+    assert snap["stale"] is True                       # the G43 contract starts here
+    assert snap["composite"]["label"] == "unknown"
+    assert snap["inflation"]["cpi_yoy"] is None
+    assert snap["fear_greed"] is None
+    assert snap["events"]["next_high_impact"] is None
+    assert snap["news"]["sentiment"] == {"score": 0.0, "n": 0, "label": "neutral"}
+
+
+def test_save_load_round_trip_and_history_line(paths, all_stubbed):
+    snap = snap_mod.build_snapshot()
+    snap_mod.save_snapshot(snap)
+    assert snap_mod.load_snapshot() == snap
+    with open(snap_mod.HISTORY_PATH, encoding="utf-8") as fh:
+        lines = fh.readlines()
+    assert len(lines) == 1 and '"composite"' in lines[0]
+
+
+def test_max_age_gate(paths, all_stubbed):
+    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=90)
+    snap_mod.save_snapshot(snap_mod.build_snapshot(now=old))
+    assert snap_mod.load_snapshot(max_age_min=30) is None
+    assert snap_mod.load_snapshot(max_age_min=240) is not None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_snapshot.py -v`
+Expected: FAIL with `ImportError` (snapshot module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/snapshot.py
+"""Build/save/load the ONE macro snapshot every consumer reads (scan gate,
+embeds, !macro, admin pages, advisor payloads). Nobody re-fetches
+providers at render time."""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import logging
+import os
+
+from swingbot import config
+from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.macro import (breadth as breadth_mod, calendar_events,
+                                 composite, credit, httpcache, news,
+                                 sectors, sentiment, series, vix)
+
+log = logging.getLogger("swing-bot.macro.snapshot")
+
+SNAPSHOT_PATH = os.path.join(config.DATA_DIR, "macro", "macro_snapshot.json")
+HISTORY_PATH = os.path.join(config.DATA_DIR, "macro", "snapshot_history.jsonl")
+
+_SERIES_KEYS = {
+    "inflation": ("cpi_yoy", "core_cpi_yoy", "ppi_yoy", "pce_yoy",
+                  "core_pce_yoy", "inflation_vs_target"),
+    "labor": ("unemployment", "payrolls_change_k", "jobless_claims"),
+    "rates": ("fed_funds", "y3m", "y2", "y10", "y30",
+              "curve_10y2y", "curve_10y3m"),
+    "expectations": ("breakeven_5y", "breakeven_10y"),
+}
+
+
+def _safe(fn, *args, **kw):
+    """A broken provider never breaks the build — None + one log line."""
+    try:
+        return fn(*args, **kw)
+    except Exception:  # noqa: BLE001
+        log.warning("snapshot: %s failed", getattr(fn, "__name__", fn), exc_info=True)
+        return None
+
+
+def _mv_dict(keys) -> dict:
+    out = {}
+    for key in keys:
+        mv = _safe(series.get_value, key)
+        out[key] = None if mv is None else {"value": mv.value, "as_of": mv.as_of,
+                                            "direction": mv.direction}
+    return out
+
+
+def _percentile(values, last) -> float | None:
+    if not len(values):
+        return None
+    return round(100.0 * sum(v <= last for v in values) / len(values), 1)
+
+
+def build_snapshot(*, loaders: dict | None = None, now=None) -> dict:
+    """loaders (optional, injectable for tests / decoupling):
+      "bars": ticker -> daily OHLCV frame (cache loader)
+      "universe": () -> {ticker: df} for breadth over the scan universe
+    Every section is None-tolerant; total provider failure still returns
+    the full skeleton with unknowns and stale=True (proven in G43)."""
+    loaders = loaders or {}
+    bars_loader = loaders.get("bars")
+    universe = loaders.get("universe")
+    httpcache.LAST_SERVED_STALE = False
+    now = now or dt.datetime.now(dt.timezone.utc)
+    today = now.date().isoformat()
+
+    snap: dict = {"built_at": now.isoformat(), "stale": False}
+    for section, keys in _SERIES_KEYS.items():
+        snap[section] = _mv_dict(keys)
+    snap["rates"]["curve_state"] = _safe(series.curve_state) or "unknown"
+
+    vix_state = _safe(vix.vix_state, bars_loader)
+    credit_bars = None
+    if bars_loader is not None:
+        credit_bars = {t: _safe(bars_loader, t) for t in ("HYG", "LQD")}
+    credit_state = _safe(credit.credit_state, credit_bars)
+
+    sector_bars = _safe(sectors.sector_bars, bars_loader) or {}
+    rs_rows = _safe(sectors.sector_rs, sector_bars) or []
+    rotation = (_safe(sectors.rotation_state, rs_rows)
+                or {"posture": "unknown", "note": ""})
+
+    breadth_dict = (_safe(breadth_mod.breadth, universe() if universe else {})
+                    or {"pct_above_50dma": None, "pct_above_200dma": None, "n": 0})
+
+    comp = composite.risk_composite(vix_state, credit_state, rotation,
+                                    breadth_dict, snap["rates"]["curve_state"])
+
+    # fear/greed percentile inputs — only computable with cached bars
+    credit_pctile = spy_mom_pctile = None
+    if credit_bars and credit_bars.get("HYG") is not None \
+            and credit_bars.get("LQD") is not None:
+        ratio = (credit_bars["HYG"]["Close"] / credit_bars["LQD"]["Close"]).dropna()
+        if len(ratio) >= 60:
+            credit_pctile = _percentile(list(ratio.iloc[-252:]), float(ratio.iloc[-1]))
+    if bars_loader is not None:
+        spy = _safe(bars_loader, "SPY")
+        if spy is not None and len(spy) > 380:
+            mom = spy["Close"].pct_change(125).dropna()
+            spy_mom_pctile = _percentile(list(mom.iloc[-252:]), float(mom.iloc[-1]))
+    fg = _safe(composite.fear_greed, vix_state, breadth_dict,
+               credit_pctile, spy_mom_pctile)
+
+    events = _safe(calendar_events.load_events) or []
+    horizon = (now + dt.timedelta(days=30)).date().isoformat()
+    upcoming = [e for e in events if today <= e["date"] <= horizon]
+    heads = _safe(news.market_headlines) or []
+
+    snap["risk"] = {"vix": vix_state, "credit": credit_state,
+                    **_mv_dict(("dollar_index", "wti"))}
+    snap["composite"] = comp
+    snap["fear_greed"] = fg
+    snap["sectors"] = {"rs_rows": rs_rows, "rotation": rotation}
+    snap["breadth"] = breadth_dict
+    snap["events"] = {
+        "next_high_impact": next((e for e in upcoming if e["importance"] == 3), None),
+        "within_24h": [e for e in upcoming
+                       if 0 <= calendar_events.hours_until(e, now) <= 24],
+        "today": [e for e in upcoming if e["date"] == today],
+    }
+    snap["news"] = {"headlines_top5": heads[:5],
+                    "sentiment": sentiment.aggregate_sentiment(heads),
+                    "rumor_ratio": sentiment.rumor_ratio(heads)}
+    # Stale when a stale cache was served OR too little arrived to say
+    # anything (composite needs >= 2 inputs).
+    snap["stale"] = bool(httpcache.LAST_SERVED_STALE or comp["inputs_used"] < 2)
+    snap["quality_warnings"] = []          # G42's validator fills this in
+    return snap
+
+
+def save_snapshot(snap: dict) -> None:
+    os.makedirs(os.path.dirname(SNAPSHOT_PATH), exist_ok=True)
+    atomic_write_json(SNAPSHOT_PATH, snap)
+    line = {
+        "ts": snap["built_at"],
+        "composite": snap["composite"]["score"],
+        "label": snap["composite"]["label"],
+        "vix": (snap["risk"]["vix"] or {}).get("level"),
+        "curve_10y2y": (snap["rates"].get("curve_10y2y") or {}).get("value"),
+        "curve_10y3m": (snap["rates"].get("curve_10y3m") or {}).get("value"),
+        "fear_greed": (snap["fear_greed"] or {}).get("value"),
+        "sentiment": snap["news"]["sentiment"]["score"],
+    }
+    with open(HISTORY_PATH, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def load_snapshot(max_age_min: float | None = None) -> dict | None:
+    snap = read_json(SNAPSHOT_PATH, default=None)
+    if snap is None:
+        return None
+    if max_age_min is not None:
+        try:
+            built = dt.datetime.fromisoformat(snap["built_at"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        age_min = (dt.datetime.now(dt.timezone.utc) - built).total_seconds() / 60.0
+        if age_min > max_age_min:
+            return None
+    return snap
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_snapshot.py -v`
+Expected: 4 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/snapshot.py tests/test_macro_snapshot.py
+git commit -m "feat: macro snapshot (single source of context)"
+```
 
 ### Task G39: Snapshot scheduler — refresh before every scan
 
@@ -567,16 +4340,193 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `ensure_fresh_snapshot(ttl_min=None) -> dict | None` — returns the saved snapshot when younger than TTL (default `config.MACRO_SNAPSHOT_TTL_MIN`), else rebuilds (called via `asyncio.to_thread` from the scan path); **wired at the top of every scan run** when `MACRO_ENABLED`; once per day also calls `refresh_future_events()`. Rebuild failure → previous snapshot with `stale=True` (never blocks the scan). Flag off → None and zero provider calls.
 
-- [ ] **Step 1: Failing tests** — TTL respected (no rebuild when fresh, counting stub); rebuild failure serves stale; disabled → None + zero calls.
-- [ ] **Step 2–4: Implement + wire (try/except-log), PASS, commit** — `feat: pre-scan macro snapshot refresh`
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_snapshot.py`)
+
+```python
+def test_ttl_respected_no_rebuild(paths, all_stubbed, monkeypatch):
+    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(snap_mod.config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
+    snap_mod.save_snapshot(snap_mod.build_snapshot())
+    calls = {"n": 0}
+    real_build = snap_mod.build_snapshot
+    def counting_build(**kw):
+        calls["n"] += 1
+        return real_build(**kw)
+    monkeypatch.setattr(snap_mod, "build_snapshot", counting_build)
+    assert snap_mod.ensure_fresh_snapshot() is not None
+    assert calls["n"] == 0                              # fresh -> no rebuild
+
+
+def test_rebuild_failure_serves_previous_as_stale(paths, all_stubbed, monkeypatch):
+    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(snap_mod, "_last_future_refresh_day", None)
+    monkeypatch.setattr(snap_mod.calendar_events, "refresh_future_events",
+                        lambda **k: 0)
+    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=120)
+    snap_mod.save_snapshot(snap_mod.build_snapshot(now=old))
+    def boom(**kw):
+        raise RuntimeError("providers down")
+    monkeypatch.setattr(snap_mod, "build_snapshot", boom)
+    served = snap_mod.ensure_fresh_snapshot(ttl_min=30)
+    assert served is not None and served["stale"] is True
+
+
+def test_disabled_returns_none_and_zero_calls(paths, monkeypatch):
+    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", False, raising=False)
+    def boom(**kw):
+        raise AssertionError("no provider calls when MACRO_ENABLED is off")
+    monkeypatch.setattr(snap_mod, "build_snapshot", boom)
+    assert snap_mod.ensure_fresh_snapshot() is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'ensure_fresh_snapshot'`)
+- [ ] **Step 3: Write the implementation** (append to `snapshot.py`)
+
+```python
+_last_future_refresh_day: str | None = None
+
+
+def ensure_fresh_snapshot(ttl_min: float | None = None, *,
+                          loaders: dict | None = None, now=None) -> dict | None:
+    """Return a snapshot no older than ttl_min (default:
+    config.MACRO_SNAPSHOT_TTL_MIN), rebuilding + saving when expired.
+    Never raises; a failed rebuild serves the previous snapshot marked
+    stale (never blocks the scan). MACRO_ENABLED off -> None and zero
+    provider calls. Once per day also refreshes the forward event
+    schedule (G30)."""
+    global _last_future_refresh_day
+    if not getattr(config, "MACRO_ENABLED", False):
+        return None
+    ttl = ttl_min if ttl_min is not None else float(
+        getattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30))
+    fresh = load_snapshot(max_age_min=ttl)
+    if fresh is not None:
+        return fresh
+    today = dt.date.today().isoformat()
+    if _last_future_refresh_day != today:
+        _last_future_refresh_day = today
+        try:
+            calendar_events.refresh_future_events()
+        except Exception:  # noqa: BLE001
+            log.warning("forward event refresh failed", exc_info=True)
+    try:
+        snap = build_snapshot(loaders=loaders, now=now)
+        save_snapshot(snap)
+        return snap
+    except Exception:  # noqa: BLE001
+        log.error("snapshot rebuild failed — serving previous as stale",
+                  exc_info=True)
+        prev = load_snapshot()
+        if prev is not None:
+            prev["stale"] = True
+        return prev
+```
+
+**And wire it into the scan path** — `swingbot/commands/scanning.py` has three `scan_engine.run_scan(...)` call sites (`_session_scan_tick` ~line 416, the UI-poll path ~line 723, `check_cmd` ~line 1103 — verify at execution). Add one helper and await it immediately before each:
+
+```python
+# swingbot/commands/scanning.py
+from swingbot.core.macro import snapshot as macro_snapshot
+
+
+async def _refresh_macro_snapshot() -> None:
+    """Pre-scan macro refresh (G39). Failure is logged, never blocks a scan."""
+    if not config.MACRO_ENABLED:
+        return
+    try:
+        await asyncio.to_thread(macro_snapshot.ensure_fresh_snapshot)
+    except Exception:
+        log.warning("macro snapshot refresh failed", exc_info=True)
+```
+
+```python
+    # at each run_scan call site:
+    await _refresh_macro_snapshot()
+    alerts = await scan_engine.run_scan(...)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_snapshot.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/snapshot.py swingbot/commands/scanning.py tests/test_macro_snapshot.py
+git commit -m "feat: pre-scan macro snapshot refresh"
+```
 
 ### Task G40: Live smoke script
 
 **Files:**
 - Create: `scripts/macro_smoke.py`
 
-- [ ] **Step 1: Write it** — with real keys in env: builds a snapshot, prints each section, provider latencies, and which sections came back None; exits non-zero if > 3 sections missing; loudly warns if either PPI id (G14) 404s.
-- [ ] **Step 2: Run once for real; save the output summary to `docs/superpowers/results/2026-07-macro-smoke.md`. Commit both** — `feat: macro live smoke script + first snapshot evidence`
+- [ ] **Step 1: Write it**
+
+```python
+# scripts/macro_smoke.py
+"""Live macro smoke test (NETWORK — never imported by the test suite).
+
+Usage:
+    FRED_API_KEY=... FINNHUB_API_KEY=... python scripts/macro_smoke.py
+
+Exit codes: 0 healthy, 1 degraded (> 3 sections missing), 2 config error.
+"""
+import json
+import sys
+import time
+
+sys.path.insert(0, ".")
+
+from swingbot import config
+from swingbot.core.macro import fred, health
+from swingbot.core.macro.snapshot import build_snapshot
+
+SECTIONS = ("inflation", "labor", "rates", "expectations", "risk",
+            "composite", "fear_greed", "sectors", "breadth", "events", "news")
+
+
+def _section_missing(snap, name) -> bool:
+    val = snap.get(name)
+    if val in (None, {}, []):
+        return True
+    if isinstance(val, dict):
+        return all(v in (None, [], {}) for v in val.values())
+    return False
+
+
+def main() -> int:
+    if not (getattr(config, "FRED_API_KEY", "") or "").strip():
+        print("FRED_API_KEY not set — nothing to smoke-test")
+        return 2
+    for series_id in ("PPIFIS", "PPIFES"):        # G14's ids must resolve live
+        if fred.fred_series(series_id) is None:
+            print(f"!!! WARNING: PPI series {series_id} returned nothing — "
+                  f"re-check the FRED id chosen in G14 !!!")
+    t0 = time.time()
+    snap = build_snapshot()
+    missing = [s for s in SECTIONS if _section_missing(snap, s)]
+    for name in SECTIONS:
+        status = "MISSING" if name in missing else "ok"
+        print(f"{name:14s} {status:8s} "
+              f"{json.dumps(snap.get(name), default=str)[:110]}")
+    print(f"\nbuild took {time.time() - t0:.1f}s   stale={snap['stale']}")
+    print("provider health:")
+    for provider, s in health.provider_status().items():
+        print(f"  {provider}: ok_rate={s['ok_rate_24h']:.2f} "
+              f"calls_today={s['calls_today']} cache_hit={s['cache_hit_rate']:.2f}")
+    print(f"missing sections: {missing or 'none'}")
+    return 1 if len(missing) > 3 else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+- [ ] **Step 2: Run once for real** (`FRED_API_KEY=... FINNHUB_API_KEY=... python scripts/macro_smoke.py`); paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict (which sections are live, which providers degraded, build time). Commit both:
+
+```bash
+git add scripts/macro_smoke.py docs/superpowers/results/2026-07-macro-smoke.md
+git commit -m "feat: macro live smoke script + first snapshot evidence"
+```
 
 ### Task G41: Historical macro backfill (publication-lag aware)
 
@@ -587,8 +4537,195 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: script writes `data/macro/history/{series_key}.json` full FRED history 2017-01→present for every registry series (2017 start gives yoy room for 2018 backtests) plus derived daily VIX-percentile and credit-state series from cached bars. `history.as_of_frame() -> pd.DataFrame` — date-indexed, one column per key, forward-filled **with publication lag**: monthly prints become visible on their release date (from G29's calendar), not their reference month — the no-lookahead rule G90 depends on.
 
-- [ ] **Step 1: Failing tests** — publication-lag golden (May CPI, released Jun 10, appears in the frame from Jun 10, not May 31); ffill correctness; missing series → column of NaN, not error.
-- [ ] **Step 2: Implement; run the script once for real; commit generated history files** — `feat: macro history backfill (publication-lag aware)`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_history.py
+import os
+
+import pandas as pd
+import pytest
+
+import swingbot.core.macro.history as hist
+from swingbot.core.jsonio import atomic_write_json
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setattr(hist, "HISTORY_DIR", str(tmp_path))
+    events = [
+        {"date": "2020-05-12", "time_et": "08:30", "kind": "cpi", "label": "CPI", "importance": 3},
+        {"date": "2020-06-10", "time_et": "08:30", "kind": "cpi", "label": "CPI", "importance": 3},
+    ]
+    monkeypatch.setattr(hist.calendar_events, "load_events", lambda: events)
+    return tmp_path
+
+
+def test_publication_lag_golden(env):
+    # April CPI (ref 2020-04-01) released May 12; May CPI released Jun 10.
+    atomic_write_json(os.path.join(str(env), "cpi_yoy.json"),
+                      [["2020-04-01", 0.3], ["2020-05-01", 0.1]])
+    frame = hist.as_of_frame(start="2020-05-01", end="2020-06-30")
+    assert frame.loc["2020-05-29", "cpi_yoy"] == 0.3   # May 29: only April's print is out
+    assert frame.loc["2020-06-09", "cpi_yoy"] == 0.3   # still April's the day before release
+    assert frame.loc["2020-06-10", "cpi_yoy"] == 0.1   # May's print appears ON release day
+    assert pd.isna(frame.loc["2020-05-01", "cpi_yoy"]) # nothing published yet in-window
+
+
+def test_ffill_and_missing_series(env):
+    atomic_write_json(os.path.join(str(env), "cpi_yoy.json"), [["2020-04-01", 0.3]])
+    frame = hist.as_of_frame(start="2020-05-01", end="2020-06-30")
+    assert (frame.loc["2020-05-12":, "cpi_yoy"] == 0.3).all()   # forward-filled
+    assert frame["y10"].isna().all()                # missing file -> NaN column, no error
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`), then **write the frame implementation**:
+
+```python
+# swingbot/core/macro/history.py
+"""Publication-lag-aware historical macro frame — the no-lookahead
+foundation G90's backtest snapshots stand on. Monthly prints become
+visible on their RELEASE date (from the G29 calendar), not their
+reference month."""
+from __future__ import annotations
+
+import os
+
+import pandas as pd
+
+from swingbot import config
+from swingbot.core.jsonio import read_json
+from swingbot.core.macro import calendar_events
+from swingbot.core.macro.series import SERIES
+
+HISTORY_DIR = os.path.join(config.DATA_DIR, "macro", "history")
+
+# series key -> release kind gating its visibility. Unlisted keys are
+# daily prints (yields, VIX, dollar, oil, weekly claims ~5d lag treated
+# as same-day — a conservative simplification noted here deliberately).
+_RELEASE_KIND = {
+    "cpi_yoy": "cpi", "core_cpi_yoy": "cpi", "cpi_mom": "cpi",
+    "ppi_yoy": "ppi", "ppi_mom": "ppi", "core_ppi_yoy": "ppi",
+    "pce_yoy": "pce", "core_pce_yoy": "pce",
+    "unemployment": "nfp", "payrolls_change_k": "nfp",
+}
+
+
+def _visible_from(obs_date: str, key: str, release_dates: dict) -> str:
+    """A monthly print for reference month M becomes visible on the first
+    release date AFTER M's month-end; daily series are same-day."""
+    kind = _RELEASE_KIND.get(key)
+    if kind is None:
+        return obs_date
+    month_end = (pd.Timestamp(obs_date) + pd.offsets.MonthEnd(0)).strftime("%Y-%m-%d")
+    for release in release_dates.get(kind, ()):
+        if release > month_end:
+            return release
+    return month_end        # no known release: month-end (still conservative)
+
+
+def as_of_frame(start: str = "2018-01-01", end: str | None = None) -> pd.DataFrame:
+    end = end or pd.Timestamp.today().strftime("%Y-%m-%d")
+    idx = pd.bdate_range(start, end)
+    release_dates: dict[str, list[str]] = {}
+    for e in calendar_events.load_events():
+        release_dates.setdefault(e["kind"], []).append(e["date"])
+    for dates in release_dates.values():
+        dates.sort()
+    frame = pd.DataFrame(index=idx)
+    for key, spec in SERIES.items():
+        if spec.kind == "derived":
+            continue
+        col = pd.Series(index=idx, dtype=float)
+        raw = read_json(os.path.join(HISTORY_DIR, f"{key}.json"), default=None)
+        for obs_date, value in raw or []:
+            ts = pd.Timestamp(_visible_from(obs_date, key, release_dates))
+            pos = idx.searchsorted(ts)
+            if pos < len(idx):
+                col.iloc[pos] = value          # later prints overwrite on same day
+        frame[key] = col.ffill()
+    return frame
+```
+
+**And the backfill script:**
+
+```python
+# scripts/backfill_macro.py
+"""Backfill data/macro/history/{key}.json for every registry series
+(2017-01 -> present — 2017 gives yoy headroom for 2018 backtests), plus
+derived daily vix_percentile.json and credit_state.json from cached bars.
+
+Usage (NETWORK): FRED_API_KEY=... python scripts/backfill_macro.py
+(--dry-run / --only / resume discipline are hardened in G202.)
+"""
+import os
+import sys
+
+sys.path.insert(0, ".")
+
+from swingbot.core.jsonio import atomic_write_json
+from swingbot.core.macro import fred
+from swingbot.core.macro.history import HISTORY_DIR
+from swingbot.core.macro.series import KINDS, SERIES
+
+
+def build_transformed(key: str) -> list[list]:
+    spec = SERIES[key]
+    raw = fred.fred_series(spec.fred_id, start="2016-01-01", ttl_s=0)
+    if not raw:
+        return []
+    calc = KINDS[spec.kind]
+    out = []
+    for i, (date, _) in enumerate(raw):
+        value = calc(raw, i)
+        if value is not None and date >= "2017-01-01":
+            out.append([date, round(value, 4)])
+    return out
+
+
+def main() -> int:
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+    written = 0
+    for key, spec in SERIES.items():
+        if spec.kind == "derived":
+            continue
+        rows = build_transformed(key)
+        if not rows:
+            print(f"  {key}: NO DATA (check FRED id {spec.fred_id})")
+            continue
+        atomic_write_json(os.path.join(HISTORY_DIR, f"{key}.json"), rows)
+        print(f"  {key}: {len(rows)} rows ({rows[0][0]} .. {rows[-1][0]})")
+        written += 1
+    # Derived daily series from cached bars (verify loader name at execution):
+    try:
+        from swingbot.core.data import load_cached_daily
+        vix_bars = load_cached_daily("^VIX")
+        if vix_bars is not None and len(vix_bars) > 260:
+            closes = vix_bars["Close"]
+            pct = closes.rolling(252).apply(
+                lambda w: 100.0 * (w <= w.iloc[-1]).mean()).dropna()
+            atomic_write_json(os.path.join(HISTORY_DIR, "vix_percentile.json"),
+                              [[str(d.date()), round(float(v), 1)]
+                               for d, v in pct.items()])
+            written += 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"  vix_percentile: skipped ({exc})")
+    print(f"wrote {written} history files -> {HISTORY_DIR}")
+    return 0 if written else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+- [ ] **Step 3: Run tests — PASS**: `python -m pytest tests/test_macro_history.py -v`
+- [ ] **Step 4: Run the backfill once for real; spot-check row counts; commit generated history files.**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/history.py scripts/backfill_macro.py data/macro/history/
+git commit -m "feat: macro history backfill (publication-lag aware)"
+```
 
 ### Task G42: Macro data-quality validator
 
@@ -599,15 +4736,169 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 **Interfaces:**
 - Produces: `validate_snapshot(snap) -> list[str]` — WARN strings for: yields outside [0, 20], VIX outside [5, 100], CPI yoy outside [-5, 25], sector count < 8, missing sections, empty event calendar within 30d ahead. Warnings land in `snap["quality_warnings"]` and surface in admin (G187); never raise.
 
-- [ ] **Step 1–4: TDD (each rule trips on a crafted snapshot), commit** — `feat: macro snapshot sanity validator`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_quality.py
+from swingbot.core.macro.quality import validate_snapshot
+
+
+def _healthy():
+    return {
+        "inflation": {"cpi_yoy": {"value": 3.1, "as_of": "2026-06-01", "direction": 1}},
+        "rates": {"y10": {"value": 4.2, "as_of": "2026-07-13", "direction": 0}},
+        "risk": {"vix": {"level": 15.0}},
+        "sectors": {"rs_rows": [{"etf": f"X{i}"} for i in range(11)]},
+        "events": {"next_high_impact": {"kind": "cpi", "date": "2026-07-15"}},
+        "news": {"headlines_top5": []},
+    }
+
+
+def test_healthy_snapshot_no_warnings():
+    assert validate_snapshot(_healthy()) == []
+
+
+def test_each_rule_trips():
+    snap = _healthy()
+    snap["rates"]["y10"]["value"] = 35.0
+    assert any("yield" in w for w in validate_snapshot(snap))
+    snap = _healthy()
+    snap["risk"]["vix"]["level"] = 2.0
+    assert any("VIX" in w for w in validate_snapshot(snap))
+    snap = _healthy()
+    snap["inflation"]["cpi_yoy"]["value"] = 40.0
+    assert any("CPI" in w for w in validate_snapshot(snap))
+    snap = _healthy()
+    snap["sectors"]["rs_rows"] = snap["sectors"]["rs_rows"][:5]
+    assert any("sectors" in w for w in validate_snapshot(snap))
+    snap = _healthy()
+    snap["events"]["next_high_impact"] = None
+    assert any("calendar" in w for w in validate_snapshot(snap))
+    snap = _healthy()
+    del snap["rates"]
+    assert any("section rates missing" in w for w in validate_snapshot(snap))
+
+
+def test_never_raises_on_garbage():
+    assert isinstance(validate_snapshot({}), list)
+    assert isinstance(validate_snapshot({"rates": None, "risk": {"vix": None}}), list)
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_quality.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/quality.py
+"""Snapshot sanity validator — WARN strings, never raises, never blocks."""
+from __future__ import annotations
+
+
+def _val(section, key):
+    entry = (section or {}).get(key)
+    return None if not isinstance(entry, dict) else entry.get("value")
+
+
+def validate_snapshot(snap: dict) -> list[str]:
+    warnings: list[str] = []
+    rates = snap.get("rates") or {}
+    for key in ("y3m", "y2", "y10", "y30"):
+        v = _val(rates, key)
+        if v is not None and not (0 <= v <= 20):
+            warnings.append(f"yield {key}={v} outside [0, 20]")
+    vix_level = ((snap.get("risk") or {}).get("vix") or {}).get("level")
+    if vix_level is not None and not (5 <= vix_level <= 100):
+        warnings.append(f"VIX {vix_level} outside [5, 100]")
+    cpi = _val(snap.get("inflation") or {}, "cpi_yoy")
+    if cpi is not None and not (-5 <= cpi <= 25):
+        warnings.append(f"CPI yoy {cpi} outside [-5, 25]")
+    rs_rows = ((snap.get("sectors") or {}).get("rs_rows")) or []
+    if len(rs_rows) < 8:
+        warnings.append(f"only {len(rs_rows)} sectors with data (< 8)")
+    for section in ("inflation", "rates", "risk", "events", "news"):
+        if not snap.get(section):
+            warnings.append(f"section {section} missing")
+    events = snap.get("events") or {}
+    if snap.get("events") is not None and events.get("next_high_impact") is None:
+        warnings.append("no high-impact event within 30d — calendar may be stale")
+    return warnings
+```
+
+**And wire it into the builder** — in `snapshot.build_snapshot`, replace the final `snap["quality_warnings"] = []` with:
+
+```python
+    from swingbot.core.macro.quality import validate_snapshot
+    snap["quality_warnings"] = validate_snapshot(snap)
+```
+
+(The G38 tests keep passing: the healthy stubbed build produces zero warnings; the darkness build now carries warnings, which its assertions don't forbid.)
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_quality.py tests/test_macro_snapshot.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/quality.py swingbot/core/macro/snapshot.py tests/test_macro_quality.py
+git commit -m "feat: macro snapshot sanity validator"
+```
 
 ### Task G43: Total-degradation proof
 
 **Files:**
 - Test: `tests/test_macro_degradation.py`
 
-- [ ] **Step 1: The test** — monkeypatch `requests` to always raise + empty cache dir: `build_snapshot()` still returns the skeleton (every section None/unknown, `stale=True`), `ensure_fresh_snapshot` returns it, `risk_composite` label `"unknown"` — proving the bot scans normally with the entire internet down. (G121 extends this proof through the gate.)
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: macro layer total-degradation proof`
+- [ ] **Step 1: Write the test**
+
+```python
+# tests/test_macro_degradation.py
+"""THE proof: entire internet down + cold caches -> the bot still gets a
+full snapshot skeleton (every section None/unknown, stale=True) and
+scanning proceeds. G121 extends this proof through the gate."""
+import pytest
+
+import swingbot.config as config_mod
+import swingbot.core.macro.health as health
+import swingbot.core.macro.httpcache as httpcache
+import swingbot.core.macro.snapshot as snap_mod
+
+
+@pytest.fixture
+def darkness(tmp_path, monkeypatch):
+    def boom(*a, **k):
+        raise OSError("internet down")
+    monkeypatch.setattr(httpcache.requests, "get", boom)
+    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path / "cache"))   # cold
+    monkeypatch.setattr(httpcache, "LAST_SERVED_STALE", False)
+    monkeypatch.setattr(health, "LEDGER_PATH", str(tmp_path / "health.jsonl"))
+    monkeypatch.setattr(snap_mod, "SNAPSHOT_PATH", str(tmp_path / "snap.json"))
+    monkeypatch.setattr(snap_mod, "HISTORY_PATH", str(tmp_path / "hist.jsonl"))
+    monkeypatch.setattr(snap_mod, "_last_future_refresh_day", None)
+    monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [])
+    monkeypatch.setattr(config_mod, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config_mod, "FRED_API_KEY", "key-set-net-down", raising=False)
+    monkeypatch.setattr(config_mod, "FINNHUB_API_KEY", "key-set-net-down", raising=False)
+
+
+def test_total_darkness(darkness):
+    snap = snap_mod.build_snapshot()
+    assert snap["stale"] is True
+    assert snap["composite"]["label"] == "unknown"
+    assert snap["inflation"]["cpi_yoy"] is None
+    assert snap["rates"]["curve_state"] == "unknown"
+    assert snap["risk"]["vix"] is None
+    assert snap["news"]["headlines_top5"] == []
+    # the scheduler still serves it — a scan would proceed normally
+    served = snap_mod.ensure_fresh_snapshot()
+    assert served is not None and served["composite"]["label"] == "unknown"
+```
+
+- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_macro_degradation.py -v`
+- [ ] **Step 3: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_macro_degradation.py
+git commit -m "test: macro layer total-degradation proof"
+```
 
 ### Task G44: Phase G1 checkpoint
 
@@ -631,15 +4922,192 @@ One module per checklist section; one task per check. Every check task follows t
 **Interfaces:**
 - Produces: `htf_trend(df_daily) -> dict` — weekly resample; trend from 10w vs 40w SMA + last-pivot structure: `"up"` (10w > 40w and higher highs/lows over last 8 pivots), `"down"` (mirror), `"range"` otherwise; returns `{weekly, daily, detail}` (daily uses 20/50 SMA same logic). If edge-engine E27 (MTF alignment) is merged, consume its primitives instead of duplicating resample logic.
 
-- [ ] **Step 1: Failing tests** — G7 `uptrend_daily` → weekly "up"; `downtrend_daily` → "down"; `range_daily` → "range"; short history (< 60 weekly bars) → "range" with detail "insufficient history".
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: HTF trend detector`
+**Shared test factory (created here, reused by every check task):**
+
+```python
+# tests/fixtures/gate/plans.py
+"""Minimal TradePlanV2 factory for gate tests. Verify the horizon_key
+values against HORIZONS at execution."""
+from swingbot.core.plan_engine import TradePlanV2
+
+
+def make_plan(**overrides) -> TradePlanV2:
+    base = dict(
+        plan_id="p_test_0001", ticker="TEST", created_at="2026-07-14",
+        source="strategy", strategy="Break & Retest", horizon_key="swing",
+        direction="bullish", entry_type="stop_entry", trigger_price=101.0,
+        entry_price=None, expiry_bars=5, stop_loss=97.0, tp1=107.0,
+        tp1_fraction=0.5, tp2=112.0, breakeven_trigger_fraction=0.5,
+        trail_atr_mult=1.5, quality_score=70, quality_breakdown=[],
+        tier="B", badge="VALIDATED", badge_stats={}, status="pending",
+    )
+    base.update(overrides)
+    return TradePlanV2(**base)
+```
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_context_htf.py
+from swingbot.core.gate.context_htf import htf_trend
+from tests.fixtures.gate import downtrend_daily, range_daily, uptrend_daily
+
+
+def test_htf_trend_three_states():
+    assert htf_trend(uptrend_daily())["weekly"] == "up"
+    assert htf_trend(downtrend_daily())["weekly"] == "down"
+    assert htf_trend(range_daily(90, 110, n=300))["weekly"] == "range"
+
+
+def test_short_history_is_range_with_detail():
+    result = htf_trend(uptrend_daily(n=100))     # ~20 weekly bars
+    assert result["weekly"] == "range"
+    assert "insufficient" in result["detail"]
+
+
+def test_daily_state_present():
+    assert htf_trend(uptrend_daily())["daily"] == "up"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_context_htf.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/context_htf.py
+"""HTF trend detection. If edge-engine E27 MTF primitives are merged,
+consume them instead of this resample logic (capability-check at
+execution: `from swingbot.core.edge import mtf`)."""
+from __future__ import annotations
+
+import pandas as pd
+
+
+def _resample_weekly(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame({
+        "Open": df["Open"].resample("W-FRI").first(),
+        "High": df["High"].resample("W-FRI").max(),
+        "Low": df["Low"].resample("W-FRI").min(),
+        "Close": df["Close"].resample("W-FRI").last(),
+    }).dropna()
+
+
+def _pivots(closes: pd.Series, span: int = 2) -> tuple[list, list]:
+    highs, lows = [], []
+    vals = closes.values
+    for i in range(span, len(vals) - span):
+        window = vals[i - span:i + span + 1]
+        if vals[i] == window.max():
+            highs.append(float(vals[i]))
+        elif vals[i] == window.min():
+            lows.append(float(vals[i]))
+    return highs, lows
+
+
+def _trend(closes: pd.Series, fast: int, slow: int) -> str:
+    """SMA cross + pivot structure; SMAs within 0.5% of each other are
+    treated as flat (keeps oscillating ranges deterministic)."""
+    if len(closes) < slow + 5:
+        return "range"
+    sma_fast = float(closes.rolling(fast).mean().iloc[-1])
+    sma_slow = float(closes.rolling(slow).mean().iloc[-1])
+    if abs(sma_fast / sma_slow - 1.0) < 0.005:
+        return "range"
+    highs, lows = _pivots(closes.iloc[-min(len(closes), 8 * fast):])
+    up_structure = ((len(highs) >= 2 and highs[-1] > highs[0])
+                    or (len(lows) >= 2 and lows[-1] > lows[0]))
+    down_structure = ((len(highs) >= 2 and highs[-1] < highs[0])
+                      or (len(lows) >= 2 and lows[-1] < lows[0]))
+    if sma_fast > sma_slow and up_structure:
+        return "up"
+    if sma_fast < sma_slow and down_structure:
+        return "down"
+    return "range"
+
+
+def htf_trend(df_daily: pd.DataFrame) -> dict:
+    weekly_df = _resample_weekly(df_daily)
+    daily = _trend(df_daily["Close"], 20, 50)
+    if len(weekly_df) < 45:                      # 40w SMA + margin
+        return {"weekly": "range", "daily": daily,
+                "detail": "insufficient weekly history"}
+    weekly = _trend(weekly_df["Close"], 10, 40)
+    return {"weekly": weekly, "daily": daily,
+            "detail": f"weekly {weekly} (10/40w SMA + pivots), daily {daily}"}
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_context_htf.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/context_htf.py tests/fixtures/gate/plans.py tests/test_gate_context_htf.py
+git commit -m "feat: HTF trend detector"
+```
 
 ### Task G46: Check `htf_alignment` (weight 12, checklist §1 "I know the HTF trend and I'm not against it")
 
 **Files:** Modify `context_htf.py`, `registry.py`; test `tests/test_gate_context_htf.py`
 
 **Interfaces:** `check_htf_alignment(df_daily, plan, macro_snap) -> CheckResult` — bullish plan + weekly "up" → pass; weekly "range" → warn; bullish into weekly "down" (or mirror) → **fail**; evidence carries both timeframe states.
-- [ ] **Step 1–4: TDD (all four outcomes + registry row asserted), commit** — `feat: htf_alignment check`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_context_htf.py`)
+
+```python
+from swingbot.core.gate.context_htf import check_htf_alignment
+from swingbot.core.gate.registry import CHECKS
+from tests.fixtures.gate.plans import make_plan
+
+
+def test_htf_alignment_four_outcomes():
+    up, down = uptrend_daily(), downtrend_daily()
+    bull, bear = make_plan(direction="bullish"), make_plan(direction="bearish")
+    assert check_htf_alignment(up, bull, None).status == "pass"
+    assert check_htf_alignment(down, bear, None).status == "pass"     # mirror
+    assert check_htf_alignment(down, bull, None).status == "fail"     # against trend
+    assert check_htf_alignment(uptrend_daily(n=100), bull, None).status == "warn"  # range
+    result = check_htf_alignment(down, bull, None)
+    assert result.evidence["weekly"] == "down" and "daily" in result.evidence
+
+
+def test_htf_alignment_registered():
+    spec = CHECKS["htf_alignment"]
+    assert spec.section == "context" and spec.weight == 12.0
+    assert spec.hard_block is False and spec.applies_to is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_htf_alignment'`)
+- [ ] **Step 3: Write the implementation** (append to `context_htf.py`)
+
+```python
+from swingbot.core.gate.registry import register
+from swingbot.core.gate.types import CheckResult
+
+
+def check_htf_alignment(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    trend = htf_trend(df_daily)
+    weekly = trend["weekly"]
+    with_trend = "up" if plan.direction == "bullish" else "down"
+    if weekly == with_trend:
+        status, detail = "pass", f"{plan.direction} plan with the weekly {weekly}trend"
+    elif weekly == "range":
+        status, detail = "warn", "weekly trend is range-bound"
+    else:
+        status, detail = "fail", f"{plan.direction} plan AGAINST the weekly {weekly}trend"
+    return CheckResult("htf_alignment", "context", status, 12.0, detail,
+                       {"weekly": weekly, "daily": trend["daily"]})
+
+
+register(check_id="htf_alignment", section="context", weight=12.0,
+         func=check_htf_alignment)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_context_htf.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/context_htf.py tests/test_gate_context_htf.py
+git commit -m "feat: htf_alignment check"
+```
 
 ### Task G47: Swing S/R level extraction
 
@@ -650,21 +5118,289 @@ One module per checklist section; one task per check. Every check task follows t
 **Interfaces:**
 - Produces: `swing_levels(df_daily, lookback=250, pivot_span=5) -> list[Level]` — `Level(price, kind: "support"|"resistance", touches, last_touch)`; pivots = local extrema over ±`pivot_span` bars, clustered within 0.5×ATR, touch-counted; sorted by touches desc. Reuse the existing scanning support/resistance helpers if `swingbot/core/scanning/` already exposes them (verify at execution; wrap, don't fork).
 
-- [ ] **Step 1–4: TDD (crafted series with an obvious 3-touch level → clustered, counted; empty for flat synthetic), commit** — `feat: swing S/R extraction`
+**Reuse decision (verified):** `swingbot/core/levels.py` exists but its `collect_candidate_levels`/`build_level_map` are horizon-config-coupled (`h` dict) and vote 10+ indicator sources for scenario building; its `Level` is `(price, sources)`. The gate needs plain touch-counted price structure, so `swingbot/core/gate/levels.py` keeps its own lean extractor with a distinct `SwingLevel` dataclass — a documented decision, not a fork of the same concern.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_levels.py
+import numpy as np
+
+from swingbot.core.gate.levels import SwingLevel, swing_levels
+from tests.conftest import make_ohlcv
+
+
+def _three_touch_resistance(level=110.0, base=100.0, n=120):
+    closes = []
+    for _ in range(3):
+        # [1:] drops the duplicated peak/valley joints so every extremum
+        # is unique (the pivot rule rejects ties)
+        closes += list(np.linspace(base, level, 15)) + list(np.linspace(level, base, 15))[1:]
+    closes += list(np.linspace(base, base * 1.01, n - len(closes)))
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+def test_three_touch_level_clustered_and_counted():
+    levels = swing_levels(_three_touch_resistance(), pivot_span=5)
+    res = [l for l in levels if l.kind == "resistance"]
+    assert res, "no resistance found"
+    assert res[0].touches == 3                       # strongest first
+    assert abs(res[0].price - 110.0) / 110.0 < 0.01
+    assert res[0].last_touch >= "2019-01-01"
+
+
+def test_flat_series_has_no_levels():
+    assert swing_levels(make_ohlcv(np.full(120, 100.0))) == []
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/levels.py
+"""Swing S/R extraction + round numbers (G48) + level_map check (G49)."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import pandas as pd
+
+from swingbot.core.indicators import atr
+
+
+@dataclass(frozen=True)
+class SwingLevel:
+    price: float
+    kind: str          # "support" | "resistance"
+    touches: int
+    last_touch: str    # ISO date
+
+
+def _safe_atr(df: pd.DataFrame, fallback_price: float) -> float:
+    val = float(atr(df).iloc[-1])
+    return val if val == val and val > 0 else fallback_price * 0.02
+
+
+def swing_levels(df_daily: pd.DataFrame, lookback: int = 250,
+                 pivot_span: int = 5) -> list[SwingLevel]:
+    """Pivots = UNIQUE local extrema over +/-pivot_span bars (ties are not
+    pivots — a flat series yields nothing), clustered within 0.5*ATR,
+    touch-counted, sorted by touches desc."""
+    df = df_daily.iloc[-lookback:]
+    if len(df) < 2 * pivot_span + 1:
+        return []
+    highs, lows, idx = df["High"].values, df["Low"].values, df.index
+    atr_val = _safe_atr(df, float(df["Close"].iloc[-1]))
+    raw = []   # (price, kind, date)
+    for i in range(pivot_span, len(df) - pivot_span):
+        hi_win = highs[i - pivot_span:i + pivot_span + 1]
+        lo_win = lows[i - pivot_span:i + pivot_span + 1]
+        if highs[i] == hi_win.max() and (hi_win == highs[i]).sum() == 1:
+            raw.append((float(highs[i]), "resistance", str(idx[i].date())))
+        if lows[i] == lo_win.min() and (lo_win == lows[i]).sum() == 1:
+            raw.append((float(lows[i]), "support", str(idx[i].date())))
+    levels: list[SwingLevel] = []
+    for kind in ("support", "resistance"):
+        bucket: list[tuple[float, str]] = []
+        for price, _, date in sorted((r for r in raw if r[1] == kind),
+                                     key=lambda r: r[0]):
+            if bucket and price - sum(p for p, _ in bucket) / len(bucket) > 0.5 * atr_val:
+                levels.append(_close_bucket(bucket, kind))
+                bucket = []
+            bucket.append((price, date))
+        if bucket:
+            levels.append(_close_bucket(bucket, kind))
+    return sorted(levels, key=lambda l: l.touches, reverse=True)
+
+
+def _close_bucket(bucket: list[tuple[float, str]], kind: str) -> SwingLevel:
+    prices = [p for p, _ in bucket]
+    return SwingLevel(round(sum(prices) / len(prices), 4), kind,
+                      len(bucket), max(d for _, d in bucket))
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/levels.py tests/test_gate_levels.py
+git commit -m "feat: swing S/R extraction"
+```
 
 ### Task G48: Round-number levels
 
 **Files:** Modify `levels.py`; test `tests/test_gate_levels.py`
 
 **Interfaces:** `round_levels(price) -> list[float]` — the psychological grid near price: multiples of 1/5/10/50/100 chosen by price magnitude (e.g. price 187 → 180, 185, 190, 195, 200 and the majors 150/200); `nearest_round(price) -> tuple[float, float]` (level, distance in ATRs given atr kwarg).
-- [ ] **Step 1–4: TDD (goldens at $8, $87, $432, $4300), commit** — `feat: round-number levels`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_levels.py`)
+
+```python
+from swingbot.core.gate.levels import major_levels, nearest_round, round_levels
+
+
+def test_round_grid_goldens():
+    assert 8.0 in round_levels(8.0)                  # step 0.25 at single digits
+    assert 87.5 in round_levels(87.0)                # step 2.5 in the tens
+    assert 430.0 in round_levels(432.0)              # step 10 in the hundreds
+    assert 4300.0 in round_levels(4300.0)            # step 100 in the thousands
+    assert all(p > 0 for p in round_levels(0.8))
+
+
+def test_majors():
+    assert 200.0 in major_levels(187.0) and 150.0 in major_levels(187.0)
+    assert 4000.0 in major_levels(4300.0)
+
+
+def test_nearest_round_with_atr_distance():
+    level, dist = nearest_round(187.0, atr=2.0)
+    assert level == 185.0 and dist == 1.0            # |185-187| / 2 (grid steps by 5)
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'round_levels'`)
+- [ ] **Step 3: Write the implementation** (append to `levels.py`)
+
+```python
+_STEPS = (0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0)
+
+
+def _step_for(price: float) -> float:
+    target = price / 50.0
+    for step in _STEPS:
+        if step >= target:
+            return step
+    return _STEPS[-1]
+
+
+def round_levels(price: float) -> list[float]:
+    """The minor psychological grid near price (5 multiples of the
+    magnitude-appropriate step) plus the majors around it."""
+    step = _step_for(price)
+    center = round(price / step) * step
+    grid = {round(center + k * step, 2) for k in range(-2, 3)}
+    grid |= set(major_levels(price))
+    return sorted(p for p in grid if p > 0)
+
+
+def major_levels(price: float) -> list[float]:
+    """Only these count as 'walls' — a 10x-step grid (e.g. 150/200 for a
+    $187 stock). The minor grid is context, not obstruction."""
+    major = _step_for(price) * 10
+    center = round(price / major) * major
+    return sorted({round(center + k * major, 2) for k in (-1, 0, 1)} - {0.0})
+
+
+def nearest_round(price: float, *, atr: float) -> tuple[float, float]:
+    level = min(round_levels(price), key=lambda l: abs(l - price))
+    dist = abs(level - price) / atr if atr > 0 else float("inf")
+    return level, round(dist, 3)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/levels.py tests/test_gate_levels.py
+git commit -m "feat: round-number levels"
+```
 
 ### Task G49: Check `level_map` (weight 8, §1 "nearest major S/R, prior swings, round numbers marked")
 
 **Files:** Modify `levels.py`, `registry.py`; test `tests/test_gate_levels.py`
 
 **Interfaces:** `check_level_map(df_daily, plan, macro_snap) -> CheckResult` — computes the three nearest levels above/below entry (swing + round merged); **fail** when a resistance (for longs; support for shorts) sits closer than 1×ATR to entry *before* TP1 (the trade runs straight into a wall); warn when between 1–2×ATR; pass otherwise. Evidence lists the levels — this is also what the embed renders (G123).
-- [ ] **Step 1–4: TDD (wall-before-TP1 fail; clear-path pass), commit** — `feat: level_map check`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_levels.py`)
+
+```python
+from swingbot.core.gate.levels import check_level_map
+from swingbot.core.gate.registry import CHECKS
+from tests.fixtures.gate.plans import make_plan
+
+
+def test_wall_before_tp1_fails():
+    df = _three_touch_resistance(level=110.0)        # resistance wall ~110
+    plan = make_plan(direction="bullish", trigger_price=110.0, entry_price=110.0,
+                     stop_loss=106.0, tp1=118.0)
+    result = check_level_map(df, plan, None)
+    assert result.status == "fail"
+    assert result.evidence["nearest_wall"] is not None
+    assert result.evidence["below"] and result.evidence["above"]
+
+
+def test_clear_path_passes():
+    df = _three_touch_resistance(level=110.0)
+    plan = make_plan(direction="bullish", trigger_price=111.5, entry_price=111.5,
+                     stop_loss=107.0, tp1=118.0)     # above the wall, majors clear
+    assert check_level_map(df, plan, None).status == "pass"
+
+
+def test_level_map_registered_with_thresholds():
+    spec = CHECKS["level_map"]
+    assert spec.weight == 8.0 and spec.section == "context"
+    assert spec.threshold("wall_atr_fail") == 1.0    # balanced default
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_level_map'`)
+- [ ] **Step 3: Write the implementation** (append to `levels.py`)
+
+```python
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+
+
+def check_level_map(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["level_map"]
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    swings = swing_levels(df_daily)
+    all_prices = sorted({l.price for l in swings} | set(round_levels(entry)))
+    below = [p for p in all_prices if p < entry][-3:]
+    above = [p for p in all_prices if p > entry][:3]
+    bullish = plan.direction == "bullish"
+    lo, hi = (entry, plan.tp1) if bullish else (plan.tp1, entry)
+    opposing = "resistance" if bullish else "support"
+    walls = [l.price for l in swings if l.kind == opposing and lo < l.price < hi]
+    walls += [m for m in major_levels(entry) if lo < m < hi]
+    nearest = min(walls, key=lambda w: abs(w - entry)) if walls else None
+    dist_atr = round(abs(nearest - entry) / atr_val, 2) if nearest is not None else None
+    if dist_atr is not None and dist_atr < spec.threshold("wall_atr_fail"):
+        status = "fail"
+        detail = f"{opposing} wall {nearest:.2f} only {dist_atr} ATR into the path to TP1"
+    elif dist_atr is not None and dist_atr < spec.threshold("wall_atr_warn"):
+        status = "warn"
+        detail = f"{opposing} {nearest:.2f} sits {dist_atr} ATR into the path to TP1"
+    else:
+        status, detail = "pass", "no significant wall before TP1"
+    return CheckResult("level_map", "context", status, 8.0, detail,
+                       {"below": below, "above": above, "walls": sorted(walls)[:5],
+                        "nearest_wall": nearest, "dist_atr": dist_atr,
+                        "atr": round(atr_val, 4)})
+
+
+register(check_id="level_map", section="context", weight=8.0, func=check_level_map,
+         thresholds={
+             "wall_atr_fail": ThresholdSpec(
+                 "wall_atr_fail", 1.0, 0.25, 3.0, 0.25,
+                 "lower to tolerate closer walls before TP1",
+                 presets={"strict": 1.5, "balanced": 1.0, "relaxed": 0.5}),
+             "wall_atr_warn": ThresholdSpec(
+                 "wall_atr_warn", 2.0, 0.5, 4.0, 0.25,
+                 "lower to warn about fewer walls",
+                 presets={"strict": 2.5, "balanced": 2.0, "relaxed": 1.0}),
+         })
+```
+
+(This evidence block — `below`/`above`/`walls` — is exactly what the embed renders in G123.)
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/levels.py tests/test_gate_levels.py
+git commit -m "feat: level_map check"
+```
 
 ### Task G50: Check `atr_normal` (weight 6, §1 "volatility normal — not compressed or spiked")
 
@@ -673,14 +5409,215 @@ One module per checklist section; one task per check. Every check task follows t
 - Test: `tests/test_gate_atr.py`
 
 **Interfaces:** `check_atr_normal(df_daily, plan, macro_snap) -> CheckResult` — ATR(14)/close percentile over trailing 252 bars; pass in [20th, 80th]; warn <20th (compression — breakout fuel but whipsaw risk) or 80–95th; **fail** >95th (spiked — stop math unreliable). Evidence: percentile + raw ATR%.
-- [ ] **Step 1–4: TDD (three bands via crafted vol paths), commit** — `feat: atr_normal check`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_atr.py
+import numpy as np
+
+from swingbot.core.gate.atr_regime import check_atr_normal
+from swingbot.core.gate.registry import CHECKS
+from tests.conftest import make_ohlcv
+from tests.fixtures.gate.plans import make_plan
+
+
+def _vol_path(early_move, late_move, n=300, late=25):
+    """Alternating +/- daily moves: early_move for n-late bars, late_move after."""
+    closes = [100.0]
+    for i in range(n):
+        m = early_move if i < n - late else late_move
+        closes.append(closes[-1] * (1 + (m if i % 2 == 0 else -m)))
+    return make_ohlcv(np.asarray(closes[1:]), spread_pct=0.2)
+
+
+PLAN = make_plan()
+
+
+def test_normal_band_passes():
+    result = check_atr_normal(_vol_path(0.01, 0.01), PLAN, None)
+    assert result.status == "pass"
+    assert 20 <= result.evidence["percentile"] <= 80
+
+
+def test_compression_warns():
+    assert check_atr_normal(_vol_path(0.02, 0.002), PLAN, None).status == "warn"
+
+
+def test_spike_fails():
+    result = check_atr_normal(_vol_path(0.004, 0.05), PLAN, None)
+    assert result.status == "fail"
+    assert result.evidence["percentile"] > 95
+
+
+def test_short_history_unknown():
+    df = _vol_path(0.01, 0.01, n=40, late=5)
+    assert check_atr_normal(df, PLAN, None).status == "unknown"
+
+
+def test_registered():
+    assert CHECKS["atr_normal"].threshold("pct_spike") == 95.0
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_atr.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/atr_regime.py
+"""ATR-percentile regime checks. Percentile uses MIDRANK so a
+constant-volatility series sits at ~50, not 100."""
+from __future__ import annotations
+
+import pandas as pd
+
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+from swingbot.core.indicators import atr
+
+
+def _atr_percentile(df_daily) -> tuple[float | None, float | None]:
+    atr_pct = (atr(df_daily) / df_daily["Close"]).dropna()
+    if len(atr_pct) < 60:
+        return None, None
+    window = atr_pct.iloc[-252:]
+    last = float(atr_pct.iloc[-1])
+    midrank = 100.0 * (float((window < last).mean())
+                       + float((window <= last).mean())) / 2.0
+    return midrank, last * 100.0
+
+
+def check_atr_normal(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["atr_normal"]
+    pctile, atr_pct = _atr_percentile(df_daily)
+    if pctile is None:
+        return CheckResult("atr_normal", "context", "unknown", 6.0,
+                           "insufficient history for ATR percentile", {})
+    evidence = {"percentile": round(pctile, 1), "atr_pct": round(atr_pct, 2)}
+    if pctile > spec.threshold("pct_spike"):
+        return CheckResult("atr_normal", "context", "fail", 6.0,
+                           f"ATR spiked ({pctile:.0f}th pct) — stop math unreliable",
+                           evidence)
+    if pctile < spec.threshold("pct_low"):
+        return CheckResult("atr_normal", "context", "warn", 6.0,
+                           f"volatility compressed ({pctile:.0f}th pct) — "
+                           f"breakout fuel but whipsaw risk", evidence)
+    if pctile > spec.threshold("pct_high"):
+        return CheckResult("atr_normal", "context", "warn", 6.0,
+                           f"volatility elevated ({pctile:.0f}th pct)", evidence)
+    return CheckResult("atr_normal", "context", "pass", 6.0,
+                       f"volatility normal ({pctile:.0f}th pct)", evidence)
+
+
+register(check_id="atr_normal", section="context", weight=6.0, func=check_atr_normal,
+         thresholds={
+             "pct_low": ThresholdSpec("pct_low", 20.0, 0.0, 40.0, 5.0,
+                 "lower to accept more compression without a warn",
+                 presets={"strict": 25.0, "balanced": 20.0, "relaxed": 10.0}),
+             "pct_high": ThresholdSpec("pct_high", 80.0, 60.0, 100.0, 5.0,
+                 "raise to accept more elevated volatility",
+                 presets={"strict": 75.0, "balanced": 80.0, "relaxed": 90.0}),
+             "pct_spike": ThresholdSpec("pct_spike", 95.0, 80.0, 100.0, 1.0,
+                 "raise to fail only on the most extreme spikes",
+                 presets={"strict": 90.0, "balanced": 95.0, "relaxed": 99.0}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_atr.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/atr_regime.py tests/test_gate_atr.py
+git commit -m "feat: atr_normal check"
+```
 
 ### Task G51: Check `vol_expansion_direction` (weight 4, info-grade)
 
 **Files:** Modify `atr_regime.py`, `registry.py`; test `tests/test_gate_atr.py`
 
 **Interfaces:** `check_vol_expansion(df_daily, plan, macro_snap) -> CheckResult` — when ATR is rising (5d slope > 0), is expansion happening on with-plan bars or against-plan bars (sum of true range on up-close vs down-close days, last 10)? Against-plan expansion → warn. Never fails — weight-4 nuance.
-- [ ] **Step 1–4: TDD, commit** — `feat: vol expansion direction check`
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_atr.py`)
+
+```python
+from swingbot.core.gate.atr_regime import check_vol_expansion
+
+
+def _expansion_path(down_big: bool, n=200):
+    """Flat lead-in, then 12 alternating bars where either the down or the
+    up bars carry the big true ranges (growing, so ATR slope > 0)."""
+    closes = [100.0] * n
+    mag = 0.02
+    for i in range(12):
+        mag *= 1.12
+        if down_big:
+            move = -mag if i % 2 == 0 else 0.004
+        else:
+            move = mag if i % 2 == 0 else -0.004
+        closes.append(closes[-1] * (1 + move))
+    return make_ohlcv(np.asarray(closes), spread_pct=0.2)
+
+
+def test_against_plan_expansion_warns():
+    result = check_vol_expansion(_expansion_path(down_big=True),
+                                 make_plan(direction="bullish"), None)
+    assert result.status == "warn"
+    assert result.evidence["tr_against"] > result.evidence["tr_with"]
+
+
+def test_with_plan_expansion_passes():
+    assert check_vol_expansion(_expansion_path(down_big=False),
+                               make_plan(direction="bullish"), None).status == "pass"
+
+
+def test_no_expansion_passes():
+    flat = make_ohlcv(np.full(200, 100.0), spread_pct=1.0)
+    assert check_vol_expansion(flat, make_plan(), None).status == "pass"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_vol_expansion'`)
+- [ ] **Step 3: Write the implementation** (append to `atr_regime.py`)
+
+```python
+def check_vol_expansion(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Info-grade: when ATR is rising, is the expansion on with-plan or
+    against-plan bars (true-range sums, last 10)? Never fails."""
+    series = atr(df_daily).dropna()
+    if len(series) < 20:
+        return CheckResult("vol_expansion_direction", "context", "unknown", 4.0,
+                           "insufficient history", {})
+    slope5 = float(series.iloc[-1] - series.iloc[-6])
+    if slope5 <= 0:
+        return CheckResult("vol_expansion_direction", "context", "pass", 4.0,
+                           "ATR not expanding", {"atr_slope5": round(slope5, 4)})
+    tail = df_daily.iloc[-10:]
+    prev_close = tail["Close"].shift(1)
+    true_range = pd.concat([tail["High"] - tail["Low"],
+                            (tail["High"] - prev_close).abs(),
+                            (prev_close - tail["Low"]).abs()], axis=1).max(axis=1)
+    up_bars = tail["Close"] >= tail["Open"]
+    with_plan = up_bars if plan.direction == "bullish" else ~up_bars
+    tr_with = round(float(true_range[with_plan].sum()), 2)
+    tr_against = round(float(true_range[~with_plan].sum()), 2)
+    evidence = {"atr_slope5": round(slope5, 4),
+                "tr_with": tr_with, "tr_against": tr_against}
+    if tr_against > tr_with:
+        return CheckResult("vol_expansion_direction", "context", "warn", 4.0,
+                           "ATR expanding on against-plan bars", evidence)
+    return CheckResult("vol_expansion_direction", "context", "pass", 4.0,
+                       "expansion happening with-plan", evidence)
+
+
+register(check_id="vol_expansion_direction", section="context", weight=4.0,
+         func=check_vol_expansion)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_atr.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/atr_regime.py tests/test_gate_atr.py
+git commit -m "feat: vol expansion direction check"
+```
 
 ## Section 2 — Setup quality
 
