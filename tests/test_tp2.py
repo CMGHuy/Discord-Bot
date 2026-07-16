@@ -73,3 +73,50 @@ def test_build_strategy_plan_tp2_stays_none_without_level_map():
     p = build_strategy_plan(df, 79, ticker="AAPL", strategy="MACD",
                             horizon_key="4w", direction="bullish")
     assert p.tp2 is None
+
+
+# --- Task 31 regression: exit_params_for() wiring into build_strategy_plan ---
+#
+# These two tests use the SAME level_map (which, on its own, is sufficient
+# to populate tp2 -- see test_build_strategy_plan_fills_tp2_from_level_map
+# above) against two strategies that differ only in whether they have an
+# EXIT_V2_PARAMS override, to prove the override actually reaches the built
+# plan and isn't just correct in exit_params_for()'s own unit tests.
+
+def _level_map_beyond_tp1(close):
+    supports = [Level(price=close - 10, sources=["EMA20"])]
+    resistances = [
+        Level(price=close + 2, sources=["EMA20"]),
+        Level(price=close + 4, sources=["Fib 61.8%"]),
+    ]
+    return supports, resistances
+
+
+def test_build_strategy_plan_applies_exit_v2_override_trail_and_drops_tp2():
+    # RSI Divergence: EXIT_V2_PARAMS = {"trail_atr_mult": 2.0, "tp2": False}
+    # (grid winner, docs/superpowers/results/2026-07-exit-v2-train-grid.txt:99).
+    # Even with a level_map that WOULD otherwise populate tp2 (as it does for
+    # a no-override strategy below), tp2 must come back None and
+    # trail_atr_mult must be the strategy's 2.0 override, not the 2.5 default.
+    df = make_ohlcv([100 + i * 0.5 for i in range(80)])
+    close = float(df["Close"].iloc[79])
+    p = build_strategy_plan(df, 79, ticker="AAPL", strategy="RSI Divergence",
+                            horizon_key="4w", direction="bullish",
+                            level_map=_level_map_beyond_tp1(close))
+    assert p.trail_atr_mult == 2.0
+    assert p.tp2 is None
+
+
+def test_build_strategy_plan_no_override_strategy_keeps_defaults():
+    # EMA Crossover has no EXIT_V2_PARAMS entry (grid: "no config qualifies
+    # -- KEEP DEFAULTS"). With the identical level_map from the test above,
+    # it must fall back to trail_atr_mult=2.5 (TRAIL_ATR_MULT) and tp2 must
+    # actually get populated from the level map (tp2 defaults to True).
+    df = make_ohlcv([100 + i * 0.5 for i in range(80)])
+    close = float(df["Close"].iloc[79])
+    p = build_strategy_plan(df, 79, ticker="AAPL", strategy="EMA Crossover",
+                            horizon_key="4w", direction="bullish",
+                            level_map=_level_map_beyond_tp1(close))
+    assert p.trail_atr_mult == 2.5
+    assert p.tp2 is not None
+    assert p.tp2 > p.tp1
