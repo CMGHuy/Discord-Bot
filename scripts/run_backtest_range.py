@@ -24,10 +24,23 @@ import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
 from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.backtest_scenarios import run_scenario_backtest
 from swingbot.core.strategy_types import HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
+
+# Confluence scenario replay gates (--scenarios). Spelled out as literals
+# (mirroring swingbot.config.MIN_REWARD_PCT / MIN_STOP_DISTANCE_PCT /
+# MAX_STOP_LOSS_PCT / MIN_RISK_REWARD_RATIO as of this writing) rather than
+# read from config at call time, so a replay stays reproducible even if the
+# operator's live .env later drifts from these numbers.
+SCENARIO_GATES = {
+    "min_reward_pct": 3.0,
+    "min_stop_distance_pct": 2.0,
+    "max_stop_distance_pct": 7.0,
+    "min_risk_reward": 1.5,
+}
 
 
 def window_trades(summary, date_from, date_to):
@@ -55,6 +68,61 @@ def passes(stats, min_n):
             and stats["win_rate"] is not None and stats["win_rate"] >= 80
             and stats["expectancy_r"] is not None and stats["expectancy_r"] > 0
             and stats["excluded_share"] <= 0.5)
+
+
+def _scenario_row_stats(agg):
+    """Adapt backtest_scenarios._aggregate's stats shape to the same
+    n_eval/win_rate/expectancy_r/excluded_share shape `pool()`/`passes()`
+    use, so scenario rows print through the same table format."""
+    closed = agg["n"] + agg["scratches"] + agg["timeouts"]
+    return {
+        "n_eval": agg["n"], "win_rate": agg["win_rate"],
+        "expectancy_r": agg["expectancy_r"],
+        "scratches": agg["scratches"], "timeouts": agg["timeouts"],
+        "excluded_share": (agg["scratches"] + agg["timeouts"]) / closed if closed else 0.0,
+    }
+
+
+def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
+    """--scenarios: replay the confluence scan itself (backtest_scenarios)
+    instead of a named strategy, and print per-horizon + pooled rows in the
+    standard table with strategy column `confluence/<horizon>`."""
+    tickers = sorted(load_watchlist())
+    frames = {}
+    for ticker in tickers:
+        df = load_cached(ticker)
+        if df is not None:
+            frames[ticker] = df
+    print(f"loaded {len(frames)}/{len(tickers)} cached tickers", flush=True)
+
+    stats = run_scenario_backtest(frames, date_from, date_to,
+                                  gates=SCENARIO_GATES, scale_out=scale_out,
+                                  horizons=list(HORIZONS))
+
+    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
+    lines = [f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
+             f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==", header]
+    for hk in HORIZONS:
+        st = _scenario_row_stats(stats["by_horizon"][hk])
+        if st["n_eval"] == 0 and st["scratches"] == 0 and st["timeouts"] == 0:
+            continue
+        wr = f"{st['win_rate']:.1f}" if st["win_rate"] is not None else "n/a"
+        er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
+        flag = "PASS" if passes(st, min_n) else "FAIL"
+        lines.append(f"{'confluence/' + hk:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s} "
+                     f"{st['scratches']:5d} {st['timeouts']:5d} {st['excluded_share']*100:5.0f}%  {flag}")
+
+    pooled = _scenario_row_stats(stats["pooled"])
+    wr = f"{pooled['win_rate']:.1f}" if pooled["win_rate"] is not None else "n/a"
+    er = f"{pooled['expectancy_r']:+.3f}" if pooled["expectancy_r"] is not None else "n/a"
+    flag = "PASS" if passes(pooled, min_n) else "FAIL"
+    lines.append(f"{'confluence/pooled':22s} {pooled['n_eval']:5d} {wr:>6s} {er:>7s} "
+                 f"{pooled['scratches']:5d} {pooled['timeouts']:5d} {pooled['excluded_share']*100:5.0f}%  {flag}")
+
+    report = "\n".join(lines)
+    print("\n" + report)
+    Path("backtest_range_summary.txt").write_text(report, encoding="utf-8")
+    print("\nSaved backtest_range_summary.txt")
 
 
 def build_registry_records(summaries, *, source, window, run_date,
@@ -110,6 +178,9 @@ def main():
     ap.add_argument("--scale-out", dest="scale_out", action="store_true")
     ap.add_argument("--tp2", dest="tp2", choices=["none", "levels"], default="levels",
                     help="TP2 source for scale-out runs (v2 only)")
+    ap.add_argument("--scenarios", action="store_true",
+                    help="replay the confluence scan itself (backtest_scenarios."
+                         "run_scenario_backtest) instead of the named-strategy loop")
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
@@ -122,6 +193,10 @@ def main():
         if not (args.date_from and args.date_to):
             ap.error("need --train, --validation, or --from/--to")
         date_from, date_to, min_n, label = args.date_from, args.date_to, 15, "CUSTOM"
+
+    if args.scenarios:
+        run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out)
+        return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
     by_strategy = defaultdict(list)

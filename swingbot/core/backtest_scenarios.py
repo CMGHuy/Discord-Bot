@@ -5,8 +5,10 @@ simulator the live scan uses. No lookahead: every computation sees
 df.iloc[:i+1] only."""
 from __future__ import annotations
 
+import numpy as np
+
 from swingbot.core import levels
-from swingbot.core.plan_engine import build_confluence_plan
+from swingbot.core.plan_engine import build_confluence_plan, simulate_exit
 from swingbot.core.strategy_types import HORIZONS, MIN_BARS
 
 # Levels move slowly; recomputing the full multi-source level map every bar
@@ -84,3 +86,49 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
             last_accepted[sc.direction] = i
             out.append((i, plan))
     return out
+
+
+def _aggregate(results: list) -> dict:
+    """Win/loss/scratch/timeout/runner stats -- same shape family as
+    run_backtest_range.py's `pool()`, but keyed to ExitResult's outcome
+    vocabulary (Task 37)."""
+    closed = [r for r in results if r.outcome != "not_triggered"]
+    ev = [r for r in closed if r.outcome in ("win", "loss")]
+    wins = [r for r in ev if r.outcome == "win"]
+    runner = {}
+    for r in closed:
+        if r.runner_outcome:
+            runner[r.runner_outcome] = runner.get(r.runner_outcome, 0) + 1
+    return {
+        "n": len(ev),
+        "wins": len(wins),
+        "losses": len(ev) - len(wins),
+        "scratches": sum(1 for r in closed if r.outcome == "scratch"),
+        "timeouts": sum(1 for r in closed if r.outcome == "timeout"),
+        "not_triggered": sum(1 for r in results if r.outcome == "not_triggered"),
+        "win_rate": len(wins) / len(ev) * 100 if ev else None,
+        "expectancy_r": float(np.mean([r.r_total for r in closed])) if closed else None,
+        "runner": runner,
+    }
+
+
+def run_scenario_backtest(frames: dict, start, end, *, gates,
+                          scale_out=True, horizons=None) -> dict:
+    """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
+    dates -- the exit walk may run past `end`, same convention as
+    run_backtest_daterange."""
+    horizons = horizons or list(HORIZONS)
+    results_by_hz: dict = {hk: [] for hk in horizons}
+    for ticker, df in frames.items():
+        for hk in horizons:
+            for i, plan in replay_scenarios(ticker, df, hk, gates=gates):
+                signal_date = str(df.index[i].date())
+                if start and signal_date < start:
+                    continue
+                if end and signal_date > end:
+                    continue
+                results_by_hz[hk].append(simulate_exit(df, i, plan,
+                                                       scale_out=scale_out))
+    all_results = [r for rs in results_by_hz.values() for r in rs]
+    return {"pooled": _aggregate(all_results),
+            "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
