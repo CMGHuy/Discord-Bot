@@ -12,6 +12,19 @@ from swingbot.core.strategy import HORIZONS, MIN_BARS, evaluate_all
 from swingbot.core.charts.trade_chart import generate_all_strategy_charts
 
 
+def format_signal_plan_line(plan) -> str:
+    """Compact !ticker plan line: 'MACD 4w ✅ 81.3% | entry 101.20 stop
+    99.10 tp1 101.94 tp2 104.00' (tp2 clause omitted when there's no TP2)."""
+    badge_mark = "✅" if plan.badge == "VALIDATED" else "⚠️"
+    wr = (plan.badge_stats or {}).get("win_rate", 0.0)
+    line = (f"{plan.strategy} {plan.horizon_key} {badge_mark} {wr:.1f}% | "
+           f"entry {plan.trigger_price:.2f} stop {plan.stop_loss:.2f} "
+           f"tp1 {plan.tp1:.2f}")
+    if plan.tp2 is not None:
+        line += f" tp2 {plan.tp2:.2f}"
+    return line
+
+
 def _sync_ticker_snapshot(ticker: str):
     """All the blocking work for !ticker (network fetch, indicator computation) in one place, run via to_thread."""
     df = get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
@@ -65,7 +78,33 @@ async def ticker_cmd(ctx, ticker: str):
         f"{config.MIN_ALERT_CONFIDENCE_LEVEL}+ confidence signals become alerts via `!check`; "
         "everything is shown here regardless of confidence."
     )
-    await ctx.send("\n".join(lines))
+
+    plan_lines = []
+    for r in results:
+        if not r.triggered:
+            continue
+        from swingbot.core.plan_engine import build_strategy_plan
+        try:
+            plan = build_strategy_plan(df, len(df) - 1, ticker=ticker,
+                                       strategy=r.strategy, horizon_key=r.horizon_key,
+                                       direction=r.trend)
+        except Exception:
+            plan = None
+        if plan is not None:
+            plan_lines.append(format_signal_plan_line(plan))
+    if plan_lines:
+        lines.append("**Trade plans**")
+        lines.extend(plan_lines)
+
+    msg = "\n".join(lines)
+    while len(msg) > 1990:
+        split_at = msg.rfind("\n", 0, 1990)
+        if split_at == -1:
+            split_at = 1990
+        await ctx.send(msg[:split_at])
+        msg = msg[split_at:]
+    if msg.strip():
+        await ctx.send(msg)
 
 
 def _sync_strategy_charts(ticker: str, df, direction: str, h: dict, currency_symbol: str):
