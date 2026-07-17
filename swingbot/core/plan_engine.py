@@ -209,7 +209,7 @@ def select_tp2(levels_above: list, levels_below: list, direction: str,
 
 
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
-                        direction, level_map=None) -> TradePlanV2 | None:
+                        direction, level_map=None, quality_inputs=None) -> TradePlanV2 | None:
     """THE constructor for strategy-source plans. Returns None when the
     strategy has no valid structure at this bar (same conditions as the
     backtest reference)."""
@@ -265,7 +265,17 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
     stamp_badge(plan)
+    _apply_quality(plan, quality_inputs)
     return plan
+
+
+def _apply_quality(plan: TradePlanV2, quality_inputs: dict | None) -> None:
+    if quality_inputs is None:
+        return
+    from swingbot.core.quality import score_plan
+    q = score_plan(direction=plan.direction, badge_status=plan.badge, **quality_inputs)
+    plan.quality_score, plan.tier = q.score, q.tier
+    plan.quality_breakdown = q.breakdown
 
 
 # ---------------------------------------------------------------------------
@@ -314,13 +324,13 @@ def primary_strategy_for(scenario) -> str:
 
 
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
-                          primary_strategy) -> TradePlanV2:
+                          primary_strategy, quality_inputs=None) -> TradePlanV2:
     """THE constructor for confluence-source plans (a levels.build_scenarios
     Scenario). TP1 is RECOMPUTED under the unified exit policy rather than
     reusing the scenario's own target -- see spec §5; the scenario's own
     take_profit survives as tp2 only when it still lies beyond the new TP1.
-    `strategy` is a placeholder attribution until Task 38 wires the real
-    generating strategy through."""
+    `primary_strategy` is the real per-scenario attribution (see
+    primary_strategy_for)."""
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
     risk = abs(entry - scenario.stop_loss)
@@ -350,6 +360,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
     stamp_badge(plan)
+    _apply_quality(plan, quality_inputs)
     return plan
 
 
