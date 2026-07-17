@@ -212,9 +212,10 @@ def run_backtest(
     _lm_resistances: list = []
     if exit_model == "v2":
         from .plan_engine import (
-            TRAIL_ATR_MULT, PlanStatus, TradePlanV2, entry_type_for, select_tp2,
-            simulate_exit,
+            PlanStatus, TradePlanV2, entry_type_for, exit_params_for,
+            select_tp2, simulate_exit,
         )
+        _exit_params = exit_params_for(strategy)
 
     entry_idx = np.where((bullish_entries.values | bearish_entries.values))[0]
     _open_until: int = -1  # bar index after which the current trade has exited
@@ -236,7 +237,7 @@ def run_backtest(
 
         if exit_model == "v2":
             tp2 = None
-            if tp2_mode == "levels":
+            if tp2_mode == "levels" and _exit_params["tp2"]:
                 cache_key = i // 5
                 if cache_key != _lm_cache_key:
                     from .levels import build_level_map
@@ -257,7 +258,8 @@ def run_backtest(
                 expiry_bars=5, stop_loss=stop_loss,
                 tp1=take_profit, tp1_fraction=0.5, tp2=tp2,
                 breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
-                trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+                trail_atr_mult=_exit_params["trail_atr_mult"],
+                quality_score=0, quality_breakdown=[],
                 tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
             )
             res = simulate_exit(df, i, plan, scale_out=scale_out)

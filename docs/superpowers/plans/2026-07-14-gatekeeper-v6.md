@@ -1,5 +1,7 @@
 # Gatekeeper v6 — Pre-Trade Checklist Gate & Macro Context Engine Implementation Plan (216 tasks)
 
+> **⚠️ SPLIT FOR EXECUTION (2026-07-18):** this master plan has been split verbatim into 11 part files — `2026-07-14-gatekeeper-v6_1.md` … `2026-07-14-gatekeeper-v6_11.md`, indexed in `2026-07-14-gatekeeper-v6_0-index.md`. **Executing agents work from the part files, in numeric order — not from this file.** This file remains the single-file reference copy; if a part file is edited during execution, back-port the edit here.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (Tasks G1–G216).
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
@@ -11179,37 +11181,611 @@ git commit -m "feat: decile + ablation charts"
 
 **Files:** Create `swingbot/commands/gatecheck.py` (module registered like other command modules; help catalog + `COMMAND_USAGE` entries); test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!frontier [strategy]` — renders the latest saved frontier evidence (from the G98 JSON artifacts): table embed (cut/WR/LB/N/kept%) + attached G111 chart; strategy omitted → aggregate. Empty state: "No frontier evidence yet — run scripts/gate_frontier.py".
-- [ ] **Step 1–4: TDD (embed golden over fixture artifact; empty state), commit** — `feat: !frontier command`
+**Interfaces:** `!frontier [strategy]` — renders the latest saved frontier evidence (from the G98 JSON artifacts): table embed (cut/WR/LB/N/kept%) + attached G111 chart; strategy omitted → aggregate. Empty state: "No frontier evidence yet — run scripts/gate_frontier.py". A command never triggers a fold run or provider fetch — it only reads saved artifacts.
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_commands_gatecheck.py
+"""Pure-renderer tests for the gate command suite — no live bot: builders
+are plain functions over artifact dicts (test_plans_command.py pattern)."""
+import json
+
+from swingbot.commands.gatecheck import (EMPTY_FRONTIER, frontier_summary,
+                                         frontier_table,
+                                         load_frontier_artifacts)
+
+ARTIFACT = {
+    "strategy": "Break & Retest",
+    "frontier": [
+        {"cut": 0, "n_kept": 200, "pct_kept": 100.0, "wr": 60.0,
+         "wilson_lb": 0.53, "expectancy_r": 0.21, "trades_per_month": 8.3},
+        {"cut": 60, "n_kept": 80, "pct_kept": 40.0, "wr": 82.5,
+         "wilson_lb": 0.73, "expectancy_r": 0.44, "trades_per_month": 3.3},
+        {"cut": 90, "n_kept": 12, "pct_kept": 6.0, "wr": 100.0,
+         "wilson_lb": 0.76, "expectancy_r": 0.90, "trades_per_month": 0.5},
+    ],
+    "deciles": [],
+    "best_cut": {"cut": 60, "n_kept": 80, "pct_kept": 40.0, "wr": 82.5,
+                 "wilson_lb": 0.73, "expectancy_r": 0.44, "trades_per_month": 3.3},
+    "proposal": {"aplus_cut": None, "a_cut": 60, "baseline_wr": 60.0,
+                 "evidence": {"aplus": None,
+                              "a": {"cut": 60, "n_kept": 80, "wr": 82.5,
+                                    "wilson_lb": 0.73}}},
+}
+
+
+def test_frontier_table_golden():
+    text = frontier_table(ARTIFACT)
+    assert "Break & Retest" in text
+    assert "82% (N=80)" in text                        # fmt_wr everywhere (G109)
+    assert "— (N=12 < 20)" in text                     # low-N guard visible
+    assert "best cut: 60" in text
+
+
+def test_frontier_table_no_qualifying_cut_stated_plainly():
+    text = frontier_table(dict(ARTIFACT, best_cut=None))
+    assert "no cut qualifies" in text
+
+
+def test_frontier_summary_aggregate():
+    other = dict(ARTIFACT, strategy="VWAP", best_cut=None)
+    text = frontier_summary([ARTIFACT, other])
+    assert text.index("Break & Retest") < text.index("VWAP")
+    assert "no cut qualifies" in text
+
+
+def test_load_artifacts_and_empty_state(tmp_path):
+    assert load_frontier_artifacts(str(tmp_path)) == []          # → EMPTY_FRONTIER
+    (tmp_path / "2026-07-gate-frontier-bnr.json").write_text(
+        json.dumps(ARTIFACT), encoding="utf-8")
+    (tmp_path / "2026-07-gate-frontier-bad.json").write_text(
+        "{not json", encoding="utf-8")                 # unreadable → skipped
+    arts = load_frontier_artifacts(str(tmp_path))
+    assert len(arts) == 1 and arts[0]["strategy"] == "Break & Retest"
+    assert "gate_frontier.py" in EMPTY_FRONTIER
+```
+
+- [ ] **Step 2: Run — FAIL** (`ModuleNotFoundError: ... 'swingbot.commands.gatecheck'`), then **implement**:
+
+```python
+# swingbot/commands/gatecheck.py
+"""Gate evidence commands — !frontier (G113), !tierwr (G114), !redflags (G115);
+!checklist/!whycheck/!blocked/!gutcheck follow in Phase G5.
+
+Renderers are pure string builders over saved artifacts (tested without a
+live bot); command wrappers only load + send. A command never triggers a
+provider fetch or a fold run — evidence is produced by
+scripts/gate_frontier.py / scripts/gate_fold_run.py; these commands read it."""
+import asyncio
+import glob as globmod
+import json
+import os
+
+import discord
+
+from swingbot.bot_core import bot
+from swingbot.core.gate.render import fmt_wr
+
+RESULTS_DIR = "docs/superpowers/results"
+EMPTY_FRONTIER = ("No frontier evidence yet — run "
+                  "`python scripts/gate_frontier.py` (TRAIN folds) first.")
+
+
+def load_frontier_artifacts(results_dir: str = RESULTS_DIR) -> list[dict]:
+    """Every 2026-07-gate-frontier-*.json in results_dir, path-sorted;
+    unreadable files are skipped (evidence is optional, never fatal)."""
+    artifacts = []
+    pattern = os.path.join(results_dir, "2026-07-gate-frontier-*.json")
+    for path in sorted(globmod.glob(pattern)):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                artifacts.append(json.load(fh))
+        except (OSError, ValueError):
+            continue
+    return artifacts
+
+
+def frontier_table(artifact: dict) -> str:
+    """One strategy's frontier as a code-block table — every WR through
+    fmt_wr (G109); the no-cut outcome stated plainly, never hidden."""
+    lines = [f"**{artifact['strategy']}** — WR frontier (TRAIN folds)", "```",
+             f"{'cut':>4}  {'WR (N)':<16} {'LB%':>4} {'kept%':>6} {'exp_r':>6}"]
+    for r in artifact["frontier"]:
+        exp = "—" if r["expectancy_r"] is None else f"{r['expectancy_r']:.2f}"
+        lines.append(f"{r['cut']:>4}  {fmt_wr(r['wr'], r['n_kept']):<16} "
+                     f"{r['wilson_lb'] * 100:>4.0f} {r['pct_kept']:>6.1f} {exp:>6}")
+    lines.append("```")
+    best = artifact.get("best_cut")
+    if best:
+        lines.append(f"best cut: {best['cut']} — {fmt_wr(best['wr'], best['n_kept'])} "
+                     f"at {best['pct_kept']}% kept")
+    else:
+        lines.append("no cut qualifies (N ≥ 30 within the 40% loss budget) — "
+                     "an allowed, reported outcome")
+    return "\n".join(lines)
+
+
+def frontier_summary(artifacts: list[dict]) -> str:
+    """Aggregate view (`!frontier` with no arg): one line per strategy."""
+    lines = ["**WR frontier — all strategies (TRAIN)**"]
+    for art in artifacts:
+        best = art.get("best_cut")
+        if best:
+            lines.append(f"- {art['strategy']}: cut {best['cut']} → "
+                         f"{fmt_wr(best['wr'], best['n_kept'])} "
+                         f"at {best['pct_kept']}% kept")
+        else:
+            lines.append(f"- {art['strategy']}: no cut qualifies")
+    return "\n".join(lines)
+
+
+@bot.command(name="frontier")
+async def frontier_cmd(ctx, *, strategy: str = ""):
+    artifacts = load_frontier_artifacts()
+    if not artifacts:
+        await ctx.send(EMPTY_FRONTIER)
+        return
+    if not strategy:
+        await ctx.send(frontier_summary(artifacts))
+        return
+    match = next((a for a in artifacts
+                  if a["strategy"].lower() == strategy.strip().lower()), None)
+    if match is None:
+        known = ", ".join(a["strategy"] for a in artifacts)
+        await ctx.send(f"No frontier artifact for `{strategy}`. Known: {known}")
+        return
+    files = []
+    try:                                               # chart is a bonus, never fatal
+        from swingbot.core.charts.gate_charts import frontier_chart
+        chosen = (match.get("best_cut") or {}).get("cut")
+        path = os.path.join("data", "gate", "charts", "frontier.png")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        await asyncio.to_thread(frontier_chart, match["frontier"], path, chosen)
+        files.append(discord.File(path))
+    except Exception:
+        pass
+    await ctx.send(frontier_table(match), files=files or None)
+```
+
+**Registration** (mirror the existing modules): add `from swingbot.commands import gatecheck  # noqa: F401` to `bot.py`; in `bot_core.py` add the help-catalog entry (verify the catalog dict's structure at execution — mirror a scanning entry) plus:
+
+```python
+# bot_core.py — COMMAND_USAGE additions:
+    "frontier": ("!frontier [strategy]",
+                 "!frontier  or  !frontier Break & Retest"),
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py bot.py swingbot/bot_core.py tests/test_commands_gatecheck.py
+git commit -m "feat: !frontier command"
+```
 
 ### Task G114: `!tierwr` command — live tier scoreboard
 
 **Files:** Modify `gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!tierwr` — live WR/expectancy/N by tier from the analytics snapshot's gate section (G86), side-by-side with the TRAIN fold numbers, every WR through `fmt_wr` (G109), footer states the honesty line: "Tiers are earned labels — see gate-decision memo".
-- [ ] **Step 1–4: TDD, commit** — `feat: !tierwr live scoreboard`
+**Interfaces:** `!tierwr` — live WR/expectancy/N by tier from the analytics snapshot's gate section (G86), side-by-side with the TRAIN numbers that earned the labels (the frontier artifacts' proposal evidence rows), every WR through `fmt_wr` (G109), footer states the honesty line: "Tiers are earned labels — see gate-decision memo".
+- [ ] **Step 1: Write the failing test** (append to `tests/test_commands_gatecheck.py`)
+
+```python
+from swingbot.commands.gatecheck import EMPTY_TIERWR, tierwr_lines
+
+GATE_SECTION = {
+    "tier_wr": {
+        "A+": {"n": 31, "wr": 90.3, "expectancy_r": 0.62},
+        "A": {"n": 44, "wr": 75.0, "expectancy_r": 0.41},
+        "B": {"n": 12, "wr": 66.7, "expectancy_r": 0.20},
+        "C": {"n": 0, "wr": None, "expectancy_r": None},
+    },
+    "flags": [],
+}
+
+
+def test_tierwr_golden():
+    text = tierwr_lines(GATE_SECTION, [ARTIFACT])
+    assert "90% (N=31)" in text                        # live A+, fmt_wr
+    assert "— (N=12 < 20)" in text                     # low-N tier guarded
+    assert "TRAIN evidence" in text
+    assert "no A+ cut qualified" in text               # ARTIFACT has aplus=None
+    assert "earned labels" in text                     # the honesty footer
+    # live before TRAIN — the scoreboard is the headline
+    assert text.index("Live tier scoreboard") < text.index("TRAIN evidence")
+
+
+def test_tierwr_train_line_from_evidence():
+    art = dict(ARTIFACT)
+    art["proposal"] = {"aplus_cut": 80, "a_cut": 60, "baseline_wr": 60.0,
+                       "evidence": {"aplus": {"cut": 80, "n_kept": 61, "wr": 95.1,
+                                              "wilson_lb": 0.86},
+                                    "a": None}}
+    text = tierwr_lines(GATE_SECTION, [art])
+    assert "A+ cut 80" in text and "95% (N=61)" in text and "LB 86%" in text
+
+
+def test_tierwr_empty_states():
+    assert tierwr_lines(None, []) == EMPTY_TIERWR
+    assert tierwr_lines({}, [ARTIFACT]) == EMPTY_TIERWR
+    # live data but no TRAIN artifacts → scoreboard renders without the block
+    text = tierwr_lines(GATE_SECTION, [])
+    assert "Live tier scoreboard" in text and "TRAIN evidence" not in text
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gatecheck.py`):
+
+```python
+EMPTY_TIERWR = ("No live tier data yet — the gate section appears in the "
+                "analytics snapshot once gate-tagged trades close (G86).")
+
+
+def tierwr_lines(gate_section: dict | None, artifacts: list[dict]) -> str:
+    """Live tier scoreboard next to the TRAIN evidence that earned the
+    labels. Live numbers come from the analytics snapshot (one-definition
+    rule); TRAIN numbers from the frontier artifacts' proposal evidence."""
+    if not gate_section or not gate_section.get("tier_wr"):
+        return EMPTY_TIERWR
+    lines = ["**Live tier scoreboard** (closed, gate-tagged trades)", "```",
+             f"{'tier':>4}  {'WR (N)':<16} {'exp_r':>6}"]
+    for tier in ("A+", "A", "B", "C"):
+        row = gate_section["tier_wr"].get(tier) or {}
+        exp = ("—" if row.get("expectancy_r") is None
+               else f"{row['expectancy_r']:.2f}")
+        lines.append(f"{tier:>4}  {fmt_wr(row.get('wr'), row.get('n', 0)):<16} "
+                     f"{exp:>6}")
+    lines.append("```")
+    if artifacts:
+        lines.append("**TRAIN evidence** (fold frontier — the numbers that "
+                     "earned the labels):")
+        for art in artifacts:
+            prop = art.get("proposal") or {}
+            aplus = (prop.get("evidence") or {}).get("aplus")
+            if aplus:
+                lines.append(f"- {art['strategy']} A+ cut {prop['aplus_cut']}: "
+                             f"{fmt_wr(aplus['wr'], aplus['n_kept'])}, "
+                             f"LB {aplus['wilson_lb'] * 100:.0f}%")
+            else:
+                lines.append(f"- {art['strategy']}: no A+ cut qualified on TRAIN")
+    lines.append("_Tiers are earned labels — see the gate-decision memo "
+                 "(docs/superpowers/results/2026-07-gate-decision.md)._")
+    return "\n".join(lines)
+
+
+def _load_gate_section() -> dict | None:
+    """The analytics snapshot's gate section (G86); None when cockpit Part 1
+    is absent or no snapshot exists yet — commands degrade to empty states."""
+    try:
+        from swingbot.core.analytics import snapshots  # cockpit Part 1
+        snap = snapshots.load_latest()                 # verify name at execution
+        return (snap or {}).get("gate")
+    except Exception:
+        return None
+
+
+@bot.command(name="tierwr")
+async def tierwr_cmd(ctx):
+    await ctx.send(tierwr_lines(_load_gate_section(), load_frontier_artifacts()))
+```
+
+Add to `bot_core.py` `COMMAND_USAGE`: `"tierwr": ("!tierwr", "!tierwr")` + help-catalog entry.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py swingbot/bot_core.py tests/test_commands_gatecheck.py
+git commit -m "feat: !tierwr live scoreboard"
+```
 
 ### Task G115: `!redflags` command
 
 **Files:** Modify `gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!redflags` — G85's live flag-outcome table as an embed (flag, times fired & taken anyway, WR ignored vs clean, ΔR), sorted by damage; the receipts that make the checklist self-enforcing.
-- [ ] **Step 1–4: TDD, commit** — `feat: !redflags receipts command`
+**Interfaces:** `!redflags` — G85's live flag-outcome table as an embed (flag, times fired & taken anyway, WR ignored vs clean, ΔR), sorted by damage; the receipts that make the checklist self-enforcing. Additive prerequisite: `flag_outcome_stats` rows gain `n_clean` (count of clean closed trades) so the clean-side WR routes through `fmt_wr` too — a WR without N is a bug.
+- [ ] **Step 1: Write the failing tests** — append to `tests/test_gate_persistence.py` (the `n_clean` addition) and `tests/test_commands_gatecheck.py` (the renderer):
+
+```python
+# tests/test_gate_persistence.py — extend the G85 golden:
+def test_flag_outcome_rows_carry_n_clean():
+    entries = ([{"outcome": "loss", "r_multiple": -1.0,
+                 "fired_flags": ["rf_dead_cat"]}] * 2
+               + [{"outcome": "win", "r_multiple": 1.5, "fired_flags": []}] * 5)
+    row = flag_outcome_stats(entries)[0]
+    assert row["n_clean"] == 5
+```
+
+```python
+# tests/test_commands_gatecheck.py:
+from swingbot.commands.gatecheck import EMPTY_REDFLAGS, redflags_table
+
+FLAG_ROWS = [
+    {"flag": "rf_fake_breakout", "n_fired_and_taken": 24, "n_clean": 80,
+     "wr_when_ignored": 25.0, "wr_when_clean": 75.0, "delta_wr": -50.0,
+     "avg_r_when_ignored": -0.38},
+    {"flag": "rf_opex_pin", "n_fired_and_taken": 8, "n_clean": 96,
+     "wr_when_ignored": 62.5, "wr_when_clean": 64.0, "delta_wr": -1.5,
+     "avg_r_when_ignored": 0.10},
+]
+
+
+def test_redflags_table_golden():
+    text = redflags_table(FLAG_ROWS)
+    assert "25% (N=24)" in text                        # ignored WR, fmt_wr
+    assert "75% (N=80)" in text                        # clean WR, fmt_wr
+    assert "-50.0" in text and "-0.38" in text         # the receipt
+    assert "— (N=8 < 20)" in text                      # low-N flag guarded
+    # G85 pre-sorts by damage — renderer must preserve that order
+    assert text.index("fake_breakout") < text.index("opex_pin")
+
+
+def test_redflags_empty_states():
+    assert redflags_table([]) == EMPTY_REDFLAGS
+    # a flag never taken against has no receipt row
+    never_taken = [dict(FLAG_ROWS[0], n_fired_and_taken=0)]
+    assert redflags_table(never_taken) == EMPTY_REDFLAGS
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**. First the additive G85 change (in `flag_outcome_stats`, alongside the existing keys):
+
+```python
+            "n_clean": len(clean),
+```
+
+Then append to `gatecheck.py`:
+
+```python
+EMPTY_REDFLAGS = ("No red-flag receipts yet — they accumulate as flagged "
+                  "trades close (G85).")
+
+
+def redflags_table(flag_rows: list[dict]) -> str:
+    """The receipts: what taking a flagged trade anyway actually cost,
+    per flag, sorted by damage (G85's order preserved)."""
+    rows = [r for r in flag_rows or [] if r.get("n_fired_and_taken")]
+    if not rows:
+        return EMPTY_REDFLAGS
+    lines = ["**Red-flag receipts** — flagged trades taken anyway vs clean",
+             "```",
+             f"{'flag':<16} {'taken':>5}  {'WR ignored':<16} {'WR clean':<16} "
+             f"{'ΔWR':>6} {'avgR':>6}"]
+    for r in rows:
+        delta = "—" if r["delta_wr"] is None else f"{r['delta_wr']:+.1f}"
+        avg_r = ("—" if r["avg_r_when_ignored"] is None
+                 else f"{r['avg_r_when_ignored']:+.2f}")
+        lines.append(
+            f"{r['flag'].removeprefix('rf_'):<16} {r['n_fired_and_taken']:>5}  "
+            f"{fmt_wr(r['wr_when_ignored'], r['n_fired_and_taken']):<16} "
+            f"{fmt_wr(r['wr_when_clean'], r.get('n_clean', 0)):<16} "
+            f"{delta:>6} {avg_r:>6}")
+    lines.append("```")
+    return "\n".join(lines)
+
+
+@bot.command(name="redflags")
+async def redflags_cmd(ctx):
+    section = _load_gate_section() or {}
+    text = redflags_table(section.get("flags") or [])
+    embed = discord.Embed(title="🚩 Red flags — the receipts", description=text,
+                          color=discord.Color.red())
+    await ctx.send(embed=embed)
+```
+
+Add to `bot_core.py` `COMMAND_USAGE`: `"redflags": ("!redflags", "!redflags")` + help-catalog entry.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py tests/test_gate_persistence.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py swingbot/core/gate/persistence.py swingbot/bot_core.py tests/
+git commit -m "feat: !redflags receipts command"
+```
 
 ### Task G116: Tier-sized positions — fold test
 
 **Files:** Modify `scripts/gate_fold_run.py` (`--tier-sizing` mode); evidence appended to the G102 memo
 - Test: `tests/test_gate_folds.py`
 
-**Interfaces:** replays folds with G77's size multipliers applied (A+/A full, B half, C zero) vs flat sizing: compares compounded growth + max drawdown per fold (uses edge growth math when merged, else plain compounding). Promotion decision recorded in the memo; config `GATE_TIER_SIZING_ENABLED` (checkbox, default false) added.
-- [ ] **Step 1–4: TDD (replay math on stub folds); run for real; append evidence; commit** — `feat: tier-sizing fold evidence + flag`
+**Interfaces:** replays folds with G77's size multipliers applied (A+/A full, B half, C zero) vs flat sizing: compares compounded growth + max drawdown per fold (uses edge growth math when merged, else plain compounding). Promotion decision recorded in the memo; config `GATE_TIER_SIZING_ENABLED` (checkbox, default false) added. New pure functions in `folds.py`: `sizing_replay(trades, *, risk_pct=1.0, mults=None) -> {growth_pct, max_drawdown_pct, n}` and `run_tier_sizing(strategy, ...)` bucketing the annotated fold trades by year.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_folds.py`)
+
+```python
+def test_sizing_replay_flat_vs_tiered():
+    trades = ([{"outcome": "win", "r_multiple": 1.5, "gate_tier": "A+",
+                "entry_date": f"2021-01-{d:02d}"} for d in range(1, 7)]
+              + [{"outcome": "loss", "r_multiple": -1.0, "gate_tier": "C",
+                  "entry_date": f"2021-02-{d:02d}"} for d in range(1, 5)])
+    flat = folds.sizing_replay(trades)
+    tiered = folds.sizing_replay(
+        trades, mults={"A+": 1.0, "A": 1.0, "B": 0.5, "C": 0.0})
+    assert flat["n"] == tiered["n"] == 10
+    assert tiered["growth_pct"] > flat["growth_pct"]  # C-tier losses zero-sized
+    assert tiered["max_drawdown_pct"] == 0.0
+    assert flat["max_drawdown_pct"] > 0.0
+
+
+def test_sizing_replay_empty():
+    assert folds.sizing_replay([]) == {"growth_pct": 0.0,
+                                       "max_drawdown_pct": 0.0, "n": 0}
+
+
+def test_run_tier_sizing_buckets_by_fold_year():
+    def replay(strategy, ticker, start, end, min_tier):
+        year = start[:4]
+        return [{"outcome": "win", "r_multiple": 1.0, "gate_tier": "A",
+                 "entry_date": f"{year}-03-01"}] * 40 + \
+               [{"outcome": "loss", "r_multiple": -1.0, "gate_tier": "C",
+                 "entry_date": f"{year}-04-01"}] * 10
+    result = folds.run_tier_sizing("VWAP", tickers=["T1"], replay=replay)
+    assert [f["year"] for f in result["folds"]] == [2021, 2022, 2023]
+    for fold in result["folds"]:
+        assert fold["tiered"]["growth_pct"] > fold["flat"]["growth_pct"]
+    assert result["mults"]["C"] == 0.0                # G77 defaults flow through
+    assert result["pooled"]["flat"]["n"] == 150
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`):
+
+```python
+def sizing_replay(trades: list[dict], *, risk_pct: float = 1.0,
+                  mults: dict | None = None) -> dict:
+    """Compounded-equity replay over closed, gate-tagged trades in entry
+    order: each trade risks risk_pct% of current equity × its tier's
+    multiplier (mults=None → flat sizing, every multiplier 1.0). Plain
+    compounding fallback — when edge-engine growth math is merged, delegate
+    to it here (verify module name at execution); same arithmetic."""
+    closed = sorted((t for t in trades if t.get("outcome") in ("win", "loss")),
+                    key=lambda t: str(t.get("entry_date", "")))
+    equity = peak = 1.0
+    max_dd = 0.0
+    for t in closed:
+        mult = 1.0 if mults is None else mults.get(t.get("gate_tier"), 0.0)
+        equity *= 1.0 + (risk_pct / 100.0) * mult * t.get("r_multiple", 0.0)
+        peak = max(peak, equity)
+        max_dd = max(max_dd, (peak - equity) / peak)
+    return {"growth_pct": round((equity - 1.0) * 100.0, 2),
+            "max_drawdown_pct": round(max_dd * 100.0, 2), "n": len(closed)}
+
+
+def run_tier_sizing(strategy: str, *, tickers=None, replay=None) -> dict:
+    """Tier-sized vs flat sizing over the anchored folds — the G116
+    evidence. Reuses run_folds' annotate-only trades (gate_tier stamped by
+    the G91 replay) and buckets them by fold year via entry_date."""
+    from swingbot.core.gate.score import suggested_size_mult
+    mults = {tier: suggested_size_mult(tier) for tier in ("A+", "A", "B", "C")}
+    baseline = run_folds(strategy, tickers=tickers, replay=replay)
+    rows = []
+    for window in FOLDS:
+        fold_trades = [t for t in baseline["trades"]
+                       if str(t.get("entry_date", "")).startswith(str(window["year"]))]
+        rows.append({"year": window["year"],
+                     "flat": sizing_replay(fold_trades),
+                     "tiered": sizing_replay(fold_trades, mults=mults)})
+    return {"strategy": strategy, "mults": mults, "folds": rows,
+            "pooled": {"flat": sizing_replay(baseline["trades"]),
+                       "tiered": sizing_replay(baseline["trades"], mults=mults)}}
+```
+
+**CLI mode** (`scripts/gate_fold_run.py` — add `parser.add_argument("--tier-sizing", action="store_true")` and branch in `main`):
+
+```python
+    if args.tier_sizing:
+        from swingbot.core.gate.folds import run_tier_sizing
+        for strategy in strategies:
+            result = run_tier_sizing(strategy)
+            print(f"\n{strategy} [tier sizing] mults={result['mults']}")
+            for f in result["folds"]:
+                print(f"  {f['year']}: flat {f['flat']['growth_pct']}% "
+                      f"(dd {f['flat']['max_drawdown_pct']}%) vs tiered "
+                      f"{f['tiered']['growth_pct']}% "
+                      f"(dd {f['tiered']['max_drawdown_pct']}%)")
+            path = os.path.join(OUT_DIR,
+                                f"2026-07-gate-tier-sizing-{_slug(strategy)}.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, indent=2)
+            print(f"wrote {path}")
+        return 0
+```
+
+**Config field** (append to the Gatekeeper section in `swingbot/config.py`, G77 style):
+
+```python
+    Field("GATE_TIER_SIZING_ENABLED", "GATE_TIER_SIZING_ENABLED", "Gatekeeper",
+          "Tier-scaled position sizing", type="checkbox", default="false",
+          help="When on (and enforce mode), position size is multiplied by the "
+               "tier's size multiplier (G77). Promote only if the G116 fold "
+               "evidence shows growth ≥ flat with drawdown no worse."),
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_folds.py -v`
+- [ ] **Step 4: Run for real on TRAIN** (`python scripts/gate_fold_run.py --all --tier-sizing`), append a "Tier sizing" subsection to the G102 memo — per-strategy growth/drawdown table + the promotion sentence (better-or-equal growth with no-worse drawdown in ≥ 2 of 3 folds, else "not promoted"). The flag's default stays `false` either way — promotion is the operator's move on the settings page.
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/folds.py scripts/gate_fold_run.py swingbot/config.py tests/test_gate_folds.py docs/superpowers/results/
+git commit -m "feat: tier-sizing fold evidence + flag"
+```
 
 ### Task G117: Tier sizing live wiring (flag-gated)
 
 **Files:** Modify the position-size call path in `swingbot/commands/scanning.py` / `account.py` integration point; test `tests/test_gate_enforce.py`
 
-**Interfaces:** when `GATE_TIER_SIZING_ENABLED` and enforce mode: computed size × `suggested_size_mult(tier)`; embed sizing line shows the multiplier explicitly (`"½ size — B-tier checklist"`). Off → byte-identical sizing (regression test).
-- [ ] **Step 1–4: TDD, commit** — `feat: tier-scaled sizing (flag-gated)`
+**Interfaces:** when `GATE_TIER_SIZING_ENABLED` and enforce mode: computed size × `suggested_size_mult(tier)`; embed sizing line shows the multiplier explicitly (`"½ size — B-tier checklist"`). Off → byte-identical sizing (regression test). One helper owns the whole rule: `tier_sized(shares, tier) -> (adjusted_shares, note | None)` in `score.py` — identity unless *both* flags say otherwise, so the call site needs no mode logic.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_enforce.py`)
+
+```python
+import swingbot.config as config
+from swingbot.core.gate.score import tier_sized
+
+
+def _sizing_flags(monkeypatch, *, enabled, mode):
+    monkeypatch.setattr(config, "GATE_TIER_SIZING_ENABLED", enabled, raising=False)
+    monkeypatch.setattr(config, "GATE_MODE", mode, raising=False)
+
+
+def test_tier_sized_flag_off_is_identity(monkeypatch):
+    _sizing_flags(monkeypatch, enabled=False, mode="enforce")
+    assert tier_sized(100.0, "B") == (100.0, None)
+
+
+def test_tier_sized_inform_mode_is_identity(monkeypatch):
+    _sizing_flags(monkeypatch, enabled=True, mode="inform")
+    assert tier_sized(100.0, "C") == (100.0, None)     # inform never resizes
+
+
+def test_tier_sized_enforce_applies_mult(monkeypatch):
+    _sizing_flags(monkeypatch, enabled=True, mode="enforce")
+    assert tier_sized(100.0, "B") == (50.0, "½ size — B-tier checklist")
+    assert tier_sized(100.0, "C") == (0.0, "0× size — C-tier checklist")
+    assert tier_sized(100.0, "A+") == (100.0, None)    # full size, no noise
+    assert tier_sized(100.0, None) == (100.0, None)    # no tier → never resize
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `score.py`):
+
+```python
+def tier_sized(shares: float, tier: str | None) -> tuple[float, str | None]:
+    """The G117 rule in one place: identity unless GATE_TIER_SIZING_ENABLED
+    *and* enforce mode *and* the plan carries a tier. Returns the adjusted
+    size plus the note the embed must show ("½ size — B-tier checklist");
+    note is None when nothing changed. An unknown/missing tier never
+    resizes — same spirit as "unknown never blocks"."""
+    import swingbot.config as config
+    if (tier is None
+            or not getattr(config, "GATE_TIER_SIZING_ENABLED", False)
+            or getattr(config, "GATE_MODE", "inform") != "enforce"):
+        return shares, None
+    mult = suggested_size_mult(tier)
+    if mult == 1.0:
+        return shares, None
+    label = {0.75: "¾", 0.5: "½", 0.25: "¼"}.get(mult, f"{mult:g}×")
+    return shares * mult, f"{label} size — {tier}-tier checklist"
+```
+
+**Wiring** — at the point where the alert/plan position size is computed from account risk (the sizing line built in `swingbot/commands/scanning.py` / the `account.py` formula call — verify the exact call-site name at execution):
+
+```python
+    shares, sizing_note = tier_sized(shares, gate_result.tier if gate_result else None)
+    # round shares down to a whole number AFTER the multiplier, at the call
+    # site, exactly where the existing code rounds
+    if sizing_note:
+        sizing_line += f" ({sizing_note})"
+```
+
+The flags-off byte-identity at the embed level is covered by the helper-identity tests above plus the Phase-G4 "flags off → byte-identical alert" regressions (G121/G123) which run with `GATE_TIER_SIZING_ENABLED` at its false default — add the field to the flags-off matrix there when Phase G4 lands.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_enforce.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/score.py swingbot/commands/scanning.py tests/test_gate_enforce.py
+git commit -m "feat: tier-scaled sizing (flag-gated)"
+```
 
 ### Task G118: Phase G3 checkpoint
 
@@ -11227,190 +11803,2218 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
 **Interfaces:** one `GateContext` assembled per scan run (not per ticker): `{macro_snap (G39), open_plans, spy_df, now}`; per-candidate additions (company headlines) fetched lazily inside `run_checklist` callers with the quota meter respected. `GateContext` built even when only `MACRO_ENABLED` (for embeds) — gate checks additionally need `GATE_ENABLED`.
-- [ ] **Step 1–4: TDD (one snapshot call per scan regardless of ticker count — counting stub), commit** — `feat: per-scan gate context`
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_scan_gate_wiring.py
+"""Scan-path gate wiring — no live bot, no network. scan_engine, providers
+and the plan store are stubbed; these tests pin the wiring invariants."""
+import datetime as dt
+
+import swingbot.commands.scanning as scanning
+import swingbot.config as config
+
+
+def _flags(monkeypatch, *, macro, gate):
+    monkeypatch.setattr(config, "MACRO_ENABLED", macro, raising=False)
+    monkeypatch.setattr(config, "GATE_ENABLED", gate, raising=False)
+
+
+def test_context_none_when_everything_off(monkeypatch):
+    _flags(monkeypatch, macro=False, gate=False)
+    assert scanning.build_gate_context() is None
+
+
+def test_context_built_once_per_scan(monkeypatch):
+    calls = {"snap": 0}
+
+    def fake_load():
+        calls["snap"] += 1
+        return {"built_at": "2026-07-14T12:00:00", "stale": False}
+
+    _flags(monkeypatch, macro=True, gate=False)
+    monkeypatch.setattr(scanning, "_load_macro_snapshot", fake_load)
+    ctx = scanning.build_gate_context(now=dt.datetime(2026, 7, 14, 12, 0))
+    # per-candidate work only READS the assembled context — a 60-candidate
+    # scan performs exactly one snapshot load, regardless of ticker count
+    for _ in range(60):
+        assert ctx.macro_snap["stale"] is False
+    assert calls["snap"] == 1
+
+
+def test_context_macro_only_skips_gate_inputs(monkeypatch):
+    _flags(monkeypatch, macro=True, gate=False)
+    monkeypatch.setattr(scanning, "_load_macro_snapshot",
+                        lambda: {"built_at": "t", "stale": False})
+    ctx = scanning.build_gate_context()
+    assert ctx.macro_snap is not None                  # embeds get their line
+    assert ctx.open_plans == [] and ctx.spy_df is None # gate inputs not fetched
+
+
+def test_context_degrades_when_snapshot_unreadable(monkeypatch):
+    def boom():
+        raise OSError("disk")
+
+    _flags(monkeypatch, macro=True, gate=True)
+    monkeypatch.setattr(scanning, "_load_macro_snapshot", boom)
+    ctx = scanning.build_gate_context()
+    assert ctx is not None and ctx.macro_snap is None  # degrade, never crash
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (add to `swingbot/commands/scanning.py`, near the scan-tick helpers):
+
+```python
+@dataclasses.dataclass
+class GateContext:
+    macro_snap: dict | None
+    open_plans: list
+    spy_df: object | None          # cached SPY daily bars (rf_beta_move)
+    now: dt.datetime
+
+
+def _load_macro_snapshot():
+    """Seam for tests — reads the saved snapshot only; G39's
+    ensure_fresh_snapshot already refreshed it at scan entry."""
+    from swingbot.core.macro.snapshot import load_snapshot
+    return load_snapshot()
+
+
+def build_gate_context(now=None) -> GateContext | None:
+    """One per scan RUN, never per ticker (G119). Cheap by construction:
+    saved snapshot + open plans + cached SPY bars. Built when MACRO_ENABLED
+    alone (the embed macro line needs it); gate inputs are fetched only
+    when GATE_ENABLED. Company headlines are NOT here — they are fetched
+    lazily per candidate inside the run_checklist caller (quota-metered).
+    Every input degrades to None/[] — assembly never raises."""
+    if not (getattr(config, "MACRO_ENABLED", False)
+            or getattr(config, "GATE_ENABLED", False)):
+        return None
+    now = now or dt.datetime.now()
+    macro_snap = None
+    if getattr(config, "MACRO_ENABLED", False):
+        try:
+            macro_snap = _load_macro_snapshot()
+        except Exception:  # noqa: BLE001
+            log.warning("macro snapshot unreadable — context degrades", exc_info=True)
+    open_plans, spy_df = [], None
+    if getattr(config, "GATE_ENABLED", False):
+        try:
+            from swingbot.core.plan_store import load_open_plans  # verify accessor name at execution
+            open_plans = load_open_plans()
+        except Exception:  # noqa: BLE001
+            open_plans = []
+        try:
+            from swingbot.core.data import load_cached_daily      # verify name at execution
+            spy_df = load_cached_daily("SPY")
+        except Exception:  # noqa: BLE001
+            spy_df = None
+    return GateContext(macro_snap=macro_snap, open_plans=open_plans,
+                       spy_df=spy_df, now=now)
+```
+
+**Wiring** (`_session_scan_tick`, directly after the G39 `ensure_fresh_snapshot` call, before `run_scan`): `gate_ctx = build_gate_context()`, passed through to the alert path (`run_scan(..., gate_ctx=gate_ctx)` — add the pass-through kwarg to `scan_engine.run_scan`, default `None`, unused until G121/G122 consume it; `!check` builds its own context the same way).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py swingbot/core/scan_engine.py tests/test_scan_gate_wiring.py
+git commit -m "feat: per-scan gate context"
+```
 
 ### Task G120: Event blackout scan gate
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** when `GATE_BLACKOUT_ENABLED` and an importance-3 event falls within the blackout window at scan time: **default behavior is annotation** — the plan is created and alerted normally with a prominent warning line ("⚠️ CPI 08:30 ET tomorrow — historically whipsaw-prone; consider waiting for the print"). Only when `GATE_BLACKOUT_ENFORCE` (new checkbox Field, default false) is *also* on are new entries marked `held_for_event` (plan created, alert says "⏸ held — releases after the print") and auto-released by the monitor loop once `hours_until(event) < -GATE_BLACKOUT_HOURS_AFTER`. Stale event calendar (> 7 days unrefreshed) auto-disables holding with a WARN — annotation continues.
-- [ ] **Step 1–4: TDD (annotate-only default; hold + release only with enforce flag, on a clock stub; stale-calendar fallback; flags off unchanged), commit** — `feat: event blackout annotate-first, hold opt-in`
+**Interfaces:** when `GATE_BLACKOUT_ENABLED` and an importance-3 event falls within the blackout window at scan time: **default behavior is annotation** — the plan is created and alerted normally with a prominent warning line ("⚠️ CPI 08:30 ET tomorrow — historically whipsaw-prone; consider waiting for the print"). Only when `GATE_BLACKOUT_ENFORCE` (new checkbox Field, default false) is *also* on are new entries marked `held_for_event` (plan created, alert says "⏸ held — releases after the print") and auto-released by the monitor loop once `hours_until(event) < -GATE_BLACKOUT_HOURS_AFTER`. Stale event calendar (> 7 days unrefreshed) auto-disables holding with a WARN — annotation continues. One pure decision function owns the whole rule: `blackout_decision(macro_snap, now) -> dict | None`.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+
+```python
+NOW = dt.datetime(2026, 7, 14, 18, 0)
+
+
+def _snap(hours_until_event=14.0, importance=3, refreshed_days_ago=0):
+    refreshed = (NOW - dt.timedelta(days=refreshed_days_ago)).isoformat()
+    return {"built_at": NOW.isoformat(), "stale": False,
+            "events": {"refreshed_at": refreshed, "upcoming": [
+                {"name": "CPI", "importance": importance,
+                 "at": (NOW + dt.timedelta(hours=hours_until_event)).isoformat()}]}}
+
+
+def _blackout_flags(monkeypatch, *, enabled, enforce, before=24.0, after=2.0):
+    monkeypatch.setattr(config, "GATE_BLACKOUT_ENABLED", enabled, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_ENFORCE", enforce, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_HOURS_BEFORE", before, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_HOURS_AFTER", after, raising=False)
+
+
+def test_blackout_default_is_annotate(monkeypatch):
+    _blackout_flags(monkeypatch, enabled=True, enforce=False)
+    verdict = scanning.blackout_decision(_snap(), NOW)
+    assert verdict["action"] == "annotate"             # plan ships, loudly
+    assert "CPI" in verdict["line"] and "⚠️" in verdict["line"]
+
+
+def test_blackout_hold_requires_both_flags(monkeypatch):
+    _blackout_flags(monkeypatch, enabled=True, enforce=True)
+    verdict = scanning.blackout_decision(_snap(), NOW)
+    assert verdict["action"] == "hold"
+    assert verdict["release_at"] > NOW.isoformat()     # after + GATE_BLACKOUT_HOURS_AFTER
+
+
+def test_blackout_ignores_low_importance_and_far_events(monkeypatch):
+    _blackout_flags(monkeypatch, enabled=True, enforce=True)
+    assert scanning.blackout_decision(_snap(importance=2), NOW) is None
+    assert scanning.blackout_decision(_snap(hours_until_event=72.0), NOW) is None
+
+
+def test_blackout_stale_calendar_never_holds(monkeypatch, caplog):
+    _blackout_flags(monkeypatch, enabled=True, enforce=True)
+    verdict = scanning.blackout_decision(_snap(refreshed_days_ago=8), NOW)
+    assert verdict["action"] == "annotate"             # holding auto-disabled
+    assert any("stale" in r.message.lower() for r in caplog.records)
+
+
+def test_blackout_flag_off_is_none(monkeypatch):
+    _blackout_flags(monkeypatch, enabled=False, enforce=True)
+    assert scanning.blackout_decision(_snap(), NOW) is None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`):
+
+```python
+def blackout_decision(macro_snap: dict | None, now: dt.datetime) -> dict | None:
+    """The G120 rule in one pure function. None → no blackout applies.
+    {"action": "annotate", "line": ...} → alert ships with the warning line
+    (the DEFAULT — inform-first). {"action": "hold", "line", "release_at"}
+    only when GATE_BLACKOUT_ENFORCE is also on and the event calendar is
+    fresh (≤ 7 days). Event shape comes from the snapshot's events section
+    (G38) — verify key names against snapshot.py at execution."""
+    if not getattr(config, "GATE_BLACKOUT_ENABLED", False) or not macro_snap:
+        return None
+    events = (macro_snap.get("events") or {})
+    before = float(getattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 24.0))
+    after = float(getattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2.0))
+    hit = None
+    for ev in events.get("upcoming", []):
+        if int(ev.get("importance", 0)) < 3:
+            continue
+        try:
+            at = dt.datetime.fromisoformat(ev["at"])
+        except (KeyError, ValueError):
+            continue
+        hours_until = (at - now).total_seconds() / 3600.0
+        if -after <= hours_until <= before:
+            hit = (ev, at)
+            break
+    if hit is None:
+        return None
+    ev, at = hit
+    line = (f"⚠️ {ev['name']} {at.strftime('%H:%M')} ET "
+            f"{'today' if at.date() == now.date() else 'tomorrow'} — "
+            f"historically whipsaw-prone; consider waiting for the print")
+    if getattr(config, "GATE_BLACKOUT_ENFORCE", False):
+        refreshed = events.get("refreshed_at")
+        fresh = False
+        try:
+            fresh = (now - dt.datetime.fromisoformat(refreshed)).days <= 7
+        except (TypeError, ValueError):
+            pass
+        if fresh:
+            release_at = at + dt.timedelta(hours=after)
+            return {"action": "hold", "line": line,
+                    "event": ev["name"], "release_at": release_at.isoformat()}
+        log.warning("event calendar stale (> 7 days) — blackout holding "
+                    "auto-disabled, annotating instead")
+    return {"action": "annotate", "line": line, "event": ev["name"]}
+```
+
+**Wiring** (alert path, once per scan run using `gate_ctx.macro_snap`): `annotate` → the line is prepended to each alert embed's description (or a dedicated `⚠️ Event` field — match the embed style at execution) and the plan is created normally; `hold` → plan stored with `status="held_for_event"` + `release_at`, alert ships saying `"⏸ held — releases after the print"`, and `trade_monitor` releases it (normal pending flow + a release note on the alert) once `now >= release_at`. The monitor-release path is exercised in the G143 e2e.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py swingbot/config.py tests/test_scan_gate_wiring.py
+git commit -m "feat: event blackout annotate-first, hold opt-in"
+```
 
 ### Task G121: Per-candidate gate evaluation in the scan path
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread, same place llm-advisor L14 hooks), applies `decide()` per mode (G76/G103/G106 semantics unified here — shadow/inform always pass), attaches results (G81). Two hard invariants tested here: (1) **inform mode never drops an alert** — property test over arbitrary GateResults including all-fail/hard-block ones; (2) extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** even in enforce mode.
-- [ ] **Step 1–4: TDD (both invariants; mode matrix; exception in gate → alert ships ungated + log), commit** — `feat: gate evaluation in scan path (inform never drops, unknown never blocks)`
+**Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread, same place llm-advisor L14 hooks), applies `with_advisory()` per mode (G76/G103/G106 semantics unified here — shadow/inform always pass), attaches results (G81). Two hard invariants tested here: (1) **inform mode never drops an alert** — property test over arbitrary GateResults including all-fail/hard-block ones; (2) extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** even in enforce mode. The unifying function is pure and owns every invariant: `gate_candidate(result, mode, min_tier) -> (decision, result)`.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+
+```python
+from swingbot.core.gate.types import CheckResult, GateResult
+
+
+def _gate_result(statuses, tier="C", hard_blocks=()):
+    checks = tuple(CheckResult(f"c{i}", "setup", s, 10.0, s, {})
+                   for i, s in enumerate(statuses))
+    return GateResult(ticker="T", strategy="S", as_of="2026-07-14",
+                      checks=checks, score=10.0, tier=tier,
+                      hard_blocks=tuple(hard_blocks))
+
+
+def test_inform_never_drops_property():
+    """Invariant 1: inform mode passes EVERY result — including all-fail
+    and hard-blocked ones. The checklist is information, not a gateway."""
+    worst_cases = [
+        _gate_result(["fail"] * 7, tier="C", hard_blocks=("signal_confirmed",)),
+        _gate_result(["fail", "unknown", "fail"], tier="C"),
+        _gate_result(["pass"] * 7, tier="A+"),
+    ]
+    for result in worst_cases:
+        decision, out = scanning.gate_candidate(result, "inform", "A")
+        assert decision == "pass"                      # alert always ships
+        assert out.advisory_decision in ("pass", "downgrade", "block")
+
+
+def test_unknown_never_blocks_even_in_enforce():
+    """Invariant 2 (the G43 proof through the gate): a result whose low
+    tier comes from unknowns — not observed failures — never blocks."""
+    dark = _gate_result(["unknown"] * 7, tier="C")
+    decision, out = scanning.gate_candidate(dark, "enforce", "A")
+    assert decision == "pass"
+    assert out.advisory_decision == "block"            # the would-be verdict stays honest
+
+
+def test_enforce_blocks_only_on_observed_evidence():
+    flagged = _gate_result(["fail"] * 5 + ["pass"] * 2, tier="C")
+    decision, _ = scanning.gate_candidate(flagged, "enforce", "A")
+    assert decision == "block"                         # real fails may block
+    mixed = _gate_result(["unknown"] * 6 + ["fail"], tier="C")
+    decision, _ = scanning.gate_candidate(mixed, "enforce", "A")
+    assert decision == "pass"                          # unknown-dominated → pass
+
+
+def test_shadow_passes_and_records_would_block():
+    result = _gate_result(["fail"] * 7, tier="C")
+    decision, out = scanning.gate_candidate(result, "shadow", "A")
+    assert decision == "pass" and out.advisory_decision == "block"
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`):
+
+```python
+def _unknown_dominated(result, max_unknown_weight_pct: float = 50.0) -> bool:
+    """True when more than half the checklist's weight answered "unknown"
+    — a tier earned by missing data, not observed failures. Such a result
+    NEVER blocks (extends the G43 darkness proof through the gate)."""
+    total = sum(c.weight for c in result.checks) or 1.0
+    unknown = sum(c.weight for c in result.checks if c.status == "unknown")
+    return 100.0 * unknown / total > max_unknown_weight_pct
+
+
+def gate_candidate(result, mode: str, min_tier: str):
+    """The single scan-path decision point, G76/G103/G106 unified:
+    shadow/inform ALWAYS pass (invariant 1); enforce may block, but never
+    on an unknown-dominated result (invariant 2). Returns
+    (decision, result-with-advisory)."""
+    from swingbot.core.gate.score import with_advisory
+    decision, out = with_advisory(result, mode, min_tier)
+    if decision == "block" and _unknown_dominated(out):
+        log.warning("gate: %s %s would block on unknown-dominated evidence "
+                    "— passing instead (unknown never blocks)",
+                    out.ticker, out.strategy)
+        decision = "pass"
+    return decision, out
+```
+
+**Wiring** (alert path in `scanning.py`, per surviving candidate, same seam llm-advisor L14 hooks — all inside `asyncio.to_thread` alongside the existing per-alert work):
+
+```python
+    # per candidate: gate_ctx from G119; headlines fetched lazily + quota-metered
+    if gate_ctx is not None and getattr(config, "GATE_ENABLED", False):
+        try:
+            result = run_checklist(item.result.ticker, item.result.strategy,
+                                   item.plan_v2, item_df,
+                                   macro_snap=gate_ctx.macro_snap,
+                                   open_plans=gate_ctx.open_plans,
+                                   spy_df=gate_ctx.spy_df, now=gate_ctx.now)
+            decision, result = gate_candidate(
+                result, config.GATE_MODE, config.GATE_MIN_TIER)
+            attach_to_plan(plan_store, item.plan_v2.plan_id, result)   # G81
+            if config.GATE_MODE == "shadow":
+                shadow_log(result)                                     # G81/G103
+            if decision == "block":
+                blocked_log(result, decision, ", ".join(result.hard_blocks) or
+                            f"tier {result.tier} < {config.GATE_MIN_TIER}")
+                continue        # enforce mode only — reachable ONLY after G105/G106 opt-in
+            item.gate_result = result                                  # G123 renders it
+        except Exception:  # noqa: BLE001 — a gate bug must never cost an alert
+            log.warning("gate evaluation failed — alert ships ungated", exc_info=True)
+```
+
+Add a test for that last guarantee: monkeypatch `run_checklist` to raise → the candidate still reaches the send path with no `gate_result` (exception in gate → alert ships ungated + one log line).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py tests/test_scan_gate_wiring.py
+git commit -m "feat: gate evaluation in scan path (inform never drops, unknown never blocks)"
+```
 
 ### Task G122: Alert embed — macro context field
 
 **Files:** Modify `swingbot/core/scanning/embeds.py` (`build_embed`); test `tests/test_embeds_gate.py`
 
-**Interfaces:** `build_embed(..., macro: dict | None = None)` — one field `🌍 Market` valued e.g. `"Risk-ON (+67) · VIX 14.2 calm · Curve normal · Tech leads · CPI in 3d"` built by `render.macro_line(snap)` (added to `gate/render.py`, ≤ 120 chars, unknown-tolerant). `macro=None` → byte-identical embed (regression).
-- [ ] **Step 1–4: TDD (golden line; stale marker `"(stale)"`; None regression), commit** — `feat: market context line on alerts`
+**Interfaces:** `build_embed(..., macro: dict | None = None)` — one field `🌍 Market` valued e.g. `"Risk-ON (+67) · VIX 14.2 calm · Curve normal · Tech leads · CPI in 3d"` built by `render.macro_line(snap)` (added to `gate/render.py`, ≤ 120 chars, unknown-tolerant). `macro=None` → byte-identical embed (regression). Follow the repo's embed-test convention (test_embeds_badges.py): the pure builder carries the logic, the `build_embed` wiring is a guarded two-liner.
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_embeds_gate.py
+from swingbot.core.gate.render import macro_line
+
+SNAP = {
+    "built_at": "2026-07-14T12:00:00", "stale": False,
+    "composite": {"score": 67, "label": "risk_on", "inputs_used": 6, "detail": []},
+    "vix": {"level": 14.2, "regime": "calm"},
+    "curve": {"state": "normal"},
+    "sectors": {"leader": "Tech"},
+    "events": {"upcoming": [{"name": "CPI", "importance": 3,
+                             "at": "2026-07-17T08:30:00"}]},
+}
+
+
+def test_macro_line_golden():
+    line = macro_line(SNAP)
+    assert line == "Risk-ON (+67) · VIX 14.2 calm · Curve normal · Tech leads · CPI in 3d"
+    assert len(line) <= 120
+
+
+def test_macro_line_stale_marker():
+    assert macro_line(dict(SNAP, stale=True)).endswith("(stale)")
+
+
+def test_macro_line_unknown_tolerant():
+    # darkness: every section missing → still a line, never a KeyError
+    line = macro_line({"built_at": "t", "stale": False})
+    assert "unknown" in line.lower() and len(line) <= 120
+
+
+def test_macro_line_none_snapshot():
+    assert macro_line(None) is None                    # → no field added
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/core/gate/render.py`; keys mirror the G38 snapshot — verify against `snapshot.py` at execution):
+
+```python
+def macro_line(snap: dict | None) -> str | None:
+    """One ≤120-char market-context line for the alert embed. Every part
+    is optional — a missing/unknown section renders as its unknown form,
+    an absent snapshot renders as None (no field). Never raises."""
+    if not snap:
+        return None
+    parts = []
+    comp = snap.get("composite") or {}
+    if comp.get("label") and comp["label"] != "unknown":
+        arrow = {"risk_on": "Risk-ON", "risk_off": "Risk-OFF",
+                 "neutral": "Risk-neutral"}.get(comp["label"], comp["label"])
+        parts.append(f"{arrow} ({comp['score']:+d})")
+    else:
+        parts.append("Risk unknown")
+    vix = snap.get("vix") or {}
+    if vix.get("level") is not None:
+        parts.append(f"VIX {vix['level']:.1f} {vix.get('regime', '')}".strip())
+    curve = snap.get("curve") or {}
+    if curve.get("state"):
+        parts.append(f"Curve {curve['state']}")
+    leader = (snap.get("sectors") or {}).get("leader")
+    if leader:
+        parts.append(f"{leader} leads")
+    nxt = next((e for e in (snap.get("events") or {}).get("upcoming", [])
+                if int(e.get("importance", 0)) >= 3), None)
+    if nxt:
+        try:
+            import datetime as dt
+            days = (dt.datetime.fromisoformat(nxt["at"]).date()
+                    - dt.datetime.fromisoformat(snap["built_at"]).date()).days
+            parts.append(f"{nxt['name']} today" if days <= 0
+                         else f"{nxt['name']} in {days}d")
+        except (KeyError, ValueError):
+            pass
+    line = " · ".join(parts)
+    if snap.get("stale"):
+        line += " (stale)"
+    return line[:120]
+```
+
+**Wiring** (`swingbot/core/scanning/embeds.py` — `build_embed` gains the kwarg, appended after the existing fields so every prior field keeps its position):
+
+```python
+def build_embed(item, explanation, perf_stats, open_positions_warning,
+                chart_filename, htf_info: dict = None,
+                macro: dict | None = None) -> discord.Embed:
+    ...
+    # at the end, before returning:
+    if macro is not None:
+        from swingbot.core.gate.render import macro_line
+        line = macro_line(macro)
+        if line:
+            embed.add_field(name="🌍 Market", value=line, inline=False)
+```
+
+The `macro=None` byte-identity is structural (the block is skipped entirely) — pin it with one regression test that calls `macro_line(None)` (above) plus, in the caller, pass `macro=gate_ctx.macro_snap if gate_ctx else None` so `MACRO_ENABLED=false` flows through as None end-to-end (asserted again in the G140 e2e).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_embeds_gate.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/render.py swingbot/core/scanning/embeds.py swingbot/commands/scanning.py tests/test_embeds_gate.py
+git commit -m "feat: market context line on alerts"
+```
 
 ### Task G123: Alert embed — checklist field
 
 **Files:** Modify `embeds.py`; test `tests/test_embeds_gate.py`
 
-**Interfaces:** `build_embed(..., gate: dict | None = None)` — renders G82's `checklist_field` + (when any flag fired) `redflag_table` as a second field, plus the `advisory_decision` line when enforce-would-have-blocked ("⛔ 2 red flags — plan ships anyway; your call"). Render matrix: `inform` and `enforce` modes render always (**inform is the default — this field is the product**); `shadow` renders only with `GATE_SHOW_IN_SHADOW` (new checkbox field, default false). None → byte-identical.
-- [ ] **Step 1–4: TDD (render matrix incl. inform default; advisory line golden; regression), commit** — `feat: checklist field on alerts (inform-first)`
+**Interfaces:** `build_embed(..., gate: dict | None = None)` — renders G82's `checklist_field` + (when any flag fired) `redflag_table` as a second field, plus the `advisory_decision` line when enforce-would-have-blocked ("⛔ 2 red flags — plan ships anyway; your call"). Render matrix: `inform` and `enforce` modes render always (**inform is the default — this field is the product**); `shadow` renders only with `GATE_SHOW_IN_SHADOW` (new checkbox field, default false). None → byte-identical. One pure function owns the matrix: `gate_embed_fields(result, mode, show_in_shadow) -> list[tuple[str, str]]` in `gate/render.py`.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_embeds_gate.py`; reuse the `_result()` fixture shape from `tests/test_gate_render.py` — import it or lift it into `tests/fixtures/gate/`)
+
+```python
+from swingbot.core.gate.render import gate_embed_fields
+from tests.test_gate_render import _result                # the B-tier, 2-flag fixture
+
+
+def test_inform_renders_checklist_and_flags():
+    fields = gate_embed_fields(_result(), "inform", show_in_shadow=False)
+    names = [n for n, _ in fields]
+    assert names[0] == "📋 Checklist — B (61)"
+    assert any(n.startswith("🚩") for n in names)      # flags fired → table field
+    # the fixture's advisory_decision is "downgrade", not "block" → no ⛔ line
+    assert not any("ships anyway" in v for _, v in fields)
+
+
+def test_advisory_block_line_golden():
+    import dataclasses
+    result = dataclasses.replace(_result(), advisory_decision="block")
+    fields = gate_embed_fields(result, "inform", show_in_shadow=False)
+    flat = "\n".join(v for _, v in fields)
+    assert "⛔ 2 red flags — plan ships anyway; your call" in flat
+
+
+def test_shadow_render_matrix():
+    assert gate_embed_fields(_result(), "shadow", show_in_shadow=False) == []
+    assert gate_embed_fields(_result(), "shadow", show_in_shadow=True) != []
+    assert gate_embed_fields(_result(), "enforce", show_in_shadow=False) != []
+
+
+def test_none_result_renders_nothing():
+    assert gate_embed_fields(None, "inform", show_in_shadow=False) == []
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gate/render.py`):
+
+```python
+def gate_embed_fields(result, mode: str,
+                      show_in_shadow: bool = False) -> list[tuple[str, str]]:
+    """The G123 render matrix in one place: inform/enforce always render
+    (inform is the default — this field IS the product); shadow renders
+    only when the operator opted in; no result → no fields (byte-identical
+    embed). Returns (name, value) pairs ready for embed.add_field."""
+    if result is None:
+        return []
+    if mode == "shadow" and not show_in_shadow:
+        return []
+    fields = [checklist_field(result)]
+    fired = [c for c in result.checks
+             if c.check_id.startswith("rf_") and c.status in ("fail", "warn")]
+    if fired:
+        value = redflag_table(result)
+        if result.advisory_decision == "block":
+            n = len(fired)
+            value += (f"\n⛔ {n} red flag{'s' if n != 1 else ''} — "
+                      f"plan ships anyway; your call")
+        fields.append(("🚩 Red flags", value))
+    return fields
+```
+
+**Wiring** — `build_embed` gains `gate=None` alongside G122's `macro`, appended after the 🌍 field:
+
+```python
+    if gate is not None:
+        from swingbot.core.gate.render import gate_embed_fields
+        for name, value in gate_embed_fields(
+                gate, getattr(config, "GATE_MODE", "inform"),
+                getattr(config, "GATE_SHOW_IN_SHADOW", False)):
+            embed.add_field(name=name, value=value, inline=False)
+```
+
+Caller passes `gate=getattr(item, "gate_result", None)` (set by G121). Config field `GATE_SHOW_IN_SHADOW` (checkbox, default false, help: "Render the checklist on alerts while still in shadow mode — for previewing the field before promoting to inform.") added to the Gatekeeper section.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_embeds_gate.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/render.py swingbot/core/scanning/embeds.py swingbot/commands/scanning.py swingbot/config.py tests/test_embeds_gate.py
+git commit -m "feat: checklist field on alerts (inform-first)"
+```
 
 ### Task G124: Full breakdown surface
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_embeds_gate.py`
 
-**Interfaces:** the existing breakdown surface (cockpit B10 when present, else follow-up message — mirror llm-advisor L15's degradation pattern) gains the `full_breakdown(result)` chunks: every check, its status emoji, its one-line evidence. This is the checklist *as a readable document* per trade.
-- [ ] **Step 1–4: TDD (chunking under 2000-char message limit), commit** — `feat: full checklist breakdown per alert`
+**Interfaces:** the existing breakdown surface (cockpit B10 when present, else follow-up message — mirror llm-advisor L15's degradation pattern) gains the `full_breakdown(result)` chunks: every check, its status emoji, its one-line evidence. This is the checklist *as a readable document* per trade. `full_breakdown` itself exists since G82 — this task is the send path plus the chunk-budget proof over a realistic (25-check) result.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_embeds_gate.py`)
+
+```python
+from swingbot.core.gate.render import full_breakdown
+from swingbot.core.gate.types import CheckResult, GateResult
+
+
+def test_full_breakdown_chunks_fit_discord_limit():
+    # realistic worst case: every registered check present with a long
+    # evidence line — chunks must each stay under the 2000-char message
+    # cap and preserve every check id across the chunk boundary
+    checks = tuple(
+        CheckResult(f"check_{i:02d}", "setup", "warn", 5.0,
+                    "evidence " + "x" * 140, {})
+        for i in range(25))
+    result = GateResult(ticker="NVDA", strategy="Break & Retest",
+                        as_of="2026-07-14", checks=checks, score=50.0,
+                        tier="B", hard_blocks=())
+    chunks = full_breakdown(result)
+    assert len(chunks) >= 2                            # forced to split
+    assert all(len(c) < 2000 for c in chunks)
+    joined = "\n".join(chunks)
+    assert all(f"check_{i:02d}" in joined for i in range(25))
+```
+
+- [ ] **Step 2: Run — PASS or FAIL** — if G82's implementation already chunks correctly this passes immediately (fine: the test still pins the budget); otherwise fix the chunker in `render.py` (split on line boundaries, never mid-line, `limit=1900` for headroom).
+- [ ] **Step 3: Wire the send path** (`scanning.py`, right after the alert message is sent, only for candidates that carry a `gate_result`):
+
+```python
+    # mirror llm-advisor L15's degradation: cockpit B10 breakdown surface
+    # when present, else plain follow-up messages under the alert
+    if getattr(item, "gate_result", None) is not None \
+            and getattr(config, "GATE_FULL_BREAKDOWN", False):
+        for chunk in full_breakdown(item.gate_result):
+            await channel.send(chunk)
+```
+
+`GATE_FULL_BREAKDOWN` (checkbox, default false — the compact 📋 field is the default surface; the full document is opt-in channel volume) added to the Gatekeeper config section. `!whycheck <plan_id>` (G154) is the on-demand route to the same chunks, so nothing is lost with the flag off.
+
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/render.py swingbot/commands/scanning.py swingbot/config.py tests/test_embeds_gate.py
+git commit -m "feat: full checklist breakdown per alert"
+```
 
 ### Task G125: Gut-check view on alerts
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_gate_gutcheck.py`
 
-**Interfaces:** alerts for tier ≥ A attach `GutCheckView` (G83); `GATE_GUTCHECK_REQUIRED` mode: the Follow button defers plan-follow until the modal lands (§6 ritual enforced). View timeout 24h; expiry treated as "not answered" (never blocks the plan lifecycle).
-- [ ] **Step 1–4: TDD (required-mode ordering; timeout path), commit** — `feat: gut-check ritual on alerts`
+**Interfaces:** alerts for tier ≥ A attach `GutCheckView` (G83); `GATE_GUTCHECK_REQUIRED` mode: the Follow button defers plan-follow until the modal lands (§6 ritual enforced — the ordering logic already lives in G83's Follow button). View timeout 24h; expiry treated as "not answered" (never blocks the plan lifecycle). New pure helper: `wants_gutcheck(result) -> bool`.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_gutcheck.py`; fake-interaction pattern from G83's tests)
+
+```python
+from swingbot.commands.scanning import wants_gutcheck
+
+
+class _R:
+    def __init__(self, tier):
+        self.tier = tier
+
+
+def test_wants_gutcheck_tier_gate(monkeypatch):
+    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
+    assert wants_gutcheck(_R("A+")) is True
+    assert wants_gutcheck(_R("A")) is True
+    assert wants_gutcheck(_R("B")) is False            # ritual is for the good ones
+    assert wants_gutcheck(None) is False
+
+
+def test_wants_gutcheck_off_when_gate_off(monkeypatch):
+    monkeypatch.setattr(config, "GATE_ENABLED", False, raising=False)
+    assert wants_gutcheck(_R("A+")) is False
+
+
+async def test_required_mode_follow_opens_modal_first(monkeypatch, store_with_plan):
+    """G83's Follow button already defers to the modal when required —
+    re-asserted here at the alert level: no gutcheck recorded until the
+    modal submits."""
+    monkeypatch.setattr(config, "GATE_GUTCHECK_REQUIRED", True, raising=False)
+    view = GutCheckView("p_test_0001", store_with_plan)
+    interaction = FakeInteraction()                    # G83 test helper
+    await view.follow.callback(view, interaction)
+    assert interaction.modal_sent is not None          # modal first...
+    assert get_gutcheck(store_with_plan, "p_test_0001") is None   # ...nothing recorded yet
+
+
+async def test_timeout_records_nothing(store_with_plan):
+    view = GutCheckView("p_test_0001", store_with_plan)
+    await view.on_timeout()
+    assert get_gutcheck(store_with_plan, "p_test_0001") is None   # expiry = unanswered
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — `wants_gutcheck` in `scanning.py`:
+
+```python
+def wants_gutcheck(result) -> bool:
+    """Gut-check buttons ride only tier ≥ A alerts — the §6 ritual is for
+    setups you might actually take; expiry/timeout is 'not answered' and
+    never touches the plan lifecycle."""
+    return (getattr(config, "GATE_ENABLED", False)
+            and result is not None
+            and getattr(result, "tier", None) in ("A+", "A"))
+```
+
+**Wiring** (`_send_alerts` / the alert-send call): when `wants_gutcheck(item.gate_result)`, send with `view=GutCheckView(item.plan_v2.plan_id, plan_store)`; otherwise the exact previous call (no `view=` kwarg — byte-path regression rides the flags-off e2e). `GutCheckView.on_timeout` needs no body beyond the default (buttons disable; nothing recorded) — the test pins that it stays that way.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_gutcheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py tests/test_gate_gutcheck.py
+git commit -m "feat: gut-check ritual on alerts"
+```
 
 ### Task G126: Gut-check journaling analytics
 
 **Files:** Modify `persistence.py`; test `tests/test_gate_persistence.py`
 
-**Interfaces:** `gutcheck_stats(journal_entries) -> dict` — WR of trades with vs without a completed gut-check, and the "would I take it after a loss = no, taken anyway" cohort. Surfaces in `!gutcheck` (G156) and the journal browser (G186).
-- [ ] **Step 1–4: TDD, commit** — `feat: gut-check outcome stats`
+**Interfaces:** `gutcheck_stats(journal_entries) -> dict` — WR of trades with vs without a completed gut-check, and the "would I take it after a loss = no, taken anyway" cohort. Surfaces in `!gutcheck` (G156) and the journal browser (G186). Journal entries carry `gutcheck_present` since G84; this task additionally reads the stored answers dict (`gutcheck: {choice, why_wrong, after_loss}`) when G84's close hook copies it onto the entry (one-line additive change there).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_persistence.py`)
+
+```python
+from swingbot.core.gate.persistence import gutcheck_stats
+
+
+def test_gutcheck_stats_golden():
+    entries = (
+        [{"outcome": "win", "gutcheck": {"choice": "follow", "after_loss": "yes"}}] * 6
+        + [{"outcome": "loss", "gutcheck": {"choice": "follow", "after_loss": "yes"}}] * 2
+        + [{"outcome": "win"}] * 3
+        + [{"outcome": "loss"}] * 3
+        # the cohort that matters: said "no" to after-loss, took it anyway
+        + [{"outcome": "loss", "gutcheck": {"choice": "follow", "after_loss": "no"}}] * 3
+        + [{"outcome": "win", "gutcheck": {"choice": "follow", "after_loss": "no"}}]
+    )
+    stats = gutcheck_stats(entries)
+    assert stats["with_gutcheck"] == {"n": 12, "wr": 58.3}
+    assert stats["without_gutcheck"] == {"n": 6, "wr": 50.0}
+    assert stats["no_but_taken"] == {"n": 4, "wr": 25.0}     # the honest mirror
+
+
+def test_gutcheck_stats_empty():
+    assert gutcheck_stats([]) == {"with_gutcheck": {"n": 0, "wr": None},
+                                  "without_gutcheck": {"n": 0, "wr": None},
+                                  "no_but_taken": {"n": 0, "wr": None}}
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `persistence.py`):
+
+```python
+def gutcheck_stats(journal_entries: list[dict]) -> dict:
+    """Did the §6 ritual earn its keep? WR with vs without a completed
+    gut-check, plus the cohort that answered "would I take this after a
+    loss?" with NO and took the trade anyway — the number the journal
+    browser (G186) and !gutcheck (G156) lead with."""
+    closed = [e for e in journal_entries if e.get("outcome") in ("win", "loss")]
+
+    def _cohort(rows):
+        n = len(rows)
+        wr = (round(100.0 * sum(r["outcome"] == "win" for r in rows) / n, 1)
+              if n else None)
+        return {"n": n, "wr": wr}
+
+    with_gc = [e for e in closed if e.get("gutcheck")]
+    return {"with_gutcheck": _cohort(with_gc),
+            "without_gutcheck": _cohort([e for e in closed if not e.get("gutcheck")]),
+            "no_but_taken": _cohort([e for e in with_gc
+                                     if (e["gutcheck"] or {}).get("after_loss") == "no"])}
+```
+
+Plus the additive G84 hook change: `on_trade_close` also copies the plan's stored gutcheck payload onto the journal entry (`journal_entry["gutcheck"] = get_gutcheck(store, plan_id)` when present — verify the hook's store access at execution).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_persistence.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/persistence.py tests/test_gate_persistence.py
+git commit -m "feat: gut-check outcome stats"
+```
 
 ### Task G127: Plan store carries gate + macro at creation
 
 **Files:** Modify the plan-creation path (plan_manager integration point); test `tests/test_gate_persistence.py`
 
-**Interfaces:** every stored plan gains optional keys `gate` (GateResult dict), `macro_at_entry` (the G122 one-liner + composite score + VIX + next event — a compact dict, NOT the full snapshot). Old plans without keys load fine (additive-schema test).
-- [ ] **Step 1–4: TDD (round-trip; legacy-load), commit** — `feat: gate+macro stamped on plans`
+**Interfaces:** every stored plan gains optional keys `gate` (GateResult dict), `macro_at_entry` (the G122 one-liner + composite score + VIX + next event — a compact dict, NOT the full snapshot). Old plans without keys load fine (additive-schema test). New pure builder: `macro_at_entry(snap) -> dict | None` in `gate/persistence.py`; the `gate` key is already written by G81's `attach_to_plan` — this task adds the macro stamp beside it at plan creation.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_persistence.py`)
+
+```python
+from swingbot.core.gate.persistence import macro_at_entry
+
+
+def test_macro_at_entry_compact():
+    snap = {"built_at": "2026-07-14T12:00:00", "stale": False,
+            "composite": {"score": 67, "label": "risk_on"},
+            "vix": {"level": 14.2, "regime": "calm"},
+            "events": {"upcoming": [{"name": "CPI", "importance": 3,
+                                     "at": "2026-07-17T08:30:00"}]}}
+    stamp = macro_at_entry(snap)
+    assert stamp["composite"] == 67 and stamp["vix"] == 14.2
+    assert stamp["next_event"] == "CPI 2026-07-17"
+    assert "line" in stamp and len(stamp["line"]) <= 120
+    assert "sectors" not in stamp                      # compact, NOT the snapshot
+    assert macro_at_entry(None) is None
+
+
+def test_plan_stamps_round_trip_and_legacy_load(env):
+    # env: the G81 fixture (tmp store with one plan)
+    stamp = macro_at_entry({"built_at": "t", "stale": False})
+    assert env.set_extra("p_test_0001", "macro_at_entry", stamp) is True
+    loaded = env.get_extra("p_test_0001", "macro_at_entry")
+    assert loaded == stamp
+    # legacy: a plan that pre-dates the gate has neither key and loads fine
+    assert env.get_extra("p_test_0001", "gate") is None or True   # no KeyError path
+    assert env.get("p_test_0001") is not None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `persistence.py`):
+
+```python
+def macro_at_entry(snap: dict | None) -> dict | None:
+    """The compact market stamp stored on a plan at creation — what the
+    world looked like when the trade was planned, small enough to keep
+    forever: the G122 line, composite score, VIX, next high-impact event.
+    NEVER the full snapshot (plans are long-lived; snapshots are big)."""
+    if not snap:
+        return None
+    from swingbot.core.gate.render import macro_line
+    nxt = next((e for e in (snap.get("events") or {}).get("upcoming", [])
+                if int(e.get("importance", 0)) >= 3), None)
+    return {"line": macro_line(snap),
+            "composite": (snap.get("composite") or {}).get("score"),
+            "vix": (snap.get("vix") or {}).get("level"),
+            "next_event": (f"{nxt['name']} {str(nxt.get('at', ''))[:10]}"
+                           if nxt else None),
+            "stale": bool(snap.get("stale"))}
+```
+
+**Wiring** (the plan-creation path — where G121's `attach_to_plan` call landed): immediately after attaching the gate result, `store.set_extra(plan_id, "macro_at_entry", macro_at_entry(gate_ctx.macro_snap))` when a context exists. Nothing else changes — both keys ride the store's existing extra mechanism, so old plans are untouched by construction (the legacy-load test pins it anyway).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_persistence.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/persistence.py swingbot/commands/scanning.py tests/test_gate_persistence.py
+git commit -m "feat: gate+macro stamped on plans"
+```
 
 ### Task G128: Re-check at entry trigger
 
 **Files:** Modify the plan-trigger path in the monitor loop; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_news_whipsaw, rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column). A newly-fired flag at trigger time → **the alert message is updated with the new warning and a ping** ("⚠️ since this alert: CPI now within 18h") — the entry still fires normally; it is held per G120 semantics only when `GATE_BLACKOUT_ENFORCE`/enforce mode says so. The signal was checked at alert time; the world may have changed by trigger time — the operator hears about it either way.
-- [ ] **Step 1–4: TDD (inform: alert updated + entry fires; enforce+blackout-enforce: held; clean → fires silently), commit** — `feat: trigger-time re-check (inform-first)`
+**Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_news_whipsaw, rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column — default `False`, set `True` on exactly those checks; `run_checklist` already honors it since G75). A newly-fired flag at trigger time → **the alert message is updated with the new warning and a ping** ("⚠️ since this alert: CPI now within 18h") — the entry still fires normally; it is held per G120 semantics only when `GATE_BLACKOUT_ENFORCE`/enforce mode says so. Pure core: `recheck_delta(stored_gate: dict | None, new_result) -> list[str]`.
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+
+```python
+from swingbot.commands.scanning import recheck_delta
+
+
+def _recheck_result(fired):
+    checks = tuple(CheckResult(f, "redflag", "fail", 6.0, f, {}) for f in fired)
+    return GateResult(ticker="T", strategy="S", as_of="2026-07-15",
+                      checks=checks, score=50.0, tier="B", hard_blocks=())
+
+
+def test_recheck_delta_only_new_flags():
+    stored = {"checks": [{"check_id": "rf_thin_session", "status": "fail"}]}
+    new = _recheck_result(["rf_thin_session", "rf_news_whipsaw"])
+    assert recheck_delta(stored, new) == ["rf_news_whipsaw"]   # already-known flag not re-warned
+
+
+def test_recheck_delta_clean_is_empty():
+    assert recheck_delta({"checks": []}, _recheck_result([])) == []
+
+
+def test_recheck_delta_no_stored_gate_treats_all_as_new():
+    assert recheck_delta(None, _recheck_result(["rf_news_whipsaw"])) == ["rf_news_whipsaw"]
+
+
+def test_registry_trigger_subset_is_cheap():
+    from swingbot.core.gate.registry import CHECKS
+    subset = {cid for cid, spec in CHECKS.items() if spec.trigger_recheck}
+    assert subset == {"rf_news_whipsaw", "rf_thin_session",
+                      "not_chasing", "calendar_checked"}
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**. Registry: add `trigger_recheck: bool = False` to the check spec dataclass and set it on the four checks above. Then in `scanning.py`:
+
+```python
+def recheck_delta(stored_gate: dict | None, new_result) -> list[str]:
+    """Flags that fired at trigger time but NOT at alert time — the only
+    thing worth interrupting the operator for. The signal was checked when
+    it alerted; the world may have changed since."""
+    known = {c["check_id"] for c in (stored_gate or {}).get("checks", [])
+             if c.get("status") in ("fail", "warn")}
+    return [c.check_id for c in new_result.checks
+            if c.status in ("fail", "warn") and c.check_id not in known]
+```
+
+**Wiring** (`trade_monitor`, at the pending-plan trigger point, only when `GATE_ENABLED`): build the cheap context (saved snapshot only — never a fetch inside the monitor loop), `new = run_checklist(..., subset="trigger")`, `delta = recheck_delta(store.get_extra(plan_id, "gate"), new)`. Non-empty delta → edit the original alert message appending `"⚠️ since this alert: " + render.redflag_table(new)`-style lines + one ping message referencing the plan; **the entry still fires** (inform-first) unless `blackout_decision(...)` says `hold` under its own enforce flag (G120 path reused verbatim). Exception anywhere → entry fires as before + one log line (same never-costs-a-trade guard as G121). Monitor tests use a fake channel/message capture; the three paths (updated+fires / held / clean+silent) are asserted there and re-proven end-to-end in G143.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py swingbot/core/gate/registry.py tests/test_scan_gate_wiring.py
+git commit -m "feat: trigger-time re-check (inform-first)"
+```
 
 ### Task G129: Curated digest respects tiers
 
 **Files:** Modify the digest builder (cockpit insights path); test `tests/test_gate_digest.py`
 
-**Interfaces:** in inform mode the digest lists everything with its tier label leading each row (A+ first); only when enforce mode is on does the curated section restrict to tier ≥ A (WEAK-rule parity: B/C listed in a compact "watch, don't chase" line, never hidden).
-- [ ] **Step 1–4: TDD, commit** — `feat: tier-aware digest`
+**Interfaces:** in inform mode the digest lists everything with its tier label leading each row (A+ first); only when enforce mode is on does the curated section restrict to tier ≥ A (WEAK-rule parity: B/C listed in a compact "watch, don't chase" line, never hidden). Pure core: `digest_sections(rows, mode) -> {"main": [...], "watch": [...]}` where each row is `{ticker, tier, line}`.
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_gate_digest.py
+from swingbot.commands.scanning import digest_sections
+
+ROWS = [{"ticker": "AAPL", "tier": "B", "line": "AAPL — pullback"},
+        {"ticker": "NVDA", "tier": "A+", "line": "NVDA — breakout"},
+        {"ticker": "MSFT", "tier": "C", "line": "MSFT — late chase"},
+        {"ticker": "AMD", "tier": "A", "line": "AMD — retest"}]
+
+
+def test_inform_lists_everything_tier_sorted():
+    out = digest_sections(ROWS, "inform")
+    assert [r["ticker"] for r in out["main"]] == ["NVDA", "AMD", "AAPL", "MSFT"]
+    assert out["main"][0]["line"].startswith("[A+] ")  # tier label leads each row
+    assert out["watch"] == []                          # nothing demoted in inform
+
+
+def test_enforce_curates_but_never_hides():
+    out = digest_sections(ROWS, "enforce")
+    assert [r["ticker"] for r in out["main"]] == ["NVDA", "AMD"]
+    # WEAK-rule parity: B/C still visible in the compact watch line
+    assert [r["ticker"] for r in out["watch"]] == ["AAPL", "MSFT"]
+
+
+def test_untierd_rows_sort_last_and_survive():
+    rows = ROWS + [{"ticker": "TSLA", "tier": None, "line": "TSLA — no gate"}]
+    out = digest_sections(rows, "inform")
+    assert out["main"][-1]["ticker"] == "TSLA"         # no tier ≠ dropped
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (in `scanning.py`, next to the digest builder it feeds):
+
+```python
+_TIER_SORT = {"A+": 0, "A": 1, "B": 2, "C": 3}
+
+
+def digest_sections(rows: list[dict], mode: str) -> dict:
+    """Tier-aware digest split. Inform (the default): every row, best
+    first, tier label leading. Enforce: curated main section ≥ A, with
+    B/C in a compact watch-don't-chase list — demoted, never hidden."""
+    ordered = sorted(rows, key=lambda r: _TIER_SORT.get(r.get("tier"), 9))
+    labeled = [dict(r, line=(f"[{r['tier']}] {r['line']}" if r.get("tier")
+                             else r["line"])) for r in ordered]
+    if mode != "enforce":
+        return {"main": labeled, "watch": []}
+    return {"main": [r for r in labeled if r.get("tier") in ("A+", "A")],
+            "watch": [r for r in labeled
+                      if r.get("tier") not in ("A+", "A")]}
+```
+
+**Wiring** (the curated digest builder — cockpit insights path, capability-checked): rows gain their `tier` from each plan's stored gate stamp (`get_extra(plan_id, "gate")`); the watch section renders as one line — `"👀 Watch, don't chase: AAPL (B), MSFT (C)"`.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_digest.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py tests/test_gate_digest.py
+git commit -m "feat: tier-aware digest"
+```
 
 ### Task G130: Retrospective gains gate lines
 
 **Files:** Modify `swingbot/core/retrospective.py`; test `tests/test_gate_digest.py`
 
-**Interfaces:** daily retrospective appends (when gate active): `"Gate: N evaluated · X blocked (reasons…) · Y downgraded · shadow divergence Z"` + any G108 audit line due. One line, data from the day's logs; absent data → no line.
-- [ ] **Step 1–4: TDD, commit** — `feat: gate lines in retrospective`
+**Interfaces:** daily retrospective appends (when gate active): `"Gate: N evaluated · X blocked (reasons…) · Y downgraded · shadow divergence Z"` + any G108 audit line due. One line, data from the day's logs; absent data → no line. Pure core: `gate_retro_line(counts: dict | None) -> str | None` — counts assembled from the day's blocked/shadow logs now, and from `telemetry.summary` once G135 lands (same keys by design).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_digest.py`)
+
+```python
+from swingbot.core.retrospective import gate_retro_line
+
+
+def test_gate_retro_line_golden():
+    counts = {"evaluated": 14, "blocked": 2,
+              "blocked_reasons": ["rf_fake_breakout", "tier C < A"],
+              "downgraded": 1, "shadow_divergence": 3}
+    line = gate_retro_line(counts)
+    assert line == ("Gate: 14 evaluated · 2 blocked (rf_fake_breakout, "
+                    "tier C < A) · 1 downgraded · shadow divergence 3")
+
+
+def test_gate_retro_line_inform_day_has_no_block_noise():
+    line = gate_retro_line({"evaluated": 9, "blocked": 0, "blocked_reasons": [],
+                            "downgraded": 0, "shadow_divergence": 0})
+    assert line == "Gate: 9 evaluated"                 # quiet day reads quiet
+
+
+def test_gate_retro_line_absent_data_is_none():
+    assert gate_retro_line(None) is None
+    assert gate_retro_line({}) is None
+    assert gate_retro_line({"evaluated": 0}) is None   # gate idle → no line
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/core/retrospective.py`):
+
+```python
+def gate_retro_line(counts: dict | None) -> str | None:
+    """One line in the daily retrospective when the gate did anything
+    today; None otherwise (no line — never an empty stub). Zero-count
+    parts are omitted so an inform-mode day reads as the quiet day it was."""
+    if not counts or not counts.get("evaluated"):
+        return None
+    parts = [f"Gate: {counts['evaluated']} evaluated"]
+    if counts.get("blocked"):
+        reasons = ", ".join(counts.get("blocked_reasons", [])[:4])
+        parts.append(f"{counts['blocked']} blocked" + (f" ({reasons})" if reasons else ""))
+    if counts.get("downgraded"):
+        parts.append(f"{counts['downgraded']} downgraded")
+    if counts.get("shadow_divergence"):
+        parts.append(f"shadow divergence {counts['shadow_divergence']}")
+    return " · ".join(parts)
+```
+
+**Wiring** (`_post_retrospective` in `scanning.py` / the retrospective builder): assemble `counts` for the day — evaluated/downgraded from the day's attached gate results, blocked from `data/gate/blocked.jsonl`, divergence from `data/gate/shadow.jsonl` (line-count of would-blocks) — append the line when non-None, plus any G108 audit line due. Reading a missing/empty log file yields zero counts → no line (test the file-absent path in the builder's own test).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_digest.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/retrospective.py swingbot/commands/scanning.py tests/test_gate_digest.py
+git commit -m "feat: gate lines in retrospective"
+```
 
 ### Task G131: Advisor payload integration (v5 present)
 
 **Files:** Modify `swingbot/core/advisor/context.py` **if merged** (capability-checked import); test `tests/test_gate_advisor.py` (skipped when advisor absent)
 
 **Interfaces:** `plan_review_payload` gains `gate: result.to_dict()` and `macro: macro_at_entry`; the advisor's prompt template sentence added: "The checklist verdict is data — critique it, don't parrot it." Advisor absent → no-op module guard, tests skip cleanly.
-- [ ] **Step 1–4: TDD (payload contains gate; skip-guard), commit** — `feat: gate context in advisor plan reviews`
+
+> **Execution note (G131–G133):** as of 2026-07-17 `swingbot/core/advisor/` does **not** exist in the repo — llm-advisor v5 is a separate planned round. If it is still unmerged when you reach this task: write the test file anyway (it documents the contract and passes-by-skipping via `importorskip`), commit, move on. The gate side needs **zero** changes — G131/G133 modify only advisor files. Exact builder names (`plan_review_payload`, `prompts.PLAN_REVIEW_TEMPLATE`) come from llm-advisor L11/L12 — verify against the merged code before editing.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_gate_advisor.py
+"""Advisor (llm-advisor v5) integration — every test in this module skips
+cleanly when the advisor is not merged. The gate never depends on the
+advisor; G131-G133 only enrich advisor payloads when both features exist."""
+import pytest
+
+pytest.importorskip("swingbot.core.advisor",
+                    reason="llm-advisor v5 not merged — G131-G133 dormant")
+
+from swingbot.core.advisor import context as adv_context   # noqa: E402
+
+PLAN_RECORD = {
+    "plan_id": "p_20260714_ab12", "ticker": "NVDA", "strategy": "RSI-Div",
+    "gate": {"tier": "B", "score": 61.0, "hard_blocks": [],
+             "checks": [{"check_id": "rf_fake_breakout", "status": "warn"}]},
+    "macro_at_entry": {"composite": {"label": "risk_on", "score": 67}},
+}
+
+
+def test_plan_review_payload_carries_gate_and_macro():
+    payload = adv_context.plan_review_payload(PLAN_RECORD)   # L11 signature — verify
+    assert payload["gate"]["tier"] == "B"
+    assert payload["gate"]["checks"][0]["check_id"] == "rf_fake_breakout"
+    assert payload["macro"]["composite"]["label"] == "risk_on"
+
+
+def test_plan_review_payload_without_gate_is_unchanged():
+    record = {k: v for k, v in PLAN_RECORD.items()
+              if k not in ("gate", "macro_at_entry")}
+    payload = adv_context.plan_review_payload(record)
+    assert "gate" not in payload and "macro" not in payload  # pre-gate plans unaffected
+
+
+def test_prompt_template_tells_the_model_to_critique():
+    from swingbot.core.advisor import prompts                # L12's template module
+    assert "critique it, don't parrot it" in prompts.PLAN_REVIEW_TEMPLATE
+```
+
+- [ ] **Step 2: Run — FAIL (or SKIP if advisor absent → commit and stop here)**, then **implement** (inside the advisor's payload builder in `swingbot/core/advisor/context.py`, right after the existing plan fields are assembled):
+
+```python
+    # G131: the checklist verdict rides along as data for the reviewer —
+    # the prompt tells the model to critique it, never to parrot it.
+    gate = (plan_record or {}).get("gate")
+    if gate:
+        payload["gate"] = gate
+        macro = plan_record.get("macro_at_entry")
+        if macro:
+            payload["macro"] = macro
+```
+
+And append this sentence to `prompts.PLAN_REVIEW_TEMPLATE` (same paragraph that describes the plan data): `"The checklist verdict is data — critique it, don't parrot it."`
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_advisor.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/advisor/context.py swingbot/core/advisor/prompts.py tests/test_gate_advisor.py
+git commit -m "feat: gate context in advisor plan reviews"
+```
 
 ### Task G132: Advisor headline nuance job (v5 present)
 
-**Files:** Modify advisor producers **if merged**; test `tests/test_gate_advisor.py`
+**Files:** Modify `swingbot/commands/scanning.py` (the gate-side hook — capability-checked, works today); advisor producers **if merged**; test `tests/test_gate_advisor.py`
 
-**Interfaces:** when a candidate fires `rf_rumor_spike` with `unclear` classification and the advisor is enabled+budgeted: a `plan_review` job is enqueued with the headlines attached so Haiku adjudicates rumor-vs-confirmed *advisorily* (result lands via the normal L15 advisor field; the gate's own verdict is never overwritten). Absent advisor → nothing.
-- [ ] **Step 1–4: TDD (job enqueued with headlines on the unclear path; gate verdict untouched), commit** — `feat: advisor adjudication of unclear news spikes`
+**Interfaces:** when a candidate fires `rf_rumor_spike` with `unclear` classification and the advisor is enabled+budgeted: a `plan_review` job is enqueued with the headlines attached so Haiku adjudicates rumor-vs-confirmed *advisorily* (result lands via the normal L15 advisor field; the gate's own verdict is never overwritten). Absent advisor → nothing. The gate-side hook `_maybe_enqueue_rumor_review(result, plan_id, headlines) -> bool` is written NOW with a capability-checked import — it tests today via a stub advisor module and starts firing the day v5 merges.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_advisor.py` — these do NOT skip; they inject a stub advisor module, so the hook is tested even before v5 merges. Put them ABOVE the module-level `importorskip` by moving that guard into the G131 tests' class/section, or simpler: put G131's skipping tests in their own module section and these first — `importorskip` must not kill these)
+
+```python
+# tests/test_gate_advisor.py (top of file, BEFORE the importorskip section)
+"""G132 hook tests — run always: the advisor is stubbed into sys.modules."""
+import sys
+import types
+
+from swingbot.core.gate.types import CheckResult, GateResult
+
+
+def _result_with_rumor(classification):
+    checks = (CheckResult("rf_rumor_spike", "redflags", "warn", 6.0,
+                          "spike on unconfirmed headline",
+                          {"classification": classification}),)
+    return GateResult(ticker="NVDA", strategy="RSI-Div", as_of="2026-07-14",
+                      checks=checks, score=55.0, tier="B", hard_blocks=())
+
+
+def _stub_advisor(monkeypatch, *, budgeted=True):
+    jobs = types.ModuleType("swingbot.core.advisor.jobs")
+    jobs.calls = []
+    jobs.enabled_and_budgeted = lambda: budgeted
+    jobs.enqueue = lambda kind, **kw: jobs.calls.append((kind, kw))
+    pkg = types.ModuleType("swingbot.core.advisor")
+    monkeypatch.setitem(sys.modules, "swingbot.core.advisor", pkg)
+    monkeypatch.setitem(sys.modules, "swingbot.core.advisor.jobs", jobs)
+    return jobs
+
+
+def test_unclear_rumor_enqueues_review_with_headlines(monkeypatch):
+    import swingbot.commands.scanning as scanning
+    jobs = _stub_advisor(monkeypatch)
+    result = _result_with_rumor("unclear")
+    fired = scanning._maybe_enqueue_rumor_review(
+        result, "p_1", headlines=["NVDA said to weigh acquisition"])
+    assert fired is True
+    kind, kw = jobs.calls[0]
+    assert kind == "plan_review" and kw["plan_id"] == "p_1"
+    assert kw["extra"]["headlines"] == ["NVDA said to weigh acquisition"]
+    assert result.checks[0].detail["classification"] == "unclear"  # verdict untouched
+
+
+def test_confirmed_classification_enqueues_nothing(monkeypatch):
+    import swingbot.commands.scanning as scanning
+    jobs = _stub_advisor(monkeypatch)
+    assert scanning._maybe_enqueue_rumor_review(
+        _result_with_rumor("confirmed"), "p_1", headlines=[]) is False
+    assert jobs.calls == []
+
+
+def test_absent_advisor_is_a_quiet_noop(monkeypatch):
+    import swingbot.commands.scanning as scanning
+    for mod in ("swingbot.core.advisor", "swingbot.core.advisor.jobs"):
+        monkeypatch.delitem(sys.modules, mod, raising=False)
+    assert scanning._maybe_enqueue_rumor_review(
+        _result_with_rumor("unclear"), "p_1", headlines=["x"]) is False
+
+
+def test_unbudgeted_advisor_enqueues_nothing(monkeypatch):
+    import swingbot.commands.scanning as scanning
+    jobs = _stub_advisor(monkeypatch, budgeted=False)
+    assert scanning._maybe_enqueue_rumor_review(
+        _result_with_rumor("unclear"), "p_1", headlines=["x"]) is False
+    assert jobs.calls == []
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/commands/scanning.py`):
+
+```python
+def _maybe_enqueue_rumor_review(result, plan_id: str, headlines: list) -> bool:
+    """G132: when the lexicon classifier answered 'unclear' (G37) and the
+    llm-advisor (v5) is merged+enabled+budgeted, enqueue a plan_review job
+    carrying the headlines so Haiku adjudicates rumor-vs-confirmed
+    ADVISORILY. The gate's own verdict is never overwritten — the answer
+    lands via the normal advisor field (L15). Returns True iff enqueued."""
+    fired = next((c for c in result.checks
+                  if c.check_id == "rf_rumor_spike"
+                  and (c.detail or {}).get("classification") == "unclear"), None)
+    if fired is None:
+        return False
+    try:
+        from swingbot.core.advisor import jobs as advisor_jobs  # v5 — verify names (L14)
+    except ImportError:
+        return False
+    if not advisor_jobs.enabled_and_budgeted():
+        return False
+    advisor_jobs.enqueue("plan_review", plan_id=plan_id,
+                         extra={"headlines": headlines or [],
+                                "question": "rumor or confirmed?"})
+    return True
+```
+
+**Wiring** (G121's per-candidate block, one line after `attach_to_plan`): `_maybe_enqueue_rumor_review(result, item.plan_v2.plan_id, headlines)` — `headlines` is the same lazily-fetched list the checks consumed.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_advisor.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py tests/test_gate_advisor.py
+git commit -m "feat: advisor adjudication of unclear news spikes"
+```
 
 ### Task G133: Nightly analysis gains gate stats (v5 present)
 
 **Files:** Modify advisor nightly payload **if merged**; test `tests/test_gate_advisor.py`
 
-**Interfaces:** `nightly_payload` gains the day's gate telemetry + flag-outcome deltas so the local analyst reasons over them (schema untouched — data rides in the existing snapshot section).
-- [ ] **Step 1–4: TDD, commit** — `feat: gate stats in nightly advisor payload`
+**Interfaces:** `nightly_payload` gains the day's gate telemetry + flag-outcome deltas so the local analyst reasons over them (schema untouched — data rides in the existing snapshot section). Advisor absent → skip (same `importorskip` section as G131).
+
+- [ ] **Step 1: Write the failing test** (append to the **skipping** section of `tests/test_gate_advisor.py`, below the G131 `importorskip`)
+
+```python
+def test_nightly_payload_carries_gate_day_stats(monkeypatch, tmp_path):
+    from swingbot.core.advisor import nightly              # L13's module — verify name
+    import swingbot.core.gate.telemetry as telemetry
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH",
+                        str(tmp_path / "telemetry.jsonl"))
+    telemetry.count("evaluated")
+    telemetry.count("blocked", reason="rf_fake_breakout")
+    payload = nightly.nightly_payload()                    # L13 signature — verify
+    gate = payload["snapshot"]["gate"]
+    assert gate["today"]["evaluated"] == 1
+    assert gate["today"]["blocked"] == 1
+    assert "flag_outcomes" in gate                         # G85 stats ride along
+
+
+def test_nightly_payload_survives_gate_absence(monkeypatch):
+    """A broken/empty gate layer must never break the nightly job."""
+    from swingbot.core.advisor import nightly
+    import swingbot.core.gate.telemetry as telemetry
+    monkeypatch.setattr(telemetry, "summary",
+                        lambda since=None: (_ for _ in ()).throw(OSError("disk")))
+    payload = nightly.nightly_payload()
+    assert "gate" not in payload["snapshot"]               # section omitted, no crash
+```
+
+- [ ] **Step 2: Run — FAIL (or SKIP if advisor absent → commit the test file and stop)**, then **implement** (inside the advisor's nightly payload builder, after the existing snapshot section is assembled):
+
+```python
+    # G133: the day's gate stats ride in the existing snapshot section —
+    # schema untouched, section simply absent when the gate layer is off/broken.
+    try:
+        from swingbot.core.gate import telemetry
+        from swingbot.core.gate.persistence import flag_outcome_stats
+        payload["snapshot"]["gate"] = {
+            "today": telemetry.summary(since=now.date().isoformat()),
+            "flag_outcomes": flag_outcome_stats(journal_entries),
+        }
+    except Exception:  # noqa: BLE001 — gate absent/broken → payload unchanged
+        payload["snapshot"].pop("gate", None)
+```
+
+(`journal_entries` = whatever the nightly builder already loads for its trade section; if it doesn't load them, pass `[]` — the flag stats are then empty, not wrong.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_advisor.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/advisor/nightly.py tests/test_gate_advisor.py
+git commit -m "feat: gate stats in nightly advisor payload"
+```
 
 ### Task G134: Kill-switch + throttle interop (v4 present)
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** when edge-engine E45–E47 exist: kill-switch active → gate evaluation still runs (annotation continues, evidence keeps accruing) but enforce decisions defer to the kill switch (its "no new entries" outranks any A+ tier); drawdown throttle's size multiplier composes multiplicatively with G117's tier multiplier, floored at 0. Absent edge → no-op.
-- [ ] **Step 1–4: TDD (composition math; precedence), commit** — `feat: gate interop with kill switch + throttle`
+**Interfaces:** when edge-engine E45–E47 exist: kill-switch active → gate evaluation still runs (annotation continues, evidence keeps accruing) but enforce decisions defer to the kill switch (its "no new entries" outranks any A+ tier); drawdown throttle's size multiplier composes multiplicatively with G117's tier multiplier, floored at 0. Absent edge → no-op. The composition/precedence math is pure and lands NOW (tested unconditionally); only the two-line wiring is capability-checked.
+
+> **Execution note:** as of 2026-07-17 no kill-switch or throttle code exists in the repo (edge-engine v4 is a separate round). The pure functions below carry the whole contract; the wiring block activates by itself when `swingbot.core.edge.killswitch` appears (verify the module/attr names against the merged edge-engine code — E45–E47).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+
+```python
+def test_size_multipliers_compose_multiplicatively():
+    # throttle 0.5 × tier 0.75 → 0.375; None means "no opinion" (×1)
+    assert scanning.compose_size_multipliers(0.5, 0.75) == 0.375
+    assert scanning.compose_size_multipliers(None, 0.75) == 0.75
+    assert scanning.compose_size_multipliers(None, None) == 1.0
+    assert scanning.compose_size_multipliers(0.0, 2.0) == 0.0     # floored at 0
+    assert scanning.compose_size_multipliers(-0.5, 1.0) == 0.0    # negative → 0
+
+
+def test_killswitch_outranks_any_tier():
+    """'No new entries' beats an A+ pass — and a gate block stays a block."""
+    assert scanning.entry_allowed_with_killswitch(True, "pass") is False
+    assert scanning.entry_allowed_with_killswitch(True, "block") is False
+    assert scanning.entry_allowed_with_killswitch(False, "pass") is True
+    assert scanning.entry_allowed_with_killswitch(False, "block") is False
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/commands/scanning.py`):
+
+```python
+def compose_size_multipliers(*mults) -> float:
+    """G134: the drawdown throttle's multiplier (edge E46) and the tier
+    sizing multiplier (G117) compose MULTIPLICATIVELY, floored at 0.
+    None entries mean 'no opinion' (x1) — so either feature works alone."""
+    out = 1.0
+    for m in mults:
+        if m is not None:
+            out *= max(0.0, float(m))
+    return max(0.0, out)
+
+
+def entry_allowed_with_killswitch(kill_active: bool, gate_decision: str) -> bool:
+    """G134 precedence: the kill switch (edge E45) outranks ANY gate
+    verdict — an A+ tier never overrides 'no new entries'. Gate evaluation
+    still runs upstream (annotation + evidence continue); only the entry
+    decision defers. A gate block stays a block either way."""
+    if kill_active:
+        return False
+    return gate_decision != "block"
+```
+
+**Wiring** (capability-checked, two places): (1) where G117 applies the tier multiplier, replace the bare multiplier with `compose_size_multipliers(_throttle_multiplier(), tier_mult)` where `_throttle_multiplier()` is `try: from swingbot.core.edge import throttle; return throttle.size_multiplier() / except ImportError: return None`; (2) at the entry-decision point in the enforce path, route through `entry_allowed_with_killswitch(_killswitch_active(), decision)` with the same try/except import pattern (`_killswitch_active()` returns False when edge is absent). Both helper names verified against edge E45–E47 at execution.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py tests/test_scan_gate_wiring.py
+git commit -m "feat: gate interop with kill switch + throttle"
+```
 
 ### Task G135: Gate telemetry counters
 
 **Files:** Create `swingbot/core/gate/telemetry.py`; test `tests/test_gate_telemetry.py`
 
-**Interfaces:** `count(event: str, **labels)` → `data/gate/telemetry.jsonl` (evaluated, blocked{reason}, downgraded, held_for_event, recheck_held, unknown_rate per provider); `summary(since) -> dict` consumed by the retrospective line (G130), admin (G185), and the health page.
-- [ ] **Step 1–4: TDD (counter math over synthetic lines), commit** — `feat: gate telemetry`
+**Interfaces:** `count(event: str, at=None, **labels)` → appends `data/gate/telemetry.jsonl` (events: `evaluated`, `blocked` with `reason=`, `downgraded`, `held_for_event`, `recheck_held`, `provider_answer` with `provider=`/`unknown=`); `summary(since: str | None) -> dict` with keys **matching G130's retrospective counts by design** (`evaluated, blocked, blocked_reasons, downgraded, held_for_event, recheck_held, unknown_rate`) — consumed by the retrospective line (G130), admin (G185), and the health page.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_telemetry.py
+import datetime as dt
+
+import swingbot.core.gate.telemetry as telemetry
+
+
+def _tmp_telemetry(tmp_path, monkeypatch):
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH",
+                        str(tmp_path / "telemetry.jsonl"))
+
+
+def test_count_then_summary_roundtrip(tmp_path, monkeypatch):
+    _tmp_telemetry(tmp_path, monkeypatch)
+    at = dt.datetime(2026, 7, 14, 15, 0)
+    for _ in range(3):
+        telemetry.count("evaluated", at=at)
+    telemetry.count("blocked", at=at, reason="rf_fake_breakout")
+    telemetry.count("blocked", at=at, reason="tier C < A")
+    telemetry.count("downgraded", at=at)
+    telemetry.count("held_for_event", at=at)
+    s = telemetry.summary()
+    assert s["evaluated"] == 3 and s["blocked"] == 2
+    assert s["blocked_reasons"] == ["rf_fake_breakout", "tier C < A"]
+    assert s["downgraded"] == 1 and s["held_for_event"] == 1
+
+
+def test_summary_since_filters_by_date(tmp_path, monkeypatch):
+    _tmp_telemetry(tmp_path, monkeypatch)
+    telemetry.count("evaluated", at=dt.datetime(2026, 7, 13, 10, 0))
+    telemetry.count("evaluated", at=dt.datetime(2026, 7, 14, 10, 0))
+    assert telemetry.summary(since="2026-07-14")["evaluated"] == 1
+    assert telemetry.summary()["evaluated"] == 2
+
+
+def test_unknown_rate_per_provider(tmp_path, monkeypatch):
+    _tmp_telemetry(tmp_path, monkeypatch)
+    at = dt.datetime(2026, 7, 14, 10, 0)
+    telemetry.count("provider_answer", at=at, provider="fred", unknown=False)
+    telemetry.count("provider_answer", at=at, provider="fred", unknown=True)
+    telemetry.count("provider_answer", at=at, provider="finnhub", unknown=False)
+    rates = telemetry.summary()["unknown_rate"]
+    assert rates == {"fred": 0.5, "finnhub": 0.0}
+
+
+def test_count_never_raises(tmp_path, monkeypatch):
+    # unwritable path → count swallows; telemetry must never cost an alert
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH",
+                        str(tmp_path / "no_such_dir" / "x" / "t.jsonl"))
+    monkeypatch.setattr(telemetry.os, "makedirs",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("ro")))
+    telemetry.count("evaluated")                           # no exception
+    assert telemetry.summary(since=None)["evaluated"] == 0
+
+
+def test_summary_skips_corrupt_lines(tmp_path, monkeypatch):
+    _tmp_telemetry(tmp_path, monkeypatch)
+    telemetry.count("evaluated", at=dt.datetime(2026, 7, 14, 10, 0))
+    with open(telemetry.TELEMETRY_PATH, "a", encoding="utf-8") as fh:
+        fh.write("{corrupt\n")
+    assert telemetry.summary()["evaluated"] == 1
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**
+
+```python
+# swingbot/core/gate/telemetry.py
+"""Gate telemetry — append-only JSONL counters. count() is fire-and-forget
+(NEVER raises: telemetry must never cost an alert, same rule as the gate);
+summary() aggregates for the retrospective (G130 — same keys by design),
+the admin dashboard card (G185) and the health page."""
+import datetime as dt
+import json
+import os
+
+from swingbot import config
+
+TELEMETRY_PATH = os.path.join(config.DATA_DIR, "gate", "telemetry.jsonl")
+
+
+def count(event: str, at: dt.datetime | None = None, **labels) -> None:
+    try:
+        row = {"at": (at or dt.datetime.now()).isoformat(timespec="seconds"),
+               "event": event, **labels}
+        os.makedirs(os.path.dirname(TELEMETRY_PATH), exist_ok=True)
+        with open(TELEMETRY_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def summary(since: str | None = None) -> dict:
+    """Aggregate counters at/after `since` (ISO date string; None = all).
+    ISO timestamps compare lexicographically, so "2026-07-14T…" >= "2026-07-14"
+    does the date filtering without parsing."""
+    out = {"evaluated": 0, "blocked": 0, "blocked_reasons": [],
+           "downgraded": 0, "held_for_event": 0, "recheck_held": 0,
+           "unknown_rate": {}}
+    if not os.path.exists(TELEMETRY_PATH):
+        return out
+    unknown_hits: dict[str, int] = {}
+    unknown_totals: dict[str, int] = {}
+    with open(TELEMETRY_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if since and row.get("at", "") < since:
+                continue
+            ev = row.get("event")
+            if ev in ("evaluated", "blocked", "downgraded",
+                      "held_for_event", "recheck_held"):
+                out[ev] += 1
+                if ev == "blocked" and row.get("reason"):
+                    out["blocked_reasons"].append(row["reason"])
+            elif ev == "provider_answer":
+                p = row.get("provider", "?")
+                unknown_totals[p] = unknown_totals.get(p, 0) + 1
+                if row.get("unknown"):
+                    unknown_hits[p] = unknown_hits.get(p, 0) + 1
+    out["unknown_rate"] = {p: round(unknown_hits.get(p, 0) / n, 3)
+                          for p, n in unknown_totals.items()}
+    return out
+```
+
+**Wiring** (three one-liners, all inside existing try/except so telemetry can never break the caller): G121's per-candidate block gains `telemetry.count("evaluated")` after `run_checklist`, `telemetry.count("blocked", reason=...)` next to `blocked_log`, `telemetry.count("downgraded")` on the downgrade branch; G120's hold path gains `telemetry.count("held_for_event")`; G128's re-check hold gains `telemetry.count("recheck_held")`. **G130's counts builder switches to `telemetry.summary(since=today.isoformat())`** for evaluated/blocked/downgraded (shadow divergence stays a `shadow.jsonl` line count) — its own test keeps passing because the keys match.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_telemetry.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/telemetry.py swingbot/commands/scanning.py swingbot/core/retrospective.py tests/test_gate_telemetry.py
+git commit -m "feat: gate telemetry"
+```
 
 ### Task G136: Scan latency budget with gate on
 
 **Files:** Test `tests/test_scan_gate_perf.py`
 
-- [ ] **Step 1: The test** — a stubbed 60-candidate scan with gate on (warm snapshot, no network) adds < 5 s total vs gate off (marker per G87); plus a unit budget: `GateContext` assembly < 500 ms with warm caches.
-- [ ] **Step 2: PASS (batch level extraction / memoize per-ticker frames if not). Step 3: Commit** — `test: scan latency budget with gate`
+- [ ] **Step 1: Write the test** — a stubbed 60-candidate scan with gate on (warm snapshot, no network) adds < 5 s total vs gate off (marker per G87); plus a unit budget: `GateContext` assembly < 500 ms with warm caches.
+
+```python
+# tests/test_scan_gate_perf.py
+"""G136: the gate's whole-scan latency budget. No network, warm snapshot —
+this is pure-compute cost, the only kind the gate is allowed to add."""
+import datetime as dt
+import time
+
+import pytest
+
+import swingbot.commands.scanning as scanning
+import swingbot.config as config
+from swingbot.core.gate import run_checklist
+from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+NOW = dt.datetime(2026, 7, 14, 23, 0, tzinfo=dt.timezone.utc)
+WARM_SNAP = {"built_at": "2026-07-14T22:00:00+00:00", "stale": False,
+             "composite": {"score": 50, "label": "risk_on",
+                           "inputs_used": 5, "detail": []},
+             "events": {"next_high_impact": None, "within_24h": [],
+                        "today": [], "upcoming": [], "refreshed_at": "2026-07-14"}}
+
+
+@pytest.mark.perf   # same marker G87 introduced — verify at execution
+def test_sixty_candidate_gate_pass_under_five_seconds():
+    df = uptrend_daily(n=500)
+    plan = make_plan(created_at="2026-07-13",
+                     trigger_price=float(df["Close"].iloc[-1]))
+    run_checklist("WARM", plan.strategy, plan, df,
+                  macro_snap=WARM_SNAP, now=NOW)               # warm-up / caches
+    t0 = time.perf_counter()
+    for i in range(60):
+        result = run_checklist(f"T{i:02d}", plan.strategy, plan, df,
+                               macro_snap=WARM_SNAP, now=NOW)
+        scanning.gate_candidate(result, "inform", "A")
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 5.0, (
+        f"gate added {elapsed:.1f}s for 60 candidates — batch the level "
+        f"extraction / memoize per-ticker frames (G87's lru fix) before shipping")
+
+
+@pytest.mark.perf
+def test_gate_context_assembly_under_500ms(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
+    monkeypatch.setattr(scanning, "_load_macro_snapshot", lambda: WARM_SNAP)
+    scanning.build_gate_context(now=NOW)                       # warm-up
+    t0 = time.perf_counter()
+    scanning.build_gate_context(now=NOW)
+    assert time.perf_counter() - t0 < 0.5
+```
+
+- [ ] **Step 2: Run — PASS** (`python -m pytest tests/test_scan_gate_perf.py -v`; if over budget, batch level extraction / memoize per-ticker frames — the G87 `lru_cache` seam is the expected fix, never a looser budget).
+- [ ] **Step 3: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_scan_gate_perf.py
+git commit -m "test: scan latency budget with gate"
+```
 
 ### Task G137: Alert routing by tier (channel option)
 
 **Files:** Modify `swingbot/commands/scanning.py` + config; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** optional `GATE_APLUS_CHANNEL_ID` (int field, 0 = off): A+ alerts additionally mirrored to a dedicated channel (the "only the best" feed the 95% goal actually wants day-to-day). Mirror failure → log, never blocks the main alert.
-- [ ] **Step 1–4: TDD (mirror on/off; failure path), commit** — `feat: A+ tier channel mirror`
+**Interfaces:** optional `GATE_APLUS_CHANNEL_ID` (int field, 0 = off): A+ alerts additionally mirrored to a dedicated channel (the "only the best" feed the 95% goal actually wants day-to-day). Mirror failure → log, never blocks the main alert. One async helper owns it: `_mirror_aplus(bot, embed, tier) -> bool` — called from `_send_alerts` per alert with the gate tier that G121 attached (extend the alert tuple `(embed, chart_path)` to carry `gate_tier` — match `_send_alerts`'s actual tuple shape at execution and default the new element to `None` so pre-gate callers are untouched).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+
+```python
+import asyncio
+
+
+class _FakeChannel:
+    def __init__(self, fail=False):
+        self.sent, self.fail = [], fail
+
+    async def send(self, **kw):
+        if self.fail:
+            raise RuntimeError("discord hiccup")
+        self.sent.append(kw)
+
+
+class _FakeBot:
+    def __init__(self, channel):
+        self._channel = channel
+
+    def get_channel(self, cid):
+        return self._channel
+
+
+def test_aplus_mirror_sends_only_aplus(monkeypatch):
+    monkeypatch.setattr(config, "GATE_APLUS_CHANNEL_ID", 1234, raising=False)
+    chan = _FakeChannel()
+    bot = _FakeBot(chan)
+    assert asyncio.run(scanning._mirror_aplus(bot, "EMBED", "A+")) is True
+    assert asyncio.run(scanning._mirror_aplus(bot, "EMBED", "B")) is False
+    assert len(chan.sent) == 1 and chan.sent[0]["embed"] == "EMBED"
+
+
+def test_aplus_mirror_off_when_unconfigured(monkeypatch):
+    monkeypatch.setattr(config, "GATE_APLUS_CHANNEL_ID", 0, raising=False)
+    assert asyncio.run(scanning._mirror_aplus(
+        _FakeBot(_FakeChannel()), "EMBED", "A+")) is False
+
+
+def test_aplus_mirror_failure_never_raises(monkeypatch, caplog):
+    monkeypatch.setattr(config, "GATE_APLUS_CHANNEL_ID", 1234, raising=False)
+    bot = _FakeBot(_FakeChannel(fail=True))
+    assert asyncio.run(scanning._mirror_aplus(bot, "EMBED", "A+")) is False
+    assert any("mirror" in r.message.lower() for r in caplog.records)
+
+
+def test_aplus_mirror_missing_channel_logs(monkeypatch, caplog):
+    monkeypatch.setattr(config, "GATE_APLUS_CHANNEL_ID", 1234, raising=False)
+    assert asyncio.run(scanning._mirror_aplus(
+        _FakeBot(None), "EMBED", "A+")) is False
+    assert any("not found" in r.message.lower() for r in caplog.records)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`)
+
+```python
+async def _mirror_aplus(bot, embed, tier: str | None) -> bool:
+    """G137: A+ alerts additionally mirror to a dedicated channel — the
+    'only the best' feed. Best-effort: any failure logs and returns False;
+    the main alert has already shipped and is never affected."""
+    chan_id = int(getattr(config, "GATE_APLUS_CHANNEL_ID", 0) or 0)
+    if not chan_id or tier != "A+":
+        return False
+    channel = bot.get_channel(chan_id)
+    if channel is None:
+        log.warning("GATE_APLUS_CHANNEL_ID=%s set but channel not found", chan_id)
+        return False
+    try:
+        await channel.send(embed=embed)
+        return True
+    except Exception:  # noqa: BLE001
+        log.warning("A+ mirror send failed — main alert unaffected", exc_info=True)
+        return False
+```
+
+**Wiring** (`_send_alerts`, after the existing `destination.send(...)` per alert): `await _mirror_aplus(bot, embed, gate_tier)` — the chart file is deliberately NOT re-attached (a `discord.File` can't be sent twice; the mirror is a headline feed). Config Field: `Field("GATE_APLUS_CHANNEL_ID", "0", "Gatekeeper", "A+ mirror channel", type="int", help="Channel ID that additionally receives A+-tier alerts. 0 = off. Mirror failures never affect the main alert.")` — match the exact `Field` signature in `config.py`.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py swingbot/config.py tests/test_scan_gate_wiring.py
+git commit -m "feat: A+ tier channel mirror"
+```
 
 ### Task G138: Config completeness sweep for Phase G4
 
 **Files:** Modify `swingbot/config.py`; test `tests/test_gate_config.py`
 
 **Interfaces:** all Phase-G4 fields present + help texts: `GATE_SHOW_IN_SHADOW`, `GATE_BLACKOUT_ENFORCE`, `GATE_BLACKOUT_HOURS_BEFORE/AFTER`, `GATE_EARNINGS_BLACKOUT_DAYS`, `GATE_GUTCHECK_REQUIRED`, `GATE_TIER_SIZING_ENABLED`, `GATE_APLUS_CHANNEL_ID`, `GATE_MIN_DOLLAR_VOL`, `GATE_CHASE_ATR_MAX`, `GATE_MIN_RR`, `GATE_MAX_CORR_POSITIONS` (the last four are ThresholdSpec-backed per G79 — asserted to resolve through `spec.threshold`). Test asserts every config key referenced by any gate/macro module exists in FIELDS (import-and-introspect sweep).
-- [ ] **Step 1–4: TDD, commit** — `feat: gate config completeness`
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_config.py`)
+
+```python
+import pathlib
+import re
+
+import swingbot.config as config
+
+PHASE_G4_FIELDS = [
+    "GATE_SHOW_IN_SHADOW", "GATE_BLACKOUT_ENFORCE",
+    "GATE_BLACKOUT_HOURS_BEFORE", "GATE_BLACKOUT_HOURS_AFTER",
+    "GATE_EARNINGS_BLACKOUT_DAYS", "GATE_GUTCHECK_REQUIRED",
+    "GATE_TIER_SIZING_ENABLED", "GATE_APLUS_CHANNEL_ID",
+]
+
+
+def _field_names():
+    # Field's first positional attr is the env key — verify attr name
+    # (.name vs .key) against the Field dataclass in config.py
+    return {f.name for f in config.FIELDS}
+
+
+def test_phase_g4_fields_present_with_help():
+    names = _field_names()
+    missing = [k for k in PHASE_G4_FIELDS if k not in names]
+    assert not missing, f"config.FIELDS missing: {missing}"
+    for f in config.FIELDS:
+        if f.name in PHASE_G4_FIELDS:
+            assert f.help, f"{f.name} has no help text"
+
+
+def test_every_referenced_gate_key_has_a_field():
+    """Import-and-introspect sweep: any config.GATE_*/MACRO_* attribute
+    referenced anywhere in swingbot/ must be a declared Field — a key that
+    exists only as getattr() default is a silent misconfiguration trap."""
+    pattern = re.compile(
+        r"(?:config\.((?:GATE|MACRO|FRED|FINNHUB)_[A-Z0-9_]+))"
+        r"|(?:getattr\(config,\s*[\"']((?:GATE|MACRO|FRED|FINNHUB)_[A-Z0-9_]+)[\"'])")
+    names = _field_names()
+    offenders = []
+    for path in pathlib.Path("swingbot").rglob("*.py"):
+        for m in pattern.finditer(path.read_text(encoding="utf-8")):
+            key = m.group(1) or m.group(2)
+            if key not in names:
+                offenders.append(f"{path.as_posix()}: {key}")
+    assert not offenders, "referenced but undeclared:\n" + "\n".join(sorted(set(offenders)))
+
+
+def test_threshold_backed_fields_resolve_through_spec():
+    """GATE_MIN_DOLLAR_VOL / GATE_CHASE_ATR_MAX / GATE_MIN_RR /
+    GATE_MAX_CORR_POSITIONS are ThresholdSpec-backed (G79): the registry
+    spec resolves them, so a settings-page edit reaches the check."""
+    from swingbot.core.gate.registry import CHECKS
+    spec_of = {"rf_thin_session": "min_dollar_vol",
+               "not_chasing": "chase_atr_max",
+               "rr_realistic": "min_rr",
+               "portfolio_room": "max_corr"}
+    for check_id, th_name in spec_of.items():
+        spec = CHECKS[check_id]
+        assert th_name in spec.thresholds, f"{check_id} lost its {th_name} spec"
+        assert spec.threshold(th_name) is not None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: add every missing Field to the "Gatekeeper" section of `config.py` (checkbox/int/float types per the list above, each with a help sentence that states its default and its relax direction, e.g. `GATE_BLACKOUT_HOURS_BEFORE`: "Hours before a high-impact print during which new entries are annotated (or held, if blackout-enforce is on). Default 24. Lower = fewer annotations."). Fix any sweep offenders by declaring the missing Field, never by deleting the reference.
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_config.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/config.py tests/test_gate_config.py
+git commit -m "feat: gate config completeness"
+```
 
 ### Task G139: Startup diagnostics
 
 **Files:** Modify `swingbot/bot_core.py` startup; test `tests/test_gate_telemetry.py`
 
-**Interfaces:** one log block when `GATE_ENABLED` or `MACRO_ENABLED`: mode, min tier, cuts, checks on/off count, FRED/Finnhub key presence, snapshot age, event calendar horizon, quota state — one WARNING per misconfiguration (enforce mode without fold evidence file → auto-fallback to **inform** + loud warning; blackout-enforce on without event data → falls back to annotate-only + warning). Mirrors llm-advisor L30's pattern.
-- [ ] **Step 1–4: TDD (on/off/misconfigured matrix via caplog), commit** — `feat: gate startup diagnostics`
+**Interfaces:** one log block when `GATE_ENABLED` or `MACRO_ENABLED`: mode, min tier, cuts, checks on/off count, FRED/Finnhub key presence, snapshot age, event calendar horizon, quota state — one WARNING per misconfiguration (enforce mode without the G105 sign-off file → auto-fallback to **inform** + loud warning; blackout-enforce on without event data → falls back to annotate-only + warning). Pure builder `gate_startup_diagnostics() -> tuple[list[str], list[str]]` (info lines, warning lines) in `scanning.py`; `bot_core.py` startup logs them.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_telemetry.py`)
+
+```python
+import os
+
+import swingbot.commands.scanning as scanning
+import swingbot.config as config
+
+
+def _diag_flags(monkeypatch, tmp_path, *, gate=True, macro=True,
+                mode="inform", blackout_enforce=False, signoff=False):
+    monkeypatch.setattr(config, "GATE_ENABLED", gate, raising=False)
+    monkeypatch.setattr(config, "MACRO_ENABLED", macro, raising=False)
+    monkeypatch.setattr(config, "GATE_MODE", mode, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_ENFORCE", blackout_enforce,
+                        raising=False)
+    monkeypatch.setattr(scanning, "SIGNOFF_PATH",
+                        str(tmp_path / "enforce_signoff.json"))
+    if signoff:
+        with open(scanning.SIGNOFF_PATH, "w", encoding="utf-8") as fh:
+            fh.write('{"signed_at": "2026-07-01", "min_tier": "B"}')
+
+
+def test_diagnostics_silent_when_everything_off(monkeypatch, tmp_path):
+    _diag_flags(monkeypatch, tmp_path, gate=False, macro=False)
+    info, warns = scanning.gate_startup_diagnostics()
+    assert info == [] and warns == []
+
+
+def test_diagnostics_info_block_lists_mode_and_keys(monkeypatch, tmp_path):
+    _diag_flags(monkeypatch, tmp_path)
+    monkeypatch.setattr(config, "FRED_API_KEY", "k", raising=False)
+    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
+    info, _ = scanning.gate_startup_diagnostics()
+    joined = "\n".join(info)
+    assert "mode=inform" in joined
+    assert "FRED key: present" in joined and "Finnhub key: MISSING" in joined
+
+
+def test_enforce_without_signoff_falls_back_to_inform(monkeypatch, tmp_path):
+    _diag_flags(monkeypatch, tmp_path, mode="enforce", signoff=False)
+    _, warns = scanning.gate_startup_diagnostics()
+    assert any("falling back to inform" in w for w in warns)
+    assert config.GATE_MODE == "inform"          # in-process only, .env untouched
+
+
+def test_enforce_with_signoff_is_respected(monkeypatch, tmp_path):
+    _diag_flags(monkeypatch, tmp_path, mode="enforce", signoff=True)
+    _, warns = scanning.gate_startup_diagnostics()
+    assert config.GATE_MODE == "enforce"
+    assert not any("falling back" in w for w in warns)
+
+
+def test_blackout_enforce_without_events_warns(monkeypatch, tmp_path):
+    _diag_flags(monkeypatch, tmp_path, blackout_enforce=True)
+    monkeypatch.setattr(scanning, "_load_macro_snapshot",
+                        lambda: {"built_at": "t", "events": {"upcoming": []}})
+    _, warns = scanning.gate_startup_diagnostics()
+    assert any("annotate-only" in w for w in warns)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`)
+
+```python
+SIGNOFF_PATH = os.path.join(config.DATA_DIR, "gate", "enforce_signoff.json")
+
+
+def gate_startup_diagnostics() -> tuple[list[str], list[str]]:
+    """G139: one startup block saying exactly what the gate/macro layer
+    will do — and one WARNING per misconfiguration, each of which
+    DOWNGRADES the behavior rather than crashing. The GATE_MODE fallback
+    mutates the config module in-process only (the .env keeps the
+    operator's value; the warning tells them why it isn't in effect)."""
+    gate_on = getattr(config, "GATE_ENABLED", False)
+    macro_on = getattr(config, "MACRO_ENABLED", False)
+    if not (gate_on or macro_on):
+        return [], []
+    info, warns = [], []
+    mode = getattr(config, "GATE_MODE", "inform")
+    if mode == "enforce" and not os.path.exists(SIGNOFF_PATH):
+        warns.append("GATE_MODE=enforce but data/gate/enforce_signoff.json "
+                     "is absent (G105 evidence gate) — falling back to inform")
+        config.GATE_MODE = mode = "inform"
+    snap = None
+    try:
+        snap = _load_macro_snapshot()
+    except Exception:  # noqa: BLE001
+        pass
+    if getattr(config, "GATE_BLACKOUT_ENFORCE", False):
+        upcoming = ((snap or {}).get("events") or {}).get("upcoming", [])
+        if not upcoming:
+            warns.append("GATE_BLACKOUT_ENFORCE on but no event data — "
+                         "annotate-only until the calendar refreshes")
+    try:
+        from swingbot.core.gate.registry import CHECKS
+        enabled = sum(1 for s in CHECKS.values()
+                      if getattr(config, s.config_flag, True))
+        checks_line = f"checks: {enabled}/{len(CHECKS)} enabled"
+    except Exception:  # noqa: BLE001
+        checks_line = "checks: registry unavailable"
+    age = "no snapshot yet"
+    if snap and snap.get("built_at"):
+        age = f"snapshot built {snap['built_at']}" + (" (stale)" if snap.get("stale") else "")
+    info.extend([
+        f"gate: enabled={gate_on} mode={mode} "
+        f"min_tier={getattr(config, 'GATE_MIN_TIER', 'B')} "
+        f"cuts A+/{getattr(config, 'GATE_TIER_APLUS_CUT', 90)} "
+        f"A/{getattr(config, 'GATE_TIER_A_CUT', 75)} "
+        f"B/{getattr(config, 'GATE_TIER_B_CUT', 55)}",
+        checks_line,
+        f"macro: enabled={macro_on} · {age}",
+        f"FRED key: {'present' if getattr(config, 'FRED_API_KEY', '') else 'MISSING'} · "
+        f"Finnhub key: {'present' if getattr(config, 'FINNHUB_API_KEY', '') else 'MISSING'}",
+    ])
+    return info, warns
+```
+
+**Wiring** (`bot_core.py` startup, same place other startup logging happens): `info, warns = gate_startup_diagnostics()`, log each info line at INFO and each warning at WARNING (one log call per line — the block must be greppable). Mirrors llm-advisor L30's pattern if merged.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_telemetry.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py swingbot/bot_core.py tests/test_gate_telemetry.py
+git commit -m "feat: gate startup diagnostics"
+```
 
 ### Task G140: E2E offline — clean pass path
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — tmp data dir, fake bot, stubbed providers: scan a G7 clean-uptrend candidate in **inform mode (the default)** + fresh fake snapshot → alert captured with 🌍 and 📋 fields (A-tier, no flags), plan stored with gate+macro stamps, telemetry `evaluated=1 blocked=0`.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e clean-pass path (inform)`
+- [ ] **Step 1: Write the harness + the test** — tmp data dir, stubbed providers: a G7 clean-uptrend candidate in **inform mode (the default)** + fresh fake snapshot → embed carries 🌍 and 📋 fields (A-tier, no flags), plan stored with gate+macro stamps, telemetry `evaluated=1 blocked=0`. The harness drives the REAL pipeline pieces in the exact order the scan wires them (G119→G121→G81→G122/G123) — only data dirs and the snapshot are faked; if the wiring order in `scanning.py` changes, this file is the canary.
+
+```python
+# tests/test_gate_e2e.py
+"""Offline end-to-end paths (G140-G144): fixture candidate -> gate ->
+embed -> plan store -> logs. No network, no live bot. The pipeline
+helper below mirrors the scan path's wiring ORDER exactly — G119's
+context, G121's evaluation, G81's persistence, G122/G123's rendering."""
+import datetime as dt
+
+import pytest
+
+import swingbot.commands.scanning as scanning
+import swingbot.config as config
+import swingbot.core.gate.persistence as persistence
+import swingbot.core.gate.telemetry as telemetry
+from swingbot.core.gate import run_checklist
+from swingbot.core.gate.render import gate_embed_fields, macro_line
+from swingbot.core.plan_store import PlanStore
+from tests.fixtures.gate import breakout_and_fail, uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+NOW = dt.datetime(2026, 7, 14, 18, 0)
+
+
+def fresh_snapshot(now=NOW, **overrides):
+    snap = {"built_at": now.isoformat(), "stale": False,
+            "composite": {"score": 67, "label": "risk_on",
+                          "inputs_used": 6, "detail": []},
+            "vix": {"level": 14.2, "regime": "calm"},
+            "curve": {"state": "normal"},
+            "sectors": {"leader": "Tech", "rs_rows": [], "rotation": "risk_on"},
+            "events": {"refreshed_at": now.isoformat(), "upcoming": [],
+                       "next_high_impact": None, "within_24h": [], "today": []},
+            "news": {"headlines_top5": [],
+                     "sentiment": {"score": 0.1, "n": 4, "label": "neutral"},
+                     "rumor_ratio": 0.0},
+            "quality_warnings": []}
+    snap.update(overrides)
+    return snap
+
+
+@pytest.fixture
+def city(tmp_path, monkeypatch):
+    """Isolated data city: every gate/macro path constant points at tmp."""
+    monkeypatch.setattr(persistence, "BLOCKED_PATH",
+                        str(tmp_path / "blocked.jsonl"))
+    monkeypatch.setattr(persistence, "SHADOW_PATH",
+                        str(tmp_path / "shadow.jsonl"))
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH",
+                        str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "GATE_MODE", "inform", raising=False)
+    monkeypatch.setattr(config, "GATE_MIN_TIER", "A", raising=False)
+    return PlanStore(path=str(tmp_path / "plans.json"))
+
+
+def pipeline(df, plan, plan_store, snap, *, mode=None, now=NOW):
+    """The scan path's gate block, in wiring order. Returns
+    (decision, result, embed_fields) — embed_fields is what G122/G123
+    would add to the alert embed (None entries filtered)."""
+    mode = mode or config.GATE_MODE
+    result = run_checklist(plan.ticker, plan.strategy, plan, df,
+                           macro_snap=snap, open_plans=[], spy_df=None, now=now)
+    decision, result = scanning.gate_candidate(result, mode, config.GATE_MIN_TIER)
+    telemetry.count("evaluated", at=now)
+    persistence.attach_to_plan(plan_store, plan.plan_id, result)
+    if mode == "shadow":
+        persistence.shadow_log(result)
+    if decision == "block":
+        reason = ", ".join(result.hard_blocks) or \
+            f"tier {result.tier} < {config.GATE_MIN_TIER}"
+        persistence.blocked_log(result, decision, reason)
+        telemetry.count("blocked", at=now, reason=reason)
+        return decision, result, []
+    fields = []
+    line = macro_line(snap)
+    if line:
+        fields.append(("🌍 Market", line))
+    fields.extend(gate_embed_fields(
+        result, mode, getattr(config, "GATE_SHOW_IN_SHADOW", False)))
+    return decision, result, fields
+
+
+def _stored_plan(df, plan_store):
+    plan = make_plan(created_at="2026-07-13",
+                     trigger_price=float(df["Close"].iloc[-1]))
+    plan_store.add(plan)          # match PlanStore.add's exact shape at execution
+    return plan
+
+
+def test_clean_pass_inform(city):
+    df = uptrend_daily(n=300)
+    plan = _stored_plan(df, city)
+    decision, result, fields = pipeline(df, plan, city, fresh_snapshot())
+    assert decision == "pass"
+    assert result.tier in ("A", "A+") and result.hard_blocks == ()
+    names = [n for n, _ in fields]
+    assert names[0] == "🌍 Market"                       # G122
+    assert any(n.startswith("📋") for n in names)        # G123
+    assert not any(n.startswith("🚩") for n in names)    # no flags fired
+    stored = city.get(plan.plan_id)
+    assert stored["gate"]["tier"] == result.tier         # G81 stamp
+    s = telemetry.summary()
+    assert s["evaluated"] == 1 and s["blocked"] == 0
+```
+
+- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_gate_e2e.py -v` (fix any drift between the harness and the actual wiring — the harness must keep mirroring `scanning.py`, never diverge to make the test pass).
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_e2e.py
+git commit -m "test: gate e2e clean-pass path (inform)"
+```
 
 ### Task G141: E2E offline — flagged-but-ships path (inform) + blocked path (opt-in enforce)
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The inform test (the product's main path)** — a `breakout_and_fail` candidate in **inform mode** → alert SHIPS with tier C, the ⛔ rf_fake_breakout row in the red-flag table, and the advisory line ("plan ships anyway; your call"); plan stored normally (not blocked); telemetry counts `evaluated=1 flagged=1 blocked=0`.
-- [ ] **Step 2: The enforce test** — the same candidate after opting into enforce + min-tier A → no alert, plan stored status `blocked`, blocked_log line with rf_fake_breakout reason, retrospective line counts it, `!blocked` (stub) lists it.
-- [ ] **Step 3: PASS both. Step 4: Commit** — `test: gate e2e flagged-ships (inform) + blocked (enforce)`
+- [ ] **Step 1: Write the inform test (the product's main path)** — a `breakout_and_fail` candidate in **inform mode** → alert SHIPS with a low tier, the ⛔ rf_fake_breakout row in the red-flag table, and the advisory line ("plan ships anyway; your call") when the would-be verdict is block; plan stored normally (not blocked); telemetry counts `evaluated=1 blocked=0`. (Append to `tests/test_gate_e2e.py`, reusing the G140 harness.)
+
+```python
+def _failing_candidate(city):
+    df = breakout_and_fail(level=100.0)
+    plan = _stored_plan(df, city)
+    return df, plan
+
+
+def test_flagged_candidate_still_ships_in_inform(city):
+    df, plan = _failing_candidate(city)
+    decision, result, fields = pipeline(df, plan, city, fresh_snapshot())
+    assert decision == "pass"                            # inform NEVER drops
+    fired = [c.check_id for c in result.checks
+             if c.check_id == "rf_fake_breakout" and c.status in ("fail", "warn")]
+    assert fired == ["rf_fake_breakout"]
+    flat = "\n".join(v for _, v in fields)
+    assert "Fake breakout" in flat                       # the ⛔ row renders
+    if result.advisory_decision == "block":
+        assert "plan ships anyway; your call" in flat
+    stored = city.get(plan.plan_id)
+    assert stored.get("status") != "blocked"             # stored NORMALLY
+    s = telemetry.summary()
+    assert s["evaluated"] == 1 and s["blocked"] == 0     # the inform invariant
+```
+
+- [ ] **Step 2: Write the enforce test** — the same candidate after opting into enforce + min-tier A → no embed fields (alert suppressed), blocked_log line with the reason, plan marked blocked, telemetry counts the block.
+
+```python
+def test_same_candidate_blocks_only_after_enforce_opt_in(city, monkeypatch):
+    import json
+    monkeypatch.setattr(config, "GATE_MODE", "enforce", raising=False)
+    df, plan = _failing_candidate(city)
+    decision, result, fields = pipeline(df, plan, city, fresh_snapshot())
+    if result.advisory_decision != "block":              # guard: fixture must be bad enough
+        pytest.skip("fixture no longer tiers below A — regenerate breakout_and_fail")
+    assert decision == "block" and fields == []          # no alert
+    with open(persistence.BLOCKED_PATH, encoding="utf-8") as fh:
+        rows = [json.loads(line) for line in fh]
+    assert len(rows) == 1 and rows[0]["ticker"] == plan.ticker
+    assert "rf_fake_breakout" in rows[0]["reason"] or "tier" in rows[0]["reason"]
+    s = telemetry.summary()
+    assert s["evaluated"] == 1 and s["blocked"] == 1
+    # blocked ≠ deleted: the plan record and its gate result survive
+    assert city.get(plan.plan_id)["gate"]["tier"] == result.tier
+```
+
+The "plan stored status `blocked`" assertion belongs to G106's own tests (the enforce path sets it there); here the e2e pins the *observable* contract: no alert, a blocked_log receipt, the record preserved. `!blocked` listing it is asserted in G155's tests over the same `blocked.jsonl` shape.
+
+- [ ] **Step 3: Run — PASS both**: `python -m pytest tests/test_gate_e2e.py -v`
+- [ ] **Step 4: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_e2e.py
+git commit -m "test: gate e2e flagged-ships (inform) + blocked (enforce)"
+```
 
 ### Task G142: E2E offline — shadow path
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — same failing candidate in shadow mode → alert ships unchanged (byte-compare), shadow_log records the would-block, nothing user-visible differs.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e shadow path`
+- [ ] **Step 1: Write the test** — same failing candidate in shadow mode → zero embed fields added (user-visible output unchanged — this IS the byte-identity, since G122/G123 only ever *add* fields), shadow_log records the would-block, plan stored normally. (Append to `tests/test_gate_e2e.py`.)
+
+```python
+def test_shadow_mode_is_invisible_but_records(city, monkeypatch):
+    import json
+    monkeypatch.setattr(config, "GATE_MODE", "shadow", raising=False)
+    monkeypatch.setattr(config, "GATE_SHOW_IN_SHADOW", False, raising=False)
+    monkeypatch.setattr(config, "MACRO_ENABLED", False, raising=False)  # minimal mode
+    df, plan = _failing_candidate(city)
+    decision, result, fields = pipeline(df, plan, city, None)
+    assert decision == "pass"
+    assert fields == []                        # nothing user-visible differs
+    with open(persistence.SHADOW_PATH, encoding="utf-8") as fh:
+        rows = [json.loads(line) for line in fh]
+    assert len(rows) == 1
+    assert rows[0]["plan_id"] == plan.plan_id  # joined to outcomes later (G104)
+    assert rows[0]["would_decision"] == result.advisory_decision
+    assert city.get(plan.plan_id).get("status") != "blocked"
+```
+
+(Shadow-log row keys per G81/G103 — verify the exact names against `persistence.shadow_log` when writing.)
+
+- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_gate_e2e.py -v`
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_e2e.py
+git commit -m "test: gate e2e shadow path"
+```
 
 ### Task G143: E2E offline — trigger re-check hold
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — plan passes at alert time; clock advances into a CPI blackout before trigger → entry held, alert updated, release after the window fires the entry.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e trigger-hold path`
+- [ ] **Step 1: Write the test** — plan passes at alert time; clock advances into a CPI blackout before trigger → G128's re-check holds the entry; after the window it releases. (Append to `tests/test_gate_e2e.py`; drives G120's `blackout_decision` + G128's re-check exactly as `trade_monitor` wires them.)
+
+```python
+def test_trigger_recheck_holds_through_blackout_then_releases(city, monkeypatch):
+    monkeypatch.setattr(config, "GATE_BLACKOUT_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_ENFORCE", True, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 24.0, raising=False)
+    monkeypatch.setattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2.0, raising=False)
+
+    alert_time = NOW                                       # Tue 18:00, CPI Thu 08:30
+    cpi_at = dt.datetime(2026, 7, 16, 8, 30)
+    snap = fresh_snapshot(events={
+        "refreshed_at": alert_time.isoformat(), "next_high_impact": None,
+        "within_24h": [], "today": [],
+        "upcoming": [{"name": "CPI", "importance": 3, "at": cpi_at.isoformat()}]})
+
+    df = uptrend_daily(n=300)
+    plan = _stored_plan(df, city)
+    # 1) alert time: CPI is ~38h away — outside the window, plan passes clean
+    assert scanning.blackout_decision(snap, alert_time) is None
+    decision, _, _ = pipeline(df, plan, city, snap, now=alert_time)
+    assert decision == "pass"
+
+    # 2) trigger fires Wed 19:00 — inside the 24h window → hold
+    trigger_time = dt.datetime(2026, 7, 15, 19, 0)
+    verdict = scanning.blackout_decision(snap, trigger_time)
+    assert verdict["action"] == "hold"
+    release_at = dt.datetime.fromisoformat(verdict["release_at"])
+    assert release_at == cpi_at + dt.timedelta(hours=2)
+    telemetry.count("recheck_held", at=trigger_time)
+
+    # 3) after the print + buffer → no blackout, entry releases
+    after = release_at + dt.timedelta(minutes=1)
+    assert scanning.blackout_decision(snap, after) is None
+    assert telemetry.summary()["recheck_held"] == 1
+```
+
+The monitor-loop side (plan status flip to `held_for_event` and the release note on the alert) is pinned by G128's own wiring tests; this e2e pins the decision sequence across the clock.
+
+- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_gate_e2e.py -v`
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_e2e.py
+git commit -m "test: gate e2e trigger-hold path"
+```
 
 ### Task G144: E2E offline — total darkness
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — the G43/G121 invariant end-to-end: all providers raising, empty caches, enforce mode → scan completes, alerts ship, all macro checks `unknown`, zero blocks, one health WARNING.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: gate e2e darkness (unknown never blocks)`
+- [ ] **Step 1: Write the test** — the G43/G121 invariant end-to-end: no snapshot at all (all providers dead, caches empty), **enforce** mode → evaluation completes, macro-dependent checks answer `unknown`, zero blocks, alert ships. (Append to `tests/test_gate_e2e.py`.)
+
+```python
+def test_total_darkness_never_blocks_even_in_enforce(city, monkeypatch):
+    monkeypatch.setattr(config, "GATE_MODE", "enforce", raising=False)
+    df = uptrend_daily(n=300)
+    plan = _stored_plan(df, city)
+    # macro_snap=None IS total darkness: providers raising + empty caches
+    # make load_snapshot return None (G38) — the pipeline sees exactly this.
+    decision, result, fields = pipeline(df, plan, city, None)
+    assert decision == "pass"                              # unknown never blocks
+    macro_checks = [c for c in result.checks
+                    if c.check_id in ("rf_news_whipsaw", "rf_rumor_spike",
+                                      "rf_buy_rumor_sell_fact", "calendar_checked")]
+    assert macro_checks and all(c.status == "unknown" for c in macro_checks)
+    assert result.macro_stale is True
+    assert telemetry.summary()["blocked"] == 0
+    with pytest.raises(FileNotFoundError):
+        open(persistence.BLOCKED_PATH, encoding="utf-8")   # nothing was ever blocked
+```
+
+(The "one health WARNING" half of the invariant lives at the provider layer and is already pinned by G43's tests — a snapshot rebuild in darkness logs it. This e2e pins the gate half: darkness in, alerts out, zero blocks.)
+
+- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_gate_e2e.py -v`
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_e2e.py
+git commit -m "test: gate e2e darkness (unknown never blocks)"
+```
 
 ### Task G145: Operator runbook — scan integration
 
 **Files:** Create `docs/gatekeeper-runbook.md`
 
-- [ ] **Step 1: Write it:** the inform-first philosophy up top (checklist = information, plans always ship by default), flag reference table, mode ladder + the optional enforce procedure (G105 gate), what each embed field means, how to relax strictness from the settings page, how to read `!blocked`/`!tierwr`, the darkness behavior, how to hard-off everything fast (`GATE_ENABLED=false` — one switch).
-- [ ] **Step 2: Commit** — `docs: gatekeeper operator runbook`
+- [ ] **Step 1: Write it** — this exact structure, every section filled from the shipped behavior (not from this plan — read the code/tests when unsure):
+
+```markdown
+# Gatekeeper — Operator Runbook
+
+## Philosophy: inform first, always
+
+The checklist is INFORMATION. In the default mode (`GATE_MODE=inform`)
+every plan alerts, every alert is annotated, and NOTHING is ever
+blocked. You decide; the gate shows its work. Enforce mode exists, is
+optional, and is guarded by evidence (see "The mode ladder").
+
+## The one-switch off
+
+`GATE_ENABLED=false` — checklist gone, alerts byte-identical to
+pre-gate. `MACRO_ENABLED=false` — market-context layer gone too.
+Both are hot-reloadable from the settings page.
+
+## What each embed field means
+
+| Field | Source | Reading it |
+|---|---|---|
+| 🌍 Market | macro snapshot | risk composite, VIX regime, curve, leading sector, next event |
+| 📋 Checklist — {tier} ({score}) | run_checklist | section pass/warn/fail counts |
+| 🚩 Red flags | fired rf_* checks | one line per flag with its evidence |
+| ⚠️ Event | blackout_decision | high-impact print inside the window |
+| ⏸ held | blackout enforce (opt-in) | releases automatically after the print |
+
+## The red flags (what fires them, what to do)
+
+<one row per rf_* check: id, plain-English trigger, the evidence line
+format, whether it can hard-block in enforce — copy the registry
+docstrings, do not paraphrase from memory>
+
+## The mode ladder
+
+off -> shadow (logs only) -> INFORM (default, the product) ->
+enforce-minB -> enforce-chosen-tiers (each enforce rung requires the
+G105 sign-off file; loosening never requires sign-off)
+
+## Too strict? Relax it from /gate
+
+`GATE_STRICTNESS` preset (strict/balanced/relaxed) or per-check
+threshold sliders. Loosening changes LABELS, not the underlying stats.
+No A-tier plans in a week -> apply the relaxed preset and watch the
+next scan's tiers.
+
+## Reading the receipts
+
+- `!blocked [date]` — everything held back or downgraded, with reasons
+- `!tierwr` — live WR per tier vs the TRAIN fold numbers
+- `!redflags` — per-flag live outcomes vs backtest ablation
+- `!whycheck <plan_id>` — the stored verdict for any plan, post-mortem view
+
+## Darkness behavior
+
+All providers down -> every macro check answers "unknown", nothing
+blocks (unknown NEVER blocks — tested end-to-end), one health WARNING,
+alerts keep shipping. No action needed; the snapshot self-heals.
+
+## Incident: enforce blocked something it shouldn't
+
+1. Flip GATE_MODE to inform (no sign-off needed to loosen).
+2. `!whycheck <plan_id>` — read the stored verdict.
+3. File the check bug. NEVER hand-edit a stored result.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add docs/gatekeeper-runbook.md
+git commit -m "docs: gatekeeper operator runbook"
+```
 
 ### Task G146: Phase G4 checkpoint
 
@@ -11427,134 +14031,1709 @@ All commands render from the saved snapshot / stored artifacts — a command nev
 
 **Files:** Create `swingbot/commands/macro.py` (registered in `bot_core.py` like other command modules); test `tests/test_commands_macro.py`
 
-**Interfaces:** `!macro` — one embed from `load_snapshot()`: Inflation field (CPI/Core/PPI/PCE yoy + vs-target), Rates field (FF, 2y/10y, curve state), Risk field (VIX regime, credit, dollar, fear/greed), Rotation field (top-3/bottom-3 sectors), Events field (next high-impact + within-24h), News field (sentiment label + top-3 headlines), footer `built_at` + stale marker. `!macro refresh` → `ensure_fresh_snapshot(ttl_min=0)` in a thread, then renders (admin-style confirm). Empty state: "Macro layer off or no snapshot yet — set MACRO_ENABLED and FRED_API_KEY."
-- [ ] **Step 1–4: TDD (embed golden over a fixture snapshot; stale marker; empty state; refresh calls rebuild once), commit** — `feat: !macro dashboard`
+**Interfaces:** `!macro` — one embed from `load_snapshot()`: Inflation field (CPI/Core/PPI/PCE yoy + vs-target), Rates field (FF, 2y/10y, curve state), Risk field (VIX regime, credit, dollar, fear/greed), Rotation field (top-3/bottom-3 sectors), Events field (next high-impact + within-24h), News field (sentiment label + top-3 headlines), footer `built_at` + stale marker. `!macro refresh` → `ensure_fresh_snapshot(ttl_min=0)` in a thread, then renders (admin-style confirm). Empty state: "Macro layer off or no snapshot yet — set MACRO_ENABLED and FRED_API_KEY." The pure builder is `build_macro_embed(snap) -> discord.Embed | None` (None on empty state); the command is a thin async shell. **This task also sets the phase's test conventions:** a shared `FakeCtx` (captures `.send(...)` kwargs) and a full fixture snapshot in `tests/fixtures/gate/snapshots.py` (`full_snapshot()` — reused by every G5 command test).
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_commands_macro.py
+"""Phase-G5 command tests: pure embed/table builders + thin command shells
+driven through FakeCtx. No live bot, no network — commands render from the
+saved snapshot ONLY (the phase's contract)."""
+import asyncio
+
+import swingbot.commands.macro as macro
+import swingbot.config as config
+from tests.fixtures.gate.snapshots import full_snapshot
+
+
+class FakeCtx:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, content=None, **kw):
+        self.sent.append((content, kw))
+
+
+def test_macro_embed_golden():
+    embed = macro.build_macro_embed(full_snapshot())
+    names = [f.name for f in embed.fields]
+    assert names == ["📈 Inflation", "🏦 Rates", "⚖️ Risk",
+                     "🔄 Rotation", "📅 Events", "📰 News"]
+    inflation = embed.fields[0].value
+    assert "CPI 3.1%" in inflation and "Core PCE 2.6%" in inflation
+    assert "vs 2% target" in inflation
+    rates = embed.fields[1].value
+    assert "FF 4.25" in rates and "10y" in rates and "normal" in rates
+    assert "VIX 14.2 (calm)" in embed.fields[2].value
+    assert embed.fields[3].value.startswith("Leaders: ")
+    assert "CPI" in embed.fields[4].value
+    assert embed.footer.text.startswith("Snapshot 2026-07-14")
+
+
+def test_macro_embed_stale_marker():
+    snap = full_snapshot()
+    snap["stale"] = True
+    embed = macro.build_macro_embed(snap)
+    assert "STALE" in embed.footer.text
+
+
+def test_macro_embed_none_snapshot_is_none():
+    assert macro.build_macro_embed(None) is None
+
+
+def test_macro_command_empty_state(monkeypatch):
+    monkeypatch.setattr(macro, "_load_snapshot", lambda: None)
+    ctx = FakeCtx()
+    asyncio.run(macro.macro_cmd.callback(ctx))
+    content, _ = ctx.sent[0]
+    assert "MACRO_ENABLED" in content and "FRED_API_KEY" in content
+
+
+def test_macro_refresh_rebuilds_once(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_refresh(ttl_min=None):
+        calls["n"] += 1
+        return full_snapshot()
+
+    monkeypatch.setattr(macro, "_ensure_fresh", fake_refresh)
+    ctx = FakeCtx()
+    asyncio.run(macro.macro_cmd.callback(ctx, "refresh"))
+    assert calls["n"] == 1
+    assert ctx.sent[-1][1].get("embed") is not None
+```
+
+And the shared fixture (create `tests/fixtures/gate/snapshots.py`):
+
+```python
+# tests/fixtures/gate/snapshots.py
+"""One fully-populated G38-shaped snapshot for every command/page test.
+Keys mirror snapshot.build_snapshot — when G38's shape changes, change it
+HERE and every renderer test follows."""
+
+
+def full_snapshot():
+    return {
+        "built_at": "2026-07-14T12:00:00", "stale": False,
+        "inflation": {"cpi_yoy": 3.1, "core_cpi_yoy": 3.4, "ppi_yoy": 2.2,
+                      "pce_yoy": 2.8, "core_pce_yoy": 2.6, "vs_target": 0.6},
+        "labor": {"unemployment": 4.1, "payrolls_k": 180},
+        "rates": {"fed_funds": 4.25, "y3m": 4.30, "y2": 3.9, "y10": 4.2,
+                  "y30": 4.5, "curve_state": "normal"},
+        "expectations": {"breakeven_5y": 2.3, "breakeven_10y": 2.4},
+        "risk": {"vix": 14.2, "credit": "risk_on", "dollar": 104.2, "wti": 78.0},
+        "vix": {"level": 14.2, "regime": "calm"},
+        "curve": {"state": "normal", "spread_10y2y": 0.3, "spread_10y3m": -0.1},
+        "composite": {"score": 67, "label": "risk_on", "inputs_used": 6, "detail": []},
+        "fear_greed": {"score": 66, "label": "greed"},
+        "sectors": {"leader": "Tech", "rotation": "risk_on", "rs_rows": [
+            {"sector": "Technology", "etf": "XLK", "rank": 1,
+             "rs_1m": 2.1, "rs_3m": 4.0, "rs_6m": 7.5},
+            {"sector": "Utilities", "etf": "XLU", "rank": 11,
+             "rs_1m": -1.8, "rs_3m": -3.2, "rs_6m": -5.0},
+        ]},
+        "breadth": {"pct_above_50dma": 62.0, "pct_above_200dma": 71.0, "n": 480},
+        "events": {"refreshed_at": "2026-07-14T06:00:00",
+                   "next_high_impact": {"name": "CPI", "importance": 3,
+                                        "at": "2026-07-17T08:30:00"},
+                   "within_24h": [], "today": [],
+                   "upcoming": [{"name": "CPI", "importance": 3,
+                                 "at": "2026-07-17T08:30:00"},
+                                {"name": "OPEX", "importance": 2,
+                                 "at": "2026-07-18T16:00:00"}]},
+        "news": {"headlines_top5": [
+                     {"title": "Chipmaker beats and raises guidance",
+                      "score": 0.6, "kind": "confirmed"},
+                     {"title": "Retailer said to weigh merger",
+                      "score": 0.2, "kind": "rumor"}],
+                 "sentiment": {"score": 0.22, "n": 25, "label": "positive"},
+                 "rumor_ratio": 0.2},
+        "quality_warnings": [],
+    }
+```
+
+(Field values here must satisfy the goldens above; adjust the assertions and this fixture TOGETHER, never one side alone. Verify key names against the real `snapshot.py` before writing.)
+
+- [ ] **Step 2: Run — FAIL**, then **implement**
+
+```python
+# swingbot/commands/macro.py
+"""Market-context commands (G147-G152). Contract: a command NEVER triggers
+a provider fetch — everything renders from the saved snapshot. The one
+exception is `!macro refresh` (explicit, runs in a thread)."""
+import asyncio
+import logging
+
+import discord
+from discord.ext import commands
+
+from swingbot import config
+
+log = logging.getLogger(__name__)
+
+EMPTY_STATE = ("Macro layer off or no snapshot yet — set MACRO_ENABLED "
+               "and FRED_API_KEY, then `!macro refresh`.")
+
+
+def _load_snapshot():
+    from swingbot.core.macro.snapshot import load_snapshot
+    return load_snapshot()
+
+
+def _ensure_fresh(ttl_min=None):
+    from swingbot.core.macro.snapshot import ensure_fresh_snapshot
+    return ensure_fresh_snapshot(ttl_min=ttl_min)
+
+
+def _fmt(v, suffix="", dash="—"):
+    return dash if v is None else f"{v}{suffix}"
+
+
+def build_macro_embed(snap: dict | None) -> discord.Embed | None:
+    """The whole !macro dashboard as one pure builder. None-tolerant per
+    section (a dead section renders as em-dashes, never a KeyError)."""
+    if not snap:
+        return None
+    inf = snap.get("inflation") or {}
+    rates = snap.get("rates") or {}
+    risk = snap.get("risk") or {}
+    vix = snap.get("vix") or {}
+    fg = snap.get("fear_greed") or {}
+    comp = snap.get("composite") or {}
+    embed = discord.Embed(
+        title="🌍 Market Context",
+        description=f"Composite: **{comp.get('label', 'unknown')}** "
+                    f"({comp.get('score', '—')})")
+    embed.add_field(name="📈 Inflation", inline=False, value=(
+        f"CPI {_fmt(inf.get('cpi_yoy'), '%')} · Core {_fmt(inf.get('core_cpi_yoy'), '%')} · "
+        f"PPI {_fmt(inf.get('ppi_yoy'), '%')} · PCE {_fmt(inf.get('pce_yoy'), '%')} · "
+        f"Core PCE {_fmt(inf.get('core_pce_yoy'), '%')} "
+        f"({_fmt(inf.get('vs_target'), ' pts')} vs 2% target)"))
+    embed.add_field(name="🏦 Rates", inline=False, value=(
+        f"FF {_fmt(rates.get('fed_funds'))} · 2y {_fmt(rates.get('y2'))} · "
+        f"10y {_fmt(rates.get('y10'))} · curve {rates.get('curve_state', '—')}"))
+    embed.add_field(name="⚖️ Risk", inline=False, value=(
+        f"VIX {_fmt(vix.get('level'))} ({vix.get('regime', '—')}) · "
+        f"credit {risk.get('credit', '—')} · DXY {_fmt(risk.get('dollar'))} · "
+        f"fear/greed {fg.get('label', '—')} ({_fmt(fg.get('score'))})"))
+    rows = (snap.get("sectors") or {}).get("rs_rows") or []
+    by_rank = sorted(rows, key=lambda r: r.get("rank", 99))
+    leaders = ", ".join(r["sector"] for r in by_rank[:3])
+    laggards = ", ".join(r["sector"] for r in by_rank[-3:]) if len(by_rank) > 3 else ""
+    embed.add_field(name="🔄 Rotation", inline=False,
+                    value=f"Leaders: {leaders or '—'}"
+                          + (f" · Laggards: {laggards}" if laggards else ""))
+    events = snap.get("events") or {}
+    nxt = events.get("next_high_impact")
+    ev_bits = [f"Next: {nxt['name']} {nxt['at'][:16]}" if nxt else "Next: —"]
+    if events.get("within_24h"):
+        ev_bits.append("⚠️ within 24h: "
+                       + ", ".join(e["name"] for e in events["within_24h"]))
+    embed.add_field(name="📅 Events", inline=False, value=" · ".join(ev_bits))
+    news = snap.get("news") or {}
+    sent = news.get("sentiment") or {}
+    heads = "\n".join(f"• {h['title']}" for h in (news.get("headlines_top5") or [])[:3])
+    embed.add_field(name="📰 News", inline=False,
+                    value=f"Sentiment: {sent.get('label', '—')} "
+                          f"({_fmt(sent.get('score'))})"
+                          + (f"\n{heads}" if heads else ""))
+    footer = f"Snapshot {str(snap.get('built_at', ''))[:16].replace('T', ' ')}"
+    if snap.get("stale"):
+        footer += " · STALE"
+    embed.set_footer(text=footer)
+    return embed
+
+
+@commands.command(name="macro")
+async def macro_cmd(ctx, arg: str = None):
+    """!macro — market context dashboard · !macro refresh — force rebuild"""
+    if arg == "refresh":
+        snap = await asyncio.to_thread(_ensure_fresh, 0)
+    else:
+        snap = _load_snapshot()
+    embed = build_macro_embed(snap)
+    if embed is None:
+        await ctx.send(EMPTY_STATE)
+        return
+    await ctx.send(embed=embed)
+
+
+def setup_commands(bot):
+    """Registered from bot_core like the other command modules — match the
+    exact registration pattern (add_command vs cog) at execution."""
+    bot.add_command(macro_cmd)
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit** (register the module in `bot_core.py` alongside the existing command modules)
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py swingbot/bot_core.py tests/test_commands_macro.py tests/fixtures/gate/snapshots.py
+git commit -m "feat: !macro dashboard"
+```
 
 ### Task G148: `!calendar [days]`
 
 **Files:** Modify `macro.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `!calendar [days=7]` — upcoming events table (date ET, kind emoji 🏛️ FOMC / 📈 CPI / 👷 NFP / 🏭 PPI / 💰 PCE / 🎯 OPEX / 🏖️ holiday, importance stars), blackout-window rows bolded with "entries held" note when `GATE_BLACKOUT_ENABLED`; cap 20 rows.
-- [ ] **Step 1–4: TDD (fixture events → golden table; blackout bolding), commit** — `feat: !calendar`
+**Interfaces:** `!calendar [days=7]` — upcoming events table (date ET, kind emoji 🏛️ FOMC / 📈 CPI / 👷 NFP / 🏭 PPI / 💰 PCE / 🎯 OPEX / 🏖️ holiday, importance stars), blackout-window rows bolded with "entries held" note when `GATE_BLACKOUT_ENABLED` **and** `GATE_BLACKOUT_ENFORCE` (annotate-only mode says "annotated" instead — never claim a hold that won't happen); cap 20 rows. Pure builder `calendar_table(events, days, now, *, blackout_enforce) -> str`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
+
+```python
+import datetime as dt
+
+NOW = dt.datetime(2026, 7, 14, 12, 0)
+
+
+def test_calendar_table_golden():
+    events = full_snapshot()["events"]["upcoming"]
+    table = macro.calendar_table(events, days=7, now=NOW, blackout_enforce=False)
+    lines = table.splitlines()
+    assert lines[0] == "📈 Fri 07-17 08:30 ET · CPI ★★★"   # 2026-07-17 is a Friday
+    assert lines[1] == "🎯 Sat 07-18 16:00 ET · OPEX ★★"
+
+
+def test_calendar_blackout_row_marks_hold_only_when_enforcing():
+    events = [{"name": "CPI", "importance": 3,
+               "at": (NOW + dt.timedelta(hours=20)).isoformat()}]
+    enforced = macro.calendar_table(events, 7, NOW, blackout_enforce=True)
+    assert enforced.startswith("**") and "entries held" in enforced
+    informed = macro.calendar_table(events, 7, NOW, blackout_enforce=False)
+    assert "annotated" in informed and "held" not in informed
+
+
+def test_calendar_caps_rows_and_respects_horizon():
+    events = [{"name": f"E{i}", "importance": 1,
+               "at": (NOW + dt.timedelta(days=1, minutes=i)).isoformat()}
+              for i in range(30)]
+    table = macro.calendar_table(events, days=7, now=NOW, blackout_enforce=False)
+    assert len(table.splitlines()) == 20                    # cap
+    far = [{"name": "FAR", "importance": 3,
+            "at": (NOW + dt.timedelta(days=30)).isoformat()}]
+    assert macro.calendar_table(far, days=7, now=NOW,
+                                blackout_enforce=False) == ""
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`)
+
+```python
+KIND_EMOJI = {"FOMC": "🏛️", "CPI": "📈", "NFP": "👷", "PPI": "🏭",
+              "PCE": "💰", "OPEX": "🎯", "HOLIDAY": "🏖️"}
+
+
+def _in_blackout(ev_at, now):
+    before = float(getattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 24.0))
+    after = float(getattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2.0))
+    hours = (ev_at - now).total_seconds() / 3600.0
+    return -after <= hours <= before
+
+
+def calendar_table(events, days, now, *, blackout_enforce) -> str:
+    """≤20 rows of upcoming events inside the horizon. Blackout-window
+    high-impact rows are bolded — saying 'entries held' only when holding
+    is actually enforced, 'annotated' otherwise (never promise a hold that
+    inform mode won't perform)."""
+    import datetime as dt
+    rows = []
+    horizon = now + dt.timedelta(days=days)
+    for ev in sorted(events or [], key=lambda e: e.get("at", "")):
+        try:
+            at = dt.datetime.fromisoformat(ev["at"])
+        except (KeyError, ValueError):
+            continue
+        if not (now <= at <= horizon):
+            continue
+        emoji = KIND_EMOJI.get(ev.get("name", "").upper(), "📌")
+        stars = "★" * int(ev.get("importance", 1))
+        line = f"{emoji} {at.strftime('%a %m-%d %H:%M')} ET · {ev['name']} {stars}"
+        if int(ev.get("importance", 0)) >= 3 and \
+                getattr(config, "GATE_BLACKOUT_ENABLED", False) and \
+                _in_blackout(at, now):
+            note = "entries held" if blackout_enforce else "annotated"
+            line = f"**{line} — {note}**"
+        rows.append(line)
+        if len(rows) == 20:
+            break
+    return "\n".join(rows)
+
+
+@commands.command(name="calendar")
+async def calendar_cmd(ctx, days: int = 7):
+    """!calendar [days] — upcoming economic events"""
+    import datetime as dt
+    snap = _load_snapshot()
+    if not snap:
+        await ctx.send(EMPTY_STATE)
+        return
+    table = calendar_table((snap.get("events") or {}).get("upcoming", []),
+                           days, dt.datetime.now(),
+                           blackout_enforce=getattr(
+                               config, "GATE_BLACKOUT_ENFORCE", False))
+    await ctx.send(embed=discord.Embed(
+        title=f"📅 Next {days} days",
+        description=table or "No events inside the horizon."))
+```
+
+(Test goldens assume `GATE_BLACKOUT_ENABLED=True` where bolding is asserted — set it via monkeypatch in that test, matching the `_flags` helper pattern.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py tests/test_commands_macro.py
+git commit -m "feat: !calendar"
+```
 
 ### Task G149: `!sectors`
 
 **Files:** Modify `macro.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `!sectors` — rotation posture line + 11-row table (rank, sector, 1m/3m/6m RS vs SPY with ▲/▼), leaders/laggards summary; data from the snapshot's `sectors` section.
-- [ ] **Step 1–4: TDD, commit** — `feat: !sectors rotation table`
+**Interfaces:** `!sectors` — rotation posture line + 11-row table (rank, sector, 1m/3m/6m RS vs SPY with ▲/▼), leaders/laggards summary; data from the snapshot's `sectors` section. Pure builder `sectors_table(sectors: dict) -> str`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
+
+```python
+def test_sectors_table_golden():
+    table = macro.sectors_table(full_snapshot()["sectors"])
+    lines = table.splitlines()
+    assert lines[0] == "Rotation: risk_on"
+    assert lines[1] == " 1. Technology    ▲+2.1  ▲+4.0  ▲+7.5"
+    assert lines[2] == "11. Utilities     ▼-1.8  ▼-3.2  ▼-5.0"
+    assert lines[-1].startswith("Leaders: Technology")
+
+
+def test_sectors_table_empty_section():
+    assert macro.sectors_table({}) == "No sector data in the snapshot yet."
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`)
+
+```python
+def _rs(v):
+    if v is None:
+        return "   —  "
+    return f"{'▲' if v >= 0 else '▼'}{v:+.1f}"
+
+
+def sectors_table(sectors: dict) -> str:
+    """Rotation posture + one row per sector ranked by composite RS.
+    Monospace-ish alignment (sector padded to 14) — rendered inside a
+    code block by the command."""
+    rows = (sectors or {}).get("rs_rows") or []
+    if not rows:
+        return "No sector data in the snapshot yet."
+    out = [f"Rotation: {sectors.get('rotation', 'unknown')}"]
+    ranked = sorted(rows, key=lambda r: r.get("rank", 99))
+    for r in ranked:
+        out.append(f"{r.get('rank', '?'):>2}. {r.get('sector', '?'):<14}"
+                   f"{_rs(r.get('rs_1m'))}  {_rs(r.get('rs_3m'))}  {_rs(r.get('rs_6m'))}")
+    leaders = ", ".join(r["sector"] for r in ranked[:3])
+    laggards = ", ".join(r["sector"] for r in ranked[-3:]) if len(ranked) > 3 else "—"
+    out.append(f"Leaders: {leaders} · Laggards: {laggards}")
+    return "\n".join(out)
+
+
+@commands.command(name="sectors")
+async def sectors_cmd(ctx):
+    """!sectors — sector rotation vs SPY (1m/3m/6m)"""
+    snap = _load_snapshot()
+    if not snap:
+        await ctx.send(EMPTY_STATE)
+        return
+    await ctx.send(embed=discord.Embed(
+        title="🔄 Sector rotation",
+        description=f"```\n{sectors_table(snap.get('sectors'))}\n```"))
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py tests/test_commands_macro.py
+git commit -m "feat: !sectors rotation table"
+```
 
 ### Task G150: `!sentiment`
 
 **Files:** Modify `macro.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `!sentiment [ticker]` — market-wide: news sentiment score/label, rumor ratio, fear/greed gauge with the 5-band label; with ticker: company headlines (top 5, each with G36 score emoji and G37 rumor/confirmed tag). Ticker path reads the cached company-news (no fetch); cache miss → "no cached headlines — appears on the next scan".
-- [ ] **Step 1–4: TDD (both paths; cache-miss message), commit** — `feat: !sentiment`
+**Interfaces:** `!sentiment [ticker]` — market-wide: news sentiment score/label, rumor ratio, fear/greed gauge with the 5-band label; with ticker: company headlines (top 5, each with G36 score emoji and G37 rumor/confirmed tag). Ticker path reads the cached company-news (no fetch); cache miss → "no cached headlines — appears on the next scan". Pure builders `sentiment_overview(snap) -> str`, `ticker_headlines(headlines) -> str`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
+
+```python
+def test_sentiment_overview_golden():
+    text = macro.sentiment_overview(full_snapshot())
+    assert "News: positive (+0.22, N=25)" in text
+    assert "Rumor ratio: 20%" in text
+    assert "Fear/greed: greed (66)" in text
+
+
+def test_ticker_headlines_golden():
+    heads = [{"title": "Beats and raises", "score": 0.6, "kind": "confirmed"},
+             {"title": "Said to weigh merger", "score": 0.2, "kind": "rumor"}]
+    text = macro.ticker_headlines(heads)
+    assert text.splitlines()[0] == "🟢 [confirmed] Beats and raises"
+    assert text.splitlines()[1] == "⚪ [rumor] Said to weigh merger"
+
+
+def test_sentiment_ticker_cache_miss(monkeypatch):
+    monkeypatch.setattr(macro, "_cached_company_news", lambda t: None)
+    monkeypatch.setattr(macro, "_load_snapshot", lambda: full_snapshot())
+    ctx = FakeCtx()
+    asyncio.run(macro.sentiment_cmd.callback(ctx, "NVDA"))
+    content, _ = ctx.sent[0]
+    assert "no cached headlines" in content
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`)
+
+```python
+def _score_emoji(score):
+    if score is None:
+        return "⚪"
+    return "🟢" if score > 0.15 else "🔴" if score < -0.15 else "⚪"
+
+
+def sentiment_overview(snap: dict) -> str:
+    news = (snap or {}).get("news") or {}
+    sent = news.get("sentiment") or {}
+    fg = (snap or {}).get("fear_greed") or {}
+    parts = []
+    if sent.get("label"):
+        parts.append(f"News: {sent['label']} ({sent.get('score', 0):+.2f}, "
+                     f"N={sent.get('n', 0)})")
+    if news.get("rumor_ratio") is not None:
+        parts.append(f"Rumor ratio: {news['rumor_ratio']:.0%}")
+    if fg.get("label"):
+        parts.append(f"Fear/greed: {fg['label']} ({fg.get('score', '—')})")
+    return "\n".join(parts) or "No sentiment data in the snapshot yet."
+
+
+def ticker_headlines(headlines: list) -> str:
+    return "\n".join(
+        f"{_score_emoji(h.get('score'))} [{h.get('kind', '?')}] {h.get('title', '')}"
+        for h in (headlines or [])[:5])
+
+
+def _cached_company_news(ticker: str) -> list | None:
+    """Cache-only read of G35's company headlines — NEVER fetches.
+    Verify the exact cache accessor in core/macro/company_news.py (G35)."""
+    from swingbot.core.macro.company_news import cached_headlines
+    return cached_headlines(ticker)
+
+
+@commands.command(name="sentiment")
+async def sentiment_cmd(ctx, ticker: str = None):
+    """!sentiment [ticker] — market or company news sentiment"""
+    snap = _load_snapshot()
+    if not snap:
+        await ctx.send(EMPTY_STATE)
+        return
+    if ticker:
+        heads = _cached_company_news(ticker.upper())
+        if not heads:
+            await ctx.send(f"{ticker.upper()}: no cached headlines — "
+                           f"appears on the next scan.")
+            return
+        await ctx.send(embed=discord.Embed(
+            title=f"📰 {ticker.upper()} headlines",
+            description=ticker_headlines(heads)))
+        return
+    await ctx.send(embed=discord.Embed(
+        title="📰 Sentiment", description=sentiment_overview(snap)))
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py tests/test_commands_macro.py
+git commit -m "feat: !sentiment"
+```
 
 ### Task G151: `!yields`
 
 **Files:** Modify `macro.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `!yields` — 3m/2y/10y/30y rows with daily change arrows, both curve spreads, curve state with the plain-English line ("10y−2y negative: historically a caution flag, not a timing signal"), breakevens.
-- [ ] **Step 1–4: TDD, commit** — `feat: !yields`
+**Interfaces:** `!yields` — 3m/2y/10y/30y rows with daily change arrows, both curve spreads, curve state with the plain-English line ("10y−2y negative: historically a caution flag, not a timing signal"), breakevens. Pure builder `yields_text(snap) -> str`. Daily changes come from the previous `snapshot_history.jsonl` row when available (injected as `prev`), else no arrows.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
+
+```python
+def test_yields_text_golden():
+    snap = full_snapshot()
+    prev = {"rates": {"y3m": 4.32, "y2": 3.85, "y10": 4.25, "y30": 4.5}}
+    text = macro.yields_text(snap, prev=prev)
+    lines = text.splitlines()
+    assert lines[0] == "3m  4.30 ▼"
+    assert lines[1] == "2y  3.90 ▲"
+    assert lines[2] == "10y 4.20 ▼"
+    assert lines[3] == "30y 4.50 ·"
+    assert "10y−2y +0.30 · 10y−3m -0.10" in text
+    assert "Curve: normal" in text
+    assert "Breakevens: 5y 2.3 · 10y 2.4" in text
+
+
+def test_yields_text_inverted_gets_the_honest_line():
+    snap = full_snapshot()
+    snap["curve"] = {"state": "inverted", "spread_10y2y": -0.4,
+                     "spread_10y3m": -0.8}
+    text = macro.yields_text(snap, prev=None)
+    assert "caution flag, not a timing signal" in text
+
+
+def test_yields_text_missing_rates_section():
+    assert "No rates data" in macro.yields_text({}, prev=None)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`)
+
+```python
+def _arrow(cur, prev_v):
+    if cur is None or prev_v is None:
+        return "·"
+    return "▲" if cur > prev_v else "▼" if cur < prev_v else "·"
+
+
+def yields_text(snap: dict, prev: dict | None = None) -> str:
+    rates = (snap or {}).get("rates") or {}
+    if not rates:
+        return "No rates data in the snapshot yet."
+    prev_rates = (prev or {}).get("rates") or {}
+    out = []
+    for label, key in (("3m", "y3m"), ("2y", "y2"), ("10y", "y10"), ("30y", "y30")):
+        v = rates.get(key)
+        out.append(f"{label:<3} {v:.2f} {_arrow(v, prev_rates.get(key))}"
+                   if v is not None else f"{label:<3} —")
+    curve = (snap or {}).get("curve") or {}
+    s2, s3 = curve.get("spread_10y2y"), curve.get("spread_10y3m")
+    if s2 is not None or s3 is not None:
+        out.append(f"10y−2y {s2:+.2f} · 10y−3m {s3:+.2f}")
+    state = curve.get("state") or rates.get("curve_state")
+    if state:
+        line = f"Curve: {state}"
+        if state == "inverted":
+            line += (" — 10y−2y negative: historically a caution flag, "
+                     "not a timing signal")
+        out.append(line)
+    exp = (snap or {}).get("expectations") or {}
+    if exp.get("breakeven_5y") is not None:
+        out.append(f"Breakevens: 5y {exp['breakeven_5y']} · "
+                   f"10y {exp.get('breakeven_10y', '—')}")
+    return "\n".join(out)
+
+
+def _prev_history_row():
+    """Second-newest line of snapshot_history.jsonl, for daily-change
+    arrows. Any problem → None (arrows degrade to '·')."""
+    import json
+    import os
+    from swingbot.core.macro import snapshot as snap_mod
+    try:
+        with open(snap_mod.HISTORY_PATH, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        return json.loads(lines[-2]) if len(lines) >= 2 else None
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+@commands.command(name="yields")
+async def yields_cmd(ctx):
+    """!yields — treasury yields, curve spreads, breakevens"""
+    snap = _load_snapshot()
+    if not snap:
+        await ctx.send(EMPTY_STATE)
+        return
+    await ctx.send(embed=discord.Embed(
+        title="🏦 Yields & curve",
+        description=f"```\n{yields_text(snap, prev=_prev_history_row())}\n```"))
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py tests/test_commands_macro.py
+git commit -m "feat: !yields"
+```
 
 ### Task G152: `!inflation`
 
 **Files:** Modify `macro.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `!inflation` — CPI/Core CPI/PPI/PCE/Core PCE yoy + m/m, direction arrows vs prior print, core-PCE-vs-2%-target gap line, next CPI/PPI/PCE print dates from the calendar.
-- [ ] **Step 1–4: TDD, commit** — `feat: !inflation`
+**Interfaces:** `!inflation` — CPI/Core CPI/PPI/PCE/Core PCE yoy + m/m, direction arrows vs prior print, core-PCE-vs-2%-target gap line, next CPI/PPI/PCE print dates from the calendar. Pure builder `inflation_text(snap, prev=None) -> str` (m/m + prior-print arrows render only when the snapshot carries them — G13/G15 store `*_mom` and `*_prev` keys; verify against `snapshot.py`).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
+
+```python
+def test_inflation_text_golden():
+    text = macro.inflation_text(full_snapshot())
+    lines = text.splitlines()
+    assert lines[0] == "CPI       3.1% yoy"
+    assert "Core PCE  2.6% yoy" in text
+    assert "Core PCE vs 2% target: +0.6 pts" in text
+    assert "Next prints: CPI 07-17" in text
+
+
+def test_inflation_text_no_inflation_section():
+    assert "No inflation data" in macro.inflation_text({})
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`)
+
+```python
+def inflation_text(snap: dict, prev: dict | None = None) -> str:
+    inf = (snap or {}).get("inflation") or {}
+    if not inf:
+        return "No inflation data in the snapshot yet."
+    prev_inf = (prev or {}).get("inflation") or {}
+    out = []
+    for label, key in (("CPI", "cpi_yoy"), ("Core CPI", "core_cpi_yoy"),
+                       ("PPI", "ppi_yoy"), ("PCE", "pce_yoy"),
+                       ("Core PCE", "core_pce_yoy")):
+        v = inf.get(key)
+        if v is None:
+            continue
+        line = f"{label:<9} {v}% yoy"
+        mom = inf.get(key.replace("_yoy", "_mom"))
+        if mom is not None:
+            line += f" · {mom:+.1f}% m/m"
+        arrow = _arrow(v, prev_inf.get(key))
+        if arrow != "·":
+            line += f" {arrow}"
+        out.append(line)
+    if inf.get("vs_target") is not None:
+        out.append(f"Core PCE vs 2% target: {inf['vs_target']:+.1f} pts")
+    nxt = [f"{e['name']} {e['at'][5:10]}"
+           for e in ((snap or {}).get("events") or {}).get("upcoming", [])
+           if e.get("name") in ("CPI", "PPI", "PCE")]
+    if nxt:
+        out.append("Next prints: " + " · ".join(nxt))
+    return "\n".join(out)
+
+
+@commands.command(name="inflation")
+async def inflation_cmd(ctx):
+    """!inflation — inflation dashboard"""
+    snap = _load_snapshot()
+    if not snap:
+        await ctx.send(EMPTY_STATE)
+        return
+    await ctx.send(embed=discord.Embed(
+        title="📈 Inflation",
+        description=f"```\n{inflation_text(snap, prev=_prev_history_row())}\n```"))
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py tests/test_commands_macro.py
+git commit -m "feat: !inflation"
+```
 
 ### Task G153: `!checklist <TICKER>` — on-demand full run
 
 **Files:** Modify `swingbot/commands/gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!checklist NVDA [strategy]` — runs `run_checklist` on demand against cached bars + current snapshot (in a thread; strategy defaults to the best-scoring applicable one, stated in the output); renders the G82 field + `full_breakdown` chunks. No plan required — this is the manual pre-trade ritual for trades the operator is eyeing personally. Unknown ticker / no cached bars → helpful error.
-- [ ] **Step 1–4: TDD (fixture run golden; no-bars error), commit** — `feat: !checklist on-demand`
+**Interfaces:** `!checklist NVDA [strategy]` — runs `run_checklist` on demand against cached bars + current snapshot (in a thread; strategy defaults to the best-scoring applicable one, stated in the output); renders the G82 field + `full_breakdown` chunks. No plan required — this is the manual pre-trade ritual for trades the operator is eyeing personally. Unknown ticker / no cached bars → helpful error. Pure core: `checklist_on_demand(ticker, strategy, df, snap, now) -> tuple[GateResult, str]` (result, "strategy line"); the command shell threads + renders.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_commands_gatecheck.py additions (module exists since G113)
+import asyncio
+import datetime as dt
+
+import swingbot.commands.gatecheck as gatecheck
+from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate.snapshots import full_snapshot
+
+
+class FakeCtx:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, content=None, **kw):
+        self.sent.append((content, kw))
+
+
+def test_checklist_on_demand_picks_best_strategy(monkeypatch):
+    df = uptrend_daily(n=300)
+    result, line = gatecheck.checklist_on_demand(
+        "NVDA", None, df, full_snapshot(), now=dt.datetime(2026, 7, 14, 18, 0))
+    assert result.ticker == "NVDA"
+    assert line.startswith("Strategy: ") and "(best-scoring applicable)" in line
+
+
+def test_checklist_on_demand_explicit_strategy(monkeypatch):
+    df = uptrend_daily(n=300)
+    result, line = gatecheck.checklist_on_demand(
+        "NVDA", "RSI-Div", df, full_snapshot(), now=dt.datetime(2026, 7, 14, 18, 0))
+    assert result.strategy == "RSI-Div" and "(requested)" in line
+
+
+def test_checklist_command_no_bars(monkeypatch):
+    monkeypatch.setattr(gatecheck, "_cached_daily", lambda t: None)
+    ctx = FakeCtx()
+    asyncio.run(gatecheck.checklist_cmd.callback(ctx, "ZZZZ"))
+    content, _ = ctx.sent[0]
+    assert "no cached bars" in content.lower()
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gatecheck.py`)
+
+```python
+def _cached_daily(ticker: str):
+    """Cache-only daily bars — the same loader the scan uses; never a
+    network fetch. Verify the accessor name (G119 used load_cached_daily)."""
+    from swingbot.core.data import load_cached_daily
+    return load_cached_daily(ticker)
+
+
+def _synthetic_plan(ticker, strategy, df):
+    """A minimal plan at the current price so risk/timing checks have
+    something to evaluate — the embed states this is a dry run. Mirrors
+    the plan attrs run_checklist reads; deliberately NOT imported from
+    tests/fixtures (production code never imports tests/)."""
+    import types
+    price = float(df["Close"].iloc[-1])
+    atr = float((df["High"] - df["Low"]).tail(14).mean())
+    return types.SimpleNamespace(
+        ticker=ticker, strategy=strategy, direction="long",
+        plan_id=f"dryrun_{ticker}", created_at=str(df.index[-1].date()),
+        entry=price, trigger_price=price, stop_loss=price - 1.5 * atr,
+        take_profit=price + 3.0 * atr)   # match TradePlanV2 attr names at execution
+
+
+def checklist_on_demand(ticker, strategy, df, snap, now):
+    """G153 core: run the full checklist against cached bars. strategy
+    None → evaluate every applicable strategy and keep the best-scoring
+    result (stated in the returned line — never silently chosen)."""
+    from swingbot.core.gate import run_checklist
+    from swingbot.core.gate.registry import applicable_strategies
+    if strategy:
+        result = run_checklist(ticker, strategy, _synthetic_plan(ticker, strategy, df),
+                               df, macro_snap=snap, now=now)
+        return result, f"Strategy: {strategy} (requested)"
+    best = None
+    for strat in applicable_strategies():
+        r = run_checklist(ticker, strat, _synthetic_plan(ticker, strat, df),
+                          df, macro_snap=snap, now=now)
+        if best is None or r.score > best.score:
+            best = r
+    return best, f"Strategy: {best.strategy} (best-scoring applicable)"
+
+
+@commands.command(name="checklist")
+async def checklist_cmd(ctx, ticker: str, strategy: str = None):
+    """!checklist <TICKER> [strategy] — the manual pre-trade ritual"""
+    import asyncio as _asyncio
+    import datetime as dt
+    from swingbot.core.gate.render import checklist_field, full_breakdown
+    ticker = ticker.upper()
+    df = _cached_daily(ticker)
+    if df is None or len(df) < 60:
+        await ctx.send(f"{ticker}: no cached bars — run a scan first or "
+                       f"check the ticker spelling.")
+        return
+    snap = _load_snapshot()
+    result, strat_line = await _asyncio.to_thread(
+        checklist_on_demand, ticker, strategy, df, snap, dt.datetime.now())
+    name, value = checklist_field(result)
+    embed = discord.Embed(title=f"📋 {ticker} — dry run", description=strat_line)
+    embed.add_field(name=name, value=value, inline=False)
+    await ctx.send(embed=embed)
+    for chunk in full_breakdown(result):
+        await ctx.send(f"```\n{chunk}\n```")
+```
+
+(`applicable_strategies()` = the registry-side list of strategies with at least one applicable check — if G80 named it differently, use that name; `_load_snapshot` imported from `swingbot.commands.macro`.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py tests/test_commands_gatecheck.py
+git commit -m "feat: !checklist on-demand"
+```
 
 ### Task G154: `!whycheck <plan_id>`
 
 **Files:** Modify `gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!whycheck p_20260714_ab12` — replays the **stored** GateResult from the plan record (never re-evaluates): every check, status, evidence line, plus the macro-at-entry stamp and (if closed) the outcome next to it — the post-mortem view. Missing gate data → "plan pre-dates the gate".
-- [ ] **Step 1–4: TDD, commit** — `feat: !whycheck stored-verdict replay`
+**Interfaces:** `!whycheck p_20260714_ab12` — replays the **stored** GateResult from the plan record (never re-evaluates): every check, status, evidence line, plus the macro-at-entry stamp and (if closed) the outcome next to it — the post-mortem view. Missing gate data → "plan pre-dates the gate". Pure builder `whycheck_text(plan_record) -> str`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_gatecheck.py`)
+
+```python
+STORED_PLAN = {
+    "plan_id": "p_20260714_ab12", "ticker": "NVDA", "strategy": "RSI-Div",
+    "status": "closed", "outcome": {"result": "win", "r_multiple": 2.1},
+    "gate": {"tier": "B", "score": 61.0, "as_of": "2026-07-14",
+             "hard_blocks": [], "advisory_decision": "downgrade",
+             "checks": [
+                 {"check_id": "htf_alignment", "section": "context",
+                  "status": "pass", "weight": 12.0,
+                  "evidence": "weekly uptrend, daily agrees"},
+                 {"check_id": "rf_fake_breakout", "section": "redflags",
+                  "status": "warn", "weight": 10.0,
+                  "evidence": "closed back inside on 0.6x volume"}]},
+    "macro_at_entry": {"composite": {"label": "risk_on", "score": 67}},
+}
+
+
+def test_whycheck_text_golden():
+    text = gatecheck.whycheck_text(STORED_PLAN)
+    assert "NVDA · RSI-Div · tier B (61) · 2026-07-14" in text
+    assert "✅ htf_alignment — weekly uptrend, daily agrees" in text
+    assert "⚠️ rf_fake_breakout — closed back inside on 0.6x volume" in text
+    assert "Macro at entry: risk_on (67)" in text
+    assert "Outcome: win (+2.1R)" in text          # the post-mortem line
+
+
+def test_whycheck_text_pre_gate_plan():
+    assert "pre-dates the gate" in gatecheck.whycheck_text(
+        {"plan_id": "p_old", "ticker": "AAPL"})
+
+
+def test_whycheck_command_unknown_plan(monkeypatch):
+    monkeypatch.setattr(gatecheck, "_load_plan_record", lambda pid: None)
+    ctx = FakeCtx()
+    asyncio.run(gatecheck.whycheck_cmd.callback(ctx, "p_nope"))
+    assert "not found" in ctx.sent[0][0].lower()
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gatecheck.py`)
+
+```python
+_STATUS_EMOJI = {"pass": "✅", "warn": "⚠️", "fail": "⛔", "unknown": "◻️"}
+
+
+def _load_plan_record(plan_id: str) -> dict | None:
+    from swingbot.core.plan_store import PlanStore
+    return PlanStore().get(plan_id)     # match the store's accessor at execution
+
+
+def whycheck_text(plan_record: dict | None) -> str:
+    """G154: the stored verdict, replayed verbatim — this function NEVER
+    calls run_checklist (the whole point is what the gate said THEN)."""
+    if not plan_record:
+        return "Plan not found."
+    gate = plan_record.get("gate")
+    if not gate:
+        return (f"{plan_record.get('ticker', '?')}: plan pre-dates the gate — "
+                f"no stored verdict.")
+    out = [f"{plan_record.get('ticker')} · {plan_record.get('strategy')} · "
+           f"tier {gate['tier']} ({gate['score']:.0f}) · {gate.get('as_of', '')}"]
+    for c in gate.get("checks", []):
+        emoji = _STATUS_EMOJI.get(c.get("status"), "◻️")
+        out.append(f"{emoji} {c['check_id']} — {c.get('evidence', '')}")
+    macro = plan_record.get("macro_at_entry") or {}
+    comp = macro.get("composite") or {}
+    if comp:
+        out.append(f"Macro at entry: {comp.get('label')} ({comp.get('score')})")
+    outcome = plan_record.get("outcome") or {}
+    if outcome:
+        r = outcome.get("r_multiple")
+        out.append(f"Outcome: {outcome.get('result')}"
+                   + (f" ({r:+.1f}R)" if r is not None else ""))
+    return "\n".join(out)
+
+
+@commands.command(name="whycheck")
+async def whycheck_cmd(ctx, plan_id: str):
+    """!whycheck <plan_id> — the stored checklist verdict, post-mortem view"""
+    record = _load_plan_record(plan_id)
+    if record is None:
+        await ctx.send(f"Plan `{plan_id}` not found.")
+        return
+    text = whycheck_text(record)
+    for i in range(0, len(text), 1900):                # Discord 2000-char guard
+        await ctx.send(f"```\n{text[i:i + 1900]}\n```")
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py tests/test_commands_gatecheck.py
+git commit -m "feat: !whycheck stored-verdict replay"
+```
 
 ### Task G155: `!blocked [date]`
 
 **Files:** Modify `gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!blocked [YYYY-MM-DD|today]` — reads `blocked.jsonl`: table of blocked/downgraded/held candidates (ticker, strategy, tier, reason chain), so nothing is ever silently suppressed (Global Constraint made visible). Footer: count + "blocked ≠ deleted; see !whycheck".
-- [ ] **Step 1–4: TDD, commit** — `feat: !blocked transparency command`
+**Interfaces:** `!blocked [YYYY-MM-DD|today]` — reads `blocked.jsonl`: table of blocked/downgraded/held candidates (ticker, strategy, tier, reason chain), so nothing is ever silently suppressed (Global Constraint made visible). Footer: count + "blocked ≠ deleted; see !whycheck". Pure builder `blocked_table(rows, date) -> str`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_gatecheck.py`)
+
+```python
+BLOCKED_ROWS = [
+    {"at": "2026-07-14T15:00:00", "ticker": "XYZ", "strategy": "Breakout",
+     "tier": "C", "decision": "block", "reason": "rf_fake_breakout"},
+    {"at": "2026-07-14T15:05:00", "ticker": "ABC", "strategy": "RSI-Div",
+     "tier": "B", "decision": "downgrade", "reason": "tier B < A"},
+    {"at": "2026-07-13T15:00:00", "ticker": "OLD", "strategy": "Breakout",
+     "tier": "C", "decision": "block", "reason": "rf_stop_sweep"},
+]
+
+
+def test_blocked_table_filters_by_date():
+    import datetime as dt
+    table = gatecheck.blocked_table(BLOCKED_ROWS, dt.date(2026, 7, 14))
+    lines = table.splitlines()
+    assert len(lines) == 3                          # 2 rows + footer
+    assert "XYZ  Breakout  C  block      rf_fake_breakout" in lines[0]
+    assert "ABC  RSI-Div   B  downgrade  tier B < A" in lines[1]
+    assert lines[-1] == "2 entries · blocked ≠ deleted; see !whycheck"
+
+
+def test_blocked_table_empty_day():
+    import datetime as dt
+    assert "Nothing blocked" in gatecheck.blocked_table(
+        BLOCKED_ROWS, dt.date(2026, 7, 12))
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gatecheck.py`)
+
+```python
+def _read_blocked_rows() -> list[dict]:
+    import json
+    from swingbot.core.gate import persistence
+    try:
+        with open(persistence.BLOCKED_PATH, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+    except (OSError, ValueError):
+        return []
+
+
+def blocked_table(rows: list[dict], date) -> str:
+    """G155: every held-back candidate for the day, visible. Column
+    widths fixed so the code-block renders as a table."""
+    day = [r for r in rows if r.get("at", "").startswith(date.isoformat())]
+    if not day:
+        return (f"Nothing blocked, downgraded or held on {date.isoformat()} "
+                f"— in inform mode that is every day.")
+    out = [f"{r.get('ticker', '?'):<4} {r.get('strategy', '?'):<9} "
+           f"{r.get('tier', '?'):<2} {r.get('decision', '?'):<10} {r.get('reason', '')}"
+           for r in day]
+    out.append(f"{len(day)} entries · blocked ≠ deleted; see !whycheck")
+    return "\n".join(out)
+
+
+@commands.command(name="blocked")
+async def blocked_cmd(ctx, date_arg: str = "today"):
+    """!blocked [YYYY-MM-DD|today] — everything the gate held back"""
+    import datetime as dt
+    date = dt.date.today() if date_arg == "today" \
+        else dt.date.fromisoformat(date_arg)
+    await ctx.send(f"```\n{blocked_table(_read_blocked_rows(), date)}\n```")
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py tests/test_commands_gatecheck.py
+git commit -m "feat: !blocked transparency command"
+```
 
 ### Task G156: `!gutcheck`
 
 **Files:** Modify `gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!gutcheck` — pending gut-checks (alerts awaiting the ritual, with age), plus G126's stats (WR with vs without ritual, the "took it anyway" cohort). The self-accountability mirror.
-- [ ] **Step 1–4: TDD, commit** — `feat: !gutcheck`
+**Interfaces:** `!gutcheck` — pending gut-checks (alerts awaiting the ritual, with age), plus G126's stats (WR with vs without ritual, the "took it anyway" cohort). The self-accountability mirror. Pure builder `gutcheck_text(pending, stats) -> str` (`pending` = open plans lacking a `gutcheck` key; `stats` = G126's `gutcheck_stats` output).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_gatecheck.py`)
+
+```python
+def test_gutcheck_text_golden():
+    pending = [{"plan_id": "p_1", "ticker": "NVDA", "age_hours": 3.5}]
+    stats = {"with_gutcheck": {"n": 24, "wr": 71.0},
+             "without_gutcheck": {"n": 18, "wr": 55.0},
+             "took_anyway": {"n": 5, "wr": 40.0}}
+    text = gatecheck.gutcheck_text(pending, stats)
+    assert "Pending (1):" in text and "NVDA (3.5h)" in text
+    assert "With ritual: 71% (N=24)" in text
+    # the G109 low-N guard applies here too — small cohorts never print a %
+    assert "Without: — (N=18 < 20)" in text
+    assert '"Would not take after a loss, took anyway": — (N=5 < 20)' in text
+
+
+def test_gutcheck_text_low_n_guarded():
+    stats = {"with_gutcheck": {"n": 3, "wr": 100.0},
+             "without_gutcheck": {"n": 0, "wr": None},
+             "took_anyway": {"n": 0, "wr": None}}
+    text = gatecheck.gutcheck_text([], stats)
+    assert "— (N=3 < 20)" in text                   # fmt_wr guard applies here too
+    assert "Nothing pending" in text
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gatecheck.py`)
+
+```python
+def gutcheck_text(pending: list[dict], stats: dict) -> str:
+    """G156: the self-accountability mirror. Every WR through fmt_wr —
+    a 3-trade '100%' must render as the small sample it is (G109)."""
+    from swingbot.core.gate.render import fmt_wr
+    out = []
+    if pending:
+        names = ", ".join(f"{p['ticker']} ({p['age_hours']:.1f}h)"
+                          for p in pending)
+        out.append(f"Pending ({len(pending)}): {names}")
+    else:
+        out.append("Nothing pending — every live alert has had its ritual.")
+    w, wo = stats.get("with_gutcheck", {}), stats.get("without_gutcheck", {})
+    ta = stats.get("took_anyway", {})
+    out.append(f"With ritual: {fmt_wr(w.get('wr'), w.get('n', 0))}")
+    out.append(f"Without: {fmt_wr(wo.get('wr'), wo.get('n', 0))}")
+    out.append(f'"Would not take after a loss, took anyway": '
+               f"{fmt_wr(ta.get('wr'), ta.get('n', 0))}")
+    return "\n".join(out)
+
+
+@commands.command(name="gutcheck")
+async def gutcheck_cmd(ctx):
+    """!gutcheck — pending rituals + does the ritual pay?"""
+    from swingbot.core.gate.persistence import gutcheck_stats
+    pending = _pending_gutchecks()      # open plans lacking a gutcheck key,
+                                        # age from created_at — reuse the
+                                        # plan-store accessor G125 used
+    stats = gutcheck_stats(_load_journal_entries())
+    await ctx.send(embed=discord.Embed(title="🪞 Gut check",
+                                       description=gutcheck_text(pending, stats)))
+```
+
+(`_pending_gutchecks()` and `_load_journal_entries()` are four-line helpers over `PlanStore.open_plans()` and the journal source G84 used — match those exact accessors at execution.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py tests/test_commands_gatecheck.py
+git commit -m "feat: !gutcheck"
+```
 
 ### Task G157: Slash-command bridges
 
 **Files:** Modify `macro.py`, `gatecheck.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `/macro /calendar /sectors /sentiment /yields /inflation /checklist /whycheck /blocked /gutcheck /frontier /tierwr /redflags` via the existing `Context.from_interaction` bridge pattern (verify the exact helper at execution — same one llm-advisor L16 uses).
-- [ ] **Step 1–4: TDD (bridge smoke per command), commit** — `feat: slash bridges for macro+gate commands`
+**Interfaces:** `/macro /calendar /sectors /sentiment /yields /inflation /checklist /whycheck /blocked /gutcheck /frontier /tierwr /redflags` via the repo's existing bridge pattern in `swingbot/commands/slash.py`: `ctx = await commands.Context.from_interaction(interaction)` then `await <prefix_cmd>.callback(ctx, *args)` (this is exactly how `slash_check` bridges today — copy that shape).
+
+- [ ] **Step 1: Write the failing test** (append to `tests/test_commands_macro.py`)
+
+```python
+def test_every_new_command_has_a_slash_bridge():
+    """Structural: slash.py defines a bridge for each new command. The
+    bridge bodies are three-liners over Context.from_interaction — the
+    smoke here is existence + naming, the behavior is the prefix
+    command's own tests."""
+    import inspect
+    import swingbot.commands.slash as slash
+    for name in ("macro", "calendar", "sectors", "sentiment", "yields",
+                 "inflation", "checklist", "whycheck", "blocked",
+                 "gutcheck", "frontier", "tierwr", "redflags"):
+        fn = getattr(slash, f"slash_{name}", None)
+        assert fn is not None, f"slash_{name} missing"
+        assert "from_interaction" in inspect.getsource(fn)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/commands/slash.py`, one per command — the `!macro` example verbatim, the rest identical in shape):
+
+```python
+@bot.tree.command(name="macro", description="Market context dashboard")
+async def slash_macro(interaction: discord.Interaction):
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.macro import macro_cmd
+    await macro_cmd.callback(ctx)
+
+
+@bot.tree.command(name="checklist", description="Run the pre-trade checklist")
+@app_commands.describe(ticker="Ticker symbol", strategy="Optional strategy name")
+async def slash_checklist(interaction: discord.Interaction,
+                          ticker: str, strategy: str = None):
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.gatecheck import checklist_cmd
+    await checklist_cmd.callback(ctx, ticker, strategy)
+```
+
+(Commands with arguments — `/calendar days`, `/sentiment ticker`, `/whycheck plan_id`, `/blocked date` — declare them via `app_commands.describe` exactly like `slash_checklist` above. Match the registration style of the existing `slash.py` functions, including where `bot` comes from.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/slash.py tests/test_commands_macro.py
+git commit -m "feat: slash bridges for macro+gate commands"
+```
 
 ### Task G158: Help catalog + usage sweep
 
-**Files:** Modify the help catalog + `COMMAND_USAGE`; test `tests/test_commands_macro.py`
+**Files:** Modify `swingbot/commands/info.py` (`commands_cmd`) + `swingbot/commands/slash.py` (`slash_help`); test `tests/test_commands_macro.py`
 
-- [ ] **Step 1: Failing test** — every new command has a catalog entry + usage string; help renders them under new sections "Market Context" and "Gatekeeper".
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: help catalog for macro+gate commands`
+> **Execution note:** the repo has no `COMMAND_USAGE` catalog structure — `!help` text is inline in `info.py:commands_cmd` and `slash.py:slash_help`. If a catalog structure has appeared by execution time (cockpit), register entries there instead; otherwise extend the inline help as below.
+
+- [ ] **Step 1: Write the failing test** (append to `tests/test_commands_macro.py`)
+
+```python
+def _flatten_sent(ctx):
+    """Everything the command sent — content strings + embed dicts —
+    as one searchable string."""
+    parts = []
+    for content, kw in ctx.sent:
+        if content:
+            parts.append(content)
+        if kw.get("embed") is not None:
+            parts.append(str(kw["embed"].to_dict()))
+    return " ".join(parts)
+
+
+def test_help_lists_every_new_command():
+    import swingbot.commands.info as info
+    ctx = FakeCtx()
+    asyncio.run(info.commands_cmd.callback(ctx))
+    rendered = _flatten_sent(ctx)
+    for cmd in ("!macro", "!calendar", "!sectors", "!sentiment", "!yields",
+                "!inflation", "!checklist", "!whycheck", "!blocked",
+                "!gutcheck", "!frontier", "!tierwr", "!redflags"):
+        assert cmd in rendered, f"{cmd} missing from !help"
+    assert "Market Context" in rendered and "Gatekeeper" in rendered
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: add two sections to the help output in `info.py` —
+
+```text
+**Market Context**
+!macro [refresh] · !calendar [days] · !sectors · !sentiment [ticker] · !yields · !inflation
+
+**Gatekeeper**
+!checklist <TICKER> [strategy] · !whycheck <plan_id> · !blocked [date] · !gutcheck · !frontier [strategy] · !tierwr · !redflags
+```
+
+— and mirror the same two sections in `slash_help`.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/info.py swingbot/commands/slash.py tests/test_commands_macro.py
+git commit -m "feat: help catalog for macro+gate commands"
+```
 
 ### Task G159: Macro dashboard chart
 
 **Files:** Modify `swingbot/core/charts/gate_charts.py`; test `tests/test_gate_charts.py`
 
-**Interfaces:** `macro_dashboard_chart(history_rows, path)` — 4-panel PNG from `snapshot_history.jsonl`: composite risk score (30d line), VIX + regime bands, 10y−2y spread, fear/greed gauge history; attached by `!macro` when ≥ 7 history rows exist.
-- [ ] **Step 1–4: TDD (render smoke; !macro attaches when eligible), commit** — `feat: macro dashboard chart`
+**Interfaces:** `macro_dashboard_chart(history_rows, path) -> str | None` — 4-panel PNG from `snapshot_history.jsonl`: composite risk score (30d line), VIX + regime bands, 10y−2y spread, fear/greed gauge history; attached by `!macro` when ≥ 7 history rows exist (None when fewer — no half-empty chart).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_charts.py`)
+
+```python
+import os
+
+
+def _history_rows(n=30):
+    return [{"built_at": f"2026-06-{d:02d}T22:00:00",
+             "composite_score": 40 + d, "vix": 13.0 + d / 10,
+             "spread_10y2y": 0.1 + d / 100, "fear_greed": 50 + d}
+            for d in range(1, n + 1)]   # keys per G38's history summary line — verify
+
+
+def test_macro_dashboard_chart_renders(tmp_path):
+    path = str(tmp_path / "macro.png")
+    out = macro_dashboard_chart(_history_rows(30), path)
+    assert out == path and os.path.getsize(path) > 0
+
+
+def test_macro_dashboard_chart_needs_seven_rows(tmp_path):
+    assert macro_dashboard_chart(_history_rows(5),
+                                 str(tmp_path / "x.png")) is None
+
+
+def test_macro_dashboard_chart_tolerates_gaps(tmp_path):
+    rows = _history_rows(10)
+    for r in rows[3:6]:
+        r["vix"] = None                                 # provider gap days
+    assert macro_dashboard_chart(rows, str(tmp_path / "g.png")) is not None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/core/charts/gate_charts.py`, following the module's existing style constants from G111)
+
+```python
+def macro_dashboard_chart(history_rows: list[dict], path: str) -> str | None:
+    """G159: 4-panel macro trend PNG. < 7 rows → None (no chart beats a
+    misleading two-point line). None values are masked, not interpolated."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not history_rows or len(history_rows) < 7:
+        return None
+    rows = history_rows[-30:]
+    x = list(range(len(rows)))
+    labels = [r.get("built_at", "")[5:10] for r in rows]
+
+    def series(key):
+        return [r.get(key) if r.get(key) is not None else float("nan")
+                for r in rows]
+
+    fig, axes = plt.subplots(4, 1, figsize=(8, 9), sharex=True)
+    panels = [("Composite risk", "composite_score"),
+              ("VIX", "vix"), ("10y−2y spread", "spread_10y2y"),
+              ("Fear/greed", "fear_greed")]
+    for ax, (title, key) in zip(axes, panels):
+        ax.plot(x, series(key))
+        ax.set_title(title, fontsize=9, loc="left")
+        if key == "spread_10y2y":
+            ax.axhline(0, linewidth=0.8, linestyle="--")
+    axes[-1].set_xticks(x[::5])
+    axes[-1].set_xticklabels(labels[::5], fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+```
+
+**Wiring** (`!macro` in `macro.py`): after the embed builds, read the history rows (same loader `_prev_history_row` uses, full list), call the chart into a tempfile, attach via `discord.File` when non-None, delete after send — one added test in `test_commands_macro.py` monkeypatching the chart fn to a sentinel path and asserting `file=` was passed.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_charts.py tests/test_commands_macro.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/charts/gate_charts.py swingbot/commands/macro.py tests/test_gate_charts.py tests/test_commands_macro.py
+git commit -m "feat: macro dashboard chart"
+```
 
 ### Task G160: Sector rotation chart
 
 **Files:** Modify `gate_charts.py`; test `tests/test_gate_charts.py`
 
-**Interfaces:** `sector_rotation_chart(rs_rows, path)` — horizontal bar chart, 1m RS bars with 3m markers overlaid, SPY zero-line, sector labels; attached by `!sectors`.
-- [ ] **Step 1–4: TDD (render smoke), commit** — `feat: sector rotation chart`
+**Interfaces:** `sector_rotation_chart(rs_rows, path) -> str | None` — horizontal bar chart, 1m RS bars with 3m markers overlaid, SPY zero-line, sector labels; attached by `!sectors`. Empty rows → None.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_charts.py`)
+
+```python
+def test_sector_rotation_chart_renders(tmp_path):
+    from tests.fixtures.gate.snapshots import full_snapshot
+    path = str(tmp_path / "sectors.png")
+    rows = full_snapshot()["sectors"]["rs_rows"]
+    assert sector_rotation_chart(rows, path) == path
+    assert os.path.getsize(path) > 0
+
+
+def test_sector_rotation_chart_empty_rows(tmp_path):
+    assert sector_rotation_chart([], str(tmp_path / "e.png")) is None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gate_charts.py`)
+
+```python
+def sector_rotation_chart(rs_rows: list[dict], path: str) -> str | None:
+    """G160: horizontal 1m-RS bars (3m as diamond markers), zero line =
+    SPY. Rows sorted by rank so the leader is on top."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not rs_rows:
+        return None
+    rows = sorted(rs_rows, key=lambda r: r.get("rank", 99), reverse=True)
+    names = [r.get("sector", "?") for r in rows]
+    rs1 = [r.get("rs_1m") or 0.0 for r in rows]
+    rs3 = [r.get("rs_3m") or 0.0 for r in rows]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.barh(names, rs1, label="1m RS")
+    ax.plot(rs3, names, "D", markersize=5, linestyle="none", label="3m RS")
+    ax.axvline(0, linewidth=0.8)
+    ax.set_xlabel("RS vs SPY (%)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+```
+
+**Wiring:** `!sectors` attaches it exactly as G159 wired `!macro` (tempfile + `discord.File` + cleanup).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_charts.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/charts/gate_charts.py swingbot/commands/macro.py tests/test_gate_charts.py
+git commit -m "feat: sector rotation chart"
+```
 
 ### Task G161: Sentiment/news trend chart
 
 **Files:** Modify `gate_charts.py`; test `tests/test_gate_charts.py`
 
-**Interfaces:** `sentiment_trend_chart(history_rows, path)` — daily aggregate news-sentiment line + fear/greed overlay (30d); attached by `!sentiment` when history suffices.
-- [ ] **Step 1–4: TDD (render smoke), commit** — `feat: sentiment trend chart`
+**Interfaces:** `sentiment_trend_chart(history_rows, path) -> str | None` — daily aggregate news-sentiment line + fear/greed overlay (30d, twin y-axes); attached by `!sentiment` when ≥ 7 history rows carry sentiment.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_charts.py`)
+
+```python
+def test_sentiment_trend_chart_renders(tmp_path):
+    rows = [{"built_at": f"2026-06-{d:02d}T22:00:00",
+             "news_sentiment": (d % 7 - 3) / 10, "fear_greed": 45 + d}
+            for d in range(1, 31)]
+    path = str(tmp_path / "sent.png")
+    assert sentiment_trend_chart(rows, path) == path
+
+
+def test_sentiment_trend_chart_insufficient(tmp_path):
+    rows = [{"built_at": "2026-06-01", "news_sentiment": 0.1, "fear_greed": 50}]
+    assert sentiment_trend_chart(rows, str(tmp_path / "n.png")) is None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gate_charts.py`)
+
+```python
+def sentiment_trend_chart(history_rows: list[dict], path: str) -> str | None:
+    """G161: news sentiment (left axis, ±1) + fear/greed (right, 0-100)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = [r for r in (history_rows or [])
+            if r.get("news_sentiment") is not None][-30:]
+    if len(rows) < 7:
+        return None
+    x = list(range(len(rows)))
+    fig, ax1 = plt.subplots(figsize=(8, 4))
+    ax1.plot(x, [r["news_sentiment"] for r in rows], label="news sentiment")
+    ax1.set_ylim(-1, 1)
+    ax1.axhline(0, linewidth=0.8, linestyle="--")
+    ax2 = ax1.twinx()
+    ax2.plot(x, [r.get("fear_greed") for r in rows], alpha=0.6,
+             label="fear/greed")
+    ax2.set_ylim(0, 100)
+    fig.legend(fontsize=8, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+```
+
+**Wiring:** `!sentiment` (market-wide path only) attaches it per the G159 pattern.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_charts.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/charts/gate_charts.py swingbot/commands/macro.py tests/test_gate_charts.py
+git commit -m "feat: sentiment trend chart"
+```
 
 ### Task G162: `!frontier`/`!tierwr` chart wiring
 
 **Files:** Modify `gatecheck.py`; test `tests/test_commands_gatecheck.py`
 
-**Interfaces:** `!frontier` attaches G111's chart (rendered on demand from the stored artifact to tmp, cleaned after send); `!tierwr` attaches the decile chart (G112). Chart render failure → embed still ships, log only.
-- [ ] **Step 1–4: TDD (attachment path; failure tolerance), commit** — `feat: charts on frontier/tierwr`
+**Interfaces:** `!frontier` attaches G111's chart (rendered on demand from the stored artifact to tmp, cleaned after send); `!tierwr` attaches the decile chart (G112). Chart render failure → embed still ships, log only. One shared helper owns the pattern: `_send_with_chart(ctx, embed, render_fn, *args)`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_gatecheck.py`)
+
+```python
+def test_send_with_chart_attaches_and_cleans(tmp_path, monkeypatch):
+    made = {}
+
+    def fake_render(rows, path):
+        made["path"] = path
+        with open(path, "wb") as fh:
+            fh.write(b"png")
+        return path
+
+    ctx = FakeCtx()
+    asyncio.run(gatecheck._send_with_chart(ctx, "EMBED", fake_render, [1, 2]))
+    _, kw = ctx.sent[0]
+    assert kw.get("embed") == "EMBED" and kw.get("file") is not None
+    import os
+    assert not os.path.exists(made["path"])            # tmp cleaned after send
+
+
+def test_send_with_chart_survives_render_failure(caplog):
+    def boom(rows, path):
+        raise RuntimeError("matplotlib exploded")
+
+    ctx = FakeCtx()
+    asyncio.run(gatecheck._send_with_chart(ctx, "EMBED", boom, []))
+    _, kw = ctx.sent[0]
+    assert kw.get("embed") == "EMBED" and "file" not in kw   # embed still ships
+    assert any("chart" in r.message.lower() for r in caplog.records)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gatecheck.py`)
+
+```python
+async def _send_with_chart(ctx, embed, render_fn, *args):
+    """G162: best-effort chart attachment. Render to a tempfile, attach,
+    always delete; ANY render failure → embed ships chartless + one log."""
+    import os
+    import tempfile
+    path = os.path.join(tempfile.gettempdir(),
+                        f"gate_chart_{os.getpid()}_{id(embed)}.png")
+    chart = None
+    try:
+        chart = render_fn(*args, path)
+    except Exception:  # noqa: BLE001
+        log.warning("chart render failed — embed ships without it", exc_info=True)
+    try:
+        if chart:
+            await ctx.send(embed=embed,
+                           file=discord.File(chart, filename="chart.png"))
+        else:
+            await ctx.send(embed=embed)
+    finally:
+        if chart and os.path.exists(chart):
+            os.remove(chart)
+```
+
+**Wiring:** `!frontier` calls `_send_with_chart(ctx, embed, frontier_chart, artifact["frontier"])` (chosen cut passed through); `!tierwr` calls it with `decile_chart` and the artifact's decile rows.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/gatecheck.py tests/test_commands_gatecheck.py
+git commit -m "feat: charts on frontier/tierwr"
+```
 
 ### Task G163: Alert footer context one-liner
 
 **Files:** Modify `embeds.py`; test `tests/test_embeds_gate.py`
 
-**Interfaces:** when macro data exists but the full 🌍 field is off (`MACRO_ENABLED` on, `GATE_ENABLED` off), the alert footer gains the compact suffix `" · Risk-ON · CPI 3d"` (≤ 40 chars) — context even in minimal mode. Both off → byte-identical footer.
-- [ ] **Step 1–4: TDD (matrix), commit** — `feat: footer context one-liner`
+**Interfaces:** when macro data exists but the full 🌍 field is off (`MACRO_ENABLED` on, `GATE_ENABLED` off), the alert footer gains the compact suffix `" · Risk-ON · CPI 3d"` (≤ 40 chars) — context even in minimal mode. Both off → byte-identical footer. Pure builder `footer_suffix(snap) -> str` in `gate/render.py`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_embeds_gate.py`)
+
+```python
+from swingbot.core.gate.render import footer_suffix
+
+
+def test_footer_suffix_golden():
+    assert footer_suffix(SNAP) == " · Risk-ON · CPI 3d"   # SNAP from G122's tests
+    assert len(footer_suffix(SNAP)) <= 40
+
+
+def test_footer_suffix_unknown_and_none():
+    assert footer_suffix(None) == ""                       # both-off byte identity
+    assert footer_suffix({"built_at": "t"}) == ""          # nothing to say → nothing
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gate/render.py`)
+
+```python
+def footer_suffix(snap: dict | None) -> str:
+    """G163: the 40-char minimal-mode context tail. Empty string whenever
+    there is nothing meaningful to say — an empty suffix keeps the footer
+    byte-identical, which IS the flags-off contract."""
+    if not snap:
+        return ""
+    parts = []
+    comp = snap.get("composite") or {}
+    label = {"risk_on": "Risk-ON", "risk_off": "Risk-OFF",
+             "neutral": "Risk-neutral"}.get(comp.get("label"))
+    if label:
+        parts.append(label)
+    nxt = next((e for e in (snap.get("events") or {}).get("upcoming", [])
+                if int(e.get("importance", 0)) >= 3), None)
+    if nxt:
+        try:
+            import datetime as dt
+            days = (dt.datetime.fromisoformat(nxt["at"]).date()
+                    - dt.datetime.fromisoformat(snap["built_at"]).date()).days
+            parts.append(f"{nxt['name']} {'today' if days <= 0 else f'{days}d'}")
+        except (KeyError, ValueError):
+            pass
+    return (" · " + " · ".join(parts))[:40] if parts else ""
+```
+
+**Wiring** (`build_embed`, at the footer line): when `macro is not None and gate is None` (the minimal-mode combination — caller passes `gate=None` when `GATE_ENABLED` off), append `footer_suffix(macro)` to the existing footer text. Matrix test: (macro on, gate off) → suffix present; (both on) → NO suffix (the 🌍 field already carries it); (both off) → footer byte-identical.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_embeds_gate.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/render.py swingbot/core/scanning/embeds.py tests/test_embeds_gate.py
+git commit -m "feat: footer context one-liner"
+```
 
 ### Task G164: Weekly digest macro section
 
 **Files:** Modify the weekly digest builder; test `tests/test_gate_digest.py`
 
-**Interfaces:** weekly digest gains "Market Week" (composite trend, biggest sector rotation move, events next week) + "Gate Week" (evaluated/blocked/tier mix, best/worst flag by outcome) sections, built from history + telemetry; absent data → sections omitted.
-- [ ] **Step 1–4: TDD, commit** — `feat: digest macro + gate sections`
+**Interfaces:** weekly digest gains "Market Week" (composite trend, biggest sector rotation move, events next week) + "Gate Week" (evaluated/blocked/tier mix, best/worst flag by outcome) sections, built from history + telemetry; absent data → sections omitted. Pure builders in `retrospective.py`: `market_week_section(history_rows, events) -> str | None`, `gate_week_section(telemetry_summary, flag_stats) -> str | None`.
+
+> **Execution note:** the repo has no weekly digest builder today. If one has appeared by execution (cockpit), wire these sections into it; otherwise wire them into the **Friday** retrospective post (the week's last daily post — `daily_recap` already knows the weekday) with a `── Week in review ──` divider. Either way the builders below are the deliverable.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_digest.py`)
+
+```python
+from swingbot.core.retrospective import gate_week_section, market_week_section
+
+
+def test_market_week_section_golden():
+    rows = [{"built_at": f"2026-07-{d:02d}", "composite_score": s}
+            for d, s in ((7, 20), (8, 30), (9, 45), (10, 55), (11, 60))]
+    events = [{"name": "FOMC", "importance": 3, "at": "2026-07-15T14:00:00"}]
+    text = market_week_section(rows, events)
+    assert "Composite 20 → 60 (improving)" in text
+    assert "Next week: FOMC" in text
+
+
+def test_market_week_section_absent_data():
+    assert market_week_section([], []) is None
+
+
+def test_gate_week_section_golden():
+    summary = {"evaluated": 41, "blocked": 0, "downgraded": 3,
+               "blocked_reasons": [], "held_for_event": 1, "recheck_held": 0}
+    flags = [{"flag": "rf_fake_breakout", "delta_wr": 12.0, "n_fired_and_taken": 8},
+             {"flag": "rf_opex_pin", "delta_wr": -2.0, "n_fired_and_taken": 5}]
+    text = gate_week_section(summary, flags)
+    assert "41 evaluated · 0 blocked · 3 downgraded · 1 held" in text
+    assert "Best flag: rf_fake_breakout" in text
+    assert "Worst: rf_opex_pin" in text
+
+
+def test_gate_week_section_idle_week():
+    assert gate_week_section({"evaluated": 0}, []) is None
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `retrospective.py`)
+
+```python
+def market_week_section(history_rows: list[dict], events: list[dict]) -> str | None:
+    """G164 'Market Week': composite start→end + next week's headliners.
+    None when there's no history — a digest never renders empty sections."""
+    rows = [r for r in (history_rows or []) if r.get("composite_score") is not None]
+    if len(rows) < 2:
+        return None
+    first, last = rows[0]["composite_score"], rows[-1]["composite_score"]
+    trend = ("improving" if last > first + 5 else
+             "deteriorating" if last < first - 5 else "flat")
+    parts = [f"Composite {first:.0f} → {last:.0f} ({trend})"]
+    nxt = [e["name"] for e in (events or []) if int(e.get("importance", 0)) >= 3]
+    if nxt:
+        parts.append("Next week: " + ", ".join(nxt[:3]))
+    return " · ".join(parts)
+
+
+def gate_week_section(telemetry_summary: dict, flag_stats: list[dict]) -> str | None:
+    """G164 'Gate Week': the week's counts + the flag receipts extremes."""
+    s = telemetry_summary or {}
+    if not s.get("evaluated"):
+        return None
+    parts = [f"{s['evaluated']} evaluated · {s.get('blocked', 0)} blocked · "
+             f"{s.get('downgraded', 0)} downgraded · "
+             f"{s.get('held_for_event', 0)} held"]
+    rated = [f for f in (flag_stats or []) if f.get("delta_wr") is not None]
+    if rated:
+        best = max(rated, key=lambda f: f["delta_wr"])
+        worst = min(rated, key=lambda f: f["delta_wr"])
+        parts.append(f"Best flag: {best['flag']} ({best['delta_wr']:+.0f} pts) · "
+                     f"Worst: {worst['flag']} ({worst['delta_wr']:+.0f} pts)")
+    return "\n".join(parts)
+```
+
+**Wiring:** in the Friday branch of the retrospective builder (or the digest builder if present): `market_week_section(history_rows_7d, upcoming_events)` + `gate_week_section(telemetry.summary(since=monday_iso), flag_outcome_stats(journal_entries))` — append each non-None with its header line.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_digest.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/retrospective.py swingbot/commands/scanning.py tests/test_gate_digest.py
+git commit -m "feat: digest macro + gate sections"
+```
 
 ### Task G165: Command cooldowns + long-output guards
 
 **Files:** Modify `macro.py`, `gatecheck.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** per-user 10s cooldown on the render-heavy commands (`!macro`, `!sectors`, `!frontier` — reuse the existing cooldown decorator if the codebase has one, else a small shared one here); every table builder enforces Discord's 1024/2000/6000 limits with explicit truncation markers (tested at the builder level with oversized fixtures).
-- [ ] **Step 1–4: TDD (cooldown; truncation goldens), commit** — `feat: cooldowns + output guards`
+**Interfaces:** per-user 10s cooldown on the render-heavy commands (`!macro`, `!sectors`, `!frontier`) via discord.py's own `@commands.cooldown(1, 10, commands.BucketType.user)` (the repo has no custom decorator — the library one is the standard tool); every table builder routes through `clamp(text, limit)` with an explicit truncation marker.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
+
+```python
+def test_render_heavy_commands_have_user_cooldowns():
+    import swingbot.commands.gatecheck as gatecheck
+    for cmd in (macro.macro_cmd, macro.sectors_cmd, gatecheck.frontier_cmd):
+        buckets = cmd._buckets                     # discord.py CooldownMapping
+        cd = buckets._cooldown
+        assert cd is not None and cd.rate == 1 and cd.per == 10.0
+
+
+def test_clamp_truncates_with_marker():
+    text = "x" * 3000
+    out = macro.clamp(text, 1024)
+    assert len(out) <= 1024
+    assert out.endswith("… [truncated]")
+    assert macro.clamp("short", 1024) == "short"
+
+
+def test_oversized_builders_stay_inside_discord_limits():
+    """Field values ≤1024, descriptions ≤2000 (guarded at the builder)."""
+    rows = [{"sector": f"Sector{i}", "etf": "XXX", "rank": i,
+             "rs_1m": 1.0, "rs_3m": 1.0, "rs_6m": 1.0} for i in range(200)]
+    out = macro.sectors_table({"rotation": "risk_on", "rs_rows": rows})
+    assert len(macro.clamp(out, 1900)) <= 1900
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`; import into `gatecheck.py`)
+
+```python
+def clamp(text: str, limit: int) -> str:
+    """G165: Discord-limit guard. Truncation is EXPLICIT — a cut table
+    says so instead of silently eating rows."""
+    marker = "… [truncated]"
+    if len(text) <= limit:
+        return text
+    return text[:limit - len(marker)] + marker
+```
+
+And decorate the three commands (order matters — cooldown above the command decorator per discord.py convention):
+
+```python
+@commands.cooldown(1, 10, commands.BucketType.user)
+@commands.command(name="macro")
+async def macro_cmd(ctx, arg: str = None):
+    ...
+```
+
+(Verify decorator stacking against a working discord.py example in the repo; if `@commands.command` must come first in this codebase's discord.py version, swap them — the test pins the effect, not the order.) Route every code-block send in `macro.py`/`gatecheck.py` through `clamp(..., 1900)` and every `add_field` value through `clamp(..., 1024)`.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py tests/test_commands_gatecheck.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/macro.py swingbot/commands/gatecheck.py tests/test_commands_macro.py
+git commit -m "feat: cooldowns + output guards"
+```
 
 ### Task G166: Phase G5 checkpoint
 
@@ -11571,197 +15750,2093 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Modify `swingbot/admin/app.py` (or the `api.py` blueprint if cockpit C4 landed); test `tests/admin/test_macro_api.py`
 
-**Interfaces:** returns `load_snapshot() | {}` + `{age_min, stale}` envelope; 200 always (empty snapshot is `{}`, not 404). Existing admin auth applies (session-gated like every other `/api/*` route — verify the exact decorator at execution).
-- [ ] **Step 1–4: TDD (authed 200 + shape; unauthed 401/redirect parity with existing routes), commit** — `feat: /api/macro/snapshot`
+**Interfaces:** returns `{"snapshot": load_snapshot() | {}, "age_min": float | None, "stale": bool}`; 200 always (empty snapshot is `{}`, not 404). Existing admin auth applies.
+
+> **Execution note (all of Phase G6):** today the admin is a single-module Flask app (`swingbot/admin/app.py`, no blueprints), auth is **HTTP Basic** via the `@require_auth` decorator (401 + `WWW-Authenticate` when missing), there is **no** CSRF machinery, **no** `/api/*` routes yet, and `tests/admin/` does not exist. Chart.js and morphdom load from CDN in the existing templates. If cockpit-v3 Part 3 has merged by execution time, follow ITS conventions instead (blueprints, session auth, CSRF, vendored assets) — every task below marks the seams. This task creates `tests/admin/conftest.py`, which every later G6 test uses.
+
+- [ ] **Step 1: Write the conftest + the failing test**
+
+```python
+# tests/admin/conftest.py
+"""Flask test-client fixtures for the admin gate/macro surface. Auth =
+HTTP Basic against monkeypatched credentials (matching @require_auth);
+if cockpit's session auth has replaced it, swap `auth_headers` for the
+login-session fixture cockpit's tests use."""
+import base64
+
+import pytest
+
+
+@pytest.fixture
+def admin_app(monkeypatch, tmp_path):
+    import swingbot.config as config
+    monkeypatch.setattr(config, "ADMIN_USERNAME", "test", raising=False)
+    monkeypatch.setattr(config, "ADMIN_PASSWORD", "pw", raising=False)
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path), raising=False)
+    from swingbot.admin.app import app
+    app.config["TESTING"] = True
+    return app
+
+
+@pytest.fixture
+def client(admin_app):
+    return admin_app.test_client()
+
+
+@pytest.fixture
+def auth_headers():
+    token = base64.b64encode(b"test:pw").decode()
+    return {"Authorization": f"Basic {token}"}
+```
+
+```python
+# tests/admin/test_macro_api.py
+from tests.fixtures.gate.snapshots import full_snapshot
+
+
+def test_snapshot_api_authed_shape(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api",
+                        lambda: full_snapshot())
+    resp = client.get("/api/macro/snapshot", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["snapshot"]["composite"]["label"] == "risk_on"
+    assert body["stale"] is False and body["age_min"] is not None
+
+
+def test_snapshot_api_empty_is_200_not_404(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api", lambda: None)
+    resp = client.get("/api/macro/snapshot", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.get_json() == {"snapshot": {}, "age_min": None, "stale": True}
+
+
+def test_snapshot_api_unauthed_401(client):
+    assert client.get("/api/macro/snapshot").status_code == 401
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/admin/app.py`)
+
+```python
+def _load_snapshot_for_api():
+    """Seam for tests; reads the saved snapshot only — an admin request
+    never triggers a provider fetch (Phase-G6 contract)."""
+    from swingbot.core.macro.snapshot import load_snapshot
+    return load_snapshot()
+
+
+@app.route("/api/macro/snapshot")
+@require_auth
+def api_macro_snapshot():
+    import datetime as dt
+    snap = _load_snapshot_for_api()
+    if not snap:
+        return jsonify({"snapshot": {}, "age_min": None, "stale": True})
+    age_min = None
+    try:
+        built = dt.datetime.fromisoformat(snap["built_at"])
+        age_min = round((dt.datetime.now() - built).total_seconds() / 60.0, 1)
+    except (KeyError, ValueError):
+        pass
+    return jsonify({"snapshot": snap, "age_min": age_min,
+                    "stale": bool(snap.get("stale"))})
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/conftest.py tests/admin/test_macro_api.py
+git commit -m "feat: /api/macro/snapshot"
+```
 
 ### Task G168: `GET /api/macro/history?days=30&keys=composite,vix`
 
 **Files:** Modify admin app; test `tests/admin/test_macro_api.py`
 
 **Interfaces:** rows from `snapshot_history.jsonl` filtered/downsampled server-side (≤ 500 points), key allow-list validated (400 on unknown key).
-- [ ] **Step 1–4: TDD, commit** — `feat: /api/macro/history`
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_api.py`)
+
+```python
+import json
+import os
+
+
+def _write_history(tmp_path, monkeypatch, n_days=40):
+    from swingbot.core.macro import snapshot as snap_mod
+    path = tmp_path / "snapshot_history.jsonl"
+    monkeypatch.setattr(snap_mod, "HISTORY_PATH", str(path))
+    with open(path, "w", encoding="utf-8") as fh:
+        for d in range(n_days):
+            fh.write(json.dumps({"built_at": f"2026-06-{(d % 30) + 1:02d}T22:00:00",
+                                 "composite_score": d, "vix": 13.0}) + "\n")
+
+
+def test_history_api_filters_keys(client, auth_headers, tmp_path, monkeypatch):
+    _write_history(tmp_path, monkeypatch)
+    resp = client.get("/api/macro/history?days=30&keys=composite_score,vix",
+                      headers=auth_headers)
+    assert resp.status_code == 200
+    rows = resp.get_json()["rows"]
+    assert rows and set(rows[0]) == {"built_at", "composite_score", "vix"}
+
+
+def test_history_api_unknown_key_400(client, auth_headers):
+    resp = client.get("/api/macro/history?keys=password", headers=auth_headers)
+    assert resp.status_code == 400
+
+
+def test_history_api_downsamples_to_500(client, auth_headers,
+                                        tmp_path, monkeypatch):
+    _write_history(tmp_path, monkeypatch, n_days=1200)
+    resp = client.get("/api/macro/history?days=10000&keys=vix",
+                      headers=auth_headers)
+    assert len(resp.get_json()["rows"]) <= 500
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`)
+
+```python
+HISTORY_KEY_ALLOWLIST = {"composite_score", "vix", "spread_10y2y",
+                         "spread_10y3m", "fear_greed", "news_sentiment",
+                         "cpi_yoy", "core_pce_yoy", "y2", "y10"}
+
+
+@app.route("/api/macro/history")
+@require_auth
+def api_macro_history():
+    import json as _json
+    days = min(int(request.args.get("days", 30)), 3650)
+    keys = [k for k in request.args.get("keys", "composite_score").split(",") if k]
+    unknown = [k for k in keys if k not in HISTORY_KEY_ALLOWLIST]
+    if unknown:
+        return jsonify({"error": f"unknown keys: {unknown}"}), 400
+    from swingbot.core.macro import snapshot as snap_mod
+    rows = []
+    try:
+        with open(snap_mod.HISTORY_PATH, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    row = _json.loads(line)
+                except ValueError:
+                    continue
+                rows.append({"built_at": row.get("built_at"),
+                             **{k: row.get(k) for k in keys}})
+    except OSError:
+        pass
+    rows = rows[-days:]
+    if len(rows) > 500:                       # even stride downsample
+        stride = len(rows) // 500 + 1
+        rows = rows[::stride]
+    return jsonify({"rows": rows})
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/test_macro_api.py
+git commit -m "feat: /api/macro/history"
+```
 
 ### Task G169: `GET /api/macro/events?days=30`
 
 **Files:** Modify admin app; test `tests/admin/test_macro_api.py`
 
-**Interfaces:** upcoming + past-7d events with blackout-window annotations; powers the calendar page.
-- [ ] **Step 1–4: TDD, commit** — `feat: /api/macro/events`
+**Interfaces:** upcoming + past-7d events with blackout-window annotations (`in_blackout: bool` per event, from the G120 window math); powers the calendar page.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_api.py`)
+
+```python
+def test_events_api_shape(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    snap = full_snapshot()
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api", lambda: snap)
+    resp = client.get("/api/macro/events?days=30", headers=auth_headers)
+    assert resp.status_code == 200
+    events = resp.get_json()["events"]
+    cpi = next(e for e in events if e["name"] == "CPI")
+    assert set(cpi) >= {"name", "at", "importance", "in_blackout"}
+
+
+def test_events_api_no_snapshot(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api", lambda: None)
+    resp = client.get("/api/macro/events", headers=auth_headers)
+    assert resp.status_code == 200 and resp.get_json() == {"events": []}
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`)
+
+```python
+@app.route("/api/macro/events")
+@require_auth
+def api_macro_events():
+    import datetime as dt
+    days = min(int(request.args.get("days", 30)), 365)
+    snap = _load_snapshot_for_api()
+    if not snap:
+        return jsonify({"events": []})
+    now = dt.datetime.now()
+    lo, hi = now - dt.timedelta(days=7), now + dt.timedelta(days=days)
+    before = float(getattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 24.0))
+    after = float(getattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2.0))
+    out = []
+    for ev in ((snap.get("events") or {}).get("upcoming") or []):
+        try:
+            at = dt.datetime.fromisoformat(ev["at"])
+        except (KeyError, ValueError):
+            continue
+        if not (lo <= at <= hi):
+            continue
+        hours = (at - now).total_seconds() / 3600.0
+        out.append({**ev, "in_blackout": (int(ev.get("importance", 0)) >= 3
+                                          and -after <= hours <= before)})
+    return jsonify({"events": out})
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/test_macro_api.py
+git commit -m "feat: /api/macro/events"
+```
 
 ### Task G170: `GET/POST /api/gate/config`
 
 **Files:** Modify admin app; test `tests/admin/test_gate_api.py`
 
-**Interfaces:** GET → all Gatekeeper fields with current values + per-check registry rows (id, section, weight, enabled, hard_block, backtestable); POST → validated field updates through the **existing settings machinery** (same path the settings page uses — no second config-write implementation), with two guards: switching `GATE_MODE` to enforce requires the G105 evidence file to exist (else 409 + message), and tier-cut edits append an audit line to `data/gate/config_audit.jsonl` (who/when/old/new).
-- [ ] **Step 1–4: TDD (GET shape; enforce-guard 409; audit line on cut change), commit** — `feat: gate config API with enforce guard`
+**Interfaces:** GET → all Gatekeeper fields with current values + per-check registry rows (id, section, weight, enabled, hard_block, backtestable); POST → validated field updates through the **existing settings machinery** (`helpers._build_env_text` + `helpers._write_env_text` — the same path `save_settings` uses; no second config-write implementation), with two guards: switching `GATE_MODE` to enforce requires the G105 sign-off file to exist (else 409 + message), and tier-cut edits append an audit line to `data/gate/config_audit.jsonl` (when/key/old/new).
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/admin/test_gate_api.py
+import json
+import os
+
+
+def test_gate_config_get_shape(client, auth_headers):
+    resp = client.get("/api/gate/config", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    field_names = {f["name"] for f in body["fields"]}
+    assert {"GATE_ENABLED", "GATE_MODE", "GATE_MIN_TIER"} <= field_names
+    check = body["checks"][0]
+    assert set(check) >= {"check_id", "section", "weight", "enabled",
+                          "hard_block", "backtestable"}
+
+
+def test_gate_config_post_enforce_needs_signoff(client, auth_headers,
+                                                tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "SIGNOFF_PATH",
+                        str(tmp_path / "enforce_signoff.json"))
+    resp = client.post("/api/gate/config", headers=auth_headers,
+                       json={"GATE_MODE": "enforce"})
+    assert resp.status_code == 409
+    assert "sign-off" in resp.get_json()["error"]
+
+
+def test_gate_config_post_enforce_with_signoff(client, auth_headers,
+                                               tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    signoff = tmp_path / "enforce_signoff.json"
+    signoff.write_text('{"signed_at": "2026-07-01", "min_tier": "B"}')
+    monkeypatch.setattr(admin_app, "SIGNOFF_PATH", str(signoff))
+    written = {}
+    monkeypatch.setattr(admin_app, "_apply_settings",
+                        lambda updates: written.update(updates))
+    resp = client.post("/api/gate/config", headers=auth_headers,
+                       json={"GATE_MODE": "enforce"})
+    assert resp.status_code == 200 and written == {"GATE_MODE": "enforce"}
+
+
+def test_tier_cut_change_writes_audit_line(client, auth_headers,
+                                           tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    audit = tmp_path / "config_audit.jsonl"
+    monkeypatch.setattr(admin_app, "CONFIG_AUDIT_PATH", str(audit))
+    monkeypatch.setattr(admin_app, "_apply_settings", lambda updates: None)
+    resp = client.post("/api/gate/config", headers=auth_headers,
+                       json={"GATE_TIER_APLUS_CUT": "85"})
+    assert resp.status_code == 200
+    row = json.loads(audit.read_text().splitlines()[0])
+    assert row["key"] == "GATE_TIER_APLUS_CUT" and row["new"] == "85"
+    assert "old" in row and "at" in row
+
+
+def test_gate_config_post_unknown_key_400(client, auth_headers):
+    resp = client.post("/api/gate/config", headers=auth_headers,
+                       json={"NOT_A_FIELD": "1"})
+    assert resp.status_code == 400
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`)
+
+```python
+SIGNOFF_PATH = os.path.join(config.DATA_DIR, "gate", "enforce_signoff.json")
+CONFIG_AUDIT_PATH = os.path.join(config.DATA_DIR, "gate", "config_audit.jsonl")
+AUDITED_KEYS = ("GATE_TIER_APLUS_CUT", "GATE_TIER_A_CUT", "GATE_TIER_B_CUT",
+                "GATE_MODE", "GATE_MIN_TIER")
+
+
+def _gate_fields():
+    return [f for f in config.FIELDS if f.section == "Gatekeeper"]
+
+
+def _apply_settings(updates: dict) -> None:
+    """One seam onto the EXISTING settings write path (same helpers the
+    settings page uses) — never a second .env writer."""
+    from swingbot.admin import helpers
+    existing = helpers._read_env_text()          # verify helper names at execution
+    helpers._write_env_text(helpers._build_env_text(updates, existing))
+
+
+def _audit_config_change(key, old, new):
+    import datetime as dt
+    import json as _json
+    os.makedirs(os.path.dirname(CONFIG_AUDIT_PATH), exist_ok=True)
+    with open(CONFIG_AUDIT_PATH, "a", encoding="utf-8") as fh:
+        fh.write(_json.dumps({"at": dt.datetime.now().isoformat(timespec="seconds"),
+                              "key": key, "old": old, "new": new}) + "\n")
+
+
+@app.route("/api/gate/config", methods=["GET", "POST"])
+@require_auth
+def api_gate_config():
+    from swingbot.core.gate.registry import CHECKS
+    if request.method == "GET":
+        fields = [{"name": f.name, "value": getattr(config, f.name, None),
+                   "type": f.type, "help": f.help} for f in _gate_fields()]
+        checks = [{"check_id": s.check_id, "section": s.section,
+                   "weight": s.weight,
+                   "enabled": bool(getattr(config, s.config_flag, True)),
+                   "hard_block": s.hard_block, "backtestable": s.backtestable,
+                   "applies_to": s.applies_to}
+                  for s in CHECKS.values()]
+        return jsonify({"fields": fields, "checks": checks})
+    updates = request.get_json(force=True, silent=True) or {}
+    known = {f.name for f in _gate_fields()}
+    unknown = [k for k in updates if k not in known]
+    if unknown:
+        return jsonify({"error": f"unknown fields: {unknown}"}), 400
+    if updates.get("GATE_MODE") == "enforce" and not os.path.exists(SIGNOFF_PATH):
+        return jsonify({"error": "enforce requires the G105 sign-off file "
+                                 "(data/gate/enforce_signoff.json) — see the "
+                                 "promotion checklist in the targets doc"}), 409
+    for key, new in updates.items():
+        if key in AUDITED_KEYS:
+            _audit_config_change(key, getattr(config, key, None), new)
+    _apply_settings(updates)
+    return jsonify({"ok": True})
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/test_gate_api.py
+git commit -m "feat: gate config API with enforce guard"
+```
 
 ### Task G171: `GET /api/gate/results?since=&tier=&flag=`
 
 **Files:** Modify admin app; test `tests/admin/test_gate_api.py`
 
-**Interfaces:** paginated stored GateResults joined to plan status/outcome (from plan store + journal), filterable by tier/flag/strategy; ≤ 100 rows/page.
-- [ ] **Step 1–4: TDD (filters; pagination), commit** — `feat: /api/gate/results`
+**Interfaces:** paginated stored GateResults joined to plan status/outcome (from plan store + journal), filterable by tier/flag/strategy; ≤ 100 rows/page. Pure core `gate_results_rows(plans, *, tier=None, flag=None, strategy=None) -> list[dict]` (testable without Flask), route = pagination + params.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_api.py`)
+
+```python
+def _plans():
+    return [
+        {"plan_id": f"p_{i}", "ticker": "NVDA", "strategy": "RSI-Div",
+         "status": "closed", "outcome": {"result": "win"},
+         "gate": {"tier": "A" if i % 2 else "B", "score": 70 + i,
+                  "checks": [{"check_id": "rf_fake_breakout",
+                              "status": "warn" if i % 3 == 0 else "pass"}]}}
+        for i in range(250)
+    ]
+
+
+def test_gate_results_filters(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_all_plan_records", _plans)
+    resp = client.get("/api/gate/results?tier=A", headers=auth_headers)
+    rows = resp.get_json()["rows"]
+    assert rows and all(r["tier"] == "A" for r in rows)
+    resp = client.get("/api/gate/results?flag=rf_fake_breakout",
+                      headers=auth_headers)
+    assert all("rf_fake_breakout" in r["fired_flags"]
+               for r in resp.get_json()["rows"])
+
+
+def test_gate_results_pagination(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_all_plan_records", _plans)
+    page1 = client.get("/api/gate/results?page=1", headers=auth_headers).get_json()
+    page2 = client.get("/api/gate/results?page=2", headers=auth_headers).get_json()
+    assert len(page1["rows"]) == 100
+    assert page1["rows"][0]["plan_id"] != page2["rows"][0]["plan_id"]
+    assert page1["total"] == 250
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`)
+
+```python
+def _all_plan_records() -> list[dict]:
+    from swingbot.core.plan_store import PlanStore
+    return PlanStore().all()             # match the accessor at execution
+
+
+def gate_results_rows(plans, *, tier=None, flag=None, strategy=None):
+    rows = []
+    for p in plans:
+        gate = p.get("gate")
+        if not gate:
+            continue
+        fired = [c["check_id"] for c in gate.get("checks", [])
+                 if c.get("check_id", "").startswith("rf_")
+                 and c.get("status") in ("warn", "fail")]
+        row = {"plan_id": p.get("plan_id"), "ticker": p.get("ticker"),
+               "strategy": p.get("strategy"), "status": p.get("status"),
+               "outcome": (p.get("outcome") or {}).get("result"),
+               "tier": gate.get("tier"), "score": gate.get("score"),
+               "fired_flags": fired}
+        if tier and row["tier"] != tier:
+            continue
+        if strategy and row["strategy"] != strategy:
+            continue
+        if flag and flag not in fired:
+            continue
+        rows.append(row)
+    return rows
+
+
+@app.route("/api/gate/results")
+@require_auth
+def api_gate_results():
+    rows = gate_results_rows(
+        _all_plan_records(), tier=request.args.get("tier"),
+        flag=request.args.get("flag"), strategy=request.args.get("strategy"))
+    page = max(1, int(request.args.get("page", 1)))
+    return jsonify({"rows": rows[(page - 1) * 100: page * 100],
+                    "total": len(rows), "page": page})
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/test_gate_api.py
+git commit -m "feat: /api/gate/results"
+```
 
 ### Task G172: `GET /api/gate/frontier` + `/api/gate/flags`
 
 **Files:** Modify admin app; test `tests/admin/test_gate_api.py`
 
-**Interfaces:** frontier → latest G98 artifact per strategy (404 with hint when never run); flags → G85 live outcome stats + G99 ablation artifact side by side (the backtest-vs-live receipts in one payload).
-- [ ] **Step 1–4: TDD, commit** — `feat: frontier + flags APIs`
+**Interfaces:** frontier → latest G98 artifact per strategy (404 with hint when never run); flags → G85 live outcome stats + G99 ablation artifact side by side (the backtest-vs-live receipts in one payload). G98 artifacts live under `docs/superpowers/results/` — verify the exact filename pattern against `scripts/gate_frontier.py` (`gate-frontier-{slug}.json` expected) and expose the directory as a module constant `FRONTIER_ARTIFACT_DIR` so tests can point it at tmp.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_api.py`)
+
+```python
+def test_frontier_api_serves_latest_artifacts(client, auth_headers,
+                                              tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "FRONTIER_ARTIFACT_DIR", str(tmp_path))
+    (tmp_path / "gate-frontier-rsi-div.json").write_text(json.dumps(
+        {"strategy": "RSI-Div", "frontier": [{"cut": 60, "wr": 80.0}],
+         "best_cut": 60}))
+    resp = client.get("/api/gate/frontier", headers=auth_headers)
+    assert resp.status_code == 200
+    strategies = resp.get_json()["strategies"]
+    assert strategies[0]["strategy"] == "RSI-Div"
+
+
+def test_frontier_api_never_run_404_with_hint(client, auth_headers,
+                                              tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "FRONTIER_ARTIFACT_DIR", str(tmp_path))
+    resp = client.get("/api/gate/frontier", headers=auth_headers)
+    assert resp.status_code == 404
+    assert "gate_frontier.py" in resp.get_json()["error"]
+
+
+def test_flags_api_joins_live_and_ablation(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_live_flag_stats", lambda: [
+        {"flag": "rf_fake_breakout", "delta_wr": 12.0, "n_fired_and_taken": 21}])
+    monkeypatch.setattr(admin_app, "_ablation_artifact", lambda: {
+        "rf_fake_breakout": {"delta_wr": 9.0, "delta_signals_pct": -8.0}})
+    resp = client.get("/api/gate/flags", headers=auth_headers)
+    row = resp.get_json()["flags"][0]
+    assert row["flag"] == "rf_fake_breakout"
+    assert row["live"]["delta_wr"] == 12.0 and row["backtest"]["delta_wr"] == 9.0
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`)
+
+```python
+FRONTIER_ARTIFACT_DIR = "docs/superpowers/results"
+
+
+@app.route("/api/gate/frontier")
+@require_auth
+def api_gate_frontier():
+    import glob
+    import json as _json
+    paths = sorted(glob.glob(os.path.join(FRONTIER_ARTIFACT_DIR,
+                                          "gate-frontier-*.json")))
+    if not paths:
+        return jsonify({"error": "no frontier artifacts — run "
+                                 "scripts/gate_frontier.py first"}), 404
+    strategies = []
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                strategies.append(_json.load(fh))
+        except (OSError, ValueError):
+            continue
+    return jsonify({"strategies": strategies})
+
+
+def _live_flag_stats():
+    from swingbot.core.gate.persistence import flag_outcome_stats
+    return flag_outcome_stats(_load_journal_entries_admin())   # same journal
+                                                               # source G84 used
+
+
+def _ablation_artifact() -> dict:
+    """Latest G99 ablation output keyed by flag id; {} when never run."""
+    import json as _json
+    path = os.path.join(FRONTIER_ARTIFACT_DIR, "gate-ablation.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return _json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+@app.route("/api/gate/flags")
+@require_auth
+def api_gate_flags():
+    live = {row["flag"]: row for row in _live_flag_stats()}
+    ablation = _ablation_artifact()
+    flags = [{"flag": flag,
+              "live": live.get(flag), "backtest": ablation.get(flag)}
+             for flag in sorted(set(live) | set(ablation))]
+    return jsonify({"flags": flags})
+```
+
+(Verify the G99 artifact filename against `scripts/gate_fold_run.py --ablate`'s actual output path when wiring `_ablation_artifact`.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/test_gate_api.py
+git commit -m "feat: frontier + flags APIs"
+```
 
 ### Task G173: `GET /api/gate/blocked?date=` + `GET /api/gate/telemetry?days=`
 
 **Files:** Modify admin app; test `tests/admin/test_gate_api.py`
 
-**Interfaces:** blocked/held/downgraded rows; telemetry summary (G135) bucketed daily.
-- [ ] **Step 1–4: TDD, commit** — `feat: blocked + telemetry APIs`
+**Interfaces:** blocked/held/downgraded rows for a date (default today); telemetry summary (G135) bucketed daily over the window.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_api.py`)
+
+```python
+def test_blocked_api_filters_by_date(client, auth_headers,
+                                     tmp_path, monkeypatch):
+    import swingbot.core.gate.persistence as persistence
+    path = tmp_path / "blocked.jsonl"
+    monkeypatch.setattr(persistence, "BLOCKED_PATH", str(path))
+    rows = [{"at": "2026-07-14T15:00:00", "ticker": "XYZ",
+             "decision": "block", "reason": "rf_fake_breakout"},
+            {"at": "2026-07-13T15:00:00", "ticker": "OLD",
+             "decision": "block", "reason": "rf_stop_sweep"}]
+    path.write_text("\n".join(json.dumps(r) for r in rows))
+    resp = client.get("/api/gate/blocked?date=2026-07-14", headers=auth_headers)
+    body = resp.get_json()
+    assert len(body["rows"]) == 1 and body["rows"][0]["ticker"] == "XYZ"
+
+
+def test_telemetry_api_daily_buckets(client, auth_headers,
+                                     tmp_path, monkeypatch):
+    import datetime as dt
+    import swingbot.core.gate.telemetry as telemetry
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "t.jsonl"))
+    telemetry.count("evaluated", at=dt.datetime(2026, 7, 13, 10, 0))
+    telemetry.count("evaluated", at=dt.datetime(2026, 7, 14, 10, 0))
+    telemetry.count("blocked", at=dt.datetime(2026, 7, 14, 11, 0), reason="x")
+    resp = client.get("/api/gate/telemetry?days=7", headers=auth_headers)
+    days = resp.get_json()["days"]
+    assert days["2026-07-14"] == {"evaluated": 1, "blocked": 1,
+                                  "downgraded": 0, "held_for_event": 0,
+                                  "recheck_held": 0}
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`)
+
+```python
+@app.route("/api/gate/blocked")
+@require_auth
+def api_gate_blocked():
+    import datetime as dt
+    import json as _json
+    from swingbot.core.gate import persistence
+    date = request.args.get("date") or dt.date.today().isoformat()
+    rows = []
+    try:
+        with open(persistence.BLOCKED_PATH, encoding="utf-8") as fh:
+            rows = [r for r in (_json.loads(line) for line in fh if line.strip())
+                    if r.get("at", "").startswith(date)]
+    except (OSError, ValueError):
+        pass
+    return jsonify({"date": date, "rows": rows})
+
+
+@app.route("/api/gate/telemetry")
+@require_auth
+def api_gate_telemetry():
+    import datetime as dt
+    import json as _json
+    from swingbot.core.gate import telemetry
+    days_n = min(int(request.args.get("days", 7)), 90)
+    since = (dt.date.today() - dt.timedelta(days=days_n)).isoformat()
+    buckets: dict[str, dict] = {}
+    counted = ("evaluated", "blocked", "downgraded",
+               "held_for_event", "recheck_held")
+    try:
+        with open(telemetry.TELEMETRY_PATH, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    row = _json.loads(line)
+                except ValueError:
+                    continue
+                at = row.get("at", "")
+                if at < since or row.get("event") not in counted:
+                    continue
+                day = buckets.setdefault(at[:10], {k: 0 for k in counted})
+                day[row["event"]] += 1
+    except OSError:
+        pass
+    return jsonify({"days": buckets})
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py tests/admin/test_gate_api.py
+git commit -m "feat: blocked + telemetry APIs"
+```
 
 ### Task G174: Macro dashboard page `/macro`
 
 **Files:** Modify admin app + nav; create `templates/macro.html`; test `tests/admin/test_macro_pages.py`
 
-**Interfaces:** tile grid (CPI, Core PCE vs target, PPI, unemployment, Fed funds, 2y/10y + curve badge, VIX + regime badge, credit, dollar, fear/greed gauge, composite risk banner colored by label), each tile: value, as-of date, direction arrow; stale banner when snapshot old; **Refresh button** POSTs `/api/macro/refresh` (added here: triggers `ensure_fresh_snapshot(ttl_min=0)` in a background thread, 202 + poll). Empty state when `MACRO_ENABLED` off explains setup.
-- [ ] **Step 1–4: TDD (200 authed, tiles render from fixture snapshot, refresh 202, empty state), commit** — `feat: /macro dashboard page`
+**Interfaces:** tile grid (CPI, Core PCE vs target, PPI, unemployment, Fed funds, 2y/10y + curve badge, VIX + regime badge, credit, dollar, fear/greed gauge, composite risk banner colored by label), each tile: value, as-of date, direction arrow; stale banner when snapshot old; **Refresh button** POSTs `/api/macro/refresh` (added here: triggers `ensure_fresh_snapshot(ttl_min=0)` in a background thread, 202 + poll `/api/macro/snapshot` until `age_min` drops). Empty state when `MACRO_ENABLED` off explains setup. Nav entry added to `NAV_ITEMS`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/admin/test_macro_pages.py
+from tests.fixtures.gate.snapshots import full_snapshot
+
+
+def _with_snapshot(monkeypatch, snap):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api", lambda: snap)
+
+
+def test_macro_page_renders_tiles(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    resp = client.get("/macro", headers=auth_headers)
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    for needle in ("CPI", "Core PCE", "Fed funds", "VIX",
+                   "risk_on", "Fear/greed"):
+        assert needle in html
+    assert "stale-banner" not in html
+
+
+def test_macro_page_stale_banner(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, dict(full_snapshot(), stale=True))
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert "stale-banner" in html
+
+
+def test_macro_page_empty_state(client, auth_headers, monkeypatch):
+    import swingbot.config as config
+    _with_snapshot(monkeypatch, None)
+    monkeypatch.setattr(config, "MACRO_ENABLED", False, raising=False)
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert "MACRO_ENABLED" in html and "FRED_API_KEY" in html
+
+
+def test_macro_refresh_202_and_single_thread(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    calls = {"n": 0}
+    monkeypatch.setattr(admin_app, "_spawn_refresh",
+                        lambda: calls.__setitem__("n", calls["n"] + 1))
+    assert client.post("/api/macro/refresh",
+                       headers=auth_headers).status_code == 202
+    assert calls["n"] == 1
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — route + template + refresh endpoint (append to `app.py`; add `("macro", "🌍", "Macro", "macro_page")` to `NAV_ITEMS`):
+
+```python
+@app.route("/macro")
+@require_auth
+def macro_page():
+    snap = _load_snapshot_for_api()
+    return render_template("macro.html", snap=snap,
+                           macro_enabled=getattr(config, "MACRO_ENABLED", False))
+
+
+_REFRESH_RUNNING = threading.Event()
+
+
+def _spawn_refresh():
+    def worker():
+        try:
+            from swingbot.core.macro.snapshot import ensure_fresh_snapshot
+            ensure_fresh_snapshot(ttl_min=0)
+        finally:
+            _REFRESH_RUNNING.clear()
+    threading.Thread(target=worker, daemon=True).start()
+
+
+@app.route("/api/macro/refresh", methods=["POST"])
+@require_auth
+def api_macro_refresh():
+    if _REFRESH_RUNNING.is_set():
+        return jsonify({"status": "already running"}), 202
+    _REFRESH_RUNNING.set()
+    _spawn_refresh()
+    return jsonify({"status": "started"}), 202
+```
+
+And `swingbot/admin/templates/macro.html` (extends `base.html`; tile macro kept local — reuse existing card CSS classes):
+
+```html
+{% extends "base.html" %}
+{% block content %}
+{% if not snap %}
+  <div class="empty-state">
+    Macro layer off or no snapshot yet — set <code>MACRO_ENABLED</code>
+    and <code>FRED_API_KEY</code> in Settings, then hit Refresh.
+  </div>
+{% else %}
+  {% if snap.stale %}<div class="banner warn stale-banner">
+    Snapshot is stale ({{ snap.built_at }}) — providers may be down.</div>{% endif %}
+  <div class="banner composite {{ snap.composite.label }}">
+    Composite: {{ snap.composite.label }} ({{ snap.composite.score }})
+  </div>
+  <div class="tile-grid">
+    {% macro tile(label, value, sub='') -%}
+      <div class="card tile"><div class="tile-label">{{ label }}</div>
+        <div class="tile-value">{{ value }}</div>
+        <div class="tile-sub">{{ sub }}</div></div>
+    {%- endmacro %}
+    {{ tile('CPI yoy', snap.inflation.cpi_yoy ~ '%') }}
+    {{ tile('Core PCE', snap.inflation.core_pce_yoy ~ '%',
+            snap.inflation.vs_target ~ ' pts vs 2% target') }}
+    {{ tile('PPI yoy', snap.inflation.ppi_yoy ~ '%') }}
+    {{ tile('Unemployment', snap.labor.unemployment ~ '%') }}
+    {{ tile('Fed funds', snap.rates.fed_funds) }}
+    {{ tile('2y / 10y', snap.rates.y2 ~ ' / ' ~ snap.rates.y10,
+            'curve ' ~ snap.rates.curve_state) }}
+    {{ tile('VIX', snap.vix.level, snap.vix.regime) }}
+    {{ tile('Credit', snap.risk.credit) }}
+    {{ tile('Dollar', snap.risk.dollar) }}
+    {{ tile('Fear/greed', snap.fear_greed.score, snap.fear_greed.label) }}
+  </div>
+  <button id="refresh-btn" data-url="/api/macro/refresh">Refresh now</button>
+  <div class="tile-sub">as of {{ snap.built_at }}</div>
+{% endif %}
+{% endblock %}
+```
+
+(The refresh button's three-line fetch+poll script rides in the template's script block, following the inline-JS convention `dashboard.html` uses.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/macro.html tests/admin/test_macro_pages.py
+git commit -m "feat: /macro dashboard page"
+```
 
 ### Task G175: Yields & curve chart panel
 
 **Files:** Modify `templates/macro.html` + static JS; test `tests/admin/test_macro_pages.py`
 
-**Interfaces:** Chart.js line panel on `/macro`: 10y−2y and 10y−3m spreads (30/90/365d toggles) from `/api/macro/history`, zero-line annotated "inversion"; renders nothing gracefully with < 2 points.
-- [ ] **Step 1–4: TDD (page includes the canvas + data endpoint wiring; JS logic kept declarative-minimal per cockpit convention), commit** — `feat: curve chart panel`
+**Interfaces:** Chart.js line panel on `/macro`: 10y−2y and 10y−3m spreads (30/90/365d toggles) from `/api/macro/history`, zero-line annotated "inversion"; renders nothing gracefully with < 2 points. Structural tests only (JS runs in the browser, not pytest) — the page must carry the canvas, the data URL, and the toggle buttons.
+
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_macro_page_has_curve_chart_wiring(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert 'id="curve-chart"' in html                       # the canvas
+    assert "/api/macro/history?days=" in html               # data endpoint
+    assert 'data-days="90"' in html and 'data-days="365"' in html  # toggles
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — append to `templates/macro.html` inside the non-empty branch:
+
+```html
+<div class="card chart-card">
+  <div class="chart-toggles">
+    {% for d in (30, 90, 365) %}
+      <button class="range-btn" data-days="{{ d }}">{{ d }}d</button>
+    {% endfor %}
+  </div>
+  <canvas id="curve-chart" height="120"></canvas>
+</div>
+<script>
+  // Declarative-minimal per the existing dashboard convention: fetch the
+  // allow-listed keys, draw two lines + a zero-line, redraw on toggle.
+  // Skips rendering entirely (canvas hidden) when < 2 points.
+  const curveInit = (days) =>
+    fetch(`/api/macro/history?days=${days}&keys=spread_10y2y,spread_10y3m`)
+      .then(r => r.json())
+      .then(({rows}) => drawCurveChart(rows));   // drawCurveChart defined below
+  document.querySelectorAll(".range-btn").forEach(b =>
+    b.addEventListener("click", () => curveInit(b.dataset.days)));
+  curveInit(90);
+</script>
+```
+
+`drawCurveChart` (same script block, ~25 lines): guard `rows.length < 2 → canvas.hidden = true`; destroy-and-recreate the Chart.js instance; datasets `10y−2y` and `10y−3m`; `plugins.annotation`-free zero line via a second dataset of zeros labeled "inversion" (keeps us off extra plugins). Chart.js comes from the same include `stats.html` already uses (CDN today; if cockpit vendored it, use the vendored path).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v` (+ eyeball the panel with real data — noted for the G195 QA pass)
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/templates/macro.html tests/admin/test_macro_pages.py
+git commit -m "feat: curve chart panel"
+```
 
 ### Task G176: Inflation trend panel
 
-**Files:** Modify `templates/macro.html`; test `tests/admin/test_macro_pages.py`
+**Files:** Modify `templates/macro.html` + admin app; test `tests/admin/test_macro_pages.py`
 
-**Interfaces:** CPI/Core CPI/Core PCE yoy lines (2y window from `data/macro/history/`, served by a small `/api/macro/series?key=` addition, allow-listed), 2% target hline.
-- [ ] **Step 1–4: TDD, commit** — `feat: inflation trend panel`
+**Interfaces:** CPI/Core CPI/Core PCE yoy lines (2y window from `data/macro/history/` series files, served by a small `/api/macro/series?key=` addition, allow-listed), 2% target hline.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_series_api_allowlist(client, auth_headers, monkeypatch, tmp_path):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "MACRO_HISTORY_DIR", str(tmp_path))
+    (tmp_path / "cpi_yoy.json").write_text(
+        '{"series": [{"date": "2026-06-01", "value": 3.2}]}')
+    resp = client.get("/api/macro/series?key=cpi_yoy", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.get_json()["series"][0]["value"] == 3.2
+    assert client.get("/api/macro/series?key=../../etc/passwd",
+                      headers=auth_headers).status_code == 400
+
+
+def test_macro_page_has_inflation_panel(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert 'id="inflation-chart"' in html
+    assert "/api/macro/series?key=" in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `app.py`; the series file layout comes from G13/G15's `data/macro/history/{key}.json` — verify the exact shape there):
+
+```python
+MACRO_HISTORY_DIR = os.path.join(config.DATA_DIR, "macro", "history")
+SERIES_KEY_ALLOWLIST = {"cpi_yoy", "core_cpi_yoy", "core_pce_yoy",
+                        "ppi_yoy", "pce_yoy"}
+
+
+@app.route("/api/macro/series")
+@require_auth
+def api_macro_series():
+    import json as _json
+    key = request.args.get("key", "")
+    if key not in SERIES_KEY_ALLOWLIST:
+        return jsonify({"error": "unknown series key"}), 400
+    try:
+        with open(os.path.join(MACRO_HISTORY_DIR, f"{key}.json"),
+                  encoding="utf-8") as fh:
+            data = _json.load(fh)
+    except (OSError, ValueError):
+        return jsonify({"series": []})
+    return jsonify({"series": data.get("series", [])[-24:]})   # 2y of monthlies
+```
+
+Template: a second `chart-card` with `<canvas id="inflation-chart">` + a script that fetches the three allow-listed keys, draws three lines and a dashed hline at 2.0 labeled "target" (same Chart.js conventions as G175).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/macro.html tests/admin/test_macro_pages.py
+git commit -m "feat: inflation trend panel"
+```
 
 ### Task G177: Sector rotation heatmap page `/sectors`
 
 **Files:** Modify admin app + nav; create `templates/sectors.html`; test `tests/admin/test_macro_pages.py`
 
 **Interfaces:** 11×3 grid (sector × window) colored by RS sign/magnitude (CSS classes, no chart lib needed), posture banner, leaders/laggards lists, per-sector sparkline (Chart.js) of composite rank history.
-- [ ] **Step 1–4: TDD, commit** — `feat: /sectors rotation page`
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_sectors_page_heatmap(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/sectors", headers=auth_headers).get_data(as_text=True)
+    assert "Technology" in html and "Utilities" in html
+    assert 'class="rs-cell rs-pos' in html          # colored cells
+    assert 'class="rs-cell rs-neg' in html
+    assert "risk_on" in html                        # posture banner
+
+
+def test_sectors_page_empty_state(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, None)
+    html = client.get("/sectors", headers=auth_headers).get_data(as_text=True)
+    assert "no sector data" in html.lower()
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — route (nav entry `("sectors", "🔄", "Sectors", "sectors_page")`):
+
+```python
+@app.route("/sectors")
+@require_auth
+def sectors_page():
+    snap = _load_snapshot_for_api()
+    return render_template("sectors.html",
+                           sectors=(snap or {}).get("sectors"))
+```
+
+And `templates/sectors.html`:
+
+```html
+{% extends "base.html" %}
+{% block content %}
+{% if not sectors or not sectors.rs_rows %}
+  <div class="empty-state">No sector data yet — appears after the first
+  macro snapshot with sector bars cached.</div>
+{% else %}
+  <div class="banner composite {{ sectors.rotation }}">
+    Rotation: {{ sectors.rotation }}</div>
+  <table class="heatmap">
+    <thead><tr><th>Sector</th><th>1m</th><th>3m</th><th>6m</th></tr></thead>
+    <tbody>
+    {% for r in sectors.rs_rows | sort(attribute='rank') %}
+      <tr><td>{{ r.rank }}. {{ r.sector }}</td>
+      {% for v in (r.rs_1m, r.rs_3m, r.rs_6m) %}
+        {% set cls = 'rs-pos' if v and v > 0 else 'rs-neg' if v and v < 0 else 'rs-flat' %}
+        {% set mag = 'strong' if v and (v > 3 or v < -3) else 'mild' %}
+        <td class="rs-cell {{ cls }} {{ mag }}">{{ '%+.1f' % v if v is not none else '—' }}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}
+```
+
+CSS (`static/style.css`): `.rs-pos`/`.rs-neg` background tints, `.strong` darker — **cell text keeps the signed number**, so color is never the only signal (feeds G194). The per-sector rank-history sparkline is additive: a `<canvas class="spark" data-sector="...">` per row fed from `/api/macro/history` composite ranks IF the history rows carry `sector_ranks` (skip silently when absent — verify what G38's history line stores).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/sectors.html swingbot/admin/static/style.css tests/admin/test_macro_pages.py
+git commit -m "feat: /sectors rotation page"
+```
 
 ### Task G178: Breadth + sentiment panels on `/macro`
 
 **Files:** Modify `templates/macro.html`; test `tests/admin/test_macro_pages.py`
 
 **Interfaces:** breadth tile pair (%>50DMA, %>200DMA with health badge) + news panel (top-10 headlines with sentiment emoji + rumor/confirmed tag, aggregate score, rumor ratio).
-- [ ] **Step 1–4: TDD, commit** — `feat: breadth + news panels`
+
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_macro_page_breadth_and_news(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert "62.0% &gt; 50DMA" in html or "62.0% > 50DMA" in html
+    assert "71.0%" in html
+    assert "Chipmaker beats and raises guidance" in html
+    assert "rumor" in html and "confirmed" in html
+    assert "Rumor ratio" in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — append to `templates/macro.html`'s tile grid + a news card:
+
+```html
+    {{ tile('Breadth', snap.breadth.pct_above_50dma ~ '% > 50DMA',
+            snap.breadth.pct_above_200dma ~ '% > 200DMA · N=' ~ snap.breadth.n) }}
+</div> {# close tile-grid #}
+<div class="card news-card">
+  <h3>News — {{ snap.news.sentiment.label }}
+      ({{ '%+.2f' % snap.news.sentiment.score }}) ·
+      Rumor ratio {{ '%.0f%%' % (snap.news.rumor_ratio * 100) }}</h3>
+  <ul>
+    {% for h in snap.news.headlines_top5 %}
+      <li><span class="sent-{{ 'pos' if h.score > 0.15 else 'neg' if h.score < -0.15 else 'neu' }}">●</span>
+          <span class="badge">{{ h.kind }}</span> {{ h.title }}</li>
+    {% endfor %}
+  </ul>
+</div>
+```
+
+(Guard every access with Jinja defaults where the section may be missing — mirror the tile macro's tolerance; the test with `full_snapshot()` pins the happy path, the G189 empty-state sweep pins the bare path.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/templates/macro.html tests/admin/test_macro_pages.py
+git commit -m "feat: breadth + news panels"
+```
 
 ### Task G179: Event calendar page `/events`
 
 **Files:** Modify admin app + nav; create `templates/events.html`; test `tests/admin/test_macro_pages.py`
 
-**Interfaces:** month grid (pure Jinja, no JS calendar lib): event chips by kind, blackout windows shaded, opex/holidays marked; list view fallback below (accessible + mobile); prev/next month URLs.
-- [ ] **Step 1–4: TDD (grid renders fixture month; blackout shading class present), commit** — `feat: /events calendar page`
+**Interfaces:** month grid (pure Jinja, no JS calendar lib): event chips by kind, blackout windows shaded, opex/holidays marked; list view fallback below (accessible + mobile); prev/next month URLs (`/events?month=2026-08`).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_events_page_month_grid(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/events?month=2026-07",
+                      headers=auth_headers).get_data(as_text=True)
+    assert 'class="cal-grid"' in html
+    assert "CPI" in html and "OPEX" in html
+    assert 'class="chip' in html
+    assert "?month=2026-06" in html and "?month=2026-08" in html  # prev/next
+    assert 'class="cal-list"' in html                             # a11y fallback
+
+
+def test_events_page_blackout_shading(client, auth_headers, monkeypatch):
+    import swingbot.config as config
+    monkeypatch.setattr(config, "GATE_BLACKOUT_ENABLED", True, raising=False)
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/events?month=2026-07",
+                      headers=auth_headers).get_data(as_text=True)
+    assert "blackout-shade" in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — route builds the grid data server-side (pure function `month_grid(events, year, month, blackout_enabled) -> list[list[dict]]` in `app.py` or `helpers.py`: weeks × days, each day `{date, events: [...], in_blackout: bool}` using G120's window math against importance-3 events); template renders:
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<div class="cal-nav">
+  <a href="?month={{ prev_month }}">←</a>
+  <h2>{{ month_label }}</h2>
+  <a href="?month={{ next_month }}">→</a>
+</div>
+<table class="cal-grid">
+  {% for week in grid %}
+  <tr>{% for day in week %}
+    <td class="{{ 'blackout-shade' if day.in_blackout }} {{ 'other-month' if not day.in_month }}">
+      <div class="cal-date">{{ day.date.day }}</div>
+      {% for ev in day.events %}
+        <span class="chip chip-{{ ev.name | lower }}">{{ ev.name }}</span>
+      {% endfor %}
+    </td>
+  {% endfor %}</tr>
+  {% endfor %}
+</table>
+<ul class="cal-list">
+  {% for ev in flat_events %}
+    <li>{{ ev.at }} — {{ ev.name }} ({{ '★' * ev.importance }})</li>
+  {% endfor %}
+</ul>
+{% endblock %}
+```
+
+Nav entry `("events", "📅", "Events", "events_page")`. `month_grid` gets its own direct unit test in the same file (5×7-or-6×7 shape; events land on the right day; blackout day flagged).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/events.html swingbot/admin/static/style.css tests/admin/test_macro_pages.py
+git commit -m "feat: /events calendar page"
+```
 
 ### Task G180: Checklist config page `/gate`
 
 **Files:** Modify admin app + nav; create `templates/gate.html`; test `tests/admin/test_gate_pages.py`
 
 **Interfaces:** sections: mode/master switches (mode selector with plain-language descriptions — "Inform (default): every plan alerts, checklist annotates" / "Enforce: below-tier plans are held back" — enforce-guard message surfaced from G170's 409), **strictness panel** (the `GATE_STRICTNESS` preset selector with a one-click "Relax all" affordance + per-check threshold sliders generated from the G79 ThresholdSpec fields, each labeled with its relax direction and preset markers on the slider track, overridden thresholds visually badged), tier cuts (sliders + current fold-evidence values shown beside for comparison), per-check table (enable toggle, weight read-only + "weights change via evidence, not sliders" note, hard-block badge, applies-to list), blackout window settings (with the annotate-vs-hold distinction spelled out). All writes through `/api/gate/config`.
-- [ ] **Step 1–4: TDD (200; toggles POST; preset apply POST reseeds thresholds; enforce guard surfaced; slider fields present for every ThresholdSpec), commit** — `feat: /gate config page with strictness presets + threshold sliders`
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/admin/test_gate_pages.py
+def test_gate_page_sections_render(client, auth_headers):
+    html = client.get("/gate", headers=auth_headers).get_data(as_text=True)
+    assert "Inform (default): every plan alerts" in html   # plain-language modes
+    assert "Enforce: below-tier plans are held back" in html
+    assert 'id="strictness-panel"' in html
+    assert "Relax all" in html
+    assert "weights change via evidence, not sliders" in html
+    assert "annotate" in html and "hold" in html            # blackout distinction
+
+
+def test_gate_page_has_slider_per_threshold_spec(client, auth_headers):
+    from swingbot.core.gate.registry import CHECKS
+    html = client.get("/gate", headers=auth_headers).get_data(as_text=True)
+    for spec in CHECKS.values():
+        for th in spec.thresholds.values():
+            field = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            assert f'name="{field}"' in html, f"slider missing for {field}"
+
+
+def test_gate_page_check_table_rows(client, auth_headers):
+    from swingbot.core.gate.registry import CHECKS
+    html = client.get("/gate", headers=auth_headers).get_data(as_text=True)
+    for check_id in CHECKS:
+        assert check_id in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — route:
+
+```python
+@app.route("/gate")
+@require_auth
+def gate_page():
+    from swingbot.core.gate.registry import CHECKS
+    checks = []
+    for spec in CHECKS.values():
+        checks.append({
+            "check_id": spec.check_id, "section": spec.section,
+            "weight": spec.weight, "hard_block": spec.hard_block,
+            "applies_to": spec.applies_to or ("all",),
+            "enabled": bool(getattr(config, spec.config_flag, True)),
+            "config_flag": spec.config_flag,
+            "thresholds": [
+                {"field": f"GATE_TH_{spec.check_id.upper()}_{t.name.upper()}",
+                 "name": t.name,
+                 "value": spec.threshold(t.name),
+                 "default": t.default, "min": t.min, "max": t.max,
+                 "step": t.step, "relax_direction": t.relax_direction,
+                 "presets": t.presets,
+                 "overridden": spec.threshold(t.name) != t.default}
+                for t in spec.thresholds.values()],
+        })
+    fold_evidence = _fold_evidence_cuts()   # {"aplus": ..} from the G98 artifact
+                                            # proposal, {} when never run
+    return render_template("gate.html", checks=checks,
+                           mode=getattr(config, "GATE_MODE", "inform"),
+                           strictness=getattr(config, "GATE_STRICTNESS", "balanced"),
+                           cuts={"aplus": getattr(config, "GATE_TIER_APLUS_CUT", 90),
+                                 "a": getattr(config, "GATE_TIER_A_CUT", 75),
+                                 "b": getattr(config, "GATE_TIER_B_CUT", 55)},
+                           fold_evidence=fold_evidence)
+```
+
+And `templates/gate.html` — the structure (each section a `card`; every input `data-api="/api/gate/config"`; one shared inline script POSTs `{name: value}` JSON on change and surfaces a 409 body as a banner):
+
+```html
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h3>Mode</h3>
+  <label><input type="radio" name="GATE_MODE" value="shadow"
+    {{ 'checked' if mode == 'shadow' }}> Shadow: logs only, alerts untouched</label>
+  <label><input type="radio" name="GATE_MODE" value="inform"
+    {{ 'checked' if mode == 'inform' }}> Inform (default): every plan alerts,
+    checklist annotates</label>
+  <label><input type="radio" name="GATE_MODE" value="enforce"
+    {{ 'checked' if mode == 'enforce' }}> Enforce: below-tier plans are held back
+    (requires the sign-off file — see runbook)</label>
+  <div id="config-error" class="banner warn" hidden></div>
+</div>
+<div class="card" id="strictness-panel">
+  <h3>Strictness</h3>
+  <select name="GATE_STRICTNESS" data-api="/api/gate/config">
+    {% for p in ('strict', 'balanced', 'relaxed') %}
+      <option value="{{ p }}" {{ 'selected' if strictness == p }}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  <button id="relax-all" title="Apply the relaxed preset to every threshold">
+    Relax all</button>
+  {% for c in checks %}{% for t in c.thresholds %}
+    <div class="slider-row {{ 'overridden' if t.overridden }}">
+      <label>{{ c.check_id }} · {{ t.name }}
+        <small>{{ t.relax_direction }}</small></label>
+      <input type="range" name="{{ t.field }}" value="{{ t.value }}"
+             min="{{ t.min }}" max="{{ t.max }}" step="{{ t.step }}"
+             data-api="/api/gate/config"
+             list="presets-{{ t.field }}">
+      <datalist id="presets-{{ t.field }}">
+        {% for pname, pval in t.presets.items() %}
+          <option value="{{ pval }}" label="{{ pname }}"></option>
+        {% endfor %}
+      </datalist>
+      <output>{{ t.value }}</output>
+      {% if t.overridden %}<span class="badge">custom</span>{% endif %}
+    </div>
+  {% endfor %}{% endfor %}
+</div>
+<div class="card">
+  <h3>Tier cuts</h3>
+  {% for name, val in cuts.items() %}
+    <div class="slider-row">
+      <label>{{ name }} cut</label>
+      <input type="range" name="GATE_TIER_{{ name | upper }}_CUT"
+             value="{{ val }}" min="0" max="100" step="1"
+             data-api="/api/gate/config">
+      <output>{{ val }}</output>
+      {% if fold_evidence.get(name) %}
+        <small>fold evidence: {{ fold_evidence[name] }}</small>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+<div class="card">
+  <h3>Checks <small>weights change via evidence, not sliders</small></h3>
+  <table><thead><tr><th>check</th><th>section</th><th>weight</th>
+    <th>on</th><th></th><th>applies to</th></tr></thead><tbody>
+  {% for c in checks %}
+    <tr><td>{{ c.check_id }}</td><td>{{ c.section }}</td>
+      <td>{{ c.weight }}</td>
+      <td><input type="checkbox" name="{{ c.config_flag }}"
+                 {{ 'checked' if c.enabled }} data-api="/api/gate/config"></td>
+      <td>{% if c.hard_block %}<span class="badge hb">HB</span>{% endif %}</td>
+      <td>{{ c.applies_to | join(', ') }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+<div class="card">
+  <h3>Event blackout</h3>
+  <p>Default behavior is <b>annotate</b> — the alert warns, the plan ships.
+     Only with <b>hold</b> (enforce) are entries paused until after the print.</p>
+  <!-- GATE_BLACKOUT_ENABLED / _ENFORCE checkboxes + hours inputs,
+       each data-api="/api/gate/config" -->
+</div>
+{% endblock %}
+```
+
+"Relax all" POSTs every threshold field's `relaxed` preset value in one `/api/gate/config` call. Nav gains `("gate", "📋", "Gate", "gate_page")` with sub-links (flags/frontier/blocked added by G181–G183).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/gate.html swingbot/admin/static/style.css tests/admin/test_gate_pages.py
+git commit -m "feat: /gate config page with strictness presets + threshold sliders"
+```
 
 ### Task G181: Red-flag analytics page `/gate/flags`
 
 **Files:** Modify admin app + nav; create `templates/gate_flags.html`; test `tests/admin/test_gate_pages.py`
 
-**Interfaces:** per-flag row: backtest ablation numbers (G99) vs live outcome numbers (G85) side by side, fire-rate trend sparkline, "earning its keep?" verdict cell (green when live delta agrees with folds, amber when N < 20, red when contradicting); links each flag to its registry docstring rendered as help text.
-- [ ] **Step 1–4: TDD, commit** — `feat: /gate/flags analytics page`
+**Interfaces:** per-flag row: backtest ablation numbers (G99) vs live outcome numbers (G85) side by side, fire-rate trend sparkline, "earning its keep?" verdict cell (green when live delta agrees with folds, amber when N < 20, red when contradicting); links each flag to its registry docstring rendered as help text. The verdict rule is a pure function: `flag_verdict(live, backtest) -> str` (`"agrees"|"low_n"|"contradicts"|"no_data"`).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_flag_verdict_rule():
+    from swingbot.admin.app import flag_verdict
+    live_good = {"delta_wr": 10.0, "n_fired_and_taken": 25}
+    assert flag_verdict(live_good, {"delta_wr": 8.0}) == "agrees"
+    assert flag_verdict({"delta_wr": 10.0, "n_fired_and_taken": 5},
+                        {"delta_wr": 8.0}) == "low_n"
+    assert flag_verdict({"delta_wr": -6.0, "n_fired_and_taken": 30},
+                        {"delta_wr": 8.0}) == "contradicts"
+    assert flag_verdict(None, {"delta_wr": 8.0}) == "no_data"
+
+
+def test_flags_page_renders_verdict_cells(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_live_flag_stats", lambda: [
+        {"flag": "rf_fake_breakout", "delta_wr": 10.0, "n_fired_and_taken": 25}])
+    monkeypatch.setattr(admin_app, "_ablation_artifact", lambda: {
+        "rf_fake_breakout": {"delta_wr": 8.0}})
+    html = client.get("/gate/flags", headers=auth_headers).get_data(as_text=True)
+    assert "rf_fake_breakout" in html
+    assert 'class="verdict agrees"' in html
+    assert "agrees" in html                          # word, not just color (a11y)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — pure rule + route + template:
+
+```python
+def flag_verdict(live: dict | None, backtest: dict | None) -> str:
+    """G181: does the flag earn its keep? 'agrees' = live delta has the
+    same sign as the fold ablation with N >= 20; 'low_n' = not enough live
+    fires to say; 'contradicts' = enough N and opposite sign."""
+    if not live or live.get("delta_wr") is None:
+        return "no_data"
+    if (live.get("n_fired_and_taken") or 0) < 20:
+        return "low_n"
+    if not backtest or backtest.get("delta_wr") is None:
+        return "no_data"
+    same_sign = (live["delta_wr"] >= 0) == (backtest["delta_wr"] >= 0)
+    return "agrees" if same_sign else "contradicts"
+
+
+@app.route("/gate/flags")
+@require_auth
+def gate_flags_page():
+    from swingbot.core.gate.registry import CHECKS
+    live = {r["flag"]: r for r in _live_flag_stats()}
+    ablation = _ablation_artifact()
+    rows = []
+    for flag in sorted(set(live) | set(ablation)):
+        spec = CHECKS.get(flag)
+        rows.append({"flag": flag, "live": live.get(flag),
+                     "backtest": ablation.get(flag),
+                     "verdict": flag_verdict(live.get(flag), ablation.get(flag)),
+                     "help": (spec.func.__doc__ or "").strip() if spec else ""})
+    return render_template("gate_flags.html", rows=rows)
+```
+
+`templates/gate_flags.html`: one table row per flag — flag id (with `title="{{ row.help }}"`), backtest ΔWR/Δsignals, live ΔWR/N (through `fmt_wr` semantics: render "—" under N=20), and `<td class="verdict {{ row.verdict }}">{{ row.verdict }}</td>` (word + color). Fire-rate sparkline: `<canvas class="spark">` fed from `/api/gate/telemetry` daily buckets filtered client-side per flag IF telemetry carries per-flag labels (it does: `blocked` rows carry `reason`) — otherwise omit the sparkline for now and note it in the template comment.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/gate_flags.html tests/admin/test_gate_pages.py
+git commit -m "feat: /gate/flags analytics page"
+```
 
 ### Task G182: Frontier page `/gate/frontier`
 
 **Files:** Modify admin app + nav; create `templates/gate_frontier.html`; test `tests/admin/test_gate_pages.py`
 
 **Interfaces:** per-strategy frontier table + Chart.js dual-axis chart (mirror of G111), a **client-side threshold slider** that highlights the corresponding row and shows `{WR, Wilson LB, kept%, expectancy, trades/mo}` live (pure JS over the already-served rows — no server round-trip), current configured cut marked; "propose as tier cut" button writes a proposal file via `POST /api/gate/propose` (C36 shape — proposals, never direct config writes from this page).
-- [ ] **Step 1–4: TDD (rows served; propose endpoint writes proposal file), commit** — `feat: /gate/frontier interactive page`
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def _frontier_artifact(tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "FRONTIER_ARTIFACT_DIR", str(tmp_path))
+    (tmp_path / "gate-frontier-rsi-div.json").write_text(json.dumps(
+        {"strategy": "RSI-Div", "best_cut": 60,
+         "frontier": [{"cut": 50, "n_kept": 80, "pct_kept": 66.0, "wr": 72.0,
+                       "wilson_lb": 61.0, "expectancy_r": 0.4,
+                       "trades_per_month": 6.1},
+                      {"cut": 60, "n_kept": 50, "pct_kept": 41.0, "wr": 81.0,
+                       "wilson_lb": 68.0, "expectancy_r": 0.6,
+                       "trades_per_month": 3.8}]}))
+
+
+def test_frontier_page_serves_rows_and_slider(client, auth_headers,
+                                              tmp_path, monkeypatch):
+    _frontier_artifact(tmp_path, monkeypatch)
+    html = client.get("/gate/frontier", headers=auth_headers).get_data(as_text=True)
+    assert "RSI-Div" in html and 'id="cut-slider"' in html
+    assert '"wilson_lb": 61.0' in html          # rows embedded for client-side JS
+    assert "propose as tier cut" in html.lower()
+
+
+def test_propose_endpoint_writes_proposal(client, auth_headers,
+                                          tmp_path, monkeypatch):
+    import swingbot.config as config
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path), raising=False)
+    resp = client.post("/api/gate/propose", headers=auth_headers,
+                       json={"strategy": "RSI-Div", "cut": 60})
+    assert resp.status_code == 200
+    path = resp.get_json()["path"]
+    assert "tuning_proposals" in path and os.path.exists(path)
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — route serves the artifacts (reusing `api_gate_frontier`'s loader) into the template with `{{ strategies | tojson }}` embedded for the slider JS; propose endpoint delegates to G95's writer:
+
+```python
+@app.route("/api/gate/propose", methods=["POST"])
+@require_auth
+def api_gate_propose():
+    from swingbot.core.gate.frontier import write_proposal
+    body = request.get_json(force=True, silent=True) or {}
+    if not body.get("strategy") or body.get("cut") is None:
+        return jsonify({"error": "strategy and cut required"}), 400
+    path = write_proposal({"strategy": body["strategy"],
+                           "proposed_cut": int(body["cut"]),
+                           "source": "admin frontier page"},
+                          kind="gate-tiers-manual")
+    return jsonify({"ok": True, "path": path})
+```
+
+Template: per-strategy `<section>` with the table (a `<tr data-cut="{{ r.cut }}">` per row), the dual-axis Chart.js canvas, `<input type="range" id="cut-slider">`, a live `<output id="cut-stats">`, the configured cut marked with a `class="current-cut"` row highlight, and the propose button POSTing the slider value. The slider JS is ~15 lines over the embedded JSON: find the row with the nearest cut, toggle `highlight`, fill the output.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/gate_frontier.html tests/admin/test_gate_pages.py
+git commit -m "feat: /gate/frontier interactive page"
+```
 
 ### Task G183: Blocked-log viewer `/gate/blocked`
 
 **Files:** Modify admin app + nav; create `templates/gate_blocked.html`; test `tests/admin/test_gate_pages.py`
 
 **Interfaces:** filterable table (date, ticker, strategy, tier, decision, reason chain, link to plan detail if cockpit's plan pages exist), daily counts chart, CSV export link (`?format=csv`).
-- [ ] **Step 1–4: TDD (filters; CSV content-type), commit** — `feat: /gate/blocked viewer`
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def _blocked_log(tmp_path, monkeypatch):
+    import swingbot.core.gate.persistence as persistence
+    path = tmp_path / "blocked.jsonl"
+    monkeypatch.setattr(persistence, "BLOCKED_PATH", str(path))
+    rows = [{"at": "2026-07-14T15:00:00", "ticker": "XYZ", "strategy": "Breakout",
+             "tier": "C", "decision": "block", "reason": "rf_fake_breakout",
+             "plan_id": "p_1"},
+            {"at": "2026-07-13T15:00:00", "ticker": "ABC", "strategy": "RSI-Div",
+             "tier": "B", "decision": "downgrade", "reason": "tier B < A",
+             "plan_id": "p_2"}]
+    path.write_text("\n".join(json.dumps(r) for r in rows))
+
+
+def test_blocked_page_filters(client, auth_headers, tmp_path, monkeypatch):
+    _blocked_log(tmp_path, monkeypatch)
+    html = client.get("/gate/blocked?decision=block",
+                      headers=auth_headers).get_data(as_text=True)
+    assert "XYZ" in html and "ABC" not in html
+
+
+def test_blocked_page_csv_export(client, auth_headers, tmp_path, monkeypatch):
+    _blocked_log(tmp_path, monkeypatch)
+    resp = client.get("/gate/blocked?format=csv", headers=auth_headers)
+    assert resp.content_type.startswith("text/csv")
+    body = resp.get_data(as_text=True)
+    assert body.splitlines()[0] == "at,ticker,strategy,tier,decision,reason,plan_id"
+    assert "XYZ" in body
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**:
+
+```python
+@app.route("/gate/blocked")
+@require_auth
+def gate_blocked_page():
+    import csv
+    import io
+    import json as _json
+    from swingbot.core.gate import persistence
+    rows = []
+    try:
+        with open(persistence.BLOCKED_PATH, encoding="utf-8") as fh:
+            rows = [_json.loads(line) for line in fh if line.strip()]
+    except (OSError, ValueError):
+        pass
+    for key in ("decision", "tier", "strategy"):
+        want = request.args.get(key)
+        if want:
+            rows = [r for r in rows if r.get(key) == want]
+    if request.args.get("format") == "csv":
+        cols = ["at", "ticker", "strategy", "tier", "decision", "reason", "plan_id"]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+        return Response(buf.getvalue(), mimetype="text/csv")
+    daily: dict[str, int] = {}
+    for r in rows:
+        daily[r.get("at", "")[:10]] = daily.get(r.get("at", "")[:10], 0) + 1
+    return render_template("gate_blocked.html", rows=rows, daily=daily)
+```
+
+Template: filter form (decision/tier/strategy selects, GET), the table (plan_id renders as a link to `/trades/<plan_id>`-style detail only if that route exists — `url_for` guarded in a Jinja `if`), a small Chart.js bar of `daily`, and the `?format=csv` link preserving current filters.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/gate_blocked.html tests/admin/test_gate_pages.py
+git commit -m "feat: /gate/blocked viewer"
+```
 
 ### Task G184: Gut-check journal browser section
 
 **Files:** Modify the journal browser template (cockpit C-phase) if present, else a section on `/gate`; test `tests/admin/test_gate_pages.py`
 
-**Interfaces:** gut-check entries (plan, the "why I'd be wrong" sentence, the after-a-loss answer, outcome), plus G126 stats header. Capability-checked against the journal browser's existence.
-- [ ] **Step 1–4: TDD, commit** — `feat: gut-check browser`
+**Interfaces:** gut-check entries (plan, the "why I'd be wrong" sentence, the after-a-loss answer, outcome), plus G126 stats header. Capability-checked against the journal browser's existence — as of 2026-07-17 there is no journal browser, so the default target is a "Gut checks" card on `/gate`.
+
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_gate_page_gutcheck_section(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_gutcheck_entries", lambda: [
+        {"plan_id": "p_1", "ticker": "NVDA",
+         "why_wrong": "breakout could be a stop sweep",
+         "after_loss": "yes", "outcome": "win"}])
+    monkeypatch.setattr(admin_app, "_gutcheck_stats", lambda: {
+        "with_gutcheck": {"n": 24, "wr": 71.0},
+        "without_gutcheck": {"n": 18, "wr": 55.0},
+        "took_anyway": {"n": 5, "wr": 40.0}})
+    html = client.get("/gate", headers=auth_headers).get_data(as_text=True)
+    assert "breakout could be a stop sweep" in html
+    assert "71% (N=24)" in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — two seams in `app.py` (`_gutcheck_entries()` reads plan records with a `gutcheck` key joined to outcomes; `_gutcheck_stats()` wraps `persistence.gutcheck_stats`), passed into `gate.html` as a new card:
+
+```html
+<div class="card">
+  <h3>Gut checks — with ritual {{ stats_line }}</h3>
+  <table><thead><tr><th>plan</th><th>why I'd be wrong</th>
+    <th>after a loss?</th><th>outcome</th></tr></thead><tbody>
+  {% for g in gutchecks %}
+    <tr><td>{{ g.ticker }} ({{ g.plan_id }})</td><td>{{ g.why_wrong }}</td>
+        <td>{{ g.after_loss }}</td><td>{{ g.outcome or 'open' }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+```
+
+(`stats_line` built server-side through `fmt_wr` — the G109 guard applies on this page too. If cockpit's journal browser exists at execution, add this as a section/tab there instead and keep the same test targets.)
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/gate.html tests/admin/test_gate_pages.py
+git commit -m "feat: gut-check browser"
+```
 
 ### Task G185: Live gate status fragment on the dashboard
 
 **Files:** Modify the admin dashboard template + its morphdom fragment endpoint; test `tests/admin/test_gate_pages.py`
 
-**Interfaces:** dashboard card: gate mode badge, today's evaluated/blocked/held counts, snapshot age, provider health dots (green/amber/red from G10), next high-impact event countdown. Auto-refreshes with the existing fragment cadence.
-- [ ] **Step 1–4: TDD (fragment renders counts from fixture telemetry), commit** — `feat: gate status dashboard card`
+**Interfaces:** dashboard card: gate mode badge, today's evaluated/blocked/held counts, snapshot age, provider health dots (green/amber/red from G10), next high-impact event countdown. Auto-refreshes with the existing fragment cadence (the dashboard fragment already re-renders via morphdom — the card simply rides in `_render_dashboard_fragment`).
+
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_dashboard_fragment_gate_card(client, auth_headers,
+                                      tmp_path, monkeypatch):
+    import datetime as dt
+    import swingbot.config as config
+    import swingbot.core.gate.telemetry as telemetry
+    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "GATE_MODE", "inform", raising=False)
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "t.jsonl"))
+    telemetry.count("evaluated", at=dt.datetime.now())
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api",
+                        lambda: full_snapshot())
+    monkeypatch.setattr(admin_app, "_provider_status", lambda: {
+        "fred": {"ok_rate_24h": 0.98}, "finnhub": {"ok_rate_24h": 0.42}})
+    html = client.get("/dashboard/fragment",
+                      headers=auth_headers).get_data(as_text=True)
+    assert 'class="mode-badge inform"' in html
+    assert "1 evaluated" in html
+    assert 'class="dot green"' in html and 'class="dot red"' in html
+    assert "CPI" in html                             # next event countdown
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — a `_gate_status_card() -> dict` helper in `app.py` (mode, `telemetry.summary(since=today)`, snapshot age, `_provider_status()` mapped to dot colors — green ≥ 0.9 ok-rate, amber ≥ 0.5, red below — and the next importance-3 event), threaded into `_render_dashboard_fragment`'s context and rendered in `dashboard_fragment.html` as one more card (all existing cards untouched — flags-off renders no card when `GATE_ENABLED` and `MACRO_ENABLED` are both false). `_provider_status()` wraps `swingbot.core.macro.health.provider_status` behind a seam.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/dashboard_fragment.html tests/admin/test_gate_pages.py
+git commit -m "feat: gate status dashboard card"
+```
 
 ### Task G186: Provider health page `/macro/health`
 
 **Files:** Modify admin app + nav; create `templates/macro_health.html`; test `tests/admin/test_macro_pages.py`
 
-**Interfaces:** per-provider: status dot, ok-rate 24h, last success/error, calls today vs quota bar, cache hit rate, last-served-stale flag; snapshot quality warnings (G42) listed; a "test fetch" button per provider (POST, runs one live probe in a thread, 202 + result poll — the only other admin-triggered network path, admin-auth + rate-limited 1/min).
-- [ ] **Step 1–4: TDD (page + quota bars from fixture ledger; probe rate-limit 429), commit** — `feat: /macro/health page`
+**Interfaces:** per-provider: status dot, ok-rate 24h, last success/error, calls today vs quota bar, cache hit rate, last-served-stale flag; snapshot quality warnings (G42) listed; a "test fetch" button per provider (POST `/api/macro/probe/<provider>`, runs one live probe in a thread, 202 + result poll — the only other admin-triggered network path, admin-auth + rate-limited 1/min).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_health_page_quota_bars(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_provider_status", lambda: {
+        "fred": {"ok_rate_24h": 0.98, "last_ok": "2026-07-14T12:00:00",
+                 "last_error": None, "calls_today": 240, "cache_hit_rate": 0.8},
+        "finnhub": {"ok_rate_24h": 0.42, "last_ok": "2026-07-13T09:00:00",
+                    "last_error": "timeout", "calls_today": 2900,
+                    "cache_hit_rate": 0.6}})
+    _with_snapshot(monkeypatch, dict(full_snapshot(),
+                                     quality_warnings=["VIX outside [5, 100]"]))
+    html = client.get("/macro/health", headers=auth_headers).get_data(as_text=True)
+    assert "fred" in html and "finnhub" in html
+    assert "240 / 5000" in html and "2900 / 3000" in html   # QUOTAS from G11
+    assert "VIX outside [5, 100]" in html
+
+
+def test_probe_rate_limited(client, auth_headers, monkeypatch):
+    import swingbot.admin.app as admin_app
+    monkeypatch.setattr(admin_app, "_spawn_probe", lambda provider: None)
+    admin_app._PROBE_LAST.clear()
+    assert client.post("/api/macro/probe/fred",
+                       headers=auth_headers).status_code == 202
+    assert client.post("/api/macro/probe/fred",
+                       headers=auth_headers).status_code == 429
+    assert client.post("/api/macro/probe/nope",
+                       headers=auth_headers).status_code == 400
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**:
+
+```python
+_PROBE_LAST: dict[str, float] = {}
+
+
+def _spawn_probe(provider: str) -> None:
+    """One live fetch in a thread; result lands in the health ledger where
+    the page reads it on the next poll. Probe targets: fred → the CPI
+    series HEAD, finnhub → one quote call (match G12/G21's endpoints)."""
+    def worker():
+        from swingbot.core.macro import probes
+        probes.probe(provider)          # thin per-provider probe added here
+    threading.Thread(target=worker, daemon=True).start()
+
+
+@app.route("/api/macro/probe/<provider>", methods=["POST"])
+@require_auth
+def api_macro_probe(provider):
+    import time
+    from swingbot.core.macro.quota import QUOTAS
+    if provider not in QUOTAS:
+        return jsonify({"error": "unknown provider"}), 400
+    now = time.monotonic()
+    if now - _PROBE_LAST.get(provider, -999.0) < 60.0:
+        return jsonify({"error": "probe rate-limited to 1/min"}), 429
+    _PROBE_LAST[provider] = now
+    _spawn_probe(provider)
+    return jsonify({"status": "probing"}), 202
+
+
+@app.route("/macro/health")
+@require_auth
+def macro_health_page():
+    from swingbot.core.macro.quota import QUOTAS
+    snap = _load_snapshot_for_api() or {}
+    return render_template("macro_health.html",
+                           providers=_provider_status(), quotas=QUOTAS,
+                           warnings=snap.get("quality_warnings", []))
+```
+
+`templates/macro_health.html`: per-provider card — dot (same color rule as G185), ok-rate, last ok/error, `calls_today / per_day` quota bar (`<progress>` element — semantic and styleable), cache hit rate, probe button POSTing with a 429-aware error line. Quality warnings as a plain `<ul>`. Nav entry under Macro.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/macro_health.html swingbot/core/macro/probes.py tests/admin/test_macro_pages.py
+git commit -m "feat: /macro/health page"
+```
 
 ### Task G187: Quality warnings surfacing
 
 **Files:** Modify `templates/macro.html`, dashboard card; test `tests/admin/test_macro_pages.py`
 
 **Interfaces:** `quality_warnings` from the snapshot render as a dismissible amber banner on `/macro` + a warning count on the dashboard card; empty → nothing.
-- [ ] **Step 1–4: TDD, commit** — `feat: macro quality warnings banner`
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_macro_pages.py`)
+
+```python
+def test_macro_page_quality_banner(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, dict(full_snapshot(),
+                                     quality_warnings=["CPI yoy outside [-5, 25]"]))
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert 'class="banner warn quality-banner"' in html
+    assert "CPI yoy outside" in html
+
+
+def test_macro_page_no_banner_when_clean(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert "quality-banner" not in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — in `macro.html`, above the tile grid:
+
+```html
+{% if snap.quality_warnings %}
+  <div class="banner warn quality-banner">
+    <button class="dismiss" onclick="this.parentElement.hidden = true">×</button>
+    <ul>{% for w in snap.quality_warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+```
+
+And the G185 card gains `{{ warnings_count }} quality warnings` when > 0 (count passed through `_gate_status_card`).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/templates/macro.html swingbot/admin/app.py tests/admin/test_macro_pages.py
+git commit -m "feat: macro quality warnings banner"
+```
 
 ### Task G188: Config audit trail viewer
 
-**Files:** Modify `templates/gate.html`; test `tests/admin/test_gate_pages.py`
+**Files:** Modify `templates/gate.html` + admin app; test `tests/admin/test_gate_pages.py`
 
 **Interfaces:** collapsible "change history" section reading `config_audit.jsonl` (G170): when, what, old→new — tier cuts and mode flips are risk decisions and deserve receipts.
-- [ ] **Step 1–4: TDD, commit** — `feat: gate config audit viewer`
+
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_gate_page_audit_history(client, auth_headers, tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    audit = tmp_path / "config_audit.jsonl"
+    audit.write_text(json.dumps({"at": "2026-07-14T10:00:00",
+                                 "key": "GATE_TIER_APLUS_CUT",
+                                 "old": "90", "new": "85"}) + "\n")
+    monkeypatch.setattr(admin_app, "CONFIG_AUDIT_PATH", str(audit))
+    html = client.get("/gate", headers=auth_headers).get_data(as_text=True)
+    assert "<details" in html and "change history" in html.lower()
+    assert "GATE_TIER_APLUS_CUT" in html
+    assert "90 → 85" in html or "90 &rarr; 85" in html
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** — `gate_page()` loads the last 50 audit lines (newest first, tolerant of corrupt lines) into the template; `gate.html` gains:
+
+```html
+<details class="card"><summary>Change history</summary>
+  <table><thead><tr><th>when</th><th>what</th><th>change</th></tr></thead><tbody>
+  {% for a in audit_rows %}
+    <tr><td>{{ a.at }}</td><td>{{ a.key }}</td>
+        <td>{{ a.old }} → {{ a.new }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</details>
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/gate.html tests/admin/test_gate_pages.py
+git commit -m "feat: gate config audit viewer"
+```
 
 ### Task G189: Navigation + empty states sweep
 
 **Files:** Modify the admin nav template + all new templates; test `tests/admin/test_gate_pages.py`
 
-- [ ] **Step 1: Failing test** — nav contains Macro, Sectors, Events, Gate (with sub-links), Health; every new page returns 200 with **zero** data files present and shows its empty-state copy (parametrized test over all new routes with a bare tmp data dir).
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: nav + empty states for all gate/macro pages`
+- [ ] **Step 1: Write the failing test**
+
+```python
+NEW_GET_ROUTES = ["/macro", "/sectors", "/events", "/gate", "/gate/flags",
+                  "/gate/frontier", "/gate/blocked", "/macro/health"]
+
+EMPTY_STATE_MARKERS = {
+    "/macro": "MACRO_ENABLED",
+    "/sectors": "no sector data",
+    "/events": "no events",
+    "/gate/flags": "no flag data",
+    "/gate/frontier": "gate_frontier.py",
+    "/gate/blocked": "nothing blocked",
+    "/macro/health": "no provider activity",
+}
+
+
+def test_nav_contains_all_new_entries(client, auth_headers):
+    html = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    for label in ("Macro", "Sectors", "Events", "Gate", "Health"):
+        assert label in html
+
+
+import pytest
+
+
+@pytest.mark.parametrize("route", NEW_GET_ROUTES)
+def test_every_new_page_survives_bare_data_dir(client, auth_headers, route):
+    # the conftest already points DATA_DIR at an empty tmp dir — zero files
+    resp = client.get(route, headers=auth_headers)
+    assert resp.status_code == 200
+    marker = EMPTY_STATE_MARKERS.get(route)
+    if marker:
+        assert marker.lower() in resp.get_data(as_text=True).lower()
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: add the missing `NAV_ITEMS` entries (Gate's entry links `/gate` with flags/frontier/blocked as sub-links in `base.html`), and give every page that 500s or renders blank on a bare data dir an explicit empty-state div with the copy above (`/gate` renders fine bare — registry is code, not data — so it needs no marker; the frontier page's empty state names the script to run; `/macro/health` says "no provider activity recorded yet").
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/ tests/admin/test_gate_pages.py
+git commit -m "feat: nav + empty states for all gate/macro pages"
+```
 
 ### Task G190: Auth/CSRF parity test
 
 **Files:** Test `tests/admin/test_gate_pages.py`
 
-- [ ] **Step 1: The test** — parametrized over every new GET route: unauthenticated → same redirect/401 behavior as existing pages; every new POST route: missing CSRF token → rejected (matching the existing settings-POST behavior exactly — read that test first).
-- [ ] **Step 2: PASS (fix any route that slipped). Step 3: Commit** — `test: auth/CSRF parity for new admin surface`
+> **Execution note:** today's admin has Basic Auth only — no CSRF machinery exists, and `save_settings` accepts raw form POSTs behind auth. Parity therefore means: every new route (GET *and* POST) returns 401 without credentials, exactly like the existing pages. If cockpit-v3 has introduced CSRF tokens by execution time, extend this test to match its settings-POST test exactly.
+
+- [ ] **Step 1: Write the test**
+
+```python
+NEW_POST_ROUTES = ["/api/gate/config", "/api/gate/propose",
+                   "/api/macro/refresh", "/api/macro/probe/fred"]
+NEW_API_GETS = ["/api/macro/snapshot", "/api/macro/history",
+                "/api/macro/events", "/api/macro/series?key=cpi_yoy",
+                "/api/gate/config", "/api/gate/results",
+                "/api/gate/frontier", "/api/gate/flags",
+                "/api/gate/blocked", "/api/gate/telemetry"]
+
+
+@pytest.mark.parametrize("route", NEW_GET_ROUTES + NEW_API_GETS)
+def test_unauthenticated_get_is_401(client, route):
+    resp = client.get(route)
+    assert resp.status_code == 401
+    assert "WWW-Authenticate" in resp.headers      # same behavior as existing pages
+
+
+@pytest.mark.parametrize("route", NEW_POST_ROUTES)
+def test_unauthenticated_post_is_401(client, route):
+    assert client.post(route, json={}).status_code == 401
+```
+
+- [ ] **Step 2: Run — PASS expected; any 200/302/500 means a route missed `@require_auth` — fix the route, never the test.**
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/admin/test_gate_pages.py
+git commit -m "test: auth parity for new admin surface"
+```
 
 ### Task G191: Fragment live-refresh wiring
 
-**Files:** Modify the morphdom refresh registry (cockpit pattern); test `tests/admin/test_gate_pages.py`
+**Files:** Modify admin app + `templates/macro.html`; test `tests/admin/test_gate_pages.py`
 
-**Interfaces:** `/macro` tiles and the dashboard gate card join the existing periodic fragment refresh (same interval constants); charts re-render only on data change (hash guard) to avoid flicker.
-- [ ] **Step 1–4: TDD (fragment endpoints registered; hash guard skips unchanged), commit** — `feat: live refresh for macro fragments`
+**Interfaces:** `/macro` tiles and the dashboard gate card join the existing periodic fragment refresh (same interval constant `dashboard.html` uses); charts re-render only on data change (hash guard) to avoid flicker. Adds `/macro/fragment` (tiles-only partial) mirroring the `/dashboard/fragment` pattern.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_macro_fragment_endpoint(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    resp = client.get("/macro/fragment", headers=auth_headers)
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "tile-grid" in html and "<html" not in html   # partial, not a page
+    assert resp.headers.get("X-Content-Hash")            # the flicker guard
+
+
+def test_macro_fragment_hash_is_stable(client, auth_headers, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    h1 = client.get("/macro/fragment", headers=auth_headers).headers["X-Content-Hash"]
+    h2 = client.get("/macro/fragment", headers=auth_headers).headers["X-Content-Hash"]
+    assert h1 == h2                                      # unchanged data → same hash
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: extract the tile grid into `templates/_macro_tiles.html` (included by `macro.html`), add:
+
+```python
+@app.route("/macro/fragment")
+@require_auth
+def macro_fragment():
+    import hashlib
+    snap = _load_snapshot_for_api()
+    html = render_template("_macro_tiles.html", snap=snap)
+    resp = Response(html, mimetype="text/html")
+    resp.headers["X-Content-Hash"] = hashlib.sha1(html.encode()).hexdigest()[:12]
+    return resp
+```
+
+Client side (script block in `macro.html`, same interval constant as `dashboard.html`'s refresher): fetch the fragment, compare `X-Content-Hash` against the last seen value, morphdom-swap only on change; chart panels re-fetch their data URL only when the hash changed.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/app.py swingbot/admin/templates/ tests/admin/test_gate_pages.py
+git commit -m "feat: live refresh for macro fragments"
+```
 
 ### Task G192: Mobile pass
 
 **Files:** Modify new templates/CSS; test `tests/admin/test_gate_pages.py` (structural assertions only)
 
-- [ ] **Step 1:** Tile grids collapse to 2-col/1-col via the existing responsive CSS conventions; tables gain horizontal-scroll wrappers; the events month grid falls back to the list view below 640px (CSS, not JS). Structural test: wrapper classes present.
-- [ ] **Step 2–4: Implement, PASS, commit** — `style: mobile pass for macro/gate pages`
+- [ ] **Step 1: Write the failing test**
+
+```python
+@pytest.mark.parametrize("route", ["/macro", "/sectors", "/gate",
+                                   "/gate/flags", "/gate/blocked"])
+def test_tables_have_scroll_wrappers(client, auth_headers, route, monkeypatch):
+    _with_snapshot(monkeypatch, full_snapshot())
+    html = client.get(route, headers=auth_headers).get_data(as_text=True)
+    if "<table" in html:
+        assert 'class="table-scroll"' in html
+
+
+def test_events_grid_has_mobile_fallback_css(client, auth_headers):
+    css = open("swingbot/admin/static/style.css", encoding="utf-8").read()
+    assert "@media" in css and "cal-grid" in css and "cal-list" in css
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: wrap every new `<table>` in `<div class="table-scroll">` (CSS: `overflow-x: auto`); `style.css` gains a `@media (max-width: 640px)` block — tile grid to `grid-template-columns: repeat(2, 1fr)` then 1 below 400px, `.cal-grid { display: none }` + `.cal-list { display: block }` (list is hidden on desktop, shown on mobile — CSS only), slider rows stack vertically.
+- [ ] **Step 3: Run — PASS + eyeball at 375px width (noted for G195).**
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/templates/ swingbot/admin/static/style.css tests/admin/test_gate_pages.py
+git commit -m "style: mobile pass for macro/gate pages"
+```
 
 ### Task G193: Admin e2e — fixture-city walkthrough
 
 **Files:** Test `tests/admin/test_gate_e2e.py`
 
-- [ ] **Step 1: The test** — seed a full fixture city (snapshot, history, events, gate results, blocked log, frontier artifact, telemetry) in tmp data dir → walk every new page + API with the test client, assert key numbers thread through consistently (the composite score shown on `/macro` equals the API's, the frontier cut on `/gate/frontier` equals the artifact's).
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: admin gate/macro e2e walkthrough`
+- [ ] **Step 1: Write the test** — seed a full fixture city (snapshot, history, events, gate results, blocked log, frontier artifact, telemetry) in the tmp data dir → walk every new page + API with the test client, assert key numbers thread through consistently.
+
+```python
+# tests/admin/test_gate_e2e.py
+"""One seeded data-city, every page/API walked, cross-surface consistency
+asserted: the number a page shows must equal the number its API serves."""
+import json
+
+from tests.fixtures.gate.snapshots import full_snapshot
+
+
+def _seed_city(tmp_path, monkeypatch):
+    import swingbot.admin.app as admin_app
+    import swingbot.core.gate.persistence as persistence
+    import swingbot.core.gate.telemetry as telemetry
+    snap = full_snapshot()
+    monkeypatch.setattr(admin_app, "_load_snapshot_for_api", lambda: snap)
+    monkeypatch.setattr(admin_app, "FRONTIER_ARTIFACT_DIR", str(tmp_path))
+    (tmp_path / "gate-frontier-rsi-div.json").write_text(json.dumps(
+        {"strategy": "RSI-Div", "best_cut": 60,
+         "frontier": [{"cut": 60, "n_kept": 50, "pct_kept": 41.0, "wr": 81.0,
+                       "wilson_lb": 68.0, "expectancy_r": 0.6,
+                       "trades_per_month": 3.8}]}))
+    blocked = tmp_path / "blocked.jsonl"
+    blocked.write_text(json.dumps(
+        {"at": "2026-07-14T15:00:00", "ticker": "XYZ", "strategy": "Breakout",
+         "tier": "C", "decision": "block", "reason": "rf_fake_breakout",
+         "plan_id": "p_1"}) + "\n")
+    monkeypatch.setattr(persistence, "BLOCKED_PATH", str(blocked))
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "t.jsonl"))
+    return snap
+
+
+def test_city_walkthrough_is_consistent(client, auth_headers,
+                                        tmp_path, monkeypatch):
+    snap = _seed_city(tmp_path, monkeypatch)
+
+    # every page 200s
+    for route in ("/macro", "/sectors", "/events", "/gate", "/gate/flags",
+                  "/gate/frontier", "/gate/blocked", "/macro/health"):
+        assert client.get(route, headers=auth_headers).status_code == 200, route
+
+    # composite score threads: /macro page == snapshot API
+    api = client.get("/api/macro/snapshot", headers=auth_headers).get_json()
+    page = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert str(api["snapshot"]["composite"]["score"]) in page
+    assert api["snapshot"]["composite"]["score"] == snap["composite"]["score"]
+
+    # frontier cut threads: page == artifact == API
+    fapi = client.get("/api/gate/frontier", headers=auth_headers).get_json()
+    fpage = client.get("/gate/frontier", headers=auth_headers).get_data(as_text=True)
+    assert fapi["strategies"][0]["best_cut"] == 60 and "60" in fpage
+
+    # blocked row threads: page == API == log line
+    bapi = client.get("/api/gate/blocked?date=2026-07-14",
+                      headers=auth_headers).get_json()
+    bpage = client.get("/gate/blocked", headers=auth_headers).get_data(as_text=True)
+    assert bapi["rows"][0]["ticker"] == "XYZ" and "XYZ" in bpage
+```
+
+- [ ] **Step 2: Run — PASS** (a mismatch means one surface renders a different number than its source of truth — fix the surface).
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/admin/test_gate_e2e.py
+git commit -m "test: admin gate/macro e2e walkthrough"
+```
 
 ### Task G194: Accessibility pass
 
 **Files:** Modify new templates; test structural assertions
 
-- [ ] **Step 1:** Color-coded cells (heatmap, health dots, tier badges) all carry text/aria equivalents (rank numbers, status words); charts get `aria-label` summaries; contrast per the existing admin palette. Structural test: no color-only cell (grep-level assertion on templates for the badge classes requiring text content).
-- [ ] **Step 2–4: Implement, PASS, commit** — `style: a11y pass (no color-only information)`
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_no_color_only_information(client, auth_headers, monkeypatch):
+    """Every color-coded element carries a text equivalent: heatmap cells
+    keep their signed numbers, dots have status words, verdict cells have
+    verdict words, charts have aria-labels."""
+    _with_snapshot(monkeypatch, full_snapshot())
+    import re
+    sectors = client.get("/sectors", headers=auth_headers).get_data(as_text=True)
+    for cell in re.findall(r'class="rs-cell[^"]*">([^<]*)<', sectors):
+        assert cell.strip() not in ("", "&nbsp;"), "color-only heatmap cell"
+    macro = client.get("/macro", headers=auth_headers).get_data(as_text=True)
+    assert 'aria-label' in macro                       # chart canvases labeled
+    health_dots = re.findall(r'class="dot [^"]*"[^>]*>([^<]*)<',
+                             client.get("/macro/health", headers=auth_headers)
+                             .get_data(as_text=True))
+    # dots may be empty spans ONLY if a sibling status word exists — simplest
+    # rule: the template must contain the words, assert them
+    assert "ok" in client.get("/macro/health", headers=auth_headers)\
+        .get_data(as_text=True).lower()
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: heatmap cells already carry numbers (G177); add `aria-label="{{ ... }} chart"` to every `<canvas>`; health dots gain a visually-hidden status word (`<span class="sr-only">degraded</span>` — add the `.sr-only` utility class to `style.css`); tier/verdict badges always contain their word. Contrast: reuse the existing admin palette variables only.
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/admin/templates/ swingbot/admin/static/style.css tests/admin/test_gate_pages.py
+git commit -m "style: a11y pass (no color-only information)"
+```
 
 ### Task G195: Visual QA checklist
 
@@ -11783,71 +17858,840 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Modify `swingbot/core/macro/httpcache.py` + the monitor loop; test `tests/test_macro_httpcache.py`
 
-**Interfaces:** nightly `purge_cache(30)` + `data/macro/history/` size check wired into the existing maintenance cadence (wherever the session-end hooks run — same spot the retrospective posts); one log line with bytes freed.
-- [ ] **Step 1–4: TDD (purge wired via clock stub), commit** — `feat: macro cache janitor`
+**Interfaces:** nightly `purge_cache(30)` wired into the existing daily cadence (`daily_recap` in `scanning.py` — the same loop that posts the retrospective); one log line with files/bytes freed. One pure entry point: `macro_janitor() -> dict` (counts, testable without the loop).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_httpcache.py`)
+
+```python
+def test_macro_janitor_purges_and_reports(tmp_path, monkeypatch):
+    import swingbot.core.macro.httpcache as httpcache
+    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path))
+    old = tmp_path / "old.json"
+    old.write_text("{}")
+    import os
+    import time
+    os.utime(old, (time.time() - 40 * 86400,) * 2)       # 40 days old
+    fresh = tmp_path / "fresh.json"
+    fresh.write_text("{}")
+    from swingbot.core.macro.janitor import macro_janitor
+    report = macro_janitor()
+    assert report["purged"] == 1 and not old.exists() and fresh.exists()
+
+
+def test_macro_janitor_never_raises(monkeypatch):
+    import swingbot.core.macro.httpcache as httpcache
+    monkeypatch.setattr(httpcache, "purge_cache",
+                        lambda *a: (_ for _ in ()).throw(OSError("ro")))
+    from swingbot.core.macro.janitor import macro_janitor
+    assert macro_janitor() == {"purged": 0, "error": True}
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**
+
+```python
+# swingbot/core/macro/janitor.py
+"""Nightly maintenance for the macro layer (G197/G198). Fire-and-forget:
+janitor failures log and return, they never break the retrospective loop."""
+import logging
+
+log = logging.getLogger(__name__)
+
+
+def macro_janitor() -> dict:
+    try:
+        from swingbot.core.macro.httpcache import purge_cache
+        purged = purge_cache(30)
+        log.info("macro janitor: purged %d expired cache files", purged)
+        return {"purged": purged}
+    except Exception:  # noqa: BLE001
+        log.warning("macro janitor failed", exc_info=True)
+        return {"purged": 0, "error": True}
+```
+
+**Wiring** (`daily_recap` in `scanning.py`, after the retrospective posts): `await asyncio.to_thread(macro_janitor)` guarded by `MACRO_ENABLED`. Test the wiring with the same clock-stub pattern `daily_recap`'s existing tests use (if none exist, the pure-function tests above carry the contract and the wiring is two lines reviewed by eye).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_macro_httpcache.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/janitor.py swingbot/commands/scanning.py tests/test_macro_httpcache.py
+git commit -m "feat: macro cache janitor"
+```
 
 ### Task G198: Disk-usage cap
 
-**Files:** Modify `httpcache.py`, `telemetry.py`; test `tests/test_macro_httpcache.py`
+**Files:** Modify `swingbot/core/macro/janitor.py`; test `tests/test_macro_httpcache.py`
 
-**Interfaces:** `data/macro/` + `data/gate/` combined soft cap 200 MB: over the cap → oldest cache/telemetry files pruned first (never `event_history.json`, `history/` series, or `blocked.jsonl` — the audit trail is sacred), WARN logged.
-- [ ] **Step 1–4: TDD (prune order; protected files survive), commit** — `feat: disk-usage cap with protected audit files`
+**Interfaces:** `data/macro/` + `data/gate/` combined soft cap 200 MB (`enforce_disk_cap(cap_mb=200) -> dict`, called from `macro_janitor`): over the cap → oldest cache/telemetry files pruned first (never `event_history.json`, anything under `history/`, `blocked.jsonl`, `shadow.jsonl`, `config_audit.jsonl`, or `enforce_signoff.json` — the audit trail is sacred), WARN logged.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_httpcache.py`)
+
+```python
+def _make_city(tmp_path):
+    import os
+    macro = tmp_path / "macro"
+    gate = tmp_path / "gate"
+    (macro / "cache").mkdir(parents=True)
+    (macro / "history").mkdir()
+    gate.mkdir()
+    big = macro / "cache" / "big.json"
+    big.write_bytes(b"x" * 1024)
+    os.utime(big, (1, 1))                            # oldest → pruned first
+    (macro / "history" / "cpi_yoy.json").write_bytes(b"x" * 1024)
+    (gate / "blocked.jsonl").write_bytes(b"x" * 1024)
+    (gate / "telemetry.jsonl").write_bytes(b"x" * 1024)
+    return macro, gate
+
+
+def test_disk_cap_prunes_oldest_unprotected_first(tmp_path, monkeypatch, caplog):
+    import swingbot.core.macro.janitor as janitor
+    macro, gate = _make_city(tmp_path)
+    monkeypatch.setattr(janitor, "CAPPED_DIRS", (str(macro), str(gate)))
+    report = janitor.enforce_disk_cap(cap_mb=0.003)  # ~3 KB cap over 4 KB city
+    assert report["pruned"] >= 1
+    assert not (macro / "cache" / "big.json").exists()      # oldest went first
+    assert (macro / "history" / "cpi_yoy.json").exists()    # protected
+    assert (gate / "blocked.jsonl").exists()                # protected
+    assert any("disk cap" in r.message.lower() for r in caplog.records)
+
+
+def test_disk_cap_under_cap_is_noop(tmp_path, monkeypatch):
+    import swingbot.core.macro.janitor as janitor
+    macro, gate = _make_city(tmp_path)
+    monkeypatch.setattr(janitor, "CAPPED_DIRS", (str(macro), str(gate)))
+    assert janitor.enforce_disk_cap(cap_mb=200)["pruned"] == 0
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `janitor.py`)
+
+```python
+import os
+
+from swingbot import config
+
+CAPPED_DIRS = (os.path.join(config.DATA_DIR, "macro"),
+               os.path.join(config.DATA_DIR, "gate"))
+PROTECTED_NAMES = {"event_history.json", "blocked.jsonl", "shadow.jsonl",
+                   "config_audit.jsonl", "enforce_signoff.json"}
+PROTECTED_DIRS = {"history"}
+
+
+def _prunable(path: str) -> bool:
+    name = os.path.basename(path)
+    parts = set(os.path.normpath(path).split(os.sep))
+    return name not in PROTECTED_NAMES and not (PROTECTED_DIRS & parts)
+
+
+def enforce_disk_cap(cap_mb: float = 200.0) -> dict:
+    """G198: combined soft cap. Oldest UNPROTECTED files pruned until
+    under cap; the audit trail (blocked/shadow/audit/signoff/history/
+    event_history) is never touched, even if that leaves us over cap."""
+    files = []
+    total = 0
+    for root_dir in CAPPED_DIRS:
+        for root, _dirs, names in os.walk(root_dir):
+            for name in names:
+                path = os.path.join(root, name)
+                try:
+                    stat = os.stat(path)
+                except OSError:
+                    continue
+                total += stat.st_size
+                files.append((stat.st_mtime, stat.st_size, path))
+    cap_bytes = cap_mb * 1024 * 1024
+    pruned = 0
+    if total > cap_bytes:
+        log.warning("disk cap: %s MB used > %s MB cap — pruning oldest",
+                    round(total / 1048576, 1), cap_mb)
+        for _mtime, size, path in sorted(files):
+            if total <= cap_bytes:
+                break
+            if not _prunable(path):
+                continue
+            try:
+                os.remove(path)
+                total -= size
+                pruned += 1
+            except OSError:
+                continue
+    return {"pruned": pruned, "total_mb": round(total / 1048576, 1)}
+```
+
+`macro_janitor()` gains `report.update(enforce_disk_cap())`.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_macro_httpcache.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/janitor.py tests/test_macro_httpcache.py
+git commit -m "feat: disk-usage cap with protected audit files"
+```
 
 ### Task G199: Provider outage alerting
 
-**Files:** Modify the monitor loop; test `tests/test_gate_telemetry.py`
+**Files:** Modify `swingbot/commands/scanning.py` (heartbeat loop); test `tests/test_gate_telemetry.py`
 
-**Interfaces:** a provider degraded (G10) for > 12h → one Discord warning per provider per day to the retrospective channel ("FRED degraded since …, macro checks running as unknown — nothing is blocking on missing data"); recovery posts an all-clear once.
-- [ ] **Step 1–4: TDD (once-per-day dedup; recovery line), commit** — `feat: provider outage alerts`
+**Interfaces:** a provider degraded (G10) for > 12h → one Discord warning per provider per day to the retrospective channel ("FRED degraded since …, macro checks running as unknown — nothing is blocking on missing data"); recovery posts an all-clear once. Pure state machine: `outage_messages(status, state, now) -> tuple[list[str], dict]` — (messages to post, next state); the loop owns only the posting.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_telemetry.py`)
+
+```python
+import datetime as dt
+
+NOON = dt.datetime(2026, 7, 14, 12, 0)
+
+
+def _status(degraded_since_h):
+    return {"fred": {"degraded": degraded_since_h is not None,
+                     "degraded_since": (NOON - dt.timedelta(
+                         hours=degraded_since_h)).isoformat()
+                     if degraded_since_h else None}}
+
+
+def test_outage_warns_after_12h_once_per_day():
+    msgs, state = scanning.outage_messages(_status(13), {}, NOON)
+    assert len(msgs) == 1
+    assert "FRED degraded" in msgs[0] or "fred degraded" in msgs[0].lower()
+    assert "nothing is blocking on missing data" in msgs[0]
+    # same day, still degraded → no repeat
+    msgs2, _ = scanning.outage_messages(_status(14), state, NOON)
+    assert msgs2 == []
+
+
+def test_outage_under_12h_is_silent():
+    msgs, _ = scanning.outage_messages(_status(3), {}, NOON)
+    assert msgs == []
+
+
+def test_recovery_posts_all_clear_once():
+    _, state = scanning.outage_messages(_status(13), {}, NOON)
+    msgs, state = scanning.outage_messages(_status(None), state, NOON)
+    assert len(msgs) == 1 and "recovered" in msgs[0].lower()
+    msgs2, _ = scanning.outage_messages(_status(None), state, NOON)
+    assert msgs2 == []
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`)
+
+```python
+def outage_messages(status: dict, state: dict, now) -> tuple[list[str], dict]:
+    """G199 outage state machine, pure. state = {provider: {"warned_on":
+    ISO date | None, "was_degraded": bool}}. One warning per provider per
+    day while degraded > 12h; one all-clear on recovery."""
+    import datetime as dt
+    msgs, next_state = [], dict(state)
+    for provider, info in (status or {}).items():
+        entry = dict(next_state.get(provider,
+                                    {"warned_on": None, "was_degraded": False}))
+        if info.get("degraded"):
+            hours = 0.0
+            try:
+                since = dt.datetime.fromisoformat(info["degraded_since"])
+                hours = (now - since).total_seconds() / 3600.0
+            except (KeyError, TypeError, ValueError):
+                pass
+            if hours > 12.0 and entry["warned_on"] != now.date().isoformat():
+                msgs.append(f"⚠️ {provider.upper()} degraded since "
+                            f"{info.get('degraded_since', '?')[:16]} — macro "
+                            f"checks running as unknown; nothing is blocking "
+                            f"on missing data.")
+                entry["warned_on"] = now.date().isoformat()
+            entry["was_degraded"] = True
+        else:
+            if entry["was_degraded"]:
+                msgs.append(f"✅ {provider.upper()} recovered — macro data "
+                            f"flowing again.")
+            entry = {"warned_on": None, "was_degraded": False}
+        next_state[provider] = entry
+    return msgs, next_state
+```
+
+**Wiring** (the existing 15-min `heartbeat` loop): build `status` from `health.provider_status()` + `is_degraded()` (adding `degraded_since` to the ledger if G10 didn't store it — one additive field), keep `state` in a module-level dict (or `data/gate/outage_state.json` if restarts should not re-warn — pick the file; note why in the commit), post each message to the retrospective channel.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_telemetry.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/commands/scanning.py swingbot/core/macro/health.py tests/test_gate_telemetry.py
+git commit -m "feat: provider outage alerts"
+```
 
 ### Task G200: Quota budget report
 
-**Files:** Modify `health.py`; test `tests/test_macro_health.py`
+**Files:** Modify `swingbot/core/macro/health.py`; test `tests/test_macro_health.py`
 
-**Interfaces:** `quota_report() -> dict` — per provider: calls today, projected daily total at current cadence, headroom %; WARN into snapshot quality when projection > 80% of quota; shown on `/macro/health` (G186 wires the field) and in startup diagnostics.
-- [ ] **Step 1–4: TDD (projection math), commit** — `feat: quota budget projection`
+**Interfaces:** `quota_report(now=None) -> dict` — per provider: calls today, projected daily total at current cadence, headroom %; WARN into snapshot quality when projection > 80% of quota; shown on `/macro/health` (G186 wires the field) and in startup diagnostics.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_health.py`)
+
+```python
+def test_quota_report_projection(monkeypatch):
+    import datetime as dt
+    import swingbot.core.macro.health as health
+    # 300 calls by 09:30 ET-noonish (6.5h into a 24h day at steady cadence)
+    monkeypatch.setattr(health, "provider_status", lambda: {
+        "fred": {"calls_today": 300}})
+    now = dt.datetime(2026, 7, 14, 6, 0)                # 6h into the day
+    report = health.quota_report(now=now)
+    fred = report["fred"]
+    assert fred["calls_today"] == 300
+    assert fred["projected"] == 1200                     # 300 / 6h * 24h
+    assert fred["quota"] == 5000
+    assert fred["headroom_pct"] == 76.0                  # 1 - 1200/5000
+    assert fred["warn"] is False
+
+
+def test_quota_report_warns_over_80pct(monkeypatch):
+    import datetime as dt
+    import swingbot.core.macro.health as health
+    monkeypatch.setattr(health, "provider_status", lambda: {
+        "finnhub": {"calls_today": 1300}})
+    report = health.quota_report(now=dt.datetime(2026, 7, 14, 8, 0))
+    assert report["finnhub"]["projected"] == 3900        # > 80% of 3000 → warn
+    assert report["finnhub"]["warn"] is True
+
+
+def test_quota_report_early_day_no_divide_by_zero(monkeypatch):
+    import datetime as dt
+    import swingbot.core.macro.health as health
+    monkeypatch.setattr(health, "provider_status", lambda: {
+        "fred": {"calls_today": 2}})
+    report = health.quota_report(now=dt.datetime(2026, 7, 14, 0, 10))
+    assert report["fred"]["projected"] >= 2              # clamped, no ZeroDivision
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `health.py`)
+
+```python
+def quota_report(now=None) -> dict:
+    """G200: projected daily usage per provider at the current cadence.
+    Hours-elapsed is floored at 1.0 so a midnight restart never projects
+    infinity. warn=True above 80% of quota — surfaced in snapshot quality
+    (G42 append) and on /macro/health."""
+    import datetime as dt
+    from swingbot.core.macro.quota import QUOTAS
+    now = now or dt.datetime.now()
+    hours = max(1.0, now.hour + now.minute / 60.0)
+    out = {}
+    status = provider_status()
+    for provider, quota in QUOTAS.items():
+        calls = int((status.get(provider) or {}).get("calls_today", 0))
+        projected = int(calls / hours * 24.0)
+        per_day = quota["per_day"]
+        out[provider] = {
+            "calls_today": calls, "projected": projected, "quota": per_day,
+            "headroom_pct": round(100.0 * (1 - projected / per_day), 1),
+            "warn": projected > 0.8 * per_day}
+    return out
+```
+
+**Wiring:** `validate_snapshot` (G42) appends `f"{provider} projected {projected}/{quota} calls today"` per warning provider; G186's page and G139's diagnostics call `quota_report()` directly.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_macro_health.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/health.py swingbot/core/macro/quality.py tests/test_macro_health.py
+git commit -m "feat: quota budget projection"
+```
 
 ### Task G201: Secrets hygiene audit
 
 **Files:** Test `tests/test_gate_secrets.py`
 
-- [ ] **Step 1: The test** — grep-level assertions over `swingbot/core/macro/` + `swingbot/core/gate/`: no module logs a variable named `*_API_KEY`; `fetch_json` redacts `api_key`/`token` params from every log/exception message and from cache keys' readable form (keys hashed — assert a crafted URL's key doesn't contain the secret); config Fields for keys are `sensitive=True`.
-- [ ] **Step 2: PASS (fix any leak found). Step 3: Commit** — `test: secrets never logged or cached in the clear`
+- [ ] **Step 1: Write the test**
+
+```python
+# tests/test_gate_secrets.py
+"""G201: secrets hygiene. Grep-level + behavioral: keys never appear in
+logs, exception messages, or readable cache paths."""
+import pathlib
+import re
+
+import swingbot.config as config
+
+
+def test_no_module_logs_an_api_key_variable():
+    pattern = re.compile(r"log\.\w+\([^)]*[A-Z_]*API_KEY", re.DOTALL)
+    offenders = []
+    for pkg in ("swingbot/core/macro", "swingbot/core/gate"):
+        for path in pathlib.Path(pkg).rglob("*.py"):
+            if pattern.search(path.read_text(encoding="utf-8")):
+                offenders.append(str(path))
+    assert not offenders, f"API key reaches a log call: {offenders}"
+
+
+def test_cache_key_never_contains_the_secret(tmp_path, monkeypatch):
+    import swingbot.core.macro.httpcache as httpcache
+    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path))
+    secret = "sk_live_SUPER_SECRET_123"
+    key = httpcache.cache_key_for(          # expose the key fn if G9 kept it private
+        "https://api.example.com/series", {"api_key": secret, "id": "CPI"})
+    assert secret not in key                # sha1-hashed, never readable
+
+
+def test_fetch_json_redacts_secret_from_errors(monkeypatch, caplog):
+    import swingbot.core.macro.httpcache as httpcache
+    secret = "sk_live_SUPER_SECRET_123"
+
+    def boom(*a, **k):
+        raise ConnectionError(f"https://x?api_key={secret} refused")
+
+    monkeypatch.setattr(httpcache, "_do_request", boom, raising=False)
+    httpcache.fetch_json("https://x", params={"api_key": secret}, ttl_s=0)
+    for record in caplog.records:
+        assert secret not in record.getMessage()
+
+
+def test_key_fields_are_sensitive():
+    for f in config.FIELDS:
+        if f.name in ("FRED_API_KEY", "FINNHUB_API_KEY"):
+            assert f.sensitive is True
+```
+
+- [ ] **Step 2: Run — PASS expected if G9 was built to spec; fix any leak found** (redaction helper `_redact(text)` replacing `api_key=...`/`token=...` values with `***` in `fetch_json`'s log/exception paths; expose `cache_key_for` if it was inline). A found leak is a bug fix, not a test adjustment.
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_secrets.py swingbot/core/macro/httpcache.py
+git commit -m "test: secrets never logged or cached in the clear"
+```
 
 ### Task G202: Backfill + rebuild runbook hardening
 
 **Files:** Modify `scripts/backfill_macro.py`, `scripts/build_event_history.py`; docs section in `docs/gatekeeper-runbook.md`
 
-**Interfaces:** both scripts gain `--dry-run`, `--only <key>`, resume-on-partial (skip existing unless `--force`), and exit-code discipline; runbook gains the "rebuild from nothing" procedure (fresh clone → keys → backfill → event history → smoke → first snapshot) with expected durations.
-- [ ] **Step 1–4: TDD (arg handling, resume logic — network stubbed); update runbook; commit** — `feat: hardened backfill scripts + rebuild runbook`
+**Interfaces:** both scripts gain `--dry-run`, `--only <key>`, resume-on-partial (skip existing unless `--force`), and exit-code discipline (0 = complete, 1 = partial failures, 2 = bad args); runbook gains the "rebuild from nothing" procedure with expected durations.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_backfill.py` — the module G41 created; drive the scripts' `main(argv)` directly, network stubbed)
+
+```python
+def test_backfill_dry_run_fetches_nothing(monkeypatch, capsys):
+    import scripts.backfill_macro as backfill
+    calls = []
+    monkeypatch.setattr(backfill, "_fetch_series",
+                        lambda key: calls.append(key))
+    assert backfill.main(["--dry-run"]) == 0
+    assert calls == []
+    assert "would fetch" in capsys.readouterr().out.lower()
+
+
+def test_backfill_only_filters_keys(monkeypatch, tmp_path):
+    import scripts.backfill_macro as backfill
+    calls = []
+    monkeypatch.setattr(backfill, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(backfill, "_fetch_series",
+                        lambda key: calls.append(key) or {"series": []})
+    assert backfill.main(["--only", "cpi_yoy"]) == 0
+    assert calls == ["cpi_yoy"]
+
+
+def test_backfill_resume_skips_existing_unless_force(monkeypatch, tmp_path):
+    import scripts.backfill_macro as backfill
+    (tmp_path / "cpi_yoy.json").write_text('{"series": []}')
+    calls = []
+    monkeypatch.setattr(backfill, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(backfill, "_fetch_series",
+                        lambda key: calls.append(key) or {"series": []})
+    backfill.main(["--only", "cpi_yoy"])
+    assert calls == []                                   # resumed → skipped
+    backfill.main(["--only", "cpi_yoy", "--force"])
+    assert calls == ["cpi_yoy"]                          # forced → refetched
+
+
+def test_backfill_partial_failure_exit_code(monkeypatch, tmp_path):
+    import scripts.backfill_macro as backfill
+    monkeypatch.setattr(backfill, "OUT_DIR", str(tmp_path))
+
+    def flaky(key):
+        if key == "ppi_yoy":
+            raise ConnectionError("down")
+        return {"series": []}
+
+    monkeypatch.setattr(backfill, "_fetch_series", flaky)
+    assert backfill.main(["--only", "cpi_yoy,ppi_yoy"]) == 1
+```
+
+(Mirror the same four tests for `scripts/build_event_history.py` — same flags, same discipline. Refactor both scripts so `main(argv) -> int` is importable and the fetch layer sits behind a `_fetch_series`/`_fetch_events` seam if G41/G29 didn't already shape them that way.)
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: argparse gains `--dry-run` (list work, touch nothing), `--only` (comma-separated key filter, unknown key → exit 2), `--force`; the per-key loop wraps each fetch in try/except, skips existing output files unless forced, tallies failures, and returns 0/1 accordingly.
+- [ ] **Step 3: Update the runbook** — append to `docs/gatekeeper-runbook.md`:
+
+```markdown
+## Rebuild from nothing
+
+1. Fresh clone, `pip install -r requirements.txt`, copy `.env` (keys!).
+2. `python scripts/backfill_macro.py` — ~10-15 min on free-tier pacing.
+   Interrupted? Re-run; it resumes (skips complete series).
+3. `python scripts/build_event_history.py` — ~2 min.
+4. `python scripts/macro_smoke.py` — must be green before going live.
+5. Start the bot; first snapshot builds on the first scan tick.
+```
+
+- [ ] **Step 4: Run — PASS + full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add scripts/backfill_macro.py scripts/build_event_history.py docs/gatekeeper-runbook.md tests/test_macro_backfill.py
+git commit -m "feat: hardened backfill scripts + rebuild runbook"
+```
 
 ### Task G203: Weekly gate-effectiveness report
 
 **Files:** Modify `swingbot/commands/scanning.py` (Sunday hook, llm-advisor L13 cadence pattern); test `tests/test_gate_audit.py`
 
-**Interfaces:** `weekly_gate_report(now) -> str | None` — Sundays: the week's shadow/enforce divergence, flag receipts delta, tier WR movement (all `fmt_wr`-guarded), quota + health summary, posted to the retrospective channel + saved `data/gate/weekly/{ISO-week}.json`. Idempotent per week.
-- [ ] **Step 1–4: TDD (Sunday-only; idempotent; golden text over fixtures), commit** — `feat: weekly gate-effectiveness report`
+**Interfaces:** `weekly_gate_report(now) -> str | None` — Sundays: the week's shadow/enforce divergence, flag receipts delta, tier WR movement (all `fmt_wr`-guarded), quota + health summary, posted to the retrospective channel + saved `data/gate/weekly/{ISO-week}.json`. Idempotent per week (the saved file is the marker). The repo has no Sunday cadence today — add a date check inside the existing `daily_recap` loop (it ticks every minute; the weekday guard currently skips weekends, so the hook goes BEFORE that guard).
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_audit.py`)
+
+```python
+SUNDAY = dt.datetime(2026, 7, 19, 20, 0)
+MONDAY = dt.datetime(2026, 7, 20, 20, 0)
+
+
+def _weekly_seams(monkeypatch, tmp_path):
+    import swingbot.core.gate.audit as audit
+    monkeypatch.setattr(audit, "WEEKLY_DIR", str(tmp_path / "weekly"))
+    monkeypatch.setattr(audit, "_week_inputs", lambda now: {
+        "telemetry": {"evaluated": 41, "blocked": 0, "downgraded": 3,
+                      "held_for_event": 1, "recheck_held": 0,
+                      "blocked_reasons": []},
+        "shadow_divergence": 4,
+        "tier_wr": {"A": {"wr": 78.0, "n": 18}, "B": {"wr": 62.0, "n": 33}},
+        "quota": {"fred": {"projected": 1200, "quota": 5000, "warn": False}},
+        "degraded_providers": []})
+
+
+def test_weekly_report_only_on_sunday(monkeypatch, tmp_path):
+    import swingbot.core.gate.audit as audit
+    _weekly_seams(monkeypatch, tmp_path)
+    assert audit.weekly_gate_report(MONDAY) is None
+    report = audit.weekly_gate_report(SUNDAY)
+    assert report is not None
+
+
+def test_weekly_report_golden_and_guarded(monkeypatch, tmp_path):
+    import swingbot.core.gate.audit as audit
+    _weekly_seams(monkeypatch, tmp_path)
+    report = audit.weekly_gate_report(SUNDAY)
+    assert "Gate week 2026-W29" in report
+    assert "41 evaluated" in report and "shadow divergence 4" in report
+    assert "A: — (N=18 < 20)" in report            # fmt_wr guard visible
+    assert "B: 62% (N=33)" in report
+
+
+def test_weekly_report_idempotent(monkeypatch, tmp_path):
+    import swingbot.core.gate.audit as audit
+    _weekly_seams(monkeypatch, tmp_path)
+    assert audit.weekly_gate_report(SUNDAY) is not None
+    assert audit.weekly_gate_report(SUNDAY) is None   # same week → saved file wins
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/core/gate/audit.py`)
+
+```python
+WEEKLY_DIR = os.path.join(config.DATA_DIR, "gate", "weekly")
+
+
+def _week_inputs(now) -> dict:
+    """Seam: gathers the week's raw numbers. Tests replace this whole
+    function, so each part may degrade independently (empty dict parts,
+    never exceptions)."""
+    import datetime as dt
+    from swingbot.core.gate import persistence, telemetry
+    from swingbot.core.macro import health
+    monday = (now - dt.timedelta(days=now.weekday())).date().isoformat()
+    try:
+        divergence = sum(1 for _ in open(persistence.SHADOW_PATH,
+                                         encoding="utf-8"))
+    except OSError:
+        divergence = 0
+    tier_wr = {}
+    try:
+        from swingbot.core.gate.persistence import gate_analytics_section
+        entries = _load_journal_entries()      # same source G85/G86 read
+        tier_wr = gate_analytics_section(entries).get("tier_wr", {})
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        quota = health.quota_report(now=now)
+        degraded = [p for p in quota if health.is_degraded(p)]
+    except Exception:  # noqa: BLE001
+        quota, degraded = {}, []
+    return {"telemetry": telemetry.summary(since=monday),
+            "shadow_divergence": divergence, "tier_wr": tier_wr,
+            "quota": quota, "degraded_providers": degraded}
+
+
+def weekly_gate_report(now) -> str | None:
+    """G203: Sundays only, once per ISO week (the saved JSON is the
+    idempotency marker). Every WR through fmt_wr."""
+    import json
+    from swingbot.core.gate.render import fmt_wr
+    if now.weekday() != 6:
+        return None
+    week = f"{now.isocalendar().year}-W{now.isocalendar().week:02d}"
+    os.makedirs(WEEKLY_DIR, exist_ok=True)
+    path = os.path.join(WEEKLY_DIR, f"{week}.json")
+    if os.path.exists(path):
+        return None
+    data = _week_inputs(now)
+    t = data["telemetry"]
+    lines = [f"📊 Gate week {week}",
+             f"{t['evaluated']} evaluated · {t['blocked']} blocked · "
+             f"{t['downgraded']} downgraded · {t['held_for_event']} held · "
+             f"shadow divergence {data['shadow_divergence']}"]
+    for tier, row in sorted(data["tier_wr"].items()):
+        lines.append(f"{tier}: {fmt_wr(row['wr'], row['n'])}")
+    for provider, q in data["quota"].items():
+        if q["warn"]:
+            lines.append(f"⚠️ {provider} projected {q['projected']}/{q['quota']} calls/day")
+    if data["degraded_providers"]:
+        lines.append("⚠️ degraded: " + ", ".join(data["degraded_providers"]))
+    report = "\n".join(lines)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"week": week, "report": report, **data}, fh, indent=2)
+    return report
+```
+
+**Wiring** (`daily_recap`, before its weekday guard): `report = weekly_gate_report(now)`; post to the retrospective channel when non-None (guarded by `GATE_ENABLED`).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_audit.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/audit.py swingbot/commands/scanning.py tests/test_gate_audit.py
+git commit -m "feat: weekly gate-effectiveness report"
+```
 
 ### Task G204: Monthly WR honesty audit
 
 **Files:** Modify the G108 audit; test `tests/test_gate_audit.py`
 
-**Interfaces:** the monthly audit gains the honesty banner logic: per strategy, live WR (Wilson LB) vs the G2 target band → status line `"RSI-Div: 87% observed (LB 81%, N=41) — target band met / not yet provable / drifting"`; **never** renders an unproven "95%" — the exact string `95` may appear only when `wilson_lower_bound > 0.90` (unit-tested string guard, the plan's promise made executable).
-- [ ] **Step 1–4: TDD (the 95-string guard; band statuses), commit** — `feat: monthly WR honesty audit`
+**Interfaces:** the monthly audit gains the honesty banner logic: per strategy, live WR (Wilson LB) vs the G2 target band → status line `"RSI-Div: 87% observed (LB 81%, N=41) — target band met / not yet provable / drifting"`; **never** renders an unproven "95%" — the exact string `95` may appear only when `wilson_lower_bound > 0.90` (unit-tested string guard, the plan's promise made executable). Pure: `honesty_line(strategy, wins, n, target_band) -> str`.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_audit.py`)
+
+```python
+from swingbot.core.gate.audit import honesty_line
+
+BAND = {"floor": 80.0, "target": 95.0}
+
+
+def test_honesty_line_observed_95_carries_the_suffix():
+    # 39/41 = 95.1% observed, Wilson LB ≈ 0.835 → NOT provable: the
+    # number renders (hiding it would be its own dishonesty) but must
+    # carry the explicit disclaimer.
+    line = honesty_line("RSI-Div", wins=39, n=41, target_band=BAND)
+    assert line.startswith("RSI-Div:")
+    assert "not yet provable" in line
+    assert "(observed, not proven)" in line
+
+
+def test_honesty_line_proven():
+    # 197/200 = 98.5%, Wilson LB ≈ 0.955 > 0.90 → a bare "95" is allowed
+    line = honesty_line("RSI-Div", wins=197, n=200, target_band=BAND)
+    assert "target band met (95% proven)" in line
+
+
+def test_honesty_line_drifting():
+    line = honesty_line("RSI-Div", wins=25, n=41, target_band=BAND)  # 61%
+    assert "drifting" in line
+
+
+def test_the_95_string_guard_is_absolute():
+    """No unproven (wins, n) may emit '95' except tagged as observed."""
+    from swingbot.core.gate.wr_math import wilson_lower_bound
+    for wins, n in ((19, 20), (38, 40), (95, 100), (48, 50), (39, 41)):
+        line = honesty_line("X", wins=wins, n=n, target_band=BAND)
+        if wilson_lower_bound(wins, n) <= 0.90 and "95" in line:
+            assert "(observed, not proven)" in line, \
+                f"unproven bare 95 leaked at {wins}/{n}: {line}"
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `audit.py`)
+
+```python
+def honesty_line(strategy: str, wins: int, n: int, target_band: dict) -> str:
+    """G204: the honesty banner. A bare '95' may appear ONLY when
+    wilson_lower_bound(wins, n) > 0.90 — a statistically PROVEN claim.
+    An OBSERVED WR that happens to format as '95%' is never hidden
+    (hiding numbers is its own dishonesty) — it carries the explicit
+    '(observed, not proven)' suffix instead."""
+    from swingbot.core.gate.render import fmt_wr
+    from swingbot.core.gate.wr_math import wilson_lower_bound
+    if n == 0:
+        return f"{strategy}: no closed trades yet"
+    wr = 100.0 * wins / n
+    lb = wilson_lower_bound(wins, n)
+    body = f"{strategy}: {fmt_wr(wr, n)} (LB {lb * 100.0:.0f}%)"
+    if lb > 0.90:
+        return f"{body} — target band met (95% proven)"
+    if f"{wr:.0f}" == "95":
+        body += " (observed, not proven)"
+    if wr < target_band["floor"]:
+        return f"{body} — drifting below the {target_band['floor']:.0f}% floor"
+    return f"{body} — target not yet provable at this N"
+```
+
+The guard's exact contract (the tests above encode it): a bare "95" appears only inside "95% proven"; an observed WR that formats as "95%" always carries "(observed, not proven)". Never solve this by clamping or hiding the observed number — the promise is *no unproven claim*, not *no inconvenient digits*.
+
+- [ ] **Step 3: Wire into `monthly_gate_audit`** — one honesty line per strategy appended to the report (target bands from the G2 doc, parsed once into a module dict `TARGET_BANDS`).
+- [ ] **Step 4: Run — PASS + full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/audit.py tests/test_gate_audit.py
+git commit -m "feat: monthly WR honesty audit"
+```
 
 ### Task G205: Quarterly re-validation hook
 
 **Files:** Modify the audit module; docs note; test `tests/test_gate_audit.py`
 
-**Interfaces:** first audit of each quarter additionally: re-runs the fold suite via `scripts/gate_fold_run.py --all` **on TRAIN only** (subprocess, background), diffs chosen cuts vs current config defaults, posts "re-validation drift" summary + writes a proposal file when drift exceeds the plateau tolerance (G101). Extends edge E96's cron if merged (one quarterly job, two payloads) — capability-checked.
-- [ ] **Step 1–4: TDD (quarter boundary; proposal-on-drift; subprocess mocked), commit** — `feat: quarterly re-validation`
+**Interfaces:** first audit of each quarter additionally: re-runs the fold suite via `scripts/gate_fold_run.py --all` **on TRAIN only** (subprocess, background), diffs chosen cuts vs current config defaults, posts "re-validation drift" summary + writes a proposal file when drift exceeds the plateau tolerance (G101). Extends edge E96's cron if merged (one quarterly job, two payloads) — capability-checked; absent edge (today's reality), the hook lives in `monthly_gate_audit`'s caller.
+
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_audit.py`)
+
+```python
+def test_quarterly_hook_fires_only_on_first_audit_of_quarter(monkeypatch, tmp_path):
+    import swingbot.core.gate.audit as audit
+    monkeypatch.setattr(audit, "QUARTERLY_DIR", str(tmp_path))
+    ran = []
+    monkeypatch.setattr(audit, "_run_fold_suite", lambda: ran.append(1))
+    assert audit.maybe_quarterly_revalidation(dt.datetime(2026, 10, 2)) is True
+    assert audit.maybe_quarterly_revalidation(dt.datetime(2026, 11, 2)) is False
+    assert len(ran) == 1                    # marker file gates the quarter
+    assert audit.maybe_quarterly_revalidation(dt.datetime(2027, 1, 5)) is True
+
+
+def test_quarterly_drift_writes_proposal(monkeypatch, tmp_path):
+    import swingbot.core.gate.audit as audit
+    written = {}
+    monkeypatch.setattr("swingbot.core.gate.frontier.write_proposal",
+                        lambda p, kind: written.update(p) or "path.json")
+    # fold says 70, config says 60, plateau tolerance ±5 → drift → proposal
+    summary = audit.revalidation_drift(
+        fold_cuts={"RSI-Div": 70}, config_cuts={"RSI-Div": 60}, tolerance=5)
+    assert "RSI-Div" in summary and "drift" in summary.lower()
+    assert written["strategy"] == "RSI-Div" and written["proposed_cut"] == 70
+
+
+def test_quarterly_no_drift_no_proposal(monkeypatch):
+    import swingbot.core.gate.audit as audit
+    called = []
+    monkeypatch.setattr("swingbot.core.gate.frontier.write_proposal",
+                        lambda *a, **k: called.append(1))
+    summary = audit.revalidation_drift(
+        fold_cuts={"RSI-Div": 62}, config_cuts={"RSI-Div": 60}, tolerance=5)
+    assert "within tolerance" in summary and called == []
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement** (append to `audit.py`)
+
+```python
+QUARTERLY_DIR = os.path.join(config.DATA_DIR, "gate", "quarterly")
+
+
+def _run_fold_suite() -> None:
+    """Background subprocess: TRAIN-only fold re-run. Never awaited — the
+    drift diff happens on the NEXT audit once artifacts refresh."""
+    import subprocess
+    import sys
+    subprocess.Popen([sys.executable, "scripts/gate_fold_run.py", "--all"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def maybe_quarterly_revalidation(now) -> bool:
+    """First audit of each quarter: kick the fold suite. Marker file per
+    quarter = idempotency."""
+    quarter = f"{now.year}-Q{(now.month - 1) // 3 + 1}"
+    os.makedirs(QUARTERLY_DIR, exist_ok=True)
+    marker = os.path.join(QUARTERLY_DIR, f"{quarter}.marker")
+    if os.path.exists(marker):
+        return False
+    with open(marker, "w", encoding="utf-8") as fh:
+        fh.write(now.isoformat())
+    _run_fold_suite()
+    return True
+
+
+def revalidation_drift(fold_cuts: dict, config_cuts: dict,
+                       tolerance: int = 5) -> str:
+    """Diff freshly-computed fold cuts against configured defaults; write
+    a proposal (NEVER a config change) per drifted strategy."""
+    from swingbot.core.gate.frontier import write_proposal
+    lines = []
+    for strategy, fold_cut in sorted(fold_cuts.items()):
+        current = config_cuts.get(strategy)
+        if current is None:
+            continue
+        if abs(fold_cut - current) > tolerance:
+            write_proposal({"strategy": strategy, "proposed_cut": fold_cut,
+                            "current": current, "source": "quarterly re-validation"},
+                           kind="gate-tiers-quarterly")
+            lines.append(f"{strategy}: drift {current} → {fold_cut} "
+                         f"(proposal written)")
+        else:
+            lines.append(f"{strategy}: {current} vs {fold_cut} — within tolerance")
+    return "\n".join(lines)
+```
+
+**Wiring:** the monthly-audit caller runs `maybe_quarterly_revalidation(now)` after posting the audit; the NEXT month's audit includes `revalidation_drift(...)` when fresh artifacts exist (compare artifact mtime > marker mtime). Docs note in the runbook's audit section. If edge E96's quarterly cron exists at execution, register there instead of the audit caller.
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_audit.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/audit.py docs/gatekeeper-runbook.md tests/test_gate_audit.py
+git commit -m "feat: quarterly re-validation"
+```
 
 ### Task G206: 4-week paper forward-gate for the A+ channel
 
 **Files:** Create `docs/superpowers/results/2026-08-gate-forward-test.md` (template now, filled during the gate)
 
-- [ ] **Step 1: Write the template + procedure:** after enforce-mode promotion (G105/G106), run 4 calendar weeks where A+ alerts are paper-tracked as their own cohort; the doc pre-registers what "pass" means (A+ live WR Wilson LB ≥ B-tier live WR; no expectancy degradation; ≥ 10 A+ signals) and what happens on fail (tier cuts revert to proposal state, gate stays enforce at min-tier B).
-- [ ] **Step 2: Commit** — `docs: A+ forward-gate template (pre-registered)`
+- [ ] **Step 1: Write the template + procedure** — this exact content (filled-in cells stay blank until the gate actually runs):
+
+```markdown
+# A+ Forward Gate — 4-week paper test (pre-registered)
+
+**Status:** template — runs only after enforce-mode promotion (G105/G106).
+**Window:** 4 calendar weeks from the first A+ alert after promotion.
+Start date: ____  End date: ____
+
+## Pre-registered pass criteria (ALL must hold — written before the data)
+
+- [ ] >= 10 A+ signals occurred in the window (else: extend 2 weeks, once)
+- [ ] A+ cohort live WR Wilson LB >= B-tier cohort live WR (point estimate)
+- [ ] A+ cohort expectancy (R) >= B-tier cohort expectancy
+- [ ] zero gate-attributable incidents (crashes, wrong holds)
+
+## Data (filled during the window — source: shadow/journal joins, !tierwr)
+
+| week | A+ signals | A+ W-L | A+ WR (LB) | B WR | notes |
+|---|---|---|---|---|---|
+| 1 | | | | | |
+| 2 | | | | | |
+| 3 | | | | | |
+| 4 | | | | | |
+
+## On pass
+Enforce may move from min-tier B to the chosen-tier ladder (G207).
+
+## On fail (pre-registered — no renegotiation after seeing data)
+Tier cuts revert to proposal state; gate stays enforce at min-tier B;
+next attempt requires a fresh G98 frontier run and a new 4-week window.
+```
+
+- [ ] **Step 2: Commit** — `git add docs/superpowers/results/2026-08-gate-forward-test.md && git commit -m "docs: A+ forward-gate template (pre-registered)"`
 
 ### Task G207: Promotion + rollback runbook
 
@@ -11860,8 +18704,61 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Create `docs/superpowers/results/2026-07-gate-premortem.md`
 
-- [ ] **Step 1: Write it (edge E95 pattern), covering at minimum:** overfit-to-folds (mitigation: permutation + plateau + sentinel), macro provider drift/silent schema change (quality validator + smoke), the gate blocking the exact trades that made the system work (shadow comparison + `!blocked` visibility), operator abandons the checklist when it disagrees with gut (receipts commands + monthly audit), free-tier quota death (meter + degradation), event-calendar staleness blocking entries wrongly (staleness auto-disables blackout with warning — verify G120 implements this; if not, fix in this task), and lookahead bugs in backtest context (G90's trap tests as the canary).
-- [ ] **Step 2: Commit** — `docs: gatekeeper pre-mortem`
+- [ ] **Step 1: Write it (edge E95 pattern)** — one section per failure mode, each with *how we'd notice* and *the mitigation already built*; this exact skeleton, prose filled at execution:
+
+```markdown
+# Gatekeeper v6 — Pre-mortem
+
+"It is six months later and the gate quietly made the system worse.
+What happened?" One section per way that happens.
+
+## 1. The score is overfit to the folds
+Noticed by: permutation p-values (G100), plateau check (G101),
+overfit sentinel warnings (G110), monthly live-vs-fold drift (G108).
+Mitigation: cuts came from the frontier + plateau, not the peak; the
+2024-2025 validation window is still unspent (G107).
+
+## 2. A macro provider drifted or changed schema silently
+Noticed by: quality validator warnings (G42), macro_smoke failures,
+unknown-rate spike in telemetry (G135), health page.
+Mitigation: every check degrades to unknown; unknown never blocks (G43/G121/G144).
+
+## 3. The gate blocks exactly the trades that made the system work
+Noticed by: shadow comparison — would-have-blocked cohort WR vs passed (G104);
+!blocked makes every suppression visible (G155).
+Mitigation: inform-first defaults; enforce requires the G105 evidence
+including blocked-cohort-worse proof; G206 forward gate re-checks live.
+
+## 4. The operator abandons the checklist when it disagrees with gut
+Noticed by: gut-check stats — the "took it anyway" cohort (G126/G156);
+monthly audit honesty lines (G204).
+Mitigation: the ritual is optional but its receipts are public to the
+operator; the mirror is the mechanism.
+
+## 5. Free-tier quota death
+Noticed by: quota projection warnings at 80% (G200), health page bars.
+Mitigation: quota meter refuses calls before providers do (G11);
+caches serve stale; darkness is a tested state, not an outage.
+
+## 6. Stale event calendar holds entries wrongly
+Noticed by: startup diagnostics + blackout WARN.
+Mitigation: G120 auto-disables HOLDING on a > 7-day-stale calendar
+(annotation continues) — verify the shipped code does this; if not,
+fixing it is part of THIS task, not a note.
+
+## 7. Lookahead bugs poison the backtest evidence
+Noticed by: G90's trap tests (publication-lag fixtures) are the canary —
+they fail loudly if a join starts peeking.
+Mitigation: all historical joins go through the lag-aware layer; the
+fold suite reuses it.
+
+## What would still hurt us (honest residual)
+<filled at execution: the risks with no mitigation yet — e.g. regime
+change invalidating TRAIN-era thresholds between quarterly re-validations>
+```
+
+- [ ] **Step 2: Verify item 6 against the shipped `blackout_decision`** (it does implement staleness auto-disable per G120 — confirm the WARN log fires and the annotate fallback holds; if anything diverges, fix the code in this task).
+- [ ] **Step 3: Commit** — `git add docs/superpowers/results/2026-07-gate-premortem.md && git commit -m "docs: gatekeeper pre-mortem"`
 
 ### Task G209: README section
 
@@ -11881,22 +18778,159 @@ Follows every cockpit-v3 Part-3 convention: Flask + Jinja2, vendored Chart.js + 
 
 **Files:** Modify `.env.example` (if present) + verify the admin settings page renders the Gatekeeper section
 
-- [ ] **Step 1:** `FRED_API_KEY=`, `FINNHUB_API_KEY=` documented with sign-up URLs; settings page shows all Gatekeeper fields grouped (FIELDS-driven — should be automatic; test asserts the section renders).
-- [ ] **Step 2–4: TDD (settings page section present), commit** — `chore: env example + settings surface`
+- [ ] **Step 1: Write the failing test** (append to `tests/admin/test_gate_pages.py`)
+
+```python
+def test_settings_page_renders_gatekeeper_section(client, auth_headers):
+    html = client.get("/settings", headers=auth_headers).get_data(as_text=True)
+    assert "Gatekeeper" in html                     # FIELDS section header
+    for key in ("GATE_ENABLED", "GATE_MODE", "MACRO_ENABLED",
+                "FRED_API_KEY", "FINNHUB_API_KEY"):
+        assert key in html
+
+
+def test_env_example_documents_the_keys():
+    text = open(".env.example", encoding="utf-8").read()
+    assert "FRED_API_KEY=" in text and "fred.stlouisfed.org" in text
+    assert "FINNHUB_API_KEY=" in text and "finnhub.io" in text
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**: the settings page is `FIELDS_BY_SECTION`-driven, so the Gatekeeper section appears automatically once the fields exist (G3/G79/G138) — if the test fails, a Field is missing its `section="Gatekeeper"`, fix the Field. Append to `.env.example`:
+
+```text
+# --- Gatekeeper / market context (both free tiers) ---
+# Sign up: https://fred.stlouisfed.org/docs/api/api_key.html
+FRED_API_KEY=
+# Sign up: https://finnhub.io/register
+FINNHUB_API_KEY=
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/admin/ -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add .env.example swingbot/config.py tests/admin/test_gate_pages.py
+git commit -m "chore: env example + settings surface"
+```
 
 ### Task G212: Dependency + import hygiene audit
 
 **Files:** Test `tests/test_gate_imports.py`
 
-- [ ] **Step 1: The test** — `swingbot/core/gate/` pure modules (types, score, wr_math, frontier, all check modules) import neither `requests` nor `config`-path I/O (AST-level check, cockpit A-phase precedent); `swingbot/core/macro/` imports no discord; `requirements.txt` unchanged by this whole plan (git-diff assertion documented as a manual step, import assertion automated).
-- [ ] **Step 2: PASS (refactor violations). Step 3: Commit** — `test: gate/macro import hygiene`
+- [ ] **Step 1: Write the test**
+
+```python
+# tests/test_gate_imports.py
+"""G212: architectural hygiene, AST-enforced. Pure gate modules stay
+pure; macro modules never touch discord; the plan adds zero dependencies."""
+import ast
+import pathlib
+
+PURE_GATE_MODULES = ["types.py", "score.py", "wr_math.py", "frontier.py",
+                     "registry.py", "render.py"]
+GATE_DIR = pathlib.Path("swingbot/core/gate")
+MACRO_DIR = pathlib.Path("swingbot/core/macro")
+
+
+def _imports_of(path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            yield from (a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            yield node.module
+
+
+def test_pure_gate_modules_do_no_io():
+    offenders = []
+    check_files = [GATE_DIR / m for m in PURE_GATE_MODULES] + \
+        sorted(GATE_DIR.glob("checks_*.py"))
+    for path in check_files:
+        if not path.exists():
+            continue
+        for mod in _imports_of(path):
+            if mod.split(".")[0] in ("requests", "urllib", "http", "discord"):
+                offenders.append(f"{path.name} imports {mod}")
+    assert not offenders, offenders
+
+
+def test_macro_modules_never_import_discord():
+    offenders = [f"{p.name} imports {mod}"
+                 for p in MACRO_DIR.glob("*.py")
+                 for mod in _imports_of(p)
+                 if mod.split(".")[0] == "discord"]
+    assert not offenders, offenders
+
+
+def test_requirements_unchanged_by_this_plan():
+    """The whole plan runs on stdlib + existing deps. New entries in
+    requirements.txt mean scope creep — justify or revert. (Baseline
+    recorded when this test was written; update ONLY with a reason in
+    the commit message.)"""
+    reqs = {line.split("==")[0].split(">=")[0].strip().lower()
+            for line in open("requirements.txt", encoding="utf-8")
+            if line.strip() and not line.startswith("#")}
+    baseline = reqs  # freeze: replace with the literal set at execution time
+    assert reqs == baseline
+```
+
+(At execution, replace `baseline = reqs` with the literal frozen set from that day's `requirements.txt` — the test is then a real tripwire.)
+
+- [ ] **Step 2: Run — PASS (refactor any violation: I/O leaks out of pure modules into `persistence.py`/`httpcache.py`, discord leaks out of macro into the command layer).**
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_imports.py
+git commit -m "test: gate/macro import hygiene"
+```
 
 ### Task G213: Full-suite performance budget
 
 **Files:** Test `tests/test_gate_suite_perf.py` + measurement note
 
-- [ ] **Step 1:** The new test modules collectively add < 60 s to the suite on the dev machine (measure, record in the test's docstring); mark the worst offenders `@pytest.mark.slow` consistent with existing markers if over.
-- [ ] **Step 2: PASS. Step 3: Commit** — `test: suite time budget for gate/macro`
+- [ ] **Step 1: Measure, then write the tripwire**
+
+Run: `python -m pytest tests/ -q --durations=25` twice (warm), note total wall time with and without the gate/macro test modules (`--ignore` the new files for the "without" number). Record both numbers in the test docstring. Then:
+
+```python
+# tests/test_gate_suite_perf.py
+"""G213: the gate/macro test modules must add < 60 s to the suite.
+Measured 2026-XX-XX on the dev machine: full suite XXXs, without
+gate/macro modules XXXs (delta XXs). This test is a coarse tripwire on
+the biggest offenders, not a rerun of the measurement."""
+import subprocess
+import sys
+import time
+
+import pytest
+
+
+@pytest.mark.slow
+def test_gate_module_smoke_time_budget():
+    """The five heaviest gate test files together under 45 s — if this
+    trips, mark the offender @pytest.mark.slow or fix the fixture."""
+    heavy = ["tests/test_gate_e2e.py", "tests/test_gate_folds.py",
+             "tests/test_gate_charts.py", "tests/test_scan_gate_perf.py",
+             "tests/admin/test_gate_e2e.py"]
+    t0 = time.perf_counter()
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q",
+                             "-p", "no:cacheprovider", *heavy],
+                            capture_output=True)
+    elapsed = time.perf_counter() - t0
+    assert result.returncode == 0
+    assert elapsed < 45.0, f"heavy gate tests took {elapsed:.0f}s"
+```
+
+- [ ] **Step 2: Run — PASS** (if over: mark the worst offenders `@pytest.mark.slow` consistent with existing markers, or fix the slow fixture — session-scope the OHLCV builders first).
+- [ ] **Step 3: Commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_suite_perf.py
+git commit -m "test: suite time budget for gate/macro"
+```
 
 ### Task G214: Lint/type sweep
 

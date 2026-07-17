@@ -29,6 +29,33 @@ TRAIL_ATR_MULT = 2.5          # chandelier default; finalized by the Task 30 TRA
 TP1_FRACTION = 0.5            # fixed by spec §5
 DEFAULT_EXPIRY_BARS = 5
 
+# Per-strategy exit-v2 overrides chosen by the Task 30 TRAIN grid under the
+# pre-registered rule "WR>=80 and ExpR>0 and N>=30 and excl<=50%; max ExpR
+# wins; else keep defaults" (docs/superpowers/results/2026-07-exit-v2-train-grid.txt).
+# Missing key = defaults (trail 2.5, tp2 on). NEVER edit from validation data.
+# Support/Resistance's winner (trail=2.5, tp2=levels) equals the defaults;
+# EMA Crossover and Elliott Wave had no qualifying config. stop_entry won for
+# no breakout-class strategy, so STRATEGY_ENTRY_TYPE stays empty.
+# Applies to strategy-source plans only: the confluence pipeline ran its
+# one-shot OOS validation (Task 41) with the defaults, so its behavior is
+# pinned — build_confluence_plan deliberately does not read this table.
+EXIT_V2_PARAMS: dict[str, dict] = {
+    "VWAP":           {"trail_atr_mult": 2.5, "tp2": False},  # N=136  WR=83.1 ExpR=+0.216
+    "Fibonacci":      {"trail_atr_mult": 3.0, "tp2": False},  # N=279  WR=81.7 ExpR=+0.183
+    "RSI":            {"trail_atr_mult": 2.0, "tp2": False},  # N=608  WR=85.2 ExpR=+0.218
+    "MACD":           {"trail_atr_mult": 2.0, "tp2": True},   # N=145  WR=83.4 ExpR=+0.090
+    "MA Ribbon":      {"trail_atr_mult": 2.5, "tp2": False},  # N=259  WR=81.1 ExpR=+0.186
+    "Break & Retest": {"trail_atr_mult": 3.0, "tp2": False},  # N=355  WR=80.3 ExpR=+0.085
+    "RSI Divergence": {"trail_atr_mult": 2.0, "tp2": False},  # N=1702 WR=81.0 ExpR=+0.218
+    "Volume Profile": {"trail_atr_mult": 3.0, "tp2": False},  # N=73   WR=82.2 ExpR=+0.180
+}
+
+
+def exit_params_for(strategy: str) -> dict:
+    p = EXIT_V2_PARAMS.get(strategy, {})
+    return {"trail_atr_mult": p.get("trail_atr_mult", TRAIL_ATR_MULT),
+            "tp2": p.get("tp2", True)}
+
 
 class PlanStatus:
     PENDING = "PENDING"
@@ -271,8 +298,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
 
     entry_type = entry_type_for(strategy, "strategy")
     created_at = df.index[index].date().isoformat()
+    exit_params = exit_params_for(strategy)
     tp2 = None
-    if level_map is not None:
+    if level_map is not None and exit_params["tp2"]:
         supports, resistances = level_map
         levels_above = [lv.price for lv in resistances]
         levels_below = [lv.price for lv in supports]
@@ -285,7 +313,8 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         expiry_bars=DEFAULT_EXPIRY_BARS, stop_loss=stop, tp1=tp1,
         tp1_fraction=TP1_FRACTION, tp2=tp2,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
-        trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
+        trail_atr_mult=exit_params["trail_atr_mult"],
+        quality_score=0, quality_breakdown=[],
         tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
     )
     if entry_type == "market":

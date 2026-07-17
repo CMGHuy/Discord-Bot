@@ -48,6 +48,9 @@ def _pool(summaries):
 
 
 def main():
+    # The grid explores trail/tp2 via the module defaults, so the adopted
+    # Task 31 per-strategy overrides must not shadow the axes on a rerun.
+    plan_engine.EXIT_V2_PARAMS.clear()
     frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
               for p in sorted(CACHE_DIR.glob("*.csv"))}
     # Optional single-strategy filter (operational only -- lets the full
