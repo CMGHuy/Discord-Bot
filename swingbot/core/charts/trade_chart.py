@@ -163,6 +163,7 @@ def generate_trade_chart(
     stop_sources: list = None,
     horizon: dict = None,
     market_price: float = None,
+    plan_v2=None,
 ) -> str:
     # Pick the single most informative confirming method per side (see
     # _pick_primary_source) -- this is what actually gets drawn instead
@@ -811,6 +812,38 @@ def generate_trade_chart(
             )
 
         ax.set_xlim(ax.get_xlim()[0], label_x + extra_width * 0.55)
+
+        # v2 plan overlays (Tasks 81-82): trigger line for stop-entry plans,
+        # TP1/TP2 zones, and (once PARTIAL) the live runner trail.
+        if plan_v2 is not None:
+            entry_lvl = plan_v2.entry_price or plan_v2.trigger_price
+            if plan_v2.entry_type == "stop_entry":
+                trigger_label = "BUY STOP" if plan_v2.direction == "bullish" else "SELL STOP"
+                ax.axhline(plan_v2.trigger_price, linestyle="--", linewidth=1.2,
+                           color=ENTRY_COLOR)
+                ax.annotate(trigger_label, xy=(0.99, plan_v2.trigger_price),
+                            xycoords=("axes fraction", "data"),
+                            ha="right", va="bottom", fontsize=8, color=ENTRY_COLOR)
+            ax.axhline(plan_v2.tp1, linewidth=1.0, color=TARGET_COLOR)
+            ax.axhspan(min(entry_lvl, plan_v2.tp1), max(entry_lvl, plan_v2.tp1),
+                       alpha=0.08, color=TARGET_COLOR)          # leg-1 reward zone
+            if plan_v2.tp2 is not None:
+                ax.axhline(plan_v2.tp2, linestyle=":", linewidth=1.0,
+                           color=TARGET_COLOR)
+                ax.axhspan(min(plan_v2.tp1, plan_v2.tp2),
+                           max(plan_v2.tp1, plan_v2.tp2),
+                           alpha=0.05, color=TARGET_COLOR)      # runner zone
+            if plan_v2.status == "PARTIAL":
+                # working trail level (already ratcheted by the manager)
+                if plan_v2.working_stop is not None:
+                    ax.axhline(plan_v2.working_stop, linestyle=":", linewidth=1.4,
+                               color=CURRENT_PRICE_COLOR)
+                    ax.annotate("trail", xy=(0.99, plan_v2.working_stop),
+                                xycoords=("axes fraction", "data"), ha="right",
+                                va="bottom", fontsize=8, color=CURRENT_PRICE_COLOR)
+                ax.annotate("TP1 banked ✓", xy=(0.01, plan_v2.tp1),
+                            xycoords=("axes fraction", "data"), ha="left",
+                            va="bottom", fontsize=8, color=TARGET_COLOR)
 
         # Confirmed-by annotation: small note at bottom-left of the price panel.
         # Kept separate from the title stats so the title stays one clean line.
