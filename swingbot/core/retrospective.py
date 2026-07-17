@@ -146,6 +146,36 @@ def _berlin_date(iso_str: str) -> dt.date | None:
     return d.date() if d else None
 
 
+def summarize_runner_outcomes(closed: list) -> str | None:
+    counts = {"tp2": 0, "trail": 0, "be": 0, "timeout": 0}
+    for t in closed:
+        for leg in t.get("legs") or []:
+            reason = leg.get("reason", "")
+            if reason.startswith("tp1_runner_"):
+                counts[reason.removeprefix("tp1_runner_")] += 1
+    if not any(counts.values()):
+        return None
+    parts = [f"{n} {k}" for k, n in counts.items() if n]
+    return "runners: " + ", ".join(parts)
+
+
+def summarize_badge_split(closed: list) -> str | None:
+    buckets: dict = {}
+    for t in closed:
+        badge = t.get("badge")
+        if not badge:
+            continue
+        b = buckets.setdefault(badge, {"w": 0, "l": 0})
+        if t.get("status") == "win":
+            b["w"] += 1
+        elif t.get("status") == "loss":
+            b["l"] += 1
+    if not buckets:
+        return None
+    return " · ".join(f"{badge}: {b['w']}W/{b['l']}L"
+                      for badge, b in sorted(buckets.items()))
+
+
 def _pnl_pct(trade: dict) -> float | None:
     entry = trade.get("entry")
     exit_ = trade.get("exit_price")
@@ -367,6 +397,13 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
 
     if still_open:
         header += f"**Still open:** {len(still_open)} trade(s)\n"
+
+    runner_line = summarize_runner_outcomes(closed_today)
+    if runner_line is not None:
+        header += f"**{runner_line}**\n"
+    badge_line = summarize_badge_split(closed_today)
+    if badge_line is not None:
+        header += f"**Badge split:** {badge_line}\n"
 
     if n_closed == 0 and not opened_today:
         header += "\n_No trading activity today._"
