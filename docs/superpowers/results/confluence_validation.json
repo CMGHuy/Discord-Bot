@@ -1,0 +1,124 @@
+{
+  "window": [
+    "2024-01-01",
+    "2025-12-31"
+  ],
+  "gates": {
+    "min_reward_pct": 3.0,
+    "min_stop_distance_pct": 2.0,
+    "max_stop_distance_pct": 7.0,
+    "min_risk_reward": 1.5,
+    "min_confluence": 2,
+    "cooldown_bars": 5,
+    "horizons": [
+      "4w",
+      "2m",
+      "3m",
+      "4m",
+      "6m"
+    ]
+  },
+  "n_tickers": 75,
+  "min_n": 15,
+  "by_horizon": {
+    "2w": {
+      "n_eval": 263,
+      "win_rate": 51.71102661596958,
+      "expectancy_r": -0.16154448398576515,
+      "scratches": 17,
+      "timeouts": 1,
+      "excluded_share": 0.06405693950177936,
+      "pass": false
+    },
+    "4w": {
+      "n_eval": 336,
+      "win_rate": 53.273809523809526,
+      "expectancy_r": -0.14474074074074075,
+      "scratches": 14,
+      "timeouts": 1,
+      "excluded_share": 0.042735042735042736,
+      "pass": false
+    },
+    "2m": {
+      "n_eval": 402,
+      "win_rate": 48.756218905472636,
+      "expectancy_r": -0.22642924528301886,
+      "scratches": 22,
+      "timeouts": 0,
+      "excluded_share": 0.05188679245283019,
+      "pass": false
+    },
+    "3m": {
+      "n_eval": 436,
+      "win_rate": 50.45871559633027,
+      "expectancy_r": -0.203015350877193,
+      "scratches": 20,
+      "timeouts": 0,
+      "excluded_share": 0.043859649122807015,
+      "pass": false
+    },
+    "4m": {
+      "n_eval": 505,
+      "win_rate": 51.68316831683168,
+      "expectancy_r": -0.1834247619047619,
+      "scratches": 19,
+      "timeouts": 1,
+      "excluded_share": 0.0380952380952381,
+      "pass": false
+    },
+    "5m": {
+      "n_eval": 501,
+      "win_rate": 55.28942115768463,
+      "expectancy_r": -0.14083333333333337,
+      "scratches": 27,
+      "timeouts": 0,
+      "excluded_share": 0.05113636363636364,
+      "pass": false
+    },
+    "6m": {
+      "n_eval": 525,
+      "win_rate": 55.42857142857143,
+      "expectancy_r": -0.16925589836660618,
+      "scratches": 25,
+      "timeouts": 1,
+      "excluded_share": 0.047186932849364795,
+      "pass": false
+    },
+    "7m": {
+      "n_eval": 550,
+      "win_rate": 55.45454545454545,
+      "expectancy_r": -0.1553830155979203,
+      "scratches": 26,
+      "timeouts": 1,
+      "excluded_share": 0.04679376083188908,
+      "pass": false
+    },
+    "8m": {
+      "n_eval": 538,
+      "win_rate": 55.01858736059479,
+      "expectancy_r": -0.1679875886524823,
+      "scratches": 25,
+      "timeouts": 1,
+      "excluded_share": 0.04609929078014184,
+      "pass": false
+    },
+    "9m": {
+      "n_eval": 585,
+      "win_rate": 55.042735042735046,
+      "expectancy_r": -0.16349429037520394,
+      "scratches": 27,
+      "timeouts": 1,
+      "excluded_share": 0.04567699836867863,
+      "pass": false
+    }
+  },
+  "pooled": {
+    "n_eval": 4641,
+    "win_rate": 53.50140056022409,
+    "expectancy_r": -0.17111293634496924,
+    "scratches": 222,
+    "timeouts": 7,
+    "excluded_share": 0.04702258726899384,
+    "pass": false
+  }
+}
