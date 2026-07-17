@@ -24,23 +24,11 @@ import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
 from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
-from swingbot.core.backtest_scenarios import run_scenario_backtest
+from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
 from swingbot.core.strategy_types import HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
-
-# Confluence scenario replay gates (--scenarios). Spelled out as literals
-# (mirroring swingbot.config.MIN_REWARD_PCT / MIN_STOP_DISTANCE_PCT /
-# MAX_STOP_LOSS_PCT / MIN_RISK_REWARD_RATIO as of this writing) rather than
-# read from config at call time, so a replay stays reproducible even if the
-# operator's live .env later drifts from these numbers.
-SCENARIO_GATES = {
-    "min_reward_pct": 3.0,
-    "min_stop_distance_pct": 2.0,
-    "max_stop_distance_pct": 7.0,
-    "min_risk_reward": 1.5,
-}
 
 
 def window_trades(summary, date_from, date_to):
@@ -96,7 +84,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers", flush=True)
 
     stats = run_scenario_backtest(frames, date_from, date_to,
-                                  gates=SCENARIO_GATES, scale_out=scale_out,
+                                  gates=CONFLUENCE_GATES, scale_out=scale_out,
                                   horizons=list(HORIZONS))
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
