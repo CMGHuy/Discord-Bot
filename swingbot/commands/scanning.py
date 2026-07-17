@@ -816,6 +816,17 @@ async def trade_monitor():
                       len(near_tp_closed), ticker, live)
             all_newly_closed.extend(near_tp_closed)
 
+    # v2 plan lifecycle tick (flag-gated; no-op while INTRADAY_MANAGER_V2=false)
+    from swingbot.core import plan_manager
+    try:
+        plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
+    except Exception as exc:
+        log.warning("trade_monitor: plan manager tick failed: %s", exc)
+        plan_events = []
+    if plan_events:
+        from swingbot.core.scanning.embeds import notify_plan_events
+        await notify_plan_events(bot, plan_events)   # Task 72
+
     if all_newly_closed:
         from swingbot.core.scanning.embeds import notify_closed_trades
         try:

@@ -622,3 +622,67 @@ async def notify_near_close(bot, warnings: list):
             await channel.send(embed=build_near_close_embed(warning))
         except Exception as e:
             log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e)
+
+
+_EVENT_STYLE = {
+    "filled":                ("🎯 ENTRY TRIGGERED — {ticker}", discord.Color.blue()),
+    "cancelled_expired":     ("⏱ Plan expired — {ticker}", discord.Color.dark_grey()),
+    "cancelled_invalidated": ("❌ Plan invalidated — {ticker}", discord.Color.dark_red()),
+    "be_moved":              ("🛡 Stop moved to break-even — {ticker}", discord.Color.teal()),
+    "tp1_partial":           ("💰 TP1 banked — {ticker}", discord.Color.gold()),
+}
+_CLOSE_STYLE = {
+    "loss":            ("🔴 Stopped out — {ticker}", discord.Color.red()),
+    "scratch":         ("⚪ Scratched at break-even — {ticker}", discord.Color.light_grey()),
+    "tp1_runner_be":   ("🟢 Win — runner closed at break-even — {ticker}", discord.Color.green()),
+    "tp1_runner_tp2":  ("🟢🟢 Win — runner hit TP2 — {ticker}", discord.Color.green()),
+    "tp1_runner_trail": ("🟢 Win — trail locked profit — {ticker}", discord.Color.green()),
+}
+
+
+def build_plan_event_embed(plan, event) -> discord.Embed:
+    """Per-transition Discord embed for the v2 plan lifecycle (Task 72)."""
+    if event.transition == "closed":
+        template, color = _CLOSE_STYLE.get(
+            event.detail.get("reason"),
+            ("Plan closed — {ticker}", discord.Color.light_grey()))
+    else:
+        template, color = _EVENT_STYLE[event.transition]
+    embed = discord.Embed(title=template.format(ticker=plan.ticker), color=color)
+    embed.add_field(name="Plan", value=(
+        f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
+        f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
+    d = event.detail
+    if event.transition == "filled":
+        embed.add_field(name="Entry", value=f"{d['entry_price']:.2f}")
+        embed.add_field(name="Stop", value=f"{plan.stop_loss:.2f}")
+        embed.add_field(name="TP1", value=f"{plan.tp1:.2f}")
+    elif event.transition == "be_moved":
+        embed.add_field(name="New stop", value=f"{d['working_stop']:.2f} (entry)")
+    elif event.transition == "tp1_partial":
+        embed.add_field(name="Banked",
+                        value=f"{d['fraction']:.0%} @ {d['exit_price']:.2f} "
+                              f"({d['r']:+.2f}R)")
+        embed.add_field(name="Runner",
+                        value="runner active, stop at break-even", inline=False)
+    elif event.transition == "closed":
+        embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
+    embed.set_footer(text=f"plan {plan.plan_id[:8]}")
+    return embed
+
+
+async def notify_plan_events(bot, events):
+    """Route fills to the alerts channel, everything else to history --
+    same split notify_closed_trades already uses."""
+    from swingbot.core.plan_store import PlanStore
+    store = PlanStore()
+    for event in events:
+        plan = store.get(event.plan_id)
+        if plan is None:
+            continue
+        channel_id = (config.DISCORD_CHANNEL_TRADES_ID
+                      if event.transition == "filled"
+                      else config.DISCORD_CHANNEL_TRADES_HISTORY_ID)
+        channel = bot.get_channel(int(channel_id)) if channel_id else None
+        if channel is not None:
+            await channel.send(embed=build_plan_event_embed(plan, event))
