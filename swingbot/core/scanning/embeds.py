@@ -18,8 +18,11 @@ from datetime import datetime, timezone
 import discord
 
 from swingbot import config
+from swingbot.core import account
 from swingbot.core.account import compute_position_size, load_account_config
 from swingbot.core.data import get_currency_symbol, get_daily_data
+from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
+from swingbot.core.registry import Badge
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 
@@ -302,9 +305,73 @@ def _build_trade_plan_table(item) -> str:
             pnl_line += f"  (+{cur}{possible_profit2:,.0f} at stretch target)"
         rows.append(("Possible P&L", pnl_line))
 
+    plan_v2 = getattr(item, "plan_v2", None)
+    if plan_v2 is not None:
+        rows.append(("Entry (v2)", entry_line(plan_v2)))
+        cur = config.CURRENCY_SYMBOL
+        tp1_row, runner_row = leg_rows(plan_v2, currency=cur)
+        rows.append(("TP1 leg (50%)", tp1_row))
+        rows.append(("Runner leg (50%)", runner_row))
+
     key_width = max(len(k) for k, _ in rows)
     lines = [f"{k.ljust(key_width)} : {v}" for k, v in rows]
     return "```ansi\n" + "\n".join(lines) + "\n```"
+
+
+def badge_field_for(plan) -> tuple[str, str] | None:
+    """(field_name, field_value) for a v2 plan's pedigree, or None."""
+    if plan is None:
+        return None
+    stats = plan.badge_stats or {}
+    badge = Badge(status=plan.badge, n=stats.get("n", 0),
+                  win_rate=stats.get("win_rate", 0.0),
+                  expectancy_r=stats.get("expectancy_r", 0.0),
+                  window=stats.get("window", ""))
+    if plan.badge == "VALIDATED":
+        return ("✅ VALIDATED", badge_stats_line(badge))
+    caution = WEAK_CAUTION_TEXT.format(win_rate=badge.win_rate, n=badge.n)
+    return ("⚠️ WEAK", f"**{caution}**")
+
+
+def quality_lines(plan) -> tuple[str, str] | None:
+    """('Quality: 82/100 (Tier A)', 'regime +15 · htf +8 · ...') or None
+    for unscored plans. Middle-dot separated, signed ints -- rendering is
+    FIXED here; every consumer prints these two strings verbatim."""
+    if plan is None or not plan.quality_breakdown:
+        return None
+    header = f"Quality: {plan.quality_score}/100 (Tier {plan.tier})"
+    detail = " · ".join(f"{name} {pts:+d}" for name, pts in plan.quality_breakdown)
+    return header, detail
+
+
+def entry_line(plan) -> str:
+    if plan.entry_type == "stop_entry":
+        side = "BUY STOP above" if plan.direction == "bullish" else "SELL STOP below"
+        return (f"Entry: {side} {plan.trigger_price:.2f} "
+                f"(expires in {plan.expiry_bars} bars)")
+    return f"Entry: market ~{plan.trigger_price:.2f}"
+
+
+def leg_rows(plan, currency: str) -> tuple[str, str]:
+    """('50% @ 102.00 → +$17.50', '50% → TP2 105.00 / trail') for the
+    two-leg sizing block. P&L uses the SAME sizing snapshot source as the
+    legacy table (account.compute_position_size at render time)."""
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    frac1 = plan.tp1_fraction
+    try:
+        sizing = account.compute_position_size(entry, plan.stop_loss)
+    except Exception:
+        sizing = None
+    tp1_pct = f"{frac1:.0%} @ {plan.tp1:.2f}"
+    if sizing and sizing.get("shares"):
+        sign = 1 if plan.direction == "bullish" else -1
+        pnl = sizing["shares"] * frac1 * (plan.tp1 - entry) * sign
+        tp1_row = f"{tp1_pct} → {'+' if pnl >= 0 else ''}{currency}{abs(pnl):,.2f}"
+    else:
+        tp1_row = tp1_pct
+    runner = f"{1 - frac1:.0%} → " + (f"TP2 {plan.tp2:.2f} / trail"
+                                      if plan.tp2 else "trail")
+    return tp1_row, runner
 
 
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
@@ -329,6 +396,14 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     # parameter(s) are marked in bold red.
     embed_color = confidence_color(conf.level) if all_ok else discord.Color.from_rgb(149, 165, 166)
     embed = discord.Embed(title=title, color=embed_color)
+
+    plan_v2 = getattr(item, "plan_v2", None)
+    badge_field = badge_field_for(plan_v2)
+    if badge_field is not None:
+        embed.add_field(name=badge_field[0], value=badge_field[1], inline=False)
+        quality_field = quality_lines(plan_v2)
+        if quality_field is not None:
+            embed.add_field(name=quality_field[0], value=quality_field[1], inline=False)
 
     # combined_from always has at least the representative's own entry (set
     # during dedup), so the confirming strategy/horizon combo(s) are always
