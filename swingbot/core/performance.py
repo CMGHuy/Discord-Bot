@@ -845,6 +845,11 @@ class TradeLog:
         # trailing price-history list), or "close" (timeout or stall).
         actions = []
         for trade in open_trades:
+            if trade.get("plan_id"):
+                # v2 manager-owned trade: the runner/trail (plan_manager)
+                # owns the "stalled near target" decision now -- double
+                # management would close the runner out from under it.
+                continue
             entry = trade.get("entry")
             target = trade.get("take_profit")
             if not entry or not target or entry == target:
