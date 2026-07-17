@@ -63,6 +63,7 @@ from swingbot.core.explain import build_explanation
 from swingbot.core.market_events import get_market_events
 from swingbot.core.notifier import notify_secondary
 from swingbot.core.performance import TradeLog
+from swingbot.core.plan_engine import primary_strategy_for
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
 from swingbot.core.strategy import HORIZONS, MIN_BARS
@@ -610,6 +611,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 result = levels.ScenarioSignal(
                     ticker=ticker, horizon_key=horizon_key, horizon_label=h["label"],
                     trend=scenario.direction, close=current_price, scenario=scenario,
+                    strategy=primary_strategy_for(scenario),
                 )
 
                 if require_confirmation:

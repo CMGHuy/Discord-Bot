@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 
 from swingbot.core import levels
-from swingbot.core.plan_engine import build_confluence_plan, simulate_exit
+from swingbot.core.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
 from swingbot.core.strategy_types import HORIZONS, MIN_BARS
 
 # Levels move slowly; recomputing the full multi-source level map every bar
@@ -79,10 +79,7 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
                 continue
             plan = build_confluence_plan(
                 sc, window, ticker=ticker, horizon_key=horizon_key,
-                # Task 38 will wire real strategy attribution via
-                # primary_strategy_for(sc); until then, the plan's own
-                # documented fallback literal.
-                primary_strategy="S/R Confluence")
+                primary_strategy=primary_strategy_for(sc))
             last_accepted[sc.direction] = i
             out.append((i, plan))
     return out
