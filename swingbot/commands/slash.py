@@ -158,6 +158,18 @@ async def slash_pnl(interaction: discord.Interaction):
 
 
 # ──────────────────────────────────────────────
+# /liveplans
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="liveplans", description="Live v2 plan lifecycle board (PENDING/ACTIVE/PARTIAL)")
+async def slash_liveplans(interaction: discord.Interaction):
+    from swingbot.commands.plans import format_plans_board
+    from swingbot.core.plan_store import PlanStore
+    board = format_plans_board(PlanStore().open_plans())
+    await _send_chunks(interaction, board)
+
+
+# ──────────────────────────────────────────────
 # /check
 # ──────────────────────────────────────────────
 
