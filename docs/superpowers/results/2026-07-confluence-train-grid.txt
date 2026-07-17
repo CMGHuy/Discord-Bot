@@ -1,0 +1,73 @@
+tickers: 25 of 75 (every 3th, alphabetical) = ['AAPL', 'AMAT', 'ARM', 'AVGO', 'BKNG', 'CRWD', 'DELL', 'EBAY', 'GD', 'GM', 'HD', 'HPQ', 'INTC', 'ISRG', 'META', 'MSFT', 'NBIS', 'NOW', 'PANW', 'PLTR', 'QCOM', 'SHOP', 'SNPS', 'TSLA', 'V']
+train: ('2020-01-01', '2023-12-31')  rule: per horizon: include iff WR>=80 and ExpR>0 and N>=30 and excl<=50%; global pair = max pooled ExpR among pairs with >=2 qualifying horizons
+
+confl=2 rr=0.0 4w: N=249  WR= 58.6 ExpR=-0.156 excl= 5.3% fail
+confl=2 rr=0.0 2m: N=301  WR= 54.8 ExpR=-0.208 excl= 5.6% fail
+confl=2 rr=0.0 3m: N=352  WR= 65.1 ExpR=-0.060 excl= 5.6% fail
+confl=2 rr=0.0 4m: N=383  WR= 64.8 ExpR=-0.081 excl= 5.9% fail
+confl=2 rr=0.0 6m: N=415  WR= 61.7 ExpR=-0.118 excl= 7.0% fail
+confl=2 rr=0.0 POOLED: N=1700 WR=61.4 ExpR=-0.119 qualifying_horizons=[]
+
+confl=2 rr=0.3 4w: N=249  WR= 58.6 ExpR=-0.156 excl= 5.3% fail
+confl=2 rr=0.3 2m: N=301  WR= 54.8 ExpR=-0.208 excl= 5.6% fail
+confl=2 rr=0.3 3m: N=352  WR= 65.1 ExpR=-0.060 excl= 5.6% fail
+confl=2 rr=0.3 4m: N=383  WR= 64.8 ExpR=-0.081 excl= 5.9% fail
+confl=2 rr=0.3 6m: N=415  WR= 61.7 ExpR=-0.118 excl= 7.0% fail
+confl=2 rr=0.3 POOLED: N=1700 WR=61.4 ExpR=-0.119 qualifying_horizons=[]
+
+confl=3 rr=0.0 4w: N=226  WR= 58.4 ExpR=-0.158 excl= 6.2% fail
+confl=3 rr=0.0 2m: N=272  WR= 54.8 ExpR=-0.204 excl= 6.2% fail
+confl=3 rr=0.0 3m: N=324  WR= 65.4 ExpR=-0.066 excl= 5.5% fail
+confl=3 rr=0.0 4m: N=336  WR= 64.9 ExpR=-0.096 excl= 5.6% fail
+confl=3 rr=0.0 6m: N=353  WR= 60.6 ExpR=-0.138 excl= 7.6% fail
+confl=3 rr=0.0 POOLED: N=1511 WR=61.2 ExpR=-0.128 qualifying_horizons=[]
+
+confl=3 rr=0.3 4w: N=226  WR= 58.4 ExpR=-0.158 excl= 6.2% fail
+confl=3 rr=0.3 2m: N=272  WR= 54.8 ExpR=-0.204 excl= 6.2% fail
+confl=3 rr=0.3 3m: N=324  WR= 65.4 ExpR=-0.066 excl= 5.5% fail
+confl=3 rr=0.3 4m: N=336  WR= 64.9 ExpR=-0.096 excl= 5.6% fail
+confl=3 rr=0.3 6m: N=353  WR= 60.6 ExpR=-0.138 excl= 7.6% fail
+confl=3 rr=0.3 POOLED: N=1511 WR=61.2 ExpR=-0.128 qualifying_horizons=[]
+
+confl=4 rr=0.0 4w: N=193  WR= 61.7 ExpR=-0.124 excl= 7.2% fail
+confl=4 rr=0.0 2m: N=230  WR= 54.8 ExpR=-0.219 excl= 7.3% fail
+confl=4 rr=0.0 3m: N=276  WR= 65.6 ExpR=-0.076 excl= 6.4% fail
+confl=4 rr=0.0 4m: N=283  WR= 66.4 ExpR=-0.081 excl= 6.3% fail
+confl=4 rr=0.0 6m: N=271  WR= 64.2 ExpR=-0.090 excl= 9.7% fail
+confl=4 rr=0.0 POOLED: N=1253 WR=62.9 ExpR=-0.114 qualifying_horizons=[]
+
+confl=4 rr=0.3 4w: N=193  WR= 61.7 ExpR=-0.124 excl= 7.2% fail
+confl=4 rr=0.3 2m: N=230  WR= 54.8 ExpR=-0.219 excl= 7.3% fail
+confl=4 rr=0.3 3m: N=276  WR= 65.6 ExpR=-0.076 excl= 6.4% fail
+confl=4 rr=0.3 4m: N=283  WR= 66.4 ExpR=-0.081 excl= 6.3% fail
+confl=4 rr=0.3 6m: N=271  WR= 64.2 ExpR=-0.090 excl= 9.7% fail
+confl=4 rr=0.3 POOLED: N=1253 WR=62.9 ExpR=-0.114 qualifying_horizons=[]
+
+=== Selection rule applied by hand (Task 39) ===
+Rule: per horizon, include iff win_rate>=80 and expectancy_r>0 and N>=30 and
+(scratches+timeouts)<=50% of closed trades; global pair = the (min_confluence,
+min_risk_reward) pair maximizing pooled ExpR among pairs with >=2 qualifying
+horizons.
+
+Result: NO horizon, at ANY of the 6 (min_confluence, min_risk_reward) grid
+points, meets the win_rate>=80 bar (best observed win_rate is 66.4%, most are
+55-65%) or has expectancy_r>0 (every single cell is negative, -0.06 to -0.22).
+Zero qualifying horizons at every grid point -- there is no pair to even rank
+by pooled ExpR.
+
+Per the plan's pre-registered fallback ("if no pair qualifies, confluence
+source stays WEAK everywhere and Tasks 41-42 record that honestly"): no
+config is adopted as a validated winner. Task 40 keeps CONFLUENCE_GATES at
+safe, previously-used defaults (not a "winning" tuned value, since none
+qualified) and documents this outcome; Tasks 41-42 record the confluence
+source as WEAK across all horizons.
+
+Note on methodology (see scripts/tune_confluence_gates.py module docstring):
+this grid samples 25 of 75 watchlist tickers (deterministic alphabetical
+stride) rather than the full pooled watchlist, because the full-universe
+run is hours per grid point under this session's CPU. A full-universe
+single point (confl=2, rr=0.0) was checked before adopting the sample and
+came back even worse (WR=56.6%, all horizons fail) -- consistent with, not
+contradicting, this sample's conclusion. Given every cell here misses the
+80% WR bar by 15-25 points, a full-universe rerun could not plausibly flip
+the outcome from "no pair qualifies" to "a pair qualifies."
