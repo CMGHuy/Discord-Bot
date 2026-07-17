@@ -15,16 +15,16 @@ Only 4 of 10 deciles are populated (30-39, 40-49, 50-59, 60-69). The other 6
     at the TRAIN-replay point.
   - As a direct result, 4 of the 7 quality-score components are hardcoded to
     a neutral/zero input for every single row in collect_scored_trades():
-      regime=None              -> component score 0 (no SPY regime feed offline)
-      htf_bias=None             -> component score 0 (no HTF feed offline)
+      regime=None              -> component score 8 (NEUTRAL, no SPY regime feed offline)
+      htf_bias=None             -> component score 8 (NEUTRAL, no HTF feed offline)
       confluence_count=0        -> component score 0 (strategy-source trades only)
-      trigger_distance_pct=0.0  -> component score max, but constant (market entries)
-  - Those 4 components together are worth the majority of the 100-point scale,
-    so with them pinned constant, the achievable score range collapses to
-    whatever the remaining 3 live components (volume, atr_percentile, badge)
-    can produce -- which lands entirely inside the 30-69 band for this
-    dataset. Scores below 30 or above 69 simply cannot occur under these
-    fixed inputs, hence the 6 empty deciles.
+      trigger_distance_pct=0.0  -> component score 10 (MAX, constant market entries)
+  - These 4 pinned components contribute a structural floor of 8+8+0+10 = 26 points.
+    With them fixed, the achievable score range depends entirely on the remaining
+    3 live components (volume 0-10, atr_percentile 0-10, badge 0-20), producing
+    a theoretical range of 26 to 66 points. In practice, this lands inside the
+    observed 30-69 band for this dataset. Scores below 26 or above 66 simply
+    cannot occur under these fixed inputs, hence the 6 empty deciles.
   - This is an inherent limitation of the offline TRAIN reconstruction
     (no live regime/HTF/confluence data available to replay), not a defect
     in swingbot/core/quality.py's scoring logic itself.
