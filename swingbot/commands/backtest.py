@@ -1,10 +1,18 @@
-"""!backtest, !backtestwatchlist, !backtestconfluence."""
+"""!backtest, !backtestwatchlist.
+
+!backtestconfluence was retired (Task 44): its engine, backtest_confluence.py,
+is superseded by the scenario backtest (swingbot/core/backtest_scenarios.py,
+Tasks 34-38), which replays the live confluence scan itself instead of an
+approximation of it. The scenario backtest is offline-only -- measured at
+~296s to replay a single ticker/single horizon (1906 daily bars) -- so it
+is not wired up here; run it via
+`python scripts/run_backtest_range.py --train --scenarios` (or --validation)
+instead of an interactive command.
+"""
 import asyncio
 
 from swingbot.core.backtest import (
     run_backtest, run_backtest_daterange, run_full_backtest,
-    run_confluence_backtest_daterange, summarize_confluence_trades,
-    CONFLUENCE_HORIZONS, CONFLUENCE_MIN_AGREE, CONFLUENCE_RR,
 )
 from swingbot.bot_core import bot
 from swingbot.core.data import get_daily_data
@@ -301,98 +309,4 @@ async def backtestwatchlist_cmd(ctx, *args):
         lines.append(f"{s.ticker:7s} {s.strategy:18s} {s.horizon_key:5s} {s.evaluated:4d} {wr:>6s} {er:>6s} {dd:>7s}")
     lines.append("```")
     lines.append("⚠️ Overlapping trades counted independently, no fees/slippage, survivorship bias.")
-    await ctx.send("\n".join(lines))
-
-
-def _sync_confluence_watchlist(tickers, min_agree, rr, date_from, date_to):
-    all_trades = []
-    errors = []
-    for t in tickers:
-        try:
-            df = get_daily_data(t, period="max")
-        except Exception as e:
-            errors.append((t, str(e)))
-            continue
-        for horizon_key in CONFLUENCE_HORIZONS:
-            all_trades.extend(
-                run_confluence_backtest_daterange(t, df, horizon_key, date_from, date_to, min_agree, rr)
-            )
-    return all_trades, errors
-
-
-@bot.command(name="backtestconfluence")
-async def backtestconfluence_cmd(ctx, *args):
-    """
-    Alternative to !backtest / !backtestwatchlist: instead of trusting any
-    single strategy (whose own targets are sized at 0.35-0.40x the stop
-    distance -- see core/strategy_types.STRATEGY_RR_OVERRIDE, and the
-    exit engine's break-even/scratch rule in core/backtest.py's module
-    docstring), this only takes a trade when >=min_agree of the 11
-    strategies fire the same direction on the same day, using a real
-    reward:risk target (default 0.25 -- the exact ratio where 80% win
-    rate is break-even).
-
-    Usage: !backtestconfluence [min_agree] [rr] [from:YYYY-MM-DD] [to:YYYY-MM-DD]
-    Defaults: min_agree=2, rr=0.25, full available history.
-    Runs across the whole watchlist and CONFLUENCE_HORIZONS (2w excluded --
-    validated negative edge on 2024 data).
-    """
-    min_agree = CONFLUENCE_MIN_AGREE
-    rr = CONFLUENCE_RR
-    date_from = date_to = None
-    for token in args:
-        tl = token.lower()
-        if tl.startswith("from:"):
-            date_from = token[5:]
-        elif tl.startswith("to:"):
-            date_to = token[3:]
-        elif token.isdigit():
-            min_agree = int(token)
-        else:
-            try:
-                rr = float(token)
-            except ValueError:
-                pass
-
-    tickers = load_watchlist()
-    range_str = f" [{date_from or '…'} → {date_to or 'now'}]" if (date_from or date_to) else ""
-    await ctx.send(
-        f"Backtesting **{len(tickers)}** watchlist ticker(s) with confluence >= {min_agree} strategies, "
-        f"R:R={rr}{range_str} across {', '.join(CONFLUENCE_HORIZONS)}… this can take a while."
-    )
-
-    all_trades, errors = await asyncio.to_thread(
-        _sync_confluence_watchlist, tickers, min_agree, rr, date_from, date_to
-    )
-    for t, err in errors:
-        await ctx.send(f"⚠️ Skipping {t}: {err}")
-
-    overall = summarize_confluence_trades(all_trades)
-    if overall["evaluated"] == 0:
-        await ctx.send("No closed confluence trades found in that window.")
-        return
-
-    lines = [
-        f"**Confluence backtest**{range_str} — min_agree={min_agree}, R:R={rr}:",
-        "```",
-        f"Trades evaluated: {overall['evaluated']}  (wins {overall['wins']}, losses {overall['losses']})",
-        f"Win rate:   {overall['win_rate']:.2f}%",
-        f"Expectancy: {overall['expectancy_r']:+.4f}R per trade  (avg win {overall['avg_win_r']:.3f}R, avg loss {overall['avg_loss_r']:.3f}R)",
-        "```",
-        "Per-horizon breakdown:",
-        "```",
-        f"{'Horiz':6s} {'N':>5s} {'Win%':>7s} {'ExpR':>8s}",
-    ]
-    for hk in CONFLUENCE_HORIZONS:
-        ts = [t for t in all_trades if t.horizon_key == hk]
-        s = summarize_confluence_trades(ts)
-        if s["evaluated"] == 0:
-            continue
-        lines.append(f"{hk:6s} {s['evaluated']:5d} {s['win_rate']:6.1f}% {s['expectancy_r']:+8.4f}")
-    lines.append("```")
-    lines.append(
-        "⚠️ Same limitations as !backtestwatchlist (overlapping trades, no fees/slippage, "
-        "survivorship bias). Expectancy > 0 means the system is net profitable on average per "
-        "trade risked; win rate alone does not tell you that -- see core/backtest.py docstring."
-    )
     await ctx.send("\n".join(lines))

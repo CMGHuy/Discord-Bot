@@ -112,8 +112,7 @@ class BacktestSummary:
 
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
     """Single source of entry logic lives in entry_filters.py -- shared with
-    the live scanner so backtest and live signals cannot drift. Kept as a
-    named function here because backtest_confluence.py imports it."""
+    the live scanner so backtest and live signals cannot drift."""
     from .entry_filters import entries_for
     return entries_for(strategy, df, horizon_key)
 
@@ -455,21 +454,3 @@ def run_backtest_daterange(
         else:
             summary.avg_return_pct = summary.avg_r_multiple = summary.avg_holding_days = None
     return summary
-
-
-
-
-# Confluence backtest engine (ConfluenceTrade, run_confluence_backtest, ...)
-# lives in its own sibling module, backtest_confluence.py -- imported back
-# here (deliberately at the BOTTOM of this file, after ALL_STRATEGIES and
-# _vectorized_entries above are already defined) so every name that used
-# to live directly in this module is still importable from
-# swingbot.core.backtest exactly as before the split. backtest_confluence.py
-# imports ALL_STRATEGIES/_vectorized_entries back from this module, so this
-# one-directional ordering (define here first, then pull in the sibling)
-# avoids a circular import between the two.
-from .backtest_confluence import (
-    CONFLUENCE_HORIZONS, CONFLUENCE_MIN_AGREE, CONFLUENCE_RR,
-    ConfluenceTrade, run_confluence_backtest, run_confluence_backtest_daterange,
-    summarize_confluence_trades,
-)
