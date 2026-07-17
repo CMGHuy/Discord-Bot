@@ -62,11 +62,51 @@ class PlanManager:
             if not price or price <= 0:
                 continue
             try:
-                events.extend(self._step(plan, price))
+                new_events = self._step(plan, price)
             except Exception:
                 log.warning("poll: step failed for plan %s", plan.plan_id,
                             exc_info=True)
+                continue
+            for event in new_events:
+                self._on_event(plan, event)
+            events.extend(new_events)
         return events
+
+    def _on_event(self, plan: TradePlanV2, event: PlanEvent) -> None:
+        if self.trade_log is None:
+            return
+        try:
+            if event.transition == "filled":
+                trade_id = self.trade_log.log_trade(
+                    ticker=plan.ticker, strategy=plan.strategy,
+                    horizon_key=plan.horizon_key, direction=plan.direction,
+                    confidence_level=None, confidence_label=None,
+                    entry=plan.entry_price, stop_loss=plan.stop_loss,
+                    take_profit=plan.tp1, target2=plan.tp2,
+                    plan_id=plan.plan_id)
+                event.detail["trade_id"] = trade_id
+            elif event.transition == "tp1_partial":
+                self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
+            elif event.transition == "closed":
+                reason = event.detail["reason"]
+                status = ("win" if reason.startswith("tp1_")
+                          else "loss" if reason == "loss" else "closed")
+                leg = event.detail.get("leg")
+                if leg is None:
+                    # Pre-TP1 loss/scratch closes the ORIGINAL single
+                    # position -- synthesize a fraction=1.0 leg from the
+                    # plan's own entry/stop (the event carries no r-multiple).
+                    is_bull = plan.direction == "bullish"
+                    sign = 1 if is_bull else -1
+                    risk = abs(plan.entry_price - plan.stop_loss)
+                    exit_price = event.detail["exit_price"]
+                    r = (exit_price - plan.entry_price) * sign / risk if risk > 0 else 0.0
+                    leg = {"fraction": 1.0, "exit_price": exit_price,
+                          "r": r, "reason": reason}
+                self.trade_log.close_plan_trade(plan.plan_id, leg, status)
+        except Exception:
+            log.warning("trade-log hook failed for plan %s", plan.plan_id,
+                        exc_info=True)   # bookkeeping must never break the manager
 
     # -- per-status handlers -------------------------------------------------
 
@@ -208,10 +248,14 @@ class PlanManager:
         if plan is None:
             return []
         if plan.status == PlanStatus.ACTIVE:
-            return self._check_bar_active(plan, bar_open, bar_high, bar_low)
-        if plan.status == PlanStatus.PARTIAL:
-            return self._check_bar_partial(plan, bar_open, bar_high, bar_low)
-        return []
+            events = self._check_bar_active(plan, bar_open, bar_high, bar_low)
+        elif plan.status == PlanStatus.PARTIAL:
+            events = self._check_bar_partial(plan, bar_open, bar_high, bar_low)
+        else:
+            events = []
+        for event in events:
+            self._on_event(plan, event)
+        return events
 
     def _check_bar_active(self, plan: TradePlanV2, bar_open: float,
                           bar_high: float, bar_low: float) -> list[PlanEvent]:
@@ -266,3 +310,44 @@ class PlanManager:
                 fill = gap_target_fill(bar_open, plan.tp2, plan.direction)
                 return self._close_runner(plan, fill, "tp1_runner_tp2", risk, sign)
         return []
+
+
+# -- module singleton wiring the manager into the 60s trade_monitor loop -----
+# (Task 71) -- INTRADAY_MANAGER_V2 flag off is a pure no-op: no PlanStore
+# instantiation, no data/plans.json file created.
+
+_MANAGER: PlanManager | None = None
+
+
+def _price_fn(ticker):                      # module-level so tests can patch it
+    from swingbot.core.data import get_current_price
+    return get_current_price(ticker)
+
+
+def _live_atr(ticker):
+    from swingbot.core.data import get_daily_data
+    from swingbot.core.indicators import atr
+    df = get_daily_data(ticker)
+    return float(atr(df, 14).iloc[-1])
+
+
+def _bars_since(ticker, created_at):
+    from swingbot.core.data import get_daily_data
+    df = get_daily_data(ticker)
+    return int((df.index.tz_localize(None) > created_at).sum()) \
+        if df.index.tz is None else int((df.index > created_at).sum())
+
+
+def run_manager_tick() -> list[PlanEvent]:
+    """One synchronous manager tick -- the trade_monitor loop calls this via
+    asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
+    file creation)."""
+    global _MANAGER
+    from swingbot import config
+    if not config.INTRADAY_MANAGER_V2:
+        return []
+    if _MANAGER is None:
+        from swingbot.core.performance import TradeLog
+        _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
+                               bar_count_fn=_bars_since, trade_log=TradeLog())
+    return _MANAGER.poll()

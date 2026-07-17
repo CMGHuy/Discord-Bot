@@ -281,6 +281,39 @@ class TradeLog:
             self._save()
         return trade_id
 
+    def append_leg_by_plan(self, plan_id: str, leg: dict) -> None:
+        """Bank a leg (e.g. TP1 partial) onto the still-open v2 trade this
+        plan created. No-op if the plan's trade can't be found (log_trade
+        may have failed, or trade_log was wired in after the fill)."""
+        with _LOCK:
+            t = next((t for t in self._trades
+                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+            if t is None:
+                return
+            append_leg(t, leg)
+            self._save()
+
+    def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
+        """Final leg + terminal status for a v2 plan's trade. `leg` is the
+        real leg dict for a runner close; the caller (PlanManager._on_event,
+        which has the TradePlanV2 and so can recompute the r-multiple)
+        synthesizes a fraction=1.0 leg for a pre-TP1 loss/scratch that
+        closes the ORIGINAL single position -- this method just appends
+        whatever it's given so settle_legs always has a leg to work from."""
+        with _LOCK:
+            t = next((t for t in self._trades
+                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+            if t is None:
+                return
+            if leg is not None:
+                append_leg(t, leg)
+            t["status"] = status
+            t["exit_price"] = (t["legs"][-1]["exit_price"] if t.get("legs")
+                               else t.get("exit_price"))
+            t["closed_at"] = datetime.now(timezone.utc).isoformat()
+            self._settle_account_balance(t)
+            self._save()
+
     def _settle_account_balance(self, t: dict) -> None:
         """
         Computes this trade's realized currency P&L -- using the share

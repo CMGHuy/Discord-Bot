@@ -6,10 +6,12 @@ from tests.test_plan_engine_model import _plan
 
 
 def _pending(**kw):
-    # _plan()'s own default expiry_bars is already 5 -- don't also hardcode
-    # it here, or explicit expiry_bars=N callers collide with it.
-    return _plan(entry_type="stop_entry", direction="bullish",
-                 trigger_price=105.0, stop_loss=95.0, tp1=110.0, **kw)
+    # base-dict-then-update (same idiom _plan() itself uses) so an explicit
+    # override of any of these defaults doesn't collide as a duplicate kwarg.
+    base = dict(entry_type="stop_entry", direction="bullish",
+               trigger_price=105.0, stop_loss=95.0, tp1=110.0, expiry_bars=5)
+    base.update(kw)
+    return _plan(**base)
 
 
 def _mgr(tmp_path, feed, **kw):
