@@ -344,6 +344,11 @@ class TradeLog:
                     hit_target = lo <= trade["take_profit"]
 
                 if hit_stop:
+                    # Same gap-fill convention as plan_manager.gap_stop_fill /
+                    # gap_target_fill (Task 67) -- kept independent here since
+                    # this loop's shape (trade dicts, not TradePlanV2) predates
+                    # the v2 plan manager.
+                    #
                     # Realistic fill, not always the nominal stop price: if
                     # this bar GAPPED past the stop before ever trading at it
                     # (e.g. opened well below an overnight stop on a bullish

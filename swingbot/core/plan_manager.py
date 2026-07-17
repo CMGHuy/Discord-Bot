@@ -194,3 +194,75 @@ class PlanManager:
         self.store.update(plan)
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg})]
+
+    # -- overnight/session-open bar check (Task 67) --------------------------
+    #
+    # Same gap-fill convention as performance.update_open_trades (and the
+    # tick-poll fills above): a stop/target can't fill better than the bar's
+    # open if the bar gapped past it; a same-bar stop+target touch resolves
+    # stop-first (conservative ordering).
+
+    def check_bar(self, plan_id: str, bar_open: float, bar_high: float,
+                  bar_low: float) -> list[PlanEvent]:
+        plan = self.store.get(plan_id)
+        if plan is None:
+            return []
+        if plan.status == PlanStatus.ACTIVE:
+            return self._check_bar_active(plan, bar_open, bar_high, bar_low)
+        if plan.status == PlanStatus.PARTIAL:
+            return self._check_bar_partial(plan, bar_open, bar_high, bar_low)
+        return []
+
+    def _check_bar_active(self, plan: TradePlanV2, bar_open: float,
+                          bar_high: float, bar_low: float) -> list[PlanEvent]:
+        is_bull = plan.direction == "bullish"
+        sign = 1 if is_bull else -1
+        entry = plan.entry_price
+        risk = abs(entry - plan.stop_loss)
+        stop = plan.working_stop if plan.working_stop is not None else plan.stop_loss
+
+        hit_stop = bar_low <= stop if is_bull else bar_high >= stop
+        if hit_stop:
+            fill = gap_stop_fill(bar_open, stop, plan.direction)
+            reason = "scratch" if plan.working_stop is not None else "loss"
+            r = (fill - entry) * sign / risk if risk > 0 else 0.0
+            leg = {"fraction": 1.0, "exit_price": fill, "r": r, "reason": reason}
+            plan.legs_realized.append(leg)
+            record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "closed",
+                              {"reason": reason, "exit_price": fill})]
+
+        hit_tp1 = bar_high >= plan.tp1 if is_bull else bar_low <= plan.tp1
+        if hit_tp1:
+            fill = gap_target_fill(bar_open, plan.tp1, plan.direction)
+            r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+            leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
+                   "r": r1, "reason": "tp1"}
+            plan.legs_realized.append(leg)
+            plan.working_stop = entry
+            record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
+                              at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
+        return []
+
+    def _check_bar_partial(self, plan: TradePlanV2, bar_open: float,
+                           bar_high: float, bar_low: float) -> list[PlanEvent]:
+        is_bull = plan.direction == "bullish"
+        sign = 1 if is_bull else -1
+        risk = abs(plan.entry_price - plan.stop_loss)
+        stop = plan.working_stop if plan.working_stop is not None else plan.entry_price
+
+        hit_stop = bar_low <= stop if is_bull else bar_high >= stop
+        if hit_stop:
+            fill = gap_stop_fill(bar_open, stop, plan.direction)
+            reason = "tp1_runner_be" if stop == plan.entry_price else "tp1_runner_trail"
+            return self._close_runner(plan, fill, reason, risk, sign)
+
+        if plan.tp2 is not None:
+            hit_tp2 = bar_high >= plan.tp2 if is_bull else bar_low <= plan.tp2
+            if hit_tp2:
+                fill = gap_target_fill(bar_open, plan.tp2, plan.direction)
+                return self._close_runner(plan, fill, "tp1_runner_tp2", risk, sign)
+        return []
