@@ -7,6 +7,7 @@ backtests, the live plan manager — builds and prices it here.
 """
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from dataclasses import dataclass, field
 
@@ -70,6 +71,24 @@ class TradePlanV2:
     badge_stats: dict
     status: str
     status_history: list = field(default_factory=list)
+
+
+_PLAN_FIELDS = None   # cached field list
+
+
+def plan_to_dict(plan: TradePlanV2) -> dict:
+    d = dataclasses.asdict(plan)
+    # tuples (quality_breakdown rows) -> lists so json round-trips cleanly
+    d["quality_breakdown"] = [list(row) for row in d.get("quality_breakdown", [])]
+    return d
+
+
+def plan_from_dict(d: dict) -> TradePlanV2:
+    global _PLAN_FIELDS
+    if _PLAN_FIELDS is None:
+        _PLAN_FIELDS = {f.name for f in dataclasses.fields(TradePlanV2)}
+    known = {k: v for k, v in d.items() if k in _PLAN_FIELDS}
+    return TradePlanV2(**known)   # missing fields use dataclass defaults
 
 
 # ---------------------------------------------------------------------------
