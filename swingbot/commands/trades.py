@@ -53,6 +53,44 @@ MAX_PER_PAGE = 25
 DEFAULT_PER_PAGE = 10
 
 
+def format_trade_row(t: dict, currency: str) -> str:
+    """One fixed-width `!trades` table row. Legacy (no `legs`) behavior is
+    byte-for-byte unchanged; a v2 two-leg trade (Task 68) gets a leg-aware
+    Gain/Loss suffix instead of the plain amount -- banked leg + 'runner
+    open' while still open, the already-summed realized total once closed
+    (no recomputation -- Task 68's settle_legs already did that math)."""
+    # Use the actual confirming method (target_sources/stop_sources priority
+    # ranking) instead of the static "S/R Confluence" t["strategy"] default.
+    method = _primary_source_label(t)
+    method_short = method[:10]
+    dir_short = "LONG" if t['direction'] == "bullish" else "SHORT"
+    conf_level = t.get('confidence_level')
+    conf_str = f"L{conf_level}" if conf_level is not None else "--"
+
+    legs = t.get("legs") or []
+    if legs and t.get("status") == "open":
+        banked = sum((t.get("shares") or 0) * l["fraction"]
+                     * (l["exit_price"] - t["entry"])
+                     * (1 if t["direction"] == "bullish" else -1) for l in legs)
+        frac = sum(l["fraction"] for l in legs)
+        amount_str = f"+{currency}{banked:,.2f} (TP1 {frac:.0%}) / runner open"
+    elif legs:
+        amount = t.get("realized_pnl_amount") or 0.0
+        amount_str = f"{'+' if amount >= 0 else ''}{currency}{abs(amount):,.2f}"
+    else:
+        # Realized $/€ gain/loss -- only meaningful for a closed win/loss
+        # trade that has a sizing snapshot (see account.py/performance.py);
+        # blank for a still-open trade or one logged before this existed.
+        amount = t.get("realized_pnl_amount")
+        amount_str = f"{amount:+.2f}" if amount is not None else "--"
+
+    return (
+        f"{t['id']:8s} {t['ticker']:6s} {method_short:10s} {t['horizon_key']:3s} {dir_short:5s} "
+        f"{conf_str:5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} "
+        f"{t['status']:6s} {amount_str:>11s}"
+    )
+
+
 def format_trades_table(trades, header: str) -> str:
     lines = [header, "```"]
     lines.append(
@@ -60,21 +98,7 @@ def format_trades_table(trades, header: str) -> str:
         f"{'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s} {'Gain/Loss':>11s}"
     )
     for t in trades:
-        # Use the actual confirming method (target_sources/stop_sources priority
-        # ranking) instead of the static "S/R Confluence" t["strategy"] default.
-        method = _primary_source_label(t)
-        method_short = method[:10]
-        dir_short = "LONG" if t['direction'] == "bullish" else "SHORT"
-        # Realized $/€ gain/loss -- only meaningful for a closed win/loss
-        # trade that has a sizing snapshot (see account.py/performance.py);
-        # blank for a still-open trade or one logged before this existed.
-        amount = t.get("realized_pnl_amount")
-        amount_str = f"{amount:+.2f}" if amount is not None else "--"
-        lines.append(
-            f"{t['id']:8s} {t['ticker']:6s} {method_short:10s} {t['horizon_key']:3s} {dir_short:5s} "
-            f"{'L'+str(t['confidence_level']):5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} "
-            f"{t['status']:6s} {amount_str:>11s}"
-        )
+        lines.append(format_trade_row(t, config.CURRENCY_SYMBOL))
     lines.append("```")
     lines.append("Use `!trade ID` for full detail, `!trade delete ID` to remove one, `!trades clear` to clear active trades, `!trades clear history` to clear closed trade history.")
     return "\n".join(lines)
