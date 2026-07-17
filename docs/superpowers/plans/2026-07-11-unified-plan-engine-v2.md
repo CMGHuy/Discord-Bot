@@ -16,8 +16,9 @@
 >
 > - **Branch:** `feature/plan-engine-v2`
 > - **Completed:** Tasks 1–21 (Phase 0; Phase 1 sizing extraction; Phase 2 entry phase + single-leg win/loss walk) — 2026-07-11 (git: `bb16669` = Task 21, `f27a29f` = stop_entry→single-leg coverage)
-> - **Next:** Task 22
 > - **2026-07-12:** plan expanded with full implementation code per task. For Tasks ≤21 the code blocks show the AS-BUILT implementation from the repo (signatures differ in places from the original sketch — the repo is authoritative). For Tasks ≥22 the code is the intended implementation; adapt only where the codebase contradicts it, and note deviations here.
+> - **Completed:** Tasks 22–38 (scale-out/TP2/chandelier exit-v2, harness + train grid + validation + registry, live-pipeline characterization, memoized level maps, historical scenario replay, scenario outcomes/aggregation, real per-scenario strategy attribution) — 2026-07-17 on `main` (merged past the `feature/plan-engine-v2` branch; git: `8818404` = Task 37, `d665870` = Task 38)
+> - **Next:** Task 39 (Confluence gate grid on TRAIN — `scripts/tune_confluence_gates.py`)
 
 ## Global Constraints
 
