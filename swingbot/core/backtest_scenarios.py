@@ -17,6 +17,36 @@ from swingbot.core.strategy_types import HORIZONS, MIN_BARS
 # lookup uses.
 LEVEL_REFRESH_BARS = 5
 
+# TRAIN grid found no qualifying config (Task 39); these are unvalidated
+# defaults, not a tuned winner. The pre-registered selection rule (per
+# horizon: win_rate>=80, expectancy_r>0, N>=30, excl<=50%; pair with the
+# best pooled ExpR among pairs with >=2 qualifying horizons) failed at every
+# one of the 6 (min_confluence, min_risk_reward) grid points tested -- best
+# observed win_rate was 66.4% (need >=80%) and every expectancy_r was
+# negative (need >0). Zero qualifying horizons anywhere, so there was no
+# pair to even rank. Full grid + the rule applied by hand:
+# docs/superpowers/results/2026-07-confluence-train-grid.txt; narrative +
+# table: docs/superpowers/results/2026-07-confluence-train.md.
+#
+# Per the plan's pre-registered fallback ("if no pair qualifies, confluence
+# source stays WEAK everywhere and Tasks 41-42 record that honestly"), this
+# is NOT the grid winner -- there wasn't one. min_reward_pct/min_stop_
+# distance_pct/max_stop_distance_pct/min_risk_reward mirror the pre-existing
+# SCENARIO_GATES in scripts/run_backtest_range.py (the closest existing
+# precedent, itself never grid-validated). min_confluence uses the least
+# restrictive value the Task 39 grid tested (2), not a tuned choice. horizons
+# lists every horizon the grid covered -- NOT a "qualifying" subset, since
+# none qualified.
+CONFLUENCE_GATES = {
+    "min_reward_pct": 3.0,
+    "min_stop_distance_pct": 2.0,
+    "max_stop_distance_pct": 7.0,
+    "min_risk_reward": 1.5,
+    "min_confluence": 2,
+    "cooldown_bars": 5,
+    "horizons": ["4w", "2m", "3m", "4m", "6m"],  # grid coverage, not a pass
+}
+
 
 def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
     """(supports, resistances) as they looked at bar_index -- computed on
