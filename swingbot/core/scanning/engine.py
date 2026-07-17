@@ -63,7 +63,8 @@ from swingbot.core.explain import build_explanation
 from swingbot.core.market_events import get_market_events
 from swingbot.core.notifier import notify_secondary
 from swingbot.core.performance import TradeLog
-from swingbot.core.plan_engine import primary_strategy_for
+from swingbot.core.plan_engine import (build_confluence_plan,
+                                       primary_strategy_for, select_tp2)
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
 from swingbot.core.strategy import HORIZONS, MIN_BARS
@@ -146,6 +147,7 @@ class ScanItem:
     stop_confluence: tuple = None
     combined_from: list = field(default_factory=list)
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
+    plan_v2: object = None            # TradePlanV2 | None
 
     @property
     def all_requirements_met(self) -> bool:
@@ -226,6 +228,27 @@ def dedup_scan_items(items: list) -> list:
             deduped.append(rep)
 
     return deduped
+
+
+def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None):
+    """Construct the v2 plan for a qualifying scan item, flag-gated.
+    A v2 construction failure must NEVER break the legacy scan -- log and
+    move on (shadow mode exists precisely to surface such failures safely)."""
+    if config.PLAN_ENGINE_V2 == "off":
+        return
+    try:
+        plan = build_confluence_plan(
+            scenario, df, ticker=ticker, horizon_key=horizon_key,
+            primary_strategy=primary_strategy_for(scenario))
+        if plan.tp2 is None and level_map is not None:
+            supports, resistances = level_map
+            plan.tp2 = select_tp2([lv.price for lv in resistances],
+                                  [lv.price for lv in supports],
+                                  plan.direction, plan.trigger_price, plan.tp1)
+        item.plan_v2 = plan
+    except Exception:
+        log.warning("plan_v2 construction failed for %s/%s", ticker,
+                    horizon_key, exc_info=True)
 
 
 def _check_near_close(ticker: str, df) -> list:
@@ -645,11 +668,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                         "pct_above_ema": htf_result["pct_above_ema"],
                     }
 
-                scan_items.append(ScanItem(
+                item = ScanItem(
                     result=result, plan=scenario, conf=conf, requirements=requirements,
                     target_confluence=target_confluence, stop_confluence=stop_confluence,
                     htf_info=htf_info_for_item,
-                ))
+                )
+                attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
+                scan_items.append(item)
                 if progress is not None:
                     progress.qualifying_found = len(scan_items)
 
