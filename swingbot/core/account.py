@@ -96,6 +96,12 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
     total = 0.0
     for t in trades:
         pnl = t.get("realized_pnl_amount")
+        if pnl is None and t.get("legs"):
+            # v2 two-leg trade whose realized_pnl_amount never got written
+            # (e.g. a crash between leg append and settle) -- rederive it
+            # from the legs themselves rather than treating it as unsettled.
+            from swingbot.core.performance import settle_legs
+            pnl = settle_legs(t)
         if pnl is not None:
             try:
                 total += float(pnl)

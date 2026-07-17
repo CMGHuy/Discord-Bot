@@ -165,6 +165,23 @@ def primary_strategy_label(t: dict) -> str:
     return _pick_primary_source(sources) or t.get("strategy") or "--"
 
 
+def settle_legs(t: dict) -> float | None:
+    """Realized currency P&L for a two-leg (v2) trade: each leg closes
+    `fraction` of the snapshotted share count at its own exit price. None
+    when the trade never got a sizing snapshot (same rule as legacy)."""
+    shares, entry = t.get("shares"), t.get("entry")
+    legs = t.get("legs") or []
+    if not shares or entry is None or not legs:
+        return None
+    sign = 1 if t.get("direction") == "bullish" else -1
+    return round(sum(shares * leg["fraction"] * (leg["exit_price"] - entry) * sign
+                     for leg in legs), 2)
+
+
+def append_leg(t: dict, leg: dict) -> None:
+    t.setdefault("legs", []).append(leg)
+
+
 class TradeLog:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "trades.json")
@@ -187,7 +204,7 @@ class TradeLog:
                   confidence_label, entry, stop_loss, take_profit, target2=None,
                   confidence_score=None, confidence_breakdown=None, target_sources=None,
                   stop_sources=None, target2_sources=None, risk_reward_ratio=None,
-                  explanation=None, confirmed_by=None) -> str:
+                  explanation=None, confirmed_by=None, plan_id=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -208,6 +225,8 @@ class TradeLog:
         trade_id = "".join(secrets.choice(_TRADE_ID_ALPHABET) for _ in range(16))
         record = {
             "id": trade_id,
+            "plan_id": plan_id,     # v2 plan-engine link; None for v1/legacy trades
+            "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
             "strategy": strategy,
             "horizon_key": horizon_key,
@@ -285,13 +304,25 @@ class TradeLog:
         land in the same write instead of needing a second save.
         """
         shares = t.get("shares")
-        exit_price = t.get("exit_price")
         entry = t.get("entry")
-        if not shares or exit_price is None or entry is None or t.get("status") not in ("win", "loss"):
+        status = t.get("status")
+        if not shares or entry is None:
             return
-        is_bull = t.get("direction") == "bullish"
-        pnl_amount = shares * (exit_price - entry) if is_bull else shares * (entry - exit_price)
-        pnl_amount = round(pnl_amount, 2)
+        if t.get("legs"):
+            # v2 two-leg trade: a runner scratch settles as status "closed",
+            # not "win"/"loss" -- settle_legs handles the sign/fraction math.
+            if status not in ("win", "loss", "closed"):
+                return
+            pnl_amount = settle_legs(t)
+            if pnl_amount is None:
+                return
+        else:
+            exit_price = t.get("exit_price")
+            if exit_price is None or status not in ("win", "loss"):
+                return
+            is_bull = t.get("direction") == "bullish"
+            pnl_amount = shares * (exit_price - entry) if is_bull else shares * (entry - exit_price)
+            pnl_amount = round(pnl_amount, 2)
         try:
             updated_cfg = account_module.apply_realized_pnl(
                 pnl_amount, {"trade_id": t.get("id"), "ticker": t.get("ticker"), "status": t.get("status")},
