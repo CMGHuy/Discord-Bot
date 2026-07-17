@@ -32,3 +32,28 @@ def test_runner_closes_at_breakeven(tmp_path):
     # total realized: leg1 banked ~+2.1R on 50% -- the win survives
     total = sum(l["fraction"] * l["r"] for l in p.legs_realized)
     assert total >= 0.5 * 2.0 * 0.9
+
+
+def test_runner_closes_at_tp2(tmp_path):
+    store, mgr = _partial_env(tmp_path, [118.5], tp2=118.0)
+    events = mgr.poll()
+    assert events[0].detail["reason"] == "tp1_runner_tp2"
+    assert store.get("p1").legs_realized[1]["r"] == pytest.approx((118.5 - 100) / 5)
+
+
+def test_tp2_none_runner_ignores_high_prices(tmp_path):
+    store, mgr = _partial_env(tmp_path, [140.0], tp2=None)
+    assert mgr.poll() == []          # no trail (no atr_fn), no tp2 -> still open
+
+
+def test_trail_ratchets_and_closes(tmp_path):
+    # ATR faked at 2.0, trail_atr_mult=2.5 -> trail = extreme - 5.0.
+    store, mgr = _partial_env(tmp_path, [120.0, 118.0, 114.9],
+                              atr_fn=lambda t: 2.0)
+    assert mgr.poll() == []                      # 120: trail -> max(100, 115)
+    assert store.get("p1").working_stop == 115.0
+    assert mgr.poll() == []                      # 118: above trail; no ratchet down
+    assert store.get("p1").working_stop == 115.0
+    events = mgr.poll()                          # 114.9 <= 115 -> trail close
+    assert events[0].detail["reason"] == "tp1_runner_trail"
+    assert store.get("p1").legs_realized[1]["r"] == pytest.approx((114.9 - 100) / 5)

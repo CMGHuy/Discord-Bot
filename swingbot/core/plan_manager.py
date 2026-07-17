@@ -20,6 +20,17 @@ from swingbot.core.plan_store import PlanStore
 log = logging.getLogger("swing-bot.plan_manager")
 
 
+def gap_stop_fill(bar_open: float, level: float, direction: str) -> float:
+    """A stop can't fill better than the open if the bar gapped past it --
+    same convention as performance.update_open_trades."""
+    return min(bar_open, level) if direction == "bullish" else max(bar_open, level)
+
+
+def gap_target_fill(bar_open: float, level: float, direction: str) -> float:
+    """A gap THROUGH the target fills at the better open."""
+    return max(bar_open, level) if direction == "bullish" else min(bar_open, level)
+
+
 @dataclass
 class PlanEvent:
     plan_id: str
