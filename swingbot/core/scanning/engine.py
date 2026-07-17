@@ -673,7 +673,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     target_confluence=target_confluence, stop_confluence=stop_confluence,
                     htf_info=htf_info_for_item,
                 )
-                attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
+                if all_ok:
+                    attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
                 scan_items.append(item)
                 if progress is not None:
                     progress.qualifying_found = len(scan_items)
