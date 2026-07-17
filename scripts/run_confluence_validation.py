@@ -23,8 +23,15 @@ _ticker_worker uses) but:
      stats using the same math as backtest_scenarios._aggregate /
      run_backtest_range.pool+passes (WR>=80, ExpR>0, N>=15, excl<=50%).
 
+`--emit-registry PATH --run-date YYYY-MM-DD` (Task 42) is a SEPARATE,
+near-instant path: it reads the already-committed
+docs/superpowers/results/confluence_validation.json as-is (no replay, no
+ProcessPoolExecutor, no CHUNK_DIR) and merges source="confluence" records
+into the validation registry at PATH.
+
 This is a one-shot execution script, not imported by swingbot/ or tests/.
 """
+import argparse
 import json
 import sys
 import warnings
@@ -39,6 +46,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
+from run_backtest_range import build_registry_records, merge_registry
 from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, replay_scenarios
 from swingbot.core.plan_engine import simulate_exit
 from swingbot.core.strategy_types import HORIZONS
@@ -46,6 +54,39 @@ from swingbot.core.strategy_types import HORIZONS
 VALIDATION = ("2024-01-01", "2025-12-31")
 MIN_N = 15
 CHUNK_DIR = ROOT / "docs" / "superpowers" / "results" / "_confluence_validation_chunks"
+RESULTS_PATH = ROOT / "docs" / "superpowers" / "results" / "confluence_validation.json"
+
+
+def emit_registry_records(registry_path, run_date, *, results_path=RESULTS_PATH):
+    """Build source="confluence" registry records straight from the already-
+    committed confluence_validation.json (Task 41's output) and merge them
+    into the validation registry. Reads that file as-is -- does NOT
+    recompute/replay anything, so this is near-instant regardless of how
+    long the original replay took.
+    """
+    summary = json.loads(results_path.read_text(encoding="utf-8"))
+    window_str = f"{summary['window'][0]}..{summary['window'][1]}"
+    min_n = summary.get("min_n", MIN_N)
+    # Per-primary-strategy pooled records aren't reconstructable from this
+    # data: chunk files only ever captured {"outcome","r_total"} per trade,
+    # with no primary_strategy label retained -- that needs a re-replay that
+    # captures it.
+    new_records = []
+    for hk, st in summary["by_horizon"].items():
+        new_records.extend(build_registry_records(
+            [{"strategy": "ALL", "n": st["n_eval"], "win_rate": st["win_rate"],
+              "expectancy_r": st["expectancy_r"]}],
+            source="confluence", window=window_str, run_date=run_date,
+            horizon=hk, min_n=min_n))
+    pooled = summary["pooled"]
+    new_records.extend(build_registry_records(
+        [{"strategy": "ALL", "n": pooled["n_eval"], "win_rate": pooled["win_rate"],
+          "expectancy_r": pooled["expectancy_r"]}],
+        source="confluence", window=window_str, run_date=run_date,
+        horizon=None, min_n=min_n))
+    merge_registry(registry_path, new_records)
+    print(f"Merged {len(new_records)} records into {registry_path}")
+    return new_records
 
 
 def _ticker_worker(args):
@@ -107,6 +148,23 @@ def passes(stats: dict, min_n: int) -> bool:
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--emit-registry", dest="emit_registry", default=None,
+                    help="path to validation_registry.json to merge records into")
+    ap.add_argument("--run-date", dest="run_date", default=None,
+                    help="YYYY-MM-DD stamped on emitted registry records "
+                         "(required with --emit-registry; explicit for reproducibility)")
+    args = ap.parse_args()
+    if args.emit_registry and not args.run_date:
+        ap.error("--emit-registry requires --run-date")
+
+    if args.emit_registry:
+        # Registry emission reads the already-committed results JSON; it
+        # never touches CHUNK_DIR/ProcessPoolExecutor/replay_scenarios, so it
+        # must not run the ticker-computation path below at all.
+        emit_registry_records(args.emit_registry, args.run_date)
+        return
+
     CHUNK_DIR.mkdir(parents=True, exist_ok=True)
     tickers = sorted(load_watchlist())
     frames = {}
@@ -180,7 +238,7 @@ def main():
                        for hk in HORIZONS},
         "pooled": {**pooled, "pass": passes(pooled, MIN_N)},
     }
-    out_path = ROOT / "docs" / "superpowers" / "results" / "confluence_validation.json"
+    out_path = RESULTS_PATH
     out_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"\nSaved {out_path}")
 
