@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
-                                       record_transition)
+                                       chandelier_stop, pending_expired,
+                                       pending_invalidated, record_transition)
 from swingbot.core.plan_store import PlanStore
 
 log = logging.getLogger("swing-bot.plan_manager")
@@ -69,6 +70,16 @@ class PlanManager:
 
     def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
+
+        if self.bar_count_fn is not None:
+            bars = self.bar_count_fn(plan.ticker, plan.created_at)
+            if pending_expired(plan, bars):
+                record_transition(plan, PlanStatus.CANCELLED, reason="expired",
+                                  at=self._now())
+                self.store.update(plan)
+                return [PlanEvent(plan.plan_id, "cancelled_expired",
+                                  {"bars_waited": bars})]
+
         crossed = price >= plan.trigger_price if is_bull else price <= plan.trigger_price
         if crossed:
             fill = max(price, plan.trigger_price) if is_bull \
@@ -79,11 +90,96 @@ class PlanManager:
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "filled",
                               {"entry_price": fill, "live_price": price})]
-        # Task 59 (expiry) and Task 60 (invalidation) slot in here.
+
+        if pending_invalidated(plan, price):
+            record_transition(plan, PlanStatus.CANCELLED, reason="invalidated",
+                              at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "cancelled_invalidated",
+                              {"live_price": price})]
         return []
 
     def _step_active(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+        is_bull = plan.direction == "bullish"
+        sign = 1 if is_bull else -1
+        entry = plan.entry_price
+        risk = abs(entry - plan.stop_loss)
+
+        stop = plan.working_stop if plan.working_stop is not None else plan.stop_loss
+        hit_stop = price <= stop if is_bull else price >= stop
+        if hit_stop:
+            reason = "scratch" if plan.working_stop is not None else "loss"
+            record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "closed",
+                              {"reason": reason, "exit_price": price})]
+
+        hit_tp1 = price >= plan.tp1 if is_bull else price <= plan.tp1
+        if hit_tp1:
+            # A stop-limit sell can't fill BETTER than the observed live
+            # price -- the observed price IS the fill (may exceed tp1 on a
+            # gap up: a real, favorable fill, not clamped to tp1).
+            fill = price
+            r1 = (fill - entry) * sign / risk if risk > 0 else 0.0
+            leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
+                   "r": r1, "reason": "tp1"}
+            plan.legs_realized.append(leg)
+            plan.working_stop = entry                     # runner floor = BE
+            record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
+                              at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
+
+        target_dist = abs(plan.tp1 - entry)
+        be_trigger = entry + sign * plan.breakeven_trigger_fraction * target_dist
+        reached_be = price >= be_trigger if is_bull else price <= be_trigger
+        if reached_be and plan.working_stop is None:
+            plan.working_stop = entry
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "be_moved",
+                              {"working_stop": entry, "live_price": price})]
         return []
 
     def _step_partial(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
+        is_bull = plan.direction == "bullish"
+        sign = 1 if is_bull else -1
+        entry = plan.entry_price
+        risk = abs(entry - plan.stop_loss)
+        stop = plan.working_stop if plan.working_stop is not None else entry
+
+        hit_stop = price <= stop if is_bull else price >= stop
+        if hit_stop:
+            reason = "tp1_runner_be" if stop == entry else "tp1_runner_trail"
+            return self._close_runner(plan, price, reason, risk, sign)
+
+        if plan.tp2 is not None:
+            hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
+            if hit_tp2:
+                return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
+
+        if self.atr_fn is not None:
+            extreme = plan.runner_high_close
+            extreme = price if extreme is None else (max(extreme, price) if is_bull
+                                                     else min(extreme, price))
+            if extreme != plan.runner_high_close:
+                plan.runner_high_close = extreme
+                atr_val = float(self.atr_fn(plan.ticker))
+                trail = chandelier_stop(extreme, atr_val, plan.trail_atr_mult,
+                                        plan.direction)
+                floor = plan.working_stop if plan.working_stop is not None else entry
+                new_stop = max(floor, trail) if is_bull else min(floor, trail)
+                if new_stop != plan.working_stop:
+                    plan.working_stop = new_stop
+                self.store.update(plan)
         return []
+
+    def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
+                      risk: float, sign: int) -> list[PlanEvent]:
+        r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
+        leg = {"fraction": 1.0 - plan.tp1_fraction, "exit_price": fill,
+               "r": r2, "reason": reason}
+        plan.legs_realized.append(leg)
+        record_transition(plan, PlanStatus.CLOSED, reason=reason, at=self._now())
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "closed",
+                          {"reason": reason, "exit_price": fill, "leg": leg})]

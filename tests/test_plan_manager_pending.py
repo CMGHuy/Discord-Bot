@@ -6,9 +6,10 @@ from tests.test_plan_engine_model import _plan
 
 
 def _pending(**kw):
+    # _plan()'s own default expiry_bars is already 5 -- don't also hardcode
+    # it here, or explicit expiry_bars=N callers collide with it.
     return _plan(entry_type="stop_entry", direction="bullish",
-                 trigger_price=105.0, stop_loss=95.0, tp1=110.0,
-                 expiry_bars=5, **kw)
+                 trigger_price=105.0, stop_loss=95.0, tp1=110.0, **kw)
 
 
 def _mgr(tmp_path, feed, **kw):
@@ -43,3 +44,47 @@ def test_price_fetch_failure_skips_plan_not_poll(tmp_path):
     store.add(_pending())
     mgr = PlanManager(store, flaky)
     assert mgr.poll() == []              # no crash, no transition
+
+
+def test_pending_expires_past_expiry_bars(tmp_path):
+    feed = FakePriceFeed([("AAPL", 100.0)])       # never reaches trigger
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending(expiry_bars=5))
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 6)
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["cancelled_expired"]
+    assert store.get("p1").status == PlanStatus.CANCELLED
+
+
+def test_pending_at_exactly_expiry_bars_still_live(tmp_path):
+    feed = FakePriceFeed([("AAPL", 100.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending(expiry_bars=5))
+    mgr = PlanManager(store, feed.get_price, bar_count_fn=lambda t, created: 5)
+    assert mgr.poll() == []                        # boundary: == is NOT expired
+
+
+def test_no_bar_count_fn_means_no_expiry(tmp_path):
+    feed = FakePriceFeed([("AAPL", 100.0)])
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(_pending())
+    assert PlanManager(store, feed.get_price).poll() == []
+
+
+def test_pending_invalidates_when_price_breaks_stop(tmp_path):
+    feed = FakePriceFeed([("AAPL", 94.0)])        # below stop 95, trigger never hit
+    store, mgr = _mgr(tmp_path, feed)
+    store.add(_pending())
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["cancelled_invalidated"]
+    assert store.get("p1").status == PlanStatus.CANCELLED
+
+
+def test_bearish_pending_invalidates_above_stop(tmp_path):
+    from tests.test_plan_engine_model import _plan
+    feed = FakePriceFeed([("AAPL", 106.0)])
+    store, mgr = _mgr(tmp_path, feed)
+    store.add(_plan(entry_type="stop_entry", direction="bearish",
+                    trigger_price=95.0, stop_loss=105.0, tp1=90.0))
+    events = mgr.poll()
+    assert [e.transition for e in events] == ["cancelled_invalidated"]

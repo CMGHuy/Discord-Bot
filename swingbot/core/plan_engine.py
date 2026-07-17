@@ -71,6 +71,13 @@ class TradePlanV2:
     badge_stats: dict
     status: str
     status_history: list = field(default_factory=list)
+    working_stop: float | None = None   # None = "use stop_loss"; live BE/trail floor
+    legs_realized: list = field(default_factory=list)  # [{fraction, exit_price, r, reason}]
+    runner_high_close: float | None = None  # extreme price since TP1 (bearish: extreme LOW)
+
+
+def effective_stop(plan: TradePlanV2) -> float:
+    return plan.working_stop if plan.working_stop is not None else plan.stop_loss
 
 
 _PLAN_FIELDS = None   # cached field list
