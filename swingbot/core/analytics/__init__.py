@@ -20,6 +20,7 @@ from swingbot.core.analytics.metrics import (  # noqa: F401
     sharpe,
     sortino,
 )
+from swingbot.core.analytics.mfe_mae import compute_mfe_mae  # noqa: F401
 
 __all__ = [
     "equity_curve",
@@ -35,4 +36,5 @@ __all__ = [
     "trade_return_pct",
     "sharpe",
     "sortino",
+    "compute_mfe_mae",
 ]
