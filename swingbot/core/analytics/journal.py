@@ -6,6 +6,7 @@ the admin/Discord Journal browsers in Plans B/C -- none of them re-derive
 a lesson, they only render what's already here."""
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from datetime import datetime, timezone
@@ -14,6 +15,8 @@ from swingbot import config
 from swingbot.core.analytics import metrics
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae
 from swingbot.core.jsonio import atomic_write_json, read_json
+
+log = logging.getLogger("swing-bot.journal")
 
 _LOCK = threading.Lock()
 
@@ -225,3 +228,25 @@ def build_entry(trade: dict, df) -> dict:
         "opened_at": trade.get("opened_at"),
         "closed_at": trade.get("closed_at"),
     }
+
+
+def journal_trade_close(trade: dict) -> None:
+    """Called once per newly-closed trade from every TradeLog close path.
+    Never raises: a bars fetch failure or any other exception here must
+    not un-close a trade or crash the caller's own save -- this is pure
+    bookkeeping layered on top of a close that has already happened and
+    already been persisted by the time this runs.
+    """
+    df = None
+    try:
+        from swingbot.core.data import get_daily_data
+        df = get_daily_data(trade["ticker"])
+    except Exception:
+        log.warning("journal_trade_close: bars fetch failed for %s -- journaling without MFE/MAE",
+                    trade.get("ticker"), exc_info=True)
+
+    try:
+        entry = build_entry(trade, df)
+        JournalStore().add(entry)
+    except Exception:
+        log.warning("journal_trade_close: failed to journal trade %s", trade.get("id"), exc_info=True)

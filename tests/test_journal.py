@@ -1,5 +1,7 @@
+from unittest.mock import patch
+
 from tests.conftest import make_ohlcv
-from swingbot.core.analytics.journal import JournalStore, build_entry
+from swingbot.core.analytics.journal import JournalStore, build_entry, journal_trade_close
 
 
 def _entry(trade_id, strategy="Fibonacci", tags=None, outcome="win", closed_at="2026-03-10T10:00:00+00:00"):
@@ -100,3 +102,30 @@ def test_build_entry_fallback_and_df_none_is_safe():
     assert e["mfe_r"] is None and e["mae_r"] is None and e["exit_efficiency"] is None
     assert e["auto_lesson"] == f"Outcome loss at {e['r_realized']:+.2f}R."
     assert e["note"] == "" and e["tags"] == []
+
+
+def _closed_trade():
+    return {"id": "t1", "ticker": "AAPL", "strategy": "Fibonacci", "horizon_key": "4w",
+            "direction": "bullish", "entry": 100.0, "stop_loss": 96.0, "status": "win",
+            "exit_price": 104.0, "opened_at": "2026-03-02T15:00:00+00:00",
+            "closed_at": "2026-03-05T15:00:00+00:00"}
+
+
+def test_journal_trade_close_adds_entry(tmp_path, monkeypatch):
+    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+    df = make_ohlcv([100, 108, 98, 104], spread_pct=0.0, start="2026-03-02")
+    with patch("swingbot.core.data.get_daily_data", return_value=df):
+        journal_trade_close(_closed_trade())
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    assert store.get("t1") is not None
+
+
+def test_journal_trade_close_never_raises_on_fetch_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+    with patch("swingbot.core.data.get_daily_data", side_effect=ValueError("no data")):
+        journal_trade_close(_closed_trade())  # must not raise
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    # Entry still gets added -- just with df=None (all MFE/MAE fields None) --
+    # a data-fetch failure degrades the entry, it does not skip it.
+    assert store.get("t1") is not None
+    assert store.get("t1")["mfe_r"] is None
