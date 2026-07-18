@@ -112,6 +112,7 @@ import pytest
 from pathlib import Path
 import pandas as pd
 from swingbot.core.backtest import run_backtest
+import swingbot.core.entry_filters as ef
 
 CACHE = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
 
@@ -149,8 +150,23 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     # (e.g. a runner_be win, where the runner leg's exit price equals the
     # entry price, was reported as a flat 0.0% return despite a real,
     # positive-R win).
-    df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
-    v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
+    #
+    # This pin needs a specific fixture shape (a runner_be win on TSLA under
+    # "Elliott Wave"/4w) that predates the rescue's strict wave-2 gate
+    # (2026-07 rescue plan, Task 105); that gate's TRAIN-adopted defaults
+    # suppress the exact trade this regression relies on. The gate's
+    # correctness is covered by tests/test_rescue_elliott.py -- this test is
+    # about return_pct arithmetic, not Elliott Wave signal quality -- so the
+    # gate is pinned off here to keep exercising the original known-good
+    # fixture regardless of future strategy tuning.
+    baseline = dict(ef.DEFAULT_PARAMS["Elliott Wave"])
+    ef.DEFAULT_PARAMS["Elliott Wave"].update(
+        {"w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None})
+    try:
+        df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
+        v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
+    finally:
+        ef.DEFAULT_PARAMS["Elliott Wave"] = baseline
     for t in v2.trades:
         if t.outcome != "win":
             continue

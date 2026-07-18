@@ -1,0 +1,18 @@
+{
+  "Elliott Wave": {
+    "n_eval": 75,
+    "wins": 58,
+    "losses": 17,
+    "scratches": 25,
+    "timeouts": 1,
+    "closed": 101,
+    "win_rate": 77.33333333333333,
+    "expectancy_r": 0.06410891089108908,
+    "excluded_share": 0.25742574257425743,
+    "avg_win_r": 0.404551724137931,
+    "runner_tp2_pct": 25.862068965517242,
+    "runner_trail_pct": 12.068965517241379,
+    "runner_be_pct": 55.172413793103445,
+    "runner_timeout_pct": 6.896551724137931
+  }
+}

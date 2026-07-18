@@ -126,10 +126,10 @@
   "horizon": null,
   "status": "VALIDATED",
   "n": 148,
-  "win_rate": 83.8,
-  "expectancy_r": 0.094,
+  "win_rate": 84.5,
+  "expectancy_r": 0.21,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
@@ -138,31 +138,31 @@
   "status": "WEAK",
   "n": 78,
   "win_rate": 76.9,
-  "expectancy_r": 0.032,
+  "expectancy_r": 0.015,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
   "strategy": "Elliott Wave",
   "horizon": null,
   "status": "WEAK",
-  "n": 159,
-  "win_rate": 74.8,
-  "expectancy_r": 0.008,
+  "n": 75,
+  "win_rate": 77.3,
+  "expectancy_r": 0.064,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
   "strategy": "Fibonacci",
   "horizon": null,
   "status": "VALIDATED",
-  "n": 206,
-  "win_rate": 81.6,
-  "expectancy_r": 0.105,
+  "n": 203,
+  "win_rate": 82.3,
+  "expectancy_r": 0.268,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
@@ -171,9 +171,9 @@
   "status": "WEAK",
   "n": 137,
   "win_rate": 78.1,
-  "expectancy_r": 0.039,
+  "expectancy_r": 0.213,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
@@ -182,42 +182,42 @@
   "status": "VALIDATED",
   "n": 123,
   "win_rate": 81.3,
-  "expectancy_r": 0.071,
+  "expectancy_r": 0.12,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
   "strategy": "RSI",
   "horizon": null,
-  "status": "WEAK",
-  "n": 414,
-  "win_rate": 68.4,
-  "expectancy_r": -0.03,
+  "status": "VALIDATED",
+  "n": 30,
+  "win_rate": 100.0,
+  "expectancy_r": 0.304,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
   "strategy": "RSI Divergence",
   "horizon": null,
   "status": "WEAK",
-  "n": 1101,
+  "n": 1099,
   "win_rate": 75.8,
-  "expectancy_r": 0.045,
+  "expectancy_r": 0.208,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
   "strategy": "Support/Resistance",
   "horizon": null,
   "status": "VALIDATED",
-  "n": 190,
-  "win_rate": 86.8,
-  "expectancy_r": 0.117,
+  "n": 186,
+  "win_rate": 87.1,
+  "expectancy_r": 0.326,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
@@ -226,9 +226,9 @@
   "status": "VALIDATED",
   "n": 77,
   "win_rate": 80.5,
-  "expectancy_r": 0.064,
+  "expectancy_r": 0.25,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
@@ -237,8 +237,8 @@
   "status": "VALIDATED",
   "n": 47,
   "win_rate": 83.0,
-  "expectancy_r": 0.136,
+  "expectancy_r": 0.479,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  }
 ]

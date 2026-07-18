@@ -19,7 +19,9 @@ def test_market_plan_is_active_and_badged():
 
 
 def test_weak_strategy_still_builds():
-    p = build_strategy_plan(_df(), 79, ticker="AAPL", strategy="RSI",
+    # EMA Crossover stayed WEAK through the rescue round (RSI, the previous
+    # exemplar, was rescued to VALIDATED in Tasks 95-97).
+    p = build_strategy_plan(_df(), 79, ticker="AAPL", strategy="EMA Crossover",
                             horizon_key="4w", direction="bullish")
     assert p is not None and p.badge == "WEAK"
 

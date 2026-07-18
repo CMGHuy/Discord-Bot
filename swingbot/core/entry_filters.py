@@ -81,6 +81,23 @@ def _rolling_argmin_pos(s: pd.Series, lookback: int) -> pd.Series:
     return pd.Series(out, index=s.index)
 
 
+def adx_series(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Wilder ADX (EWM alpha=1/period). Shared regime helper for rescue
+    gates: high = sustained directional movement, low = range. Scale-free --
+    it measures the *ratio* of up- to down-movement, not its size."""
+    h, l, c = df["High"], df["Low"], df["Close"]
+    up, dn = h.diff(), -l.diff()
+    plus_dm = ((up > dn) & (up > 0)) * up
+    minus_dm = ((dn > up) & (dn > 0)) * dn
+    tr = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()],
+                   axis=1).max(axis=1)
+    atr_w = tr.ewm(alpha=1 / period, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=1 / period, adjust=False).mean() / atr_w
+    minus_di = 100 * minus_dm.ewm(alpha=1 / period, adjust=False).mean() / atr_w
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    return dx.ewm(alpha=1 / period, adjust=False).mean()
+
+
 def _params(strategy: str, params: dict | None) -> dict:
     merged = dict(DEFAULT_PARAMS.get(strategy, {}))
     if params:
@@ -433,7 +450,10 @@ def break_retest_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Break & Retest"] = break_retest_entries
 
 
-DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}
+DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high",
+                         # rescue gate: train-grid winner 2026-07-18
+                         # (docs/superpowers/results/2026-07-rescue-rsi-train.md)
+                         "max_adx": 20, "require_bb_range": False}
 
 
 def rsi_entries(df, horizon_key, params=None):
@@ -469,13 +489,33 @@ def rsi_entries(df, horizon_key, params=None):
     bearish = (crossed_down & ma200_down & fade_started & confirm_bear
                & (rsi14 > 60)
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- rescue gate (Task 95): only dip-buy/fade in RANGE regimes ---
+    # Mean-reversion entries in trending tape are exactly where round 1
+    # showed this strategy bleeding; ADX + Bollinger containment restrict
+    # it to sideways conditions. None/False = gate off (backward compatible).
+    max_adx = p.get("max_adx")
+    if max_adx is not None:
+        range_regime = (adx_series(df) < max_adx).fillna(False)
+        bullish &= range_regime
+        bearish &= range_regime
+    if p.get("require_bb_range"):
+        mid = close.rolling(20).mean()
+        sd = close.rolling(20).std()
+        in_band = ((close <= mid + 2 * sd) & (close >= mid - 2 * sd)).fillna(False)
+        bullish &= in_band
+        bearish &= in_band
     return bullish, bearish
 
 
 ENTRY_FUNCS["RSI"] = rsi_entries
 
 
-DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45}
+DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45,
+                                    # rescue gate (Task 98) -- off until the
+                                    # train grid (Task 99) adopts winners
+                                    "min_volume_ratio": None,
+                                    "min_reclaim_strength": None}
 
 
 def rsi_divergence_entries(df, horizon_key, params=None):
@@ -503,6 +543,28 @@ def rsi_divergence_entries(df, horizon_key, params=None):
     bearish = (price_lh & rsi_hh & turn_bear & rsi14.between(48, 72)
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- rescue gate (Task 98): confirmation quality on the reclaim bar ---
+    # This detector is a rolling formulation (no discrete swing points), so
+    # reclaim strength is measured from the recent lb-bar swing extreme
+    # toward the lb-bar range midpoint (deviation from the plan's discrete
+    # swing-mid formula, which is vacuous against rolling extremes).
+    # None = gate off (backward compatible).
+    min_vr = p.get("min_volume_ratio")
+    min_rs = p.get("min_reclaim_strength")
+    if min_vr is not None:
+        vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
+        vr_ok = (vol_ratio >= min_vr).fillna(False)
+        bullish &= vr_ok
+        bearish &= vr_ok
+    if min_rs is not None:
+        lo = close.rolling(lb).min()
+        hi = close.rolling(lb).max()
+        mid = (lo + hi) / 2
+        reclaim_floor = lo + min_rs * (mid - lo)
+        reclaim_ceil = hi - min_rs * (hi - mid)
+        bullish &= (close >= reclaim_floor).fillna(False)
+        bearish &= (close <= reclaim_ceil).fillna(False)
     return bullish, bearish
 
 
@@ -567,7 +629,16 @@ def volume_profile_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Volume Profile"] = volume_profile_entries
 
 
-DEFAULT_PARAMS["Elliott Wave"] = {"depth_min": 0.30, "depth_max": 0.80}
+DEFAULT_PARAMS["Elliott Wave"] = {
+    "depth_min": 0.30, "depth_max": 0.80,
+    # Rescue gate (Task 104/105): strict wave-2 validation. TRAIN grid
+    # (docs/superpowers/results/2026-07-rescue-elliott-train.md) selected
+    # this config -- N=117, WR=83.8%, ExpR=+0.094 on TRAIN, the pre-
+    # registered max-expectancy winner among qualifying configs. Adopted
+    # here permanently; Task 106 spends the single VALIDATION-window look
+    # against this exact config, no retuning after.
+    "w2_min_retrace": 0.382, "w2_max_retrace": 0.618, "w2_max_duration_ratio": 0.75,
+}
 
 
 def elliott_wave_entries(df, horizon_key, params=None):
@@ -580,6 +651,40 @@ def elliott_wave_entries(df, horizon_key, params=None):
     g = compute_shared_gates(df)
     threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
     bull_raw, bear_raw, levels = elliott_wave3_entries(df, threshold_pct)
+
+    # --- rescue gate (Task 104): strict wave-2 validation ---
+    # `levels` is shared by both the bullish (kind0=="low") and bearish
+    # (kind0=="high") wave triples, keyed by the breakout bar index -- a
+    # given bar belongs to at most one side, so clearing both raw series at
+    # a rejected bar is safe (the other side is already False there).
+    w2_min = p.get("w2_min_retrace")
+    w2_max = p.get("w2_max_retrace")
+    dur_ratio = p.get("w2_max_duration_ratio")
+    if any(v is not None for v in (w2_min, w2_max, dur_ratio)):
+        for j, lv in list(levels.items()):
+            wave1_len = lv["wave1"] - lv["wave0"]
+            if wave1_len == 0:
+                bad = True
+            else:
+                # Signed ratio: numerator and denominator both flip sign
+                # together on the bearish (high/low/high) side, so this
+                # yields the same magnitude as the unsigned bullish case
+                # without needing an abs().
+                retrace = (lv["wave1"] - lv["wave2"]) / wave1_len
+                # Classic wave-2-overlaps-wave-1-origin invalidation, valid
+                # for either side: wave2 must stay on the same side of
+                # wave0 as wave1 is.
+                overlap = (lv["wave2"] - lv["wave0"]) * wave1_len <= 0
+                bad = ((w2_min is not None and retrace < w2_min)
+                       or (w2_max is not None and retrace > w2_max)
+                       or (dur_ratio is not None and
+                           (lv["wave2_idx"] - lv["wave1_idx"])
+                           > dur_ratio * (lv["wave1_idx"] - lv["wave0_idx"]))
+                       or overlap)
+            if bad:
+                bull_raw.iloc[j] = False
+                bear_raw.iloc[j] = False
+                levels.pop(j)
 
     depth_ok = _off(df)
     for j, lv in levels.items():

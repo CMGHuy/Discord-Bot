@@ -5,18 +5,21 @@ from tests.test_plan_engine_model import _plan
 
 
 def test_stamp_validated():
+    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
     p = _plan(strategy="Fibonacci")
     stamp_badge(p)
     assert p.badge == "VALIDATED"
-    assert p.badge_stats["win_rate"] == 81.6
+    assert p.badge_stats["win_rate"] == 82.3
 
 
 def test_stamp_weak():
-    p = _plan(strategy="RSI")
+    # EMA Crossover stayed WEAK through the rescue round (RSI, the previous
+    # exemplar, was rescued to VALIDATED in Tasks 95-97).
+    p = _plan(strategy="EMA Crossover")
     stamp_badge(p)
     assert p.badge == "WEAK"
 
 
 def test_stats_line():
     line = badge_stats_line(get_badge("strategy", "Fibonacci"))
-    assert "N=206" in line and "81.6%" in line
+    assert "N=203" in line and "82.3%" in line

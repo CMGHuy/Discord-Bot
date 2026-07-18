@@ -2,14 +2,22 @@ from swingbot.core.registry import get_badge, load_registry
 
 
 def test_validated_strategy():
+    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
     b = get_badge("strategy", "Fibonacci")
     assert b.status == "VALIDATED"
-    assert b.n == 206 and b.win_rate == 81.6
+    assert b.n == 203 and b.win_rate == 82.3
+
+
+def test_rescued_rsi_validated():
+    # RSI flipped WEAK -> VALIDATED by the Task 95-97 rescue (range-regime
+    # gate, single OOS run 2026-07-18: N=30, WR=100.0, ExpR +0.304).
+    b = get_badge("strategy", "RSI")
+    assert b.status == "VALIDATED" and b.win_rate == 100.0 and b.n == 30
 
 
 def test_weak_strategy():
-    b = get_badge("strategy", "RSI")
-    assert b.status == "WEAK" and b.win_rate == 68.4
+    b = get_badge("strategy", "EMA Crossover")
+    assert b.status == "WEAK"
 
 
 def test_unknown_defaults_weak():

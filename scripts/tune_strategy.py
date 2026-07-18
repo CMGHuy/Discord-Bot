@@ -36,7 +36,16 @@ PARAM_GRID = {
     "Support/Resistance": {"base_atr": [3.0, 4.0, 5.0], "close_frac": [0.3, 0.4, 0.5]},
     "RSI":                {"os_level": [30, 35], "confirm": ["prev_high", "prev_close"]},
     "MACD":               {"ext_atr": [0.75, 1.0, 1.5]},
-    "Elliott Wave":       {"depth_min": [0.30, 0.38], "depth_max": [0.78, 0.80]},
+    # Rescue (Task 105): grid the new strict wave-2 gate, not the old
+    # depth_min/depth_max pair (those stay fixed at baseline for this run --
+    # only the new gate is under test). w2_min_retrace is held constant at
+    # 0.382 (not gridded) via a single-value list -- it must be non-None for
+    # the gate to activate at all, but this run isn't tuning it.
+    "Elliott Wave":       {"w2_min_retrace": [0.382],
+                           "w2_max_retrace": [0.618, 0.786],
+                           "w2_max_duration_ratio": [0.75, 1.0]},
+    # Rescue (Task 102): grid the new expansion gate, not ext_pct (fixed at
+    # baseline for this run -- only the new gate is under test).
     "MA Ribbon":          {"min_width_pctile": [0.3, 0.4, 0.5],
                            "require_expanding": [True, False]},
     "Break & Retest":     {"hold_tol_pct": [0.3, 0.5, 0.8]},
@@ -45,12 +54,15 @@ PARAM_GRID = {
 }
 
 
-def run_config(strategy, dfs):
+def run_config(strategy, dfs, exit_model="v1", scale_out=False):
+    tp2_mode = "levels" if exit_model == "v2" else "none"
     trades = []
     for ticker, df in dfs.items():
         for hk in HORIZONS:
             try:
-                s = bt.run_backtest(ticker, df, strategy, hk, one_at_a_time=True)
+                s = bt.run_backtest(ticker, df, strategy, hk, one_at_a_time=True,
+                                    exit_model=exit_model, scale_out=scale_out,
+                                    tp2_mode=tp2_mode)
             except Exception:
                 continue
             trades.extend(t for t in s.trades if TRAIN[0] <= t.entry_date <= TRAIN[1])
@@ -66,12 +78,44 @@ def run_config(strategy, dfs):
     }
 
 
+def _parse_grid_value(s: str):
+    low = s.lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    if low in ("none", "null"):
+        return None
+    for cast in (int, float):
+        try:
+            return cast(s)
+        except ValueError:
+            pass
+    return s
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", required=True)
     ap.add_argument("--be-trigger", type=float, default=None)
+    ap.add_argument("--grid", nargs="+", default=None, metavar="KEY=V1,V2",
+                    help="override the built-in grid, e.g. "
+                         "--grid max_adx=20,25,30 require_bb_range=true,false "
+                         "(sweeps ONLY these keys; other params stay at "
+                         "DEFAULT_PARAMS)")
+    ap.add_argument("--exit-model", dest="exit_model", choices=["v1", "v2"],
+                    default="v1")
+    ap.add_argument("--scale-out", dest="scale_out", action="store_true")
     args = ap.parse_args()
     strategy = args.strategy
+    if args.grid:
+        grid_override = {}
+        for spec in args.grid:
+            key, _, vals = spec.partition("=")
+            if not vals:
+                ap.error(f"bad --grid spec {spec!r}, expected KEY=V1,V2,...")
+            grid_override[key] = [_parse_grid_value(v) for v in vals.split(",")]
+        PARAM_GRID[strategy] = grid_override
     if strategy not in PARAM_GRID:
         ap.error(f"unknown strategy {strategy!r}; one of {list(PARAM_GRID)}")
     if args.be_trigger is not None:
@@ -88,7 +132,8 @@ def main():
         for combo in itertools.product(*(grid[k] for k in keys)):
             params = dict(zip(keys, combo))
             ef.DEFAULT_PARAMS[strategy].update(params)
-            stats = run_config(strategy, dfs)
+            stats = run_config(strategy, dfs, exit_model=args.exit_model,
+                               scale_out=args.scale_out)
             rows.append((params, stats))
             wr = f"{stats['win_rate']:.1f}" if stats["win_rate"] is not None else "n/a"
             er = f"{stats['expectancy_r']:+.3f}" if stats["expectancy_r"] is not None else "n/a"
