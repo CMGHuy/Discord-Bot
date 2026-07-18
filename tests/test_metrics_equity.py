@@ -1,4 +1,4 @@
-from swingbot.core.analytics.metrics import equity_curve
+from swingbot.core.analytics.metrics import equity_curve, drawdown_series, max_drawdown_pct
 
 
 def _t(closed_at, pnl, opened_at="2026-01-02T10:00:00+00:00"):
@@ -41,3 +41,24 @@ def test_equity_curve_baseline_falls_back_to_closed_at_when_opened_at_missing():
     assert curve["skipped_n"] == 0
     # Verify full curve: baseline + 2 trades in close order
     assert [p["balance"] for p in pts] == [1000.0, 980.0, 1030.0]
+
+
+def _pts(balances):
+    return [{"date": f"2026-01-{i+1:02d}", "balance": b, "pnl": 0.0} for i, b in enumerate(balances)]
+
+
+def test_drawdown_series_and_max():
+    pts = _pts([1000, 1100, 990, 1200])
+    dd = drawdown_series(pts)
+    assert [round(d["dd_pct"], 4) for d in dd] == [0.0, 0.0, 10.0, 0.0]
+    assert max_drawdown_pct(pts) == 10.0
+
+
+def test_max_drawdown_pct_needs_two_points():
+    assert max_drawdown_pct([]) is None
+    assert max_drawdown_pct(_pts([1000])) is None
+
+
+def test_drawdown_series_monotonic_up_is_all_zero():
+    pts = _pts([1000, 1050, 1100, 1150])
+    assert all(d["dd_pct"] == 0.0 for d in drawdown_series(pts))

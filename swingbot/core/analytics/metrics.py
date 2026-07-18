@@ -56,3 +56,28 @@ def equity_curve(closed: list[dict], starting_balance: float) -> dict:
         points.append({"date": t["closed_at"][:10], "balance": round(balance, 2), "pnl": round(pnl, 2)})
 
     return {"points": points, "skipped_n": skipped_n}
+
+
+def drawdown_series(points: list[dict]) -> list[dict]:
+    """Per-point drawdown as a % of the running peak balance seen so far
+    (inclusive of the current point) -- the standard "how far below the
+    best-ever balance am I right now" reading, always >= 0."""
+    series = []
+    peak = None
+    for p in points:
+        bal = p["balance"]
+        peak = bal if peak is None else max(peak, bal)
+        dd_pct = (peak - bal) / peak * 100 if peak else 0.0
+        series.append({"date": p["date"], "dd_pct": round(dd_pct, 4)})
+    return series
+
+
+def max_drawdown_pct(points: list[dict]) -> float | None:
+    """Worst single-point drawdown across the whole curve. None (not 0.0)
+    when there are fewer than 2 points -- a one-point "curve" has no
+    meaningful drawdown to report, and 0.0 would misleadingly read as
+    "verified flat" rather than "not enough data"."""
+    if len(points) < 2:
+        return None
+    dds = [d["dd_pct"] for d in drawdown_series(points)]
+    return max(dds) if dds else None

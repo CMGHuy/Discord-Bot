@@ -7,6 +7,8 @@ re-deriving). Re-exports the public surface so callers can do either
 `from swingbot.core.analytics import equity_curve` interchangeably."""
 from swingbot.core.analytics.metrics import (  # noqa: F401
     equity_curve,
+    drawdown_series,
+    max_drawdown_pct,
 )
 
-__all__ = ["equity_curve"]
+__all__ = ["equity_curve", "drawdown_series", "max_drawdown_pct"]
