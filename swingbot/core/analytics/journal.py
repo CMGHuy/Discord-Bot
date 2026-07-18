@@ -131,6 +131,67 @@ def _auto_lesson(outcome: str, mfe_r: float | None, mae_r: float | None,
     return f"Outcome {outcome} at {r_realized:+.2f}R."
 
 
+_RUNNER_SUBSTRINGS = ("runner_tp2", "runner_trail", "runner_be")
+
+
+def _close_reason_text(trade: dict) -> str:
+    legs = trade.get("legs") or []
+    if legs:
+        return (legs[-1].get("reason") or "").lower()
+    return (trade.get("close_reason") or "").lower()
+
+
+def tags_for(trade: dict, m: dict | None) -> list[str]:
+    """Every auto-tag rule that fires for this trade, in rule-declaration
+    order. Unlike auto_lesson, tags are NOT first-match-wins -- a trade
+    can legitimately be both a "gap_fill" AND "weak_source", for
+    instance, and both should be visible in the journal browser filters.
+    """
+    tags: list[str] = []
+    reason_text = _close_reason_text(trade)
+    for substr in _RUNNER_SUBSTRINGS:
+        if substr in reason_text:
+            tags.append(substr)
+            break  # a trade closes via at most one runner reason
+
+    entry = trade.get("entry")
+    stop = trade.get("stop_loss")
+    target = trade.get("take_profit")
+    exit_price = trade.get("exit_price")
+    status = trade.get("status")
+    if entry is not None and exit_price is not None:
+        threshold = 0.005 * entry
+        is_bull = trade.get("direction") == "bullish"
+        if status == "loss" and stop is not None:
+            gap = (stop - exit_price) if is_bull else (exit_price - stop)
+            if gap > threshold:
+                tags.append("gap_fill")
+        elif status == "win" and target is not None:
+            gap = (exit_price - target) if is_bull else (target - exit_price)
+            if gap > threshold:
+                tags.append("gap_fill")
+
+    outcome = _resolve_outcome(trade)
+    if outcome in ("loss", "scratch") and m and m.get("mfe_r") is not None \
+            and entry is not None and stop is not None and target is not None:
+        risk = abs(entry - stop)
+        if risk > 0:
+            tp1_r = abs(target - entry) / risk
+            if m["mfe_r"] >= 0.8 * tp1_r:
+                tags.append("near_miss_tp")
+
+    holding_days = _holding_days(trade)
+    if status == "win" and holding_days is not None and holding_days <= 2:
+        tags.append("fast_win")
+    if holding_days is not None and holding_days > 30:
+        tags.append("slow_burn")
+
+    if trade.get("badge") == "WEAK":
+        tags.append("weak_source")
+
+    return tags
+
+
 def build_entry(trade: dict, df) -> dict:
     """Assemble one auto-populated journal entry for a just-closed trade.
     `df` is the ticker's cached daily bars (or None -- every MFE/MAE field
@@ -158,7 +219,7 @@ def build_entry(trade: dict, df) -> dict:
         "mae_r": mae_r,
         "exit_efficiency": exit_efficiency,
         "holding_days": _holding_days(trade),
-        "tags": [],  # Task A21 fills this in via tags_for()
+        "tags": tags_for(trade, m),
         "auto_lesson": _auto_lesson(outcome, mfe_r, mae_r, exit_efficiency, r_realized),
         "note": "",
         "opened_at": trade.get("opened_at"),
