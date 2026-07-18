@@ -1,10 +1,10 @@
 from swingbot import config
 
 
-def test_flags_exist_with_safe_defaults():
-    assert config.PLAN_ENGINE_V2 == "off"
-    assert config.SCALE_OUT_ENABLED is False
-    assert config.INTRADAY_MANAGER_V2 is False
+def test_flags_default_to_fully_live():
+    assert config.PLAN_ENGINE_V2 == "on"
+    assert config.SCALE_OUT_ENABLED is True
+    assert config.INTRADAY_MANAGER_V2 is True
 
 
 def test_plan_engine_v2_choices():

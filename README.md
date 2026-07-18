@@ -451,8 +451,12 @@ UI's "Plan Engine v2" section, hot-reloadable):
 | `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 with a chandelier ATR trail. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
 | `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
 
-Rollout order: `shadow` for ≥5 scan sessions → `on` (single-leg exits) for
-≥5 clean sessions → enable scale-out + manager.
+**Defaults ship fully live** (`PLAN_ENGINE_V2=on`, `SCALE_OUT_ENABLED=true`,
+`INTRADAY_MANAGER_V2=true`) so a fresh deployment runs the validated engine
+immediately with no staged rollout required. If you'd rather stage it
+yourself: `shadow` for ≥5 scan sessions (compare against legacy numbers via
+`python scripts/shadow_parity_report.py`) → `on` for ≥5 clean sessions →
+enable scale-out + manager.
 
 **Badges: what they legally claim.** Every v2 plan is stamped from
 `swingbot/core/validation_registry.json`:

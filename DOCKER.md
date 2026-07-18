@@ -37,11 +37,13 @@ docker compose up -d --build
 
 Three hot-reloadable `.env` flags stage the v2 plan engine rollout
 (details in the README's "Plan Engine v2" section): `PLAN_ENGINE_V2`
-(`off`/`shadow`/`on` — run `shadow` for ≥5 scan sessions and check
-`python scripts/shadow_parity_report.py` before flipping `on`), then
-`SCALE_OUT_ENABLED=true` and `INTRADAY_MANAGER_V2=true` only after ≥5
-clean `on` sessions. All three default off; flipping them requires no
-container restart (hot reload picks them up).
+(`off`/`shadow`/`on`), `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`. All
+three **default to fully live** (`on`/`true`/`true`) so a fresh deployment
+runs the validated engine immediately — flipping them requires no
+container restart (hot reload picks them up). If you'd rather stage the
+rollout yourself: run `shadow` for ≥5 scan sessions and check
+`python scripts/shadow_parity_report.py` before flipping `on`, then enable
+scale-out + manager only after ≥5 clean `on` sessions.
 
 ## Admin UI
 

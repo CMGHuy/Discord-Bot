@@ -323,16 +323,19 @@ FIELDS: list[Field] = [
 
     # --- Plan Engine v2 (rollout flags, spec 2026-07-11-unified-plan-engine-design) ---
     Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",
-          type="select", default="off", options=["off", "shadow", "on"],
+          type="select", default="on", options=["off", "shadow", "on"],
           help="off = legacy behavior. shadow = v2 plans are computed and logged to "
                "data/shadow_plans.jsonl during scans but NOT posted (parity evidence for cutover). "
-               "on = scan alerts price and emit v2 plans (badges, TP1/TP2, entry triggers)."),
+               "on = scan alerts price and emit v2 plans (badges, TP1/TP2, entry triggers). "
+               "Defaults to 'on' for immediate deployment; set to 'shadow' first if you'd rather "
+               "compare against legacy numbers for a few sessions before trusting it live."),
     Field("SCALE_OUT_ENABLED", "SCALE_OUT_ENABLED", "Plan Engine v2", "Scale-out exits enabled",
-          type="checkbox", default="false",
+          type="checkbox", default="true",
           help="At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 "
-               "with a chandelier ATR trail. Enable only after PLAN_ENGINE_V2=on has run cleanly."),
+               "with a chandelier ATR trail. Backtested under this exact exit model (see README's "
+               "Plan Engine v2 section for the validated win-rate/expectancy numbers behind it)."),
     Field("INTRADAY_MANAGER_V2", "INTRADAY_MANAGER_V2", "Plan Engine v2", "Intraday plan manager enabled",
-          type="checkbox", default="false",
+          type="checkbox", default="true",
           help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "
                "moves, TP1 partials, runner trail, invalidation - with a Discord alert per transition."),
 
