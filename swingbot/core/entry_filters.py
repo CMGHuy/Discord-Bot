@@ -431,9 +431,9 @@ ENTRY_FUNCS["Break & Retest"] = break_retest_entries
 
 
 DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high",
-                         # rescue gate (Task 95) -- off until the train grid
-                         # (Task 96) adopts winning values
-                         "max_adx": None, "require_bb_range": False}
+                         # rescue gate: train-grid winner 2026-07-18
+                         # (docs/superpowers/results/2026-07-rescue-rsi-train.md)
+                         "max_adx": 20, "require_bb_range": False}
 
 
 def rsi_entries(df, horizon_key, params=None):

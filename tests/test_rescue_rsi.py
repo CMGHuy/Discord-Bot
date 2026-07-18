@@ -9,6 +9,9 @@ from swingbot.core.entry_filters import adx_series, rsi_entries
 from tests.conftest import make_ohlcv
 
 GATED = {"max_adx": 25, "require_bb_range": True}
+# Explicit gate-off: DEFAULT_PARAMS carries the adopted train-grid winner
+# (max_adx=20), so the ungated baseline must be requested explicitly.
+OFF = {"max_adx": None, "require_bb_range": False}
 
 
 def _trend_frame():
@@ -50,7 +53,7 @@ def test_adx_regime_separation():
 
 def test_trending_frame_suppressed_when_gated():
     df = _trend_frame()
-    bull_off, _ = rsi_entries(df, "4w")
+    bull_off, _ = rsi_entries(df, "4w", params=OFF)
     bull_on, _ = rsi_entries(df, "4w", params=GATED)
     assert bull_off.any(), "fixture must fire ungated (tune shape first)"
     assert not bull_on.any()
@@ -58,18 +61,21 @@ def test_trending_frame_suppressed_when_gated():
 
 def test_range_frame_passes_gate():
     df = _range_frame()
-    bull_off, _ = rsi_entries(df, "4w")
+    bull_off, _ = rsi_entries(df, "4w", params=OFF)
     bull_on, _ = rsi_entries(df, "4w", params=GATED)
     assert bull_off.any(), "fixture must fire ungated (tune shape first)"
     assert (bull_on == bull_off).all()      # low-ADX, in-band entry survives
 
 
-def test_gate_off_is_byte_identical():
+def test_gate_off_restores_ungated_behavior():
+    # None/False disables the gate even though DEFAULT_PARAMS now carries
+    # the adopted train winner -- the trend-frame entry the default config
+    # suppresses fires again under explicit OFF params.
     df = _trend_frame()
-    a, _ = rsi_entries(df, "4w")
-    b, _ = rsi_entries(df, "4w",
-                       params={"max_adx": None, "require_bb_range": False})
-    assert (a == b).all()
+    bull_default, _ = rsi_entries(df, "4w")
+    bull_off, _ = rsi_entries(df, "4w", params=OFF)
+    assert bull_off.any()
+    assert not bull_default.any()
 
 
 def test_no_lookahead():
