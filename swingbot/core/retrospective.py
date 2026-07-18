@@ -25,6 +25,9 @@ from collections import defaultdict
 from swingbot.core.performance import primary_strategy_label
 from swingbot.core import account as account_module
 from swingbot import config as app_config
+from swingbot.core.analytics import calibration
+from swingbot.core.analytics.insights import edge_decay_report
+from swingbot.core.analytics.journal import JournalStore
 
 try:
     from zoneinfo import ZoneInfo
@@ -300,7 +303,12 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         today = now_berlin
     is_today = (today == now_berlin)
 
-    date_label = today.strftime("%A, %-d %B %Y") if hasattr(today, "strftime") else str(today)
+    # Built with %A/%B (no day-of-month directive) + a manually-inserted
+    # `.day` int, rather than the more obvious "%A, %-d %B %Y" -- %-d is a
+    # glibc-only strftime extension that raises ValueError on Windows'
+    # C runtime (ok in the Linux Docker deploy, but this must also run on a
+    # Windows dev/test machine), and produces byte-identical output either way.
+    date_label = f"{today.strftime('%A')}, {today.day} {today.strftime('%B %Y')}" if hasattr(today, "strftime") else str(today)
 
     # ── Partition trades ──────────────────────────────────────────────────
     opened_today    = []   # opened today (any status)
@@ -454,7 +462,8 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             direction = "▲ Long" if t["direction"] == "bullish" else "▼ Short"
             opened_str = _berlin_hm(t.get("opened_at", ""))
             opened_date = _berlin_date(t.get("opened_at", ""))
-            date_pfx = opened_date.strftime("%-d %b") if opened_date else "?"
+            # See date_label above for why not "%-d %b" (glibc-only, breaks on Windows).
+            date_pfx = f"{opened_date.day} {opened_date.strftime('%b')}" if opened_date else "?"
             open_rows.append(
                 f"{t['ticker']:<7} {direction:<5} {_strategy_label(t)[:15]:<16} Lv{t.get('confidence_level','-'):<2} "
                 f"{date_pfx + ' ' + opened_str:<17} "
@@ -501,6 +510,39 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         history = [h for h in history if h.get("date") != today.isoformat()]
         history.append(today_entry)
         _save_history(history)
+
+    # ── Part 6: Calibration + edge decay (analytics core) ─────────────────
+    calibration_lines = []
+    tier_rows = calibration.tier_calibration(closed_today)
+    failing = [r for r in tier_rows if r["ok"] is False]
+    if failing:
+        calibration_lines.append("**📐 Calibration**")
+        for r in failing:
+            calibration_lines.append(
+                f"• Tier {r['tier']} at {r['win_rate']:.0f}% WR (n={r['n']}) is outside its "
+                f"design band ({r['expected_band']})."
+            )
+    try:
+        decay_lines = edge_decay_report(all_trades)
+    except Exception:
+        log.exception("build_daily_retrospective: edge_decay_report failed, skipping")
+        decay_lines = []
+    if decay_lines:
+        calibration_lines.append("**📉 Edge decay**")
+        calibration_lines.extend(decay_lines)
+    if calibration_lines:
+        messages.append("\n".join(calibration_lines))
+
+    # ── Part 7: Journal lessons for today's closed trades ─────────────────
+    if closed_today:
+        store = JournalStore()
+        lesson_lines = ["**📓 Trade lessons**"]
+        for t in closed_today:
+            entry = store.get(t.get("id"))
+            if entry and entry.get("auto_lesson"):
+                lesson_lines.append(f"• {t['ticker']}: {entry['auto_lesson']}")
+        if len(lesson_lines) > 1:
+            messages.append("\n".join(lesson_lines))
 
     return messages
 

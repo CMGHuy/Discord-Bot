@@ -86,3 +86,49 @@ def test_top_lessons_counts_pairings():
     lines = top_lessons(entries, n=2)
     assert lines[0].startswith("2x")
     assert "Clean capture." in lines[0]
+
+
+import datetime as _dt
+from unittest.mock import patch as _patch
+
+from swingbot.core.retrospective import build_daily_retrospective
+
+
+def _closed_today(ticker, status, closed_at="2026-03-10T16:00:00+00:00"):
+    return {"id": ticker.lower(), "ticker": ticker, "status": status, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0 if status == "win" else 96.0,
+            "opened_at": "2026-03-09T10:00:00+00:00", "closed_at": closed_at,
+            "confidence_level": 4, "horizon_key": "4w", "tier": "C", "target_sources": []}
+
+
+def test_retrospective_includes_edge_decay_line_when_alert():
+    registry = [{"source": "strategy", "strategy": "Fibonacci", "horizon": None,
+                "status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.105,
+                "window": "2024-01-01..2025-12-31"}]
+    heavy_losers = [dict(_closed_today("AAA", "loss"), target_sources=["Fib 61.8%"]) for _ in range(30)]
+    with _patch("swingbot.core.registry.load_registry", return_value=registry):
+        messages = build_daily_retrospective(heavy_losers, today=_dt.date(2026, 3, 10))
+    joined = "\n".join(messages)
+    assert "Edge decay" in joined or "📉" in joined
+
+
+def test_retrospective_without_decay_omits_the_line():
+    trades = [_closed_today("AAA", "win")]
+    with _patch("swingbot.core.registry.load_registry", return_value=[]):
+        messages = build_daily_retrospective(trades, today=_dt.date(2026, 3, 10))
+    joined = "\n".join(messages)
+    assert "Edge decay" not in joined
+
+
+def test_retrospective_lessons_block_present_when_journaled(tmp_path, monkeypatch):
+    monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+    from swingbot.core.analytics.journal import JournalStore
+
+    JournalStore(path=str(tmp_path / "journal.json")).add({
+        "trade_id": "aaa", "ticker": "AAA", "auto_lesson": "Clean capture: banked 100% of the available move.",
+        "closed_at": "2026-03-10T16:00:00+00:00", "tags": [], "note": "",
+    })
+    trades = [_closed_today("AAA", "win")]
+    with _patch("swingbot.core.registry.load_registry", return_value=[]):
+        messages = build_daily_retrospective(trades, today=_dt.date(2026, 3, 10))
+    assert any("Clean capture" in m for m in messages)
