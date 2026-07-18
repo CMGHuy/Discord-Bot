@@ -69,3 +69,28 @@ def test_refresh_snapshot_never_raises_on_failure(monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", "/nonexistent/deeply/nested/x.json")
     with patch("swingbot.core.performance.TradeLog", side_effect=RuntimeError("boom")):
         refresh_snapshot()  # must not raise
+
+
+import csv
+import os
+
+from scripts.export_analytics import export_all
+
+
+def _fixture_snapshot():
+    from swingbot.core.analytics.snapshots import build_snapshot
+    return build_snapshot([_t(1), _t(2), _t(3, "loss")], 10_000.0, [])
+
+
+def test_export_all_writes_expected_files(tmp_path):
+    paths = export_all(_fixture_snapshot(), str(tmp_path))
+    names = {os.path.basename(p) for p in paths}
+    assert "snapshot.json" in names
+    assert "equity_curve.csv" in names
+    assert "stats_by_strategy.csv" in names
+    assert "stats_by_ticker.csv" in names
+
+    with open(os.path.join(tmp_path, "stats_by_strategy.csv"), newline="") as f:
+        header = next(csv.reader(f))
+    assert header == ["key", "n", "wins", "losses", "win_rate", "expectancy_r",
+                      "avg_r", "profit_factor", "total_pnl"]
