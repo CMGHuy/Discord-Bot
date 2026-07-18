@@ -832,6 +832,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         trade_id = None
         if item.all_requirements_met and not already_open:
+            # v2 plan pedigree (tier/badge/quality/source) rides along with
+            # plan_id -- same cutover guard: only a live "on" plan is real
+            # pedigree, "shadow"/"off" trades log as legacy (None) rows.
+            plan_v2 = (item.plan_v2
+                       if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
+                       else None)
             trade_id = trade_log.log_trade(
                 ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
                 direction=result.trend, confidence_level=conf.level, confidence_label=conf.label,
@@ -844,9 +850,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 risk_reward_ratio=plan.risk_reward_ratio,
                 explanation=explanation,
                 confirmed_by=item.combined_from,
-                plan_id=(item.plan_v2.plan_id
-                         if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
-                         else None),
+                plan_id=plan_v2.plan_id if plan_v2 is not None else None,
+                tier=plan_v2.tier if plan_v2 is not None else None,
+                badge=plan_v2.badge if plan_v2 is not None else None,
+                quality_score=plan_v2.quality_score if plan_v2 is not None else None,
+                source=plan_v2.source if plan_v2 is not None else None,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
         else:

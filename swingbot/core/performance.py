@@ -198,7 +198,8 @@ class TradeLog:
                   confidence_label, entry, stop_loss, take_profit, target2=None,
                   confidence_score=None, confidence_breakdown=None, target_sources=None,
                   stop_sources=None, target2_sources=None, risk_reward_ratio=None,
-                  explanation=None, confirmed_by=None, plan_id=None) -> str:
+                  explanation=None, confirmed_by=None, plan_id=None,
+                  tier=None, badge=None, quality_score=None, source=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -220,6 +221,10 @@ class TradeLog:
         record = {
             "id": trade_id,
             "plan_id": plan_id,     # v2 plan-engine link; None for v1/legacy trades
+            "tier": tier,           # "A" | "B" | "C" | None (legacy / no plan)
+            "badge": badge,         # "VALIDATED" | "WEAK" | None
+            "quality_score": quality_score,
+            "source": source,       # "strategy" | "confluence" | None
             "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
             "strategy": strategy,
