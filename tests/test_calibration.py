@@ -101,3 +101,18 @@ def test_badge_drift_ignores_weak_registry_rows_and_dedups_by_strategy():
     registry = [_reg("VWAP", 90.0, status="WEAK"), _reg("Fibonacci", 81.6), _reg("Fibonacci", 81.6, n=50)]
     rows = badge_drift([], registry)
     assert [r["strategy"] for r in rows] == ["Fibonacci"]  # WEAK excluded, dup collapsed
+
+
+def _live_direct_t(strategy, status):
+    return {"strategy": strategy, "status": status, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0 if status == "win" else 96.0}
+
+
+def test_badge_drift_matches_direct_strategy_field():
+    registry = [_reg("Fibonacci", 81.6)]
+    live = [_live_direct_t("Fibonacci", "win") for _ in range(16)]
+    live += [_live_direct_t("Fibonacci", "loss") for _ in range(9)]
+    rows = badge_drift(live, registry)
+    assert rows[0]["live_n"] == 25
+    assert round(rows[0]["live_wr"], 1) == 64.0
+    assert rows[0]["drift_alert"] is True

@@ -81,19 +81,6 @@ def tier_calibration(closed: list[dict]) -> list[dict]:
 DRIFT_LIVE_N_FLOOR = 20         # below this, live win rate is too noisy to judge decay from
 DRIFT_THRESHOLD_POINTS = 10.0   # live WR must fall more than this many points below OOS WR
 
-# Method keywords from chart_style.METHOD_PRIORITY -- used to match trades with
-# registry strategies by their indicator type (e.g. "Fib 61.8%" matches "Fibonacci")
-_METHOD_KEYWORDS = ["FVG", "Volume Profile", "Trendline", "Fib", "VWAP", "EMA",
-                    "Bollinger", "Donchian", "Rolling", "Floor", "Swing", "Pivot"]
-
-
-def _extract_method(label: str) -> str | None:
-    """Extract the base method keyword from a label or strategy name."""
-    for keyword in _METHOD_KEYWORDS:
-        if label.startswith(keyword):
-            return keyword
-    return None
-
 
 def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
     """Compare each VALIDATED strategy's committed out-of-sample win rate
@@ -113,7 +100,7 @@ def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
     validated to begin with), and duplicate strategy names (e.g. one row
     per horizon) collapse to the first VALIDATED occurrence encountered.
     """
-    from swingbot.core.performance import primary_strategy_label
+    from swingbot.core.levels import strategy_family
 
     rows = []
     seen: set[str] = set()
@@ -128,24 +115,17 @@ def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
         oos_n = r.get("n", 0)
         oos_wr = r.get("win_rate", 0.0)
 
-        # Match trades by strategy name or by matching the underlying method
-        # (e.g. "Fibonacci" matches trades with target_sources containing "Fib 61.8%")
-        strat_method = _extract_method(strat)
+        # Match trades by strategy name, or by the canonical family of any
+        # source that contributed to the trade's target/stop (e.g. "Fibonacci"
+        # matches a trade with target_sources containing "Fib 61.8%").
         live = []
         for t in closed:
-            # Direct match by strategy field
             if t.get("strategy") == strat:
                 live.append(t)
                 continue
-            # Match by primary_strategy_label (handles both strategy field and target_sources)
-            if primary_strategy_label(t) == strat:
+            sources = (t.get("target_sources") or []) + (t.get("stop_sources") or [])
+            if any(strategy_family(src) == strat for src in sources):
                 live.append(t)
-                continue
-            # Match by underlying method keyword (for trades with sources but no direct strategy)
-            if strat_method:
-                sources = t.get("target_sources") or t.get("stop_sources") or []
-                if any(_extract_method(src) == strat_method for src in sources):
-                    live.append(t)
 
         live_n = len(live)
         live_wr = metrics.win_rate(live)
