@@ -547,7 +547,13 @@ def volume_profile_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Volume Profile"] = volume_profile_entries
 
 
-DEFAULT_PARAMS["Elliott Wave"] = {"depth_min": 0.30, "depth_max": 0.80}
+DEFAULT_PARAMS["Elliott Wave"] = {
+    "depth_min": 0.30, "depth_max": 0.80,
+    # Rescue gate (Task 104): strict wave-2 validation. None = off
+    # (byte-identical to pre-rescue behavior) until a TRAIN grid (Task 105)
+    # picks non-None values.
+    "w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None,
+}
 
 
 def elliott_wave_entries(df, horizon_key, params=None):
@@ -560,6 +566,40 @@ def elliott_wave_entries(df, horizon_key, params=None):
     g = compute_shared_gates(df)
     threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
     bull_raw, bear_raw, levels = elliott_wave3_entries(df, threshold_pct)
+
+    # --- rescue gate (Task 104): strict wave-2 validation ---
+    # `levels` is shared by both the bullish (kind0=="low") and bearish
+    # (kind0=="high") wave triples, keyed by the breakout bar index -- a
+    # given bar belongs to at most one side, so clearing both raw series at
+    # a rejected bar is safe (the other side is already False there).
+    w2_min = p.get("w2_min_retrace")
+    w2_max = p.get("w2_max_retrace")
+    dur_ratio = p.get("w2_max_duration_ratio")
+    if any(v is not None for v in (w2_min, w2_max, dur_ratio)):
+        for j, lv in list(levels.items()):
+            wave1_len = lv["wave1"] - lv["wave0"]
+            if wave1_len == 0:
+                bad = True
+            else:
+                # Signed ratio: numerator and denominator both flip sign
+                # together on the bearish (high/low/high) side, so this
+                # yields the same magnitude as the unsigned bullish case
+                # without needing an abs().
+                retrace = (lv["wave1"] - lv["wave2"]) / wave1_len
+                # Classic wave-2-overlaps-wave-1-origin invalidation, valid
+                # for either side: wave2 must stay on the same side of
+                # wave0 as wave1 is.
+                overlap = (lv["wave2"] - lv["wave0"]) * wave1_len <= 0
+                bad = ((w2_min is not None and retrace < w2_min)
+                       or (w2_max is not None and retrace > w2_max)
+                       or (dur_ratio is not None and
+                           (lv["wave2_idx"] - lv["wave1_idx"])
+                           > dur_ratio * (lv["wave1_idx"] - lv["wave0_idx"]))
+                       or overlap)
+            if bad:
+                bull_raw.iloc[j] = False
+                bear_raw.iloc[j] = False
+                levels.pop(j)
 
     depth_ok = _off(df)
     for j, lv in levels.items():

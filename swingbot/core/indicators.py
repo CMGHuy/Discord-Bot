@@ -232,9 +232,11 @@ def elliott_wave3_entries(df: pd.DataFrame, threshold_pct: float):
     Returns (bullish_entries, bearish_entries, entry_levels):
       - bullish_entries / bearish_entries: boolean pd.Series aligned to
         df.index, True on the bar where the wave 3 breakout is confirmed.
-      - entry_levels: dict of {bar_index: {"wave1": price, "wave2": price}}
+      - entry_levels: dict of {bar_index: {"wave0": price, "wave1": price,
+        "wave2": price, "wave0_idx": int, "wave1_idx": int, "wave2_idx": int}}
         for every triggered bar, so callers can size a structural stop
-        beyond the wave 2 pivot without recomputing pivots themselves.
+        beyond the wave 2 pivot, or re-validate wave-2 structure (retrace
+        depth/duration/overlap), without recomputing pivots themselves.
     """
     pivots = zigzag_pivots(df, threshold_pct)
     n = len(df)
@@ -252,13 +254,17 @@ def elliott_wave3_entries(df: pd.DataFrame, threshold_pct: float):
             for j in range(idx2 + 1, n):
                 if close[j] > p1 and close[j - 1] <= p1:
                     bullish.iloc[j] = True
-                    entry_levels[j] = {"wave0": p0, "wave1": p1, "wave2": p2}
+                    entry_levels[j] = {"wave0": p0, "wave1": p1, "wave2": p2,
+                                       "wave0_idx": idx0, "wave1_idx": idx1,
+                                       "wave2_idx": idx2}
                     break
         elif kind0 == "high" and kind1 == "low" and kind2 == "high" and p2 < p0:
             for j in range(idx2 + 1, n):
                 if close[j] < p1 and close[j - 1] >= p1:
                     bearish.iloc[j] = True
-                    entry_levels[j] = {"wave0": p0, "wave1": p1, "wave2": p2}
+                    entry_levels[j] = {"wave0": p0, "wave1": p1, "wave2": p2,
+                                       "wave0_idx": idx0, "wave1_idx": idx1,
+                                       "wave2_idx": idx2}
                     break
 
     return bullish, bearish, entry_levels

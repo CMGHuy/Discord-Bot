@@ -263,7 +263,11 @@ def test_elliott_entry_levels_include_wave0(market_df):
     from swingbot.core.indicators import elliott_wave3_entries
     _, _, levels = elliott_wave3_entries(market_df, 7.0)
     for lv in levels.values():
-        assert set(lv) == {"wave0", "wave1", "wave2"}
+        # Task 104 (rescue): entry_levels also carries each wave point's bar
+        # index so entry_filters.elliott_wave_entries can gate on wave-2
+        # retrace depth/duration/overlap without recomputing pivots.
+        assert set(lv) == {"wave0", "wave1", "wave2",
+                            "wave0_idx", "wave1_idx", "wave2_idx"}
 
 
 def test_elliott_only_fires_on_4w(market_df):
