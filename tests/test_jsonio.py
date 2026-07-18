@@ -58,3 +58,28 @@ def test_read_invalid_utf8_returns_default(tmp_path):
         f.write(b'{"key": "\xff"}')
     # Should return default instead of raising UnicodeDecodeError
     assert read_json(p, {"fallback": True}) == {"fallback": True}
+
+
+def test_statestore_atomic(tmp_path):
+    from swingbot.core.state import StateStore
+
+    path = str(tmp_path / "state.json")
+    store = StateStore(path=path)
+    store.set_last_trend("AAPL|Fibonacci|4w", "bullish")
+    assert not os.path.exists(path + ".tmp")
+
+    reloaded = StateStore(path=path)
+    assert reloaded.get_last_trend("AAPL|Fibonacci|4w") == "bullish"
+
+
+def test_account_config_atomic(tmp_path):
+    from swingbot.core import account as account_module
+
+    path = str(tmp_path / "account.json")
+    cfg = account_module.load_account_config(path)  # seeds a fresh file
+    assert not os.path.exists(path + ".tmp")
+    account_module.set_balance(50_000.0, path)
+    assert not os.path.exists(path + ".tmp")
+
+    reloaded = account_module.load_account_config(path)
+    assert reloaded["base_balance"] == 50_000.0
