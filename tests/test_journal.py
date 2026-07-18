@@ -129,3 +129,18 @@ def test_journal_trade_close_never_raises_on_fetch_failure(tmp_path, monkeypatch
     # a data-fetch failure degrades the entry, it does not skip it.
     assert store.get("t1") is not None
     assert store.get("t1")["mfe_r"] is None
+
+
+def test_set_note_false_for_missing_trade_id(tmp_path):
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    assert store.set_note("missing", "x") is False
+
+
+def test_has_note_filter(tmp_path):
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store.add(_entry("t1"))
+    store.add(_entry("t2"))
+    store.set_note("t1", "worth remembering")
+    result = store.entries(has_note=True)
+    assert [e["trade_id"] for e in result] == ["t1"]
+    assert [e["trade_id"] for e in store.entries(has_note=False)] == ["t2"]
