@@ -11,6 +11,8 @@ import threading
 from datetime import datetime, timezone
 
 from swingbot import config
+from swingbot.core.analytics import metrics
+from swingbot.core.analytics.mfe_mae import compute_mfe_mae
 from swingbot.core.jsonio import atomic_write_json, read_json
 
 _LOCK = threading.Lock()
@@ -75,3 +77,90 @@ class JournalStore:
                     self._save(entries)
                     return True
             return False
+
+
+def _resolve_outcome(trade: dict) -> str:
+    """status is the coarse open/win/loss/closed vocabulary TradeLog has
+    always used; a v2-manager close additionally carries a specific
+    close_reason ("scratch"/"timeout"/...) inside the generic "closed"
+    status (see plan-engine-v2 Task 70's status mapping: only "win"/
+    "loss"/"closed" ever land in the field, with the real nuance in the
+    leg reason or close_reason). Prefer that finer-grained reason when
+    status itself is the generic "closed" bucket."""
+    status = trade.get("status")
+    if status in ("win", "loss"):
+        return status
+    legs = trade.get("legs") or []
+    candidates = []
+    if legs:
+        candidates.append(legs[-1].get("reason", ""))
+    candidates.append((trade.get("close_reason") or ""))
+    for reason in candidates:
+        reason = reason.lower()
+        if "scratch" in reason:
+            return "scratch"
+        if "timeout" in reason:
+            return "timeout"
+    return status or "closed"
+
+
+def _holding_days(trade: dict) -> float | None:
+    opened, closed = trade.get("opened_at"), trade.get("closed_at")
+    if not opened or not closed:
+        return None
+    try:
+        from datetime import datetime
+        return round((datetime.fromisoformat(closed) - datetime.fromisoformat(opened)).total_seconds() / 86400, 2)
+    except ValueError:
+        return None
+
+
+def _auto_lesson(outcome: str, mfe_r: float | None, mae_r: float | None,
+                  exit_efficiency: float | None, r_realized: float | None) -> str:
+    if outcome == "loss" and mae_r is not None and mfe_r is not None and mae_r <= 0.3 and mfe_r >= 1.0:
+        return (f"Trade went {mfe_r:.1f}R in favor before stopping out — exit management, "
+                f"not entry, cost this one.")
+    if outcome == "win" and exit_efficiency is not None and exit_efficiency >= 0.8:
+        return f"Clean capture: banked {exit_efficiency:.0%} of the available move."
+    if outcome == "loss" and mae_r is not None and mfe_r is not None and mae_r >= 1.0 and mfe_r < 0.2:
+        return "Entry was wrong from the first bar — review the trigger, not the exit."
+    if outcome in ("scratch", "timeout"):
+        return "No follow-through within the horizon — count it as rent, not error."
+    if r_realized is None:
+        return f"Outcome {outcome}."
+    return f"Outcome {outcome} at {r_realized:+.2f}R."
+
+
+def build_entry(trade: dict, df) -> dict:
+    """Assemble one auto-populated journal entry for a just-closed trade.
+    `df` is the ticker's cached daily bars (or None -- every MFE/MAE field
+    degrades to None rather than raising when it's unavailable, per the
+    Global Constraint on graceful degradation)."""
+    m = compute_mfe_mae(trade, df) if df is not None else None
+    mfe_r = m["mfe_r"] if m else None
+    mae_r = m["mae_r"] if m else None
+    exit_efficiency = m["exit_efficiency"] if m else None
+    r_realized = metrics.r_multiple(trade)
+    outcome = _resolve_outcome(trade)
+
+    return {
+        "trade_id": trade.get("id"),
+        "ticker": trade.get("ticker"),
+        "strategy": trade.get("strategy"),
+        "horizon_key": trade.get("horizon_key"),
+        "direction": trade.get("direction"),
+        "tier": trade.get("tier"),
+        "badge": trade.get("badge"),
+        "quality_score": trade.get("quality_score"),
+        "outcome": outcome,
+        "r_realized": r_realized,
+        "mfe_r": mfe_r,
+        "mae_r": mae_r,
+        "exit_efficiency": exit_efficiency,
+        "holding_days": _holding_days(trade),
+        "tags": [],  # Task A21 fills this in via tags_for()
+        "auto_lesson": _auto_lesson(outcome, mfe_r, mae_r, exit_efficiency, r_realized),
+        "note": "",
+        "opened_at": trade.get("opened_at"),
+        "closed_at": trade.get("closed_at"),
+    }

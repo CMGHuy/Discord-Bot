@@ -1,4 +1,5 @@
-from swingbot.core.analytics.journal import JournalStore
+from tests.conftest import make_ohlcv
+from swingbot.core.analytics.journal import JournalStore, build_entry
 
 
 def _entry(trade_id, strategy="Fibonacci", tags=None, outcome="win", closed_at="2026-03-10T10:00:00+00:00"):
@@ -51,3 +52,51 @@ def test_set_note_roundtrips_through_a_fresh_store_instance(tmp_path):
 
     fresh = JournalStore(path=path)  # forces a real disk read, not shared in-memory state
     assert fresh.get("t1")["note"] == "Should have trailed further."
+
+
+def _base_trade(**kw):
+    base = {"id": "t1", "ticker": "AAPL", "strategy": "Fibonacci", "horizon_key": "4w",
+            "direction": "bullish", "tier": "A", "badge": "VALIDATED", "quality_score": 80,
+            "entry": 100.0, "stop_loss": 96.0,
+            "opened_at": "2026-03-02T15:00:00+00:00", "closed_at": "2026-03-05T15:00:00+00:00"}
+    base.update(kw)
+    return base
+
+
+def test_build_entry_rule1_loss_stopped_after_running():
+    # mae_r <= 0.3 and mfe_r >= 1.0 -- ran to +1R+ then reversed and stopped out.
+    # NOTE: the brief's original fixture [100, 104, 95] was verified (by hand
+    # and with real compute_mfe_mae) to produce mae_r=1.25 (not <= 0.3), which
+    # would NOT hit rule 1 -- it would fall through to the fallback message.
+    # [100, 104, 99] (shallow pullback to 99, still above entry) genuinely
+    # produces mfe_r=1.0, mae_r=0.25, satisfying rule 1's condition.
+    df = make_ohlcv([100, 104, 99], spread_pct=0.0, start="2026-03-02")
+    t = _base_trade(status="loss", exit_price=96.0)
+    e = build_entry(t, df)
+    assert e["auto_lesson"] == ("Trade went 1.0R in favor before stopping out — exit management, "
+                                "not entry, cost this one.")
+    assert e["trade_id"] == "t1" and e["tier"] == "A" and e["badge"] == "VALIDATED"
+
+
+def test_build_entry_rule2_win_clean_capture():
+    df = make_ohlcv([100, 104], spread_pct=0.0, start="2026-03-02")
+    t = _base_trade(status="win", exit_price=104.0, closed_at="2026-03-03T15:00:00+00:00")
+    e = build_entry(t, df)
+    assert e["auto_lesson"] == "Clean capture: banked 100% of the available move."
+
+
+def test_build_entry_rule4_scratch_no_followthrough():
+    df = make_ohlcv([100, 100], spread_pct=0.0, start="2026-03-02")
+    t = _base_trade(status="closed", close_reason="scratch", exit_price=100.0,
+                    closed_at="2026-03-03T15:00:00+00:00")
+    e = build_entry(t, df)
+    assert e["outcome"] == "scratch"
+    assert e["auto_lesson"] == "No follow-through within the horizon — count it as rent, not error."
+
+
+def test_build_entry_fallback_and_df_none_is_safe():
+    t = _base_trade(status="loss", exit_price=97.0)
+    e = build_entry(t, None)
+    assert e["mfe_r"] is None and e["mae_r"] is None and e["exit_efficiency"] is None
+    assert e["auto_lesson"] == f"Outcome loss at {e['r_realized']:+.2f}R."
+    assert e["note"] == "" and e["tags"] == []
