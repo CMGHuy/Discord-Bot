@@ -816,6 +816,18 @@ def generate_trade_chart(
         # v2 plan overlays (Tasks 81-82): trigger line for stop-entry plans,
         # TP1/TP2 zones, and (once PARTIAL) the live runner trail.
         if plan_v2 is not None:
+            # Corner tag: charts get shared/saved detached from their embed
+            # (which carries the same marker), so the image itself says it
+            # was priced by the v2 plan engine. Drawn ABOVE the axes on the
+            # stat-chip row -- inside the panel every corner is taken
+            # (overlay legend upper-left, note block upper-right, KC label
+            # lower-right, confirmed-by lower-left).
+            ax.text(0.0, 1.012, "v2", transform=ax.transAxes,
+                    va="bottom", ha="left", fontsize=8.5, fontweight="bold",
+                    color="white",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor=CHIP_BG,
+                              edgecolor=SPINE_COLOR, linewidth=0.7, alpha=0.94),
+                    zorder=8)
             entry_lvl = plan_v2.entry_price or plan_v2.trigger_price
             if plan_v2.entry_type == "stop_entry":
                 trigger_label = "BUY STOP" if plan_v2.direction == "bullish" else "SELL STOP"
