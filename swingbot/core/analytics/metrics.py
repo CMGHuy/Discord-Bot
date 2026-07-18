@@ -61,13 +61,19 @@ def equity_curve(closed: list[dict], starting_balance: float) -> dict:
 def drawdown_series(points: list[dict]) -> list[dict]:
     """Per-point drawdown as a % of the running peak balance seen so far
     (inclusive of the current point) -- the standard "how far below the
-    best-ever balance am I right now" reading, always >= 0."""
+    best-ever balance am I right now" reading, always >= 0.
+
+    Note: when the running peak is zero or negative (a degenerate edge case
+    that should not occur in normal operation, since account balances should
+    remain non-negative), dd_pct is reported as 0.0 rather than computed,
+    since a percentage drawdown cannot be meaningfully expressed from a
+    non-positive base."""
     series = []
     peak = None
     for p in points:
         bal = p["balance"]
         peak = bal if peak is None else max(peak, bal)
-        dd_pct = (peak - bal) / peak * 100 if peak else 0.0
+        dd_pct = (peak - bal) / peak * 100 if peak is not None and peak > 0 else 0.0
         series.append({"date": p["date"], "dd_pct": round(dd_pct, 4)})
     return series
 
@@ -80,4 +86,4 @@ def max_drawdown_pct(points: list[dict]) -> float | None:
     if len(points) < 2:
         return None
     dds = [d["dd_pct"] for d in drawdown_series(points)]
-    return max(dds) if dds else None
+    return max(dds)

@@ -62,3 +62,23 @@ def test_max_drawdown_pct_needs_two_points():
 def test_drawdown_series_monotonic_up_is_all_zero():
     pts = _pts([1000, 1050, 1100, 1150])
     assert all(d["dd_pct"] == 0.0 for d in drawdown_series(pts))
+
+
+def test_drawdown_series_guards_against_zero_and_negative_peak():
+    """When peak is zero or negative (degenerate edge case), dd_pct should
+    remain 0.0 and never flip sign or become negative."""
+    # Curve where peak goes negative (starting at -50 and going to -60)
+    pts = _pts([-50.0, -60.0])
+    dd = drawdown_series(pts)
+    # First point: peak = -50, bal = -50 → peak < 0 so dd_pct = 0.0
+    # Second point: peak = max(-50, -60) = -50, bal = -60 → peak < 0 so dd_pct = 0.0
+    assert all(d["dd_pct"] == 0.0 for d in dd), \
+        f"Expected all dd_pct to be 0.0 with negative peak, got {[d['dd_pct'] for d in dd]}"
+
+    # Curve that hits exactly zero mid-sequence
+    pts = _pts([0.0, -10.0])
+    dd = drawdown_series(pts)
+    # First point: peak = 0.0, bal = 0.0 → peak == 0 so dd_pct = 0.0
+    # Second point: peak = max(0, -10) = 0, bal = -10 → peak == 0 so dd_pct = 0.0
+    assert all(d["dd_pct"] == 0.0 for d in dd), \
+        f"Expected all dd_pct to be 0.0 with zero peak, got {[d['dd_pct'] for d in dd]}"
