@@ -60,6 +60,7 @@ from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trad
 from swingbot.core.account import compute_position_size, get_daily_summary, load_account_config
 from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, prefetch_prices, is_us_market_active
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
+from swingbot.core.backtest_cache import ensure_cached_background
 from swingbot.core.ticker_directory import search_tickers
 # Pure helper functions (.env parsing, Docker container control, confidence-hex,
 # log tailing) live in their own module -- see helpers.py's own docstring for why.
@@ -902,6 +903,7 @@ def watchlist_add():
         return redirect(url_for("watchlist_page", msg=f"'{ticker}' doesn't look like a valid ticker symbol.", ok=0))
     updated = add_ticker(ticker)
     if ticker in updated:
+        ensure_cached_background(ticker)  # non-blocking full-history download
         return redirect(url_for("watchlist_page", msg=f"Added {ticker} to watchlist ({len(updated)} tickers total).", ok=1))
     return redirect(url_for("watchlist_page", msg=f"{ticker} is already in the watchlist.", ok=1))
 
@@ -936,6 +938,11 @@ def watchlist_bulk_add():
 
     newly_added = [t for t in valid if t not in existing_before]
     already_had = [t for t in valid if t in existing_before]
+
+    # Non-blocking full-history download for each newly added ticker; already
+    # cached ones return instantly, so re-imports don't refetch.
+    for ticker in newly_added:
+        ensure_cached_background(ticker)
 
     parts = []
     if newly_added:

@@ -2,6 +2,7 @@
 import asyncio
 
 from swingbot.bot_core import bot
+from swingbot.core.backtest_cache import ensure_cached_background
 from swingbot.core.data import get_daily_data
 from swingbot.core.watchlist import add_ticker, clear_watchlist, load_watchlist, remove_ticker
 
@@ -15,6 +16,9 @@ async def watchlist_cmd(ctx):
 @watchlist_cmd.command(name="add")
 async def watchlist_add(ctx, ticker: str):
     tickers = add_ticker(ticker)
+    # Kick off the full-history backtest-cache download in the background
+    # (non-blocking; logs when done). Skips instantly if already cached.
+    ensure_cached_background(ticker)
     await ctx.send(f"Added **{ticker.upper()}**. Watchlist: {', '.join(tickers)}")
 
     try:
