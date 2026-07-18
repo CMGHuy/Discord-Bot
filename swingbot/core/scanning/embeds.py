@@ -267,6 +267,7 @@ def _build_trade_plan_table(item) -> str:
         "take_profit": plan.take_profit, "target2": plan.target2_price})
     entry, stop_loss = nums["entry"], nums["stop_loss"]
     take_profit, target2 = nums["take_profit"], nums["target2"]
+    v2_priced = config.PLAN_ENGINE_V2 == "on" and plan_v2 is not None
     if entry == plan.entry and stop_loss == plan.stop_loss:
         # funnel returned the legacy numbers -- keep the scenario's own
         # (differently-rounded) distance/RR fields byte-identical
@@ -302,6 +303,12 @@ def _build_trade_plan_table(item) -> str:
     rows = [
         ("Direction", direction),
         ("Entry (now)", f"{entry:.2f}"),
+    ]
+    if v2_priced:
+        # Make it unmistakable that these prices came from the v2 plan
+        # engine, not the legacy scenario sizing.
+        rows.insert(0, ("Engine", "Plan Engine v2"))
+    rows += [
         ("Stop loss", stop_value),
         (f"{level_word} 1 (Target)", _row_value("min_reward", f"{take_profit:.2f}  (+{target_dist_pct:.1f}%)")),
     ]
@@ -470,7 +477,9 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             inline=False,
         )
 
-    embed.add_field(name="🎯 Trade plan", value=_build_trade_plan_table(item), inline=False)
+    v2_priced = config.PLAN_ENGINE_V2 == "on" and plan_v2 is not None
+    plan_field_name = "🎯 Trade plan (v2)" if v2_priced else "🎯 Trade plan"
+    embed.add_field(name=plan_field_name, value=_build_trade_plan_table(item), inline=False)
 
     what_changed = _snapshot_and_diff(item)
     if what_changed:
@@ -502,7 +511,10 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     embed.description = explanation[:4000]
     if chart_filename:
         embed.set_image(url=f"attachment://{chart_filename}")
-    embed.set_footer(text="Technical signal only, based on today's still-developing daily candle -- not financial advice.")
+    footer = "Technical signal only, based on today's still-developing daily candle -- not financial advice."
+    if v2_priced:
+        footer = "Plan Engine v2 · " + footer
+    embed.set_footer(text=footer)
     return embed
 
 
@@ -653,7 +665,10 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     if close_reason:
         embed.add_field(name="Close reason", value=close_reason, inline=False)
 
-    embed.set_footer(text=f"Trade ID: {trade['id']}")
+    footer = f"Trade ID: {trade['id']}"
+    if trade.get("plan_id") or trade.get("legs"):
+        footer += " · Plan Engine v2"
+    embed.set_footer(text=footer)
     return embed
 
 
@@ -754,7 +769,7 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
     else:
         template, color = _EVENT_STYLE[event.transition]
     embed = discord.Embed(title=template.format(ticker=plan.ticker), color=color)
-    embed.add_field(name="Plan", value=(
+    embed.add_field(name="Plan (v2)", value=(
         f"{plan.strategy} · {plan.horizon_key} · {plan.direction} · "
         f"{'✅' if plan.badge == 'VALIDATED' else '⚠️'} {plan.badge}"), inline=False)
     d = event.detail
@@ -772,7 +787,7 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
                         value="runner active, stop at break-even", inline=False)
     elif event.transition == "closed":
         embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
-    embed.set_footer(text=f"plan {plan.plan_id[:8]}")
+    embed.set_footer(text=f"v2 plan {plan.plan_id[:8]}")
     return embed
 
 

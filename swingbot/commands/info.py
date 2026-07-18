@@ -93,7 +93,7 @@ async def ticker_cmd(ctx, ticker: str):
         if plan is not None:
             plan_lines.append(format_signal_plan_line(plan))
     if plan_lines:
-        lines.append("**Trade plans**")
+        lines.append("**Trade plans (v2)**")
         lines.extend(plan_lines)
 
     msg = "\n".join(lines)

@@ -12,13 +12,13 @@ from swingbot.core.plan_store import PlanStore
 def format_plans_board(plans, prices=None) -> str:
     prices = prices or {}
     if not plans:
-        return "No live plans."
+        return "No live v2 plans."
     groups = {PlanStatus.PENDING: [], PlanStatus.ACTIVE: [], PlanStatus.PARTIAL: []}
     for p in plans:
         if p.status in groups:
             groups[p.status].append(p)
 
-    lines = []
+    lines = ["📋 **Live plans — Plan Engine v2**"]
     for status, rows in groups.items():
         if not rows:
             continue

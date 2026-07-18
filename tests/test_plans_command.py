@@ -4,7 +4,7 @@ from tests.test_plan_engine_model import _plan
 
 
 def test_empty_board():
-    assert format_plans_board([]) == "No live plans."
+    assert format_plans_board([]) == "No live v2 plans."
 
 
 def test_board_groups_by_status():

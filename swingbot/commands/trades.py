@@ -84,10 +84,11 @@ def format_trade_row(t: dict, currency: str) -> str:
         amount = t.get("realized_pnl_amount")
         amount_str = f"{amount:+.2f}" if amount is not None else "--"
 
+    engine_str = "v2" if (t.get("plan_id") or legs) else "--"
     return (
         f"{t['id']:8s} {t['ticker']:6s} {method_short:10s} {t['horizon_key']:3s} {dir_short:5s} "
         f"{conf_str:5s} {t['entry']:>9.2f} {t['stop_loss']:>9.2f} {t['take_profit']:>9.2f} "
-        f"{t['status']:6s} {amount_str:>11s}"
+        f"{t['status']:6s} {engine_str:3s} {amount_str:>11s}"
     )
 
 
@@ -95,7 +96,7 @@ def format_trades_table(trades, header: str) -> str:
     lines = [header, "```"]
     lines.append(
         f"{'ID':8s} {'Ticker':6s} {'Method':10s} {'H':3s} {'Dir':5s} {'Conf':5s} "
-        f"{'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s} {'Gain/Loss':>11s}"
+        f"{'Entry':>9s} {'SL':>9s} {'TP':>9s} {'Status':6s} {'Eng':3s} {'Gain/Loss':>11s}"
     )
     for t in trades:
         lines.append(format_trade_row(t, config.CURRENCY_SYMBOL))
@@ -278,7 +279,10 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     if match.get("close_reason"):
         embed.add_field(name="Close reason", value=match["close_reason"], inline=False)
 
-    embed.set_footer(text=f"Trade ID: {match['id']}")
+    footer = f"Trade ID: {match['id']}"
+    if match.get("plan_id") or match.get("legs"):
+        footer += " · Plan Engine v2"
+    embed.set_footer(text=footer)
     return embed
 
 
