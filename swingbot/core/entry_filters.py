@@ -283,7 +283,11 @@ RIBBON_PERIODS_BY_HORIZON = {
     "7m": (60, 117, 200), "8m": (70, 133, 200), "9m": (80, 150, 200),
 }
 
-DEFAULT_PARAMS["MA Ribbon"] = {"ext_pct": 8.0}
+DEFAULT_PARAMS["MA Ribbon"] = {
+    "ext_pct": 8.0,
+    "min_width_pctile": None,
+    "require_expanding": False,
+}
 
 
 def ma_ribbon_entries(df, horizon_key, params=None):
@@ -311,6 +315,22 @@ def ma_ribbon_entries(df, horizon_key, params=None):
     bearish = (crossed_down & slow_falling & not_ext_bear & (m["macd"] < 0)
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- rescue gate (Task 101): only trade an EXPANDING ribbon ---
+    min_wp = p.get("min_width_pctile")
+    req_exp = p.get("require_expanding")
+    if min_wp is not None or req_exp:
+        ribbon = pd.concat([fast, mid, slow_sma], axis=1)
+        width = (ribbon.max(axis=1) - ribbon.min(axis=1)) / close
+        if min_wp is not None:
+            wide_enough = (width.rolling(126).rank(pct=True) >= min_wp).fillna(False)
+            bullish &= wide_enough
+            bearish &= wide_enough
+        if req_exp:
+            expanding = (width.diff(3) > 0).fillna(False)
+            bullish &= expanding
+            bearish &= expanding
+
     return bullish, bearish
 
 
