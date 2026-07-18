@@ -339,6 +339,15 @@ FIELDS: list[Field] = [
           help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "
                "moves, TP1 partials, runner trail, invalidation - with a Discord alert per transition."),
 
+    # --- Data sources (optional external market-data APIs) ---
+    Field("FMP_API_KEY", "FMP_API_KEY", "Data Sources", "Financial Modeling Prep API key",
+          type="password", sensitive=True, default="",
+          help="Optional. API key for Financial Modeling Prep (financialmodelingprep.com), used by "
+               "the FMP data crawler (scripts/fmp_crawl.py, core/fmp_client.py) to pull prices, "
+               "fundamentals, earnings, transcripts, and more. Works on the free tier -- endpoints "
+               "your tier can't reach are skipped, not fatal -- and on any paid tier with no code "
+               "change. Leave blank to disable FMP crawling."),
+
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",
           default="admin", hot_reloadable=False,
