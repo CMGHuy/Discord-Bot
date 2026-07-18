@@ -24,3 +24,20 @@ def test_equity_curve_skips_unsized_trades():
 def test_equity_curve_empty_input():
     curve = equity_curve([], 1000.0)
     assert curve == {"points": [], "skipped_n": 0}
+
+
+def test_equity_curve_baseline_falls_back_to_closed_at_when_opened_at_missing():
+    """Baseline date should fall back to earliest closed_at when opened_at is missing."""
+    trades = [
+        {"status": "win", "closed_at": "2026-01-05T10:00:00+00:00", "realized_pnl_amount": 50.0},
+        {"status": "loss", "closed_at": "2026-01-03T10:00:00+00:00", "realized_pnl_amount": -20.0}
+    ]
+    curve = equity_curve(trades, 1000.0)
+    pts = curve["points"]
+    assert len(pts) >= 1, "Baseline point should be present"
+    assert pts[0]["date"] == "2026-01-03", "Baseline should be dated at earliest closed_at"
+    assert pts[0]["balance"] == 1000.0, "Baseline balance should be starting balance"
+    assert pts[0]["pnl"] == 0.0, "Baseline pnl should be 0.0"
+    assert curve["skipped_n"] == 0
+    # Verify full curve: baseline + 2 trades in close order
+    assert [p["balance"] for p in pts] == [1000.0, 980.0, 1030.0]

@@ -38,8 +38,17 @@ def equity_curve(closed: list[dict], starting_balance: float) -> dict:
     opened_dates = [t["opened_at"] for t in closed if t.get("opened_at")]
     points: list[dict] = []
     balance = float(starting_balance)
+
+    # Determine baseline date: prefer earliest opened_at, fall back to earliest closed_at
+    # if any trade in considered has a valid date (so baseline is never silently dropped)
+    baseline_date = None
     if opened_dates:
-        points.append({"date": min(opened_dates)[:10], "balance": round(balance, 2), "pnl": 0.0})
+        baseline_date = min(opened_dates)[:10]
+    elif considered:
+        baseline_date = min(considered, key=lambda t: t["closed_at"])["closed_at"][:10]
+
+    if baseline_date:
+        points.append({"date": baseline_date, "balance": round(balance, 2), "pnl": 0.0})
 
     for t in considered:
         pnl = float(t["realized_pnl_amount"])
