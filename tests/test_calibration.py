@@ -1,4 +1,4 @@
-from swingbot.core.analytics.calibration import score_deciles, tier_calibration
+from swingbot.core.analytics.calibration import score_deciles, tier_calibration, badge_drift
 
 
 def _t(score, status, entry=100.0, stop_loss=95.0, exit_price=None):
@@ -58,3 +58,46 @@ def test_tier_calibration_ok_false_when_band_missed():
 def test_tier_calibration_row_order_is_a_b_c():
     rows = tier_calibration([])
     assert [r["tier"] for r in rows] == ["A", "B", "C"]
+
+
+def _reg(strategy, wr, n=206, status="VALIDATED"):
+    return {"source": "strategy", "strategy": strategy, "horizon": None, "status": status,
+            "n": n, "win_rate": wr, "expectancy_r": 0.105, "window": "2024-01-01..2025-12-31"}
+
+
+def _live_t(strategy_sources, status):
+    return {"target_sources": strategy_sources, "status": status, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0 if status == "win" else 96.0}
+
+
+def test_badge_drift_alerts_on_real_decay():
+    registry = [_reg("Fibonacci", 81.6)]
+    live = [_live_t(["Fib 61.8%"], "win") for _ in range(16)] + [_live_t(["Fib 61.8%"], "loss") for _ in range(9)]
+    rows = badge_drift(live, registry)
+    assert rows[0]["strategy"] == "Fibonacci"
+    assert rows[0]["oos_wr"] == 81.6 and rows[0]["live_n"] == 25
+    assert round(rows[0]["live_wr"], 1) == 64.0
+    assert rows[0]["drift_alert"] is True
+
+
+def test_badge_drift_false_when_within_ten_points():
+    registry = [_reg("Fibonacci", 81.6)]
+    live = [_live_t(["Fib 61.8%"], "win") for _ in range(19)]
+    live += [_live_t(["Fib 61.8%"], "loss") for _ in range(6)]
+    rows = badge_drift(live, registry)
+    assert round(rows[0]["live_wr"], 1) == 76.0
+    assert rows[0]["drift_alert"] is False
+
+
+def test_badge_drift_false_below_n_floor():
+    registry = [_reg("Fibonacci", 81.6)]
+    live = [_live_t(["Fib 61.8%"], "win") for _ in range(4)] + [_live_t(["Fib 61.8%"], "loss") for _ in range(6)]
+    rows = badge_drift(live, registry)
+    assert rows[0]["live_n"] == 10
+    assert rows[0]["drift_alert"] is False  # 40% would otherwise alert, but N=10 < 20
+
+
+def test_badge_drift_ignores_weak_registry_rows_and_dedups_by_strategy():
+    registry = [_reg("VWAP", 90.0, status="WEAK"), _reg("Fibonacci", 81.6), _reg("Fibonacci", 81.6, n=50)]
+    rows = badge_drift([], registry)
+    assert [r["strategy"] for r in rows] == ["Fibonacci"]  # WEAK excluded, dup collapsed

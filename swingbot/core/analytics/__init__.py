@@ -22,7 +22,7 @@ from swingbot.core.analytics.metrics import (  # noqa: F401
 )
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae  # noqa: F401
 from swingbot.core.analytics.aggregate import DIMENSIONS, StatRow, stats_by  # noqa: F401
-from swingbot.core.analytics.calibration import score_deciles, tier_calibration  # noqa: F401
+from swingbot.core.analytics.calibration import score_deciles, tier_calibration, badge_drift  # noqa: F401
 
 __all__ = [
     "equity_curve",
@@ -44,4 +44,5 @@ __all__ = [
     "stats_by",
     "score_deciles",
     "tier_calibration",
+    "badge_drift",
 ]
