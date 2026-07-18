@@ -136,9 +136,9 @@
   "strategy": "EMA Crossover",
   "horizon": null,
   "status": "WEAK",
-  "n": 78,
-  "win_rate": 76.9,
-  "expectancy_r": 0.015,
+  "n": 36,
+  "win_rate": 75.0,
+  "expectancy_r": 0.061,
   "window": "2024-01-01..2025-12-31",
   "run_date": "2026-07-18"
  },

@@ -476,6 +476,16 @@ The registry regenerates only from validation runs
 --scale-out --emit-registry swingbot/core/validation_registry.json
 --run-date <date>`), never by hand.
 
+**Rescue outcomes.** Round 1 validated 6 of 11 strategies out-of-sample;
+each of the other 5 got one pre-registered rescue attempt (a new opt-in
+gate, TRAIN-only tuning, then a single validation-window look, no
+retuning after). Only **RSI** cleared the bar (range-regime gate,
+100% WR / N=30), bringing the total to **7 of 11 VALIDATED**. RSI
+Divergence and MA Ribbon's gates never qualified on TRAIN; Elliott Wave
+and EMA Crossover both passed TRAIN comfortably but missed the 80%
+out-of-sample floor by a few points and stay WEAK. Full scoreboard and
+pooled numbers: `docs/superpowers/results/2026-07-v2-final-report.md`.
+
 ## Files
 
 The project is laid out as a proper package:
