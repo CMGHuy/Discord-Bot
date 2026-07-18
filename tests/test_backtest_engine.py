@@ -131,7 +131,16 @@ def test_v2_single_leg_reproduces_v1_exactly():
 
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_scale_out_keeps_classification_and_expectancy():
+    # Pinned to the window these golden fixtures were authored against
+    # (the original 2018-06..2025-12 cache span). The classification-parity
+    # invariant below assumes a runner's longer hold never shifts which later
+    # signals get taken; that holds here, but over deep history a v2 scale-out
+    # runner can occupy the one_at_a_time slot and legitimately drop one later
+    # entry v1 took (the "composition, not divergence" effect documented in
+    # docs/superpowers/results/2026-07-exit-v2-validation.md). Slicing keeps
+    # the test deterministic regardless of how far the cache now extends.
     df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
+    df = df.loc["2018-06-01":"2025-12-31"]
     v1 = run_backtest("TSLA", df, "Elliott Wave", "4w")
     v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
     # TP1 unchanged => identical win/loss/scratch classification
