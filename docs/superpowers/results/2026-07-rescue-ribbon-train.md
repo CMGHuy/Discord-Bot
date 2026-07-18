@@ -30,25 +30,47 @@ acceptance bar in this plan:
   `min_width_pctile in {0.3, 0.4, 0.5} x require_expanding in {True, False}`
   (6 points), `ext_pct` held fixed at its current baseline (`8.0`) for every
   combo — only the new Task 101 gate params are under test
-- Command: `python scripts/tune_strategy.py --strategy "MA Ribbon"`
+- Command: `python scripts/tune_strategy.py --strategy "MA Ribbon" --exit-model v2 --scale-out`
 
 ## Results (full grid, all 6 points)
 
 | min_width_pctile | require_expanding | N | WR% | ExpR | Excl% | Qualifies? |
 |---|---|---|---|---|---|---|
-| 0.3 | True  | 6  | 100.0 | +0.191 | 45% | no — N<30 |
-| 0.3 | False | 34 | 79.4  | +0.050 | 31% | no — WR<80 |
+| 0.3 | True  | 6  | 100.0 | +0.237 | 45% | no — N<30 |
+| 0.3 | False | 34 | 79.4  | +0.175 | 31% | no — WR<80 |
 | 0.4 | True  | 0  | n/a   | +0.000 | 100% | no — N=0 |
-| 0.4 | False | 16 | 75.0  | +0.009 | 27% | no — N<30, WR<80 |
+| 0.4 | False | 16 | 75.0  | +0.249 | 27% | no — N<30, WR<80 |
 | 0.5 | True  | 0  | n/a   | +0.000 | 100% | no — N=0 |
-| 0.5 | False | 15 | 80.0  | +0.060 | 25% | no — N<30 |
+| 0.5 | False | 15 | 80.0  | +0.324 | 25% | no — N<30 |
 
 (Console output archived verbatim: `scripts/tune_strategy.py --strategy "MA
-Ribbon"` run against the cached OHLCV; see the tool-run transcript for this
-task.)
+Ribbon" --exit-model v2 --scale-out` run against the cached OHLCV; see the
+tool-run transcript for this task.)
 
 **0/6 configs qualify** under the pre-registered rule
 (`win_rate>=80, expectancy_r>0, n_eval>=30, excluded_share<=0.5`).
+
+## Correction note
+
+This grid was originally run (and this doc originally written) as
+`python scripts/tune_strategy.py --strategy "MA Ribbon"` with no
+`--exit-model`/`--scale-out` flags, because those flags did not exist in
+`scripts/tune_strategy.py` at the time — they were added concurrently by the
+RSI rescue work (Task 96), which established that TRAIN grids must run under
+v2/scale-out to match the economics VALIDATION will use (see
+`docs/superpowers/results/2026-07-rescue-rsi-train.md`). The original run
+therefore silently used the v1/no-scale-out default and produced different
+(smaller) ExpR numbers per config. Unlike the Elliott Wave rescue (which had
+already spent its one VALIDATION-window look before this gap was found, and
+so could only be documented, not re-run — see
+`docs/superpowers/results/2026-07-rescue-elliott-train.md`), **no VALIDATION
+look had been spent for MA Ribbon yet**, so this grid was safely re-run here
+under the correct v2/scale-out economics before any out-of-sample look was
+taken. The N and WR figures are identical between the two runs (win/loss
+classification doesn't depend on exit model here in a way that moved any
+config across a gate boundary); only ExpR shifted (higher across the board
+under v2/scale-out's partial-profit-taking economics). **The verdict is
+unchanged** either way — see below.
 
 ## Honest verdict: REJECTED-ON-TRAIN
 
@@ -64,7 +86,7 @@ trade-off between sample size and the other two metrics:
 - `require_expanding=False` at any width threshold keeps more trades (15-34)
   but none reaches both `WR>=80` and `N>=30` simultaneously: the closest,
   `min_width_pctile=0.5, require_expanding=False` (N=15, WR=80.0,
-  ExpR=+0.060), clears the win-rate bar exactly but fails the N>=30 floor by
+  ExpR=+0.324), clears the win-rate bar exactly but fails the N>=30 floor by
   half; `min_width_pctile=0.3, require_expanding=False` (N=34) clears N but
   falls short on win rate (79.4 < 80).
 
