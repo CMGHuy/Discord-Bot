@@ -53,6 +53,6 @@ def read_json(path: str, default):
             return json.load(f)
     except FileNotFoundError:
         return default
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
         log.warning("read_json(%s) failed (%s); returning default", path, exc)
         return default

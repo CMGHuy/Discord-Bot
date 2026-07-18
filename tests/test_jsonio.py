@@ -37,3 +37,24 @@ def test_roundtrip_list_and_unicode(tmp_path):
     obj = [{"ticker": "AAPL", "note": "target hit — clean 2R capture €"}]
     atomic_write_json(p, obj)
     assert read_json(p, None) == obj
+
+
+def test_overwrite_existing_file(tmp_path):
+    p = str(tmp_path / "overwrite.json")
+    # Write initial content
+    atomic_write_json(p, {"version": 1, "data": "first"})
+    assert read_json(p, None) == {"version": 1, "data": "first"}
+    # Overwrite with different content
+    atomic_write_json(p, {"version": 2, "data": "second"})
+    assert read_json(p, None) == {"version": 2, "data": "second"}
+    # No .tmp file left behind
+    assert not os.path.exists(p + ".tmp")
+
+
+def test_read_invalid_utf8_returns_default(tmp_path):
+    p = str(tmp_path / "invalid_utf8.json")
+    # Write invalid UTF-8 bytes directly (0xFF is not valid UTF-8)
+    with open(p, "wb") as f:
+        f.write(b'{"key": "\xff"}')
+    # Should return default instead of raising UnicodeDecodeError
+    assert read_json(p, {"fallback": True}) == {"fallback": True}
