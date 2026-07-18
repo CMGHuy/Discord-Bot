@@ -26,6 +26,7 @@ from swingbot.core.analytics.calibration import score_deciles, tier_calibration,
 from swingbot.core.analytics.rank import follow_score, rank_plans  # noqa: F401
 from swingbot.core.analytics.journal import JournalStore  # noqa: F401
 from swingbot.core.analytics.insights import weekly_digest, edge_decay_report, top_lessons  # noqa: F401
+from swingbot.core.analytics.snapshots import build_snapshot, save_snapshot, load_snapshot  # noqa: F401
 
 __all__ = [
     "equity_curve",
@@ -54,4 +55,7 @@ __all__ = [
     "weekly_digest",
     "edge_decay_report",
     "top_lessons",
+    "build_snapshot",
+    "save_snapshot",
+    "load_snapshot",
 ]
