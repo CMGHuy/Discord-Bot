@@ -13,6 +13,7 @@ from swingbot.core.analytics.metrics import (  # noqa: F401
     win_rate,
     expectancy_r,
     profit_factor,
+    streaks,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "win_rate",
     "expectancy_r",
     "profit_factor",
+    "streaks",
 ]

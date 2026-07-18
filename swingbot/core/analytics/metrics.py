@@ -161,3 +161,35 @@ def profit_factor(closed: list[dict]) -> float | None:
     if gross_loss == 0:
         return None
     return gross_win / gross_loss
+
+
+def streaks(closed: list[dict]) -> dict:
+    """Current/best/worst consecutive win or loss run, over win/loss trades
+    only, ordered by `closed_at`. Any other status (scratch/timeout/manual
+    "closed") is a hard break: it ends whatever streak was running, but is
+    never itself counted toward a streak of its own length -- so a
+    win/CLOSED/win sequence is two separate 1-trade win streaks, not a
+    3-trade streak with a hole in it.
+    """
+    ordered = sorted(closed, key=lambda t: t.get("closed_at") or "")
+    best_win = worst_loss = current = 0
+    current_kind: str | None = None
+
+    for t in ordered:
+        status = t.get("status")
+        if status not in ("win", "loss"):
+            current = 0
+            current_kind = None
+            continue
+        if status == current_kind:
+            current += 1
+        else:
+            current = 1
+            current_kind = status
+        if status == "win":
+            best_win = max(best_win, current)
+        else:
+            worst_loss = max(worst_loss, current)
+
+    return {"current": current, "current_kind": current_kind,
+            "best_win_streak": best_win, "worst_loss_streak": worst_loss}
