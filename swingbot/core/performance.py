@@ -35,6 +35,7 @@ except Exception:
 
 from swingbot import config
 from swingbot.core import account as account_module
+from swingbot.core.jsonio import atomic_write_json, read_json
 from swingbot.core.strategy_types import HORIZONS as _HORIZONS
 
 # Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
@@ -188,17 +189,10 @@ class TradeLog:
         self._trades = self._load()
 
     def _load(self) -> list:
-        if os.path.exists(self.path):
-            with open(self.path, "r") as f:
-                try:
-                    return json.load(f)
-                except json.JSONDecodeError:
-                    return []
-        return []
+        return read_json(self.path, [])
 
     def _save(self):
-        with open(self.path, "w") as f:
-            json.dump(self._trades, f, indent=2)
+        atomic_write_json(self.path, self._trades)
 
     def log_trade(self, ticker, strategy, horizon_key, direction, confidence_level,
                   confidence_label, entry, stop_loss, take_profit, target2=None,
