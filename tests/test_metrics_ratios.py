@@ -84,3 +84,44 @@ def test_rolling_win_rate_needs_five_closed():
     seq = ["win", "loss", "win", "loss"]  # only 4
     closed = [_wl(s, f"2026-01-{i+1:02d}") for i, s in enumerate(seq)]
     assert rolling_win_rate(closed) == []
+
+
+# Tests for sharpe, sortino, trade_return_pct (Task A10)
+import numpy as np
+import pytest
+
+from swingbot.core.analytics.metrics import sharpe, sortino, trade_return_pct
+
+
+def test_sharpe_matches_numpy_reference():
+    returns = [1.0, 2.0, -1.0, 0.5, 1.5]
+    expected = np.mean(returns) / np.std(returns, ddof=1)
+    assert sharpe(returns) == pytest.approx(expected)
+    assert sharpe(returns) == pytest.approx(0.7, abs=0.05)
+
+
+def test_sharpe_and_sortino_none_below_five():
+    assert sharpe([1.0, 2.0, -1.0, 0.5]) is None
+    assert sortino([1.0, 2.0, -1.0, 0.5]) is None
+
+
+def test_sortino_uses_downside_only():
+    returns = [1.0, 2.0, -1.0, 0.5, 1.5]
+    downside = [min(r, 0.0) for r in returns]
+    expected_downside_std = float(np.sqrt(np.mean(np.square(downside))))
+    expected = np.mean(returns) / expected_downside_std
+    assert sortino(returns) == pytest.approx(expected)
+
+
+def test_sortino_none_when_no_downside():
+    # all positive returns -> downside deviation is 0 -> undefined, not infinite
+    assert sortino([1.0, 2.0, 3.0, 1.5, 2.5]) is None
+
+
+def test_trade_return_pct_mirrors_risk_metrics():
+    from swingbot.core.risk_metrics import _trade_return_pct
+
+    bull = {"entry": 100.0, "exit_price": 104.0, "direction": "bullish"}
+    bear = {"entry": 100.0, "exit_price": 96.0, "direction": "bearish"}
+    assert trade_return_pct(bull) == pytest.approx(_trade_return_pct(bull))
+    assert trade_return_pct(bear) == pytest.approx(_trade_return_pct(bear))

@@ -10,6 +10,8 @@ full unfiltered trades.json list is always safe (open trades simply
 contribute nothing, since they lack exit_price/realized_pnl_amount)."""
 from __future__ import annotations
 
+import numpy as np
+
 
 def equity_curve(closed: list[dict], starting_balance: float) -> dict:
     """Walk realized P&L in chronological close order to build a running
@@ -238,3 +240,56 @@ def rolling_win_rate(closed: list[dict], window: int = 20) -> list[dict]:
         wr = wins / len(window_slice) * 100
         points.append({"date": wl[i]["closed_at"][:10], "win_rate": round(wr, 2)})
     return points
+
+
+MIN_TRADES_FOR_RATIO = 5  # below this, sample noise dominates any Sharpe/Sortino reading
+
+
+def trade_return_pct(trade: dict) -> float | None:
+    """Signed %% return for one closed trade -- mirrors
+    risk_metrics._trade_return_pct exactly (same formula, same sign
+    convention) so this module's native Sharpe/Sortino and risk_metrics.py's
+    optional quantstats-backed ones can never quietly disagree. Returns
+    None (rather than raising) when entry/exit_price is missing or entry
+    is 0, unlike risk_metrics._trade_return_pct which assumes valid input --
+    this copy is the safe-to-call-on-anything version.
+    """
+    entry = trade.get("entry")
+    exit_price = trade.get("exit_price")
+    if not entry or exit_price is None:
+        return None
+    pct = (exit_price - entry) / entry * 100
+    return -pct if trade.get("direction") == "bearish" else pct
+
+
+def sharpe(returns: list[float]) -> float | None:
+    """Unannualized per-trade Sharpe: mean(returns) / std(returns, ddof=1).
+    None below MIN_TRADES_FOR_RATIO trades or when std is 0 (a dead-flat
+    return series has an undefined Sharpe, not an infinite one)."""
+    if len(returns) < MIN_TRADES_FOR_RATIO:
+        return None
+    arr = np.asarray(returns, dtype=float)
+    std = float(np.std(arr, ddof=1))
+    if std == 0:
+        return None
+    return float(np.mean(arr)) / std
+
+
+def sortino(returns: list[float]) -> float | None:
+    """Unannualized per-trade Sortino: mean(returns) / downside_deviation,
+    where downside_deviation is the population RMS of min(r, 0) across
+    ALL returns (positive returns contribute 0 to the sum, per the
+    standard Sortino definition -- this is deliberately NOT the std of
+    only the negative returns, which would be a different, smaller-sample
+    statistic). None below MIN_TRADES_FOR_RATIO trades, or when there is
+    no downside at all (every return >= 0 -> downside deviation 0 ->
+    undefined ratio, not infinite).
+    """
+    if len(returns) < MIN_TRADES_FOR_RATIO:
+        return None
+    arr = np.asarray(returns, dtype=float)
+    downside = np.minimum(arr, 0.0)
+    downside_std = float(np.sqrt(np.mean(np.square(downside))))
+    if downside_std == 0:
+        return None
+    return float(np.mean(arr)) / downside_std
