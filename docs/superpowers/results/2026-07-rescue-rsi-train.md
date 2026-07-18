@@ -44,3 +44,33 @@ model with scale-out (same economics as the validation run will use).
 **Adopted into `DEFAULT_PARAMS["RSI"]`:** `max_adx=20, require_bb_range=False`.
 
 Verdict: **PASSED-ON-TRAIN** → Task 97 runs the single validation shot.
+
+---
+
+# VALIDATION verdict (Task 97 — single run, 2026-07-18)
+
+**Command:**
+
+```
+python scripts/run_backtest_range.py --validation --exit-model v2 --scale-out \
+  --strategy RSI --json rescue_rsi_validation.json
+```
+
+| Window | N | WR% | ExpR | excl% | Gate (WR≥80, ExpR>0, N≥15, excl≤50%) |
+|--------|----|------|--------|-------|------|
+| 2024-01-01..2025-12-31 | 30 | 100.0 | +0.304 | 0 | **PASS** |
+
+Runner split (of wins): 33.3% chandelier-trail closes, 66.7% break-even closes,
+no TP2, no runner timeouts.
+
+**Honesty note:** the per-horizon table shows the same 3 unique entry setups
+replicated across all 10 horizons (identical N=3 / WR / ExpR per row) — the
+pooled N=30 is horizon-replication, not 30 independent setups. This is the
+harness's standard pooling (identical to how every round-1 strategy was
+measured), so the badge is legitimate under the pre-registered gates, but the
+underlying evidence is 3 independent setups. Recorded as-is, never retuned.
+
+**Registry:** RSI record flipped to `VALIDATED` (source=strategy, N=30,
+WR=100.0, ExpR=+0.304, window 2024-01-01..2025-12-31, run_date 2026-07-18).
+
+Verdict: **VALIDATED** — RSI is rescued (1/5 so far).

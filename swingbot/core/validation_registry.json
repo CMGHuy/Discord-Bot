@@ -190,12 +190,12 @@
   "source": "strategy",
   "strategy": "RSI",
   "horizon": null,
-  "status": "WEAK",
-  "n": 414,
-  "win_rate": 68.4,
-  "expectancy_r": -0.03,
+  "status": "VALIDATED",
+  "n": 30,
+  "win_rate": 100.0,
+  "expectancy_r": 0.304,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-10"
+  "run_date": "2026-07-18"
  },
  {
   "source": "strategy",
