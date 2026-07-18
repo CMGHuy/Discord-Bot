@@ -184,8 +184,18 @@ def fibonacci_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Fibonacci"] = fibonacci_entries
 
 
-DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0,
-                                   "entry_mode": "cross", "pullback_max_bars": 10}
+DEFAULT_PARAMS["EMA Crossover"] = {
+    "rsi_dip": 45, "ext_atr": 1.0,
+    # Rescue gate (Task 107/108): pullback entry mode. TRAIN grid
+    # (docs/superpowers/results/2026-07-rescue-ema-train.md) found all 3
+    # pullback_max_bars points qualifying (WR>=80, ExpR>0, N>=30,
+    # excl<=50%); pullback_max_bars=15 is the pre-registered max-expectancy
+    # winner (N=68, WR=91.2%, ExpR=+0.197 on TRAIN) vs the "cross" baseline
+    # (N=110, WR=68.2%, ExpR=-0.059) it replaces. Adopted here permanently;
+    # Task 109 spends the single VALIDATION-window look against this exact
+    # config, no retuning after.
+    "entry_mode": "pullback", "pullback_max_bars": 15,
+}
 
 
 def ema_cross_entries(df, horizon_key, params=None):

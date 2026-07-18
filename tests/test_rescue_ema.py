@@ -28,6 +28,11 @@ from tests.conftest import make_ohlcv
 
 PULLBACK = {"rsi_dip": 45, "ext_atr": 1.0,
             "entry_mode": "pullback", "pullback_max_bars": 10}
+# Explicit cross-mode: Task 108 adopted entry_mode="pullback" into
+# DEFAULT_PARAMS, so the pre-rescue ("current") behavior must now be
+# requested explicitly -- it is no longer what a no-params call returns.
+CROSS = {"rsi_dip": 45, "ext_atr": 1.0,
+         "entry_mode": "cross", "pullback_max_bars": 10}
 
 
 def _cross_then_pullback():
@@ -56,7 +61,7 @@ def _runaway_no_pullback():
 
 def test_pullback_mode_enters_on_touch_bar_not_cross_bar():
     df = _cross_then_pullback()
-    bull_cross, _ = ema_cross_entries(df, "4w")
+    bull_cross, _ = ema_cross_entries(df, "4w", params=CROSS)
     bull_pb, _ = ema_cross_entries(df, "4w", params=PULLBACK)
     assert bull_cross.any()
     cross_i = int(np.where(bull_cross.values)[0][0])
@@ -77,12 +82,27 @@ def test_runaway_with_no_pullback_never_enters():
 
 
 def test_cross_mode_is_byte_identical():
+    # Task 108 adopted entry_mode="pullback" (pullback_max_bars=15) into
+    # DEFAULT_PARAMS, so the no-params default is no longer cross-mode --
+    # compare two EXPLICIT cross-mode calls instead (pullback_max_bars must
+    # be ignored entirely in cross mode, whatever its value).
     df = _cross_then_pullback()
-    a, _ = ema_cross_entries(df, "4w")
+    a, _ = ema_cross_entries(df, "4w", params=CROSS)
     b, _ = ema_cross_entries(df, "4w",
-        params={"rsi_dip": 45, "ext_atr": 1.0, "entry_mode": "cross",
-                "pullback_max_bars": 10})
+        params={**CROSS, "pullback_max_bars": 999})
     assert (a == b).all()
+
+
+def test_default_now_matches_adopted_pullback_config():
+    # Confirms DEFAULT_PARAMS["EMA Crossover"] (Task 108's train-grid
+    # winner) really is entry_mode="pullback", pullback_max_bars=15 --
+    # the no-params call must equal that explicit config exactly.
+    df = _cross_then_pullback()
+    default, _ = ema_cross_entries(df, "4w")
+    explicit, _ = ema_cross_entries(df, "4w",
+        params={"rsi_dip": 45, "ext_atr": 1.0, "entry_mode": "pullback",
+                "pullback_max_bars": 15})
+    assert (default == explicit).all()
 
 
 def test_no_lookahead():

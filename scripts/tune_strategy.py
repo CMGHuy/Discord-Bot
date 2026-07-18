@@ -29,7 +29,14 @@ from swingbot.core.strategy_types import HORIZONS
 TRAIN = ("2020-01-01", "2023-12-31")
 
 PARAM_GRID = {
-    "EMA Crossover":      {"rsi_dip": [40, 45, 50], "ext_atr": [0.75, 1.0, 1.5]},
+    # Rescue (Task 108): grid the new pullback entry-mode gate (Task 107),
+    # not rsi_dip/ext_atr (fixed at baseline 45/1.0 -- only the new gate is
+    # under test). entry_mode="cross" doesn't use pullback_max_bars at all,
+    # so it's held fixed at "pullback" here to avoid 3 redundant baseline
+    # rows; the "cross" (current-behavior) baseline is computed once
+    # separately and reported alongside these 3 rows in the results doc.
+    "EMA Crossover":      {"entry_mode": ["pullback"],
+                           "pullback_max_bars": [5, 10, 15]},
     "VWAP":               {"ext_pct": [1.0, 1.5, 2.0], "hold_bars_other": [2, 3]},
     "Fibonacci":          {"ratios": [(0.382, 0.5, 0.618), (0.5, 0.618)],
                            "rsi_bull": [(35, 58), (40, 60)]},
