@@ -1,0 +1,18 @@
+{
+  "EMA Crossover": {
+    "n_eval": 36,
+    "wins": 27,
+    "losses": 9,
+    "scratches": 12,
+    "timeouts": 0,
+    "closed": 48,
+    "win_rate": 75.0,
+    "expectancy_r": 0.061125000000000006,
+    "excluded_share": 0.25,
+    "avg_win_r": 0.44200000000000006,
+    "runner_tp2_pct": 62.96296296296296,
+    "runner_trail_pct": 3.7037037037037033,
+    "runner_be_pct": 33.33333333333333,
+    "runner_timeout_pct": 0.0
+  }
+}
