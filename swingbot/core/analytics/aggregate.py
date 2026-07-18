@@ -5,11 +5,43 @@ import here is performance.primary_strategy_label, a pure string
 resolution helper with no file I/O of its own (see its docstring)."""
 from __future__ import annotations
 
+import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass
 
+try:
+    from zoneinfo import ZoneInfo
+    _BERLIN_TZ = ZoneInfo("Europe/Berlin")
+except Exception:
+    _BERLIN_TZ = None
+
 from swingbot.core.analytics import metrics
 from swingbot.core.performance import primary_strategy_label
+
+
+_DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _to_berlin(iso_str: str | None) -> dt.datetime | None:
+    if not iso_str:
+        return None
+    try:
+        d = dt.datetime.fromisoformat(iso_str)
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=dt.timezone.utc)
+    return d.astimezone(_BERLIN_TZ) if _BERLIN_TZ else d
+
+
+def _dow_key(t: dict) -> str:
+    d = _to_berlin(t.get("closed_at"))
+    return _DOW_NAMES[d.weekday()] if d else "unknown"
+
+
+def _month_key(t: dict) -> str:
+    d = _to_berlin(t.get("closed_at"))
+    return d.strftime("%Y-%m") if d else "unknown"
 
 
 @dataclass
@@ -42,21 +74,31 @@ def stats_by(closed: list[dict], dimension: str) -> list[StatRow]:
     full set) and return one StatRow per group, sorted by trade count
     descending -- the busiest bucket first, matching how every table in
     this cockpit wants "most-traded strategy/ticker/etc. at the top"."""
-    from swingbot.core.analytics.aggregate import _EXTRACTORS  # populated by Task A14
     if dimension not in _EXTRACTORS:
         raise ValueError(f"Unknown aggregation dimension: {dimension!r}")
-
     groups: dict[str, list[dict]] = defaultdict(list)
     extractor = _EXTRACTORS[dimension]
     for t in closed:
         groups[extractor(t)].append(t)
-
     rows = [_row_for(key, trades) for key, trades in groups.items()]
     rows.sort(key=lambda r: r.n, reverse=True)
     return rows
 
 
-# Task A14 replaces this stub with the full 10-entry table and DIMENSIONS tuple.
-_EXTRACTORS: dict = {
+DIMENSIONS = ("strategy", "horizon", "tier", "badge", "confidence",
+             "direction", "dow", "month", "ticker", "source")
+
+# Replaces the Task A13 stub -- now a plain module global, not populated
+# via any self-import.
+_EXTRACTORS = {
     "strategy": lambda t: primary_strategy_label(t),
+    "horizon": lambda t: t.get("horizon_key") or "unknown",
+    "tier": lambda t: t.get("tier") or "unknown",
+    "badge": lambda t: t.get("badge") or "unknown",
+    "source": lambda t: t.get("source") or "unknown",
+    "confidence": lambda t: str(t["confidence_level"]) if t.get("confidence_level") is not None else "unknown",
+    "direction": lambda t: t.get("direction") or "unknown",
+    "ticker": lambda t: t.get("ticker") or "unknown",
+    "dow": _dow_key,
+    "month": _month_key,
 }

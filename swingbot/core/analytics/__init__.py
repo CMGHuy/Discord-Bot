@@ -21,7 +21,7 @@ from swingbot.core.analytics.metrics import (  # noqa: F401
     sortino,
 )
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae  # noqa: F401
-from swingbot.core.analytics.aggregate import StatRow, stats_by  # noqa: F401
+from swingbot.core.analytics.aggregate import DIMENSIONS, StatRow, stats_by  # noqa: F401
 
 __all__ = [
     "equity_curve",
@@ -38,6 +38,7 @@ __all__ = [
     "sharpe",
     "sortino",
     "compute_mfe_mae",
+    "DIMENSIONS",
     "StatRow",
     "stats_by",
 ]
