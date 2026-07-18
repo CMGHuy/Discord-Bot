@@ -43,3 +43,57 @@ def test_missing_dates_or_empty_df_returns_none():
     assert f(t, df) is None
     assert f(dict(t, opened_at="2026-03-02T00:00:00+00:00",
                   closed_at="2026-03-03T00:00:00+00:00"), None) is None
+
+
+def test_same_day_trade_with_nonmidnight_times():
+    """Regression test for Bug #1: same-day trades with non-midnight times.
+    Before the fix, the entry-day bar (indexed at midnight) would be excluded
+    because the comparison would be 2026-03-02 00:00:00 >= 2026-03-02 15:00:00,
+    which is False. This caused same-day trades to spuriously return None.
+
+    With spread_pct=1.0, the bar has High/Low ±0.5% around the close, giving
+    us measurable favorable/adverse movement on the single day."""
+    df = make_ohlcv([100], spread_pct=1.0, start="2026-03-02")
+    # For close=100, spread_pct=1.0: High=100.5, Low=99.5
+    t = {
+        "direction": "bullish",
+        "entry": 100.0,
+        "stop_loss": 99.0,
+        "exit_price": 100.5,
+        "opened_at": "2026-03-02T15:00:00+00:00",
+        "closed_at": "2026-03-02T18:00:00+00:00",  # same day as opened_at
+        "status": "win",
+    }
+    m = compute_mfe_mae(t, df)
+    # After the fix, this should return a real result instead of None
+    assert m is not None
+    risk = 100.0 - 99.0  # 1.0
+    assert m["mfe_r"] == 0.5  # (100.5 - 100) / 1.0
+    assert m["mae_r"] == 0.5  # (100 - 99.5) / 1.0
+
+
+def test_entry_day_bar_contains_price_extreme():
+    """Regression test for Bug #1: entry-day bar contains the trade's real extreme.
+    Create a scenario where the entry-day bar holds the trade's maximum (for bullish)
+    or minimum (for bearish). Before the fix, the entry-day bar would be excluded
+    from the slice, causing mfe_r to be understated."""
+    # Bars: [100 (entry), 99, 101]
+    # Trade opens at bar 1 (100), closes at bar 3 (101)
+    # The real max is 101 on the close day, but the entry day itself is 100
+    df = make_ohlcv([100, 99, 101], spread_pct=0.0, start="2026-03-02")
+    t = {
+        "direction": "bullish",
+        "entry": 100.0,
+        "stop_loss": 96.0,
+        "exit_price": 101.0,
+        "opened_at": "2026-03-02T10:00:00+00:00",
+        "closed_at": "2026-03-04T14:00:00+00:00",
+        "status": "win",
+    }
+    m = compute_mfe_mae(t, df)
+    # After the fix, mfe_r should correctly reflect the maximum encountered
+    assert m is not None
+    # Max high across bars is 101, entry is 100, risk is 4
+    assert m["mfe_r"] == 0.25  # (101-100)/4
+    # Min low across bars is 99, entry is 100, risk is 4
+    assert m["mae_r"] == 0.25  # (100-99)/4

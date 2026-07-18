@@ -58,6 +58,12 @@ def compute_mfe_mae(trade: dict, df) -> dict | None:
         start_cmp = start.replace(tzinfo=None)
         end_cmp = end.replace(tzinfo=None)
 
+    # Normalize to midnight (day boundary) so comparison is date-level, not
+    # exact-timestamp-level; this ensures the entry day's bar (indexed at
+    # midnight) is correctly included regardless of opened_at's time-of-day.
+    start_cmp = start_cmp.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_cmp = end_cmp.replace(hour=0, minute=0, second=0, microsecond=0)
+
     sliced = df.loc[(idx >= start_cmp) & (idx <= end_cmp)]
     if sliced.empty:
         return None
@@ -69,7 +75,6 @@ def compute_mfe_mae(trade: dict, df) -> dict | None:
     else:
         mfe_r = (entry - float(sliced["Low"].min())) / risk
         mae_r = max(0.0, (float(sliced["High"].max()) - entry) / risk)
-    mfe_r = max(0.0, mfe_r)
 
     r_real = r_multiple(trade)
     exit_efficiency = None
