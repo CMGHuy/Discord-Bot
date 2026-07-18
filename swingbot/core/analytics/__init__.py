@@ -9,6 +9,18 @@ from swingbot.core.analytics.metrics import (  # noqa: F401
     equity_curve,
     drawdown_series,
     max_drawdown_pct,
+    r_multiple,
+    win_rate,
+    expectancy_r,
+    profit_factor,
 )
 
-__all__ = ["equity_curve", "drawdown_series", "max_drawdown_pct"]
+__all__ = [
+    "equity_curve",
+    "drawdown_series",
+    "max_drawdown_pct",
+    "r_multiple",
+    "win_rate",
+    "expectancy_r",
+    "profit_factor",
+]

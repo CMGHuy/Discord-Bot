@@ -87,3 +87,73 @@ def max_drawdown_pct(points: list[dict]) -> float | None:
         return None
     dds = [d["dd_pct"] for d in drawdown_series(points)]
     return max(dds)
+
+
+def r_multiple(trade: dict) -> float | None:
+    """THE single shared R-multiple computation -- every other stat in this
+    module and in aggregate.py/calibration.py that needs "how many risk
+    units did this trade make or lose" calls this instead of re-deriving
+    it, per the Global Constraint "one definition per stat".
+
+    r = (exit - entry) / (entry - stop_loss), sign-flipped for a bearish
+    trade so a positive r always means "in the trade's favor" regardless
+    of direction. None when any of entry/stop_loss/exit_price is missing,
+    or when the stop distance is exactly 0 (a malformed record -- dividing
+    by zero risk is meaningless, not infinite).
+    """
+    entry = trade.get("entry")
+    stop = trade.get("stop_loss")
+    exit_price = trade.get("exit_price")
+    if entry is None or stop is None or exit_price is None:
+        return None
+    risk = abs(entry - stop)
+    if risk == 0:
+        return None
+    is_bull = trade.get("direction") == "bullish"
+    raw = (exit_price - entry) if is_bull else (entry - exit_price)
+    return raw / risk
+
+
+def win_rate(closed: list[dict]) -> float | None:
+    """wins / (wins + losses) * 100, over trades with status "win"/"loss"
+    only -- scratches, timeouts, and manual "closed" exits are excluded
+    from both numerator and denominator (see the plan's Global Constraint
+    for why: a manual close has no real win/loss verdict to count).
+    None when there are zero win/loss trades, not 0.0 -- "no data yet" and
+    "0% win rate" must never look the same on a UI.
+    """
+    wins = sum(1 for t in closed if t.get("status") == "win")
+    losses = sum(1 for t in closed if t.get("status") == "loss")
+    total = wins + losses
+    return (wins / total * 100) if total else None
+
+
+def expectancy_r(closed: list[dict]) -> float | None:
+    """Mean r_multiple() over every trade with a computable R -- i.e. every
+    trade for which r_multiple() doesn't return None, regardless of its
+    status label. This intentionally includes any future "scratch"/
+    "timeout" statuses the v2 exit engine may introduce to live trades
+    (they still have a real entry/stop/exit_price and a real R), and
+    excludes anything still open or missing fields, without needing a
+    parallel status whitelist to stay in sync with r_multiple()'s own
+    guard clauses.
+    """
+    rs = [r for t in closed if (r := r_multiple(t)) is not None]
+    return (sum(rs) / len(rs)) if rs else None
+
+
+def profit_factor(closed: list[dict]) -> float | None:
+    """Gross realized profit / |gross realized loss|, over `realized_pnl_amount`
+    (the actual currency P&L, not the R-multiple) -- the standard "how many
+    dollars won per dollar lost" summary. None when there is no losing
+    amount to divide by (this is mathematically infinite, not undefined,
+    but reporting None/"n/a" instead of infinity keeps every consumer's
+    formatting code simple, and is unambiguous: "no losses yet" is a very
+    different message than a huge finite number).
+    """
+    amounts = [t.get("realized_pnl_amount") for t in closed if t.get("realized_pnl_amount") is not None]
+    gross_win = sum(a for a in amounts if a > 0)
+    gross_loss = abs(sum(a for a in amounts if a < 0))
+    if gross_loss == 0:
+        return None
+    return gross_win / gross_loss
