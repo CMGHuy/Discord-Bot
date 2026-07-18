@@ -222,6 +222,16 @@ def _confidence_block(conf) -> str:
     return f"```ansi\n[1;{ansi_code}m{text}[0m\n```"
 
 
+def plan_numbers_for_display(plan, legacy: dict) -> dict:
+    """THE cutover switch: which numbers do embeds/charts/trade-logging
+    show? flag != 'on' or no plan -> legacy scenario numbers (today's
+    behavior); 'on' -> the v2 plan's numbers."""
+    if config.PLAN_ENGINE_V2 != "on" or plan is None:
+        return dict(legacy)
+    return {"entry": plan.trigger_price, "stop_loss": plan.stop_loss,
+            "take_profit": plan.tp1, "target2": plan.tp2}
+
+
 def _ansi_bad(text: str) -> str:
     """Bold red, Discord ansi code-block palette -- used to mark a single failing requirement's row/value."""
     return f"[1;31m{text}[0m"
@@ -251,6 +261,27 @@ def _build_trade_plan_table(item) -> str:
     direction = "LONG (buy)" if is_bull else "SHORT (sell)"
     stop_sign = "-" if is_bull else "+"
 
+    plan_v2 = getattr(item, "plan_v2", None)
+    nums = plan_numbers_for_display(plan_v2, {
+        "entry": plan.entry, "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit, "target2": plan.target2_price})
+    entry, stop_loss = nums["entry"], nums["stop_loss"]
+    take_profit, target2 = nums["take_profit"], nums["target2"]
+    if entry == plan.entry and stop_loss == plan.stop_loss:
+        # funnel returned the legacy numbers -- keep the scenario's own
+        # (differently-rounded) distance/RR fields byte-identical
+        stop_dist_pct = plan.stop_distance_pct
+        target_dist_pct = plan.target_distance_pct
+        target2_dist_pct = plan.target2_distance_pct
+        rr = plan.risk_reward_ratio
+    else:
+        stop_dist_pct = abs(entry - stop_loss) / entry * 100
+        target_dist_pct = abs(take_profit - entry) / entry * 100
+        target2_dist_pct = (abs(target2 - entry) / entry * 100
+                            if target2 is not None else None)
+        risk = abs(entry - stop_loss)
+        rr = round(abs(take_profit - entry) / risk, 2) if risk else plan.risk_reward_ratio
+
     req_by_key = {r.key: r for r in item.requirements}
 
     def _row_value(key: str, ok_value: str) -> str:
@@ -261,7 +292,7 @@ def _build_trade_plan_table(item) -> str:
             return ok_value
         return _ansi_bad(f"{ok_value}  ⚠ {r.detail}")
 
-    stop_value = f"{plan.stop_loss:.2f}  ({stop_sign}{plan.stop_distance_pct:.1f}%)"
+    stop_value = f"{stop_loss:.2f}  ({stop_sign}{stop_dist_pct:.1f}%)"
     min_stop_req, max_stop_req = req_by_key.get("min_stop_distance"), req_by_key.get("max_stop_distance")
     if min_stop_req and not min_stop_req.passed:
         stop_value = _ansi_bad(f"{stop_value}  ⚠ {min_stop_req.detail}")
@@ -270,13 +301,13 @@ def _build_trade_plan_table(item) -> str:
 
     rows = [
         ("Direction", direction),
-        ("Entry (now)", f"{plan.entry:.2f}"),
+        ("Entry (now)", f"{entry:.2f}"),
         ("Stop loss", stop_value),
-        (f"{level_word} 1 (Target)", _row_value("min_reward", f"{plan.take_profit:.2f}  (+{plan.target_distance_pct:.1f}%)")),
+        (f"{level_word} 1 (Target)", _row_value("min_reward", f"{take_profit:.2f}  (+{target_dist_pct:.1f}%)")),
     ]
-    if plan.target2_price is not None:
-        rows.append((f"{level_word} 2 (Stretch)", f"{plan.target2_price:.2f}  (+{plan.target2_distance_pct:.1f}%)"))
-    rows.append(("Reward:Risk", _row_value("min_risk_reward", f"{plan.risk_reward_ratio}:1")))
+    if target2 is not None:
+        rows.append((f"{level_word} 2 (Stretch)", f"{target2:.2f}  (+{target2_dist_pct:.1f}%)"))
+    rows.append(("Reward:Risk", _row_value("min_risk_reward", f"{rr}:1")))
     rows.append(("Confidence", _row_value("min_confidence", f"{conf.label} (Lv{conf.level}/5)")))
     rows.append(("Target confirmed by", _row_value("min_confluence", _sources_str(plan.target_sources))))
     rows.append(("Stop confirmed by", _sources_str(plan.stop_sources)))
@@ -284,7 +315,7 @@ def _build_trade_plan_table(item) -> str:
     # Position sizing -- uses the live account config so !account changes
     # are reflected immediately without a bot restart.
     account_cfg = load_account_config()
-    pos = compute_position_size(plan.entry, plan.stop_loss, account_cfg)
+    pos = compute_position_size(entry, stop_loss, account_cfg)
     if pos and pos["balance"] > 0:
         cur = config.CURRENCY_SYMBOL
         cap_note = f"  [capped at {pos['max_position_pct']:.0f}% of account]" if pos["capped"] else ""
@@ -298,14 +329,13 @@ def _build_trade_plan_table(item) -> str:
         # row above already states the $ at risk, but never the $ upside,
         # so there was no way to see the actual dollar trade-off (risk $X to
         # make $Y) without doing the shares x distance math yourself.
-        possible_profit = pos["shares"] * abs(plan.take_profit - plan.entry)
+        possible_profit = pos["shares"] * abs(take_profit - entry)
         pnl_line = f"+{cur}{possible_profit:,.0f} at target  /  -{cur}{pos['risk_amount']:,.0f} at stop"
-        if plan.target2_price is not None:
-            possible_profit2 = pos["shares"] * abs(plan.target2_price - plan.entry)
+        if target2 is not None:
+            possible_profit2 = pos["shares"] * abs(target2 - entry)
             pnl_line += f"  (+{cur}{possible_profit2:,.0f} at stretch target)"
         rows.append(("Possible P&L", pnl_line))
 
-    plan_v2 = getattr(item, "plan_v2", None)
     if plan_v2 is not None:
         rows.append(("Entry (v2)", entry_line(plan_v2)))
         cur = config.CURRENCY_SYMBOL
