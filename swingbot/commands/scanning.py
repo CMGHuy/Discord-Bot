@@ -379,6 +379,14 @@ async def session_scan():
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
 
 
+def _refresh_snapshot_safely() -> None:
+    try:
+        from swingbot.core.analytics.snapshots import refresh_snapshot
+        refresh_snapshot()
+    except Exception:
+        log.warning("post-scan snapshot refresh failed", exc_info=True)
+
+
 async def _session_scan_tick():
     # Always refresh the live-status presence first, even on the early-return
     # paths below (paused / outside session / missing channel config) -- the
@@ -415,6 +423,7 @@ async def _session_scan_tick():
     progress = scan_engine.ScanProgress()
     alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
     await _send_alerts(channel, alerts)
+    _refresh_snapshot_safely()
 
     f = progress.funnel
     if alerts:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import logging
 import os
 
 from swingbot import config
@@ -17,6 +18,8 @@ from swingbot.core.analytics.aggregate import DIMENSIONS, stats_by
 from swingbot.core.jsonio import atomic_write_json, read_json
 
 DEFAULT_PATH = os.path.join(config.DATA_DIR, "analytics_snapshot.json")
+
+log = logging.getLogger("swing-bot.snapshots")
 
 
 def build_snapshot(closed: list[dict], starting_balance: float, registry_entries: list[dict]) -> dict:
@@ -86,3 +89,26 @@ def load_snapshot(path: str | None = None, max_age_seconds: int = 3600) -> dict 
         built_at = built_at.replace(tzinfo=dt.timezone.utc)
     age = (dt.datetime.now(dt.timezone.utc) - built_at).total_seconds()
     return snap if age <= max_age_seconds else None
+
+
+def refresh_snapshot() -> None:
+    """Rebuild and save the analytics snapshot from the current in-memory
+    state of trades.json / account.json / the validation registry.
+    Wrapped so a failure here (a corrupt account.json, a registry load
+    error) can never propagate into the scan loop or a trade-close path
+    that calls this as a side effect -- worst case the snapshot simply
+    stays at its previous (or absent) state for one more cycle.
+    """
+    try:
+        from swingbot.core import account as account_module
+        from swingbot.core import registry
+        from swingbot.core.performance import TradeLog
+
+        closed = TradeLog().get_trades(status="all", limit=None)
+        starting_balance = account_module.load_account_config().get("base_balance", 0.0)
+        registry_entries = registry.load_registry()
+
+        snap = build_snapshot(closed, starting_balance, registry_entries)
+        save_snapshot(snap)
+    except Exception:
+        log.warning("refresh_snapshot failed -- snapshot left stale for this cycle", exc_info=True)

@@ -43,3 +43,29 @@ def test_load_snapshot_missing_or_stale_returns_none(tmp_path):
     stale["built_at"] = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=2)).isoformat()
     save_snapshot(stale, path=path)
     assert load_snapshot(path=path, max_age_seconds=3600) is None
+
+
+from unittest.mock import patch
+
+from swingbot.core.analytics.snapshots import refresh_snapshot, DEFAULT_PATH
+
+
+def test_refresh_snapshot_writes_file(tmp_path, monkeypatch):
+    snap_path = str(tmp_path / "analytics_snapshot.json")
+    monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", snap_path)
+
+    fake_trades = [_t(1)]
+    with patch("swingbot.core.performance.TradeLog") as MockLog, \
+         patch("swingbot.core.account.load_account_config", return_value={"base_balance": 10_000.0}), \
+         patch("swingbot.core.registry.load_registry", return_value=[]):
+        MockLog.return_value.get_trades.return_value = fake_trades
+        refresh_snapshot()
+
+    import os
+    assert os.path.exists(snap_path)
+
+
+def test_refresh_snapshot_never_raises_on_failure(monkeypatch):
+    monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", "/nonexistent/deeply/nested/x.json")
+    with patch("swingbot.core.performance.TradeLog", side_effect=RuntimeError("boom")):
+        refresh_snapshot()  # must not raise

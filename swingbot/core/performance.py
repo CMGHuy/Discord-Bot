@@ -65,6 +65,16 @@ def _journal_close_safely(trade: dict) -> None:
             "journal hook failed for trade %s", trade.get("id"), exc_info=True)
 
 
+def _refresh_snapshot_safely() -> None:
+    try:
+        from swingbot.core.analytics.snapshots import refresh_snapshot
+        refresh_snapshot()
+    except Exception:
+        import logging
+        logging.getLogger("swing-bot.performance").warning(
+            "post-close snapshot refresh failed", exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Trade-health status (admin dashboard) -- how close an OPEN trade's live
 # price is to hitting its stop-loss vs. its target, as a single -1..+1
@@ -498,6 +508,8 @@ class TradeLog:
                 self._save()
         for t in newly_closed:
             _journal_close_safely(t)
+        if newly_closed:
+            _refresh_snapshot_safely()
         return newly_closed
 
     def get_stats(self, confidence_level: int = None, trades: list | None = None) -> dict:
@@ -716,6 +728,7 @@ class TradeLog:
                     break
         if closed_trade is not None:
             _journal_close_safely(closed_trade)
+            _refresh_snapshot_safely()
             return True
         return False
 
@@ -805,6 +818,8 @@ class TradeLog:
                 self._save()
         for t in newly_closed:
             _journal_close_safely(t)
+        if newly_closed:
+            _refresh_snapshot_safely()
         return newly_closed
 
     def check_near_tp_timeout(self, ticker: str, live_price: float) -> list:
@@ -981,6 +996,8 @@ class TradeLog:
             self._save()
         for t in newly_closed:
             _journal_close_safely(t)
+        if newly_closed:
+            _refresh_snapshot_safely()
         return newly_closed
 
     def get_detailed_stats(self) -> dict:
