@@ -491,7 +491,11 @@ def rsi_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["RSI"] = rsi_entries
 
 
-DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45}
+DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45,
+                                    # rescue gate (Task 98) -- off until the
+                                    # train grid (Task 99) adopts winners
+                                    "min_volume_ratio": None,
+                                    "min_reclaim_strength": None}
 
 
 def rsi_divergence_entries(df, horizon_key, params=None):
@@ -519,6 +523,28 @@ def rsi_divergence_entries(df, horizon_key, params=None):
     bearish = (price_lh & rsi_hh & turn_bear & rsi14.between(48, 72)
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- rescue gate (Task 98): confirmation quality on the reclaim bar ---
+    # This detector is a rolling formulation (no discrete swing points), so
+    # reclaim strength is measured from the recent lb-bar swing extreme
+    # toward the lb-bar range midpoint (deviation from the plan's discrete
+    # swing-mid formula, which is vacuous against rolling extremes).
+    # None = gate off (backward compatible).
+    min_vr = p.get("min_volume_ratio")
+    min_rs = p.get("min_reclaim_strength")
+    if min_vr is not None:
+        vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
+        vr_ok = (vol_ratio >= min_vr).fillna(False)
+        bullish &= vr_ok
+        bearish &= vr_ok
+    if min_rs is not None:
+        lo = close.rolling(lb).min()
+        hi = close.rolling(lb).max()
+        mid = (lo + hi) / 2
+        reclaim_floor = lo + min_rs * (mid - lo)
+        reclaim_ceil = hi - min_rs * (hi - mid)
+        bullish &= (close >= reclaim_floor).fillna(False)
+        bearish &= (close <= reclaim_ceil).fillna(False)
     return bullish, bearish
 
 
