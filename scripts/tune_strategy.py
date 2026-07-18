@@ -36,7 +36,14 @@ PARAM_GRID = {
     "Support/Resistance": {"base_atr": [3.0, 4.0, 5.0], "close_frac": [0.3, 0.4, 0.5]},
     "RSI":                {"os_level": [30, 35], "confirm": ["prev_high", "prev_close"]},
     "MACD":               {"ext_atr": [0.75, 1.0, 1.5]},
-    "Elliott Wave":       {"depth_min": [0.30, 0.38], "depth_max": [0.78, 0.80]},
+    # Rescue (Task 105): grid the new strict wave-2 gate, not the old
+    # depth_min/depth_max pair (those stay fixed at baseline for this run --
+    # only the new gate is under test). w2_min_retrace is held constant at
+    # 0.382 (not gridded) via a single-value list -- it must be non-None for
+    # the gate to activate at all, but this run isn't tuning it.
+    "Elliott Wave":       {"w2_min_retrace": [0.382],
+                           "w2_max_retrace": [0.618, 0.786],
+                           "w2_max_duration_ratio": [0.75, 1.0]},
     "MA Ribbon":          {"ext_pct": [6.0, 8.0, 10.0]},
     "Break & Retest":     {"hold_tol_pct": [0.3, 0.5, 0.8]},
     "RSI Divergence":     {"rsi_reclaim": [38, 40, 45]},

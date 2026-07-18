@@ -549,10 +549,13 @@ ENTRY_FUNCS["Volume Profile"] = volume_profile_entries
 
 DEFAULT_PARAMS["Elliott Wave"] = {
     "depth_min": 0.30, "depth_max": 0.80,
-    # Rescue gate (Task 104): strict wave-2 validation. None = off
-    # (byte-identical to pre-rescue behavior) until a TRAIN grid (Task 105)
-    # picks non-None values.
-    "w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None,
+    # Rescue gate (Task 104/105): strict wave-2 validation. TRAIN grid
+    # (docs/superpowers/results/2026-07-rescue-elliott-train.md) selected
+    # this config -- N=117, WR=83.8%, ExpR=+0.094 on TRAIN, the pre-
+    # registered max-expectancy winner among qualifying configs. Adopted
+    # here permanently; Task 106 spends the single VALIDATION-window look
+    # against this exact config, no retuning after.
+    "w2_min_retrace": 0.382, "w2_max_retrace": 0.618, "w2_max_duration_ratio": 0.75,
 }
 
 
