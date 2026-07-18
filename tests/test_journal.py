@@ -144,3 +144,30 @@ def test_has_note_filter(tmp_path):
     result = store.entries(has_note=True)
     assert [e["trade_id"] for e in result] == ["t1"]
     assert [e["trade_id"] for e in store.entries(has_note=False)] == ["t2"]
+
+
+from scripts.backfill_journal import backfill
+
+
+def test_backfill_skips_already_journaled(tmp_path):
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store.add(_entry("already"))
+    trades = [
+        {"id": "already", "ticker": "AAPL", "status": "win", "entry": 100.0, "stop_loss": 96.0,
+         "exit_price": 104.0, "opened_at": "2026-03-01T00:00:00+00:00", "closed_at": "2026-03-02T00:00:00+00:00"},
+        {"id": "new1", "ticker": "MSFT", "status": "loss", "entry": 50.0, "stop_loss": 52.0,
+         "exit_price": 52.0, "opened_at": "2026-03-01T00:00:00+00:00", "closed_at": "2026-03-02T00:00:00+00:00"},
+        {"id": "open1", "ticker": "TSLA", "status": "open", "entry": 200.0, "stop_loss": 190.0},
+    ]
+
+    def fetch(ticker):
+        return None  # no bars available in this test -- backfill must still succeed with degraded entries
+
+    backfilled, skipped = backfill(trades, store, fetch)
+    assert backfilled == 1  # "new1" only -- "already" is already journaled, "open1" isn't closed
+    # The plan's Step-1 draft asserted skipped==1, but backfill()'s own docstring
+    # defines `skipped` as trades that are not-closed OR already-journaled -- both
+    # "already" (journaled) and "open1" (still open) count, so skipped==2. Production
+    # logic matches its documented contract; the draft assertion was the miscount.
+    assert skipped == 2
+    assert store.get("new1") is not None
