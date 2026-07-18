@@ -12,7 +12,9 @@ def test_stamp_validated():
 
 
 def test_stamp_weak():
-    p = _plan(strategy="RSI")
+    # EMA Crossover stayed WEAK through the rescue round (RSI, the previous
+    # exemplar, was rescued to VALIDATED in Tasks 95-97).
+    p = _plan(strategy="EMA Crossover")
     stamp_badge(p)
     assert p.badge == "WEAK"
 

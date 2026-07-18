@@ -1,7 +1,13 @@
 # Unified Trade-Plan Engine v2 — Design Spec
 
 Date: 2026-07-11
-Status: Approved (design dialogue 2026-07-11)
+Status: **Shipped** (code complete through Task 100 on 2026-07-18 — engine,
+registry, quality score, plan manager, Discord UX, shadow tooling, cutover
+funnel, rescue round for RSI [VALIDATED] and RSI Divergence
+[rejected-on-train]; operational rollout gates — shadow sessions, cutover,
+legacy removal — and remaining rescues per
+`docs/superpowers/plans/2026-07-11-unified-plan-engine-v2.md` Progress block)
+Previous status: Approved (design dialogue 2026-07-11)
 Predecessor: `docs/superpowers/specs/2026-07-10-strategy-winrate-redesign-design.md`
 (implemented and validated; see `docs/superpowers/results/2026-07-validation.md`)
 

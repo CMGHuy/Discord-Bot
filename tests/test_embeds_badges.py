@@ -13,7 +13,9 @@ def test_validated_badge_line_carries_registry_numbers():
 
 
 def test_weak_plan_renders_caution_text_verbatim():
-    p = _plan(strategy="RSI")
+    # EMA Crossover: still WEAK after the rescue round (RSI, the previous
+    # exemplar here, was rescued to VALIDATED in Tasks 95-97).
+    p = _plan(strategy="EMA Crossover")
     stamp_badge(p)
     name, value = badge_field_for(p)
     assert name.startswith("⚠️ WEAK")

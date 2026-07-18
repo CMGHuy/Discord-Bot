@@ -73,6 +73,7 @@ from swingbot.core.watchlist import load_watchlist
 from .embeds import (
     CONFIDENCE_COLORS, CONFIDENCE_EMOJI, CONFIDENCE_ANSI,
     confidence_color, _build_requirement_checks, build_embed,
+    plan_numbers_for_display,
     regenerate_chart_for_trade, build_closed_trade_embed, notify_closed_trades,
     build_near_close_embed, notify_near_close,
 )
@@ -822,13 +823,20 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         # every requirement, for BOTH scan modes -- so this is really just
         # "not already_open", kept explicit as a safety net in case that
         # invariant ever changes upstream.
+        # The cutover funnel (Task 89): every consumer below -- trade log,
+        # chart, embed table -- shows the same numbers, legacy or v2,
+        # decided in exactly one place.
+        nums = plan_numbers_for_display(getattr(item, "plan_v2", None), {
+            "entry": plan.entry, "stop_loss": plan.stop_loss,
+            "take_profit": plan.take_profit, "target2": plan.target2_price})
+
         trade_id = None
         if item.all_requirements_met and not already_open:
             trade_id = trade_log.log_trade(
                 ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
                 direction=result.trend, confidence_level=conf.level, confidence_label=conf.label,
-                entry=plan.entry, stop_loss=plan.stop_loss, take_profit=plan.take_profit,
-                target2=plan.target2_price,
+                entry=nums["entry"], stop_loss=nums["stop_loss"], take_profit=nums["take_profit"],
+                target2=nums["target2"],
                 confidence_score=conf.score, confidence_breakdown=conf.breakdown,
                 target_sources=list(dict.fromkeys(plan.target_sources)),
                 stop_sources=list(dict.fromkeys(plan.stop_sources)),
@@ -836,6 +844,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 risk_reward_ratio=plan.risk_reward_ratio,
                 explanation=explanation,
                 confirmed_by=item.combined_from,
+                plan_id=(item.plan_v2.plan_id
+                         if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
+                         else None),
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
         else:
@@ -853,9 +864,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         log.debug("%s: generating trade chart (%s)", result.ticker, chart_filename)
         try:
             chart_path = generate_trade_chart(
-                result.ticker, df, plan.entry, plan.stop_loss, plan.take_profit, result.trend,
+                result.ticker, df, nums["entry"], nums["stop_loss"], nums["take_profit"], result.trend,
                 result.strategy, result.horizon_label, config.TRADE_CHART_DIR, filename=chart_filename,
-                currency_symbol=get_currency_symbol(result.ticker, config.CURRENCY_SYMBOL), target2=plan.target2_price,
+                currency_symbol=get_currency_symbol(result.ticker, config.CURRENCY_SYMBOL), target2=nums["target2"],
                 trendline_lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
                 target_sources=list(dict.fromkeys(plan.target_sources)),
                 stop_sources=list(dict.fromkeys(plan.stop_sources)),

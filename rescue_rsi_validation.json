@@ -1,0 +1,18 @@
+{
+  "RSI": {
+    "n_eval": 30,
+    "wins": 30,
+    "losses": 0,
+    "scratches": 0,
+    "timeouts": 0,
+    "closed": 30,
+    "win_rate": 100.0,
+    "expectancy_r": 0.30366666666666653,
+    "excluded_share": 0.0,
+    "avg_win_r": 0.30366666666666653,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 33.33333333333333,
+    "runner_be_pct": 66.66666666666666,
+    "runner_timeout_pct": 0.0
+  }
+}

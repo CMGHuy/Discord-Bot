@@ -81,6 +81,23 @@ def _rolling_argmin_pos(s: pd.Series, lookback: int) -> pd.Series:
     return pd.Series(out, index=s.index)
 
 
+def adx_series(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Wilder ADX (EWM alpha=1/period). Shared regime helper for rescue
+    gates: high = sustained directional movement, low = range. Scale-free --
+    it measures the *ratio* of up- to down-movement, not its size."""
+    h, l, c = df["High"], df["Low"], df["Close"]
+    up, dn = h.diff(), -l.diff()
+    plus_dm = ((up > dn) & (up > 0)) * up
+    minus_dm = ((dn > up) & (dn > 0)) * dn
+    tr = pd.concat([h - l, (h - c.shift()).abs(), (l - c.shift()).abs()],
+                   axis=1).max(axis=1)
+    atr_w = tr.ewm(alpha=1 / period, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=1 / period, adjust=False).mean() / atr_w
+    minus_di = 100 * minus_dm.ewm(alpha=1 / period, adjust=False).mean() / atr_w
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    return dx.ewm(alpha=1 / period, adjust=False).mean()
+
+
 def _params(strategy: str, params: dict | None) -> dict:
     merged = dict(DEFAULT_PARAMS.get(strategy, {}))
     if params:
@@ -413,7 +430,10 @@ def break_retest_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Break & Retest"] = break_retest_entries
 
 
-DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high"}
+DEFAULT_PARAMS["RSI"] = {"os_level": 35, "ob_level": 65, "confirm": "prev_high",
+                         # rescue gate: train-grid winner 2026-07-18
+                         # (docs/superpowers/results/2026-07-rescue-rsi-train.md)
+                         "max_adx": 20, "require_bb_range": False}
 
 
 def rsi_entries(df, horizon_key, params=None):
@@ -449,13 +469,33 @@ def rsi_entries(df, horizon_key, params=None):
     bearish = (crossed_down & ma200_down & fade_started & confirm_bear
                & (rsi14 > 60)
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- rescue gate (Task 95): only dip-buy/fade in RANGE regimes ---
+    # Mean-reversion entries in trending tape are exactly where round 1
+    # showed this strategy bleeding; ADX + Bollinger containment restrict
+    # it to sideways conditions. None/False = gate off (backward compatible).
+    max_adx = p.get("max_adx")
+    if max_adx is not None:
+        range_regime = (adx_series(df) < max_adx).fillna(False)
+        bullish &= range_regime
+        bearish &= range_regime
+    if p.get("require_bb_range"):
+        mid = close.rolling(20).mean()
+        sd = close.rolling(20).std()
+        in_band = ((close <= mid + 2 * sd) & (close >= mid - 2 * sd)).fillna(False)
+        bullish &= in_band
+        bearish &= in_band
     return bullish, bearish
 
 
 ENTRY_FUNCS["RSI"] = rsi_entries
 
 
-DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45}
+DEFAULT_PARAMS["RSI Divergence"] = {"rsi_reclaim": 45,
+                                    # rescue gate (Task 98) -- off until the
+                                    # train grid (Task 99) adopts winners
+                                    "min_volume_ratio": None,
+                                    "min_reclaim_strength": None}
 
 
 def rsi_divergence_entries(df, horizon_key, params=None):
@@ -483,6 +523,28 @@ def rsi_divergence_entries(df, horizon_key, params=None):
     bearish = (price_lh & rsi_hh & turn_bear & rsi14.between(48, 72)
                & g["bear_regime"] & g["trend50_bear"]
                & g["atr_floor"] & g["atr_calm"] & g["vol_ok"]).fillna(False)
+
+    # --- rescue gate (Task 98): confirmation quality on the reclaim bar ---
+    # This detector is a rolling formulation (no discrete swing points), so
+    # reclaim strength is measured from the recent lb-bar swing extreme
+    # toward the lb-bar range midpoint (deviation from the plan's discrete
+    # swing-mid formula, which is vacuous against rolling extremes).
+    # None = gate off (backward compatible).
+    min_vr = p.get("min_volume_ratio")
+    min_rs = p.get("min_reclaim_strength")
+    if min_vr is not None:
+        vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
+        vr_ok = (vol_ratio >= min_vr).fillna(False)
+        bullish &= vr_ok
+        bearish &= vr_ok
+    if min_rs is not None:
+        lo = close.rolling(lb).min()
+        hi = close.rolling(lb).max()
+        mid = (lo + hi) / 2
+        reclaim_floor = lo + min_rs * (mid - lo)
+        reclaim_ceil = hi - min_rs * (hi - mid)
+        bullish &= (close >= reclaim_floor).fillna(False)
+        bearish &= (close <= reclaim_ceil).fillna(False)
     return bullish, bearish
 
 
