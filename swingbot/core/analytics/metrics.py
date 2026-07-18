@@ -98,18 +98,22 @@ def r_multiple(trade: dict) -> float | None:
     r = (exit - entry) / (entry - stop_loss), sign-flipped for a bearish
     trade so a positive r always means "in the trade's favor" regardless
     of direction. None when any of entry/stop_loss/exit_price is missing,
-    or when the stop distance is exactly 0 (a malformed record -- dividing
-    by zero risk is meaningless, not infinite).
+    direction is not exactly "bullish" or "bearish", or when the stop
+    distance is exactly 0 (a malformed record -- dividing by zero risk is
+    meaningless, not infinite).
     """
     entry = trade.get("entry")
     stop = trade.get("stop_loss")
     exit_price = trade.get("exit_price")
     if entry is None or stop is None or exit_price is None:
         return None
+    direction = trade.get("direction")
+    if direction not in ("bullish", "bearish"):
+        return None
     risk = abs(entry - stop)
     if risk == 0:
         return None
-    is_bull = trade.get("direction") == "bullish"
+    is_bull = direction == "bullish"
     raw = (exit_price - entry) if is_bull else (entry - exit_price)
     return raw / risk
 

@@ -39,3 +39,18 @@ def test_win_rate_and_expectancy_empty_or_no_losses():
     assert win_rate([]) is None
     assert expectancy_r([]) is None
     assert profit_factor([_win()]) is None  # no losing amount -- undefined, not infinite
+
+
+def test_r_multiple_none_on_missing_direction():
+    """r_multiple gracefully returns None when direction key is missing,
+    rather than silently defaulting to bearish formula."""
+    trade_no_direction = {"entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0}
+    assert r_multiple(trade_no_direction) is None
+
+
+def test_r_multiple_none_on_invalid_direction():
+    """r_multiple gracefully returns None when direction has an invalid
+    value (misspelled, wrong enum, etc), rather than silently defaulting
+    to bearish formula."""
+    trade_invalid_direction = {"direction": "long", "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0}
+    assert r_multiple(trade_invalid_direction) is None
