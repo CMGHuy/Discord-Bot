@@ -25,6 +25,7 @@ from swingbot.core.analytics.aggregate import DIMENSIONS, StatRow, stats_by  # n
 from swingbot.core.analytics.calibration import score_deciles, tier_calibration, badge_drift  # noqa: F401
 from swingbot.core.analytics.rank import follow_score, rank_plans  # noqa: F401
 from swingbot.core.analytics.journal import JournalStore  # noqa: F401
+from swingbot.core.analytics.insights import weekly_digest  # noqa: F401
 
 __all__ = [
     "equity_curve",
@@ -50,4 +51,5 @@ __all__ = [
     "follow_score",
     "rank_plans",
     "JournalStore",
+    "weekly_digest",
 ]
