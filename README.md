@@ -486,6 +486,53 @@ and EMA Crossover both passed TRAIN comfortably but missed the 80%
 out-of-sample floor by a few points and stay WEAK. Full scoreboard and
 pooled numbers: `docs/superpowers/results/2026-07-v2-final-report.md`.
 
+## Analytics core
+
+Every number the bot shows about its own performance — win rate,
+expectancy, calibration, lessons — traces to exactly one function in
+`swingbot/core/analytics/`, so a Discord embed, the admin dashboard, and a
+CSV export can never quietly disagree:
+
+| Module | Role |
+|---|---|
+| `metrics.py` | Equity curve, drawdown, win rate, expectancy R, profit factor, streaks, rolling win rate, Sharpe/Sortino — pure functions over trade-record lists. |
+| `mfe_mae.py` | Per-trade max favorable/adverse excursion and exit efficiency (how much of the available move a trade actually captured). |
+| `aggregate.py` | `stats_by(closed, dimension)` — one `StatRow` per bucket, across 10 dimensions (strategy, horizon, tier, badge, confidence, direction, day-of-week, month, ticker, source). |
+| `calibration.py` | Quality-score decile calibration, tier-vs-design-band checks, and `badge_drift` — the pre-registered edge-decay rule. |
+| `rank.py` | `follow_score` — the one ranking authority (see below). |
+| `journal.py` | `JournalStore` — one auto-generated lesson entry per closed trade (MFE/MAE, exit efficiency, tags, a templated `auto_lesson`), plus hand-added notes via `set_note`. |
+| `insights.py` | Human-readable rollups over the journal: the weekly lessons digest, the edge-decay report, and the top-recurring-lessons list. Formats only — every number here is delegated to `metrics.py`/`calibration.py`. |
+| `snapshots.py` | Assembles everything above into one JSON blob so UIs never recompute on request (see below). |
+
+**`data/analytics_snapshot.json`** is that pre-built blob — win/loss stats,
+equity curve, drawdown, rolling win rate, all 10 aggregation dimensions,
+calibration, and the R-multiple distribution. It's rebuilt automatically
+after every scan cycle and after every batch of trade closes
+(`refresh_snapshot()`, wrapped so a failure there can never break a scan or
+a close); a consumer calling `load_snapshot(max_age_seconds=...)` gets
+`None` back — never a silently stale read — if the file is missing or older
+than the staleness guard.
+
+**`data/journal.json`** holds one entry per closed trade: MFE/MAE, exit
+efficiency, auto-generated tags, and an `auto_lesson` sentence templated
+from the trade's outcome shape. `scripts/backfill_journal.py` journals any
+already-closed trade that predates the auto-journal hook (idempotent — safe
+to re-run any time). `python scripts/export_analytics.py` writes the
+current snapshot + journal out as CSV/JSON for spreadsheet analysis.
+
+**`follow_score`** (badge 40 + quality 40 + regime 10 + freshness 10) is the
+single ranking formula for "which plan should I follow right now" —
+computed in exactly one place and consumed everywhere a plan gets ranked or
+sorted (Discord alerts, `!plans`, `!top`, the digest, `/api/plans`, the
+admin board).
+
+**Edge-decay rule (pre-registered, never tuned after seeing live data):**
+`drift_alert = live_n >= 20 and live_wr < oos_wr - 10.0`. It only fires once
+a strategy has accumulated at least 20 live closes and its live win rate has
+fallen more than 10 points below the number it validated at out-of-sample —
+loosening either threshold after watching live results would turn an
+early-warning signal into a curve-fit one.
+
 ## Files
 
 The project is laid out as a proper package:

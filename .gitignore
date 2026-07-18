@@ -5,6 +5,7 @@ watchlist.json
 ticker_meta_cache.json
 retrospective_history.json
 journal.json
+analytics_snapshot.json
 .env
 .env.bak
 __pycache__/
