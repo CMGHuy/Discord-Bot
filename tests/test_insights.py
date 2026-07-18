@@ -49,3 +49,40 @@ def test_weekly_digest_outside_window_excluded():
 def test_weekly_digest_empty_week_still_returns_a_message():
     messages = weekly_digest([], [], TODAY)
     assert len(messages) >= 1
+
+
+from unittest.mock import patch
+
+from swingbot.core.analytics.insights import edge_decay_report, top_lessons
+
+
+def _live_t(status):
+    return {"target_sources": ["Fib 61.8%"], "status": status, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0 if status == "win" else 96.0}
+
+
+def test_edge_decay_report_line_on_real_alert():
+    registry = [{"source": "strategy", "strategy": "Fibonacci", "horizon": None,
+                "status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.105,
+                "window": "2024-01-01..2025-12-31"}]
+    live = [_live_t("win") for _ in range(14)] + [_live_t("loss") for _ in range(11)]  # 56% of 25
+    with patch("swingbot.core.registry.load_registry", return_value=registry):
+        lines = edge_decay_report(live)
+    assert len(lines) == 1
+    assert "Fibonacci" in lines[0] and "81.6" in lines[0] and "56" in lines[0]
+
+
+def test_edge_decay_report_empty_when_no_alerts():
+    with patch("swingbot.core.registry.load_registry", return_value=[]):
+        assert edge_decay_report([]) == []
+
+
+def test_top_lessons_counts_pairings():
+    entries = [
+        {"auto_lesson": "Clean capture.", "tags": ["fast_win"]},
+        {"auto_lesson": "Clean capture.", "tags": ["fast_win"]},
+        {"auto_lesson": "Entry was wrong.", "tags": ["gap_fill"]},
+    ]
+    lines = top_lessons(entries, n=2)
+    assert lines[0].startswith("2x")
+    assert "Clean capture." in lines[0]

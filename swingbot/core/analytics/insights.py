@@ -101,3 +101,39 @@ def weekly_digest(entries: list[dict], closed: list[dict], today: dt.date) -> li
             lines.append(f"• {e['ticker']}: {excerpt}")
 
     return _chunk(lines)
+
+
+def edge_decay_report(closed: list[dict]) -> list[str]:
+    """One line per strategy whose live win rate has drifted meaningfully
+    below its committed out-of-sample number (see calibration.badge_drift
+    for the pre-registered alert rule). Loads the registry itself (the
+    one deliberate I/O exception in this module) so calibration.py stays
+    a pure function of (closed, registry_entries) with no hidden load."""
+    from swingbot.core import registry
+
+    rows = calibration.badge_drift(closed, registry.load_registry())
+    lines = []
+    for r in rows:
+        if not r["drift_alert"]:
+            continue
+        lines.append(
+            f"📉 **{r['strategy']}** live WR {r['live_wr']:.0f}% (n={r['live_n']}) "
+            f"vs OOS {r['oos_wr']:.1f}% (n={r['oos_n']}) — drifted {abs(r['delta_wr']):.1f} points."
+        )
+    return lines
+
+
+def top_lessons(entries: list[dict], n: int = 5) -> list[str]:
+    """The `n` most frequent (auto_lesson, tags) pairings across `entries`,
+    most-common first -- "which lesson keeps coming up" is a much more
+    actionable weekly signal than a flat list of every individual lesson.
+    """
+    counts = Counter(
+        (e.get("auto_lesson", ""), tuple(sorted(e.get("tags") or [])))
+        for e in entries
+    )
+    lines = []
+    for (lesson, tags), count in counts.most_common(n):
+        tag_str = f" [{', '.join(tags)}]" if tags else ""
+        lines.append(f"{count}x — {lesson}{tag_str}")
+    return lines
