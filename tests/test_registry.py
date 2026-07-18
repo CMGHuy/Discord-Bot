@@ -2,9 +2,10 @@ from swingbot.core.registry import get_badge, load_registry
 
 
 def test_validated_strategy():
+    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
     b = get_badge("strategy", "Fibonacci")
     assert b.status == "VALIDATED"
-    assert b.n == 206 and b.win_rate == 81.6
+    assert b.n == 203 and b.win_rate == 82.3
 
 
 def test_rescued_rsi_validated():

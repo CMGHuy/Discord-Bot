@@ -5,11 +5,12 @@ from tests.test_plan_engine_model import _plan
 
 
 def test_validated_badge_line_carries_registry_numbers():
+    # Numbers from the exit-v2 validation single run (Task 32, 2026-07-18).
     p = _plan(strategy="Fibonacci")
     stamp_badge(p)
     name, value = badge_field_for(p)
     assert name.startswith("✅ VALIDATED")
-    assert "N=206" in value and "81.6%" in value and "+0.105" in value
+    assert "N=203" in value and "82.3%" in value and "+0.268" in value
 
 
 def test_weak_plan_renders_caution_text_verbatim():

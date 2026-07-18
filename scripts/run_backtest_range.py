@@ -169,6 +169,10 @@ def main():
     ap.add_argument("--scenarios", action="store_true",
                     help="replay the confluence scan itself (backtest_scenarios."
                          "run_scenario_backtest) instead of the named-strategy loop")
+    ap.add_argument("--from-json", dest="from_json", default=None,
+                    help="replay per-strategy summaries from a previous --json "
+                         "output instead of running the backtest (honors the "
+                         "run-once validation budget); requires --emit-registry")
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
@@ -181,6 +185,23 @@ def main():
         if not (args.date_from and args.date_to):
             ap.error("need --train, --validation, or --from/--to")
         date_from, date_to, min_n, label = args.date_from, args.date_to, 15, "CUSTOM"
+
+    if args.from_json:
+        # Registry regeneration WITHOUT re-running the window (run-once
+        # validation discipline). Reads the {strategy: stats} shape --json
+        # writes, not a fresh backtest.
+        if not args.emit_registry:
+            ap.error("--from-json only makes sense with --emit-registry")
+        with open(args.from_json, encoding="utf-8") as f:
+            results = json.load(f)
+        summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
+                      "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
+        merge_registry(args.emit_registry, build_registry_records(
+            summaries, source="strategy", window=f"{date_from}..{date_to}",
+            run_date=args.run_date, min_n=min_n))
+        print(f"Merged {len(summaries)} records into {args.emit_registry} "
+              f"(replayed from {args.from_json}, no backtest run)")
+        return
 
     if args.scenarios:
         run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out)
