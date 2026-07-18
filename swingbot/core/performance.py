@@ -35,6 +35,7 @@ except Exception:
 
 from swingbot import config
 from swingbot.core import account as account_module
+from swingbot.core.jsonio import atomic_write_json, read_json
 from swingbot.core.strategy_types import HORIZONS as _HORIZONS
 
 # Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
@@ -42,6 +43,26 @@ from swingbot.core.strategy_types import HORIZONS as _HORIZONS
 _NEAR_TP_BASELINE_HORIZON_DAYS = _HORIZONS.get("2w", {}).get("max_holding_days", 14)
 
 _LOCK = Lock()
+
+
+def _journal_close_safely(trade: dict) -> None:
+    """Lazy import to avoid a circular import (analytics.journal doesn't
+    import performance, but importing it eagerly at module load time
+    would still tie the two modules' import order together unnecessarily)
+    and a try/except so a journaling bug can never surface as a broken
+    trade close -- matches the lazy-import pattern already used by
+    primary_strategy_label() in this same file. Must always be called
+    AFTER the caller's own `with _LOCK:` block has released, since
+    journal_trade_close() does its own separate file I/O (JournalStore
+    has its own lock in journal.py) and calling it while TradeLog's
+    _LOCK is still held would be an unnecessary nested-lock risk."""
+    try:
+        from swingbot.core.analytics.journal import journal_trade_close
+        journal_trade_close(trade)
+    except Exception:
+        import logging
+        logging.getLogger("swing-bot.performance").warning(
+            "journal hook failed for trade %s", trade.get("id"), exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -188,23 +209,17 @@ class TradeLog:
         self._trades = self._load()
 
     def _load(self) -> list:
-        if os.path.exists(self.path):
-            with open(self.path, "r") as f:
-                try:
-                    return json.load(f)
-                except json.JSONDecodeError:
-                    return []
-        return []
+        return read_json(self.path, [])
 
     def _save(self):
-        with open(self.path, "w") as f:
-            json.dump(self._trades, f, indent=2)
+        atomic_write_json(self.path, self._trades)
 
     def log_trade(self, ticker, strategy, horizon_key, direction, confidence_level,
                   confidence_label, entry, stop_loss, take_profit, target2=None,
                   confidence_score=None, confidence_breakdown=None, target_sources=None,
                   stop_sources=None, target2_sources=None, risk_reward_ratio=None,
-                  explanation=None, confirmed_by=None, plan_id=None) -> str:
+                  explanation=None, confirmed_by=None, plan_id=None,
+                  tier=None, badge=None, quality_score=None, source=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -226,6 +241,10 @@ class TradeLog:
         record = {
             "id": trade_id,
             "plan_id": plan_id,     # v2 plan-engine link; None for v1/legacy trades
+            "tier": tier,           # "A" | "B" | "C" | None (legacy / no plan)
+            "badge": badge,         # "VALIDATED" | "WEAK" | None
+            "quality_score": quality_score,
+            "source": source,       # "strategy" | "confluence" | None
             "legs": [],             # v2 two-leg realization (Task 63/64/65/66); [] for v1
             "ticker": ticker,
             "strategy": strategy,
@@ -477,6 +496,8 @@ class TradeLog:
                 newly_closed.append(t)
             if newly_closed:
                 self._save()
+        for t in newly_closed:
+            _journal_close_safely(t)
         return newly_closed
 
     def get_stats(self, confidence_level: int = None, trades: list | None = None) -> dict:
@@ -683,6 +704,7 @@ class TradeLog:
         process, same trades.json) can't race with it and corrupt or lose
         data. Returns True if a matching OPEN trade was found and closed.
         """
+        closed_trade = None
         with _LOCK:
             for t in self._trades:
                 if t["id"] == trade_id and t["status"] == "open":
@@ -690,7 +712,11 @@ class TradeLog:
                     t["closed_at"] = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
                     self._save()
-                    return True
+                    closed_trade = t
+                    break
+        if closed_trade is not None:
+            _journal_close_safely(closed_trade)
+            return True
         return False
 
     def delete_trade(self, trade_id: str) -> bool:
@@ -777,6 +803,8 @@ class TradeLog:
                 newly_closed.append(dict(t))
             if newly_closed:
                 self._save()
+        for t in newly_closed:
+            _journal_close_safely(t)
         return newly_closed
 
     def check_near_tp_timeout(self, ticker: str, live_price: float) -> list:
@@ -951,6 +979,8 @@ class TradeLog:
                     self._settle_account_balance(t)
                     newly_closed.append(dict(t))
             self._save()
+        for t in newly_closed:
+            _journal_close_safely(t)
         return newly_closed
 
     def get_detailed_stats(self) -> dict:

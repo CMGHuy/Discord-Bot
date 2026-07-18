@@ -10,11 +10,11 @@ Two jobs:
      triggers an alert) after it's seen the same way on N consecutive
      scans -- filtering out noise from a single volatile tick.
 """
-import json
 import os
 from threading import Lock
 
 from swingbot import config
+from swingbot.core.jsonio import atomic_write_json, read_json
 
 _LOCK = Lock()
 
@@ -25,17 +25,10 @@ class StateStore:
         self._data = self._load()
 
     def _load(self) -> dict:
-        if os.path.exists(self.path):
-            with open(self.path, "r") as f:
-                try:
-                    return json.load(f)
-                except json.JSONDecodeError:
-                    return {}
-        return {}
+        return read_json(self.path, {})
 
     def _save(self):
-        with open(self.path, "w") as f:
-            json.dump(self._data, f, indent=2)
+        atomic_write_json(self.path, self._data)
 
     def get_last_trend(self, key: str) -> str | None:
         """`key` is typically `SignalResult.state_key` (ticker|strategy|horizon)."""

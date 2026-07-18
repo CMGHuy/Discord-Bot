@@ -1,0 +1,127 @@
+from swingbot.core.analytics.metrics import win_rate, expectancy_r, r_multiple, profit_factor
+
+
+def _win():
+    return {"status": "win", "direction": "bullish", "entry": 100.0, "stop_loss": 95.0,
+            "exit_price": 104.0, "realized_pnl_amount": 80.0}
+
+
+def _loss():
+    return {"status": "loss", "direction": "bearish", "entry": 100.0, "stop_loss": 105.0,
+            "exit_price": 106.0, "realized_pnl_amount": -40.0}
+
+
+def _still_open_unsized():
+    # No exit_price/stop -- must be skipped everywhere without raising,
+    # per the Global Constraint "missing keys degrade gracefully".
+    return {"status": "open", "direction": "bullish", "entry": 100.0}
+
+
+def test_r_multiple_bullish_win_and_bearish_loss():
+    assert r_multiple(_win()) == 0.8      # (104-100)/(100-95)
+    assert r_multiple(_loss()) == -1.2    # (100-106)/(100-105) = -6/-5... sign-adjusted: -1.2
+
+
+def test_r_multiple_none_on_zero_risk_or_missing_fields():
+    assert r_multiple({"entry": 100.0, "stop_loss": 100.0, "exit_price": 105.0,
+                       "direction": "bullish"}) is None
+    assert r_multiple({"entry": 100.0, "stop_loss": 95.0, "direction": "bullish"}) is None
+
+
+def test_expectancy_and_win_rate_and_profit_factor():
+    closed = [_win(), _loss(), _still_open_unsized()]
+    assert win_rate(closed) == 50.0
+    assert round(expectancy_r(closed), 4) == -0.2   # mean(0.8, -1.2); open trade excluded (no exit_price)
+    assert profit_factor(closed) == 2.0              # 80 / 40
+
+
+def test_win_rate_and_expectancy_empty_or_no_losses():
+    assert win_rate([]) is None
+    assert expectancy_r([]) is None
+    assert profit_factor([_win()]) is None  # no losing amount -- undefined, not infinite
+
+
+def test_r_multiple_none_on_missing_direction():
+    """r_multiple gracefully returns None when direction key is missing,
+    rather than silently defaulting to bearish formula."""
+    trade_no_direction = {"entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0}
+    assert r_multiple(trade_no_direction) is None
+
+
+def test_r_multiple_none_on_invalid_direction():
+    """r_multiple gracefully returns None when direction has an invalid
+    value (misspelled, wrong enum, etc), rather than silently defaulting
+    to bearish formula."""
+    trade_invalid_direction = {"direction": "long", "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0}
+    assert r_multiple(trade_invalid_direction) is None
+
+
+# Tests for r_multiples and rolling_win_rate (Task A9)
+from swingbot.core.analytics.metrics import r_multiples, rolling_win_rate
+
+
+def _wl(status, closed_at):
+    return {"status": status, "closed_at": closed_at, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0,
+            "exit_price": 104.0 if status == "win" else 96.0}
+
+
+def test_r_multiples_skips_unsized():
+    closed = [_wl("win", "2026-01-01"), {"status": "win"}]  # second has no entry/stop/exit
+    rs = r_multiples(closed)
+    assert len(rs) == 1 and round(rs[0], 2) == 0.8
+
+
+def test_rolling_win_rate_window_and_floor():
+    # 6 alternating W/L trades, chronological, window=4
+    seq = ["win", "loss", "win", "loss", "win", "loss"]
+    closed = [_wl(s, f"2026-01-{i+1:02d}") for i, s in enumerate(seq)]
+    pts = rolling_win_rate(closed, window=4)
+    assert pts[-1]["win_rate"] == 50.0
+
+
+def test_rolling_win_rate_needs_five_closed():
+    seq = ["win", "loss", "win", "loss"]  # only 4
+    closed = [_wl(s, f"2026-01-{i+1:02d}") for i, s in enumerate(seq)]
+    assert rolling_win_rate(closed) == []
+
+
+# Tests for sharpe, sortino, trade_return_pct (Task A10)
+import numpy as np
+import pytest
+
+from swingbot.core.analytics.metrics import sharpe, sortino, trade_return_pct
+
+
+def test_sharpe_matches_numpy_reference():
+    returns = [1.0, 2.0, -1.0, 0.5, 1.5]
+    expected = np.mean(returns) / np.std(returns, ddof=1)
+    assert sharpe(returns) == pytest.approx(expected)
+    assert sharpe(returns) == pytest.approx(0.7, abs=0.05)
+
+
+def test_sharpe_and_sortino_none_below_five():
+    assert sharpe([1.0, 2.0, -1.0, 0.5]) is None
+    assert sortino([1.0, 2.0, -1.0, 0.5]) is None
+
+
+def test_sortino_uses_downside_only():
+    returns = [1.0, 2.0, -1.0, 0.5, 1.5]
+    downside = [min(r, 0.0) for r in returns]
+    expected_downside_std = float(np.sqrt(np.mean(np.square(downside))))
+    expected = np.mean(returns) / expected_downside_std
+    assert sortino(returns) == pytest.approx(expected)
+
+
+def test_sortino_none_when_no_downside():
+    # all positive returns -> downside deviation is 0 -> undefined, not infinite
+    assert sortino([1.0, 2.0, 3.0, 1.5, 2.5]) is None
+
+
+def test_trade_return_pct_mirrors_risk_metrics():
+    from swingbot.core.risk_metrics import _trade_return_pct
+
+    bull = {"entry": 100.0, "exit_price": 104.0, "direction": "bullish"}
+    bear = {"entry": 100.0, "exit_price": 96.0, "direction": "bearish"}
+    assert trade_return_pct(bull) == pytest.approx(_trade_return_pct(bull))
+    assert trade_return_pct(bear) == pytest.approx(_trade_return_pct(bear))

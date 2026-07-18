@@ -83,7 +83,8 @@ class PlanManager:
                     confidence_level=None, confidence_label=None,
                     entry=plan.entry_price, stop_loss=plan.stop_loss,
                     take_profit=plan.tp1, target2=plan.tp2,
-                    plan_id=plan.plan_id)
+                    plan_id=plan.plan_id, tier=plan.tier, badge=plan.badge,
+                    quality_score=plan.quality_score, source=plan.source)
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)

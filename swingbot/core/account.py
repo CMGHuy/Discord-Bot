@@ -60,6 +60,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config as app_config
+from swingbot.core.jsonio import atomic_write_json, read_json
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
@@ -128,12 +129,8 @@ def load_account_config(path: str = CONFIG_PATH) -> dict:
         "balance_history":    [],
     }
     if os.path.exists(path):
-        with open(path, "r") as f:
-            try:
-                stored = json.load(f)
-            except json.JSONDecodeError:
-                stored = None
-            if stored is not None:
+        stored = read_json(path, None)
+        if stored is not None:
                 # Merge: stored values win over defaults, but any key that
                 # doesn't exist in the stored file gets the default value.
                 merged = {**defaults, **stored}
@@ -174,8 +171,7 @@ def load_account_config(path: str = CONFIG_PATH) -> dict:
 
 
 def save_account_config(config: dict, path: str = CONFIG_PATH):
-    with open(path, "w") as f:
-        json.dump(config, f, indent=2)
+    atomic_write_json(path, config)
 
 
 def _append_balance_history(cfg: dict, entry: dict) -> dict:
