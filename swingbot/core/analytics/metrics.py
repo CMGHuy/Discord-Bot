@@ -170,8 +170,14 @@ def streaks(closed: list[dict]) -> dict:
     never itself counted toward a streak of its own length -- so a
     win/CLOSED/win sequence is two separate 1-trade win streaks, not a
     3-trade streak with a hole in it.
+
+    Trades without a `closed_at` value are skipped entirely before sorting --
+    since they have no chronological position, they are excluded from streak
+    computation rather than fabricating a position for them.
     """
-    ordered = sorted(closed, key=lambda t: t.get("closed_at") or "")
+    # Filter to only trades with a closed_at timestamp before sorting
+    # (trades without closed_at have no chronological position, so skip them)
+    ordered = sorted([t for t in closed if t.get("closed_at")], key=lambda t: t["closed_at"])
     best_win = worst_loss = current = 0
     current_kind: str | None = None
 
