@@ -184,7 +184,8 @@ def fibonacci_entries(df, horizon_key, params=None):
 ENTRY_FUNCS["Fibonacci"] = fibonacci_entries
 
 
-DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0}
+DEFAULT_PARAMS["EMA Crossover"] = {"rsi_dip": 45, "ext_atr": 1.0,
+                                   "entry_mode": "cross", "pullback_max_bars": 10}
 
 
 def ema_cross_entries(df, horizon_key, params=None):
@@ -198,6 +199,24 @@ def ema_cross_entries(df, horizon_key, params=None):
     # 2-bar hold: crossed last bar AND held today (filters one-bar fakeouts)
     held_bull = (diff.shift(2) <= 0) & (diff.shift(1) > 0) & (diff > 0)
     held_bear = (diff.shift(2) >= 0) & (diff.shift(1) < 0) & (diff < 0)
+
+    # --- rescue mode (Task 107): enter on the pullback, not the cross ---
+    if p.get("entry_mode") == "pullback":
+        window = int(p.get("pullback_max_bars", 10))
+        touched_bull = (df["Low"] <= fast) & (df["Close"] > fast)
+        touched_bear = (df["High"] >= fast) & (df["Close"] < fast)
+
+        def _first_touch_after(cross_mask, touch_mask):
+            out = pd.Series(False, index=df.index)
+            for ci in np.where(cross_mask.values)[0]:
+                for j in range(ci + 1, min(ci + 1 + window, len(df))):
+                    if touch_mask.values[j]:
+                        out.iloc[j] = True
+                        break                     # first touch only
+            return out
+
+        held_bull = _first_touch_after(held_bull, touched_bull).fillna(False)
+        held_bear = _first_touch_after(held_bear, touched_bear).fillna(False)
 
     rsi14 = g["rsi14"]
     rsi_dipped = rsi14.rolling(5).min().shift(1) < p["rsi_dip"]          # real pullback preceded
