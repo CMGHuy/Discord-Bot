@@ -199,3 +199,42 @@ def streaks(closed: list[dict]) -> dict:
 
     return {"current": current, "current_kind": current_kind,
             "best_win_streak": best_win, "worst_loss_streak": worst_loss}
+
+
+def r_multiples(closed: list[dict]) -> list[float]:
+    """Every computable R-multiple across the input, in whatever order
+    `closed` was given -- the raw list a histogram/decile chart bins
+    directly. Trades r_multiple() can't compute (missing fields, zero
+    risk) are silently skipped, not zero-filled -- a skipped trade should
+    not look like a breakeven trade in a histogram."""
+    return [r for t in closed if (r := r_multiple(t)) is not None]
+
+
+def rolling_win_rate(closed: list[dict], window: int = 20) -> list[dict]:
+    """Trailing win rate, one point per win/loss close, computed over the
+    most recent `window` win/loss trades up to and including that point.
+
+    Emission starts only once at least 5 win/loss trades have accumulated
+    (a rolling window over 1-4 trades is nearly pure noise and would make
+    an early chart look far more volatile than the track record actually
+    is) -- this floor is independent of `window` itself, so `window=4`
+    with exactly 6 trades still only emits points 5 and 6, each looking
+    back over the last 4.
+
+    Trades without a `closed_at` value are skipped entirely before sorting --
+    since they have no chronological position, they are excluded from rolling
+    win-rate computation rather than fabricating a position for them.
+    """
+    # Filter to only win/loss trades with a closed_at timestamp before sorting
+    # (trades without closed_at have no chronological position, so skip them)
+    wl = sorted([t for t in closed if t.get("status") in ("win", "loss") and t.get("closed_at")],
+                key=lambda t: t["closed_at"])
+    points = []
+    for i in range(len(wl)):
+        if i + 1 < 5:
+            continue
+        window_slice = wl[max(0, i + 1 - window):i + 1]
+        wins = sum(1 for t in window_slice if t["status"] == "win")
+        wr = wins / len(window_slice) * 100
+        points.append({"date": wl[i]["closed_at"][:10], "win_rate": round(wr, 2)})
+    return points

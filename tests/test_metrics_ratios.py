@@ -54,3 +54,33 @@ def test_r_multiple_none_on_invalid_direction():
     to bearish formula."""
     trade_invalid_direction = {"direction": "long", "entry": 100.0, "stop_loss": 95.0, "exit_price": 104.0}
     assert r_multiple(trade_invalid_direction) is None
+
+
+# Tests for r_multiples and rolling_win_rate (Task A9)
+from swingbot.core.analytics.metrics import r_multiples, rolling_win_rate
+
+
+def _wl(status, closed_at):
+    return {"status": status, "closed_at": closed_at, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0,
+            "exit_price": 104.0 if status == "win" else 96.0}
+
+
+def test_r_multiples_skips_unsized():
+    closed = [_wl("win", "2026-01-01"), {"status": "win"}]  # second has no entry/stop/exit
+    rs = r_multiples(closed)
+    assert len(rs) == 1 and round(rs[0], 2) == 0.8
+
+
+def test_rolling_win_rate_window_and_floor():
+    # 6 alternating W/L trades, chronological, window=4
+    seq = ["win", "loss", "win", "loss", "win", "loss"]
+    closed = [_wl(s, f"2026-01-{i+1:02d}") for i, s in enumerate(seq)]
+    pts = rolling_win_rate(closed, window=4)
+    assert pts[-1]["win_rate"] == 50.0
+
+
+def test_rolling_win_rate_needs_five_closed():
+    seq = ["win", "loss", "win", "loss"]  # only 4
+    closed = [_wl(s, f"2026-01-{i+1:02d}") for i, s in enumerate(seq)]
+    assert rolling_win_rate(closed) == []
