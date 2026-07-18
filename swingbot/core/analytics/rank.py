@@ -29,9 +29,18 @@ def _parse_created_at(value: str) -> dt.date | None:
     both without raising on a malformed value."""
     if not value:
         return None
+    # Coerce non-string input (e.g., datetime.date/datetime.datetime objects)
+    # safely before slicing to avoid TypeError. Check datetime before date
+    # since datetime is a subclass of date.
+    if isinstance(value, dt.datetime):
+        return value.date()
+    if isinstance(value, dt.date):
+        return value
+    if not isinstance(value, str):
+        return None
     try:
         return dt.date.fromisoformat(value[:10])
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 
@@ -47,6 +56,8 @@ def follow_score(plan, *, today: dt.date | None = None) -> float:
     badge_score = BADGE_WEIGHT if _get(plan, "badge") == "VALIDATED" else 0.0
 
     quality_score = _get(plan, "quality_score") or 0
+    # Clamp to [0, 100] to ensure quality_component stays in [0, 40]
+    quality_score = max(0, min(100, quality_score))
     quality_component = QUALITY_WEIGHT * quality_score
 
     regime_component = REGIME_WEIGHT if _get(plan, "regime_aligned") else 0.0
@@ -56,7 +67,8 @@ def follow_score(plan, *, today: dt.date | None = None) -> float:
         freshness_component = 0.0
     else:
         age_days = (today - created).days
-        freshness_component = max(0.0, FRESHNESS_MAX - FRESHNESS_DECAY_PER_DAY * age_days)
+        # Clamp to [0, FRESHNESS_MAX] to handle negative age_days (future-dated created_at)
+        freshness_component = min(FRESHNESS_MAX, max(0.0, FRESHNESS_MAX - FRESHNESS_DECAY_PER_DAY * age_days))
 
     return badge_score + quality_component + regime_component + freshness_component
 
