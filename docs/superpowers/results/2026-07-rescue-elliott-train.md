@@ -102,3 +102,29 @@ This is a TRAIN-only result — Elliott Wave remains WEAK in the validation
 registry until Task 106 spends its single, pre-registered VALIDATION-window
 look on this exact config and reports the out-of-sample verdict honestly
 (no retuning after that look, win or lose).
+
+## Methodology gap (discovered post-hoc, recorded for honesty)
+
+This TRAIN grid ran via `python scripts/tune_strategy.py --strategy "Elliott
+Wave"` with no `--exit-model`/`--scale-out` flags, because those flags did
+not exist in `scripts/tune_strategy.py` at the time this task executed (they
+were added afterward, concurrently, by the RSI rescue work — see
+`docs/superpowers/results/2026-07-rescue-rsi-train.md`, which explicitly runs
+"v2 exit model with scale-out (same economics as the validation run will
+use)"). `run_config`'s defaults at the time were `exit_model="v1",
+scale_out=False` (`swingbot/core/backtest.py`'s `run_backtest` defaults),
+so **this grid selected its winner under v1/no-scale-out economics**, while
+Task 106's VALIDATION run correctly used `--exit-model v2 --scale-out` (the
+economics the rest of round 2 has standardized on). The TRAIN and VALIDATION
+numbers in this rescue are therefore not a clean apples-to-apples comparison
+the way RSI's and RSI Divergence's are — a grid re-run under v2/scale-out
+might have selected a different winning combo (or none).
+
+This is **not corrected retroactively**: Task 106's validation look at the
+v1-selected config has already been spent (one look per rescued strategy,
+per the plan's budget rule), and it FAILED. Re-running the TRAIN grid under
+v2/scale-out now and then validating again would spend a second look at the
+2024-2025 window for this strategy, which the plan explicitly forbids
+regardless of the reason. The FAIL verdict stands as the real, final result
+for this rescue; this note exists only so a future reader doesn't mistake
+the Elliott Wave rescue for having the same methodological rigor as RSI's.

@@ -105,3 +105,13 @@ run_date 2026-07-10, the round-1 result) stands as the source of truth.
 The rescue gate code (Task 104) and its TRAIN-adopted defaults (Task 105)
 remain in the codebase — they are a real, measured improvement over the
 ungated strategy — but do not cross this plan's bar for VALIDATED status.
+
+**Methodology caveat:** Task 105's TRAIN grid ran under v1/no-scale-out
+economics (see the "Methodology gap" note appended to
+`2026-07-rescue-elliott-train.md`) because `scripts/tune_strategy.py` did not
+yet support `--exit-model`/`--scale-out` when that task executed, while this
+VALIDATION run correctly used v2/scale-out. The two are not a matched pair
+the way RSI's TRAIN/VALIDATION runs are. This is recorded honestly rather
+than corrected, since correcting it would require a second VALIDATION-window
+look at this strategy — forbidden by the plan's one-look budget regardless
+of the reason. The FAIL verdict above is the real, final result.
