@@ -33,6 +33,16 @@ docker compose up -d --build
 - Bot logs: `docker compose logs -f bot`, or the admin UI's **Logs** page
 - Admin UI: `http://localhost:1234` (or your server's address/port)
 
+### Plan Engine v2 rollout flags
+
+Three hot-reloadable `.env` flags stage the v2 plan engine rollout
+(details in the README's "Plan Engine v2" section): `PLAN_ENGINE_V2`
+(`off`/`shadow`/`on` — run `shadow` for ≥5 scan sessions and check
+`python scripts/shadow_parity_report.py` before flipping `on`), then
+`SCALE_OUT_ENABLED=true` and `INTRADAY_MANAGER_V2=true` only after ≥5
+clean `on` sessions. All three default off; flipping them requires no
+container restart (hot reload picks them up).
+
 ## Admin UI
 
 Protected by HTTP Basic Auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD` from

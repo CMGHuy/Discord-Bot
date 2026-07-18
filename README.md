@@ -437,6 +437,41 @@ to every command that fetches data or renders a chart: `!check`,
 `!ticker`, `!backtest`, `!backtestwatchlist`, `!charts`, `!scrapeall`,
 `!download`, `!pnl`, `!trade`, `!tradecharts`, `!watchlist add`.
 
+## Plan Engine v2: validated trade plans with badges and scale-out
+
+Every trade plan the bot emits can be produced by one shared engine
+(`swingbot/core/plan_engine.py`) whose exit behavior was backtested under a
+train/validation split — so live behavior equals backtested behavior by
+construction. Rollout is gated by three flags (all in `.env` / the admin
+UI's "Plan Engine v2" section, hot-reloadable):
+
+| Flag | Values | Meaning |
+|---|---|---|
+| `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
+| `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 with a chandelier ATR trail. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
+| `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
+
+Rollout order: `shadow` for ≥5 scan sessions → `on` (single-leg exits) for
+≥5 clean sessions → enable scale-out + manager.
+
+**Badges: what they legally claim.** Every v2 plan is stamped from
+`swingbot/core/validation_registry.json`:
+
+- ✅ **VALIDATED** — this plan's signal source cleared `win_rate ≥ 80%,
+  expectancy > 0, N ≥ 15, scratches+timeouts ≤ 50%` on the **held-out
+  2024–2025 window it was never tuned on** (tuning used 2020–2023 only,
+  and each source got exactly one validation shot). The badge line shows
+  the actual N / win-rate / expectancy behind the claim.
+- ⚠️ **WEAK** — the source did not clear that bar out-of-sample. Weak
+  plans are **never suppressed**; they carry a caution block with the real
+  numbers instead. A win rate printed on a badge is always an
+  out-of-sample number, never a train number.
+
+The registry regenerates only from validation runs
+(`python scripts/run_backtest_range.py --validation --exit-model v2
+--scale-out --emit-registry swingbot/core/validation_registry.json
+--run-date <date>`), never by hand.
+
 ## Files
 
 The project is laid out as a proper package:
