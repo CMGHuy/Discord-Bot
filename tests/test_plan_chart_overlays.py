@@ -114,21 +114,68 @@ def test_active_stop_entry_plan_suppresses_trigger_arrow(tmp_path):
 
 
 def test_partial_plan_renders_trail(tmp_path):
+    """Task B32: once a plan is PARTIAL, the chandelier runner trail (a
+    dotted ax.plot line plus an ax.text(..., " trail", ...) label) should be
+    drawn. Intercept plt.close (same pattern as
+    test_active_stop_entry_plan_suppresses_trigger_arrow above) to inspect
+    the populated Figure before generate_trade_chart's own
+    `finally: plt.close(fig)` discards it."""
     df = _fixture_df()
     plan = _fixture_plan(entry_type="market", status="PARTIAL")
-    path = generate_trade_chart(
-        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
-        filename="partial_trail.png", target2=118.0, plan_v2=plan,
-    )
+    captured_figs = []
+    real_close = plt.close
+
+    def _intercept_close(fig=None, *args, **kwargs):
+        if fig is not None:
+            captured_figs.append(fig)
+
+    with patch("swingbot.core.charts.trade_chart.plt.close", side_effect=_intercept_close):
+        path = generate_trade_chart(
+            "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+            filename="partial_trail.png", target2=118.0, plan_v2=plan,
+        )
+
     assert os.path.exists(path)
     assert os.path.getsize(path) > 10_000
+    assert captured_figs, "generate_trade_chart did not call plt.close(fig) as expected"
+    fig = captured_figs[0]
+    try:
+        all_texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+        assert any("trail" in txt for txt in all_texts), (
+            f"chandelier trail label (' trail') not found for a PARTIAL plan: {all_texts}"
+        )
+    finally:
+        real_close(fig)
 
 
 def test_active_plan_has_no_trail_and_still_renders(tmp_path):
+    """Companion to test_partial_plan_renders_trail: an ACTIVE (not PARTIAL)
+    plan must never draw the chandelier trail, since the whole
+    `if plan_v2.status == "PARTIAL":` block -- including the trail code --
+    never executes for it."""
     df = _fixture_df()
     plan = _fixture_plan(entry_type="market", status="ACTIVE")
-    path = generate_trade_chart(
-        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
-        filename="active_no_trail.png", target2=118.0, plan_v2=plan,
-    )
+    captured_figs = []
+    real_close = plt.close
+
+    def _intercept_close(fig=None, *args, **kwargs):
+        if fig is not None:
+            captured_figs.append(fig)
+
+    with patch("swingbot.core.charts.trade_chart.plt.close", side_effect=_intercept_close):
+        path = generate_trade_chart(
+            "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+            filename="active_no_trail.png", target2=118.0, plan_v2=plan,
+        )
+
     assert os.path.exists(path)
+    assert captured_figs, "generate_trade_chart did not call plt.close(fig) as expected"
+    fig = captured_figs[0]
+    try:
+        all_texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+        assert not any("trail" in txt for txt in all_texts), (
+            f"chandelier trail label (' trail') found for an ACTIVE plan (should only "
+            f"appear once PARTIAL): {all_texts}"
+        )
+    finally:
+        real_close(fig)
