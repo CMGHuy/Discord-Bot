@@ -66,6 +66,51 @@ def test_cached_chart_atomic_write_never_leaves_corrupt_file_on_failed_render(tm
     assert p == target_path
 
 
+def test_cached_chart_real_matplotlib_render_succeeds(tmp_path):
+    """Regression test for Task B35's Bug 1: the temp path handed to
+    render_fn must still end in `.png` (not a generic `.tmp` marker) so
+    matplotlib's `fig.savefig(path)` -- called with no explicit `format=`
+    anywhere in analytics_charts.py -- can infer the output format from
+    the extension. The byte-writing fakes above (`_counting_render`)
+    never exercise this because they bypass matplotlib entirely; this
+    test goes through a real render function, matching what !stats and
+    !calibration actually call in production."""
+    from swingbot.core.charts.analytics_charts import render_equity_curve
+
+    curve = {
+        "points": [
+            {"date": "2026-01-01", "balance": 10000.0, "pnl": 0.0},
+            {"date": "2026-01-02", "balance": 10150.0, "pnl": 150.0},
+            {"date": "2026-01-03", "balance": 10050.0, "pnl": -100.0},
+            {"date": "2026-01-04", "balance": 10400.0, "pnl": 350.0},
+        ],
+        "skipped_n": 0,
+    }
+
+    key = {"kind": "equity_curve", "snapshot_built_at": "2026-07-19T00:00:00"}
+    path = cached_chart(
+        key,
+        lambda target: render_equity_curve(
+            curve, os.path.dirname(target), filename=os.path.basename(target)
+        ),
+        cache_dir=str(tmp_path),
+    )
+
+    expected_target = os.path.join(str(tmp_path), f"{_key_hash(key)}.png")
+    assert path == expected_target
+    assert path.endswith(".png")
+    assert os.path.exists(path)
+    assert os.path.getsize(path) > 1000  # a real rendered PNG, not a stub blob
+
+    with open(path, "rb") as f:
+        header = f.read(8)
+    assert header == b"\x89PNG\r\n\x1a\n"  # real PNG signature
+
+    # No orphaned temp file left behind in the cache dir after success.
+    leftover = [n for n in os.listdir(str(tmp_path)) if n != os.path.basename(path)]
+    assert leftover == []
+
+
 def test_purge_removes_stale_files(tmp_path):
     calls = []
     p1 = cached_chart({"k": "a"}, _counting_render(calls), cache_dir=str(tmp_path))

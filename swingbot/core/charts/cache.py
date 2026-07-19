@@ -39,14 +39,26 @@ def cached_chart(key_parts: dict, render_fn: Callable[[str], str], cache_dir: st
     is ever written at `target_path` itself, so a failed render can never
     be mistaken for a valid cache hit by a later call. Only a fully
     successful render gets `os.replace`d into place, which is atomic on
-    both POSIX and Windows."""
+    both POSIX and Windows.
+
+    The temp path's final path component still ends in `.png` (not some
+    generic `.tmp` marker) -- callers commonly derive `filename=` for a
+    matplotlib-based render function from `os.path.basename(temp_path)`,
+    and matplotlib's `fig.savefig(path)` infers its output format from
+    the extension with no explicit `format=` passed anywhere in this
+    codebase. A `.tmp` extension would make every such render raise
+    `ValueError: Format 'tmp' is not supported`. The pid + nanosecond
+    timestamp segments ahead of `.png` are what make concurrent renders
+    for the same key collision-free, not the extension -- the file is
+    temporary and either gets renamed away on success or removed on
+    failure either way."""
     cache_dir = cache_dir or DEFAULT_CACHE_DIR
     os.makedirs(cache_dir, exist_ok=True)
     key = _key_hash(key_parts)
     target_path = os.path.join(cache_dir, f"{key}.png")
     if os.path.exists(target_path):
         return target_path
-    tmp_path = os.path.join(cache_dir, f"{key}.{os.getpid()}.{time.time_ns()}.tmp")
+    tmp_path = os.path.join(cache_dir, f"{key}.{os.getpid()}.{time.time_ns()}.png")
     try:
         render_fn(tmp_path)
     except Exception:
