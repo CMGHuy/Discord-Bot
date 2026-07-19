@@ -80,7 +80,8 @@ from .chart_style import (
     CHIP_BG, CURRENT_PRICE_COLOR, DEFAULT_LOOKBACK_DAYS,
     DEFAULT_TRENDLINE_LOOKBACK_DAYS, DISCLAIMER_TEXT, ENTRY_COLOR, KC_COLOR,
     MACD_LINE_COLOR, MIN_LABEL_GAP_FRAC, MUTED_TEXT_COLOR, PRO_STYLE,
-    RSI_LINE_COLOR, SIGNAL_LINE_COLOR, SPINE_COLOR, STOP_COLOR,
+    REWARD_BAND_ALPHA, RISK_BAND_ALPHA, RSI_LINE_COLOR, RUNNER_BAND_ALPHA,
+    SIGNAL_LINE_COLOR, SPINE_COLOR, STOP_COLOR,
     STOP_STRATEGY_COLOR, TARGET2_COLOR, TARGET_COLOR, TARGET_STRATEGY_COLOR,
     TEXT_COLOR, TRENDLINE_RESISTANCE_COLOR, TRENDLINE_SUPPORT_COLOR,
     VOLUME_PROFILE_PANEL_GAP_FRAC, VOLUME_PROFILE_PANEL_WIDTH_FRAC,
@@ -777,10 +778,13 @@ def generate_trade_chart(
         # Shade the reward zone (entry -> target 1) and risk zone (entry -> stop-loss).
         # Target 2, if present, gets a lighter shade further out -- the "if it
         # keeps going" stretch scenario, not the primary plan.
-        ax.axhspan(min(entry, take_profit), max(entry, take_profit), color=TARGET_COLOR, alpha=0.08, zorder=0)
-        ax.axhspan(min(entry, stop_loss), max(entry, stop_loss), color=STOP_COLOR, alpha=0.08, zorder=0)
+        reward_alpha = REWARD_BAND_ALPHA
+        risk_alpha = RISK_BAND_ALPHA
+        runner_alpha = RUNNER_BAND_ALPHA if plan_v2 is not None else 0.05
+        ax.axhspan(min(entry, take_profit), max(entry, take_profit), color=TARGET_COLOR, alpha=reward_alpha, zorder=0)
+        ax.axhspan(min(entry, stop_loss), max(entry, stop_loss), color=STOP_COLOR, alpha=risk_alpha, zorder=0)
         if target2 is not None:
-            ax.axhspan(min(take_profit, target2), max(take_profit, target2), color=TARGET2_COLOR, alpha=0.05, zorder=0)
+            ax.axhspan(min(take_profit, target2), max(take_profit, target2), color=TARGET2_COLOR, alpha=runner_alpha, zorder=0)
 
         # Entry is a planned level and doesn't have to be where price is
         # trading right now (see trade_plan.py -- several strategies suggest a

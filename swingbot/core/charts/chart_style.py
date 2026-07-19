@@ -157,6 +157,18 @@ VOLUME_PROFILE_PANEL_LOOKBACK_DAYS = 180
 # gap is still "live" all the way to now, not just at the moment it formed.
 FVG_ZONE_ALPHA = 0.16
 
+# Plan-driven R:R band alphas (trade_chart.py's plan_v2= kwarg, Task B30).
+# RISK_BAND_ALPHA/REWARD_BAND_ALPHA match the long-standing hardcoded
+# 0.08 used for the entry<->stop and entry<->target1 bands regardless
+# of whether plan_v2 is present -- unifying the literal into a
+# named constant, not changing its value. RUNNER_BAND_ALPHA (0.06) is
+# NEW and used ONLY when plan_v2 is actually passed; the legacy no-plan
+# path keeps its original 0.05 literal untouched so old callers render
+# pixel-identically to before this task.
+RISK_BAND_ALPHA = 0.08
+REWARD_BAND_ALPHA = 0.08
+RUNNER_BAND_ALPHA = 0.06
+
 # Priority order used to pick ONE confirming method to actually draw
 # when a scenario's target/stop level was confirmed by several at once
 # (see chart_drawing._pick_primary_source) -- most visually distinctive /
