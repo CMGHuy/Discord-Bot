@@ -120,6 +120,17 @@ COMMANDS_BY_CATEGORY = {
         ("!pnl", "Current unrealized profit/loss for every open trade, at today's price"),
         ("!performance [level]", "Win rate + risk-adjusted stats (Sharpe, Sortino, max drawdown, Calmar, profit factor), overall or per confidence level"),
         ("!summary", "Today's status at a glance: trades opened/closed, wins/losses, net gain/loss, and account balance movement today"),
+        ("!plans TICKER [from:YYYY-MM-DD] [to:YYYY-MM-DD] [horizon] [strategy]",
+         "Historical trade-plan lookup/generation for one ticker over a date range."),
+        ("!liveplans [status] [tier:A|B|C] [badge:validated|weak] [TICKER]",
+         "Live ranked plan board (PENDING/ACTIVE/PARTIAL), filterable and paginated via buttons. Filters compose: status/tier/badge/ticker."),
+    ],
+    "📐 Analytics": [
+        ("!top [n]", "The n highest follow-score PENDING/ACTIVE plans right now (default: DIGEST_MAX_PLANS)"),
+        ("!stats [7d|30d|90d|ytd|all]", "Win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, by-tier and by-strategy breakdowns"),
+        ("!lessons [n|week]", "Last n journal entries with their auto-generated lesson, or `week` for the weekly digest"),
+        ("!calibration", "Tier calibration vs. design bands, quality-score deciles, and edge-decay alerts"),
+        ("!journal TRADE_ID your note", "Attach a manual note to a trade's journal entry; `!journal TICKER` lists that ticker's entries"),
     ],
     "🧪 Backtesting": [
         ("!backtest TICKER [horizon] [strategy] [from:DATE] [to:DATE] [setups]",
@@ -200,6 +211,14 @@ COMMAND_USAGE = {
     "cached":              ("!cached", "!cached"),
     "plans":               ("!plans TICKER [from:YYYY-MM-DD] [to:YYYY-MM-DD] [horizon] [strategy]",
                             "!plans TSLA from:2024-01-01 to:2024-12-31  or  !plans AAPL 4w bnr"),
+    "liveplans":           ("!liveplans [status] [tier:A|B|C] [badge:validated|weak] [TICKER]",
+                            "!liveplans  or  !liveplans active tier:a NVDA"),
+    # Analytics
+    "top":                 ("!top [n]", "!top  or  !top 5"),
+    "stats":               ("!stats [7d|30d|90d|ytd|all]", "!stats  or  !stats 30d"),
+    "lessons":             ("!lessons [n|week]", "!lessons 10  or  !lessons week"),
+    "calibration":         ("!calibration", "!calibration"),
+    "journal":             ("!journal TRADE_ID your note here", "!journal T-42 watch the gap next time  or  !journal NVDA"),
     "ping":                ("!ping", "!ping"),
     "commands":            ("!commands", "!commands"),
 }

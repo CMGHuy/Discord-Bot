@@ -206,3 +206,12 @@ def test_journal_note_result_missing_id(tmp_path):
     store = JournalStore(path=str(tmp_path / "journal.json"))
     msg = _journal_note_result(store, "missing", "x")
     assert "no journal entry" in msg.lower()
+
+
+def test_help_catalog_covers_analytics_and_plans():
+    from swingbot.bot_core import COMMANDS_BY_CATEGORY, COMMAND_USAGE
+
+    all_listed = {cmd.split()[0].lstrip("!") for cmds in COMMANDS_BY_CATEGORY.values() for cmd, _ in cmds}
+    for name in ("top", "stats", "lessons", "calibration", "journal", "plans", "liveplans"):
+        assert name in all_listed, f"{name} missing from COMMANDS_BY_CATEGORY"
+        assert name in COMMAND_USAGE, f"{name} missing from COMMAND_USAGE"
