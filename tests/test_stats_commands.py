@@ -150,3 +150,24 @@ def test_since_all_is_none():
 
 def test_since_unknown_period_defaults_to_none():
     assert _since("bogus", TODAY) is None
+
+
+from swingbot.commands.stats import lessons_lines
+
+
+def _entry(ticker, outcome, r, lesson, tags=None):
+    return {"ticker": ticker, "outcome": outcome, "r_realized": r, "auto_lesson": lesson, "tags": tags or []}
+
+
+def test_lessons_lines_renders_each_entry():
+    entries = [
+        _entry("AAA", "win", 1.5, "Clean capture: banked 90% of the available move."),
+        _entry("BBB", "loss", -1.0, "Entry was wrong from the first bar — review the trigger, not the exit."),
+        _entry("CCC", "scratch", 0.0, "No follow-through within the horizon — count it as rent, not error."),
+    ]
+    lines = lessons_lines(entries)
+    assert len(lines) == 3
+    assert "AAA" in lines[0] and "+1.50R" in lines[0] and "Clean capture" in lines[0]
+    assert "✅" in lines[0]
+    assert "❌" in lines[1]
+    assert "⬜" in lines[2] or "➖" in lines[2]

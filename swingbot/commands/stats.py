@@ -203,3 +203,57 @@ async def stats_cmd(ctx, period: str = "all"):
         color=discord.Color.blurple(),
     )
     await ctx.send(embed=embed)
+
+
+_OUTCOME_EMOJI = {"win": "✅", "loss": "❌", "scratch": "⬜", "timeout": "⬜"}
+
+
+def lessons_lines(entries: list) -> list:
+    lines = []
+    for e in entries:
+        emoji = _OUTCOME_EMOJI.get(e["outcome"], "➖")
+        r = e.get("r_realized")
+        r_str = f"{r:+.2f}R" if r is not None else "n/aR"
+        lines.append(f"{emoji} {e['ticker']} {r_str} — {e['auto_lesson']}")
+    return lines
+
+
+def _tag_cloud(entries: list) -> str:
+    from collections import Counter
+    counts = Counter(tag for e in entries for tag in e.get("tags", []))
+    if not counts:
+        return "no tags yet"
+    return " · ".join(f"`{tag}` x{n}" for tag, n in counts.most_common(10))
+
+
+@bot.command(name="lessons")
+async def lessons_cmd(ctx, arg: str = "5"):
+    from swingbot.core.analytics.journal import JournalStore
+    store = JournalStore()
+
+    if arg.lower() == "week":
+        from swingbot.core.scanning import engine as scan_engine
+        from swingbot.core.analytics.insights import weekly_digest
+        import datetime as _dt
+
+        all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+        closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
+        messages = weekly_digest(store.entries(), closed, today=_dt.date.today())
+        for msg in messages:
+            await ctx.send(msg)
+        return
+
+    try:
+        n = max(1, min(25, int(arg)))
+    except ValueError:
+        await ctx.send(f"`{arg}` isn't a number or `week`. Usage: `!lessons [n|week]`.")
+        return
+
+    entries = store.entries()[:n]
+    if not entries:
+        await ctx.send("No journal entries yet.")
+        return
+
+    lines = lessons_lines(entries)
+    text = "\n".join(lines) + f"\n\n**Tags:** {_tag_cloud(entries)}"
+    await ctx.send(f"📖 **Last {len(entries)} journal entr{'y' if len(entries)==1 else 'ies'}:**\n{text[:1900]}")
