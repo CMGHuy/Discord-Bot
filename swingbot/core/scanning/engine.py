@@ -816,6 +816,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             result, earnings_info=earnings_info,
             target_confluence=item.target_confluence, stop_confluence=item.stop_confluence,
             confirmed_by=item.combined_from,
+            plan=getattr(item, "plan_v2", None),
         )
 
         # By this point item.all_requirements_met is always True -- the

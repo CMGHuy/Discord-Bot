@@ -10,6 +10,7 @@ import discord
 import pytest
 
 from swingbot import config
+from swingbot.core.explain import build_explanation
 from swingbot.core.plan_engine import TradePlanV2
 from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.scanning.embeds import RequirementCheck, build_embed, confidence_color
@@ -35,11 +36,12 @@ def make_conf(level=4, label="High", score=80):
     return types.SimpleNamespace(level=level, label=label, score=score)
 
 
-def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None):
+def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
+                  entry_type="market", trigger_price=100.0, direction="bullish"):
     return TradePlanV2(
         plan_id="plan-1", ticker="NVDA", created_at="2026-07-19", source="strategy",
-        strategy="RSI Pullback", horizon_key="2w", direction="bullish",
-        entry_type="market", trigger_price=100.0, entry_price=100.0, expiry_bars=5,
+        strategy="RSI Pullback", horizon_key="2w", direction=direction,
+        entry_type=entry_type, trigger_price=trigger_price, entry_price=100.0, expiry_bars=5,
         stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=120.0,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.0,
         quality_score=72, quality_breakdown=quality_breakdown or [("regime", 15), ("htf", 8)],
@@ -173,3 +175,46 @@ def test_compact_layout_includes_one_line_quality_summary(monkeypatch):
     field_names = [f.name for f in embed.fields]
     assert "✅ VALIDATED" not in field_names
     assert not any(name.startswith("Quality: 72/100") for name in field_names)
+
+
+# --- Task B4: trigger-aware explanation wording ---------------------------
+
+def _fake_scenario_result(direction="bullish", ticker="NVDA", horizon_label="2 Weeks", strategy="RSI Pullback"):
+    scenario = types.SimpleNamespace(
+        direction=direction, target_sources=["EMA", "Fibonacci"], stop_sources=["Structure"],
+        take_profit=110.0, target_distance_pct=10.0,
+        stop_loss=95.0, stop_distance_pct=5.0,
+        target2_price=115.0, target2_distance_pct=15.0,
+    )
+    return types.SimpleNamespace(
+        scenario=scenario, ticker=ticker, horizon_label=horizon_label, strategy=strategy,
+    )
+
+
+def test_build_explanation_stop_entry_bullish_shows_buy_stop_wording():
+    result = _fake_scenario_result(direction="bullish")
+    plan = make_plan_v2(entry_type="stop_entry", trigger_price=112.5, direction="bullish")
+    text = build_explanation(result, plan=plan)
+    assert "BUY STOP above" in text
+    assert "112.5" in text or "112.50" in text
+
+
+def test_build_explanation_stop_entry_bearish_shows_sell_stop_wording():
+    result = _fake_scenario_result(direction="bearish")
+    plan = make_plan_v2(entry_type="stop_entry", trigger_price=87.5, direction="bearish")
+    text = build_explanation(result, plan=plan)
+    assert "SELL STOP below" in text
+
+
+def test_build_explanation_market_entry_shows_enters_at_market():
+    result = _fake_scenario_result(direction="bullish")
+    plan = make_plan_v2(entry_type="market", direction="bullish")
+    text = build_explanation(result, plan=plan)
+    assert "Enters at market" in text
+
+
+def test_build_explanation_no_plan_omits_trigger_wording():
+    result = _fake_scenario_result(direction="bullish")
+    text = build_explanation(result, plan=None)
+    assert "BUY STOP" not in text
+    assert "Enters at market" not in text

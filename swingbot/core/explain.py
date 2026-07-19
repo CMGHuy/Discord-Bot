@@ -38,7 +38,8 @@ def _family_list(families: list) -> str:
 def build_explanation(result, earnings_info=None,
                       target_confluence: tuple = None,
                       stop_confluence: tuple = None,
-                      confirmed_by: list = None) -> str:
+                      confirmed_by: list = None,
+                      plan=None) -> str:
     scenario = result.scenario
     is_bull = scenario.direction == "bullish"
     level_word = "resistance" if is_bull else "support"
@@ -64,6 +65,16 @@ def build_explanation(result, earnings_info=None,
     plural = "" if t_count == 1 else "s"
 
     lines = []
+
+    # Line 0: trigger-aware entry wording -- makes clear whether this trade
+    # is already live at market or still waiting on a stop trigger to hit.
+    if plan is not None and getattr(plan, "entry_type", None) == "stop_entry":
+        trigger_word = "BUY STOP above" if is_bull else "SELL STOP below"
+        lines.append(
+            f"⏱️ Waits for a **{trigger_word} {plan.trigger_price:.2f}** before this trade is live."
+        )
+    elif plan is not None and getattr(plan, "entry_type", None) == "market":
+        lines.append("▶️ Enters at market -- no trigger to wait for.")
 
     # Line 1: what's confirmed and where
     lines.append(
