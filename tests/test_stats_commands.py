@@ -215,3 +215,12 @@ def test_help_catalog_covers_analytics_and_plans():
     for name in ("top", "stats", "lessons", "calibration", "journal", "plans", "liveplans"):
         assert name in all_listed, f"{name} missing from COMMANDS_BY_CATEGORY"
         assert name in COMMAND_USAGE, f"{name} missing from COMMAND_USAGE"
+
+
+def test_new_slash_commands_registered_on_tree():
+    import swingbot.commands.slash  # noqa: F401 -- import side effect registers the commands
+    from swingbot.bot_core import bot
+
+    names = {cmd.name for cmd in bot.tree.get_commands()}
+    for expected in ("liveplans", "top", "stats", "lessons"):
+        assert expected in names, f"/{expected} not registered on bot.tree"

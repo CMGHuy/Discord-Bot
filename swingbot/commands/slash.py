@@ -51,6 +51,10 @@ TRADE_FILTER_CHOICES = [
     app_commands.Choice(name="Loss", value="loss"),
 ]
 
+STATUS_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "PENDING", "ACTIVE", "PARTIAL")]
+TIER_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "A", "B", "C")]
+PERIOD_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("7d", "30d", "90d", "ytd", "all")]
+
 
 # ──────────────────────────────────────────────
 # Helper — send long text in chunks
@@ -162,11 +166,23 @@ async def slash_pnl(interaction: discord.Interaction):
 # ──────────────────────────────────────────────
 
 @bot.tree.command(name="liveplans", description="Live v2 plan lifecycle board (PENDING/ACTIVE/PARTIAL)")
-async def slash_liveplans(interaction: discord.Interaction):
-    from swingbot.commands.plans import format_plans_board
-    from swingbot.core.plan_store import PlanStore
-    board = format_plans_board(PlanStore().open_plans())
-    await _send_chunks(interaction, board)
+@app_commands.describe(status="Filter by lifecycle status", tier="Filter by quality tier")
+@app_commands.choices(status=STATUS_CHOICES, tier=TIER_CHOICES)
+async def slash_liveplans(
+    interaction: discord.Interaction,
+    status: app_commands.Choice[str] = None,
+    tier: app_commands.Choice[str] = None,
+):
+    args = []
+    if status and status.value != "All":
+        args.append(status.value.lower())
+    if tier and tier.value != "All":
+        args.append(f"tier:{tier.value.lower()}")
+
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.plans import liveplans_cmd
+    await liveplans_cmd.callback(ctx, *args)
 
 
 # ──────────────────────────────────────────────
@@ -389,3 +405,46 @@ async def slash_watchlist(
         await interaction.response.send_message(
             "Please provide a ticker for add/remove actions.", ephemeral=True
         )
+
+
+# ──────────────────────────────────────────────
+# /top
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="top", description="Highest follow-score PENDING/ACTIVE plans")
+@app_commands.describe(n="How many plans to show (default: config.DIGEST_MAX_PLANS)")
+async def slash_top(interaction: discord.Interaction, n: int = None):
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.stats import top_cmd
+    if n is not None:
+        await top_cmd.callback(ctx, n)
+    else:
+        await top_cmd.callback(ctx)
+
+
+# ──────────────────────────────────────────────
+# /stats
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="stats", description="Win rate, expectancy, and risk-adjusted stats")
+@app_commands.describe(period="Time window")
+@app_commands.choices(period=PERIOD_CHOICES)
+async def slash_stats(interaction: discord.Interaction, period: app_commands.Choice[str] = None):
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.stats import stats_cmd
+    await stats_cmd.callback(ctx, period.value if period else "all")
+
+
+# ──────────────────────────────────────────────
+# /lessons
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="lessons", description="Recent journal entries and their auto-generated lessons")
+@app_commands.describe(arg="A number of entries, or 'week' for the weekly digest")
+async def slash_lessons(interaction: discord.Interaction, arg: str = "5"):
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.stats import lessons_cmd
+    await lessons_cmd.callback(ctx, arg)
