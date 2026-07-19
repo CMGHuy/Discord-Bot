@@ -5,6 +5,8 @@ raw trades itself (see this Part's Global Constraints)."""
 import datetime as dt
 import types
 
+import discord
+
 from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
@@ -114,8 +116,7 @@ def _mini_table(rows: list, cols=("key", "n", "win_rate", "expectancy_r")) -> st
     return "```\n" + "\n".join(lines) + "\n```"
 
 
-def stats_embed(snap: dict) -> object:
-    import discord
+def stats_embed(snap: dict) -> discord.Embed:
     o = snap["overall"]
     embed = discord.Embed(
         title="📐 Analytics — overall performance",

@@ -4,7 +4,7 @@ import types
 import discord
 import pytest
 
-from swingbot.commands.stats import _fake_item_from_plan, top_plans
+from swingbot.commands.stats import _fake_item_from_plan, stats_embed, top_plans
 from swingbot.core.plan_engine import TradePlanV2
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.embeds import build_embed
@@ -105,7 +105,6 @@ def _fixture_snapshot():
 
 
 def test_stats_embed_has_key_numbers():
-    from swingbot.commands.stats import stats_embed
     embed = stats_embed(_fixture_snapshot())
     joined = "\n".join(f.value for f in embed.fields) + embed.description
     assert "Win rate" in joined
@@ -115,7 +114,6 @@ def test_stats_embed_has_key_numbers():
 
 
 def test_stats_embed_none_heavy_snapshot_shows_dashes_not_none():
-    from swingbot.commands.stats import stats_embed
     empty = {
         "built_at": "2026-07-11T20:00:00+00:00",
         "overall": {"n": 0, "wins": 0, "losses": 0, "win_rate": None, "expectancy_r": None,
