@@ -240,3 +240,35 @@ def test_six_bridge_commands_still_registered():
     names = {cmd.name for cmd in bot.tree.get_commands()}
     for expected in ("ticker", "backtest", "backtestwatchlist", "trades", "performance", "watchlist"):
         assert expected in names
+
+
+import re
+
+
+def test_no_direct_chart_render_calls_outside_to_thread():
+    """Regression tripwire: every call to generate_trade_chart(/one of the
+    known matplotlib chart-renderer functions( inside stats.py, plans.py,
+    or views.py must be preceded on the SAME physical line by 'to_thread'
+    or be a lambda body (only ever invoked from inside an already-
+    to_thread-wrapped cached_chart call) -- a bare synchronous call inside
+    an async def blocks the whole bot's event loop for the duration of a
+    matplotlib render (measured 200-800ms per chart), stalling every other
+    command and the scan loop's own message sends for that whole window.
+
+    Deliberately whitelists specific matplotlib chart-renderer names
+    (generate_trade_chart, render_equity_curve, render_r_histogram,
+    render_calibration, render_strategy_heatmap) rather than a blanket
+    'render_\\w+(' pattern -- the broader pattern false-positives against
+    plans.py's render_board() and views.py's self.render_fn(), which are
+    plain Python text/embed builders with no matplotlib involvement and no
+    need for thread dispatch."""
+    import swingbot.commands.stats as stats_mod
+    import swingbot.commands.plans as plans_mod
+    import swingbot.commands.views as views_mod
+
+    pattern = re.compile(r"(generate_trade_chart\(|render_(equity_curve|r_histogram|calibration|strategy_heatmap)\()")
+    for mod in (stats_mod, plans_mod, views_mod):
+        import inspect
+        for lineno, line in enumerate(inspect.getsource(mod).splitlines(), start=1):
+            if pattern.search(line) and "def " not in line and "to_thread" not in line and "lambda" not in line:
+                raise AssertionError(f"{mod.__name__}:{lineno}: direct chart render call not wrapped in to_thread: {line.strip()}")
