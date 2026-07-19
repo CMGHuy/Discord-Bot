@@ -833,13 +833,14 @@ def generate_trade_chart(
                               edgecolor=SPINE_COLOR, linewidth=0.7, alpha=0.94),
                     zorder=8)
             entry_lvl = plan_v2.entry_price or plan_v2.trigger_price
-            if plan_v2.entry_type == "stop_entry":
-                trigger_label = "BUY STOP" if plan_v2.direction == "bullish" else "SELL STOP"
-                ax.axhline(plan_v2.trigger_price, linestyle="--", linewidth=1.2,
-                           color=ENTRY_COLOR)
-                ax.annotate(trigger_label, xy=(0.99, plan_v2.trigger_price),
-                            xycoords=("axes fraction", "data"),
-                            ha="right", va="bottom", fontsize=8, color=ENTRY_COLOR)
+            if plan_v2.entry_type == "stop_entry" and plan_v2.status == "PENDING":
+                trigger_word = "BUY STOP" if plan_v2.direction == "bullish" else "SELL STOP"
+                ax.annotate(
+                    trigger_word, xy=(x_right, plan_v2.trigger_price), xytext=(x_right - 4, plan_v2.trigger_price),
+                    color=ENTRY_COLOR, fontsize=8, fontweight="bold", ha="right", va="center", zorder=9,
+                    arrowprops=dict(arrowstyle="->", color=ENTRY_COLOR, lw=1.3),
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor=CHIP_BG, edgecolor=ENTRY_COLOR, alpha=0.85),
+                )
             ax.axhline(plan_v2.tp1, linewidth=1.0, color=TARGET_COLOR)
             ax.axhspan(min(entry_lvl, plan_v2.tp1), max(entry_lvl, plan_v2.tp1),
                        alpha=0.08, color=TARGET_COLOR)          # leg-1 reward zone
@@ -860,6 +861,16 @@ def generate_trade_chart(
                 ax.annotate("TP1 banked ✓", xy=(0.01, plan_v2.tp1),
                             xycoords=("axes fraction", "data"), ha="left",
                             va="bottom", fontsize=8, color=TARGET_COLOR)
+
+            # Status watermark: large, faint text bottom-right of the price
+            # panel so the chart still communicates plan lifecycle state
+            # even when saved/shared detached from its Discord embed.
+            status_text = getattr(plan_v2, "status", None)
+            if status_text:
+                ax.text(
+                    0.98, 0.04, status_text, transform=ax.transAxes, fontsize=20, fontweight="bold",
+                    color=MUTED_TEXT_COLOR, alpha=0.5, ha="right", va="bottom", zorder=1,
+                )
 
         # Confirmed-by annotation: small note at bottom-left of the price panel.
         # Kept separate from the title stats so the title stays one clean line.

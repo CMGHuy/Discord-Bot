@@ -42,3 +42,23 @@ def test_generate_trade_chart_without_plan_is_unaffected(tmp_path):
         filename="no_plan.png", target2=118.0,
     )
     assert os.path.exists(path)
+
+
+def test_pending_stop_entry_plan_renders_with_arrow(tmp_path):
+    df = _fixture_df()
+    plan = _fixture_plan(entry_type="stop_entry", status="PENDING")
+    path = generate_trade_chart(
+        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+        filename="pending_stop_entry.png", target2=118.0, plan_v2=plan,
+    )
+    assert os.path.exists(path)
+
+
+def test_market_entry_plan_renders_without_error(tmp_path):
+    df = _fixture_df()
+    plan = _fixture_plan(entry_type="market", status="ACTIVE")
+    path = generate_trade_chart(
+        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+        filename="market_active.png", target2=118.0, plan_v2=plan,
+    )
+    assert os.path.exists(path)
