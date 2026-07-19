@@ -106,6 +106,13 @@ _SECTION_META = {
 
 app = Flask(__name__)
 
+# Bounds the Trade History table's server-rendered payload -- see the
+# closed_trades slicing in _render_dashboard_fragment() below. High enough
+# that the table's own 10/25/50/All per-page selector has real rows to
+# paginate through, low enough to keep the fragment render/transfer cheap
+# even on an account with years of history.
+CLOSED_TRADES_FRAGMENT_LIMIT = 500
+
 # Wire Flask + Werkzeug request logs to admin.log so the Logs page can show
 # admin UI activity separately from the bot's own log stream.
 _admin_log_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -383,11 +390,13 @@ def _render_dashboard_fragment() -> str:
     # 26th+ closed trade could never be selected in the dropdowns even though
     # it's a perfectly real filterable value).
     all_closed_trades = [t for t in all_raw if t["status"] in ("win", "loss", "closed")]
+    closed_trades_total = len(all_closed_trades)
     closed_trades = sorted(
         all_closed_trades,
         key=lambda t: t.get("closed_at") or "",
         reverse=True,
-    )[:25]
+    )[:CLOSED_TRADES_FRAGMENT_LIMIT]
+    closed_trades_truncated = closed_trades_total > CLOSED_TRADES_FRAGMENT_LIMIT
 
     # Currency symbol map -- covers every ticker shown on the page (open AND
     # recently closed). Previously only open_trades were included, so closed
@@ -620,6 +629,7 @@ def _render_dashboard_fragment() -> str:
         price_map=price_map, pnl_map=pnl_map, days_map=days_map,
         sizing_map=sizing_map, account_cfg=account_cfg, sizing_note=sizing_note,
         closed_trades=closed_trades, closed_trade_filter_options=closed_trade_filter_options,
+        closed_trades_total=closed_trades_total, closed_trades_truncated=closed_trades_truncated,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
         is_market_active=is_us_market_active(),
         dashboard_mode=mode,

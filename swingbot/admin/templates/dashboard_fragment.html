@@ -586,6 +586,13 @@
 
 {# ── Closed trades history ────────────────────────────────────────────────── #}
 <div class="card">
+  {% if closed_trades_truncated %}
+  <div class="banner" style="border-left:3px solid #e2b25a;margin-bottom:12px;">
+    Showing latest {{ closed_trades | length }} of {{ closed_trades_total }} closed trades —
+    use the <a href="{{ url_for('stats_page') }}">Performance page</a> or
+    <a href="{{ url_for('export_trades_csv') }}">export</a> for full history.
+  </div>
+  {% endif %}
   <p class="card-title" style="margin-bottom:14px;">
     Trade history
     <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
