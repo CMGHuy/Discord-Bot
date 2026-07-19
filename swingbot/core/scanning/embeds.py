@@ -471,6 +471,18 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
 
     sections: dict[str, list[tuple]] = {k: [] for k in theme.SECTION_ORDER}
 
+    if plan_v2 is not None and plan_v2.badge == "WEAK":
+        # First field on the embed for any WEAK plan, both layouts -- a
+        # single-line caution replacing the old multi-line badge_field_for
+        # block (see the `else:` branch below, which suppresses that field
+        # for WEAK so this doesn't duplicate it).
+        stats = plan_v2.badge_stats or {}
+        wr = stats.get("win_rate", 0.0)
+        n = stats.get("n", 0)
+        sections["headline"].append((
+            "⚠️ WEAK", f"OOS WR {wr:.1f}% (N={n}), below the 80% bar. Extra care.", False,
+        ))
+
     if compact:
         # One condensed line replaces B2's two separate pedigree fields
         # (badge_field_for + quality_lines) -- fewer fields is the whole
@@ -482,11 +494,17 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             sections["quality"].append(("📐 Quality", quality_line, False))
     else:
         badge_field = badge_field_for(plan_v2)
-        if badge_field is not None:
+        # WEAK's own badge_field is suppressed here -- the headline block
+        # above already covers it (single-line, first-positioned); appending
+        # it again here would duplicate the "⚠️ WEAK" field. VALIDATED is
+        # unaffected. quality_lines(...) is independent of badge and must
+        # keep rendering for WEAK plans, so it's no longer nested under the
+        # badge_field check.
+        if badge_field is not None and plan_v2.badge != "WEAK":
             sections["quality"].append((badge_field[0], badge_field[1], False))
-            quality_field = quality_lines(plan_v2)
-            if quality_field is not None:
-                sections["quality"].append((quality_field[0], quality_field[1], False))
+        quality_field = quality_lines(plan_v2)
+        if quality_field is not None:
+            sections["quality"].append((quality_field[0], quality_field[1], False))
 
     # "Why follow this" (Task B6) -- always added (both compact and detailed
     # layouts) when a v2 plan exists, regardless of which branch above fired,

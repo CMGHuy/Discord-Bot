@@ -40,7 +40,7 @@ def make_conf(level=4, label="High", score=80):
 
 def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
                   entry_type="market", trigger_price=100.0, direction="bullish",
-                  quality_score=72):
+                  quality_score=72, badge_stats=None):
     return TradePlanV2(
         plan_id="plan-1", ticker="NVDA", created_at="2026-07-19", source="strategy",
         strategy="RSI Pullback", horizon_key="2w", direction=direction,
@@ -49,7 +49,7 @@ def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.0,
         quality_score=quality_score, quality_breakdown=quality_breakdown or [("regime", 15), ("htf", 8)],
         tier=tier, badge=badge,
-        badge_stats={"n": 40, "win_rate": 82.5, "expectancy_r": 0.9, "window": "2020-2023"},
+        badge_stats=badge_stats or {"n": 40, "win_rate": 82.5, "expectancy_r": 0.9, "window": "2020-2023"},
         status="PENDING",
     )
 
@@ -255,6 +255,44 @@ def test_ordered_alerts_ranks_plan_carrying_alerts_by_follow_score():
 
     assert [a[2] for a in ordered] == [high, mid, low]
     assert [a[0].title for a in ordered] == ["high", "mid", "low"]
+
+
+# --- Task B7: WEAK block goes compact --------------------------------------
+
+def test_weak_plan_gets_single_line_caution_as_first_field(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    plan_v2 = make_plan_v2(badge="WEAK", tier="C",
+                            badge_stats={"n": 42, "win_rate": 63.4, "expectancy_r": 0.1, "window": "2020-2023"})
+    item = make_item(plan_v2=plan_v2)
+    embed = _build(item, layout="detailed")
+    first_field = embed.fields[0]
+    assert first_field.name.startswith("⚠️ WEAK")
+    assert "N=42" in first_field.value
+    assert "63.4%" in first_field.value
+    assert first_field.value.strip() == first_field.value
+    assert "\n" not in first_field.value
+
+
+def test_validated_plan_has_no_weak_field_anywhere(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    embed = _build(item, layout="detailed")
+    assert not any(f.name.startswith("⚠️ WEAK") for f in embed.fields)
+
+
+def test_weak_plan_detailed_mode_has_exactly_one_weak_field(monkeypatch):
+    # Guards against the duplicate-field bug: naively adding the new headline
+    # caution on top of the existing badge_field_for(plan_v2) append would
+    # leave two separately-named/valued "⚠️ WEAK"-ish fields in detailed mode.
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2(badge="WEAK", tier="C"))
+    embed = _build(item, layout="detailed")
+    weak_fields = [f for f in embed.fields if f.name.startswith("⚠️ WEAK")]
+    assert len(weak_fields) == 1
+    # And quality_lines(plan_v2) must still fire for WEAK plans -- it's
+    # independent of badge, only gated on quality_breakdown.
+    field_names = [f.name for f in embed.fields]
+    assert any(name.startswith("Quality: 72/100") for name in field_names)
 
 
 def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order():
