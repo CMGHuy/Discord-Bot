@@ -149,3 +149,42 @@ def test_api_journal_note_unknown_id_404(client, auth, monkeypatch):
     r = client.post("/api/journal/does-not-exist/note", data={"note": "x"}, headers=auth)
     assert r.status_code == 404
     assert r.get_json() == {"ok": False}
+
+
+# NOTE: by.strategy is a LIST of StatRow dicts (each carrying its dimension
+# value in "key"), not a strategy-name-keyed dict as an earlier draft of
+# this plan assumed -- see swingbot/core/analytics/aggregate.py's StatRow
+# and snapshots.py's build_snapshot(). The fake snapshot below uses the
+# real shape.
+_FAKE_SNAPSHOT = {
+    "built_at": "2026-07-11T00:00:00+00:00",
+    "by": {"strategy": [
+        {"key": "RSI", "n": 40, "win_rate": 77.5},
+        {"key": "Fibonacci", "n": 12, "win_rate": 90.0},
+    ]},
+    "calibration": {
+        "deciles": [{"decile": 10, "n": 30, "win_rate": 88.0}],
+        "tiers": [{"tier": "A", "n": 200, "win_rate": 84.0, "expected_band": "80-100", "pass": True}],
+        "drift": [{"strategy": "RSI", "decayed": True, "live_wr": 68.0, "oos_wr": 82.1, "delta": -14.1}],
+    },
+}
+
+
+def test_api_calibration_returns_snapshot_block(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT)
+    r = client.get("/api/calibration", headers=auth)
+    body = r.get_json()
+    assert body["deciles"] == _FAKE_SNAPSHOT["calibration"]["deciles"]
+    assert body["tiers"] == _FAKE_SNAPSHOT["calibration"]["tiers"]
+    assert body["drift"] == _FAKE_SNAPSHOT["calibration"]["drift"]
+
+
+def test_api_registry_joins_live_stats(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT)
+    r = client.get("/api/registry", headers=auth)
+    rows = {row["strategy"]: row for row in r.get_json()["registry"]}
+    assert rows["RSI"]["live_n"] == 40
+    assert rows["RSI"]["live_wr"] == 77.5
+    assert rows["RSI"]["status"] in ("VALIDATED", "WEAK")  # from the real committed registry
+    # A strategy the fake snapshot has no live data for still appears, with nulls.
+    assert rows["Elliott Wave"]["live_n"] is None

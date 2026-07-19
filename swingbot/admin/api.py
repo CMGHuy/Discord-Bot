@@ -16,6 +16,7 @@ from swingbot.core.analytics.snapshots import load_snapshot
 from swingbot.core.analytics.snapshots import refresh_snapshot as _rebuild_snapshot
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict
 from swingbot.core.plan_store import PlanStore
+from swingbot.core.registry import load_registry
 
 from .app import ADMIN_PASSWORD, ADMIN_USERNAME
 from .helpers import get_versions
@@ -149,3 +150,31 @@ def api_journal_note(trade_id):
     if not ok:
         return jsonify({"ok": False}), 404
     return jsonify({"ok": True})
+
+
+@api.route("/calibration", methods=["GET"])
+@require_auth_json
+def api_calibration():
+    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    calibration = snap.get("calibration", {}) if snap else {}
+    return jsonify({
+        "deciles": calibration.get("deciles", []),
+        "tiers": calibration.get("tiers", []),
+        "drift": calibration.get("drift", []),
+    })
+
+
+@api.route("/registry", methods=["GET"])
+@require_auth_json
+def api_registry():
+    # snap["by"]["strategy"] is a LIST of StatRow dicts (each carrying its
+    # dimension value in "key"), not a strategy-name-keyed dict -- see
+    # aggregate.py's StatRow / snapshots.py's build_snapshot.
+    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    by_strategy_rows = ((snap or {}).get("by") or {}).get("strategy", [])
+    by_strategy = {row["key"]: row for row in by_strategy_rows}
+    rows = []
+    for rec in load_registry():
+        live = by_strategy.get(rec["strategy"], {})
+        rows.append({**rec, "live_n": live.get("n"), "live_wr": live.get("win_rate")})
+    return jsonify({"registry": rows})
