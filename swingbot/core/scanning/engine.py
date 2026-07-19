@@ -816,7 +816,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             result, earnings_info=earnings_info,
             target_confluence=item.target_confluence, stop_confluence=item.stop_confluence,
             confirmed_by=item.combined_from,
-            plan=getattr(item, "plan_v2", None),
+            # Same cutover gate as plan_numbers_for_display/v2_priced elsewhere:
+            # in "shadow" mode item.plan_v2 exists but isn't the priced plan,
+            # so the wording must not describe it either.
+            plan=item.plan_v2 if config.PLAN_ENGINE_V2 == "on" else None,
         )
 
         # By this point item.all_requirements_met is always True -- the
