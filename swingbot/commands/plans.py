@@ -74,7 +74,7 @@ def _plan_line(plan) -> str:
     )
 
 
-def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, today=None) -> tuple:
+def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, ticker: str = None, today=None) -> tuple:
     """Pure renderer: a fixed list of TradePlanV2s (or v2-shaped stand-
     ins) in, (content_str, discord.Embed) out. Called directly by
     !liveplans (Task B15/B16) and as PlanBoardView's render_fn (Task B13).
@@ -88,6 +88,8 @@ def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, 
         live = [p for p in live if p.tier == tier]
     if badge != "All":
         live = [p for p in live if p.badge == badge]
+    if ticker:
+        live = [p for p in live if p.ticker == ticker]
 
     ranked = rank_plans(live, today=today)
     starred = starred_ids()
@@ -119,13 +121,50 @@ def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, 
     return content, embed
 
 
+_VALID_STATUSES = {"PENDING", "ACTIVE", "PARTIAL", "CLOSED", "CANCELLED", "ALL"}
+_VALID_TIERS = {"A", "B", "C"}
+_VALID_BADGES = {"VALIDATED", "WEAK"}
+
+
+def _parse_board_args(args: tuple) -> dict:
+    """Case-insensitive board-mode arg parser for !liveplans."""
+    parsed: dict = {}
+    for token in args:
+        tl = token.lower()
+        if tl.startswith("tier:"):
+            val = tl[5:].upper()
+            if val in _VALID_TIERS:
+                parsed["tier"] = val
+            continue
+        if tl.startswith("badge:"):
+            val = tl[6:].upper()
+            if val in _VALID_BADGES:
+                parsed["badge"] = val
+            continue
+        if tl.upper() in _VALID_STATUSES and tl.upper() != "ALL":
+            parsed["status"] = tl.upper()
+            continue
+        parsed["ticker"] = token.upper()
+    return parsed
+
+
 @bot.command(name="liveplans")
-async def liveplans_cmd(ctx):
+async def liveplans_cmd(ctx, *args: str):
+    parsed = _parse_board_args(args)
+    parsed_status = parsed.get("status", "All")
+    parsed_tier = parsed.get("tier", "All")
+    parsed_badge = parsed.get("badge", "All")
+    parsed_ticker = parsed.get("ticker")
+
     store = PlanStore()
     plans = store.open_plans()
-    content, embed = render_board(plans, status="All", tier="All", badge="All", page=0)
+    content, embed = render_board(
+        plans, status=parsed_status, tier=parsed_tier, badge=parsed_badge, ticker=parsed_ticker, page=0,
+    )
     view = PlanBoardView(
-        render_fn=lambda status, tier, badge: render_board(plans, status=status, tier=tier, badge=badge, page=0),
+        render_fn=lambda status, tier, badge: render_board(
+            plans, status=status, tier=tier, badge=badge, ticker=parsed_ticker, page=0,
+        ),
         author_id=ctx.author.id,
         items=plans,
     )

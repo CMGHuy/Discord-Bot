@@ -1,7 +1,7 @@
 import datetime as dt
 import types
 
-from swingbot.commands.plans import render_board
+from swingbot.commands.plans import render_board, _parse_board_args
 
 TODAY = dt.date(2026, 7, 11)
 
@@ -35,3 +35,17 @@ def test_render_board_filters_by_tier():
     plans = [_plan("AAA", "ACTIVE", tier="A"), _plan("BBB", "ACTIVE", tier="B")]
     content, _ = render_board(plans, status="All", tier="A", badge="All", page=0, today=TODAY)
     assert "AAA" in content and "BBB" not in content
+
+
+def test_parse_board_args_status_tier_ticker():
+    parsed = _parse_board_args(("active", "tier:a", "NVDA"))
+    assert parsed == {"status": "ACTIVE", "tier": "A", "ticker": "NVDA"}
+
+
+def test_parse_board_args_badge():
+    parsed = _parse_board_args(("badge:validated",))
+    assert parsed["badge"] == "VALIDATED"
+
+
+def test_parse_board_args_empty():
+    assert _parse_board_args(()) == {}
