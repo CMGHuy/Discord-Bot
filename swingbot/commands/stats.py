@@ -257,3 +257,41 @@ async def lessons_cmd(ctx, arg: str = "5"):
     lines = lessons_lines(entries)
     text = "\n".join(lines) + f"\n\n**Tags:** {_tag_cloud(entries)}"
     await ctx.send(f"📖 **Last {len(entries)} journal entr{'y' if len(entries)==1 else 'ies'}:**\n{text[:1900]}")
+
+
+def calibration_lines(tier_rows: list, decay_lines: list) -> list:
+    lines = []
+    for row in tier_rows:
+        mark = "—" if row["ok"] is None else ("✅" if row["ok"] else "❌")
+        wr_str = _dash(row["win_rate"], "{:.1f}%")
+        lines.append(f"{mark} Tier {row['tier']}: N={row['n']}, WR {wr_str} (expected {row['expected_band']})")
+    lines.extend(decay_lines)
+    return lines
+
+
+@bot.command(name="calibration")
+async def calibration_cmd(ctx):
+    from swingbot.core.scanning import engine as scan_engine
+    from swingbot.core.analytics.calibration import tier_calibration, score_deciles
+    from swingbot.core.analytics.insights import edge_decay_report
+
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+    closed = [t for t in all_trades if t.get("status") in ("win", "loss")]
+    if not closed:
+        await ctx.send("No closed trades yet — nothing to calibrate against.")
+        return
+
+    tiers = tier_calibration(closed)
+    decay = edge_decay_report(closed)
+    lines = calibration_lines(tiers, decay)
+
+    deciles = score_deciles(closed)
+    decile_summary = (
+        f"Score deciles: {len(deciles)} populated bucket(s), "
+        f"best {max(deciles, key=lambda d: d['win_rate'])['decile']} @ "
+        f"{max(d['win_rate'] for d in deciles):.1f}% WR" if deciles else "No quality-scored trades yet."
+    )
+
+    embed = discord.Embed(title="📐 Calibration", description="\n".join(lines)[:4000], color=discord.Color.blurple())
+    embed.add_field(name="Score deciles", value=decile_summary, inline=False)
+    await ctx.send(embed=embed)

@@ -171,3 +171,18 @@ def test_lessons_lines_renders_each_entry():
     assert "✅" in lines[0]
     assert "❌" in lines[1]
     assert "⬜" in lines[2] or "➖" in lines[2]
+
+
+from swingbot.commands.stats import calibration_lines
+
+
+def test_calibration_lines_marks_failing_tier_and_drift_alert():
+    tiers = [
+        {"tier": "A", "n": 40, "win_rate": 60.0, "expectancy_r": 0.1, "expected_band": ">=80", "ok": False},
+        {"tier": "B", "n": 5, "win_rate": None, "expectancy_r": None, "expected_band": "70-80", "ok": None},
+    ]
+    decay_lines = ["📉 Fibonacci: OOS WR 81.6% -> live WR 64.0% (N=25) — drift alert"]
+    lines = calibration_lines(tiers, decay_lines)
+    assert any("❌" in l and "A" in l for l in lines)
+    assert any("—" in l and "B" in l for l in lines)
+    assert any("Fibonacci" in l for l in lines)
