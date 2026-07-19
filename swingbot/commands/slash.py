@@ -263,8 +263,10 @@ async def slash_stop(interaction: discord.Interaction):
 @app_commands.describe(ticker="Stock ticker symbol, e.g. AAPL")
 async def slash_ticker(interaction: discord.Interaction, ticker: str):
     ticker = ticker.upper()
-    await interaction.response.send_message(f"Pulling snapshot for **{ticker}**…")
-    await interaction.channel.send(f"!ticker {ticker}")
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.info import ticker_cmd
+    await ticker_cmd.callback(ctx, ticker)
 
 
 # ──────────────────────────────────────────────
@@ -291,18 +293,17 @@ async def slash_backtest(
     setups: bool = False,
 ):
     ticker = ticker.upper()
-    h_val = horizon.value if horizon else "all"
-    s_val = strategy.value if strategy else "all"
-    parts = [f"!backtest {ticker} {h_val} {s_val}"]
+    args = [ticker, horizon.value if horizon else "all", strategy.value if strategy else "all"]
     if from_date:
-        parts.append(f"from:{from_date}")
+        args.append(f"from:{from_date}")
     if to_date:
-        parts.append(f"to:{to_date}")
+        args.append(f"to:{to_date}")
     if setups:
-        parts.append("setups")
-    cmd_str = " ".join(parts)
-    await interaction.response.send_message(f"Running `{cmd_str}`…")
-    await interaction.channel.send(cmd_str)
+        args.append("setups")
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.backtest import backtest_cmd
+    await backtest_cmd.callback(ctx, *args)
 
 
 # ──────────────────────────────────────────────
@@ -324,16 +325,15 @@ async def slash_backtestwatchlist(
     from_date: str = None,
     to_date: str = None,
 ):
-    h_val = horizon.value if horizon else "all"
-    s_val = strategy.value if strategy else "all"
-    parts = [f"!backtestwatchlist {h_val} {s_val}"]
+    args = [horizon.value if horizon else "all", strategy.value if strategy else "all"]
     if from_date:
-        parts.append(f"from:{from_date}")
+        args.append(f"from:{from_date}")
     if to_date:
-        parts.append(f"to:{to_date}")
-    cmd_str = " ".join(parts)
-    await interaction.response.send_message(f"Running `{cmd_str}`…")
-    await interaction.channel.send(cmd_str)
+        args.append(f"to:{to_date}")
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.backtest import backtestwatchlist_cmd
+    await backtestwatchlist_cmd.callback(ctx, *args)
 
 
 # ──────────────────────────────────────────────
@@ -351,9 +351,10 @@ async def slash_trades(
     filter: app_commands.Choice[str] = None,
     per_page: int = 10,
 ):
-    f_val = filter.value if filter else "all"
-    await interaction.response.send_message(f"Fetching trades…")
-    await interaction.channel.send(f"!trades {f_val} {per_page}")
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.trades import trades_cmd
+    await trades_cmd.callback(ctx, filter.value if filter else "all", per_page)
 
 
 # ──────────────────────────────────────────────
@@ -366,8 +367,13 @@ async def slash_performance(
     interaction: discord.Interaction,
     level: int = None,
 ):
-    await interaction.response.send_message("Fetching performance stats…")
-    await interaction.channel.send(f"!performance{' ' + str(level) if level else ''}")
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.trades import performance_cmd
+    if level is not None:
+        await performance_cmd.callback(ctx, level)
+    else:
+        await performance_cmd.callback(ctx)
 
 
 # ──────────────────────────────────────────────
@@ -391,20 +397,21 @@ async def slash_watchlist(
     ticker: str = None,
 ):
     act = action.value if action else "show"
+    if act in ("add", "remove") and not ticker:
+        await interaction.response.send_message("Please provide a ticker for add/remove actions.", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    ctx = await commands.Context.from_interaction(interaction)
+    from swingbot.commands.watchlist import watchlist_cmd, watchlist_add, watchlist_remove, watchlist_clear
     if act == "show":
-        await interaction.response.send_message("Fetching watchlist…")
-        await interaction.channel.send("!watchlist")
-    elif act in ("add", "remove") and ticker:
-        t = ticker.upper()
-        await interaction.response.send_message(f"Running `!watchlist {act} {t}`…")
-        await interaction.channel.send(f"!watchlist {act} {t}")
+        await watchlist_cmd.callback(ctx)
+    elif act == "add":
+        await watchlist_add.callback(ctx, ticker.upper())
+    elif act == "remove":
+        await watchlist_remove.callback(ctx, ticker.upper())
     elif act == "clear":
-        await interaction.response.send_message("Running `!watchlist clear`…")
-        await interaction.channel.send("!watchlist clear")
-    else:
-        await interaction.response.send_message(
-            "Please provide a ticker for add/remove actions.", ephemeral=True
-        )
+        await watchlist_clear.callback(ctx)
 
 
 # ──────────────────────────────────────────────

@@ -224,3 +224,19 @@ def test_new_slash_commands_registered_on_tree():
     names = {cmd.name for cmd in bot.tree.get_commands()}
     for expected in ("liveplans", "top", "stats", "lessons"):
         assert expected in names, f"/{expected} not registered on bot.tree"
+
+
+def test_slash_py_has_no_bang_command_channel_send_calls():
+    import inspect
+    from swingbot.commands import slash as slash_mod
+
+    source = inspect.getsource(slash_mod)
+    assert 'channel.send(f"!' not in source
+    assert 'channel.send("!' not in source
+
+
+def test_six_bridge_commands_still_registered():
+    from swingbot.bot_core import bot
+    names = {cmd.name for cmd in bot.tree.get_commands()}
+    for expected in ("ticker", "backtest", "backtestwatchlist", "trades", "performance", "watchlist"):
+        assert expected in names
