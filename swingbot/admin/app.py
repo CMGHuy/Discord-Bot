@@ -822,7 +822,32 @@ def trade_chart_image(trade_id):
     path = regenerate_chart_for_trade(t)
     if not path:
         abort(404, "Could not generate a chart for this trade right now (data fetch may have failed).")
-    return send_file(path, mimetype="image/png")
+
+    resp = send_file(path, mimetype="image/png")
+    if t["status"] == "open":
+        # An open trade's chart can change on every single refresh (price
+        # moves, new bars) -- never let the browser reuse a stale copy.
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    # Closed trades are deterministic -- the same trade_id always
+    # regenerates the identical chart (entry/stop/target/outcome are all
+    # frozen), so it's safe to let the browser cache it for a day and skip
+    # regenerating the image (a real matplotlib render, not free) on every
+    # repeat view of the same trade's detail page.
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    try:
+        mtime = os.path.getmtime(path)
+        last_modified = datetime.fromtimestamp(mtime, tz=timezone.utc)
+        resp.headers["Last-Modified"] = last_modified.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        ims = request.headers.get("If-Modified-Since")
+        if ims:
+            ims_dt = datetime.strptime(ims, "%a, %d %b %Y %H:%M:%S GMT").replace(tzinfo=timezone.utc)
+            if last_modified <= ims_dt:
+                return Response(status=304)
+    except (OSError, ValueError):
+        pass
+    return resp
 
 
 @app.route("/trades/<trade_id>/close", methods=["POST"])
