@@ -7,6 +7,9 @@ not asserted; Task B38's manual smoke pass is where a human actually
 looks at one."""
 import os
 import types
+from unittest.mock import patch
+
+import matplotlib.pyplot as plt
 
 from tests.conftest import make_ohlcv
 from swingbot.core.charts.trade_chart import generate_trade_chart
@@ -62,3 +65,49 @@ def test_market_entry_plan_renders_without_error(tmp_path):
         filename="market_active.png", target2=118.0, plan_v2=plan,
     )
     assert os.path.exists(path)
+
+
+def test_active_stop_entry_plan_suppresses_trigger_arrow(tmp_path):
+    """Task B31 regression pin: a stop-entry plan that has gone ACTIVE has
+    already fired its trigger, so the "BUY STOP"/"SELL STOP" arrow (which
+    means "still waiting for trigger") must NOT be drawn -- only a PENDING
+    stop-entry plan should show it (see
+    test_pending_stop_entry_plan_renders_with_arrow above). Before Task
+    B31's fix, the annotate call fired for ANY stop_entry plan regardless
+    of status, so this exact combination (stop_entry + ACTIVE) would have
+    still shown a stale "waiting for trigger" arrow.
+
+    generate_trade_chart() always closes its figure internally
+    (`finally: plt.close(fig)`) after saving, so the only way to inspect
+    what was actually drawn is to intercept that close call, grab the
+    still-populated Figure, inspect it, and close it ourselves.
+    """
+    df = _fixture_df()
+    plan = _fixture_plan(entry_type="stop_entry", status="ACTIVE")
+    captured_figs = []
+    real_close = plt.close
+
+    def _intercept_close(fig=None, *args, **kwargs):
+        # savefig() has already run by the time `finally: plt.close(fig)`
+        # executes, so the figure is fully drawn here -- just don't close
+        # it yet, so the test can inspect it first.
+        if fig is not None:
+            captured_figs.append(fig)
+
+    with patch("swingbot.core.charts.trade_chart.plt.close", side_effect=_intercept_close):
+        path = generate_trade_chart(
+            "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+            filename="active_stop_entry.png", target2=118.0, plan_v2=plan,
+        )
+
+    assert os.path.exists(path)
+    assert captured_figs, "generate_trade_chart did not call plt.close(fig) as expected"
+    fig = captured_figs[0]
+    try:
+        all_texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+        assert not any(word in txt for txt in all_texts for word in ("BUY STOP", "SELL STOP")), (
+            f"trigger arrow text found for an ACTIVE stop-entry plan (should be suppressed "
+            f"once the trigger has fired): {all_texts}"
+        )
+    finally:
+        real_close(fig)
