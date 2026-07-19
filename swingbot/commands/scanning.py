@@ -223,6 +223,47 @@ def _ordered_alerts(alerts: list, today=None) -> list:
     return ranked_alert_tuples + legacy_alerts
 
 
+def digest_payload(plans: list, today, max_n: int) -> list:
+    """VALIDATED-only, follow_score-ranked, capped at max_n -- the exact
+    same top_plans() ranking (Task B17) with one extra filter: WEAK
+    plans never appear in the curated digest even though they stay
+    fully visible in !plans and in live alerts (this Part's Global
+    Constraint: 'never suppress WEAK plans' applies to the FULL
+    surface, not to this one deliberately-curated shortlist)."""
+    from swingbot.commands.stats import top_plans
+
+    validated_only = [p for p in plans if p.badge == "VALIDATED"]
+    return top_plans(validated_only, max_n, today=today)
+
+
+async def _post_daily_digest(channel) -> None:
+    """Posts the curated 'Top plans today' digest right after the
+    trading session closes for the day (see _check_session_transition's
+    'session just closed' edge) -- gated on config.DAILY_DIGEST_ENABLED,
+    default off. Reuses _fake_item_from_plan/build_embed exactly like
+    !top (Task B17) so the digest embeds are pixel-identical to what a
+    user would see running !top themselves."""
+    import datetime as _dt
+
+    from swingbot.core.plan_store import PlanStore
+    from swingbot.commands.stats import _fake_item_from_plan
+    from swingbot.core.scanning.embeds import build_embed
+    from swingbot.commands.views import PlanActionView
+
+    plans = PlanStore().all()
+    top = digest_payload(plans, _dt.date.today(), config.DIGEST_MAX_PLANS)
+    if not top:
+        await channel.send("📌 **Top plans today** — no VALIDATED plans qualified today.")
+        return
+
+    await channel.send(f"📌 **Top plans today** — {len(top)} VALIDATED plan(s), ranked by follow score:")
+    for plan in top:
+        item = _fake_item_from_plan(plan)
+        embed = build_embed(item, "", {"closed": 0}, None, None, layout="compact")
+        view = PlanActionView(plan.plan_id, author_id=None)
+        view.message = await channel.send(embed=embed, view=view)
+
+
 async def _send_alerts(destination, alerts):
     """alerts: list of (embed, chart_path, plan_or_none) 3-tuples.
 
@@ -356,6 +397,13 @@ async def _check_session_transition(channel) -> None:
         await channel.send(message)
     except Exception as e:
         log.warning("Could not post session welcome/goodbye message: %s", e)
+
+    if not active and config.DAILY_DIGEST_ENABLED:
+        try:
+            await _post_daily_digest(channel)
+        except Exception as e:
+            log.warning("Could not post daily top-plans digest: %s", e)
+
     _session_was_active = active
 
 
