@@ -115,3 +115,30 @@ def render_r_histogram(r_list: list, out_dir: str, filename: str = "r_histogram.
     if r_list:
         ax.legend(loc="upper right", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
     return _save(fig, out_dir, filename)
+
+
+CALIBRATION_TARGET_WR = 80.0
+
+
+def render_calibration(deciles: list, out_dir: str, filename: str = "calibration.png") -> str:
+    fig, ax = _new_dark_axes()
+    if deciles:
+        labels = [d["decile"] for d in deciles]
+        wrs = [d["win_rate"] for d in deciles]
+        colors = [UP_COLOR if wr >= CALIBRATION_TARGET_WR else DOWN_COLOR for wr in wrs]
+        bars = ax.bar(labels, wrs, color=colors, alpha=0.9)
+        for bar, d in zip(bars, deciles):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1.5, f"n={d['n']}",
+                   ha="center", fontsize=7, color=MUTED_TEXT_COLOR)
+        ax.axhline(CALIBRATION_TARGET_WR, color=TEXT_COLOR, linewidth=1.2, linestyle="--")
+        ax.text(len(labels) - 0.5, CALIBRATION_TARGET_WR + 1.5, f"{CALIBRATION_TARGET_WR:.0f}% target",
+               color=TEXT_COLOR, fontsize=8, ha="right")
+        ax.set_ylim(0, 105)
+    else:
+        ax.text(0.5, 0.5, "No quality-scored closed trades yet", transform=ax.transAxes,
+               ha="center", va="center", color=MUTED_TEXT_COLOR, fontsize=11)
+
+    ax.set_xlabel("Quality score decile")
+    ax.set_ylabel("Realized win rate %")
+    ax.set_title("Quality-Score Calibration", color=TEXT_COLOR, fontsize=12, fontweight="bold")
+    return _save(fig, out_dir, filename)

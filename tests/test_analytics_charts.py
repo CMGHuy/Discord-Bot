@@ -7,7 +7,7 @@ content isn't asserted (that's what a human "!stats"/"!calibration"
 smoke-check in Task B38 is for)."""
 import os
 
-from swingbot.core.charts.analytics_charts import render_equity_curve, render_r_histogram
+from swingbot.core.charts.analytics_charts import render_calibration, render_equity_curve, render_r_histogram
 
 
 def _fixture_curve():
@@ -47,3 +47,14 @@ def test_render_r_histogram_writes_a_real_png(tmp_path):
 def test_render_r_histogram_empty_list_still_renders(tmp_path):
     path = render_r_histogram([], str(tmp_path), filename="empty.png")
     assert os.path.exists(path)
+
+
+def test_render_calibration_writes_a_real_png(tmp_path):
+    deciles = [
+        {"decile": "0-9", "n": 4, "win_rate": 25.0, "expectancy_r": -0.4},
+        {"decile": "50-59", "n": 12, "win_rate": 66.7, "expectancy_r": 0.1},
+        {"decile": "90-100", "n": 20, "win_rate": 90.0, "expectancy_r": 0.7},
+    ]
+    path = render_calibration(deciles, str(tmp_path))
+    assert os.path.exists(path)
+    assert os.path.getsize(path) > 10_000
