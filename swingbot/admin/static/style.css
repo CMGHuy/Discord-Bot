@@ -674,3 +674,106 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* =========================================================================
+   Cockpit v3 (Plan C) component styles — chips, lifecycle strip, heatmap,
+   timeline, sparklines, job log, settings diff. Colors reuse the existing
+   palette (#6dda9e green / #e2b25a amber / #da6d6d red / #5a6275 grey /
+   #6ea8fe blue) rather than introducing new hues, so these read as part of
+   the same design system as .confidence-badge / .pos-bar / .trade-status-dot
+   above instead of a bolted-on second visual language.
+   ========================================================================= */
+
+/* ---- Chips (tier / badge / decay) --------------------------------------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em; text-transform: uppercase; line-height: 1.6;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.chip-tier-a { background: rgba(109,218,158,0.14); color: #6dda9e; border-color: rgba(109,218,158,0.35); }
+.chip-tier-b { background: rgba(226,178,90,0.14);  color: #e2b25a; border-color: rgba(226,178,90,0.35); }
+.chip-tier-c { background: rgba(90,98,117,0.18);   color: #9aa3b8; border-color: rgba(90,98,117,0.4); }
+.chip-validated { background: rgba(110,168,254,0.14); color: #6ea8fe; border-color: rgba(110,168,254,0.35); }
+.chip-weak      { background: rgba(218,109,109,0.14); color: #da6d6d; border-color: rgba(218,109,109,0.35); }
+.chip-decay {
+  background: rgba(218,109,109,0.18); color: #ff8a8a; border-color: rgba(255,138,138,0.5);
+  animation: chip-decay-pulse 1.8s ease-in-out infinite;
+}
+@keyframes chip-decay-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,138,138,0.35); }
+  50%      { box-shadow: 0 0 0 4px rgba(255,138,138,0); }
+}
+
+/* ---- Lifecycle strip (Plans board + Dashboard v2) ----------------------- */
+.lifecycle-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.lifecycle-card {
+  flex: 1; min-width: 110px; background: #13161d; border: 1px solid #1f2330;
+  border-radius: 10px; padding: 10px 14px; text-decoration: none; color: inherit;
+  transition: border-color .15s, transform .1s;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.lifecycle-card:hover { border-color: #2a3040; transform: translateY(-1px); }
+.lifecycle-card.active-filter { border-color: #6ea8fe; box-shadow: 0 0 0 1px #6ea8fe inset; }
+.lifecycle-card .lc-count { font-size: 20px; font-weight: 700; color: #dde1ea; }
+.lifecycle-card .lc-label { font-size: 10.5px; color: #5a6275; text-transform: uppercase; letter-spacing: .05em; }
+
+/* ---- Heatmap grid (strategy × horizon, promoted from stats.html so
+   strategies.html / the shared _heatmap.html partial can use it too) ------ */
+.heatmap-grid { display: grid; gap: 2px; margin-top: 4px; }
+.hm-cell {
+  border-radius: 3px; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 600; color: rgba(255,255,255,.75);
+  cursor: default;
+}
+.hm-cell.hm-na { background: #1a1d26 !important; color: #4a5060; }
+.hm-header { font-size: 9px; color: #5a6275; text-align: center;
+             display: flex; align-items: center; justify-content: center; }
+
+/* ---- Timeline (plan status_history) -------------------------------------- */
+.timeline { list-style: none; margin: 0; padding: 0 0 0 4px; position: relative; }
+.timeline::before {
+  content: ""; position: absolute; left: 5px; top: 4px; bottom: 4px; width: 2px;
+  background: #1f2330;
+}
+.timeline li {
+  position: relative; padding: 6px 0 6px 22px; font-size: 12.5px; color: #9aa0b0;
+}
+.timeline li::before {
+  content: ""; position: absolute; left: 0; top: 10px; width: 10px; height: 10px;
+  border-radius: 50%; background: #13161d; border: 2px solid #6ea8fe;
+}
+.timeline li.tl-cancelled::before { border-color: #da6d6d; }
+.timeline li.tl-closed::before    { border-color: #6dda9e; }
+.timeline li strong { color: #dde1ea; }
+
+/* ---- Sparkline (inline SVG sizing) --------------------------------------- */
+.sparkline { display: block; overflow: visible; }
+.sparkline polyline.spark-line { fill: none; stroke-width: 1.6; }
+.sparkline polyline.spark-ref  { fill: none; stroke-width: 1; stroke-dasharray: 3 2; opacity: .5; }
+
+/* ---- Job log (Tuning workbench) ------------------------------------------ */
+.job-log {
+  background: #0a0c10; border: 1px solid #1f2330; border-radius: 8px;
+  padding: 10px 12px; font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px; line-height: 1.5; color: #9aa0b0; max-height: 260px;
+  overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+}
+.job-log .job-log-line-err { color: #da6d6d; }
+
+/* ---- Settings diff preview ------------------------------------------------ */
+.diff-add { color: #6dda9e; font-weight: 600; }
+.diff-del { color: #da6d6d; text-decoration: line-through; opacity: 0.75; }
+.diff-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.diff-table th {
+  text-align: left; padding: 5px 8px; font-size: 10px; color: #5a6275;
+  text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid #1f2330;
+}
+.diff-table td { padding: 5px 8px; border-bottom: 1px solid #0d0f14; }
+
+/* ---- Empty states (every new page — Task C45) ----------------------------- */
+.empty-state {
+  text-align: center; padding: 40px 20px; color: #5a6275;
+}
+.empty-state .empty-icon { font-size: 32px; opacity: .5; margin-bottom: 8px; }
