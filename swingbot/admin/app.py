@@ -1114,3 +1114,14 @@ def main():
     host = os.getenv("ADMIN_HOST", "0.0.0.0")
     port = int(os.getenv("ADMIN_PORT", 1234))
     app.run(host=host, port=port, debug=False)
+
+
+# ---------------------------------------------------------------------------
+# Blueprints -- registered at the BOTTOM of this module, after every name
+# they import from here (app, ADMIN_USERNAME, ADMIN_PASSWORD, require_auth,
+# helpers, ...) already exists in this module's namespace. Importing these
+# any earlier (e.g. alongside the top-of-file imports) would deadlock on
+# the circular reference: api.py/pages.py both do `from .app import app`.
+# ---------------------------------------------------------------------------
+from . import api as _api  # noqa: E402
+app.register_blueprint(_api.api)

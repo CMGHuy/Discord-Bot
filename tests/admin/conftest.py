@@ -24,6 +24,7 @@ import pytest
 _RELOAD_MODULES = [
     "swingbot.admin.helpers",
     "swingbot.admin.app",
+    "swingbot.admin.api",
 ]
 
 
