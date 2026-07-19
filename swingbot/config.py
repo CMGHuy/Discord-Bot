@@ -374,6 +374,10 @@ FIELDS: list[Field] = [
                "just the headline, trade plan table, and a one-line quality summary -- confluence/"
                "what-changed/branch sections are dropped to fit more alerts on screen at once. "
                "Purely a rendering choice; no scoring or filtering changes."),
+    Field("DIGEST_MAX_PLANS", "DIGEST_MAX_PLANS", "Discord Alerts", "Default plan count for !top / daily digest",
+          type="number", default="3", min=1, max=10, step=1,
+          help="Default number of plans shown by `!top` when no explicit count is given, and the "
+               "daily Top-Plans digest's plan count (Task B37). Purely a display cap."),
 ]
 
 _CASTERS = {
