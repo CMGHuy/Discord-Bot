@@ -82,3 +82,48 @@ def test_fake_item_from_plan_builds_embed_without_crashing_and_engages_theming()
     assert embed.title.startswith("🅰")
     assert "VALIDATED" in embed.title
     assert "NVDA" in embed.title
+
+
+def _fixture_snapshot():
+    return {
+        "built_at": "2026-07-11T20:00:00+00:00",
+        "overall": {
+            "n": 40, "wins": 28, "losses": 12, "win_rate": 70.0, "expectancy_r": 0.35,
+            "profit_factor": 1.8, "sharpe": 0.6, "sortino": 0.9, "max_drawdown_pct": 12.5,
+            "total_pnl": 3210.5, "streaks": {"current": 3, "current_kind": "win", "best_win_streak": 5, "worst_loss_streak": 3},
+        },
+        "by": {
+            "tier": [
+                {"key": "A", "n": 20, "wins": 16, "losses": 4, "win_rate": 80.0, "expectancy_r": 0.5, "avg_r": 0.5, "profit_factor": 2.2, "total_pnl": 2000.0},
+                {"key": "B", "n": 20, "wins": 12, "losses": 8, "win_rate": 60.0, "expectancy_r": 0.2, "avg_r": 0.2, "profit_factor": 1.3, "total_pnl": 1210.5},
+            ],
+            "strategy": [
+                {"key": "EMA Crossover", "n": 15, "wins": 11, "losses": 4, "win_rate": 73.3, "expectancy_r": 0.4, "avg_r": 0.4, "profit_factor": 2.0, "total_pnl": 1500.0},
+            ],
+        },
+    }
+
+
+def test_stats_embed_has_key_numbers():
+    from swingbot.commands.stats import stats_embed
+    embed = stats_embed(_fixture_snapshot())
+    joined = "\n".join(f.value for f in embed.fields) + embed.description
+    assert "Win rate" in joined
+    assert "70.0%" in joined
+    assert "Expectancy" in joined
+    assert "0.35" in joined
+
+
+def test_stats_embed_none_heavy_snapshot_shows_dashes_not_none():
+    from swingbot.commands.stats import stats_embed
+    empty = {
+        "built_at": "2026-07-11T20:00:00+00:00",
+        "overall": {"n": 0, "wins": 0, "losses": 0, "win_rate": None, "expectancy_r": None,
+                    "profit_factor": None, "sharpe": None, "sortino": None, "max_drawdown_pct": None,
+                    "total_pnl": 0.0, "streaks": {"current": 0, "current_kind": None, "best_win_streak": 0, "worst_loss_streak": 0}},
+        "by": {"tier": [], "strategy": []},
+    }
+    embed = stats_embed(empty)
+    joined = "\n".join(f.value for f in embed.fields) + embed.description
+    assert "None" not in joined
+    assert "—" in joined

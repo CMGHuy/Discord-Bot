@@ -88,3 +88,74 @@ async def top_cmd(ctx, n: int = None):
         embed = build_embed(item, "", {"closed": 0}, None, None, layout="compact")
         view = PlanActionView(plan.plan_id, author_id=ctx.author.id)
         view.message = await ctx.send(embed=embed, view=view)
+
+
+def _dash(x, fmt="{:.1f}"):
+    return fmt.format(x) if x is not None else "—"
+
+
+def _mini_table(rows: list, cols=("key", "n", "win_rate", "expectancy_r")) -> str:
+    headers = {"key": "Group", "n": "N", "win_rate": "WR%", "expectancy_r": "ExpR"}
+    header_line = " ".join(f"{headers[c]:>8s}" for c in cols)
+    lines = [header_line]
+    for row in rows:
+        cells = []
+        for c in cols:
+            v = row.get(c)
+            if c == "key":
+                cells.append(f"{str(v):>8s}")
+            elif c == "win_rate":
+                cells.append(f"{_dash(v, '{:.1f}%'):>8s}")
+            elif c == "expectancy_r":
+                cells.append(f"{_dash(v, '{:+.2f}'):>8s}")
+            else:
+                cells.append(f"{v:>8}")
+        lines.append(" ".join(cells))
+    return "```\n" + "\n".join(lines) + "\n```"
+
+
+def stats_embed(snap: dict) -> object:
+    import discord
+    o = snap["overall"]
+    embed = discord.Embed(
+        title="📐 Analytics — overall performance",
+        description=(
+            f"**N** {o['n']} ({o['wins']}W/{o['losses']}L)  ·  **Win rate** {_dash(o['win_rate'], '{:.1f}%')}  ·  "
+            f"**Expectancy** {_dash(o['expectancy_r'], '{:+.3f}')}R  ·  **Profit factor** {_dash(o['profit_factor'], '{:.2f}')}\n"
+            f"**Sharpe** {_dash(o['sharpe'], '{:.2f}')}  ·  **Sortino** {_dash(o['sortino'], '{:.2f}')}  ·  "
+            f"**Max DD** {_dash(o['max_drawdown_pct'], '{:.1f}%')}  ·  **Total P&L** {o['total_pnl']:+.2f}"
+        ),
+        color=discord.Color.blurple(),
+    )
+    streak = o["streaks"]
+    streak_word = streak["current_kind"] or "none"
+    embed.add_field(name="🔥 Current streak", value=f"{streak['current']} {streak_word} "
+                     f"(best win streak {streak['best_win_streak']}, worst loss streak {streak['worst_loss_streak']})",
+                     inline=False)
+
+    tier_rows = snap["by"].get("tier", [])
+    if tier_rows:
+        embed.add_field(name="By tier", value=_mini_table(tier_rows), inline=False)
+
+    strat_rows = sorted(snap["by"].get("strategy", []), key=lambda r: r["n"], reverse=True)[:5]
+    if strat_rows:
+        embed.add_field(name="By strategy (top 5 by N)", value=_mini_table(strat_rows), inline=False)
+
+    embed.set_footer(text=f"Snapshot built {snap['built_at']}")
+    return embed
+
+
+@bot.command(name="stats")
+async def stats_cmd(ctx, period: str = "all"):
+    from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
+    import asyncio
+
+    snap = load_snapshot()
+    if snap is None:
+        await asyncio.to_thread(refresh_snapshot)
+        snap = load_snapshot()
+    if snap is None:
+        await ctx.send("No analytics snapshot available yet — not enough closed trades, or the snapshot build failed. Check logs.")
+        return
+    embed = stats_embed(snap)
+    await ctx.send(embed=embed)
