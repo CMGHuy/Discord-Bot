@@ -224,12 +224,31 @@ def _ordered_alerts(alerts: list, today=None) -> list:
 
 
 async def _send_alerts(destination, alerts):
-    """alerts: list of (embed, chart_path, plan_or_none) 3-tuples."""
-    for embed, chart_path, _plan in _ordered_alerts(alerts):
+    """alerts: list of (embed, chart_path, plan_or_none) 3-tuples.
+
+    Every plan-carrying alert gets a PlanActionView(plan.plan_id,
+    author_id=None) attached (any user may click); legacy (no-plan) alerts
+    get no view. PlanActionView is imported lazily here rather than at
+    module top to avoid a circular import: views.py imports from
+    swingbot.core.plan_store, and scanning.py is imported very early during
+    bot startup (bot_core.py registers commands from every
+    swingbot/commands/* module) -- a top-level import is safe today (no
+    cycle exists), but the lazy import documents the intent and costs
+    nothing at this call frequency (once per alert message, not per scan
+    tick).
+    """
+    from swingbot.commands.views import PlanActionView
+
+    for embed, chart_path, plan in _ordered_alerts(alerts):
+        view = PlanActionView(plan.plan_id, author_id=None) if plan is not None else None
+        kwargs = {"embed": embed}
         if chart_path:
-            await destination.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
-        else:
-            await destination.send(embed=embed)
+            kwargs["file"] = discord.File(chart_path, filename=os.path.basename(chart_path))
+        if view is not None:
+            kwargs["view"] = view
+        msg = await destination.send(**kwargs)
+        if view is not None:
+            view.message = msg
 
 
 def _presence_text() -> str:

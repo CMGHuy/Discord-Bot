@@ -257,3 +257,9 @@ def test_dismiss_button_removes_view_keeps_embed():
     interaction = _fake_interaction(user_id=1)
     asyncio.run(view.dismiss_button.callback(interaction))
     interaction.response.edit_message.assert_awaited_once_with(view=None)
+
+
+def test_any_author_id_none_interaction_check_true_for_any_user():
+    view = PlanActionView("plan-x", author_id=None)
+    for uid in (1, 2, 999999):
+        assert asyncio.run(view.interaction_check(_fake_interaction(user_id=uid))) is True
