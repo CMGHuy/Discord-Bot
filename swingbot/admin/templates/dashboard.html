@@ -125,16 +125,26 @@
     if (switchedFromServerRender) { refreshDashboard(); }
   })();
 
+  var _lastFragmentEtag = null;
   function refreshDashboard() {
-    fetch('{{ url_for("dashboard_fragment") }}?mode=' + encodeURIComponent(dashboardMode), { credentials: 'include' })
+    var _pollHeaders = {};
+    if (_lastFragmentEtag) { _pollHeaders['If-None-Match'] = _lastFragmentEtag; }
+    fetch('{{ url_for("dashboard_fragment") }}?mode=' + encodeURIComponent(dashboardMode),
+          { credentials: 'include', headers: _pollHeaders })
       .then(function(r) {
         if (r.status === 401) {
           window.location.reload();
           return null;
         }
+        if (r.status === 304) { return undefined; } // unchanged since last poll -- nothing to patch
+        _lastFragmentEtag = r.headers.get('ETag');
         return r.text();
       })
       .then(function(html) {
+        if (html === undefined) {
+          document.getElementById('refresh-status').textContent = 'Up to date ' + new Date().toLocaleTimeString();
+          return;
+        }
         if (!html) return;
         var container = document.getElementById('dashboard-fragment');
         if (typeof morphdom !== 'undefined') {

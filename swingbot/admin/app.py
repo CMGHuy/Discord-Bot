@@ -36,6 +36,7 @@ constants -- keeps this file to routes/logic only and lets the HTML be
 edited/linted as HTML. Shared CSS lives in static/style.css.
 """
 import csv
+import hashlib
 import io
 import json
 import logging
@@ -616,8 +617,20 @@ def dashboard_fragment():
     trade logged by `!check` (or the background scan) shows up without
     a manual browser refresh -- the admin process is separate from the
     bot process, so nothing pushes it a notification; it has to ask.
+
+    ETag'd on the rendered HTML's sha1: when nothing has actually changed
+    since the browser's last poll (the common case -- most 5s ticks see
+    no new trade), the response is a 5-byte "304 Not Modified" instead of
+    the full fragment, which on a page auto-refreshing indefinitely adds
+    up to a meaningful bandwidth/CPU (Jinja render) saving over a session.
     """
-    return Response(_render_dashboard_fragment(), mimetype="text/html; charset=utf-8")
+    html = _render_dashboard_fragment()
+    etag = hashlib.sha1(html.encode("utf-8")).hexdigest()
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304)
+    resp = Response(html, mimetype="text/html; charset=utf-8")
+    resp.headers["ETag"] = etag
+    return resp
 
 
 @app.route("/trades/clear-open", methods=["POST"])
