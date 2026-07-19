@@ -1,0 +1,66 @@
+{# Rendered both by the full /plans page (wrapped in plans.html) and by
+   /plans/fragment (Task C18, ETag-polled) -- identical markup either way
+   so morphdom's diff-patch has something stable to compare against. #}
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <p class="card-title" style="margin:0;">Plans board
+      <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
+        {{ plans | length }} plan{{ 's' if plans | length != 1 else '' }}
+      </span>
+    </p>
+  </div>
+
+  {% if not plans %}
+  <div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <p>No plans match the current filters.</p>
+  </div>
+  {% else %}
+  <div style="overflow-x:auto;">
+  <table id="plans-table">
+    <thead>
+    <tr>
+      <th>Tier / Badge</th>
+      <th>Ticker</th>
+      <th>Dir</th>
+      <th>Status</th>
+      <th title="Composite ranking score from analytics.rank.rank_plans">Follow score</th>
+      <th>Entry / Trigger</th>
+      <th>SL</th>
+      <th>TP1</th>
+      <th>TP2</th>
+      <th>Age</th>
+      <th>Quality</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for p in plans %}
+    <tr>
+      <td>
+        <span class="chip chip-tier-{{ p.tier | lower }}">{{ p.tier }}</span>
+        <span class="chip {{ 'chip-validated' if p.badge == 'VALIDATED' else 'chip-weak' }}">{{ p.badge }}</span>
+      </td>
+      <td><strong>{{ p.ticker }}</strong></td>
+      <td>
+        <span style="color:{{ '#6dda9e' if p.direction == 'bullish' else '#da6d6d' }};font-weight:700;">
+          {{ '▲' if p.direction == 'bullish' else '▼' }}
+        </span>
+      </td>
+      <td><span class="pill">{{ p.status }}</span></td>
+      <td>{{ '%.0f'|format(p.follow_score) if p.follow_score is not none else '—' }}</td>
+      <td>
+        {%- if p.entry_price -%}{{ "%.2f"|format(p.entry_price) }}
+        {%- else -%}{{ "%.2f"|format(p.trigger_price) }} <span class="muted">(trigger)</span>{%- endif -%}
+      </td>
+      <td style="color:#da6d6d;">{{ "%.2f"|format(p.stop_loss) }}</td>
+      <td style="color:#6dda9e;">{{ "%.2f"|format(p.tp1) }}</td>
+      <td>{{ "%.2f"|format(p.tp2) if p.tp2 else '—' }}</td>
+      <td class="muted">{{ p.created_at }}</td>
+      <td>{{ p.quality_score }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>

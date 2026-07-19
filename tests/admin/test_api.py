@@ -71,7 +71,7 @@ def _seed_plan(plan_id, ticker, status, tier="A", badge="VALIDATED"):
 
 
 def _fake_ranked_plan_rows(plans):
-    """Deterministic stand-in for api.py's own _ranked_plan_rows (which
+    """Deterministic stand-in for pages.py's _ranked_plan_rows (which
     wraps analytics.rank.rank_plans + follow_score) -- this test suite
     verifies API wiring/filtering/counts, not Plan A's real scoring
     formula (that's analytics' own test suite's job)."""
@@ -83,7 +83,10 @@ def _fake_ranked_plan_rows(plans):
 
 
 def test_api_plans_ranked_and_counted(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api._ranked_plan_rows", _fake_ranked_plan_rows)
+    # _ranked_plan_rows now lives in pages.py (Task C14 extracted _plan_rows
+    # there so the Plans board page and /api/plans share one implementation;
+    # api.py imports _plan_rows back rather than keeping its own copy).
+    monkeypatch.setattr("swingbot.admin.pages._ranked_plan_rows", _fake_ranked_plan_rows)
     _seed_plan("p1", "AAPL", PlanStatus.PENDING)
     _seed_plan("p2", "MSFT", PlanStatus.ACTIVE)
     _seed_plan("p3", "TSLA", PlanStatus.ACTIVE, tier="B", badge="WEAK")
@@ -95,7 +98,10 @@ def test_api_plans_ranked_and_counted(client, auth, monkeypatch):
 
 
 def test_api_plans_status_filter(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api._ranked_plan_rows", _fake_ranked_plan_rows)
+    # _ranked_plan_rows now lives in pages.py (Task C14 extracted _plan_rows
+    # there so the Plans board page and /api/plans share one implementation;
+    # api.py imports _plan_rows back rather than keeping its own copy).
+    monkeypatch.setattr("swingbot.admin.pages._ranked_plan_rows", _fake_ranked_plan_rows)
     _seed_plan("p1", "AAPL", PlanStatus.PENDING)
     _seed_plan("p2", "MSFT", PlanStatus.ACTIVE)
     r = client.get("/api/plans?status=ACTIVE", headers=auth)

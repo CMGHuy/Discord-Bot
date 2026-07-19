@@ -33,3 +33,41 @@ def test_new_nav_items_in_sidebar(client, auth):
     html = r.data.decode("utf-8")
     for label in ("Plans", "Strategies", "Calibration", "Journal", "Tuning"):
         assert label in html
+
+
+import dataclasses
+
+from swingbot.core.plan_engine import PlanStatus, TradePlanV2
+from swingbot.core.plan_store import PlanStore
+
+
+def _plan(plan_id, ticker, tier="A", badge="VALIDATED", status=PlanStatus.PENDING):
+    return TradePlanV2(
+        plan_id=plan_id, ticker=ticker, created_at="2026-07-01", source="strategy",
+        strategy="RSI", horizon_key="4w", direction="bullish", entry_type="market",
+        trigger_price=100.0, entry_price=100.0, expiry_bars=5, stop_loss=95.0,
+        tp1=104.0, tp1_fraction=0.5, tp2=110.0, breakeven_trigger_fraction=0.5,
+        trail_atr_mult=2.5, quality_score=70, quality_breakdown=[], tier=tier,
+        badge=badge, badge_stats={}, status=status, status_history=[],
+    )
+
+
+def _fake_ranked_plan_rows_by_ticker(plans):
+    rows = [dataclasses.asdict(p) for p in plans]
+    for r in rows:
+        r["follow_score"] = 100.0
+    return sorted(rows, key=lambda r: r["ticker"])
+
+
+def test_plans_page_renders_ranked_rows_with_chips(client, auth, monkeypatch):
+    # Real PlanStore.update() raises KeyError for an unseen plan_id --
+    # .add() is the real insert call (see the C7 commit's deviation note).
+    PlanStore().add(_plan("p1", "MSFT", tier="A", badge="VALIDATED"))
+    PlanStore().add(_plan("p2", "AAPL", tier="B", badge="WEAK"))
+    monkeypatch.setattr("swingbot.admin.pages._ranked_plan_rows", _fake_ranked_plan_rows_by_ticker)
+
+    r = client.get("/plans", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "chip-tier-a" in html
+    assert "chip-validated" in html
+    assert html.index("AAPL") < html.index("MSFT")  # ranked order = alphabetical per the fake
