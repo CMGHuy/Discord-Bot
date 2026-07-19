@@ -465,6 +465,10 @@ async def _session_scan_tick():
     progress = scan_engine.ScanProgress()
     alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
     await _send_alerts(channel, alerts)
+
+    from swingbot.core.charts.cache import purge
+    await asyncio.to_thread(purge)
+
     _refresh_snapshot_safely()
 
     f = progress.funnel

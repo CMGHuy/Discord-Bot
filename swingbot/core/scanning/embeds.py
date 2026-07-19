@@ -605,6 +605,13 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
 
 
 def regenerate_chart_for_trade(trade: dict) -> str | None:
+    # A closed trade's chart never changes once closed (same OHLCV window,
+    # same levels) -- if the deterministic file from a prior regen already
+    # exists on disk, reuse it directly instead of re-fetching data and
+    # re-rendering.
+    deterministic_path = os.path.join(config.TRADE_CHART_DIR, f"{trade['ticker']}_{trade['id']}_view.png")
+    if trade.get("status") in ("win", "loss", "closed") and os.path.exists(deterministic_path):
+        return deterministic_path
     try:
         df = get_daily_data(trade["ticker"])
         h = HORIZONS.get(trade["horizon_key"], {})

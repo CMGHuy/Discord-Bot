@@ -175,7 +175,19 @@ async def stats_cmd(ctx, period: str = "all"):
         if snap is None:
             await ctx.send("No analytics snapshot available yet — not enough closed trades, or the snapshot build failed. Check logs.")
             return
-        await ctx.send(embed=stats_embed(snap))
+
+        embed = stats_embed(snap)
+
+        import os
+
+        from swingbot.core.charts.analytics_charts import render_equity_curve
+        from swingbot.core.charts.cache import cached_chart
+
+        chart_path = cached_chart(
+            {"kind": "equity_curve", "snapshot_built_at": snap["built_at"]},
+            lambda target: render_equity_curve(snap["equity_curve"], os.path.dirname(target), filename=os.path.basename(target)),
+        )
+        await ctx.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
         return
 
     since = _since(period, dt.date.today())
@@ -294,7 +306,17 @@ async def calibration_cmd(ctx):
 
     embed = discord.Embed(title="📐 Calibration", description="\n".join(lines)[:4000], color=discord.Color.blurple())
     embed.add_field(name="Score deciles", value=decile_summary, inline=False)
-    await ctx.send(embed=embed)
+
+    import os
+
+    from swingbot.core.charts.analytics_charts import render_calibration
+    from swingbot.core.charts.cache import cached_chart
+
+    chart_path = cached_chart(
+        {"kind": "calibration", "n": len(closed), "latest": closed[-1].get("closed_at")},
+        lambda target: render_calibration(deciles, os.path.dirname(target), filename=os.path.basename(target)),
+    )
+    await ctx.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
 
 
 def _journal_note_result(store, trade_id: str, note: str) -> str:

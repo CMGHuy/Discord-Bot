@@ -26,18 +26,37 @@ def _key_hash(key_parts: dict) -> str:
 
 def cached_chart(key_parts: dict, render_fn: Callable[[str], str], cache_dir: str = None) -> str:
     """Returns the cached PNG path for `key_parts` if it already exists;
-    otherwise calls `render_fn(target_path)` (which must write to
-    `target_path` and return it, matching every existing chart-render
+    otherwise calls `render_fn(tmp_path)` (which must write to the path
+    it's given and return it, matching every existing chart-render
     function's own `(..., out_dir, filename) -> path` shape when given
     that this function IS effectively picking out_dir/filename for it)
-    and returns the freshly rendered path."""
+    and atomically publishes the result to the real cache path.
+
+    `render_fn` is given a temp path in the same directory, not the
+    final `target_path` directly -- if it raises partway through (e.g.
+    a crash mid-render), the orphaned temp file is left behind (harmless;
+    `purge()`'s mtime sweep will eventually clean it up too) but nothing
+    is ever written at `target_path` itself, so a failed render can never
+    be mistaken for a valid cache hit by a later call. Only a fully
+    successful render gets `os.replace`d into place, which is atomic on
+    both POSIX and Windows."""
     cache_dir = cache_dir or DEFAULT_CACHE_DIR
     os.makedirs(cache_dir, exist_ok=True)
     key = _key_hash(key_parts)
     target_path = os.path.join(cache_dir, f"{key}.png")
     if os.path.exists(target_path):
         return target_path
-    return render_fn(target_path)
+    tmp_path = os.path.join(cache_dir, f"{key}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        render_fn(tmp_path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+    os.replace(tmp_path, target_path)
+    return target_path
 
 
 def purge(max_age_days: int = 7, cache_dir: str = None) -> int:
