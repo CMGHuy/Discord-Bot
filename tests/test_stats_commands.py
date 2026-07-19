@@ -186,3 +186,23 @@ def test_calibration_lines_marks_failing_tier_and_drift_alert():
     assert any("❌" in l and "A" in l for l in lines)
     assert any("—" in l and "B" in l for l in lines)
     assert any("Fibonacci" in l for l in lines)
+
+
+from swingbot.commands.stats import _journal_note_result
+
+
+def test_journal_note_result_success(tmp_path, monkeypatch):
+    from swingbot.core.analytics.journal import JournalStore
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    store.add({"trade_id": "T1", "ticker": "NVDA", "outcome": "win", "r_realized": 1.0,
+              "auto_lesson": "lesson", "tags": []})
+    msg = _journal_note_result(store, "T1", "watch the gap next time")
+    assert "saved" in msg.lower() or "note" in msg.lower()
+    assert store.get("T1")["note"] == "watch the gap next time"
+
+
+def test_journal_note_result_missing_id(tmp_path):
+    from swingbot.core.analytics.journal import JournalStore
+    store = JournalStore(path=str(tmp_path / "journal.json"))
+    msg = _journal_note_result(store, "missing", "x")
+    assert "no journal entry" in msg.lower()

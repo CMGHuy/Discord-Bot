@@ -295,3 +295,30 @@ async def calibration_cmd(ctx):
     embed = discord.Embed(title="📐 Calibration", description="\n".join(lines)[:4000], color=discord.Color.blurple())
     embed.add_field(name="Score deciles", value=decile_summary, inline=False)
     await ctx.send(embed=embed)
+
+
+def _journal_note_result(store, trade_id: str, note: str) -> str:
+    ok = store.set_note(trade_id, note)
+    if not ok:
+        return f"No journal entry for that id (`{trade_id}`)."
+    return f"📝 Note saved for trade `{trade_id}`."
+
+
+@bot.command(name="journal")
+async def journal_cmd(ctx, target: str, *, note: str = None):
+    from swingbot.core.analytics.journal import JournalStore
+    store = JournalStore()
+
+    if note:
+        # target is a trade_id in this form.
+        await ctx.send(_journal_note_result(store, target, note))
+        return
+
+    # No note text -> target is a ticker to list, reusing lessons_lines.
+    entries = store.entries()
+    matching = [e for e in entries if e.get("ticker", "").upper() == target.upper()]
+    if not matching:
+        await ctx.send(f"No journal entries for `{target.upper()}`.")
+        return
+    lines = lessons_lines(matching)
+    await ctx.send(f"📖 **{len(matching)} journal entr{'y' if len(matching)==1 else 'ies'} for {target.upper()}:**\n" + "\n".join(lines)[:1900])
