@@ -63,7 +63,7 @@
 </div>
 
 <div id="dashboard-fragment">{{ fragment | safe }}</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/morphdom/2.7.4/morphdom-umd.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/morphdom-umd.min.js') }}"></script>
 <script>
   // Basic-Auth credentials are cached by the browser per-origin.
   // We encode them ourselves here so the fetch() request is never
