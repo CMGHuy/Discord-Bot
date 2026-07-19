@@ -125,3 +125,28 @@ def test_stats_embed_none_heavy_snapshot_shows_dashes_not_none():
     joined = "\n".join(f.value for f in embed.fields) + embed.description
     assert "None" not in joined
     assert "—" in joined
+
+
+import datetime as dt
+
+from swingbot.commands.stats import _since
+
+TODAY = dt.date(2026, 7, 11)
+
+
+def test_since_7d_30d_90d():
+    assert _since("7d", TODAY) == TODAY - dt.timedelta(days=7)
+    assert _since("30d", TODAY) == TODAY - dt.timedelta(days=30)
+    assert _since("90d", TODAY) == TODAY - dt.timedelta(days=90)
+
+
+def test_since_ytd_is_jan_1():
+    assert _since("ytd", TODAY) == dt.date(2026, 1, 1)
+
+
+def test_since_all_is_none():
+    assert _since("all", TODAY) is None
+
+
+def test_since_unknown_period_defaults_to_none():
+    assert _since("bogus", TODAY) is None

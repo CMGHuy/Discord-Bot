@@ -146,17 +146,60 @@ def stats_embed(snap: dict) -> discord.Embed:
     return embed
 
 
+def _since(period: str, today: dt.date) -> "dt.date | None":
+    """Start date for a !stats period filter. 'all' (and anything
+    unrecognized -- degrade gracefully, never raise on a typo'd
+    argument) means no filter at all: None."""
+    if period == "7d":
+        return today - dt.timedelta(days=7)
+    if period == "30d":
+        return today - dt.timedelta(days=30)
+    if period == "90d":
+        return today - dt.timedelta(days=90)
+    if period == "ytd":
+        return dt.date(today.year, 1, 1)
+    return None
+
+
 @bot.command(name="stats")
 async def stats_cmd(ctx, period: str = "all"):
-    from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
-    import asyncio
+    period = period.lower()
+    if period == "all":
+        from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
+        import asyncio
 
-    snap = load_snapshot()
-    if snap is None:
-        await asyncio.to_thread(refresh_snapshot)
         snap = load_snapshot()
-    if snap is None:
-        await ctx.send("No analytics snapshot available yet — not enough closed trades, or the snapshot build failed. Check logs.")
+        if snap is None:
+            await asyncio.to_thread(refresh_snapshot)
+            snap = load_snapshot()
+        if snap is None:
+            await ctx.send("No analytics snapshot available yet — not enough closed trades, or the snapshot build failed. Check logs.")
+            return
+        await ctx.send(embed=stats_embed(snap))
         return
-    embed = stats_embed(snap)
+
+    since = _since(period, dt.date.today())
+    if since is None:
+        await ctx.send(f"Unrecognized period `{period}`. Use one of: 7d, 30d, 90d, ytd, all.")
+        return
+
+    from swingbot.core.scanning import engine as scan_engine
+    from swingbot.core.analytics import metrics as m
+
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
+    closed = [t for t in all_trades if t.get("status") in ("win", "loss")
+             and t.get("closed_at", "")[:10] >= since.isoformat()]
+    if not closed:
+        await ctx.send(f"No closed trades in the last `{period}` window.")
+        return
+
+    embed = discord.Embed(
+        title=f"📐 Analytics — last {period}",
+        description=(
+            f"**N** {len(closed)}  ·  **Win rate** {_dash(m.win_rate(closed), '{:.1f}%')}  ·  "
+            f"**Expectancy** {_dash(m.expectancy_r(closed), '{:+.3f}')}R  ·  "
+            f"**Profit factor** {_dash(m.profit_factor(closed), '{:.2f}')}"
+        ),
+        color=discord.Color.blurple(),
+    )
     await ctx.send(embed=embed)
