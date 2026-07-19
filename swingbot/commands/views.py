@@ -165,3 +165,76 @@ def breakdown_embed(plan) -> discord.Embed:
     embed.add_field(name="🕒 Status timeline", value=timeline[:1024], inline=False)
 
     return embed
+
+
+class PlanBoardView(discord.ui.View):
+    """
+    Filterable !plans board (Task B15 supplies render_fn). Three
+    dropdowns hold the current status/tier/badge filter state; every
+    selection change and the Refresh button all funnel through the
+    same `_apply` method, which calls `render_fn` and edits the
+    message in place -- one render path regardless of which control
+    triggered it, so there's no risk of the three selects drifting out
+    of sync with each other.
+    """
+
+    def __init__(self, render_fn, author_id: int, *, timeout: int = 180):
+        super().__init__(timeout=timeout)
+        self.render_fn = render_fn
+        self.author_id = author_id
+        self.status = "All"
+        self.tier = "All"
+        self.badge = "All"
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.author_id:
+            return True
+        await interaction.response.send_message("Not your panel.", ephemeral=True)
+        return False
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+    async def _apply(self, *, status=None, tier=None, badge=None, interaction: discord.Interaction = None):
+        if status is not None:
+            self.status = status
+        if tier is not None:
+            self.tier = tier
+        if badge is not None:
+            self.badge = badge
+        content, embed = self.render_fn(self.status, self.tier, self.badge)
+        if interaction is not None:
+            await interaction.response.edit_message(content=content, embed=embed, view=self)
+        return content, embed
+
+    @discord.ui.select(
+        placeholder="Status: All", custom_id="board:status",
+        options=[discord.SelectOption(label=v, value=v) for v in ("All", "PENDING", "ACTIVE", "PARTIAL")],
+    )
+    async def status_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await self._apply(status=select.values[0], interaction=interaction)
+
+    @discord.ui.select(
+        placeholder="Tier: All", custom_id="board:tier",
+        options=[discord.SelectOption(label=v, value=v) for v in ("All", "A", "B", "C")],
+    )
+    async def tier_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await self._apply(tier=select.values[0], interaction=interaction)
+
+    @discord.ui.select(
+        placeholder="Badge: All", custom_id="board:badge",
+        options=[discord.SelectOption(label=v, value=v) for v in ("All", "VALIDATED", "WEAK")],
+    )
+    async def badge_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await self._apply(badge=select.values[0], interaction=interaction)
+
+    @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.secondary, custom_id="board:refresh")
+    async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._apply(interaction=interaction)

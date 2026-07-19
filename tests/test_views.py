@@ -19,6 +19,7 @@ import discord
 from swingbot.commands import views as views_module
 from swingbot.commands.views import (
     PlanActionView,
+    PlanBoardView,
     breakdown_embed,
     star_plan,
     starred_ids,
@@ -263,3 +264,18 @@ def test_any_author_id_none_interaction_check_true_for_any_user():
     view = PlanActionView("plan-x", author_id=None)
     for uid in (1, 2, 999999):
         assert asyncio.run(view.interaction_check(_fake_interaction(user_id=uid))) is True
+
+
+def _stub_render_fn(calls):
+    def render(status, tier, badge):
+        calls.append((status, tier, badge))
+        return "content", discord.Embed(title="board")
+    return render
+
+
+def test_plan_board_view_has_4_children_and_apply_calls_render_fn():
+    calls = []
+    view = PlanBoardView(_stub_render_fn(calls), author_id=1)
+    assert len(view.children) == 4  # 3 selects + 1 refresh button
+    asyncio.run(view._apply(status="ACTIVE", tier="A", badge="All"))
+    assert calls == [("ACTIVE", "A", "All")]
