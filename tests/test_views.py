@@ -21,6 +21,7 @@ from swingbot.commands.views import (
     PlanActionView,
     PlanBoardView,
     breakdown_embed,
+    paginate,
     star_plan,
     starred_ids,
     unstar_plan,
@@ -276,6 +277,28 @@ def _stub_render_fn(calls):
 def test_plan_board_view_has_4_children_and_apply_calls_render_fn():
     calls = []
     view = PlanBoardView(_stub_render_fn(calls), author_id=1)
-    assert len(view.children) == 4  # 3 selects + 1 refresh button
+    # 3 selects + refresh + prev + next -- prev/next are decorated methods
+    # (Task B14) so they're present on every instance regardless of `items`.
+    assert len(view.children) == 6
     asyncio.run(view._apply(status="ACTIVE", tier="A", badge="All"))
     assert calls == [("ACTIVE", "A", "All")]
+
+
+def test_paginate_middle_page():
+    items, page_num, max_page = paginate(list(range(20)), page=2, per_page=8)
+    assert items == [16, 17, 18, 19]
+    assert page_num == 2
+    assert max_page == 2  # 0-indexed: pages 0,1,2 for 20 items at 8/page
+
+
+def test_paginate_clamps_out_of_range_page():
+    items, page_num, max_page = paginate(list(range(5)), page=99, per_page=8)
+    assert items == [0, 1, 2, 3, 4]
+    assert page_num == 0
+    assert max_page == 0
+
+
+def test_plan_board_view_has_6_children_after_pagination():
+    calls = []
+    view = PlanBoardView(_stub_render_fn(calls), author_id=1, items=list(range(20)))
+    assert len(view.children) == 6  # 3 selects + refresh + prev + next

@@ -167,6 +167,21 @@ def breakdown_embed(plan) -> discord.Embed:
     return embed
 
 
+PLAN_BOARD_PAGE_SIZE = 8
+
+
+def paginate(items: list, page: int, per_page: int) -> tuple:
+    """Same slicing/clamping semantics as TradesPaginator's inline page
+    logic (trades.py:83-113), extracted here so PlanBoardView can reuse
+    it without duplicating the arithmetic. TradesPaginator itself is
+    intentionally left untouched by this task -- a follow-up could have
+    it import this helper too, but that's out of scope here."""
+    max_page = max(0, (len(items) - 1) // per_page) if items else 0
+    page = max(0, min(page, max_page))
+    start = page * per_page
+    return items[start:start + per_page], page, max_page
+
+
 class PlanBoardView(discord.ui.View):
     """
     Filterable !plans board (Task B15 supplies render_fn). Three
@@ -178,13 +193,15 @@ class PlanBoardView(discord.ui.View):
     of sync with each other.
     """
 
-    def __init__(self, render_fn, author_id: int, *, timeout: int = 180):
+    def __init__(self, render_fn, author_id: int, *, items: list = None, timeout: int = 180):
         super().__init__(timeout=timeout)
         self.render_fn = render_fn
         self.author_id = author_id
         self.status = "All"
         self.tier = "All"
         self.badge = "All"
+        self.items = items or []
+        self.page = 0
         self.message: discord.Message | None = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -237,4 +254,15 @@ class PlanBoardView(discord.ui.View):
 
     @discord.ui.button(label="🔄 Refresh", style=discord.ButtonStyle.secondary, custom_id="board:refresh")
     async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._apply(interaction=interaction)
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary, custom_id="board:prev")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page = max(0, self.page - 1)
+        await self._apply(interaction=interaction)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary, custom_id="board:next")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        _, _, max_page = paginate(self.items, self.page, PLAN_BOARD_PAGE_SIZE)
+        self.page = min(max_page, self.page + 1)
         await self._apply(interaction=interaction)
