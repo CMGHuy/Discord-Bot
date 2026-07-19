@@ -111,3 +111,24 @@ def test_active_stop_entry_plan_suppresses_trigger_arrow(tmp_path):
         )
     finally:
         real_close(fig)
+
+
+def test_partial_plan_renders_trail(tmp_path):
+    df = _fixture_df()
+    plan = _fixture_plan(entry_type="market", status="PARTIAL")
+    path = generate_trade_chart(
+        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+        filename="partial_trail.png", target2=118.0, plan_v2=plan,
+    )
+    assert os.path.exists(path)
+    assert os.path.getsize(path) > 10_000
+
+
+def test_active_plan_has_no_trail_and_still_renders(tmp_path):
+    df = _fixture_df()
+    plan = _fixture_plan(entry_type="market", status="ACTIVE")
+    path = generate_trade_chart(
+        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+        filename="active_no_trail.png", target2=118.0, plan_v2=plan,
+    )
+    assert os.path.exists(path)

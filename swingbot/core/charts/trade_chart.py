@@ -851,13 +851,44 @@ def generate_trade_chart(
                            max(plan_v2.tp1, plan_v2.tp2),
                            alpha=0.05, color=TARGET_COLOR)      # runner zone
             if plan_v2.status == "PARTIAL":
-                # working trail level (already ratcheted by the manager)
-                if plan_v2.working_stop is not None:
-                    ax.axhline(plan_v2.working_stop, linestyle=":", linewidth=1.4,
-                               color=CURRENT_PRICE_COLOR)
-                    ax.annotate("trail", xy=(0.99, plan_v2.working_stop),
-                                xycoords=("axes fraction", "data"), ha="right",
-                                va="bottom", fontsize=8, color=CURRENT_PRICE_COLOR)
+                # Chandelier runner trail (Task B32) -- PARTIAL plans only. Finds
+                # the first bar in the VISIBLE window where price actually
+                # touched tp1 (the runner's own starting point), then walks
+                # forward tracking the highest close since (lowest, for a
+                # bearish plan) minus trail_atr_mult * ATR(14) per bar -- the
+                # same chandelier formula plan_engine.py's TRAIL_ATR_MULT
+                # constant is designed for, just visualized here rather than
+                # applied to a live exit decision.
+                try:
+                    from ..indicators import atr as atr_indicator
+                    atr_full = atr_indicator(df, 14)
+                    atr_recent = atr_full.reindex(recent.index).bfill()
+                    is_bull_trail = plan_v2.direction == "bullish"
+                    if is_bull_trail:
+                        tp1_hit = recent.index[recent["High"] >= plan_v2.tp1]
+                    else:
+                        tp1_hit = recent.index[recent["Low"] <= plan_v2.tp1]
+                    if len(tp1_hit):
+                        start_pos = recent.index.get_loc(tp1_hit[0])
+                        trail_xs, trail_ys = [], []
+                        running_extreme = None
+                        for i in range(start_pos, len(recent)):
+                            close_i = float(recent["Close"].iloc[i])
+                            if running_extreme is None:
+                                running_extreme = close_i
+                            else:
+                                running_extreme = max(running_extreme, close_i) if is_bull_trail else min(running_extreme, close_i)
+                            atr_i = float(atr_recent.iloc[i])
+                            trail_val = (running_extreme - plan_v2.trail_atr_mult * atr_i if is_bull_trail
+                                        else running_extreme + plan_v2.trail_atr_mult * atr_i)
+                            trail_xs.append(i)
+                            trail_ys.append(trail_val)
+                        ax.plot(trail_xs, trail_ys, color=CURRENT_PRICE_COLOR, linestyle=":", linewidth=1.6,
+                               alpha=0.85, zorder=6)
+                        ax.text(trail_xs[-1], trail_ys[-1], " trail", color=CURRENT_PRICE_COLOR, fontsize=7,
+                               va="center", ha="left", zorder=6)
+                except Exception as _te:
+                    log.debug("Chandelier trail overlay skipped: %s", _te)
                 ax.annotate("TP1 banked ✓", xy=(0.01, plan_v2.tp1),
                             xycoords=("axes fraction", "data"), ha="left",
                             va="bottom", fontsize=8, color=TARGET_COLOR)
