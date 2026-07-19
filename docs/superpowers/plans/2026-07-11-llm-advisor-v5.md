@@ -33,8 +33,23 @@
 > engages if payload-stable content grows past the floor), but no cache savings
 > are promised. Payload enrichment (Task L6): every payload now specifies exact
 > slimmed record shapes (journal slices, plan slices, drift rows, regime,
-> earnings proximity) instead of loose prose. Tasks L12+ remain in interface
-> form; implementers consume the exact signatures produced by L4–L9.
+> earnings proximity) instead of loose prose.
+>
+> **Second enrichment pass (same day):** full code added for the pipeline
+> spine — L11 (Finnhub w/ 6h cache + graceful degradation), L12–L14
+> (producers incl. idempotency stamps and the injectable `gather`),
+> L17+L19 (consumer + hypotheses→proposal ingest with catalog filtering),
+> L20/L22 (Transport ABC, LocalDirTransport speaking queue.py's exact file
+> protocol, HttpTransport + FallbackTransport + `make_transport`), L23
+> (token-auth endpoints, `hmac.compare_digest`, 404-when-unconfigured),
+> L24–L25 (Ollama provider — full SCHEMAS as `format`, no api_schema strip
+> needed locally — and the worker loop, whose result dict matches
+> `queue.complete`'s shape byte-for-byte). Still interface-form by design:
+> L15/L16/L18 (Discord renderers — small, and their embed copy is specified
+> in the Interfaces blocks), L21 (SFTPTransport — the tmp+`posix_rename`
+> semantics are specified; paramiko mechanics are boilerplate), L26–L32
+> (launcher/docs/e2e/admin/eval — operational and UI tasks). Implementers of
+> those consume the exact signatures now frozen in code above.
 
 ## Global Constraints
 
@@ -889,7 +904,77 @@ def run_or_queue(kind: str, payload: dict, provider=None) -> dict | None:
 - Produces: `days_to_earnings(ticker, now=None) -> int | None` and `recent_headlines(ticker, n=3) -> list[str]` — Finnhub REST (`/calendar/earnings`, `/company-news`) with 6h on-disk cache (`data/advisor/finnhub_cache.json` via jsonio), 3s timeout, `None`/`[]` on any error or when `FINNHUB_API_KEY` empty. Wired into `plan_review_payload` by the caller (L14).
 
 - [ ] **Step 1: Failing tests** — no key → `None`/`[]` without network (assert no requests via monkeypatched `requests.get` that raises); cache hit avoids second fetch (counting stub).
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: optional Finnhub earnings/news context`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement**
+
+```python
+# swingbot/core/advisor/market_context.py
+"""Optional Finnhub context: earnings proximity + headlines. Empty key or any
+error degrades to None/[] — the advisor payload just goes without it."""
+from __future__ import annotations
+
+import datetime as dt
+import os
+import time
+
+from swingbot import config
+from swingbot.core.jsonio import atomic_write_json, read_json
+
+CACHE_PATH = os.path.join(config.DATA_DIR, "advisor", "finnhub_cache.json")
+_TTL_S = 6 * 3600
+
+
+def _cached_or_fetch(key: str, fetch):
+    cache = read_json(CACHE_PATH, {})
+    row = cache.get(key)
+    if row and time.time() - row["at"] < _TTL_S:
+        return row["value"]
+    try:
+        value = fetch()
+    except Exception:
+        return row["value"] if row else None
+    cache[key] = {"at": time.time(), "value": value}
+    os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+    atomic_write_json(CACHE_PATH, cache)
+    return value
+
+
+def _get(path: str, params: dict):
+    import requests
+    key = getattr(config, "FINNHUB_API_KEY", "") or ""
+    if not key:
+        raise RuntimeError("no key")
+    r = requests.get(f"https://finnhub.io/api/v1/{path}",
+                     params={**params, "token": key}, timeout=3)
+    r.raise_for_status()
+    return r.json()
+
+
+def days_to_earnings(ticker: str, now=None) -> int | None:
+    if not (getattr(config, "FINNHUB_API_KEY", "") or ""):
+        return None
+    now = now or dt.date.today()
+    def fetch():
+        data = _get("calendar/earnings", {
+            "symbol": ticker, "from": now.isoformat(),
+            "to": (now + dt.timedelta(days=30)).isoformat()})
+        dates = sorted(e["date"] for e in data.get("earningsCalendar", []) if e.get("date"))
+        return (dt.date.fromisoformat(dates[0]) - now).days if dates else None
+    return _cached_or_fetch(f"earn:{ticker}:{now.isoformat()}", fetch)
+
+
+def recent_headlines(ticker: str, n: int = 3) -> list[str]:
+    if not (getattr(config, "FINNHUB_API_KEY", "") or ""):
+        return []
+    today = dt.date.today()
+    def fetch():
+        data = _get("company-news", {
+            "symbol": ticker, "from": (today - dt.timedelta(days=7)).isoformat(),
+            "to": today.isoformat()})
+        return [a["headline"] for a in data[:10] if a.get("headline")]
+    return (_cached_or_fetch(f"news:{ticker}:{today.isoformat()}", fetch) or [])[:n]
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: optional Finnhub earnings/news context`
 
 ---
 
@@ -906,7 +991,42 @@ def run_or_queue(kind: str, payload: dict, provider=None) -> dict | None:
 - Produces: `produce_nightly(snapshot, journal_entries, retro_text, open_plans) -> dict | None` — assembles `nightly_payload`, `create_job("nightly_analysis", …, model_hint="local")`; skips (None) when `ADVISOR_ENABLED` off or an unarchived nightly job for today already exists (idempotent). Hook: called right after the retrospective posts, wrapped try/except-log.
 
 - [ ] **Step 1: Failing tests** — job created with kind + local hint; second same-day call is a no-op; disabled flag → None.
-- [ ] **Step 2–4: Implement + wire hook, PASS, commit** — `feat: nightly analysis job producer`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement**
+
+```python
+# swingbot/core/advisor/producers.py
+"""Job producers: pure given injected data; the scanning.py hooks fetch."""
+from __future__ import annotations
+
+import datetime as dt
+import logging
+
+from swingbot import config
+from swingbot.core.advisor import queue
+from swingbot.core.advisor.context import nightly_payload
+
+log = logging.getLogger("swing-bot.advisor.producers")
+
+
+def _has_job_today(kind: str, now: dt.datetime) -> bool:
+    day = now.strftime("%Y-%m-%d")
+    return any(j["kind"] == kind and j["created_at"].startswith(day)
+               for j in queue.list_jobs())
+
+
+def produce_nightly(snapshot, journal_entries, retro_text, open_plans, now=None) -> dict | None:
+    if not getattr(config, "ADVISOR_ENABLED", False):
+        return None
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if _has_job_today("nightly_analysis", now):
+        return None                       # idempotent: one per day
+    payload = nightly_payload(snapshot, journal_entries, retro_text, open_plans)
+    return queue.create_job("nightly_analysis", payload, model_hint="local")
+```
+
+Hook in `scanning.py`'s retrospective block (wrapped try/except-log, mirrors `_refresh_snapshot_safely`): gather `snapshots.load_snapshot(max_age_seconds=10**9)`, `JournalStore().entries()` filtered to the last 7 days, the just-posted retro text (join of `messages`), `PlanStore().open_plans()` — each fetch individually guarded with a `None`/`[]` fallback.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: nightly analysis job producer`
 
 ### Task L13: Weekly hypothesist producer
 
@@ -917,7 +1037,48 @@ def run_or_queue(kind: str, payload: dict, provider=None) -> dict | None:
 - Produces: `produce_weekly(now=None) -> dict | None` — Sundays only (injectable `now`), gathers `weekly_payload` inputs (snapshot, params catalog from `context.py`, current `STRATEGY_GATES`/`STRATEGY_RR_OVERRIDE`/`DEFAULT_PARAMS`, tested-hypotheses list, results-doc summaries as static strings), queues `tuning_hypotheses` job. Same idempotency (one per ISO week).
 
 - [ ] **Step 1: Failing tests** — Sunday produces, Monday doesn't; one per week.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: weekly tuning-hypothesis job`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement (append to producers.py)**
+
+```python
+def produce_weekly(gather=None, now=None) -> dict | None:
+    """Sundays only, one per ISO week. `gather` is an injectable zero-arg
+    callable returning the weekly_payload kwargs (tests pass a stub; the
+    real one lives in the scanning.py hook)."""
+    if not getattr(config, "ADVISOR_ENABLED", False):
+        return None
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if now.weekday() != 6:                # Sunday
+        return None
+    week = now.strftime("%G-W%V")
+    if any(j["kind"] == "tuning_hypotheses"
+           and j.get("payload", {}).get("_week") == week for j in queue.list_jobs()):
+        return None
+    from swingbot.core.advisor.context import weekly_payload
+    payload = weekly_payload(**(gather() if gather else _gather_weekly_inputs()))
+    payload["_week"] = week               # idempotency stamp, ignored by prompts
+    return queue.create_job("tuning_hypotheses", payload, model_hint="local")
+
+
+def _gather_weekly_inputs() -> dict:
+    from swingbot.core.analytics.snapshots import load_snapshot
+    from swingbot.core.advisor.context import PARAMS_CATALOG
+    from swingbot.core.entry_filters import DEFAULT_PARAMS
+    from swingbot.core.strategy_types import STRATEGY_GATES
+    from swingbot.core.jsonio import read_json
+    import os
+    tested = read_json(os.path.join(config.DATA_DIR, "advisor", "tested_hypotheses.json"), [])
+    return {"snapshot": load_snapshot(max_age_seconds=10**9) or {},
+            "params_catalog": PARAMS_CATALOG,
+            "current_params": {"DEFAULT_PARAMS": DEFAULT_PARAMS,
+                               "STRATEGY_GATES": {k: str(v) for k, v in STRATEGY_GATES.items()}},
+            "tested_hypotheses": tested,
+            "results_summaries": ["exit-v2 validation: 7/11 VALIDATED, pooled 84.2%/N=814",
+                                  "confluence source WEAK everywhere (53.5% pooled)"]}
+```
+
+(Verify `DEFAULT_PARAMS`/`STRATEGY_GATES` import paths against the live tree at execution time — grep, don't trust.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: weekly tuning-hypothesis job`
 
 ### Task L14: Inline plan review
 
@@ -928,7 +1089,40 @@ def run_or_queue(kind: str, payload: dict, provider=None) -> dict | None:
 - Produces: `review_plan(plan, item) -> dict | None` — gated on `ADVISOR_PLAN_REVIEW_ENABLED`; assembles `plan_review_payload` (drift row from snapshot, journal entries for ticker, regime, `days_to_earnings` via L11), calls `cloud.run_or_queue("plan_review", …)` with the 10s timeout; any failure → None. Called from the alert path in its existing background thread, BEFORE the embed is built so the result can be attached.
 
 - [ ] **Step 1: Failing tests** — flag off → None with zero provider calls; FakeProvider verdict returned; provider exception → None (no raise).
-- [ ] **Step 2–4: Implement + wire, PASS, commit** — `feat: per-alert plan review (flag-gated)`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement (append to producers.py)**
+
+```python
+def review_plan(plan, *, provider=None) -> dict | None:
+    """Inline advisor verdict for one alert. Gated, budgeted, 10s-capped,
+    never raises — a None simply means the embed ships without the field."""
+    if not (getattr(config, "ADVISOR_ENABLED", False)
+            and getattr(config, "ADVISOR_PLAN_REVIEW_ENABLED", False)):
+        return None
+    try:
+        from swingbot.core.advisor import cloud
+        from swingbot.core.advisor.context import plan_review_payload
+        from swingbot.core.advisor.market_context import days_to_earnings
+        from swingbot.core.analytics.journal import JournalStore
+        from swingbot.core.analytics.snapshots import load_snapshot
+
+        snap = load_snapshot(max_age_seconds=10**9) or {}
+        drift = next((r for r in (snap.get("calibration", {}) or {}).get("drift", [])
+                      if r.get("strategy") == getattr(plan, "strategy", None)), None)
+        entries = JournalStore().entries(ticker=getattr(plan, "ticker", None))
+        payload = plan_review_payload(
+            plan, drift_row=drift, journal_entries=entries,
+            regime=None, days_to_earnings=days_to_earnings(plan.ticker))
+        if provider is not None:
+            return provider.run("plan_review", payload, timeout_s=10.0)
+        return cloud.run_or_queue("plan_review", payload)
+    except Exception:
+        log.warning("review_plan failed; alert ships without advisor", exc_info=True)
+        return None
+```
+
+Wiring: in `_send_alerts`'s existing background path, call `review_plan(item.plan)` for each alert that carries a v2 plan and pass the result into `build_embed(..., advisor=...)` (L15). Check `JournalStore.entries`'s real filter kwargs first — if it has no `ticker=` filter, filter the list in the caller.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: per-alert plan review (flag-gated)`
 
 ### Task L15: Advisor field on alert embeds
 
@@ -964,7 +1158,77 @@ def run_or_queue(kind: str, payload: dict, provider=None) -> dict | None:
 - Produces: `consume_results(bot) -> int` — scans `data/llm_results/`, re-validates each against its job's schema (invalid → mark job failed, skip), dispatches by kind: `nightly_analysis` → post `discord_summary` as `🤖 AI Analyst — {date}` to the retrospective channel + save full report `data/advisor/reports/{date}.json`; `tuning_hypotheses` → L19 handler; `ask` → post the L16 embed to the asking channel (channel id stored in job payload); then `archive()`. Returns count ingested. Failure of one result never blocks the rest.
 
 - [ ] **Step 1: Failing tests** — fake bot object records posts; nightly result posts summary + writes report file + archives; schema-invalid result marks failed and posts nothing; ask result routes to the payload's channel id.
-- [ ] **Step 2–4: Implement + wire into the monitor loop (try/except-log), PASS, commit** — `feat: advisor result consumer`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement**
+
+```python
+# swingbot/core/advisor/consumer.py
+"""Result ingestion: re-validate, dispatch by kind, archive. One bad result
+never blocks the rest; posting failures leave the result for the next tick."""
+from __future__ import annotations
+
+import datetime as dt
+import logging
+import os
+
+from swingbot import config
+from swingbot.core.advisor import queue
+from swingbot.core.advisor.schemas import validate
+from swingbot.core.jsonio import atomic_write_json
+
+log = logging.getLogger("swing-bot.advisor.consumer")
+
+REPORTS_DIR = os.path.join(config.DATA_DIR, "advisor", "reports")
+
+
+async def consume_results(bot) -> int:
+    ingested = 0
+    for job in queue.list_jobs(status="done"):
+        try:
+            res = queue.read_result(job["id"])
+            if res is None:
+                continue
+            errors = validate(job["kind"], res["output"])
+            if errors:
+                queue.fail(job["id"], f"consumer validation: {errors[:3]}")
+                queue.archive(job["id"])
+                continue
+            await _dispatch(bot, job, res["output"])
+            queue.archive(job["id"])
+            ingested += 1
+        except Exception:
+            log.warning("consume_results: job %s failed, continuing", job["id"], exc_info=True)
+    return ingested
+
+
+async def _dispatch(bot, job: dict, out: dict) -> None:
+    kind = job["kind"]
+    if kind == "nightly_analysis":
+        date = dt.date.today().isoformat()
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        atomic_write_json(os.path.join(REPORTS_DIR, f"{date}.json"), out)
+        await _post(bot, config.DISCORD_CHANNEL_RETROSPECTIVE_ID
+                    or config.DISCORD_CHANNEL_TRADES_HISTORY_ID,
+                    f"🤖 **AI Analyst — {date}**\n{out['discord_summary']}")
+    elif kind == "tuning_hypotheses":
+        await _handle_hypotheses(bot, out)          # L19
+    elif kind == "ask":
+        ch = job["payload"].get("_channel_id")
+        if ch:
+            await _post(bot, ch, _render_ask(out))  # L16's renderer
+    # plan_review results arriving via the queue (budget-fallback path) are
+    # archived without posting: the alert they belonged to already shipped.
+
+
+async def _post(bot, channel_id, text) -> None:
+    channel = bot.get_channel(int(channel_id)) if channel_id else None
+    if channel is None:
+        raise RuntimeError(f"advisor channel {channel_id} not found")
+    await channel.send(text[:1990])
+```
+
+Wire into the 60s monitor loop as `await consume_results(bot)` inside try/except-log. `_render_ask` imports from `commands/advisor.py` lazily (L16 defines it); until L16 lands, a plain `out["answer"]` string is the placeholder.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: advisor result consumer`
 
 ### Task L18: `!analyst` command
 
@@ -986,7 +1250,46 @@ def run_or_queue(kind: str, payload: dict, provider=None) -> dict | None:
 - Produces: the `tuning_hypotheses` dispatch — for each hypothesis: validate every param against the L6 catalog (out-of-catalog → dropped + logged); write `data/tuning_proposals/{ts}-{strategy}-llm.json` `{strategy, proposed_params, rationale, expected_effect, source: "llm", status: "untested", created_at}` (Cockpit C36 shape + the two extra keys); append to `data/advisor/tested_hypotheses.json` (so L13 never re-proposes it); post a short digest to the retrospective channel: `"🤖 {n} tuning hypotheses proposed — review on the admin Tuning page and run TRAIN grids. Nothing was changed."`
 
 - [ ] **Step 1: Failing tests** — proposal files written with exact keys; out-of-catalog param dropped; tested-list grows; digest text contains "Nothing was changed".
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: LLM hypotheses land as TRAIN proposals`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement (append to consumer.py)**
+
+```python
+async def _handle_hypotheses(bot, out: dict) -> None:
+    from swingbot.core.advisor.context import PARAMS_CATALOG
+    from swingbot.core.jsonio import read_json
+
+    proposals_dir = os.path.join(config.DATA_DIR, "tuning_proposals")
+    tested_path = os.path.join(config.DATA_DIR, "advisor", "tested_hypotheses.json")
+    os.makedirs(proposals_dir, exist_ok=True)
+    tested = read_json(tested_path, [])
+    written = 0
+    now = dt.datetime.now(dt.timezone.utc)
+    for h in out.get("hypotheses", []):
+        catalog = PARAMS_CATALOG.get(h["strategy"], {})
+        params = {k: v for k, v in h.get("param_changes", {}).items() if k in catalog}
+        dropped = set(h.get("param_changes", {})) - set(params)
+        if dropped:
+            log.info("hypothesis for %s: dropped out-of-catalog params %s",
+                     h["strategy"], sorted(dropped))
+        if not params:
+            continue
+        atomic_write_json(
+            os.path.join(proposals_dir,
+                         f"{now:%Y%m%d-%H%M%S}-{h['strategy'].replace('/', '_')}-llm.json"),
+            {"strategy": h["strategy"], "proposed_params": params,
+             "rationale": h["rationale"], "expected_effect": h["expected_effect"],
+             "source": "llm", "status": "untested", "created_at": now.isoformat()})
+        tested.append({"strategy": h["strategy"], "param_changes": params,
+                       "proposed_at": now.isoformat()})
+        written += 1
+    atomic_write_json(tested_path, tested)
+    if written:
+        await _post(bot, config.DISCORD_CHANNEL_RETROSPECTIVE_ID
+                    or config.DISCORD_CHANNEL_TRADES_HISTORY_ID,
+                    f"🤖 {written} tuning hypotheses proposed — review on the admin "
+                    f"Tuning page and run TRAIN grids. Nothing was changed.")
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: LLM hypotheses land as TRAIN proposals`
 
 ---
 
@@ -1004,7 +1307,89 @@ All worker code lives in `llm_worker/` with its own tests under `tests/` (server
 - Produces: `class Transport` — `list_jobs() -> list[dict]`, `lease(job_id, worker, minutes) -> dict | None`, `put_result(job_id, result: dict) -> None`, `mark_failed(job_id, error) -> None`. `LocalDirTransport(root)` implements it over a local directory using the exact same file protocol as `queue.py` (shared behavior asserted by test: a job created by `queue.create_job` is leasable through `LocalDirTransport`). `settings.py` reads `llm_worker/worker.env` keys from spec §8 with defaults.
 
 - [ ] **Step 1: Failing tests** — roundtrip create(queue)→list→lease→put_result→server `consume`-readable result; settings defaults.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: worker transport interface + local impl`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement**
+
+```python
+# llm_worker/transports.py
+"""Transport = how the laptop reaches the server's job files. LocalDirTransport
+speaks the exact queue.py file protocol over a directory (tests + same-machine
+dev); SFTP/HTTP variants (L21/L22) implement the same four methods."""
+from __future__ import annotations
+
+import abc
+import datetime as dt
+import json
+import os
+
+
+class Transport(abc.ABC):
+    @abc.abstractmethod
+    def list_jobs(self) -> list[dict]: ...
+    @abc.abstractmethod
+    def lease(self, job_id: str, worker: str, minutes: int = 45) -> dict | None: ...
+    @abc.abstractmethod
+    def put_result(self, job_id: str, result: dict) -> None: ...
+    @abc.abstractmethod
+    def mark_failed(self, job_id: str, error: str) -> None: ...
+
+
+class LocalDirTransport(Transport):
+    def __init__(self, data_dir: str):
+        self.jobs = os.path.join(data_dir, "llm_jobs")
+        self.results = os.path.join(data_dir, "llm_results")
+
+    def _path(self, job_id): return os.path.join(self.jobs, f"{job_id}.json")
+
+    def _read(self, job_id):
+        try:
+            with open(self._path(job_id), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    def _write_atomic(self, path, obj):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2)
+        os.replace(tmp, path)
+
+    def list_jobs(self):
+        if not os.path.isdir(self.jobs):
+            return []
+        return [j for f in sorted(os.listdir(self.jobs)) if f.endswith(".json")
+                and (j := self._read(f[:-5]))]
+
+    def lease(self, job_id, worker, minutes=45):
+        job = self._read(job_id)
+        now = dt.datetime.now(dt.timezone.utc)
+        leasable = job and (job["status"] == "pending" or (
+            job["status"] == "leased" and job.get("lease_expires")
+            and dt.datetime.fromisoformat(job["lease_expires"]) < now))
+        if not leasable:
+            return None
+        job.update(status="leased", worker=worker, attempts=job["attempts"] + 1,
+                   lease_expires=(now + dt.timedelta(minutes=minutes)).isoformat())
+        self._write_atomic(self._path(job_id), job)
+        return job
+
+    def put_result(self, job_id, result):
+        self._write_atomic(os.path.join(self.results, f"{job_id}.json"), result)
+        job = self._read(job_id)
+        if job:
+            job.update(status="done", lease_expires=None)
+            self._write_atomic(self._path(job_id), job)
+
+    def mark_failed(self, job_id, error):
+        job = self._read(job_id)
+        if job:
+            job.update(status="failed", error=str(error)[:500], lease_expires=None)
+            self._write_atomic(self._path(job_id), job)
+```
+
+The shared-protocol test creates a job via the SERVER's `queue.create_job` (monkeypatched dirs) and asserts `LocalDirTransport(data_dir).lease(...)` succeeds and its `put_result` is readable via `queue.read_result` — the two implementations can never drift. `settings.py`: dataclass reading `worker.env` (KEY=VALUE lines) with defaults `POLL_SECONDS=30`, `WORKER_NAME=hostname`, `OLLAMA_MODEL=qwen3:8b`, SSH keys empty.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: worker transport interface + local impl`
 
 ### Task L21: SFTP transport
 
@@ -1024,7 +1409,73 @@ All worker code lives in `llm_worker/` with its own tests under `tests/` (server
 **Interfaces:**
 - Produces: `HttpTransport(base_url, token)` — `requests` against the L23 endpoints with `X-Advisor-Token` header, 15s timeouts; 409 on lease → None. `make_transport(settings) -> Transport` factory: SSH settings present → SFTP, else HTTP; `FallbackTransport(primary, backup)` retries each call on the backup when the primary raises a connection error.
 
-- [ ] **Step 1–4: Failing tests (requests-mock via monkeypatch), implement, PASS, commit** — `feat: HTTPS transport + fallback chain`
+- [ ] **Step 1: Failing tests (requests-mock via monkeypatch). Step 2: FAIL. Step 3: Implement (append to transports.py)**
+
+```python
+class HttpTransport(Transport):
+    def __init__(self, base_url: str, token: str):
+        self.base_url, self.token = base_url.rstrip("/"), token
+
+    def _req(self, method, path, **kw):
+        import requests
+        r = requests.request(method, f"{self.base_url}{path}", timeout=15,
+                             headers={"X-Advisor-Token": self.token}, **kw)
+        if r.status_code == 409:
+            return None
+        r.raise_for_status()
+        return r.json()
+
+    def list_jobs(self):
+        return self._req("GET", "/api/llm/jobs?status=pending") or []
+
+    def lease(self, job_id, worker, minutes=45):
+        return self._req("POST", f"/api/llm/jobs/{job_id}/lease",
+                         json={"worker": worker, "minutes": minutes})
+
+    def put_result(self, job_id, result):
+        self._req("POST", f"/api/llm/results/{job_id}", json=result)
+
+    def mark_failed(self, job_id, error):
+        # HTTP path has no dedicated fail endpoint in v1: lease simply expires
+        # and the server's requeue_failed picks it up; log locally.
+        print(f"job {job_id} failed: {error}")
+
+
+class FallbackTransport(Transport):
+    def __init__(self, primary: Transport, backup: Transport):
+        self.primary, self.backup = primary, backup
+
+    def _try(self, name, *args, **kw):
+        try:
+            return getattr(self.primary, name)(*args, **kw)
+        except (ConnectionError, OSError) as e:
+            print(f"primary transport failed ({e!r}); using backup")
+            return getattr(self.backup, name)(*args, **kw)
+
+    def list_jobs(self): return self._try("list_jobs")
+    def lease(self, *a, **k): return self._try("lease", *a, **k)
+    def put_result(self, *a, **k): return self._try("put_result", *a, **k)
+    def mark_failed(self, *a, **k): return self._try("mark_failed", *a, **k)
+
+
+def make_transport(settings) -> Transport:
+    """SSH settings present -> SFTP (with HTTP backup when both configured);
+    else HTTP; else local dir (dev)."""
+    sftp = (SFTPTransport(settings.ssh_host, settings.ssh_user,
+                          settings.ssh_key_path, settings.remote_data_dir)
+            if settings.ssh_host else None)
+    http = (HttpTransport(settings.http_base_url, settings.worker_token)
+            if settings.http_base_url else None)
+    if sftp and http:
+        return FallbackTransport(sftp, http)
+    if sftp or http:
+        return sftp or http
+    return LocalDirTransport(settings.local_data_dir or "data")
+```
+
+(Note the paramiko import stays inside `SFTPTransport` so HTTP-only laptops don't need it. `requests.exceptions.ConnectionError` subclasses `ConnectionError`? It does NOT — it subclasses `IOError`/`OSError`, which the `except` clause covers.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: HTTPS transport + fallback chain`
 
 ### Task L23: Server HTTPS endpoints
 
@@ -1036,7 +1487,71 @@ All worker code lives in `llm_worker/` with its own tests under `tests/` (server
 - Produces: `GET /api/llm/jobs?status=pending`, `POST /api/llm/jobs/<id>/lease` (body `{worker, minutes}`; 409 when not leasable), `POST /api/llm/results/<id>` (body = result dict; server validates schema before writing; 422 invalid). Auth: `X-Advisor-Token` compared with `hmac.compare_digest` against `config.ADVISOR_WORKER_TOKEN`; empty configured token → 404 on all three (feature off). Delegates to `queue.py` functions.
 
 - [ ] **Step 1: Failing tests** — 401 wrong token, 404 when unconfigured, lease 200/409 flow, invalid result 422, valid result lands in `data/llm_results/`.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: /api/llm endpoints (token auth)`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement (in `swingbot/admin/app.py`, or the api blueprint if Cockpit C4 landed)**
+
+```python
+import hmac
+from functools import wraps
+
+
+def _advisor_token_ok() -> bool:
+    configured = getattr(config, "ADVISOR_WORKER_TOKEN", "") or ""
+    supplied = request.headers.get("X-Advisor-Token", "")
+    return bool(configured) and hmac.compare_digest(configured, supplied)
+
+
+def require_advisor_token(fn):
+    @wraps(fn)
+    def wrapper(*a, **kw):
+        if not (getattr(config, "ADVISOR_WORKER_TOKEN", "") or ""):
+            return Response("not found", status=404)      # feature off
+        if not _advisor_token_ok():
+            return Response("unauthorized", status=401)
+        return fn(*a, **kw)
+    return wrapper
+
+
+@app.route("/api/llm/jobs", methods=["GET"])
+@require_advisor_token
+def llm_jobs():
+    from swingbot.core.advisor import queue
+    status = request.args.get("status")
+    return Response(json.dumps(queue.list_jobs(status=status)),
+                    mimetype="application/json")
+
+
+@app.route("/api/llm/jobs/<job_id>/lease", methods=["POST"])
+@require_advisor_token
+def llm_lease(job_id):
+    from swingbot.core.advisor import queue
+    body = request.get_json(silent=True) or {}
+    leased = queue.lease(job_id, body.get("worker", "http"),
+                         minutes=int(body.get("minutes", 45)))
+    if leased is None:
+        return Response(json.dumps({"error": "not leasable"}), status=409,
+                        mimetype="application/json")
+    return Response(json.dumps(leased), mimetype="application/json")
+
+
+@app.route("/api/llm/results/<job_id>", methods=["POST"])
+@require_advisor_token
+def llm_result(job_id):
+    from swingbot.core.advisor import queue
+    from swingbot.core.advisor.schemas import validate
+    body = request.get_json(silent=True) or {}
+    job = queue._read(job_id)
+    if job is None:
+        return Response("unknown job", status=404)
+    errors = validate(job["kind"], body.get("output", {}))
+    if errors:
+        return Response(json.dumps({"errors": errors[:5]}), status=422,
+                        mimetype="application/json")
+    queue.complete(job_id, body["output"], body.get("provider", "http"),
+                   float(body.get("duration_s", 0.0)))
+    return Response(json.dumps({"ok": True}), mimetype="application/json")
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: /api/llm endpoints (token auth)`
 
 ### Task L24: Ollama client
 
@@ -1048,7 +1563,68 @@ All worker code lives in `llm_worker/` with its own tests under `tests/` (server
 - Produces: `class OllamaProvider(model="qwen3:8b", base_url="http://localhost:11434")` — `run(kind, payload, *, timeout_s=2400) -> dict` using `build_prompt` + `/api/chat` with `format=SCHEMAS[kind]`, `num_ctx` 16384; JSON-parses, `validate()`, one retry with errors appended, raises `WorkerJobError(str)` on final failure; `ensure_model()` — `GET /api/tags`, `POST /api/pull` if missing (streamed, logged).
 
 - [ ] **Step 1: Failing tests** — mocked requests: happy path, invalid→retry→valid, invalid twice raises; `ensure_model` pulls only when absent.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: worker Ollama provider`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement**
+
+```python
+# llm_worker/ollama_client.py
+"""Local inference via Ollama's /api/chat with schema-constrained output.
+Ollama accepts the FULL JSON Schema as `format` (llama.cpp grammar handles
+maxItems etc. natively — no api_schema() strip needed on this path)."""
+from __future__ import annotations
+
+import json
+
+import requests
+
+from swingbot.core.advisor.prompts import build_prompt
+from swingbot.core.advisor.schemas import SCHEMAS, validate
+
+
+class WorkerJobError(Exception):
+    pass
+
+
+class OllamaProvider:
+    def __init__(self, model="qwen3:8b", base_url="http://localhost:11434"):
+        self.model, self.base_url = model, base_url
+
+    def run(self, kind: str, payload: dict, *, timeout_s: float = 2400) -> dict:
+        system, user = build_prompt(kind, payload)
+        messages = [{"role": "system", "content": system},
+                    {"role": "user", "content": user}]
+        errors: list[str] = []
+        for attempt in (1, 2):
+            r = requests.post(f"{self.base_url}/api/chat", timeout=timeout_s, json={
+                "model": self.model, "stream": False, "format": SCHEMAS[kind],
+                "options": {"num_ctx": 16384}, "messages": messages})
+            r.raise_for_status()
+            try:
+                out = json.loads(r.json()["message"]["content"])
+            except (KeyError, ValueError) as e:
+                raise WorkerJobError(f"ollama non-JSON reply: {e}") from e
+            errors = validate(kind, out)
+            if not errors:
+                return out
+            if attempt == 1:
+                messages += [{"role": "assistant", "content": json.dumps(out)},
+                             {"role": "user", "content":
+                              "Validation errors — fix and resend full JSON:\n- "
+                              + "\n- ".join(errors)}]
+        raise WorkerJobError(f"invalid after retry: {errors[:3]}")
+
+    def ensure_model(self) -> None:
+        tags = requests.get(f"{self.base_url}/api/tags", timeout=10).json()
+        have = {m["name"] for m in tags.get("models", [])}
+        if self.model not in have and f"{self.model}:latest" not in have:
+            print(f"pulling {self.model} (one-time, ~5GB)…")
+            with requests.post(f"{self.base_url}/api/pull", stream=True, timeout=None,
+                               json={"name": self.model}) as resp:
+                for line in resp.iter_lines():
+                    if line:
+                        print(" ", json.loads(line).get("status", ""), end="\r")
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: worker Ollama provider`
 
 ### Task L25: Worker main loop
 
@@ -1060,7 +1636,67 @@ All worker code lives in `llm_worker/` with its own tests under `tests/` (server
 - Produces: `run_once(transport, provider, settings) -> str | None` (processed job id) — list → pick oldest pending job whose `model_hint != "cloud"` → lease → provider.run → put_result → return id; `WorkerJobError` → `mark_failed`; `main()` — startup banner (transport chosen, model, `ensure_model()`), loop `run_once` + `sleep(POLL_SECONDS)`, clean exit on Ctrl+C. Single job at a time (CPU-bound).
 
 - [ ] **Step 1: Failing tests** — fake transport+provider: processes oldest first, skips cloud-hinted, failure marks failed and continues, empty queue returns None.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: worker main loop`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement**
+
+```python
+# llm_worker/worker.py
+"""Main loop: poll -> lease oldest local-eligible pending job -> run Ollama ->
+upload result. One job at a time (CPU-bound inference). Ctrl+C exits clean."""
+from __future__ import annotations
+
+import time
+
+from llm_worker.ollama_client import OllamaProvider, WorkerJobError
+from llm_worker.settings import load_settings
+from llm_worker.transports import make_transport
+
+
+def run_once(transport, provider, settings) -> str | None:
+    jobs = [j for j in transport.list_jobs()
+            if j["status"] == "pending" and j.get("model_hint") != "cloud"]
+    if not jobs:
+        return None
+    job = jobs[0]                              # list_jobs is oldest-first
+    leased = transport.lease(job["id"], settings.worker_name)
+    if leased is None:
+        return None                            # raced by another worker
+    start = time.monotonic()
+    try:
+        out = provider.run(leased["kind"], leased["payload"])
+    except WorkerJobError as e:
+        transport.mark_failed(leased["id"], str(e))
+        return leased["id"]
+    transport.put_result(leased["id"], {
+        "job_id": leased["id"], "output": out,
+        "provider": f"ollama/{provider.model}",
+        "duration_s": round(time.monotonic() - start, 1),
+        "completed_at": __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc).isoformat()})
+    return leased["id"]
+
+
+def main() -> None:
+    settings = load_settings()
+    transport = make_transport(settings)
+    provider = OllamaProvider(model=settings.ollama_model)
+    provider.ensure_model()
+    print(f"worker up: transport={type(transport).__name__} model={provider.model}")
+    try:
+        while True:
+            done = run_once(transport, provider, settings)
+            print(f"processed {done}" if done else "queue empty", flush=True)
+            time.sleep(settings.poll_seconds)
+    except KeyboardInterrupt:
+        print("bye")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+(The result dict matches `queue.complete`'s shape exactly, so `consume_results` reads worker results and inline results identically.)
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: worker main loop`
 
 ### Task L26: Windows launcher + ops docs
 
