@@ -17,10 +17,29 @@ import discord
 from swingbot import config
 from swingbot.core.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
+from swingbot.core.jsonio import atomic_write_json, read_json
 from swingbot.core.plan_store import PlanStore
 from swingbot.core.strategy import HORIZONS
 
 _plan_store = PlanStore()
+
+_STARRED_PATH = os.path.join(config.DATA_DIR, "starred_plans.json")
+
+
+def starred_ids() -> set:
+    return set(read_json(_STARRED_PATH, []))
+
+
+def star_plan(plan_id: str) -> None:
+    ids = starred_ids()
+    ids.add(plan_id)
+    atomic_write_json(_STARRED_PATH, sorted(ids))
+
+
+def unstar_plan(plan_id: str) -> None:
+    ids = starred_ids()
+    ids.discard(plan_id)
+    atomic_write_json(_STARRED_PATH, sorted(ids))
 
 
 class PlanActionView(discord.ui.View):
@@ -92,6 +111,19 @@ class PlanActionView(discord.ui.View):
             await interaction.response.send_message("This plan no longer exists.", ephemeral=True)
             return
         await interaction.response.send_message(embed=breakdown_embed(plan), ephemeral=True)
+
+    @discord.ui.button(label="⭐ Watch", style=discord.ButtonStyle.secondary, custom_id="plan:watch")
+    async def watch_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.plan_id in starred_ids():
+            unstar_plan(self.plan_id)
+            await interaction.response.send_message("Unstarred.", ephemeral=True)
+        else:
+            star_plan(self.plan_id)
+            await interaction.response.send_message("⭐ Starred — it'll sort first on `!plans` at equal follow score.", ephemeral=True)
+
+    @discord.ui.button(label="🔕 Dismiss", style=discord.ButtonStyle.secondary, custom_id="plan:dismiss")
+    async def dismiss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(view=None)
 
 
 def breakdown_embed(plan) -> discord.Embed:

@@ -17,7 +17,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 
 from swingbot.commands import views as views_module
-from swingbot.commands.views import PlanActionView, breakdown_embed
+from swingbot.commands.views import (
+    PlanActionView,
+    breakdown_embed,
+    star_plan,
+    starred_ids,
+    unstar_plan,
+)
 
 
 def _fake_interaction(user_id: int) -> MagicMock:
@@ -47,10 +53,12 @@ def _fake_plan(**overrides) -> types.SimpleNamespace:
 def test_plan_action_view_has_one_chart_button():
     view = PlanActionView("plan-123", author_id=42)
     assert view.timeout == 180
-    assert len(view.children) == 2
+    assert len(view.children) == 4
     custom_ids = [item.custom_id for item in view.children]
     assert "plan:chart" in custom_ids
     assert "plan:breakdown" in custom_ids
+    assert "plan:watch" in custom_ids
+    assert "plan:dismiss" in custom_ids
     assert view.children[0].custom_id == "plan:chart"
 
 
@@ -219,3 +227,33 @@ def test_breakdown_button_sends_ephemeral():
     _, kwargs = interaction.response.send_message.call_args
     assert kwargs.get("ephemeral") is True
     assert "embed" in kwargs
+
+
+def test_star_unstar_roundtrip(tmp_path, monkeypatch):
+    star_path = str(tmp_path / "starred_plans.json")
+    monkeypatch.setattr("swingbot.commands.views._STARRED_PATH", star_path)
+    assert starred_ids() == set()
+    star_plan("p1")
+    star_plan("p2")
+    assert starred_ids() == {"p1", "p2"}
+    unstar_plan("p1")
+    assert starred_ids() == {"p2"}
+    assert starred_ids() == {"p2"}
+
+
+def test_watch_button_toggles_star(tmp_path, monkeypatch):
+    star_path = str(tmp_path / "starred_plans.json")
+    monkeypatch.setattr("swingbot.commands.views._STARRED_PATH", star_path)
+    view = PlanActionView("plan-x", author_id=1)
+    interaction = _fake_interaction(user_id=1)
+    asyncio.run(view.watch_button.callback(interaction))
+    assert "plan-x" in starred_ids()
+    asyncio.run(view.watch_button.callback(interaction))
+    assert "plan-x" not in starred_ids()
+
+
+def test_dismiss_button_removes_view_keeps_embed():
+    view = PlanActionView("plan-x", author_id=1)
+    interaction = _fake_interaction(user_id=1)
+    asyncio.run(view.dismiss_button.callback(interaction))
+    interaction.response.edit_message.assert_awaited_once_with(view=None)
