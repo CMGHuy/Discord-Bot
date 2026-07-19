@@ -103,3 +103,49 @@ def test_api_plans_status_filter(client, auth, monkeypatch):
     assert [p["plan_id"] for p in body["plans"]] == ["p2"]
     # Counts stay computed from the FULL set regardless of the row filter.
     assert body["counts"]["PENDING"] == 1
+
+
+class _FakeJournalStore:
+    _ENTRIES = [
+        {"trade_id": "t1", "ticker": "AAPL", "strategy": "RSI", "tags": ["clean_breakout"], "outcome": "win", "note": None},
+        {"trade_id": "t2", "ticker": "MSFT", "strategy": "MACD", "tags": ["chased"], "outcome": "loss", "note": "entered late"},
+    ]
+
+    def entries(self, strategy=None, tag=None, outcome=None, has_note=None, limit=100):
+        rows = list(self._ENTRIES)
+        if strategy:
+            rows = [r for r in rows if r["strategy"] == strategy]
+        if tag:
+            rows = [r for r in rows if tag in r["tags"]]
+        if outcome:
+            rows = [r for r in rows if r["outcome"] == outcome]
+        if has_note is not None:
+            rows = [r for r in rows if (r["note"] is not None) == has_note]
+        return rows[:limit]
+
+    def set_note(self, trade_id, note):
+        for r in self._ENTRIES:
+            if r["trade_id"] == trade_id:
+                r["note"] = note
+                return True
+        return False
+
+
+def test_api_journal_filters_by_tag(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.JournalStore", _FakeJournalStore)
+    r = client.get("/api/journal?tag=chased", headers=auth)
+    body = r.get_json()
+    assert [e["trade_id"] for e in body["entries"]] == ["t2"]
+
+
+def test_api_journal_note_roundtrips(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.JournalStore", _FakeJournalStore)
+    r = client.post("/api/journal/t1/note", data={"note": "good clean entry"}, headers=auth)
+    assert r.get_json() == {"ok": True}
+
+
+def test_api_journal_note_unknown_id_404(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.JournalStore", _FakeJournalStore)
+    r = client.post("/api/journal/does-not-exist/note", data={"note": "x"}, headers=auth)
+    assert r.status_code == 404
+    assert r.get_json() == {"ok": False}

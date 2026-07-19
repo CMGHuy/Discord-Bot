@@ -10,6 +10,7 @@ from functools import wraps
 
 from flask import Blueprint, jsonify, request
 
+from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.rank import follow_score, rank_plans
 from swingbot.core.analytics.snapshots import load_snapshot
 from swingbot.core.analytics.snapshots import refresh_snapshot as _rebuild_snapshot
@@ -113,3 +114,38 @@ def api_plans():
         tier=request.args.get("tier") or None,
         badge=request.args.get("badge") or None,
     ))
+
+
+def _parse_bool_param(v: str | None) -> bool | None:
+    if v is None or v == "":
+        return None
+    return v.lower() in ("1", "true", "yes")
+
+
+@api.route("/journal", methods=["GET"])
+@require_auth_json
+def api_journal():
+    # The real JournalStore.entries() has no `limit` kwarg (it returns
+    # every matching entry, newest first) -- this route applies the
+    # documented ?limit= query param itself rather than passing it
+    # through to a parameter that doesn't exist.
+    store = JournalStore()
+    entries = store.entries(
+        strategy=request.args.get("strategy") or None,
+        tag=request.args.get("tag") or None,
+        outcome=request.args.get("outcome") or None,
+        has_note=_parse_bool_param(request.args.get("has_note")),
+    )
+    limit = int(request.args.get("limit", 100))
+    return jsonify({"entries": entries[:limit]})
+
+
+@api.route("/journal/<trade_id>/note", methods=["POST"])
+@require_auth_json
+def api_journal_note(trade_id):
+    payload = request.get_json(silent=True) or {}
+    note = request.form.get("note", payload.get("note", ""))
+    ok = JournalStore().set_note(trade_id, note)
+    if not ok:
+        return jsonify({"ok": False}), 404
+    return jsonify({"ok": True})
