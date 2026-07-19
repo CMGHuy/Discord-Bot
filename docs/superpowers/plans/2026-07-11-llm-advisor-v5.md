@@ -44,12 +44,19 @@
 > (token-auth endpoints, `hmac.compare_digest`, 404-when-unconfigured),
 > L24–L25 (Ollama provider — full SCHEMAS as `format`, no api_schema strip
 > needed locally — and the worker loop, whose result dict matches
-> `queue.complete`'s shape byte-for-byte). Still interface-form by design:
-> L15/L16/L18 (Discord renderers — small, and their embed copy is specified
-> in the Interfaces blocks), L21 (SFTPTransport — the tmp+`posix_rename`
-> semantics are specified; paramiko mechanics are boilerplate), L26–L32
-> (launcher/docs/e2e/admin/eval — operational and UI tasks). Implementers of
-> those consume the exact signatures now frozen in code above.
+> `queue.complete`'s shape byte-for-byte).
+>
+> **Third enrichment pass (L26–L32):** full code for the launcher
+> (`run_worker.ps1` + `worker.env.example`), the offline e2e pipeline test
+> (produce → worker run_once → consume, zero network), the `/advisor` admin
+> route with worker-last-seen, operator controls incl. the **Batches API**
+> force-to-cloud path (verified SDK shape: `Request(custom_id,
+> params=MessageCreateParamsNonStreaming(...))`, results keyed by
+> custom_id never position, budget recorded at 50%), startup diagnostics,
+> and the eval harness script. Still interface-form by design (small,
+> fully-specified in their Interfaces blocks): L15/L16/L18 Discord
+> renderers, L21 SFTPTransport paramiko mechanics, L32's manual live-smoke
+> checklist.
 
 ## Global Constraints
 
@@ -1703,7 +1710,37 @@ if __name__ == "__main__":
 **Files:**
 - Create: `llm_worker/run_worker.ps1`, `llm_worker/worker.env.example`; extend `llm_worker/README.md`
 
-- [ ] **Step 1: `run_worker.ps1`** — venv-activate, `python -m llm_worker.worker`, log tee to `llm_worker/logs/worker-{date}.log`.
+- [ ] **Step 1: `run_worker.ps1`**
+
+```powershell
+# llm_worker/run_worker.ps1 — laptop entry point. Run from the repo root.
+$ErrorActionPreference = "Stop"
+Set-Location (Split-Path $PSScriptRoot -Parent)   # repo root
+if (-not (Test-Path ".venv")) { python -m venv .venv }
+& .\.venv\Scripts\Activate.ps1
+pip install -q -r llm_worker\requirements.txt
+New-Item -ItemType Directory -Force llm_worker\logs | Out-Null
+$log = "llm_worker\logs\worker-$(Get-Date -Format yyyy-MM-dd).log"
+python -m llm_worker.worker 2>&1 | Tee-Object -Append -FilePath $log
+```
+
+And `llm_worker/worker.env.example` (copied to `worker.env`, gitignored):
+
+```ini
+WORKER_NAME=laptop
+POLL_SECONDS=30
+OLLAMA_MODEL=qwen3:8b
+# --- SFTP primary (leave empty to skip) ---
+SSH_HOST=167.233.26.185
+SSH_USER=deploy
+SSH_KEY_PATH=C:\Users\you\.ssh\id_ed25519
+REMOTE_DATA_DIR=/opt/swing-bot/data
+# --- HTTPS backup (leave empty to skip) ---
+HTTP_BASE_URL=
+WORKER_TOKEN=
+# --- Dev only: same-machine directory transport ---
+LOCAL_DATA_DIR=
+```
 - [ ] **Step 2: README ops section** — laptop setup end-to-end (clone repo, venv, `pip install -r llm_worker/requirements.txt`, Ollama install/pull, copy `worker.env.example` → `worker.env`, fill SSH settings, optional Task Scheduler at-logon job), update procedure (`git pull`), and the **future-machine playbook** from spec §9 verbatim (tiers table + "nobody trains from scratch" expectation).
 - [ ] **Step 3: Commit** — `docs: worker ops + future-machine playbook`
 
@@ -1712,7 +1749,69 @@ if __name__ == "__main__":
 **Files:**
 - Test: `tests/test_worker_e2e.py`
 
-- [ ] **Step 1: The test** — in a tmp data dir: `producers.produce_nightly(fixture inputs)` → `run_once(LocalDirTransport, FakeOllama(valid nightly output))` → `consume_results(fake bot)` → assert the Discord post captured, report file written, job archived. This is the whole pipeline with zero network.
+- [ ] **Step 1: The test** — the whole pipeline with zero network:
+
+```python
+# tests/test_worker_e2e.py
+import asyncio
+import os
+import types
+
+import pytest
+
+from swingbot.core.advisor import consumer, producers, queue
+from llm_worker.transports import LocalDirTransport
+from llm_worker.worker import run_once
+
+NIGHTLY_OUT = {"headline": "Quiet day", "findings": [
+    {"topic": "RSI", "detail": "2 wins", "evidence": ["t1", "t2"]}],
+    "concerns": [], "focus_tomorrow": ["watch NVDA"],
+    "discord_summary": "2 closes, both wins."}
+
+
+class FakeOllama:
+    model = "fake"
+    def run(self, kind, payload, **kw):
+        assert payload["_frame"].startswith("DATA ONLY")
+        return NIGHTLY_OUT
+
+
+class FakeChannel:
+    def __init__(self): self.posts = []
+    async def send(self, text): self.posts.append(text)
+
+
+@pytest.fixture(autouse=True)
+def _dirs(tmp_path, monkeypatch):
+    for mod, names in ((queue, ("JOBS_DIR", "RESULTS_DIR", "ARCHIVE_DIR")),
+                       (consumer, ("REPORTS_DIR",))):
+        for n in names:
+            monkeypatch.setattr(mod, n, str(tmp_path / n.lower()))
+    monkeypatch.setattr(queue, "JOBS_DIR", str(tmp_path / "llm_jobs"))
+    monkeypatch.setattr(queue, "RESULTS_DIR", str(tmp_path / "llm_results"))
+    monkeypatch.setattr("swingbot.config.ADVISOR_ENABLED", True, raising=False)
+    return tmp_path
+
+
+def test_full_pipeline_offline(tmp_path, monkeypatch):
+    job = producers.produce_nightly({"overall": {"n": 2}}, [], "retro", [])
+    assert job is not None
+    settings = types.SimpleNamespace(worker_name="t", poll_seconds=0)
+    transport = LocalDirTransport(str(tmp_path))
+    monkeypatch.setattr(transport, "jobs", queue.JOBS_DIR)
+    monkeypatch.setattr(transport, "results", queue.RESULTS_DIR)
+    assert run_once(transport, FakeOllama(), settings) == job["id"]
+
+    ch = FakeChannel()
+    bot = types.SimpleNamespace(get_channel=lambda _id: ch)
+    monkeypatch.setattr("swingbot.config.DISCORD_CHANNEL_RETROSPECTIVE_ID", "1", raising=False)
+    n = asyncio.run(consumer.consume_results(bot))
+    assert n == 1
+    assert any("Quiet day" in p or "2 closes" in p for p in ch.posts)
+    assert any(f.endswith(".json") for f in os.listdir(consumer.REPORTS_DIR))
+    assert queue.list_jobs() == []            # archived away
+```
+
 - [ ] **Step 2: PASS. Step 3: Commit** — `test: advisor pipeline end-to-end (offline)`
 
 ---
@@ -1729,7 +1828,37 @@ if __name__ == "__main__":
 - Produces: `/advisor` — budget meter (spent / cap, from `budget.spent_this_month`), queue table (id, kind, status, age, attempts), latest analyst report rendered, hypotheses list (from `data/tuning_proposals/*-llm.json`, linking to the Tuning page when present), worker-last-seen (mtime of newest lease/result). Empty states everywhere.
 
 - [ ] **Step 1: Failing tests** — page 200 authed; seeded job renders row; budget figure shown.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: admin advisor page`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement** — route (app.py or pages.py):
+
+```python
+@app.route("/advisor", methods=["GET"])
+@require_auth
+def advisor_page():
+    from swingbot.core.advisor import budget, queue
+    from swingbot.core.jsonio import read_json
+    import glob as _glob
+    reports_dir = os.path.join(config.DATA_DIR, "advisor", "reports")
+    report_files = sorted(_glob.glob(os.path.join(reports_dir, "*.json")), reverse=True)
+    latest_report = read_json(report_files[0], None) if report_files else None
+    proposals = [read_json(p, None) for p in sorted(_glob.glob(
+        os.path.join(config.DATA_DIR, "tuning_proposals", "*-llm.json")), reverse=True)[:10]]
+    jobs = queue.list_jobs()
+    # worker-last-seen = newest lease/result mtime
+    candidates = _glob.glob(os.path.join(queue.RESULTS_DIR, "*.json")) + \
+                 _glob.glob(os.path.join(queue.JOBS_DIR, "*.json"))
+    last_seen = max((os.path.getmtime(p) for p in candidates), default=None)
+    return render_template("advisor.html", active_page="advisor",
+        title="AI Advisor", jobs=jobs,
+        spent=budget.spent_this_month(),
+        cap=getattr(config, "ADVISOR_MONTHLY_BUDGET_USD", 5.0),
+        latest_report=latest_report,
+        report_date=(os.path.basename(report_files[0])[:-5] if report_files else None),
+        proposals=[p for p in proposals if p], worker_last_seen=last_seen)
+```
+
+`templates/advisor.html` extends `base.html`: a budget meter (`spent`/`cap` as a `<progress>` + text), a jobs table (id/kind/status/attempts/created_at, empty state "No advisor jobs yet"), the latest report's headline+findings list (empty state "No analyst report yet — the worker runs when your laptop is on"), the proposals list linking to `/tuning` when Cockpit C32 exists (plain list otherwise), and worker-last-seen rendered as a relative time or "never". Add the nav entry alongside the existing `nav_items`.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: admin advisor page`
 
 ### Task L29: Operator job controls
 
@@ -1740,7 +1869,63 @@ if __name__ == "__main__":
 - Produces: per-job buttons — `Retry` (failed → pending), `Cancel` (pending → archived), `Force to cloud` (queued nightly/weekly job → submitted via the **Batches API** at 50% price: `client.messages.batches.create` with the same prompt/schema, batch id stored on the job, a poll in `consume_results` collects it). Confirm dialogs.
 
 - [ ] **Step 1: Failing tests** — retry/cancel state transitions; force-to-cloud stores batch id (mocked client) and consumer ingests a canned batch result.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: operator queue controls + cloud batch fallback`
+- [ ] **Step 2: Run — FAIL. Step 3: Implement.** `queue.py` gains `retry(job_id)` (failed→pending, error cleared) and `cancel(job_id)` (pending→archived). Routes are thin POSTs calling them + redirect back to `/advisor` with a flash. Force-to-cloud uses the **Batches API at 50% price** (verified current SDK shape):
+
+```python
+# cloud.py — append
+def submit_batch(job) -> str | None:
+    """Submit one queued nightly/weekly job via the Batches API (50% price).
+    Returns the batch id (stored on the job as job['batch_id']) or None."""
+    import anthropic
+    from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+    from anthropic.types.messages.batch_create_params import Request
+    system, user = build_prompt(job["kind"], job["payload"])
+    try:
+        batch = _get_client().messages.batches.create(requests=[Request(
+            custom_id=job["id"],
+            params=MessageCreateParamsNonStreaming(
+                model=config.ADVISOR_CLOUD_MODEL, max_tokens=2048,
+                system=[{"type": "text", "text": system}],
+                output_config={"format": {"type": "json_schema",
+                                          "schema": api_schema(job["kind"])}},
+                messages=[{"role": "user", "content": user}]))])
+        return batch.id
+    except Exception:
+        log.warning("batch submit failed for %s", job["id"], exc_info=True)
+        return None
+
+
+def poll_batches(jobs_with_batch_ids) -> int:
+    """Called from consume_results' tick: for each job carrying batch_id,
+    retrieve; when ended, parse+validate the result and queue.complete it.
+    Results arrive keyed by custom_id — never by position."""
+    import anthropic, json as _json
+    done = 0
+    client = _get_client()
+    for job in jobs_with_batch_ids:
+        try:
+            b = client.messages.batches.retrieve(job["batch_id"])
+            if b.processing_status != "ended":
+                continue
+            for r in client.messages.batches.results(job["batch_id"]):
+                if r.custom_id != job["id"] or r.result.type != "succeeded":
+                    continue
+                msg = r.result.message
+                out = _json.loads(next(x.text for x in msg.content if x.type == "text"))
+                if not validate(job["kind"], out):
+                    budget.record(job["kind"], msg.usage.input_tokens // 2,
+                                  msg.usage.output_tokens // 2, 0,
+                                  config.ADVISOR_CLOUD_MODEL)  # 50% batch price
+                    queue.complete(job["id"], out, "cloud-batch", 0.0)
+                    done += 1
+        except Exception:
+            log.warning("batch poll failed for %s", job["id"], exc_info=True)
+    return done
+```
+
+Confirm dialogs are plain `onsubmit="return confirm(...)"` on the three forms.
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: operator queue controls + cloud batch fallback`
 
 ### Task L30: Startup diagnostics
 
@@ -1750,8 +1935,35 @@ if __name__ == "__main__":
 **Interfaces:**
 - Produces: one startup log block when `ADVISOR_ENABLED`: cloud key present?, model, budget remaining, queue depth, token endpoints on/off — and a single WARNING per missing piece (e.g. plan review on but no API key → feature auto-off). No advisor flags → silent.
 
-- [ ] **Step 1: Failing tests** — capture logs for the on/off/misconfigured matrix.
-- [ ] **Step 2–4: Implement, PASS, commit** — `feat: advisor startup diagnostics`
+- [ ] **Step 1: Failing tests** — capture logs (caplog) for the on/off/misconfigured matrix.
+- [ ] **Step 2: Run — FAIL. Step 3: Implement (producers.py, called once from bot_core startup)**
+
+```python
+def startup_diagnostics() -> None:
+    """One log block when the advisor is on; silent when off. Also auto-offs
+    plan review when it can't possibly work (no key)."""
+    if not getattr(config, "ADVISOR_ENABLED", False):
+        return
+    from swingbot.core.advisor import budget, queue
+    key = bool(getattr(config, "ANTHROPIC_API_KEY", ""))
+    token = bool(getattr(config, "ADVISOR_WORKER_TOKEN", ""))
+    spent = budget.spent_this_month()
+    cap = getattr(config, "ADVISOR_MONTHLY_BUDGET_USD", 5.0)
+    log.info("AI Advisor: model=%s key=%s budget=$%.2f/$%.2f queue=%d "
+             "worker-endpoints=%s plan-review=%s",
+             getattr(config, "ADVISOR_CLOUD_MODEL", "?"), "yes" if key else "NO",
+             spent, cap, len(queue.list_jobs(status="pending")),
+             "on" if token else "off",
+             "on" if getattr(config, "ADVISOR_PLAN_REVIEW_ENABLED", False) else "off")
+    if getattr(config, "ADVISOR_PLAN_REVIEW_ENABLED", False) and not key:
+        log.warning("ADVISOR_PLAN_REVIEW_ENABLED but no ANTHROPIC_API_KEY — "
+                    "reviews will queue to the local worker instead of inline")
+    if spent >= cap:
+        log.warning("advisor monthly budget exhausted ($%.2f/$%.2f) — "
+                    "inline cloud calls are blocked until next month", spent, cap)
+```
+
+- [ ] **Step 4: PASS. Step 5: Commit** — `feat: advisor startup diagnostics`
 
 ---
 
@@ -1765,8 +1977,57 @@ if __name__ == "__main__":
 **Interfaces:**
 - Produces: `python scripts/eval_advisor.py --provider ollama|cloud [--kind …]` — runs each fixture through the real provider, asserts schema validity, prints the outputs + timing + (cloud) cost. This is the manual regression check after ANY prompt edit; documented in the README as such.
 
-- [ ] **Step 1: Build fixtures from synthetic-but-realistic data (a WEAK RSI-Divergence plan; a snapshot with one drift alert; a week of journal entries).**
-- [ ] **Step 2: Run against Ollama on the laptop once — outputs read sensibly, note runtime in README. Step 3: Commit** — `feat: advisor eval harness`
+- [ ] **Step 1: Build fixtures** (`tests/fixtures/advisor/{kind}.json` — synthetic-but-realistic: a WEAK RSI-Divergence plan with badge_stats N=1099/WR=75.8; a snapshot whose drift list has one alert row; 7 journal entries mixing wins/stop-outs with real-looking mfe/mae). **Step 2: The harness**
+
+```python
+# scripts/eval_advisor.py
+"""Prompt-regression harness: run each fixture through a REAL provider and
+assert schema validity. Manual gate after ANY prompt edit — not in pytest.
+
+Run: python scripts/eval_advisor.py --provider ollama|cloud [--kind plan_review]
+"""
+import argparse, json, os, sys, time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from swingbot.core.advisor.schemas import KINDS, validate
+
+FIXTURES = os.path.join("tests", "fixtures", "advisor")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--provider", choices=["ollama", "cloud"], required=True)
+    ap.add_argument("--kind", choices=list(KINDS))
+    args = ap.parse_args()
+    if args.provider == "ollama":
+        from llm_worker.ollama_client import OllamaProvider
+        provider = OllamaProvider()
+    else:
+        from swingbot.core.advisor.cloud import ClaudeProvider
+        provider = ClaudeProvider()
+    failures = 0
+    for kind in ([args.kind] if args.kind else KINDS):
+        path = os.path.join(FIXTURES, f"{kind}.json")
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+        t0 = time.monotonic()
+        out = provider.run(kind, payload, timeout_s=2400)
+        dt_s = time.monotonic() - t0
+        errors = validate(kind, out) if out else ["provider returned None"]
+        status = "OK " if not errors else "FAIL"
+        print(f"[{status}] {kind:20s} {dt_s:7.1f}s")
+        print(json.dumps(out, indent=2)[:1200])
+        if errors:
+            print("  errors:", errors[:5]); failures += 1
+    sys.exit(1 if failures else 0)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 3: Run against Ollama on the laptop once — outputs read sensibly, note per-kind runtimes in `llm_worker/README.md`. Step 4: Commit** — `feat: advisor eval harness`
 
 ### Task L32: Checkpoint — live smoke + docs
 
