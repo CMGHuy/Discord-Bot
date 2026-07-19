@@ -15,7 +15,9 @@ from swingbot.commands.scanning import _ordered_alerts
 from swingbot.core.explain import build_explanation
 from swingbot.core.plan_engine import TradePlanV2
 from swingbot.core.scanning import embed_theme as theme
-from swingbot.core.scanning.embeds import RequirementCheck, build_embed, confidence_color
+from swingbot.core.scanning.embeds import (
+    RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed, confidence_color,
+)
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.engine import ScanItem
 
@@ -40,9 +42,9 @@ def make_conf(level=4, label="High", score=80):
 
 def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
                   entry_type="market", trigger_price=100.0, direction="bullish",
-                  quality_score=72, badge_stats=None):
+                  quality_score=72, badge_stats=None, plan_id="plan-1"):
     return TradePlanV2(
-        plan_id="plan-1", ticker="NVDA", created_at="2026-07-19", source="strategy",
+        plan_id=plan_id, ticker="NVDA", created_at="2026-07-19", source="strategy",
         strategy="RSI Pullback", horizon_key="2w", direction=direction,
         entry_type=entry_type, trigger_price=trigger_price, entry_price=100.0, expiry_bars=5,
         stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=120.0,
@@ -350,3 +352,84 @@ def test_follow_score_field_absent_without_plan_v2(monkeypatch):
     item = make_item(plan_v2=None)
     embed = _build(item)
     assert not any(f.name == "🧭 Follow score" for f in embed.fields)
+
+
+# --- Task B8: unified footer/timestamp across the three embed builders -----
+
+def _make_closed_trade(**overrides):
+    trade = {
+        "id": "trade-42", "ticker": "NVDA", "status": "win",
+        "entry": 100.0, "exit_price": 110.0, "stop_loss": 95.0, "take_profit": 110.0,
+        "direction": "bullish", "strategy": "RSI Pullback", "horizon_key": "2w",
+        "confidence_label": "High", "confidence_level": 4,
+    }
+    trade.update(overrides)
+    return trade
+
+
+def _make_near_close_warning(**trade_overrides):
+    trade = {
+        "id": "trade-99", "ticker": "NVDA", "strategy": "RSI Pullback", "horizon_key": "2w",
+        "direction": "bullish", "confidence_label": "High", "confidence_level": 4,
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+    }
+    trade.update(trade_overrides)
+    return {
+        "trade": trade, "current_price": 96.0, "near_which": "stop-loss",
+        "sl_dist_pct": 1.0, "tp_dist_pct": 14.6,
+    }
+
+
+def test_all_three_embeds_share_timestamp_and_disclaimer_and_preserve_ids(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+
+    scan_item = make_item(plan_v2=make_plan_v2(plan_id="12345678-abcd-efgh"))
+    scan_embed = _build(scan_item)
+
+    closed_trade = _make_closed_trade()  # no plan_id key -- legacy trade
+    closed_embed = build_closed_trade_embed(closed_trade)
+
+    warning = _make_near_close_warning()
+    near_close_embed = build_near_close_embed(warning)
+
+    # All three get a non-None timestamp stamped by apply_footer.
+    assert scan_embed.timestamp is not None
+    assert closed_embed.timestamp is not None
+    assert near_close_embed.timestamp is not None
+
+    # All three share the identical disclaimer prefix once the plan-id
+    # suffix is stripped off.
+    prefixes = {
+        scan_embed.footer.text.split(" · plan ")[0],
+        closed_embed.footer.text.split(" · plan ")[0],
+        near_close_embed.footer.text.split(" · plan ")[0],
+    }
+    assert len(prefixes) == 1
+
+    # Scan embed's footer carries the 8-char-truncated plan id.
+    assert "plan 12345678" in scan_embed.footer.text
+
+    # Closed-trade embed has no plan_id -- no " · plan " suffix at all.
+    assert " · plan " not in closed_embed.footer.text
+
+    # Trade ID information (previously footer-only) is preserved as a field
+    # on the closed-trade embed, since it appears nowhere else in the body.
+    trade_id_fields = [f for f in closed_embed.fields if f.name == "Trade ID"]
+    assert len(trade_id_fields) == 1
+    assert "trade-42" in trade_id_fields[0].value
+    assert "Plan Engine v2" not in trade_id_fields[0].value  # no plan_id/legs on this trade
+
+    # Near-close embed keeps its usage-hint Trade ID field too.
+    near_id_fields = [f for f in near_close_embed.fields if f.name == "Trade ID"]
+    assert len(near_id_fields) == 1
+    assert "trade-99" in near_id_fields[0].value
+    assert "!trade trade-99" in near_id_fields[0].value
+
+
+def test_closed_trade_embed_trade_id_field_shows_plan_engine_v2_suffix_when_v2():
+    trade = _make_closed_trade(plan_id="plan-abc")
+    embed = build_closed_trade_embed(trade)
+    trade_id_field = next(f for f in embed.fields if f.name == "Trade ID")
+    assert "trade-42" in trade_id_field.value
+    assert "Plan Engine v2" in trade_id_field.value
+    assert "plan plan-abc" in embed.footer.text

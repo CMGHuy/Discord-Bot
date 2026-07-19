@@ -23,6 +23,8 @@ WEAK_COLOR = 0xE67E22  # amber
 _TIER_CHIPS = {"A": "🅰", "B": "🅱", "C": "🅲"}
 _BADGE_CHIPS = {"VALIDATED": "✅ VALIDATED", "WEAK": "⚠️ WEAK"}
 
+DISCLAIMER = "Technical signal only, based on today's still-developing daily candle -- not financial advice."
+
 # Fixed rendering order for build_embed's fields -- every field the
 # builder wants to show is bucketed into one of these named sections
 # (see embeds.py's `sections: dict[str, list]` accumulator added in
@@ -63,6 +65,20 @@ def follow_chip(score: float) -> str:
     filled = max(0, min(5, filled))
     bar = "▰" * filled + "▱" * (5 - filled)
     return f"{bar} {round(score)}"
+
+
+def apply_footer(embed, *, plan_id: str | None = None) -> None:
+    """Stamps embed.timestamp = now (UTC) and a single shared footer
+    format across every embed builder in embeds.py: the disclaimer,
+    plus ' · plan {first 8 chars of plan_id}' when a plan_id is given.
+    Mutates embed in place; returns None so call sites read as a plain
+    statement (`apply_footer(embed, plan_id=...)`) rather than needing
+    to reassign anything."""
+    embed.timestamp = discord.utils.utcnow()
+    text = DISCLAIMER
+    if plan_id:
+        text = f"{DISCLAIMER} · plan {plan_id[:8]}"
+    embed.set_footer(text=text)
 
 
 def fmt_price(x: float, sym: str) -> str:

@@ -600,10 +600,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     embed.description = explanation[:4000]
     if chart_filename:
         embed.set_image(url=f"attachment://{chart_filename}")
-    footer = "Technical signal only, based on today's still-developing daily candle -- not financial advice."
-    if v2_priced:
-        footer = "Plan Engine v2 · " + footer
-    embed.set_footer(text=footer)
+    theme.apply_footer(embed, plan_id=plan_v2.plan_id if plan_v2 else None)
     return embed
 
 
@@ -754,10 +751,9 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     if close_reason:
         embed.add_field(name="Close reason", value=close_reason, inline=False)
 
-    footer = f"Trade ID: {trade['id']}"
-    if trade.get("plan_id") or trade.get("legs"):
-        footer += " · Plan Engine v2"
-    embed.set_footer(text=footer)
+    id_suffix = " · Plan Engine v2" if (trade.get("plan_id") or trade.get("legs")) else ""
+    embed.add_field(name="Trade ID", value=f"`{trade['id']}`{id_suffix}", inline=False)
+    theme.apply_footer(embed, plan_id=trade.get("plan_id"))
     return embed
 
 
@@ -812,7 +808,8 @@ def build_near_close_embed(warning: dict) -> discord.Embed:
     embed.add_field(name="Current price", value=f"{cur}{warning['current_price']:.2f}", inline=True)
     embed.add_field(name="Stop-loss", value=f"{cur}{t['stop_loss']:.2f} ({warning['sl_dist_pct']:.1f}% away)", inline=True)
     embed.add_field(name="Recommended TP", value=f"{cur}{t['take_profit']:.2f} ({warning['tp_dist_pct']:.1f}% away)", inline=True)
-    embed.set_footer(text=f"Trade ID: {t['id']} -- use !trade {t['id']} for full detail")
+    embed.add_field(name="Trade ID", value=f"`{t['id']}` -- use !trade {t['id']} for full detail", inline=False)
+    theme.apply_footer(embed, plan_id=t.get("plan_id"))
     return embed
 
 
