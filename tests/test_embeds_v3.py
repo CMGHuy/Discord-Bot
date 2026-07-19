@@ -39,14 +39,15 @@ def make_conf(level=4, label="High", score=80):
 
 
 def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
-                  entry_type="market", trigger_price=100.0, direction="bullish"):
+                  entry_type="market", trigger_price=100.0, direction="bullish",
+                  quality_score=72):
     return TradePlanV2(
         plan_id="plan-1", ticker="NVDA", created_at="2026-07-19", source="strategy",
         strategy="RSI Pullback", horizon_key="2w", direction=direction,
         entry_type=entry_type, trigger_price=trigger_price, entry_price=100.0, expiry_bars=5,
         stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=120.0,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.0,
-        quality_score=72, quality_breakdown=quality_breakdown or [("regime", 15), ("htf", 8)],
+        quality_score=quality_score, quality_breakdown=quality_breakdown or [("regime", 15), ("htf", 8)],
         tier=tier, badge=badge,
         badge_stats={"n": 40, "win_rate": 82.5, "expectancy_r": 0.9, "window": "2020-2023"},
         status="PENDING",
@@ -134,11 +135,13 @@ def test_detailed_layout_still_has_confirmed_by_and_if_it_gets_there(monkeypatch
     assert "🔀 If it gets there" in field_names
 
 
-def test_compact_layout_has_at_most_five_fields(monkeypatch):
+def test_compact_layout_has_at_most_six_fields(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
     embed = _build(item, layout="compact")
-    assert len(embed.fields) <= 5
+    # Was <=5 pre-Task-B6; the always-on "🧭 Follow score" field added by
+    # this task raises the compact-mode ceiling by exactly one field.
+    assert len(embed.fields) <= 6
 
 
 def test_compact_layout_drops_confirmed_by_and_what_changed_and_branches(monkeypatch):
@@ -273,3 +276,39 @@ def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order(
     ordered = _ordered_alerts(alerts, today=_TODAY)
 
     assert [a[0].title for a in ordered] == ["high", "low", "legacy-first", "legacy-second"]
+
+
+# --- Task B6: "why follow this" follow-score breakdown field ---------------
+
+def test_follow_score_field_present_with_chip_and_components(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    plan_v2 = make_plan_v2(badge="VALIDATED", tier="A", quality_score=82)
+    plan_v2.regime_aligned = True
+    plan_v2.created_at = dt.date.today().isoformat()  # fresh as of "today"
+    item = make_item(plan_v2=plan_v2)
+    embed = _build(item)
+    follow_fields = [f for f in embed.fields if f.name == "🧭 Follow score"]
+    assert len(follow_fields) == 1
+    value = follow_fields[0].value
+    assert "▰" in value
+    assert "validated" in value.lower()
+    assert "quality" in value.lower()
+
+
+def test_follow_score_field_present_in_compact_layout_too(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    plan_v2 = make_plan_v2(badge="VALIDATED", tier="A", quality_score=82)
+    plan_v2.regime_aligned = True
+    plan_v2.created_at = dt.date.today().isoformat()
+    item = make_item(plan_v2=plan_v2)
+    embed = _build(item, layout="compact")
+    follow_fields = [f for f in embed.fields if f.name == "🧭 Follow score"]
+    assert len(follow_fields) == 1
+    assert "▰" in follow_fields[0].value
+
+
+def test_follow_score_field_absent_without_plan_v2(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=None)
+    embed = _build(item)
+    assert not any(f.name == "🧭 Follow score" for f in embed.fields)

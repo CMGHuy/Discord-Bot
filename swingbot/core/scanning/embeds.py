@@ -20,6 +20,7 @@ import discord
 from swingbot import config
 from swingbot.core import account
 from swingbot.core.account import compute_position_size, load_account_config
+from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.data import get_currency_symbol, get_daily_data
 from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.registry import Badge
@@ -486,6 +487,20 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             quality_field = quality_lines(plan_v2)
             if quality_field is not None:
                 sections["quality"].append((quality_field[0], quality_field[1], False))
+
+    # "Why follow this" (Task B6) -- always added (both compact and detailed
+    # layouts) when a v2 plan exists, regardless of which branch above fired,
+    # so the follow_score composite and its component breakdown are visible
+    # even in compact mode where the two-field pedigree pair is dropped.
+    if plan_v2 is not None:
+        today = datetime.now(timezone.utc).date()
+        score = follow_score(plan_v2, today=today)
+        breakdown = follow_breakdown(plan_v2, today)
+        breakdown_line = " · ".join(
+            f"{label} +{pts:.0f}" if "quality" not in label else label
+            for label, pts in breakdown
+        )
+        sections["quality"].append(("🧭 Follow score", f"{theme.follow_chip(score)}\n{breakdown_line}", False))
 
     # combined_from always has at least the representative's own entry (set
     # during dedup), so the confirming strategy/horizon combo(s) are always

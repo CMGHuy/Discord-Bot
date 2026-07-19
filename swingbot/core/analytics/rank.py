@@ -73,6 +73,44 @@ def follow_score(plan, *, today: dt.date | None = None) -> float:
     return badge_score + quality_component + regime_component + freshness_component
 
 
+def follow_breakdown(plan, today: dt.date | None = None) -> list:
+    """Same four weighted components follow_score sums, itemized as
+    (label, points) pairs -- used to render the '🧭 Follow score' embed
+    field (Plan B Task B6) so every number on screen traces back to
+    exactly the formula follow_score itself computes. Every clamp here
+    mirrors follow_score's own (quality_score clamped to [0, 100],
+    freshness clamped to [0, FRESHNESS_MAX]) so summing the returned
+    points always reproduces follow_score's result exactly. Zero-value
+    components are OMITTED (a WEAK plan doesn't get a '0' line cluttering
+    the field), matching follow_chip's "only show what actually
+    contributed" spirit."""
+    if today is None:
+        today = dt.date.today()
+
+    parts = []
+
+    if _get(plan, "badge") == "VALIDATED":
+        parts.append(("✅ validated source", BADGE_WEIGHT))
+
+    quality_score = _get(plan, "quality_score") or 0
+    quality_score = max(0, min(100, quality_score))
+    quality_pts = QUALITY_WEIGHT * quality_score
+    if quality_pts:
+        parts.append((f"quality {quality_score} → +{quality_pts:.0f}", quality_pts))
+
+    if _get(plan, "regime_aligned"):
+        parts.append(("regime aligned", REGIME_WEIGHT))
+
+    created = _parse_created_at(_get(plan, "created_at", ""))
+    if created is not None:
+        age_days = (today - created).days
+        freshness = min(FRESHNESS_MAX, max(0.0, FRESHNESS_MAX - FRESHNESS_DECAY_PER_DAY * age_days))
+        if freshness:
+            parts.append(("fresh", freshness))
+
+    return parts
+
+
 def rank_plans(plans: list, *, today: dt.date | None = None) -> list:
     """`plans` sorted by follow_score descending; ties broken by
     quality_score descending, then ticker ascending (alphabetical) --

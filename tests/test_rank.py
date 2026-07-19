@@ -1,6 +1,6 @@
 import datetime as dt
 
-from swingbot.core.analytics.rank import follow_score, rank_plans
+from swingbot.core.analytics.rank import follow_breakdown, follow_score, rank_plans
 
 TODAY = dt.date(2026, 7, 11)
 
@@ -74,6 +74,27 @@ def test_non_string_created_at_datetime_instance_degrades_gracefully():
     # Should not raise; datetime should be converted to date for comparison
     score = follow_score(p, today=TODAY)
     assert score == 40 + 32 + 10 + 10  # 92.0
+
+
+def test_follow_breakdown_sums_to_follow_score():
+    fixtures = [
+        {"badge": "VALIDATED", "quality_score": 80, "regime_aligned": True, "created_at": "2026-07-11"},
+        {"badge": "WEAK", "quality_score": 80, "regime_aligned": True, "created_at": "2026-07-11"},
+        {"badge": "VALIDATED", "quality_score": 0, "regime_aligned": False, "created_at": "2026-07-01"},
+        {"badge": "VALIDATED", "quality_score": 50, "regime_aligned": False, "created_at": "2026-07-11"},
+        {"badge": "WEAK", "created_at": "2026-07-11"},  # no quality_score, no regime_aligned
+    ]
+    for p in fixtures:
+        breakdown = follow_breakdown(p, TODAY)
+        assert abs(sum(pts for _, pts in breakdown) - follow_score(p, today=TODAY)) < 1e-9
+
+
+def test_follow_breakdown_labels_and_zero_components_omitted():
+    p = {"badge": "WEAK", "quality_score": 0, "regime_aligned": False, "created_at": "2020-01-01"}
+    breakdown = follow_breakdown(p, TODAY)
+    labels = [label for label, _ in breakdown]
+    assert not any("validated" in label.lower() for label in labels)
+    assert breakdown == []  # WEAK + 0 quality + no regime + fully stale -> nothing contributed
 
 
 def test_out_of_range_quality_score_clamped():
