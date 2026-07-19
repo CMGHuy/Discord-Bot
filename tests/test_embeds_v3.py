@@ -4,12 +4,14 @@ two-attribute shape (item.plan = legacy scenario, item.plan_v2 = optional
 TradePlanV2 -- see embeds.py's _v2_plan helper) rather than the plan
 document's stale "item.plan.badge" assumption.
 """
+import datetime as dt
 import types
 
 import discord
 import pytest
 
 from swingbot import config
+from swingbot.commands.scanning import _ordered_alerts
 from swingbot.core.explain import build_explanation
 from swingbot.core.plan_engine import TradePlanV2
 from swingbot.core.scanning import embed_theme as theme
@@ -218,3 +220,56 @@ def test_build_explanation_no_plan_omits_trigger_wording():
     text = build_explanation(result, plan=None)
     assert "BUY STOP" not in text
     assert "Enters at market" not in text
+
+
+# --- Task B5: alerts ordered by follow_score -------------------------------
+
+_TODAY = dt.date(2026, 7, 19)  # matches make_plan_v2's default created_at, i.e. "fresh"
+
+
+def _alert(embed_title, plan_v2):
+    return (discord.Embed(title=embed_title), None, plan_v2)
+
+
+def test_ordered_alerts_ranks_plan_carrying_alerts_by_follow_score():
+    # low: WEAK badge (0) + quality 50 (20) + no regime (0) + fresh (10) = 30
+    low = make_plan_v2(badge="WEAK", tier="C")
+    low.quality_score = 50
+    low.regime_aligned = False
+
+    # mid: VALIDATED (40) + quality 50 (20) + no regime (0) + fresh (10) = 60
+    mid = make_plan_v2(badge="VALIDATED", tier="B")
+    mid.quality_score = 50
+    mid.regime_aligned = False
+
+    # high: VALIDATED (40) + quality 75 (30) + regime aligned (10) + fresh (10) = 90
+    high = make_plan_v2(badge="VALIDATED", tier="A")
+    high.quality_score = 75
+    high.regime_aligned = True
+
+    alerts = [_alert("low", low), _alert("high", high), _alert("mid", mid)]
+    ordered = _ordered_alerts(alerts, today=_TODAY)
+
+    assert [a[2] for a in ordered] == [high, mid, low]
+    assert [a[0].title for a in ordered] == ["high", "mid", "low"]
+
+
+def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order():
+    high = make_plan_v2(badge="VALIDATED", tier="A")
+    high.quality_score = 75
+    high.regime_aligned = True
+
+    low = make_plan_v2(badge="WEAK", tier="C")
+    low.quality_score = 50
+    low.regime_aligned = False
+
+    legacy_first = _alert("legacy-first", None)
+    legacy_second = _alert("legacy-second", None)
+
+    # Legacy alerts interleaved with plan alerts in the input -- they must
+    # all land after every plan-carrying alert, preserving their own
+    # original relative order (legacy-first before legacy-second).
+    alerts = [legacy_first, _alert("low", low), legacy_second, _alert("high", high)]
+    ordered = _ordered_alerts(alerts, today=_TODAY)
+
+    assert [a[0].title for a in ordered] == ["high", "low", "legacy-first", "legacy-second"]

@@ -12,6 +12,7 @@ from discord.ext import tasks
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core import scan_engine
+from swingbot.core.analytics.rank import rank_plans
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.account import load_account_config
 from swingbot.core.data import get_current_price
@@ -201,8 +202,30 @@ def set_scan_paused(paused: bool) -> None:
 trade_log = scan_engine.trade_log
 
 
+def _ordered_alerts(alerts: list, today=None) -> list:
+    """Splits `alerts` (each a (embed, chart_path, plan_or_none) tuple)
+    into plan-carrying and legacy groups, ranks the plan-carrying group
+    by analytics.rank.rank_plans (THE shared ordering -- see Plan A
+    Task A18), and returns plan-carrying alerts first (highest
+    follow_score first), then every legacy (no-plan) alert in its
+    original scan order, unchanged. rank_plans is given the plan
+    objects directly and returns them in ranked order; this function
+    re-derives the alert tuple order from that ranked plan-object list
+    rather than re-scoring anything itself, so there is exactly one
+    place (analytics.rank) that ever computes follow_score."""
+    plan_alerts = [a for a in alerts if a[2] is not None]
+    legacy_alerts = [a for a in alerts if a[2] is None]
+
+    ranked_plans = rank_plans([a[2] for a in plan_alerts], today=today)
+    by_plan_id = {id(a[2]): a for a in plan_alerts}
+    ranked_alert_tuples = [by_plan_id[id(p)] for p in ranked_plans]
+
+    return ranked_alert_tuples + legacy_alerts
+
+
 async def _send_alerts(destination, alerts):
-    for embed, chart_path in alerts:
+    """alerts: list of (embed, chart_path, plan_or_none) 3-tuples."""
+    for embed, chart_path, _plan in _ordered_alerts(alerts):
         if chart_path:
             await destination.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
         else:

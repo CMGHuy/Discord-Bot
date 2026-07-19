@@ -676,6 +676,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 )
                 if all_ok:
                     attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
+                    if item.plan_v2 is not None:
+                        item.plan_v2.regime_aligned = not (
+                            item.htf_info and item.htf_info.get("counter_trend", False)
+                        )
                 scan_items.append(item)
                 if progress is not None:
                     progress.qualifying_found = len(scan_items)
@@ -892,7 +896,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
-        alerts.append((embed, chart_path))
+        alerts.append((embed, chart_path, item.plan_v2))
 
         # Secondary alerting (email / push) -- fires only for high-confidence,
         # fully-qualifying alerts when enabled. Blocking I/O but we're already
