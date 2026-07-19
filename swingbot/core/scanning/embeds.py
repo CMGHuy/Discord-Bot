@@ -23,6 +23,7 @@ from swingbot.core.account import compute_position_size, load_account_config
 from swingbot.core.data import get_currency_symbol, get_daily_data
 from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.registry import Badge
+from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 
@@ -411,12 +412,25 @@ def leg_rows(plan, currency: str) -> tuple[str, str]:
     return tp1_row, runner
 
 
+def _v2_plan(item):
+    """The real TradePlanV2 attached to this scan item, or None -- a
+    separately-named field (ScanItem.plan_v2), NOT an attribute of
+    item.plan (which is always the legacy confluence-scenario object)."""
+    return getattr(item, "plan_v2", None)
+
+
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
                 htf_info: dict = None) -> discord.Embed:
     """
     htf_info, when provided, is a dict from scan_engine.py's HTF check:
         {"htf_bias": "bullish"|"bearish", "counter_trend": bool, "ema_period": int, "horizon_key": str}
     Counter-trend setups get a ⚠️ warning field added to the embed.
+
+    Fields are accumulated into `sections` (keyed by
+    embed_theme.SECTION_ORDER) as (name, value, inline) tuples as they're
+    computed, then flushed in that fixed order at the end -- so the field
+    ORDER on the embed is always the same regardless of which optional
+    fields happen to apply to this particular item.
     """
     result, plan, conf = item.result, item.plan, item.conf
     is_bull = result.trend == "bullish"
@@ -424,66 +438,77 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     all_ok = item.all_requirements_met
     priority_marker = "⭐ " if (conf.level >= 4 and all_ok) else ""
     needs_review_marker = "⚠️ " if not all_ok else ""
-    title = f"{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
-    # Embed color highlights CONFIDENCE (red=lowest -> green=highest) when
-    # every requirement is met; a scenario still missing one or more is
-    # always shown in neutral gray regardless of its score, so "this one
-    # needs a second look" reads at a glance from the color alone, before
-    # even opening the trade plan table where the specific failing
-    # parameter(s) are marked in bold red.
-    embed_color = confidence_color(conf.level) if all_ok else discord.Color.from_rgb(149, 165, 166)
+    plan_v2 = _v2_plan(item)
+    # A v2-plan-carrying item gets a tier/badge chip prefix on its title
+    # ("🅰 ✅ VALIDATED · ...") so pedigree is visible before opening the
+    # embed at all; items with no v2 plan keep today's plain title.
+    chip_prefix = f"{theme.tier_chip(plan_v2.tier)} {theme.badge_chip(plan_v2.badge)} · " if plan_v2 is not None else ""
+    title = f"{chip_prefix}{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
+    if plan_v2 is not None:
+        # Tier/badge dominates the color once a v2 plan exists -- "did this
+        # clear the validation bar, and which tier" outranks the legacy
+        # confidence-level color.
+        embed_color = theme.plan_color(plan_v2.badge, plan_v2.tier)
+    else:
+        # Embed color highlights CONFIDENCE (red=lowest -> green=highest) when
+        # every requirement is met; a scenario still missing one or more is
+        # always shown in neutral gray regardless of its score, so "this one
+        # needs a second look" reads at a glance from the color alone, before
+        # even opening the trade plan table where the specific failing
+        # parameter(s) are marked in bold red.
+        embed_color = confidence_color(conf.level) if all_ok else discord.Color.from_rgb(149, 165, 166)
     embed = discord.Embed(title=title, color=embed_color)
 
-    plan_v2 = getattr(item, "plan_v2", None)
+    sections: dict[str, list[tuple]] = {k: [] for k in theme.SECTION_ORDER}
+
     badge_field = badge_field_for(plan_v2)
     if badge_field is not None:
-        embed.add_field(name=badge_field[0], value=badge_field[1], inline=False)
+        sections["quality"].append((badge_field[0], badge_field[1], False))
         quality_field = quality_lines(plan_v2)
         if quality_field is not None:
-            embed.add_field(name=quality_field[0], value=quality_field[1], inline=False)
+            sections["quality"].append((quality_field[0], quality_field[1], False))
 
     # combined_from always has at least the representative's own entry (set
     # during dedup), so the confirming strategy/horizon combo(s) are always
     # shown -- not just when more than one merged in.
     confirmations = ", ".join(f"{c['strategy']} ({c['horizon_key']})" for c in item.combined_from)
     extra = f"  +{len(item.combined_from)-1} more horizon(s)" if len(item.combined_from) > 1 else ""
-    embed.add_field(name="Setup", value=f"{result.strategy}{extra}", inline=True)
-    embed.add_field(name="Confirmed by", value=confirmations, inline=False)
-
-    embed.add_field(name="Swing type", value=result.horizon_label, inline=True)
-    embed.add_field(name="Confidence", value=_confidence_block(conf), inline=True)
+    sections["headline"].append(("Setup", f"{result.strategy}{extra}", True))
+    sections["headline"].append(("Confirmed by", confirmations, False))
+    sections["headline"].append(("Swing type", result.horizon_label, True))
+    sections["headline"].append(("Confidence", _confidence_block(conf), True))
 
     if not all_ok:
         unmet = ", ".join(r.label for r in item.requirements if not r.passed)
-        embed.add_field(
-            name="⚠️ Not yet a clean setup",
-            value=f"Doesn't meet: {unmet}. Shown for visibility -- see the trade plan below for exactly why "
-                  "(marked in bold red); not logged as a paper trade and won't auto-alert until it clears these.",
-            inline=False,
-        )
+        sections["warnings"].append((
+            "⚠️ Not yet a clean setup",
+            f"Doesn't meet: {unmet}. Shown for visibility -- see the trade plan below for exactly why "
+            "(marked in bold red); not logged as a paper trade and won't auto-alert until it clears these.",
+            False,
+        ))
 
     if htf_info and htf_info.get("counter_trend"):
         ema_p = htf_info["ema_period"]
         htf_bias_word = htf_info["htf_bias"].capitalize()
         signal_word = "Bullish" if is_bull else "Bearish"
-        embed.add_field(
-            name="📉 Counter-trend signal",
-            value=(
+        sections["warnings"].append((
+            "📉 Counter-trend signal",
+            (
                 f"{signal_word} setup, but this ticker's own {ema_p}-day EMA trend is **{htf_bias_word}** "
                 f"(higher-timeframe bias for {htf_info['horizon_key']} horizon). "
                 f"Counter-trend setups have a lower base probability of following through -- "
                 f"confidence was reduced by {config.HTF_COUNTER_TREND_PENALTY} points to reflect this."
             ),
-            inline=False,
-        )
+            False,
+        ))
 
     v2_priced = config.PLAN_ENGINE_V2 == "on" and plan_v2 is not None
     plan_field_name = "🎯 Trade plan (v2)" if v2_priced else "🎯 Trade plan"
-    embed.add_field(name=plan_field_name, value=_build_trade_plan_table(item), inline=False)
+    sections["plan"].append((plan_field_name, _build_trade_plan_table(item), False))
 
     what_changed = _snapshot_and_diff(item)
     if what_changed:
-        embed.add_field(name="🔄 What changed since last scan", value=what_changed, inline=False)
+        sections["changes"].append(("🔄 What changed since last scan", what_changed, False))
 
     level_word = "Resistance" if is_bull else "Support"
     opposite_word = "Support" if is_bull else "Resistance"
@@ -493,20 +518,24 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     else:
         branch_lines.append(f"Continues past {level_word.lower()} 1 → no further level found for a stretch target")
     branch_lines.append(f"Reverses at {level_word.lower()} 1 → pulls back toward {opposite_word.lower()} at {plan.stop_loss:.2f} ({plan.stop_distance_pct:.1f}%)")
-    embed.add_field(name="🔀 If it gets there", value="\n".join(branch_lines), inline=False)
+    sections["branches"].append(("🔀 If it gets there", "\n".join(branch_lines), False))
 
     if perf_stats["closed"] > 0:
         wr = perf_stats["win_rate"]
-        embed.add_field(
-            name=f"Track record @ Lv{conf.level}",
-            value=f"{wr:.0f}% win rate ({perf_stats['wins']}W/{perf_stats['losses']}L, {perf_stats['closed']} closed)",
-            inline=True,
-        )
+        sections["track_record"].append((
+            f"Track record @ Lv{conf.level}",
+            f"{wr:.0f}% win rate ({perf_stats['wins']}W/{perf_stats['losses']}L, {perf_stats['closed']} closed)",
+            True,
+        ))
     else:
-        embed.add_field(name=f"Track record @ Lv{conf.level}", value="No closed trades yet at this level", inline=True)
+        sections["track_record"].append((f"Track record @ Lv{conf.level}", "No closed trades yet at this level", True))
 
     if open_positions_warning:
-        embed.add_field(name="⚠️ Position limit", value=open_positions_warning, inline=False)
+        sections["warnings"].append(("⚠️ Position limit", open_positions_warning, False))
+
+    for key in theme.SECTION_ORDER:
+        for name, value, inline in sections[key]:
+            embed.add_field(name=name, value=value, inline=inline)
 
     embed.description = explanation[:4000]
     if chart_filename:
