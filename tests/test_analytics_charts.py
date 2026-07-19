@@ -7,7 +7,7 @@ content isn't asserted (that's what a human "!stats"/"!calibration"
 smoke-check in Task B38 is for)."""
 import os
 
-from swingbot.core.charts.analytics_charts import render_equity_curve
+from swingbot.core.charts.analytics_charts import render_equity_curve, render_r_histogram
 
 
 def _fixture_curve():
@@ -34,4 +34,16 @@ def test_render_equity_curve_with_spy_overlay(tmp_path):
         {"date": "2026-01-08", "balance": 1030.0},
     ]
     path = render_equity_curve(_fixture_curve(), str(tmp_path), spy_overlay=spy)
+    assert os.path.exists(path)
+
+
+def test_render_r_histogram_writes_a_real_png(tmp_path):
+    r_list = [-1.0, -0.5, 0.3, 0.8, 1.2, 1.5, -1.0, 2.0, 0.5, -0.8]
+    path = render_r_histogram(r_list, str(tmp_path))
+    assert os.path.exists(path)
+    assert os.path.getsize(path) > 10_000
+
+
+def test_render_r_histogram_empty_list_still_renders(tmp_path):
+    path = render_r_histogram([], str(tmp_path), filename="empty.png")
     assert os.path.exists(path)

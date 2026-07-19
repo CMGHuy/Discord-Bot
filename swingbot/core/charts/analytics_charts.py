@@ -85,3 +85,33 @@ def render_equity_curve(curve: dict, out_dir: str, *, spy_overlay: list = None,
     fig.autofmt_xdate()
     legend = ax.legend(loc="upper left", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
     return _save(fig, out_dir, filename)
+
+
+def render_r_histogram(r_list: list, out_dir: str, filename: str = "r_histogram.png") -> str:
+    """Fixed bin edges -3R..+5R at 0.25R width regardless of the actual
+    data range -- a stable x-axis across every render means two !stats
+    screenshots taken weeks apart are visually comparable, rather than
+    each auto-scaling to whatever that particular sample happened to
+    span."""
+    bins = np.arange(-3.0, 5.0 + 0.25, 0.25)
+    fig, ax = _new_dark_axes()
+
+    if r_list:
+        wins = [r for r in r_list if r >= 0]
+        losses = [r for r in r_list if r < 0]
+        ax.hist(losses, bins=bins, color=DOWN_COLOR, alpha=0.85, label=f"Losses (n={len(losses)})")
+        ax.hist(wins, bins=bins, color=UP_COLOR, alpha=0.85, label=f"Wins/scratch (n={len(wins)})")
+        mean_r = float(np.mean(r_list))
+        ax.axvline(mean_r, color=TARGET_COLOR, linewidth=1.8, linestyle="--")
+        ax.text(mean_r, ax.get_ylim()[1] * 0.95, f" Expectancy {mean_r:+.2f}R",
+               color=TARGET_COLOR, fontsize=9, fontweight="bold", va="top")
+    else:
+        ax.text(0.5, 0.5, "No R-multiples yet", transform=ax.transAxes, ha="center", va="center",
+               color=MUTED_TEXT_COLOR, fontsize=11)
+
+    ax.set_xlabel("R multiple")
+    ax.set_ylabel("Trade count")
+    ax.set_title("R-Multiple Distribution", color=TEXT_COLOR, fontsize=12, fontweight="bold")
+    if r_list:
+        ax.legend(loc="upper right", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
+    return _save(fig, out_dir, filename)
