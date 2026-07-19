@@ -7,7 +7,7 @@ content isn't asserted (that's what a human "!stats"/"!calibration"
 smoke-check in Task B38 is for)."""
 import os
 
-from swingbot.core.charts.analytics_charts import render_calibration, render_equity_curve, render_r_histogram
+from swingbot.core.charts.analytics_charts import render_calibration, render_equity_curve, render_r_histogram, render_strategy_heatmap
 
 
 def _fixture_curve():
@@ -58,3 +58,21 @@ def test_render_calibration_writes_a_real_png(tmp_path):
     path = render_calibration(deciles, str(tmp_path))
     assert os.path.exists(path)
     assert os.path.getsize(path) > 10_000
+
+
+def _fixture_rows():
+    return [
+        {"key": "EMA Crossover", "n": 15, "win_rate": 73.3, "expectancy_r": 0.4, "wins": 11, "losses": 4, "avg_r": 0.4, "profit_factor": 2.0, "total_pnl": 1500.0},
+        {"key": "Fibonacci", "n": 20, "win_rate": 85.0, "expectancy_r": 0.6, "wins": 17, "losses": 3, "avg_r": 0.6, "profit_factor": 3.0, "total_pnl": 2400.0},
+    ]
+
+
+def test_render_strategy_heatmap_win_rate(tmp_path):
+    path = render_strategy_heatmap(_fixture_rows(), str(tmp_path))
+    assert os.path.exists(path)
+    assert os.path.getsize(path) > 8_000
+
+
+def test_render_strategy_heatmap_expectancy(tmp_path):
+    path = render_strategy_heatmap(_fixture_rows(), str(tmp_path), value="expectancy_r", filename="heatmap_exp.png")
+    assert os.path.exists(path)

@@ -142,3 +142,38 @@ def render_calibration(deciles: list, out_dir: str, filename: str = "calibration
     ax.set_ylabel("Realized win rate %")
     ax.set_title("Quality-Score Calibration", color=TEXT_COLOR, fontsize=12, fontweight="bold")
     return _save(fig, out_dir, filename)
+
+
+def render_strategy_heatmap(rows: list, out_dir: str, *, value: str = "win_rate",
+                            filename: str = "strategy_heatmap.png") -> str:
+    """Single-column heatmap (one row per strategy, one color-mapped
+    column for whichever `value` was asked for) -- diverging red->green,
+    centered at 80 for win_rate (the OOS validation bar) or 0 for
+    expectancy_r (breakeven)."""
+    fig, ax = _new_dark_axes(figsize=(6, max(2.5, 0.5 * len(rows) + 1)))
+    if not rows:
+        ax.text(0.5, 0.5, "No strategy stats yet", transform=ax.transAxes, ha="center", va="center",
+               color=MUTED_TEXT_COLOR, fontsize=11)
+        ax.set_title("Strategy Heatmap", color=TEXT_COLOR)
+        return _save(fig, out_dir, filename)
+
+    center = 80.0 if value == "win_rate" else 0.0
+    values = np.array([[r[value]] for r in rows], dtype=float)
+    span = max(abs(values.max() - center), abs(values.min() - center), 1e-6)
+    norm = (values - center) / span  # -1..+1, 0 at center
+
+    cmap = plt.get_cmap("RdYlGn")
+    ax.imshow(norm, cmap=cmap, vmin=-1, vmax=1, aspect="auto")
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([r["key"] for r in rows], color=TEXT_COLOR, fontsize=9)
+    ax.set_xticks([0])
+    ax.set_xticklabels([value.replace("_", " ")], color=TEXT_COLOR, fontsize=9)
+
+    for i, r in enumerate(rows):
+        val = r[value]
+        label = f"{val:.1f}%" if value == "win_rate" else f"{val:+.2f}"
+        ax.text(0, i, f"{label}\n(n={r['n']})", ha="center", va="center", fontsize=8,
+               color="black" if abs(norm[i, 0]) < 0.6 else "white", fontweight="bold")
+
+    ax.set_title(f"Strategy Heatmap — {value.replace('_', ' ')}", color=TEXT_COLOR, fontsize=12, fontweight="bold")
+    return _save(fig, out_dir, filename)
