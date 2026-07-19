@@ -80,7 +80,12 @@ PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 
 NAV_ITEMS = [
     ("dashboard", "🏠", "Dashboard", "index"),
+    ("plans",     "📋", "Plans", "pages.plans_page"),
     ("stats",     "📊", "Performance", "stats_page"),
+    ("strategies","🧭", "Strategies", "pages.strategies_page"),
+    ("calibration","📐", "Calibration", "pages.calibration_page"),
+    ("journal",   "📓", "Journal", "pages.journal_page"),
+    ("tuning",    "🛠", "Tuning", "pages.tuning_page"),
     ("watchlist", "📋", "Watchlist", "watchlist_page"),
     ("settings",  "⚙️", "Settings", "settings_page"),
     ("logs",      "📜", "Logs", "logs_page"),
@@ -1125,3 +1130,5 @@ def main():
 # ---------------------------------------------------------------------------
 from . import api as _api  # noqa: E402
 app.register_blueprint(_api.api)
+from . import pages as _pages  # noqa: E402
+app.register_blueprint(_pages.pages)

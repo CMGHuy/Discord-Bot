@@ -25,6 +25,7 @@ _RELOAD_MODULES = [
     "swingbot.admin.helpers",
     "swingbot.admin.app",
     "swingbot.admin.api",
+    "swingbot.admin.pages",
 ]
 
 
