@@ -366,6 +366,14 @@ FIELDS: list[Field] = [
           type="number", default="10", min=2, max=300, step=1,
           help="How often the Logs page auto-refreshes while its own 'Auto-refresh' checkbox is on. "
                "Takes effect on your next Logs page load -- no restart needed."),
+
+    # --- Discord Alerts (Cockpit v3 / Plan B) ---
+    Field("ALERT_EMBED_LAYOUT", "ALERT_EMBED_LAYOUT", "Discord Alerts", "Alert embed layout",
+          type="select", default="detailed", options=["detailed", "compact"],
+          help="'detailed' (default) shows every section this bot has always shown. 'compact' shows "
+               "just the headline, trade plan table, and a one-line quality summary -- confluence/"
+               "what-changed/branch sections are dropped to fit more alerts on screen at once. "
+               "Purely a rendering choice; no scoring or filtering changes."),
 ]
 
 _CASTERS = {

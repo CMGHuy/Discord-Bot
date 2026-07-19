@@ -73,10 +73,10 @@ def _isolated_scan_snapshots(tmp_path, monkeypatch):
     monkeypatch.setattr(embeds_mod, "_SNAPSHOT_PATH", str(tmp_path / "scan_snapshots.json"))
 
 
-def _build(item, perf_stats=None):
+def _build(item, perf_stats=None, layout="detailed"):
     return build_embed(
         item, explanation="Test explanation.", perf_stats=perf_stats or PERF_STATS_EMPTY,
-        open_positions_warning=None, chart_filename=None, htf_info=None,
+        open_positions_warning=None, chart_filename=None, htf_info=None, layout=layout,
     )
 
 
@@ -117,3 +117,59 @@ def test_quality_and_badge_fields_render_when_plan_v2_has_quality_breakdown(monk
     assert any(name.startswith("Quality: 72/100") for name in field_names)
     # Trade plan field still present too -- nothing got dropped in the reorder.
     assert "🎯 Trade plan (v2)" in field_names
+
+
+# ── Task B3: compact/detailed layouts ────────────────────────────────────
+
+def test_detailed_layout_still_has_confirmed_by_and_if_it_gets_there(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    embed = _build(item, layout="detailed")
+    field_names = [f.name for f in embed.fields]
+    assert "Confirmed by" in field_names
+    assert "🔀 If it gets there" in field_names
+
+
+def test_compact_layout_has_at_most_five_fields(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    embed = _build(item, layout="compact")
+    assert len(embed.fields) <= 5
+
+
+def test_compact_layout_drops_confirmed_by_and_what_changed_and_branches(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    # First build (any layout) seeds the on-disk snapshot so the second
+    # build has something to diff against -- otherwise "what changed" is
+    # always None on a first sighting regardless of layout, and the "it
+    # got dropped for compact" assertion would be vacuously true.
+    seed_item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    _build(seed_item, layout="detailed")
+
+    changed_plan = make_legacy_plan(entry=101.0)
+    item = ScanItem(
+        result=make_result(), plan=changed_plan, conf=make_conf(),
+        requirements=[RequirementCheck(key="min_reward", label="Min reward %", passed=True, detail="10.0% (needs 3.0%+)")],
+        combined_from=[{"strategy": "RSI Pullback", "horizon_key": "2w"}],
+        plan_v2=make_plan_v2(badge="VALIDATED", tier="B"),
+    )
+    embed = _build(item, layout="compact")
+    field_names = [f.name for f in embed.fields]
+    assert "Confirmed by" not in field_names
+    assert "🔄 What changed since last scan" not in field_names
+    assert "🔀 If it gets there" not in field_names
+    assert "⚠️ Position limit" not in field_names
+
+
+def test_compact_layout_includes_one_line_quality_summary(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    embed = _build(item, layout="compact")
+    quality_fields = [f for f in embed.fields if f.name == "📐 Quality"]
+    assert len(quality_fields) == 1
+    assert quality_fields[0].value.startswith("Tier B · 72/100 · ✅ VALIDATED")
+    assert "OOS N=40 WR 82.5%" in quality_fields[0].value
+    # B2's two separate pedigree fields are replaced, not duplicated, in compact mode.
+    field_names = [f.name for f in embed.fields]
+    assert "✅ VALIDATED" not in field_names
+    assert not any(name.startswith("Quality: 72/100") for name in field_names)

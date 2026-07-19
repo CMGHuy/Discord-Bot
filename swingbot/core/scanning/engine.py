@@ -887,7 +887,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             chart_path, chart_filename = None, None
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
-                            htf_info=item.htf_info)
+                            htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
         alerts.append((embed, chart_path))
 
         # Secondary alerting (email / push) -- fires only for high-confidence,

@@ -420,7 +420,7 @@ def _v2_plan(item):
 
 
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
-                htf_info: dict = None) -> discord.Embed:
+                htf_info: dict = None, layout: str = "detailed") -> discord.Embed:
     """
     htf_info, when provided, is a dict from scan_engine.py's HTF check:
         {"htf_bias": "bullish"|"bearish", "counter_trend": bool, "ema_period": int, "horizon_key": str}
@@ -431,11 +431,20 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     computed, then flushed in that fixed order at the end -- so the field
     ORDER on the embed is always the same regardless of which optional
     fields happen to apply to this particular item.
+
+    layout: "detailed" (default) shows every section this bot has always
+    shown. "compact" drops the "Confirmed by" line, counter-trend warning,
+    "what changed" section, "if it gets there" branches, track record, and
+    position-limit warning -- keeping only a shortened headline, the trade
+    plan table, and (in place of B2's two separate pedigree fields) a single
+    one-line quality summary -- to fit more alerts on screen at once. Purely
+    a rendering choice; no scoring or filtering changes.
     """
     result, plan, conf = item.result, item.plan, item.conf
     is_bull = result.trend == "bullish"
     direction = "LONG (buy)" if is_bull else "SHORT (sell)"
     all_ok = item.all_requirements_met
+    compact = layout == "compact"
     priority_marker = "⭐ " if (conf.level >= 4 and all_ok) else ""
     needs_review_marker = "⚠️ " if not all_ok else ""
     plan_v2 = _v2_plan(item)
@@ -461,20 +470,33 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
 
     sections: dict[str, list[tuple]] = {k: [] for k in theme.SECTION_ORDER}
 
-    badge_field = badge_field_for(plan_v2)
-    if badge_field is not None:
-        sections["quality"].append((badge_field[0], badge_field[1], False))
-        quality_field = quality_lines(plan_v2)
-        if quality_field is not None:
-            sections["quality"].append((quality_field[0], quality_field[1], False))
+    if compact:
+        # One condensed line replaces B2's two separate pedigree fields
+        # (badge_field_for + quality_lines) -- fewer fields is the whole
+        # point of compact mode.
+        if plan_v2 is not None:
+            stats = plan_v2.badge_stats or {}
+            oos_bit = f" (OOS N={stats.get('n', 0)} WR {stats.get('win_rate', 0):.1f}%)" if stats else ""
+            quality_line = f"Tier {plan_v2.tier} · {plan_v2.quality_score}/100 · {theme.badge_chip(plan_v2.badge)}{oos_bit}"
+            sections["quality"].append(("📐 Quality", quality_line, False))
+    else:
+        badge_field = badge_field_for(plan_v2)
+        if badge_field is not None:
+            sections["quality"].append((badge_field[0], badge_field[1], False))
+            quality_field = quality_lines(plan_v2)
+            if quality_field is not None:
+                sections["quality"].append((quality_field[0], quality_field[1], False))
 
     # combined_from always has at least the representative's own entry (set
     # during dedup), so the confirming strategy/horizon combo(s) are always
     # shown -- not just when more than one merged in.
-    confirmations = ", ".join(f"{c['strategy']} ({c['horizon_key']})" for c in item.combined_from)
-    extra = f"  +{len(item.combined_from)-1} more horizon(s)" if len(item.combined_from) > 1 else ""
-    sections["headline"].append(("Setup", f"{result.strategy}{extra}", True))
-    sections["headline"].append(("Confirmed by", confirmations, False))
+    if not compact:
+        confirmations = ", ".join(f"{c['strategy']} ({c['horizon_key']})" for c in item.combined_from)
+        extra = f"  +{len(item.combined_from)-1} more horizon(s)" if len(item.combined_from) > 1 else ""
+        sections["headline"].append(("Setup", f"{result.strategy}{extra}", True))
+        sections["headline"].append(("Confirmed by", confirmations, False))
+    else:
+        sections["headline"].append(("Setup", result.strategy, True))
     sections["headline"].append(("Swing type", result.horizon_label, True))
     sections["headline"].append(("Confidence", _confidence_block(conf), True))
 
@@ -487,7 +509,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
-    if htf_info and htf_info.get("counter_trend"):
+    if htf_info and htf_info.get("counter_trend") and not compact:
         ema_p = htf_info["ema_period"]
         htf_bias_word = htf_info["htf_bias"].capitalize()
         signal_word = "Bullish" if is_bull else "Bearish"
@@ -506,32 +528,37 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     plan_field_name = "🎯 Trade plan (v2)" if v2_priced else "🎯 Trade plan"
     sections["plan"].append((plan_field_name, _build_trade_plan_table(item), False))
 
+    # Always run -- this is the snapshot WRITE (updates the on-disk "last
+    # seen" numbers for this ticker/horizon/direction combo), not just a
+    # read, so the NEXT scan/!check of this same combo still diffs
+    # correctly even when this particular embed is rendered compact.
     what_changed = _snapshot_and_diff(item)
-    if what_changed:
+    if not compact and what_changed:
         sections["changes"].append(("🔄 What changed since last scan", what_changed, False))
 
-    level_word = "Resistance" if is_bull else "Support"
-    opposite_word = "Support" if is_bull else "Resistance"
-    branch_lines = []
-    if plan.target2_price is not None:
-        branch_lines.append(f"Continues past {level_word.lower()} 1 → next stop {plan.target2_price:.2f} (+{plan.target2_distance_pct:.1f}%)")
-    else:
-        branch_lines.append(f"Continues past {level_word.lower()} 1 → no further level found for a stretch target")
-    branch_lines.append(f"Reverses at {level_word.lower()} 1 → pulls back toward {opposite_word.lower()} at {plan.stop_loss:.2f} ({plan.stop_distance_pct:.1f}%)")
-    sections["branches"].append(("🔀 If it gets there", "\n".join(branch_lines), False))
+    if not compact:
+        level_word = "Resistance" if is_bull else "Support"
+        opposite_word = "Support" if is_bull else "Resistance"
+        branch_lines = []
+        if plan.target2_price is not None:
+            branch_lines.append(f"Continues past {level_word.lower()} 1 → next stop {plan.target2_price:.2f} (+{plan.target2_distance_pct:.1f}%)")
+        else:
+            branch_lines.append(f"Continues past {level_word.lower()} 1 → no further level found for a stretch target")
+        branch_lines.append(f"Reverses at {level_word.lower()} 1 → pulls back toward {opposite_word.lower()} at {plan.stop_loss:.2f} ({plan.stop_distance_pct:.1f}%)")
+        sections["branches"].append(("🔀 If it gets there", "\n".join(branch_lines), False))
 
-    if perf_stats["closed"] > 0:
-        wr = perf_stats["win_rate"]
-        sections["track_record"].append((
-            f"Track record @ Lv{conf.level}",
-            f"{wr:.0f}% win rate ({perf_stats['wins']}W/{perf_stats['losses']}L, {perf_stats['closed']} closed)",
-            True,
-        ))
-    else:
-        sections["track_record"].append((f"Track record @ Lv{conf.level}", "No closed trades yet at this level", True))
+        if perf_stats["closed"] > 0:
+            wr = perf_stats["win_rate"]
+            sections["track_record"].append((
+                f"Track record @ Lv{conf.level}",
+                f"{wr:.0f}% win rate ({perf_stats['wins']}W/{perf_stats['losses']}L, {perf_stats['closed']} closed)",
+                True,
+            ))
+        else:
+            sections["track_record"].append((f"Track record @ Lv{conf.level}", "No closed trades yet at this level", True))
 
-    if open_positions_warning:
-        sections["warnings"].append(("⚠️ Position limit", open_positions_warning, False))
+        if open_positions_warning:
+            sections["warnings"].append(("⚠️ Position limit", open_positions_warning, False))
 
     for key in theme.SECTION_ORDER:
         for name, value, inline in sections[key]:
