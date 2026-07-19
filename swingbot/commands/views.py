@@ -84,3 +84,52 @@ class PlanActionView(discord.ui.View):
         await interaction.followup.send(
             file=discord.File(chart_path, filename=os.path.basename(chart_path)), ephemeral=True,
         )
+
+    @discord.ui.button(label="🔍 Breakdown", style=discord.ButtonStyle.secondary, custom_id="plan:breakdown")
+    async def breakdown_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        plan = _plan_store.get(self.plan_id)
+        if plan is None:
+            await interaction.response.send_message("This plan no longer exists.", ephemeral=True)
+            return
+        await interaction.response.send_message(embed=breakdown_embed(plan), ephemeral=True)
+
+
+def breakdown_embed(plan) -> discord.Embed:
+    """Pure renderer (plan in, Embed out) so this is unit-testable
+    without any Interaction plumbing -- the button callback below is a
+    thin wrapper that just calls this and sends it ephemeral."""
+    from swingbot.core.analytics.rank import follow_score, follow_breakdown
+    import datetime as dt
+
+    embed = discord.Embed(title=f"🔍 Breakdown — {plan.ticker} ({plan.tier}/{plan.badge})",
+                          color=discord.Color.blurple())
+
+    quality_lines = "\n".join(f"{label}: {pts:+d}" for label, pts in (plan.quality_breakdown or [])) or "no components recorded"
+    embed.add_field(name=f"📐 Quality score ({plan.quality_score}/100)", value=quality_lines, inline=False)
+
+    stats = plan.badge_stats or {}
+    badge_lines = (
+        f"Status: {stats.get('status', plan.badge)}\n"
+        f"OOS N={stats.get('n', 0)}, WR {stats.get('win_rate', 0):.1f}%, "
+        f"ExpR {stats.get('expectancy_r', 0):+.3f}\nWindow: {stats.get('window', 'n/a')}"
+    )
+    embed.add_field(name="🏷️ Badge / track record", value=badge_lines, inline=False)
+
+    today = dt.date.today()
+    score = follow_score(plan, today=today)
+    breakdown = follow_breakdown(plan, today)
+    breakdown_lines = "\n".join(f"{label}: +{pts:.0f}" for label, pts in breakdown) or "no components"
+    embed.add_field(name=f"🧭 Follow score ({score:.0f})", value=breakdown_lines, inline=False)
+
+    history = (plan.status_history or [])[-5:]
+    if history:
+        timeline_lines = []
+        for i, entry in enumerate(history):
+            frm = history[i - 1]["status"] if i > 0 else "—"
+            timeline_lines.append(f"{entry.get('at', '?')} {frm}→{entry['status']} ({entry.get('reason') or 'n/a'})")
+        timeline = "\n".join(timeline_lines)
+    else:
+        timeline = "No transitions recorded yet."
+    embed.add_field(name="🕒 Status timeline", value=timeline[:1024], inline=False)
+
+    return embed

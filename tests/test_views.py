@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 
 from swingbot.commands import views as views_module
-from swingbot.commands.views import PlanActionView
+from swingbot.commands.views import PlanActionView, breakdown_embed
 
 
 def _fake_interaction(user_id: int) -> MagicMock:
@@ -47,7 +47,10 @@ def _fake_plan(**overrides) -> types.SimpleNamespace:
 def test_plan_action_view_has_one_chart_button():
     view = PlanActionView("plan-123", author_id=42)
     assert view.timeout == 180
-    assert len(view.children) == 1
+    assert len(view.children) == 2
+    custom_ids = [item.custom_id for item in view.children]
+    assert "plan:chart" in custom_ids
+    assert "plan:breakdown" in custom_ids
     assert view.children[0].custom_id == "plan:chart"
 
 
@@ -179,3 +182,40 @@ def test_chart_button_render_failure_sends_ephemeral_error():
     args, kwargs = interaction.followup.send.call_args
     assert "Chart render failed" in args[0]
     assert kwargs["ephemeral"] is True
+
+
+def _fixture_plan():
+    return types.SimpleNamespace(
+        plan_id="abcd1234-plan", ticker="NVDA", tier="A", badge="VALIDATED", quality_score=82,
+        quality_breakdown=[("Trend alignment", 20), ("Volume confirmation", 15), ("Multi-strategy confluence", 47)],
+        badge_stats={"status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.42, "window": "2024-2025"},
+        regime_aligned=True, created_at="2026-07-11",
+        status="ACTIVE",
+        status_history=[
+            {"status": "PENDING", "reason": None, "at": "2026-07-10T09:00:00+00:00"},
+            {"status": "ACTIVE", "reason": "trigger_hit", "at": "2026-07-11T10:15:00+00:00"},
+        ],
+    )
+
+
+def test_breakdown_embed_has_one_field_per_section_and_every_quality_line():
+    embed = breakdown_embed(_fixture_plan())
+    names = [f.name for f in embed.fields]
+    assert any("quality" in n.lower() for n in names)
+    assert any("track record" in n.lower() or "badge" in n.lower() for n in names)
+    assert any("follow" in n.lower() for n in names)
+    assert any("timeline" in n.lower() or "status" in n.lower() for n in names)
+    quality_field = next(f for f in embed.fields if "quality" in f.name.lower())
+    for label, pts in _fixture_plan().quality_breakdown:
+        assert label in quality_field.value and str(pts) in quality_field.value
+
+
+def test_breakdown_button_sends_ephemeral():
+    view = PlanActionView("abcd1234-plan", author_id=1)
+    interaction = _fake_interaction(user_id=1)
+    with patch.object(views_module._plan_store, "get", return_value=_fixture_plan()):
+        asyncio.run(view.breakdown_button.callback(interaction))
+    interaction.response.send_message.assert_awaited_once()
+    _, kwargs = interaction.response.send_message.call_args
+    assert kwargs.get("ephemeral") is True
+    assert "embed" in kwargs
