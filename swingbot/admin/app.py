@@ -36,6 +36,7 @@ constants -- keeps this file to routes/logic only and lets the HTML be
 edited/linted as HTML. Shared CSS lives in static/style.css.
 """
 import csv
+import gzip
 import hashlib
 import io
 import json
@@ -114,6 +115,34 @@ app.logger.addHandler(_admin_file_handler)
 app.logger.setLevel(logging.INFO)
 logging.getLogger("werkzeug").addHandler(_admin_file_handler)
 logging.getLogger("werkzeug").setLevel(logging.INFO)
+
+
+@app.after_request
+def _gzip_response(response):
+    """Hand-rolled response gzip -- no flask-compress dependency (the plan's
+    "no new pip dependencies" constraint). Only compresses text/html and
+    application/json bodies over 4 KB when the client advertises gzip
+    support; send_file responses (chart PNGs, CSV export) are always
+    direct_passthrough and are left completely alone, both because they're
+    usually already-compressed binary and because rewriting a passthrough
+    response's body would break Flask's streaming path."""
+    accept_encoding = request.headers.get("Accept-Encoding", "")
+    if "gzip" not in accept_encoding:
+        return response
+    if response.direct_passthrough or response.content_encoding:
+        return response
+    if response.mimetype not in ("text/html", "application/json"):
+        return response
+    body = response.get_data()
+    if len(body) < 4096:
+        return response
+    compressed = gzip.compress(body, compresslevel=6)
+    response.set_data(compressed)
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(compressed))
+    response.headers.add("Vary", "Accept-Encoding")
+    return response
+
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
