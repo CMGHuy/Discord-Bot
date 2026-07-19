@@ -614,6 +614,28 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
         # is *now* (today's fresh close from df) alongside the original
         # planned entry -- they'll usually differ since time has passed.
         current_price = float(df["Close"].iloc[-1])
+
+        markers = None
+        try:
+            from swingbot.core.analytics.journal import JournalStore
+            entry = JournalStore().get(trade["id"])
+            if entry and entry.get("mfe_r") is not None:
+                opened = df.index[df.index.searchsorted(trade["opened_at"][:10])]
+                closed_key = trade.get("closed_at", trade["opened_at"])[:10]
+                window = df.loc[trade["opened_at"][:10]:closed_key]
+                if not window.empty:
+                    is_bull = trade["direction"] == "bullish"
+                    mfe_date = window["High"].idxmax() if is_bull else window["Low"].idxmin()
+                    mae_date = window["Low"].idxmin() if is_bull else window["High"].idxmax()
+                    mfe_price = float(window.loc[mfe_date, "High" if is_bull else "Low"])
+                    mae_price = float(window.loc[mae_date, "Low" if is_bull else "High"])
+                    markers = {
+                        "mfe": (mfe_date, mfe_price), "mfe_r": entry.get("mfe_r"),
+                        "mae": (mae_date, mae_price), "mae_r": entry.get("mae_r"),
+                    }
+        except Exception as _je:
+            log.debug("Could not compute MFE/MAE markers for trade %s: %s", trade.get("id"), _je)
+
         return generate_trade_chart(
             trade["ticker"], df, trade["entry"], trade["stop_loss"], trade["take_profit"],
             trade["direction"], trade["strategy"], horizon_label, config.TRADE_CHART_DIR, filename=filename,
@@ -624,6 +646,7 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
             stop_sources=trade.get("stop_sources"),
             horizon=h,
             market_price=current_price,
+            markers=markers,
         )
     except Exception as e:
         log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e)

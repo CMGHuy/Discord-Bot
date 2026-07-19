@@ -179,3 +179,30 @@ def test_active_plan_has_no_trail_and_still_renders(tmp_path):
         )
     finally:
         real_close(fig)
+
+
+import pandas as pd
+
+
+def test_markers_render_without_error(tmp_path):
+    df = _fixture_df()
+    mfe_date = df.index[30]
+    mae_date = df.index[10]
+    markers = {
+        "mfe": (mfe_date, float(df["High"].iloc[30])), "mfe_r": 2.0,
+        "mae": (mae_date, float(df["Low"].iloc[10])), "mae_r": -0.5,
+    }
+    path = generate_trade_chart(
+        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+        filename="with_markers.png", target2=118.0, markers=markers,
+    )
+    assert os.path.exists(path)
+
+
+def test_no_markers_still_renders(tmp_path):
+    df = _fixture_df()
+    path = generate_trade_chart(
+        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+        filename="no_markers.png", target2=118.0,
+    )
+    assert os.path.exists(path)

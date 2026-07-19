@@ -78,12 +78,12 @@ from ..trendlines import strongest_trendline_pair
 
 from .chart_style import (
     CHIP_BG, CURRENT_PRICE_COLOR, DEFAULT_LOOKBACK_DAYS,
-    DEFAULT_TRENDLINE_LOOKBACK_DAYS, DISCLAIMER_TEXT, ENTRY_COLOR, KC_COLOR,
+    DEFAULT_TRENDLINE_LOOKBACK_DAYS, DISCLAIMER_TEXT, DOWN_COLOR, ENTRY_COLOR, KC_COLOR,
     MACD_LINE_COLOR, MIN_LABEL_GAP_FRAC, MUTED_TEXT_COLOR, PRO_STYLE,
     REWARD_BAND_ALPHA, RISK_BAND_ALPHA, RSI_LINE_COLOR, RUNNER_BAND_ALPHA,
     SIGNAL_LINE_COLOR, SPINE_COLOR, STOP_COLOR,
     STOP_STRATEGY_COLOR, TARGET2_COLOR, TARGET_COLOR, TARGET_STRATEGY_COLOR,
-    TEXT_COLOR, TRENDLINE_RESISTANCE_COLOR, TRENDLINE_SUPPORT_COLOR,
+    TEXT_COLOR, TRENDLINE_RESISTANCE_COLOR, TRENDLINE_SUPPORT_COLOR, UP_COLOR,
     VOLUME_PROFILE_PANEL_GAP_FRAC, VOLUME_PROFILE_PANEL_WIDTH_FRAC,
     _label_bbox,
 )
@@ -165,6 +165,7 @@ def generate_trade_chart(
     horizon: dict = None,
     market_price: float = None,
     plan_v2=None,
+    markers: dict = None,
 ) -> str:
     # Pick the single most informative confirming method per side (see
     # _pick_primary_source) -- this is what actually gets drawn instead
@@ -901,6 +902,33 @@ def generate_trade_chart(
                 ax.text(
                     0.98, 0.04, status_text, transform=ax.transAxes, fontsize=20, fontweight="bold",
                     color=MUTED_TEXT_COLOR, alpha=0.5, ha="right", va="bottom", zorder=1,
+                )
+
+        # MFE/MAE markers (Task B33) -- closed-trade charts only. `markers`
+        # keys "mfe"/"mae" are (date, price) tuples; optional "mfe_r"/
+        # "mae_r" floats add the R-multiple label. A marker whose date
+        # falls outside the currently-visible `recent` window is skipped
+        # silently rather than raising -- an old trade re-viewed with a
+        # short lookback_days can easily have its MFE/MAE bar scrolled
+        # out of frame.
+        if markers:
+            for key, arrow, color in (("mfe", "▲", UP_COLOR), ("mae", "▼", DOWN_COLOR)):
+                point = markers.get(key)
+                if point is None:
+                    continue
+                m_date, m_price = point
+                try:
+                    x_pos = recent.index.get_loc(m_date)
+                except KeyError:
+                    continue
+                r_val = markers.get(f"{key}_r")
+                label = f"{arrow} {key.upper()}" + (f" {r_val:+.1f}R" if r_val is not None else "")
+                va = "bottom" if key == "mfe" else "top"
+                offset = 1 if key == "mfe" else -1
+                ax.annotate(
+                    label, xy=(x_pos, m_price), xytext=(x_pos, m_price + offset * (ylim[1] - ylim[0]) * 0.03),
+                    color=color, fontsize=8, fontweight="bold", ha="center", va=va, zorder=9,
+                    arrowprops=dict(arrowstyle="-", color=color, lw=1.0, alpha=0.7),
                 )
 
         # Confirmed-by annotation: small note at bottom-left of the price panel.
