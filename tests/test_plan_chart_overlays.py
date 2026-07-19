@@ -185,18 +185,61 @@ import pandas as pd
 
 
 def test_markers_render_without_error(tmp_path):
+    """Task B33: MFE/MAE markers are drawn via ax.annotate() only for
+    marker dates that fall inside the chart's currently-visible `recent`
+    window (df.tail(effective_lookback_days) -- see generate_trade_chart's
+    markers block, which silently `continue`s on a KeyError from
+    recent.index.get_loc() otherwise). With this 60-bar fixture and no
+    plan_v2/target_sources/stop_sources passed, effective_lookback_days
+    resolves to the plain DEFAULT_LOOKBACK_DAYS=20 (confirmed by calling
+    trendlines.strongest_trendline_pair(df, 90, 100.0) directly on this
+    exact fixture: it returns None, since neither trendline side finds 2
+    volume-confirmed pivots on this synthetic monotonic-close series -- so
+    trendline_window_bars/fib_window_bars stay 0 and don't expand the
+    window). That makes the visible window df.tail(20) == df.index[40:60],
+    so indices 45/50 (unlike the original 30/10) actually land on-screen.
+
+    Same plt.close-interception pattern as
+    test_active_stop_entry_plan_suppresses_trigger_arrow /
+    test_partial_plan_renders_trail above: capture the populated Figure
+    before generate_trade_chart's own `finally: plt.close(fig)` discards
+    it, and assert the MFE/MAE annotation text is actually present --
+    not just that the file was written."""
     df = _fixture_df()
-    mfe_date = df.index[30]
-    mae_date = df.index[10]
+    mfe_date = df.index[50]
+    mae_date = df.index[45]
     markers = {
-        "mfe": (mfe_date, float(df["High"].iloc[30])), "mfe_r": 2.0,
-        "mae": (mae_date, float(df["Low"].iloc[10])), "mae_r": -0.5,
+        "mfe": (mfe_date, float(df["High"].iloc[50])), "mfe_r": 2.0,
+        "mae": (mae_date, float(df["Low"].iloc[45])), "mae_r": -0.5,
     }
-    path = generate_trade_chart(
-        "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
-        filename="with_markers.png", target2=118.0, markers=markers,
-    )
+    captured_figs = []
+    real_close = plt.close
+
+    def _intercept_close(fig=None, *args, **kwargs):
+        if fig is not None:
+            captured_figs.append(fig)
+
+    with patch("swingbot.core.charts.trade_chart.plt.close", side_effect=_intercept_close):
+        path = generate_trade_chart(
+            "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+            filename="with_markers.png", target2=118.0, markers=markers,
+        )
+
     assert os.path.exists(path)
+    assert captured_figs, "generate_trade_chart did not call plt.close(fig) as expected"
+    fig = captured_figs[0]
+    try:
+        all_texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+        assert any("MFE" in txt and "+2.0R" in txt for txt in all_texts), (
+            f"MFE marker label ('MFE' + '+2.0R') not found -- marker was not actually "
+            f"drawn: {all_texts}"
+        )
+        assert any("MAE" in txt and "-0.5R" in txt for txt in all_texts), (
+            f"MAE marker label ('MAE' + '-0.5R') not found -- marker was not actually "
+            f"drawn: {all_texts}"
+        )
+    finally:
+        real_close(fig)
 
 
 def test_no_markers_still_renders(tmp_path):
