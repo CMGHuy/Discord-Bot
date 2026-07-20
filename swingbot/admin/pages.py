@@ -6,13 +6,19 @@ app.py's existing require_auth (HTML 401 challenge, not JSON) and _render
 helper, since these are full pages a human loads in a browser, not fetch()
 targets (those live in api.py).
 """
-from flask import Blueprint, render_template, request
+import dataclasses
+import json
+import os
+from datetime import datetime, timezone
+
+from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 from swingbot.core.analytics.rank import follow_score, rank_plans
-from swingbot.core.plan_engine import PlanStatus, plan_to_dict
+from swingbot.core.performance import TradeLog
+from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transition
 from swingbot.core.plan_store import PlanStore
 
-from .app import _is_today_berlin, _render, require_auth
+from .app import MANUAL_CLOSE_QUEUE, _is_today_berlin, _render, require_auth
 
 pages = Blueprint("pages", __name__)
 
@@ -100,3 +106,74 @@ def journal_page():
 @require_auth
 def tuning_page():
     return _render("Tuning", "tuning", "tuning.html")
+
+
+def _queue_manual_close_notify(plan) -> None:
+    """Same file app.py's close_trade route already appends to (see
+    MANUAL_CLOSE_QUEUE's module docstring in app.py) -- the bot's own poll
+    loop picks this up and posts the transition to Discord. A plan-level
+    entry is tagged "kind": "plan_transition" so the bot's consumer can
+    format it distinctly from a raw trade-close entry.
+
+    NOTE (verified against the real consumer as of this task): the queue
+    write below happens, but swingbot/core/scanning/embeds.py's
+    notify_closed_trades() -- the function that actually reads this file
+    and posts to Discord -- only recognizes trade.get("status") in
+    {"win", "loss", "closed"} (lowercase) and has no notion of a "kind"
+    field. A TradePlanV2's status is uppercase ("CANCELLED"/"CLOSED"), so
+    every entry this function writes is currently silently skipped by that
+    consumer. This is a known, out-of-scope gap for this task (see the
+    task report) -- the write itself is harmless and matches the brief.
+    """
+    try:
+        existing = []
+        if os.path.exists(MANUAL_CLOSE_QUEUE):
+            with open(MANUAL_CLOSE_QUEUE, "r") as f:
+                existing = json.load(f)
+        existing.append({"kind": "plan_transition", **dataclasses.asdict(plan)})
+        with open(MANUAL_CLOSE_QUEUE, "w") as f:
+            json.dump(existing, f)
+    except Exception:
+        pass  # best-effort notify -- never block the actual state transition on this
+
+
+@pages.route("/plans/<plan_id>/cancel", methods=["POST"])
+@require_auth
+def plan_cancel(plan_id):
+    store = PlanStore()
+    plan = store.get(plan_id)
+    if not plan:
+        abort(404, f"No plan found with id '{plan_id}'.")
+    if plan.status != PlanStatus.PENDING:
+        abort(400, "Only PENDING plans can be cancelled.")
+    # at= passed explicitly (not left as record_transition's None default):
+    # the C15 lifecycle-strip's "today" count (_plan_rows above) reads
+    # status_history[-1]["at"] through _is_today_berlin, which returns False
+    # for None -- an implicit-None "at" would make this cancel invisible to
+    # today's CANCELLED count.
+    record_transition(plan, PlanStatus.CANCELLED, reason="manual",
+                       at=datetime.now(timezone.utc).isoformat())
+    store.update(plan)
+    _queue_manual_close_notify(plan)
+    return redirect(url_for("pages.plans_page", msg=f"Plan {plan.ticker} cancelled.", ok=1))
+
+
+@pages.route("/plans/<plan_id>/close", methods=["POST"])
+@require_auth
+def plan_close(plan_id):
+    store = PlanStore()
+    plan = store.get(plan_id)
+    if not plan:
+        abort(404, f"No plan found with id '{plan_id}'.")
+    if plan.status not in (PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+        abort(400, "Only ACTIVE/PARTIAL plans can be closed.")
+    tl = TradeLog()
+    linked = next((t for t in tl.get_trades(status=None, limit=None) if t.get("plan_id") == plan_id), None)
+    if linked and linked["status"] == "open":
+        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
+    # at= passed explicitly -- see the comment in plan_cancel above.
+    record_transition(plan, PlanStatus.CLOSED, reason="manual",
+                       at=datetime.now(timezone.utc).isoformat())
+    store.update(plan)
+    _queue_manual_close_notify(plan)
+    return redirect(url_for("pages.plans_page", msg=f"Plan {plan.ticker} closed.", ok=1))

@@ -169,3 +169,38 @@ def test_ticker_filter_preserved_on_lifecycle_strip_links(client, auth):
         assert "ticker=aap" in match.group(1), (
             f"status={status} lifecycle card lost the ticker filter: {match.group(1)}"
         )
+
+
+import os
+
+
+def test_cancel_pending_plan_transitions_and_notifies(client, auth):
+    # .add(), not .update(): PlanStore().update() raises KeyError for an
+    # unseen plan_id -- .add() is the real insert call (see the C7 commit's
+    # deviation note, and the other tests above in this file).
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.PENDING))
+    r = client.post("/plans/p1/cancel", headers=auth)
+    assert r.status_code == 302
+    assert PlanStore().get("p1").status == PlanStatus.CANCELLED
+    from swingbot.admin.app import MANUAL_CLOSE_QUEUE
+    assert os.path.exists(MANUAL_CLOSE_QUEUE)
+
+
+def test_cancel_active_plan_rejected(client, auth):
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.ACTIVE))
+    r = client.post("/plans/p1/cancel", headers=auth)
+    assert r.status_code == 400
+    assert PlanStore().get("p1").status == PlanStatus.ACTIVE  # unchanged
+
+
+def test_close_active_plan_transitions(client, auth):
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.ACTIVE))
+    r = client.post("/plans/p1/close", headers=auth)
+    assert r.status_code == 302
+    assert PlanStore().get("p1").status == PlanStatus.CLOSED
+
+
+def test_close_pending_plan_rejected(client, auth):
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.PENDING))
+    r = client.post("/plans/p1/close", headers=auth)
+    assert r.status_code == 400

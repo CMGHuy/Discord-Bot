@@ -65,6 +65,7 @@
       <th>TP2</th>
       <th>Age</th>
       <th>Quality</th>
+      <th>Action</th>
     </tr>
     </thead>
     <tbody>
@@ -91,6 +92,21 @@
       <td>{{ "%.2f"|format(p.tp2) if p.tp2 else '—' }}</td>
       <td class="muted">{{ p.created_at }}</td>
       <td>{{ p.quality_score }}</td>
+      <td onclick="event.stopPropagation();">
+        {% if p.status == 'PENDING' %}
+        <form method="post" action="{{ url_for('pages.plan_cancel', plan_id=p.plan_id) }}" style="margin:0;display:inline;"
+              onsubmit="return confirm('Cancel plan for {{ p.ticker }}?');">
+          <button type="submit" class="icon-btn danger" title="Cancel plan">✕</button>
+        </form>
+        {% elif p.status in ('ACTIVE', 'PARTIAL') %}
+        <form method="post" action="{{ url_for('pages.plan_close', plan_id=p.plan_id) }}" style="margin:0;display:inline;"
+              onsubmit="return confirm('Close plan for {{ p.ticker }}?');">
+          <button type="submit" class="icon-btn danger" title="Close plan">✕</button>
+        </form>
+        {% else %}
+        <span class="muted">—</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
     </tbody>
