@@ -420,3 +420,31 @@ def test_strategy_heatmap_all_closed_bucket_renders_na_not_500(client, auth, mon
     html = r.data.decode("utf-8")
     assert 'title="MACD / 8m: n=6 (too few trades)"' in html
     assert "hm-na" in html
+
+
+def test_sparkline_svg_point_count_and_color():
+    from swingbot.admin.pages import _sparkline_svg
+    svg = _sparkline_svg([50.0, 60.0, 70.0, 80.0], width=100, height=20)
+    assert svg.startswith("<svg")
+    assert "polyline" in svg
+
+
+def test_sparkline_svg_empty_data_is_emdash():
+    from swingbot.admin.pages import _sparkline_svg
+    assert _sparkline_svg([]) == "&mdash;"
+
+
+def test_strategies_page_embeds_sparkline_for_strategy_with_data(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
+    monkeypatch.setattr("swingbot.admin.pages.primary_strategy_label", lambda t: t["strategy"])
+    from swingbot import config
+    trades = [{
+        "id": f"w{i}", "ticker": "AAA", "status": "win", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "exit_price": 110.0,
+        "opened_at": "2026-01-01T00:00:00+00:00", "closed_at": f"2026-01-{i + 1:02d}T00:00:00+00:00",
+        "confidence_level": 3, "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
+    } for i in range(3)]
+    with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
+        json.dump(trades, f)
+    r = client.get("/strategies", headers=auth)
+    assert b'class="sparkline"' in r.data

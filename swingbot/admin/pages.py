@@ -223,11 +223,63 @@ def _strategy_horizon_heatmap() -> dict:
     return {"strategies": list(ALL_STRATEGIES), "horizons": horizons, "matrix": matrix}
 
 
+def _rolling_win_rate_series(closed_trades: list[dict], window: int = 10) -> list[float | None]:
+    """Rolling win-rate (0-100 scale) over a strategy's own closed-trade
+    sequence, ordered by closed_at. Same "small per-trade display helper"
+    category as app.py's _closed_pnl/_closed_r -- not an analytics call,
+    just windowed arithmetic for a sparkline."""
+    ordered = sorted(closed_trades, key=lambda t: t.get("closed_at") or "")
+    outcomes = [1 if t["status"] == "win" else 0 for t in ordered if t["status"] in ("win", "loss")]
+    points: list[float | None] = []
+    for i in range(len(outcomes)):
+        chunk = outcomes[max(0, i - window + 1):i + 1]
+        points.append(sum(chunk) / len(chunk) * 100 if chunk else None)
+    return points
+
+
+def _sparkline_svg(points: list, *, width: int = 120, height: int = 28,
+                    ref: float | None = 80.0) -> str:
+    """Inline <svg> polyline sparkline over a 0-100 scale. `ref` draws a
+    dashed horizontal reference line (the 80% OOS win-rate bar) so the eye
+    has a fixed anchor point. Reused verbatim by Task C43's dashboard
+    equity-curve card. Empty data -> em-dash (nothing to draw)."""
+    pts = [p for p in points if p is not None]
+    if not pts:
+        return "&mdash;"
+    n = len(pts)
+
+    def _xy(i, v):
+        x = (i / max(n - 1, 1)) * width
+        y = height - (v / 100.0) * height
+        return f"{x:.1f},{y:.1f}"
+
+    poly = " ".join(_xy(i, v) for i, v in enumerate(pts))
+    last = pts[-1]
+    color = "#6dda9e" if last >= 80 else ("#e2b25a" if last >= 60 else "#da6d6d")
+    ref_line = ""
+    if ref is not None:
+        ry = height - (ref / 100.0) * height
+        ref_line = f'<polyline class="spark-ref" stroke="#9aa0b0" points="0,{ry:.1f} {width},{ry:.1f}" />'
+    return (
+        f'<svg class="sparkline" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        f"{ref_line}"
+        f'<polyline class="spark-line" stroke="{color}" points="{poly}" />'
+        f"</svg>"
+    )
+
+
 @pages.route("/strategies", methods=["GET"])
 @require_auth
 def strategies_page():
+    rows = _registry_rows()
+    tl = TradeLog()
+    closed = [t for t in tl.get_trades(status=None, limit=None) if t["status"] in ("win", "loss", "closed")]
+    labeled = [{**t, "strategy": primary_strategy_label(t)} for t in closed]
+    for row in rows:
+        strat_trades = [t for t in labeled if t["strategy"] == row["strategy"]]
+        row["sparkline_svg"] = _sparkline_svg(_rolling_win_rate_series(strat_trades, window=10))
     return _render("Strategies", "strategies", "strategies.html",
-                   rows=_registry_rows(), heatmap=_strategy_horizon_heatmap(),
+                   rows=rows, heatmap=_strategy_horizon_heatmap(),
                    heatmap_color=_heatmap_color)
 
 
