@@ -374,6 +374,32 @@ def test_strategy_heatmap_colors_and_na_cells(client, auth, monkeypatch):
     assert "100% (6)" in html
 
 
+_FAKE_SNAPSHOT_WITH_DRIFT = {
+    "built_at": "x",
+    "by": {"strategy": [{"key": "RSI", "n": 40, "win_rate": 68.0}]},
+    "calibration": {"drift": [{"strategy": "RSI", "oos_n": 608, "oos_wr": 68.4,
+                                "live_n": 40, "live_wr": 68.0, "delta_wr": -0.4,
+                                "drift_alert": True}]},
+}
+
+
+def test_drift_chip_and_banner_present_when_flagged(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_WITH_DRIFT)
+    r = client.get("/strategies", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "chip-decay" in html
+    assert "DECAY" in html
+    assert "Edge decay flagged" in html
+
+
+def test_no_drift_chip_or_banner_when_clean(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
+    r = client.get("/strategies", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "chip-decay" not in html
+    assert "Edge decay flagged" not in html
+
+
 def test_strategy_heatmap_all_closed_bucket_renders_na_not_500(client, auth, monkeypatch):
     # 6 manually-"closed" trades (not "win"/"loss") sharing MACD/8m: n=6 (>=5)
     # but metrics.win_rate() returns None since there are zero win/loss

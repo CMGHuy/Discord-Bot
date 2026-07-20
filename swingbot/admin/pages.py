@@ -157,15 +157,20 @@ def _registry_rows() -> list[dict]:
     snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
     by_strategy_rows = ((snap or {}).get("by") or {}).get("strategy", [])
     by_strategy = {row["key"]: row for row in by_strategy_rows}
+    drift_by_strategy = {d["strategy"]: d for d in ((snap or {}).get("calibration") or {}).get("drift") or []}
     rows = []
     for rec in load_registry():
         if rec.get("horizon") is not None or rec["strategy"] not in ALL_STRATEGIES:
             continue
         live = by_strategy.get(rec["strategy"], {})
+        drift = drift_by_strategy.get(rec["strategy"], {})
+        live_wr = live.get("win_rate")
         rows.append({
             **rec,
             "live_n": live.get("n"),
-            "live_wr": live.get("win_rate"),
+            "live_wr": live_wr,
+            "delta_vs_oos": (live_wr - rec["win_rate"]) if live_wr is not None else None,
+            "decayed": bool(drift.get("drift_alert")),
             "rr_override": STRATEGY_RR_OVERRIDE.get(rec["strategy"]),
             "gate_description": _gate_description(rec["strategy"]),
         })

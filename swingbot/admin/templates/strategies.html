@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block body %}
+{% set decayed_strategies = rows | selectattr('decayed') | map(attribute='strategy') | list %}
+{% if decayed_strategies %}
+<div class="banner err" style="margin-bottom:16px;">
+  ⚠️ Edge decay flagged for: {{ decayed_strategies | join(', ') }} — live win rate has drifted
+  meaningfully below the OOS-validated figure.
+</div>
+{% endif %}
 <div class="card">
   <p class="card-title">Strategy registry
     <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
@@ -16,6 +23,9 @@
         <th>OOS N</th>
         <th>OOS WR</th>
         <th>OOS ExpR</th>
+        <th>Live N</th>
+        <th>Live WR</th>
+        <th>Δ vs OOS</th>
         <th>Window</th>
         <th>Run date</th>
         <th>Gate</th>
@@ -30,6 +40,12 @@
       <td>{{ row.n }}</td>
       <td>{{ "%.1f%%"|format(row.win_rate) }}</td>
       <td>{{ "%+.3f"|format(row.expectancy_r) }}</td>
+      <td>{{ row.live_n if row.live_n is not none else '—' }}</td>
+      <td>{{ "%.1f%%"|format(row.live_wr) if row.live_wr is not none else '—' }}</td>
+      <td style="color:{% if row.delta_vs_oos is none %}#5a6275{% elif row.delta_vs_oos < 0 %}#da6d6d{% else %}#6dda9e{% endif %};">
+        {{ "%+.1f"|format(row.delta_vs_oos) if row.delta_vs_oos is not none else '—' }}
+        {% if row.decayed %}<span class="chip chip-decay">DECAY</span>{% endif %}
+      </td>
       <td class="muted">{{ row.window }}</td>
       <td class="muted">{{ row.run_date }}</td>
       <td class="muted">{{ row.gate_description }}</td>
