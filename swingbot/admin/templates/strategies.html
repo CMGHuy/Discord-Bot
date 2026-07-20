@@ -49,7 +49,7 @@
       <div class="hm-header" style="justify-content:flex-start;text-align:left;">{{ s }}</div>
       {% for h in heatmap.horizons %}
         {% set cell = heatmap.matrix[(s, h)] %}
-        {% if cell.n < 5 %}
+        {% if cell.n < 5 or cell.win_rate is none %}
         <div class="hm-cell hm-na" title="{{ s }} / {{ h }}: n={{ cell.n }} (too few trades)">n/a</div>
         {% else %}
         <div class="hm-cell" style="background:{{ heatmap_color(cell.win_rate) }};"

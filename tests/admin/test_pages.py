@@ -372,3 +372,25 @@ def test_strategy_heatmap_colors_and_na_cells(client, auth, monkeypatch):
     html = r.data.decode("utf-8")
     assert "hm-na" in html          # e.g. RSI/2w has n=0 < 5 -- greyed n/a
     assert "100% (6)" in html
+
+
+def test_strategy_heatmap_all_closed_bucket_renders_na_not_500(client, auth, monkeypatch):
+    # 6 manually-"closed" trades (not "win"/"loss") sharing MACD/8m: n=6 (>=5)
+    # but metrics.win_rate() returns None since there are zero win/loss
+    # trades in the bucket -- must render as n/a, not crash _heatmap_color.
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
+    monkeypatch.setattr("swingbot.admin.pages.primary_strategy_label", lambda t: t["strategy"])
+    from swingbot import config
+    trades = [{
+        "id": f"c{i}", "ticker": "AAA", "status": "closed", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "exit_price": 102.0,
+        "opened_at": "2026-01-01T00:00:00+00:00", "closed_at": "2026-01-02T00:00:00+00:00",
+        "confidence_level": 3, "confidence_score": 60, "strategy": "MACD", "horizon_key": "8m",
+    } for i in range(6)]
+    with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
+        json.dump(trades, f)
+    r = client.get("/strategies", headers=auth)
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    assert 'title="MACD / 8m: n=6 (too few trades)"' in html
+    assert "hm-na" in html
