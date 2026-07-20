@@ -71,3 +71,35 @@ def test_plans_page_renders_ranked_rows_with_chips(client, auth, monkeypatch):
     assert "chip-tier-a" in html
     assert "chip-validated" in html
     assert html.index("AAPL") < html.index("MSFT")  # ranked order = alphabetical per the fake
+
+
+from datetime import datetime, timezone
+
+
+def test_lifecycle_strip_counts_and_click_filters(client, auth, monkeypatch):
+    # No rank_plans/_ranked_plan_rows mock here (unlike
+    # test_plans_page_renders_ranked_rows_with_chips above): rank_plans is a
+    # pure function with no network/IO dependency (see
+    # swingbot/core/analytics/rank.py) and works fine on real TradePlanV2
+    # instances -- mocking it to return dicts is actually incompatible with
+    # _ranked_plan_rows, which calls plan_to_dict()/follow_score() on
+    # rank_plans()'s output expecting TradePlanV2 objects, not dicts.
+    # .add() not .update(): PlanStore().update() raises KeyError for an
+    # unseen plan_id -- .add() is the real insert call (see the C7 commit's
+    # deviation note, and test_plans_page_renders_ranked_rows_with_chips
+    # above).
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.PENDING))
+    PlanStore().add(_plan("p2", "MSFT", status=PlanStatus.ACTIVE))
+    today_closed = _plan("p3", "TSLA", status=PlanStatus.CLOSED)
+    today_closed.status_history = [{"status": "CLOSED", "reason": "manual",
+                                    "at": datetime.now(timezone.utc).isoformat()}]
+    PlanStore().add(today_closed)
+
+    r = client.get("/plans", headers=auth)
+    html = r.data.decode("utf-8")
+    assert 'href="/plans?status=PENDING' in html
+    assert ">1<" in html  # PENDING count of 1 shows somewhere in the strip
+
+    r2 = client.get("/plans?status=PENDING", headers=auth)
+    html2 = r2.data.decode("utf-8")
+    assert "AAPL" in html2 and "MSFT" not in html2

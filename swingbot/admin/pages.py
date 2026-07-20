@@ -12,7 +12,7 @@ from swingbot.core.analytics.rank import follow_score, rank_plans
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict
 from swingbot.core.plan_store import PlanStore
 
-from .app import _render, require_auth
+from .app import _is_today_berlin, _render, require_auth
 
 pages = Blueprint("pages", __name__)
 
@@ -40,6 +40,10 @@ def _plan_rows(status: str | None = None, tier: str | None = None,
     all_plans = PlanStore().all()
     counts = {s: 0 for s in _ALL_PLAN_STATUSES}
     for p in all_plans:
+        if p.status in (PlanStatus.CLOSED, PlanStatus.CANCELLED):
+            last_at = p.status_history[-1]["at"] if p.status_history else None
+            if not _is_today_berlin(last_at):
+                continue  # only today's closes/cancels count toward the strip
         counts[p.status] = counts.get(p.status, 0) + 1
 
     rows = _ranked_plan_rows(all_plans)

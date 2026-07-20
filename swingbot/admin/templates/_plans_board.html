@@ -1,6 +1,16 @@
 {# Rendered both by the full /plans page (wrapped in plans.html) and by
    /plans/fragment (Task C18, ETag-polled) -- identical markup either way
    so morphdom's diff-patch has something stable to compare against. #}
+<div class="lifecycle-strip">
+  {% for status, display in [('PENDING','PENDING'), ('ACTIVE','ACTIVE'), ('PARTIAL','PARTIAL'),
+                              ('CLOSED','CLOSED (today)'), ('CANCELLED','CANCELLED (today)')] %}
+  <a class="lifecycle-card {{ 'active-filter' if filters.status == status else '' }}"
+     href="{{ url_for('pages.plans_page', status=status, tier=filters.tier, badge=filters.badge) }}">
+    <span class="lc-count">{{ counts.get(status, 0) }}</span>
+    <span class="lc-label">{{ display }}</span>
+  </a>
+  {% endfor %}
+</div>
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <p class="card-title" style="margin:0;">Plans board
