@@ -290,8 +290,50 @@ def test_plan_detail_page_renders_timeline_and_breakdown(client, auth, monkeypat
     assert "Confluence x3" in html
     assert "ACTIVE" in html
     assert "85.2" in html
+    # Proves swingbot.core.analytics.rank.follow_breakdown actually imported
+    # and ran (not silently swallowed by the route's `except (ImportError,
+    # AttributeError)`) and that the template's tuple-unpack loop rendered
+    # real content. _plan()'s defaults (badge="VALIDATED", quality_score=70)
+    # deterministically produce these two lines per rank.py:76-111 --
+    # BADGE_WEIGHT contributes "✅ validated source" whenever badge ==
+    # "VALIDATED", and QUALITY_WEIGHT (0.4) * 70 == 28 contributes
+    # "quality 70 → +28". The regression this guards against: the brief's
+    # original (wrong) import path `swingbot.analytics.rank` always raises
+    # ImportError, follow_breakdown silently becomes None, and the template's
+    # `{% if follow_breakdown %}` block simply never renders -- a bug the
+    # prior version of this test would not have caught.
+    assert "validated source" in html
+    assert "quality 70" in html
 
 
 def test_plan_detail_page_404_for_unknown_id(client, auth):
     r = client.get("/plans/does-not-exist", headers=auth)
+    assert r.status_code == 404
+
+
+def test_plan_chart_image_200_on_success(client, auth, tmp_path, monkeypatch):
+    # Real-file pattern matched to test_views.py's /trades/<id>/chart.png
+    # tests (test_closed_trade_chart_is_cacheable et al.): write an actual
+    # tiny PNG to disk and point generate_trade_chart at it, so send_file
+    # operates on a real path rather than needing its own mock.
+    png_path = tmp_path / "AAPL_p1_plan.png"
+    png_path.write_bytes(
+        bytes.fromhex(
+            "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+            "de0000000c4944415478da6360606060000000050001d78f7e6e0000000049454e44ae426082"
+        )
+    )
+    monkeypatch.setattr("swingbot.admin.pages.generate_trade_chart", lambda *a, **k: str(png_path))
+    monkeypatch.setattr("swingbot.admin.pages.get_daily_data", lambda ticker: object())
+    PlanStore().add(_plan("p1", "AAPL"))
+
+    r = client.get("/plans/p1/chart.png", headers=auth)
+    assert r.status_code == 200
+
+
+def test_plan_chart_image_404_when_data_fetch_fails(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.get_daily_data", lambda ticker: None)
+    PlanStore().add(_plan("p1", "AAPL"))
+
+    r = client.get("/plans/p1/chart.png", headers=auth)
     assert r.status_code == 404
