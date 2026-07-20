@@ -556,3 +556,24 @@ def test_strategies_page_embeds_sparkline_for_strategy_with_data(client, auth, m
     # (not >=80 green, not <60 red), so the route's real trade data
     # drives a specific, non-default color.
     assert color == "#e2b25a"
+
+
+def test_strategy_row_links_to_tuning_and_journal(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
+    r = client.get("/strategies", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "/tuning?strategy=RSI" in html
+    assert "/journal?strategy=RSI" in html
+
+
+def test_plans_board_strategy_cell_links_to_strategies_anchor(client, auth):
+    # No rank_plans monkeypatch (see the note on test_lifecycle_strip_counts_
+    # and_click_filters above): mocking rank_plans to return dicts breaks
+    # _ranked_plan_rows, which calls plan_to_dict()/follow_score() on
+    # rank_plans()'s output expecting TradePlanV2 objects, not dicts.
+    # Real PlanStore.update() raises KeyError for an unseen plan_id --
+    # .add() is the real insert call (see the C7 commit's deviation note).
+    PlanStore().add(_plan("p1", "AAPL"))  # strategy="RSI" per the _plan() test factory's default
+    r = client.get("/plans", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "/strategies#strategy-rsi" in html

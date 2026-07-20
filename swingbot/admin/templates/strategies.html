@@ -35,7 +35,11 @@
     <tbody>
     {% for row in rows %}
     <tr id="strategy-{{ row.strategy | lower | replace(' ', '-') | replace('/', '-') }}">
-      <td><strong>{{ row.strategy }}</strong></td>
+      <td>
+        <strong>{{ row.strategy }}</strong><br>
+        <a href="{{ url_for('pages.tuning_page', strategy=row.strategy) }}" style="font-size:11px;">🛠 Tune</a> ·
+        <a href="{{ url_for('pages.journal_page', strategy=row.strategy) }}" style="font-size:11px;">📓 Journal</a>
+      </td>
       <td>{{ row.sparkline_svg | safe }}</td>
       <td><span class="chip {{ 'chip-validated' if row.status == 'VALIDATED' else 'chip-weak' }}">{{ row.status }}</span></td>
       <td>{{ "%.2f"|format(row.rr_override) if row.rr_override is not none else '—' }}</td>
