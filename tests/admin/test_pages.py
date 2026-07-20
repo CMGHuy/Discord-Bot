@@ -206,6 +206,30 @@ def test_close_pending_plan_rejected(client, auth):
     assert r.status_code == 400
 
 
+def test_plans_fragment_etag_304(client, auth):
+    r1 = client.get("/plans/fragment", headers=auth)
+    assert r1.status_code == 200
+    etag = r1.headers.get("ETag")
+    assert etag
+    r2 = client.get("/plans/fragment", headers={**auth, "If-None-Match": etag})
+    assert r2.status_code == 304
+    assert r2.data == b""
+
+
+def test_plans_fragment_respects_filters(client, auth):
+    # No rank_plans monkeypatch (see the note on test_lifecycle_strip_counts_
+    # and_click_filters above): mocking rank_plans to return dicts breaks
+    # _ranked_plan_rows, which calls plan_to_dict()/follow_score() on
+    # rank_plans()'s output expecting TradePlanV2 objects, not dicts.
+    # .add(), not .update(): PlanStore().update() raises KeyError for an
+    # unseen plan_id -- .add() is the real insert call.
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.PENDING))
+    PlanStore().add(_plan("p2", "MSFT", status=PlanStatus.ACTIVE))
+    r = client.get("/plans/fragment?status=PENDING", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "AAPL" in html and "MSFT" not in html
+
+
 def test_close_active_plan_also_closes_linked_trade(client, auth):
     # Covers the gap flagged by the C17 review: plan_close()'s linked-trade
     # branch (tl = TradeLog(); linked = next(... t.get("plan_id") ==

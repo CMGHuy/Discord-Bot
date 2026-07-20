@@ -1,4 +1,36 @@
 {% extends "base.html" %}
 {% block body %}
 <div id="plans-fragment">{{ fragment | safe }}</div>
+<script src="{{ url_for('static', filename='vendor/morphdom-umd.min.js') }}"></script>
+<script>
+(function () {
+  var _lastEtag = null;
+  function refreshPlansBoard() {
+    var qs = new URL(window.location.href).search;  // preserve current filter params
+    var headers = {};
+    if (_lastEtag) { headers['If-None-Match'] = _lastEtag; }
+    fetch('{{ url_for("pages.plans_fragment") }}' + qs, { credentials: 'include', headers: headers })
+      .then(function (r) {
+        if (r.status === 401) { window.location.reload(); return null; }
+        if (r.status === 304) { return undefined; }
+        _lastEtag = r.headers.get('ETag');
+        return r.text();
+      })
+      .then(function (html) {
+        if (html === undefined || !html) return;
+        var container = document.getElementById('plans-fragment');
+        if (typeof morphdom !== 'undefined') {
+          var wrapper = document.createElement('div');
+          wrapper.id = 'plans-fragment';
+          wrapper.innerHTML = html;
+          morphdom(container, wrapper);
+        } else {
+          container.innerHTML = html;
+        }
+      })
+      .catch(function () {});
+  }
+  setInterval(refreshPlansBoard, {{ (dashboard_refresh_seconds * 1000) | int }});
+})();
+</script>
 {% endblock %}

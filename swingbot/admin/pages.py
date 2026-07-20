@@ -7,12 +7,14 @@ helper, since these are full pages a human loads in a browser, not fetch()
 targets (those live in api.py).
 """
 import dataclasses
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
 
-from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
 
+from swingbot import config
 from swingbot.core.analytics.rank import follow_score, rank_plans
 from swingbot.core.performance import TradeLog
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transition
@@ -81,7 +83,33 @@ def plans_page():
     result = _plan_rows(status=filters["status"] or None, tier=filters["tier"] or None,
                         badge=filters["badge"] or None, ticker=filters["ticker"] or None)
     fragment = _render_plans_board(result["plans"], result["counts"], filters)
-    return _render("Plans", "plans", "plans.html", fragment=fragment)
+    return _render("Plans", "plans", "plans.html", fragment=fragment,
+                   dashboard_refresh_seconds=config.DASHBOARD_REFRESH_SECONDS)
+
+
+@pages.route("/plans/fragment", methods=["GET"])
+@require_auth
+def plans_fragment():
+    """Same ETag'd auto-refresh pattern as app.py's dashboard_fragment
+    (C10) -- see that function's docstring for the rationale. Polled by
+    plans.html's own JS every config.DASHBOARD_REFRESH_SECONDS, preserving
+    whatever filter query params are currently in the URL so a filtered
+    view keeps polling that same filtered slice."""
+    filters = {
+        "status": request.args.get("status", ""),
+        "tier": request.args.get("tier", ""),
+        "badge": request.args.get("badge", ""),
+        "ticker": request.args.get("ticker", ""),
+    }
+    result = _plan_rows(status=filters["status"] or None, tier=filters["tier"] or None,
+                        badge=filters["badge"] or None, ticker=filters["ticker"] or None)
+    html = _render_plans_board(result["plans"], result["counts"], filters)
+    etag = hashlib.sha1(html.encode("utf-8")).hexdigest()
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304)
+    resp = Response(html, mimetype="text/html; charset=utf-8")
+    resp.headers["ETag"] = etag
+    return resp
 
 
 @pages.route("/strategies", methods=["GET"])
