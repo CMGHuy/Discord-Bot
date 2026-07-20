@@ -204,3 +204,29 @@ def test_close_pending_plan_rejected(client, auth):
     PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.PENDING))
     r = client.post("/plans/p1/close", headers=auth)
     assert r.status_code == 400
+
+
+def test_close_active_plan_also_closes_linked_trade(client, auth):
+    # Covers the gap flagged by the C17 review: plan_close()'s linked-trade
+    # branch (tl = TradeLog(); linked = next(... t.get("plan_id") ==
+    # plan_id ...); if linked and linked["status"] == "open":
+    # tl.close_trade_manual(...)) had zero test coverage -- every existing
+    # close test only exercised the no-linked-trade no-op path. This proves
+    # the OPEN trade whose plan_id matches the closed plan is actually
+    # closed via TradeLog.close_trade_manual, not just that the plan's own
+    # status flips.
+    from swingbot.core.performance import TradeLog
+
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.ACTIVE))
+    trade_id = TradeLog().log_trade(
+        ticker="AAPL", strategy="RSI", horizon_key="4w", direction="bullish",
+        confidence_level=4, confidence_label="Strong", entry=100.0, stop_loss=95.0,
+        take_profit=110.0, plan_id="p1",
+    )
+
+    r = client.post("/plans/p1/close", headers=auth)
+    assert r.status_code == 302
+    assert PlanStore().get("p1").status == PlanStatus.CLOSED
+
+    closed_trade = TradeLog().get_trade_by_id(trade_id)
+    assert closed_trade["status"] == "closed"
