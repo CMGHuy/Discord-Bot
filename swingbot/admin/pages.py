@@ -12,13 +12,16 @@ import json
 import os
 from datetime import datetime, timezone
 
-from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, redirect, render_template, request, send_file, url_for
 
 from swingbot import config
 from swingbot.core.analytics.rank import follow_score, rank_plans
+from swingbot.core.charts.trade_chart import generate_trade_chart
+from swingbot.core.data import get_daily_data
 from swingbot.core.performance import TradeLog
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transition
 from swingbot.core.plan_store import PlanStore
+from swingbot.core.strategy_types import HORIZONS
 
 from .app import MANUAL_CLOSE_QUEUE, _is_today_berlin, _render, require_auth
 
@@ -205,3 +208,54 @@ def plan_close(plan_id):
     store.update(plan)
     _queue_manual_close_notify(plan)
     return redirect(url_for("pages.plans_page", msg=f"Plan {plan.ticker} closed.", ok=1))
+
+
+@pages.route("/plans/<plan_id>", methods=["GET"])
+@require_auth
+def plan_detail_page(plan_id):
+    plan = PlanStore().get(plan_id)
+    if not plan:
+        abort(404, f"No plan found with id '{plan_id}'.")
+
+    tl = TradeLog()
+    linked_trade = next(
+        (t for t in tl.get_trades(status=None, limit=None) if t.get("plan_id") == plan_id), None,
+    )
+
+    # analytics.rank may or may not expose a per-plan breakdown function
+    # depending on how far Plan A's own scope went -- fall back to the
+    # score alone (already shown in badge_stats/quality_score) rather than
+    # failing the whole page over an optional enrichment.
+    follow_breakdown = None
+    try:
+        from swingbot.core.analytics.rank import follow_breakdown as _follow_breakdown
+        follow_breakdown = _follow_breakdown(plan)
+    except (ImportError, AttributeError):
+        follow_breakdown = None
+
+    return _render(
+        f"{plan.ticker} — Plan {plan.plan_id[:8]}", "plans", "plan_detail.html",
+        plan=plan, linked_trade=linked_trade, follow_breakdown=follow_breakdown,
+    )
+
+
+@pages.route("/plans/<plan_id>/chart.png", methods=["GET"])
+@require_auth
+def plan_chart_image(plan_id):
+    plan = PlanStore().get(plan_id)
+    if not plan:
+        abort(404)
+    df = get_daily_data(plan.ticker)
+    if df is None:
+        abort(404, "Could not fetch chart data for this plan right now (data fetch may have failed).")
+    h = HORIZONS.get(plan.horizon_key, {})
+    path = generate_trade_chart(
+        plan.ticker, df,
+        entry=plan.entry_price or plan.trigger_price,
+        stop_loss=plan.stop_loss, take_profit=plan.tp1,
+        direction=plan.direction, strategy=plan.strategy,
+        horizon_label=h.get("label", plan.horizon_key),
+        out_dir=config.TRADE_CHART_DIR,
+        filename=f"{plan.ticker}_{plan.plan_id}_plan.png",
+    )
+    return send_file(path, mimetype="image/png")

@@ -268,3 +268,30 @@ def test_close_active_plan_also_closes_linked_trade(client, auth):
 
     closed_trade = TradeLog().get_trade_by_id(trade_id)
     assert closed_trade["status"] == "closed"
+
+
+def test_plan_detail_page_renders_timeline_and_breakdown(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.generate_trade_chart", lambda *a, **k: "/tmp/does-not-matter.png")
+    monkeypatch.setattr("swingbot.admin.pages.get_daily_data", lambda ticker: object())
+    plan = _plan("p1", "AAPL", status=PlanStatus.ACTIVE)
+    # quality_breakdown rows are (label, points) tuples, not dicts -- see
+    # plan_engine.py's plan_to_dict, which round-trips each row via
+    # list(row), proving they're sequences. .add(), not .update(): PlanStore
+    # .update() raises KeyError for an unseen plan_id (see the C7 commit's
+    # deviation note referenced throughout this file).
+    plan.quality_breakdown = [("Confluence x3", 30)]
+    plan.status_history = [{"status": "ACTIVE", "reason": "market_entry", "at": "2026-07-01T14:00:00+00:00"}]
+    plan.badge_stats = {"status": "VALIDATED", "n": 608, "win_rate": 85.2, "expectancy_r": 0.14, "window": "2024-01-01..2025-12-31"}
+    PlanStore().add(plan)
+
+    r = client.get("/plans/p1", headers=auth)
+    html = r.data.decode("utf-8")
+    assert r.status_code == 200
+    assert "Confluence x3" in html
+    assert "ACTIVE" in html
+    assert "85.2" in html
+
+
+def test_plan_detail_page_404_for_unknown_id(client, auth):
+    r = client.get("/plans/does-not-exist", headers=auth)
+    assert r.status_code == 404

@@ -1,0 +1,121 @@
+{# swingbot/admin/templates/plan_detail.html #}
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+    <div style="flex:1;min-width:280px;">
+      <p class="card-title">{{ plan.ticker }} — {{ plan.strategy }} ({{ plan.horizon_key }})</p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <span class="chip chip-tier-{{ plan.tier | lower }}">Tier {{ plan.tier }}</span>
+        <span class="chip {{ 'chip-validated' if plan.badge == 'VALIDATED' else 'chip-weak' }}">{{ plan.badge }}</span>
+        <span class="pill">{{ plan.status }}</span>
+      </div>
+      <table style="width:100%;font-size:13px;">
+        <tr><td class="muted">Direction</td><td>{{ '▲ Long' if plan.direction == 'bullish' else '▼ Short' }}</td></tr>
+        <tr><td class="muted">Entry type</td><td>{{ plan.entry_type }}</td></tr>
+        <tr><td class="muted">Trigger / Entry</td>
+          <td>{{ "%.2f"|format(plan.trigger_price) }}{% if plan.entry_price %} / {{ "%.2f"|format(plan.entry_price) }}{% endif %}</td></tr>
+        <tr><td class="muted">Stop loss</td><td style="color:#da6d6d;">{{ "%.2f"|format(plan.stop_loss) }}</td></tr>
+        <tr><td class="muted">TP1 ({{ "%.0f"|format(plan.tp1_fraction * 100) }}%)</td>
+          <td style="color:#6dda9e;">{{ "%.2f"|format(plan.tp1) }}</td></tr>
+        <tr><td class="muted">TP2 (runner)</td><td>{{ "%.2f"|format(plan.tp2) if plan.tp2 else '—' }}</td></tr>
+        <tr><td class="muted">Break-even trigger</td><td>{{ "%.0f%%"|format(plan.breakeven_trigger_fraction * 100) }} of TP1 distance</td></tr>
+        <tr><td class="muted">Quality score</td><td>{{ plan.quality_score }}</td></tr>
+      </table>
+    </div>
+    <div style="flex:1;min-width:280px;">
+      <img src="{{ url_for('pages.plan_chart_image', plan_id=plan.plan_id) }}" alt="Chart"
+           style="width:100%;border-radius:8px;cursor:zoom-in;" onclick="openLightbox(this.src)">
+    </div>
+  </div>
+</div>
+
+{# .cal-overlay is scoped inside stats.html's own <style> block for an
+   unrelated calendar-modal feature and isn't in the shared style.css --
+   inlining the same declarations here rather than referencing a class that
+   doesn't exist outside that template. #}
+<div id="lightbox-overlay" style="display:none; position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; padding:24px;" onclick="closeLightbox()">
+  <img id="lightbox-img" style="max-width:92vw;max-height:92vh;border-radius:8px;" alt="">
+</div>
+<script>
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox-overlay').style.display = 'flex';
+}
+function closeLightbox() { document.getElementById('lightbox-overlay').style.display = 'none'; }
+</script>
+
+<div class="card">
+  <p class="card-title">Lifecycle timeline</p>
+  <ul class="timeline">
+    <li><strong>Created</strong> — {{ plan.created_at }} ({{ plan.source }})</li>
+    {% for h in plan.status_history %}
+    <li class="{{ 'tl-cancelled' if h.status == 'CANCELLED' else ('tl-closed' if h.status == 'CLOSED' else '') }}">
+      <strong>{{ h.status }}</strong>{% if h.reason %} — {{ h.reason }}{% endif %}{% if h.at %} — {{ h.at }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="card">
+  <p class="card-title">Quality breakdown</p>
+  {% if plan.quality_breakdown %}
+  <table style="width:100%;font-size:13px;">
+    <thead><tr><th style="text-align:left;">Factor</th><th style="text-align:right;">Points</th></tr></thead>
+    <tbody>
+    {% for label, points in plan.quality_breakdown %}
+    <tr><td>{{ label }}</td><td style="text-align:right;">{{ points }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No quality breakdown recorded for this plan.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <p class="card-title">Badge stats (out-of-sample validation)</p>
+  <table style="width:100%;font-size:13px;">
+    <tr><td class="muted">Status</td><td>{{ plan.badge_stats.get('status', plan.badge) }}</td></tr>
+    <tr><td class="muted">N</td><td>{{ plan.badge_stats.get('n', '—') }}</td></tr>
+    <tr><td class="muted">Win rate</td>
+      <td>{{ "%.1f%%"|format(plan.badge_stats.win_rate) if plan.badge_stats.get('win_rate') is not none else '—' }}</td></tr>
+    <tr><td class="muted">Expectancy</td>
+      <td>{{ "%+.3f"|format(plan.badge_stats.expectancy_r) if plan.badge_stats.get('expectancy_r') is not none else '—' }}</td></tr>
+    <tr><td class="muted">Window</td><td>{{ plan.badge_stats.get('window', '—') }}</td></tr>
+  </table>
+</div>
+
+{% if follow_breakdown %}
+<div class="card">
+  <p class="card-title">Follow-score breakdown</p>
+  <table style="width:100%;font-size:13px;">
+    {% for factor, points in follow_breakdown %}
+    <tr><td class="muted">{{ factor }}</td><td style="text-align:right;">{{ points }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if linked_trade %}
+<div class="card">
+  <p class="card-title">Linked trade</p>
+  <table style="width:100%;font-size:13px;">
+    <tr><td class="muted">Trade ID</td><td><a href="{{ url_for('trade_detail', trade_id=linked_trade.id) }}">{{ linked_trade.id }}</a></td></tr>
+    <tr><td class="muted">Status</td><td>{{ linked_trade.status }}</td></tr>
+    {% if linked_trade.get('legs') %}
+    <tr><td class="muted">Legs</td><td>
+      {% for leg in linked_trade.legs %}
+        {{ leg.fraction }} @ {{ leg.exit_price if leg.exit_price else 'live' }} ({{ leg.reason if leg.reason else 'open' }})<br>
+      {% endfor %}
+    </td></tr>
+    {% endif %}
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">🔗</div>
+  <p>No trade has been linked to this plan yet (it hasn't triggered/filled).</p>
+</div>
+{% endif %}
+{% endblock %}

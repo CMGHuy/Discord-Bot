@@ -70,7 +70,7 @@
     </thead>
     <tbody>
     {% for p in plans %}
-    <tr>
+    <tr class="clickable" onclick="window.location='{{ url_for('pages.plan_detail_page', plan_id=p.plan_id) }}'">
       <td>
         <span class="chip chip-tier-{{ p.tier | lower }}">{{ p.tier }}</span>
         <span class="chip {{ 'chip-validated' if p.badge == 'VALIDATED' else 'chip-weak' }}">{{ p.badge }}</span>
