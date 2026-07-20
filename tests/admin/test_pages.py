@@ -151,3 +151,21 @@ def test_board_filters_by_ticker_substring(client, auth):
     r = client.get("/plans?ticker=aap", headers=auth)
     html = r.data.decode("utf-8")
     assert "AAPL" in html and "MSFT" not in html
+
+
+def test_ticker_filter_preserved_on_lifecycle_strip_links(client, auth):
+    # Regression test for a C16 review finding: the lifecycle-strip status
+    # cards (added in C15) build their href from status/tier/badge only,
+    # dropping the ticker filter -- so clicking a status card while a ticker
+    # filter is active silently clears it. Every lifecycle card's href must
+    # carry ticker=aap through unchanged.
+    PlanStore().add(_plan("p1", "AAPL", status=PlanStatus.PENDING))
+    PlanStore().add(_plan("p2", "MSFT", status=PlanStatus.ACTIVE))
+    r = client.get("/plans?ticker=aap", headers=auth)
+    html = r.data.decode("utf-8")
+    for status in ("PENDING", "ACTIVE", "PARTIAL", "CLOSED", "CANCELLED"):
+        match = re.search(r'href="([^"]*status=' + status + r'[^"]*)"', html)
+        assert match, f"no lifecycle card href found for status={status}"
+        assert "ticker=aap" in match.group(1), (
+            f"status={status} lifecycle card lost the ticker filter: {match.group(1)}"
+        )

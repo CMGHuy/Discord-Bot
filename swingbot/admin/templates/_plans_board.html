@@ -5,7 +5,7 @@
   {% for status, display in [('PENDING','PENDING'), ('ACTIVE','ACTIVE'), ('PARTIAL','PARTIAL'),
                               ('CLOSED','CLOSED (today)'), ('CANCELLED','CANCELLED (today)')] %}
   <a class="lifecycle-card {{ 'active-filter' if filters.status == status else '' }}"
-     href="{{ url_for('pages.plans_page', status=status, tier=filters.tier, badge=filters.badge) }}">
+     href="{{ url_for('pages.plans_page', status=status, tier=filters.tier, badge=filters.badge, ticker=filters.ticker) }}">
     <span class="lc-count">{{ counts.get(status, 0) }}</span>
     <span class="lc-label">{{ display }}</span>
   </a>
