@@ -73,7 +73,22 @@ def test_plans_page_renders_ranked_rows_with_chips(client, auth, monkeypatch):
     assert html.index("AAPL") < html.index("MSFT")  # ranked order = alphabetical per the fake
 
 
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
+
+
+def _lifecycle_card_count(html, status):
+    """Extract the lc-count integer for a specific lifecycle-strip card by
+    anchoring on that status's href and taking the very next lc-count span
+    (the template emits href then lc-count within the same <a> element, in
+    a fixed status order) -- avoids a page-wide substring match that could
+    coincidentally match any digit anywhere on the page."""
+    match = re.search(
+        r'href="[^"]*status=' + status + r'[^"]*".*?<span class="lc-count">(\d+)</span>',
+        html, re.S,
+    )
+    assert match, f"no lifecycle card found for status={status}"
+    return int(match.group(1))
 
 
 def test_lifecycle_strip_counts_and_click_filters(client, auth, monkeypatch):
@@ -94,11 +109,22 @@ def test_lifecycle_strip_counts_and_click_filters(client, auth, monkeypatch):
     today_closed.status_history = [{"status": "CLOSED", "reason": "manual",
                                     "at": datetime.now(timezone.utc).isoformat()}]
     PlanStore().add(today_closed)
+    # A second CLOSED plan, but closed several days ago -- proves the
+    # _is_today_berlin scoping in _plan_rows (pages.py) actually excludes
+    # stale closes rather than passing vacuously (the count would be 2, not
+    # 1, if the "today" filter weren't applied).
+    old_closed = _plan("p4", "NVDA", status=PlanStatus.CLOSED)
+    old_closed.status_history = [{"status": "CLOSED", "reason": "manual",
+                                  "at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()}]
+    PlanStore().add(old_closed)
 
     r = client.get("/plans", headers=auth)
     html = r.data.decode("utf-8")
     assert 'href="/plans?status=PENDING' in html
-    assert ">1<" in html  # PENDING count of 1 shows somewhere in the strip
+    assert _lifecycle_card_count(html, "PENDING") == 1
+    # The plan-mandated assertion: CLOSED-today count is 1 (today_closed),
+    # and the prior-day close (old_closed) is excluded, not 2.
+    assert _lifecycle_card_count(html, "CLOSED") == 1
 
     r2 = client.get("/plans?status=PENDING", headers=auth)
     html2 = r2.data.decode("utf-8")
