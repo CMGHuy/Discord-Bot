@@ -13,11 +13,10 @@ from flask import Blueprint, jsonify, request
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.snapshots import load_snapshot
 from swingbot.core.analytics.snapshots import refresh_snapshot as _rebuild_snapshot
-from swingbot.core.registry import load_registry
 
 from .app import ADMIN_PASSWORD, ADMIN_USERNAME
 from .helpers import get_versions
-from .pages import _plan_rows
+from .pages import _plan_rows, _registry_rows
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -128,14 +127,4 @@ def api_calibration():
 @api.route("/registry", methods=["GET"])
 @require_auth_json
 def api_registry():
-    # snap["by"]["strategy"] is a LIST of StatRow dicts (each carrying its
-    # dimension value in "key"), not a strategy-name-keyed dict -- see
-    # aggregate.py's StatRow / snapshots.py's build_snapshot.
-    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
-    by_strategy_rows = ((snap or {}).get("by") or {}).get("strategy", [])
-    by_strategy = {row["key"]: row for row in by_strategy_rows}
-    rows = []
-    for rec in load_registry():
-        live = by_strategy.get(rec["strategy"], {})
-        rows.append({**rec, "live_n": live.get("n"), "live_wr": live.get("win_rate")})
-    return jsonify({"registry": rows})
+    return jsonify({"registry": _registry_rows()})

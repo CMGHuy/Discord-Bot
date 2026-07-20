@@ -186,7 +186,12 @@ def test_api_calibration_returns_snapshot_block(client, auth, monkeypatch):
 
 
 def test_api_registry_joins_live_stats(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT)
+    # _registry_rows() was extracted to pages.py in Task C20 (api.py now
+    # imports it instead of keeping its own copy, same pattern as
+    # _plan_rows/_ranked_plan_rows above) -- it calls pages.py's own
+    # load_snapshot import, not api.py's, so the monkeypatch target moves
+    # with it.
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT)
     r = client.get("/api/registry", headers=auth)
     rows = {row["strategy"]: row for row in r.get_json()["registry"]}
     assert rows["RSI"]["live_n"] == 40

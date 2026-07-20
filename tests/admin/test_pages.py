@@ -337,3 +337,16 @@ def test_plan_chart_image_404_when_data_fetch_fails(client, auth, monkeypatch):
 
     r = client.get("/plans/p1/chart.png", headers=auth)
     assert r.status_code == 404
+
+
+_FAKE_SNAPSHOT_EMPTY = {"built_at": "x", "by": {"strategy": {}}, "calibration": {}}
+
+
+def test_strategies_page_shows_registry_rows(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
+    r = client.get("/strategies", headers=auth)
+    html = r.data.decode("utf-8")
+    # 11 registry rows (swingbot.core.backtest.ALL_STRATEGIES) -> 11 badge chips
+    assert html.count("chip-validated") + html.count("chip-weak") == 11
+    assert "82.3" in html          # Fibonacci's committed OOS win_rate (validation_registry.json, pooled/horizon=None record)
+    assert "bullish only" in html  # Fibonacci's real current STRATEGY_GATES entry

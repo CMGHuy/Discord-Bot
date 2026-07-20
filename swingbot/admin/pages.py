@@ -16,12 +16,15 @@ from flask import Blueprint, Response, abort, redirect, render_template, request
 
 from swingbot import config
 from swingbot.core.analytics.rank import follow_score, rank_plans
+from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
+from swingbot.core.backtest import ALL_STRATEGIES
 from swingbot.core.charts.trade_chart import generate_trade_chart
 from swingbot.core.data import get_daily_data
 from swingbot.core.performance import TradeLog
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transition
 from swingbot.core.plan_store import PlanStore
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.registry import load_registry
+from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 
 from .app import MANUAL_CLOSE_QUEUE, _is_today_berlin, _render, require_auth
 
@@ -115,10 +118,63 @@ def plans_fragment():
     return resp
 
 
+def _gate_description(strategy: str) -> str:
+    """Human-readable rendering of a STRATEGY_GATES entry -- e.g.
+    Fibonacci's real current {"directions": ("bullish",)} becomes
+    "bullish only"; VWAP's {"directions": ("bullish",),
+    "horizons": ("4w","6m","7m","8m","9m")} becomes
+    "bullish only {4w,6m,7m,8m,9m}". A missing key means no gate at all
+    (both directions, every horizon)."""
+    gate = STRATEGY_GATES.get(strategy)
+    if not gate:
+        return "no gate (all directions, all horizons)"
+    parts = []
+    directions = gate.get("directions")
+    if directions:
+        parts.append(f"{'/'.join(directions)} only" if len(directions) == 1 else "/".join(directions))
+    horizons = gate.get("horizons")
+    if horizons:
+        parts.append("{" + ",".join(horizons) + "}")
+    return " ".join(parts) if parts else "no gate (all directions, all horizons)"
+
+
+def _registry_rows() -> list[dict]:
+    """Shared by /strategies (this task) and /api/registry (C9 -- api.py
+    imports this instead of keeping its own copy). snap["by"]["strategy"]
+    is a LIST of StatRow dicts (each carrying its dimension value in
+    "key"), not a strategy-name-keyed dict -- see aggregate.py's StatRow /
+    snapshots.py's build_snapshot -- so it's converted below exactly like
+    the original C9 api.py implementation did.
+
+    load_registry() returns one record per (strategy, horizon) plus a
+    pooled (horizon=None) record per strategy, plus a non-strategy "ALL"
+    pseudo-entry. This page wants one summary row per real strategy, so it
+    filters to the pooled record (horizon is None) for each name in
+    ALL_STRATEGIES -- that also makes the strategy->record mapping
+    deterministic (no ambiguity from multiple records sharing a strategy
+    key)."""
+    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    by_strategy_rows = ((snap or {}).get("by") or {}).get("strategy", [])
+    by_strategy = {row["key"]: row for row in by_strategy_rows}
+    rows = []
+    for rec in load_registry():
+        if rec.get("horizon") is not None or rec["strategy"] not in ALL_STRATEGIES:
+            continue
+        live = by_strategy.get(rec["strategy"], {})
+        rows.append({
+            **rec,
+            "live_n": live.get("n"),
+            "live_wr": live.get("win_rate"),
+            "rr_override": STRATEGY_RR_OVERRIDE.get(rec["strategy"]),
+            "gate_description": _gate_description(rec["strategy"]),
+        })
+    return rows
+
+
 @pages.route("/strategies", methods=["GET"])
 @require_auth
 def strategies_page():
-    return _render("Strategies", "strategies", "strategies.html")
+    return _render("Strategies", "strategies", "strategies.html", rows=_registry_rows())
 
 
 @pages.route("/calibration", methods=["GET"])

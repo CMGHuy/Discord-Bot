@@ -1,7 +1,42 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="empty-state">
-  <div class="empty-icon">🧭</div>
-  <p>The strategies overview lands in Task C20.</p>
+<div class="card">
+  <p class="card-title">Strategy registry
+    <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
+      out-of-sample validation status per strategy
+    </span>
+  </p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>Strategy</th>
+        <th>Badge</th>
+        <th>R:R</th>
+        <th>OOS N</th>
+        <th>OOS WR</th>
+        <th>OOS ExpR</th>
+        <th>Window</th>
+        <th>Run date</th>
+        <th>Gate</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+    <tr id="strategy-{{ row.strategy | lower | replace(' ', '-') | replace('/', '-') }}">
+      <td><strong>{{ row.strategy }}</strong></td>
+      <td><span class="chip {{ 'chip-validated' if row.status == 'VALIDATED' else 'chip-weak' }}">{{ row.status }}</span></td>
+      <td>{{ "%.2f"|format(row.rr_override) if row.rr_override is not none else '—' }}</td>
+      <td>{{ row.n }}</td>
+      <td>{{ "%.1f%%"|format(row.win_rate) }}</td>
+      <td>{{ "%+.3f"|format(row.expectancy_r) }}</td>
+      <td class="muted">{{ row.window }}</td>
+      <td class="muted">{{ row.run_date }}</td>
+      <td class="muted">{{ row.gate_description }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
 </div>
 {% endblock %}
