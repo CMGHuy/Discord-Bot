@@ -39,4 +39,27 @@
   </table>
   </div>
 </div>
+<div class="card">
+  <p class="card-title">Strategy × horizon live win rate</p>
+  <div style="overflow-x:auto;">
+  <div class="heatmap-grid" style="grid-template-columns: 140px repeat({{ heatmap.horizons | length }}, 1fr); min-width:640px;">
+    <div class="hm-header"></div>
+    {% for h in heatmap.horizons %}<div class="hm-header">{{ h }}</div>{% endfor %}
+    {% for s in heatmap.strategies %}
+      <div class="hm-header" style="justify-content:flex-start;text-align:left;">{{ s }}</div>
+      {% for h in heatmap.horizons %}
+        {% set cell = heatmap.matrix[(s, h)] %}
+        {% if cell.n < 5 %}
+        <div class="hm-cell hm-na" title="{{ s }} / {{ h }}: n={{ cell.n }} (too few trades)">n/a</div>
+        {% else %}
+        <div class="hm-cell" style="background:{{ heatmap_color(cell.win_rate) }};"
+             title="{{ s }} / {{ h }}: {{ '%.0f'|format(cell.win_rate) }}% (n={{ cell.n }})">
+          {{ "%.0f"|format(cell.win_rate) }}% ({{ cell.n }})
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+  </div>
+</div>
 {% endblock %}

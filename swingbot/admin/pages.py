@@ -15,12 +15,13 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, abort, redirect, render_template, request, send_file, url_for
 
 from swingbot import config
+from swingbot.core.analytics.metrics import win_rate
 from swingbot.core.analytics.rank import follow_score, rank_plans
 from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
 from swingbot.core.backtest import ALL_STRATEGIES
 from swingbot.core.charts.trade_chart import generate_trade_chart
 from swingbot.core.data import get_daily_data
-from swingbot.core.performance import TradeLog
+from swingbot.core.performance import TradeLog, primary_strategy_label
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transition
 from swingbot.core.plan_store import PlanStore
 from swingbot.core.registry import load_registry
@@ -171,10 +172,58 @@ def _registry_rows() -> list[dict]:
     return rows
 
 
+def _lerp_hex(c1: str, c2: str, t: float) -> str:
+    r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+    r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+    r = round(r1 + (r2 - r1) * t)
+    g = round(g1 + (g2 - g1) * t)
+    b = round(b1 + (b2 - b1) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _heatmap_color(win_rate: float) -> str:
+    """Linear red (<=60) -> amber (75) -> green (>=85)."""
+    if win_rate <= 60:
+        return "#da6d6d"
+    if win_rate >= 85:
+        return "#6dda9e"
+    if win_rate <= 75:
+        return _lerp_hex("#da6d6d", "#e2b25a", (win_rate - 60) / 15)
+    return _lerp_hex("#e2b25a", "#6dda9e", (win_rate - 75) / 10)
+
+
+def _strategy_horizon_heatmap() -> dict:
+    """Live win-rate per (strategy, horizon) cell, grouped directly here
+    since aggregate.stats_by only supports a single grouping dimension,
+    not a joint (strategy, horizon) cross-tab. Relabels each trade's
+    strategy via primary_strategy_label first -- the raw t["strategy"]
+    field is a fixed placeholder for confluence-engine trades (see
+    performance.primary_strategy_label's own docstring), so grouping on
+    it directly would silently misbucket almost every real trade. Reuses
+    metrics.win_rate() for the actual ratio -- same definition as every
+    other win-rate number in this cockpit, not reimplemented here."""
+    tl = TradeLog()
+    closed = [t for t in tl.get_trades(status=None, limit=None) if t["status"] in ("win", "loss", "closed")]
+    horizons = list(HORIZONS.keys())
+    buckets: dict[tuple[str, str], list[dict]] = {}
+    for t in closed:
+        strategy = primary_strategy_label(t)
+        horizon = t.get("horizon_key") or "unknown"
+        buckets.setdefault((strategy, horizon), []).append(t)
+    matrix = {}
+    for s in ALL_STRATEGIES:
+        for h in horizons:
+            group = buckets.get((s, h), [])
+            matrix[(s, h)] = {"n": len(group), "win_rate": win_rate(group)}
+    return {"strategies": list(ALL_STRATEGIES), "horizons": horizons, "matrix": matrix}
+
+
 @pages.route("/strategies", methods=["GET"])
 @require_auth
 def strategies_page():
-    return _render("Strategies", "strategies", "strategies.html", rows=_registry_rows())
+    return _render("Strategies", "strategies", "strategies.html",
+                   rows=_registry_rows(), heatmap=_strategy_horizon_heatmap(),
+                   heatmap_color=_heatmap_color)
 
 
 @pages.route("/calibration", methods=["GET"])

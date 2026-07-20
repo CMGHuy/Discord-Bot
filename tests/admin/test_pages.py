@@ -350,3 +350,25 @@ def test_strategies_page_shows_registry_rows(client, auth, monkeypatch):
     assert html.count("chip-validated") + html.count("chip-weak") == 11
     assert "82.3" in html          # Fibonacci's committed OOS win_rate (validation_registry.json, pooled/horizon=None record)
     assert "bullish only" in html  # Fibonacci's real current STRATEGY_GATES entry
+
+
+import json
+import os
+
+
+def test_strategy_heatmap_colors_and_na_cells(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
+    monkeypatch.setattr("swingbot.admin.pages.primary_strategy_label", lambda t: t["strategy"])
+    from swingbot import config
+    trades = [{
+        "id": f"w{i}", "ticker": "AAA", "status": "win", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "exit_price": 110.0,
+        "opened_at": "2026-01-01T00:00:00+00:00", "closed_at": "2026-01-02T00:00:00+00:00",
+        "confidence_level": 3, "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
+    } for i in range(6)]  # 6 RSI/4w wins -> WR 100%, n=6
+    with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
+        json.dump(trades, f)
+    r = client.get("/strategies", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "hm-na" in html          # e.g. RSI/2w has n=0 < 5 -- greyed n/a
+    assert "100% (6)" in html
