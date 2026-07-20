@@ -426,7 +426,29 @@ def test_sparkline_svg_point_count_and_color():
     from swingbot.admin.pages import _sparkline_svg
     svg = _sparkline_svg([50.0, 60.0, 70.0, 80.0], width=100, height=20)
     assert svg.startswith("<svg")
-    assert "polyline" in svg
+
+    # Pull the actual rendered polyline out of the SVG (not just check
+    # "polyline" appears somewhere -- the ref line at y=80 is also a
+    # polyline, so match on the spark-line class specifically).
+    m = re.search(r'class="spark-line" stroke="(#[0-9a-f]{6})" points="([^"]+)"', svg)
+    assert m is not None, svg
+    color, points_attr = m.group(1), m.group(2)
+
+    # last point is 80.0 -- lands in _sparkline_svg's own ">= 80 -> green"
+    # bracket (the other two brackets are >=60 amber, else red), chosen
+    # deterministically so this assertion pins one specific hex value.
+    assert color == "#6dda9e"
+
+    coords = points_attr.split(" ")
+    assert len(coords) == 4  # one "x,y" pair per input point, same order
+
+    # Hand-derived from _sparkline_svg's own mapping (n=4, width=100,
+    # height=20): x = i/(n-1)*width, y = height - v/100*height.
+    #   i=0 v=50.0 -> x=0/3*100=0.0,   y=20-50/100*20=10.0
+    #   i=1 v=60.0 -> x=1/3*100=33.3,  y=20-60/100*20=8.0
+    #   i=2 v=70.0 -> x=2/3*100=66.7,  y=20-70/100*20=6.0
+    #   i=3 v=80.0 -> x=3/3*100=100.0, y=20-80/100*20=4.0
+    assert coords == ["0.0,10.0", "33.3,8.0", "66.7,6.0", "100.0,4.0"]
 
 
 def test_sparkline_svg_empty_data_is_emdash():
@@ -434,17 +456,103 @@ def test_sparkline_svg_empty_data_is_emdash():
     assert _sparkline_svg([]) == "&mdash;"
 
 
+def test_rolling_win_rate_series_window_rolls_and_excludes_scratch():
+    from swingbot.admin.pages import _rolling_win_rate_series
+
+    def t(day, status):
+        return {"status": status, "closed_at": f"2026-01-{day:02d}T00:00:00+00:00"}
+
+    # Chronological order (by closed_at, day 1..14) is:
+    #   win win loss closed(scratch) win loss win win closed(scratch)
+    #   loss win win loss win
+    # Built out of chronological order below to prove the function sorts
+    # by closed_at itself rather than trusting input order.
+    trades = [
+        t(14, "win"), t(1, "win"), t(9, "closed"), t(2, "win"), t(3, "loss"),
+        t(13, "loss"), t(4, "closed"), t(5, "win"), t(12, "win"), t(6, "loss"),
+        t(11, "win"), t(7, "win"), t(10, "loss"), t(8, "win"),
+    ]
+    series = _rolling_win_rate_series(trades, window=10)
+
+    # The two "closed" (scratch) trades (day 4, day 9) are dropped
+    # entirely -- 14 input trades but only 12 win/loss outcomes feed the
+    # series, proving scratches are excluded from both numerator and
+    # denominator rather than diluting the window or counting as losses.
+    assert len(series) == 12
+
+    # Win/loss-only outcomes in closed_at order (day 1,2,3,5,6,7,8,10,11,
+    # 12,13,14): win win loss win loss win win loss win win loss win
+    # -> as 1/0:      1   1   0   1   0   1   1   0   1   1   0    1
+    assert series[0] == 100.0                    # [1] -> 1/1
+    assert series[1] == 100.0                    # [1,1] -> 2/2
+    assert series[2] == pytest.approx(200 / 3)    # [1,1,0] -> 2/3
+    # 10th outcome (day 12): window is exactly the first 10 outcomes
+    # (day1..day8,day10,day11) = 7 wins / 10 -> 70.0
+    assert series[9] == 70.0
+    # 11th outcome (day 13, a loss): window=10 rolls forward, dropping
+    # the oldest outcome (day1, a win) and adding day13 (a loss) ->
+    # 6/10 = 60.0. This differs from both series[9] (70.0) and the
+    # all-12 global average (8/12 = 66.67), which is only possible if
+    # the computation is a genuine trailing window, not a running/global
+    # average.
+    assert series[10] == 60.0
+    # 12th outcome (day 14, a win): window drops day2 (win) and adds
+    # day14 (win) -- net unchanged from the previous window's ratio.
+    assert series[11] == 60.0
+
+
 def test_strategies_page_embeds_sparkline_for_strategy_with_data(client, auth, monkeypatch):
     monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: _FAKE_SNAPSHOT_EMPTY)
     monkeypatch.setattr("swingbot.admin.pages.primary_strategy_label", lambda t: t["strategy"])
     from swingbot import config
-    trades = [{
-        "id": f"w{i}", "ticker": "AAA", "status": "win", "direction": "bullish",
-        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "exit_price": 110.0,
-        "opened_at": "2026-01-01T00:00:00+00:00", "closed_at": f"2026-01-{i + 1:02d}T00:00:00+00:00",
-        "confidence_level": 3, "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
-    } for i in range(3)]
+
+    def rsi_trade(id_, day, status, exit_price):
+        return {
+            "id": id_, "ticker": "AAA", "status": status, "direction": "bullish",
+            "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "exit_price": exit_price,
+            "opened_at": "2026-01-01T00:00:00+00:00", "closed_at": f"2026-01-{day:02d}T00:00:00+00:00",
+            "confidence_level": 3, "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
+        }
+
+    # Mixed win/loss/scratch by closed_at day, not all-wins: win, loss,
+    # closed(scratch, day 3, must be excluded), win, win.
+    trades = [
+        rsi_trade("w0", 1, "win", 110.0),
+        rsi_trade("l1", 2, "loss", 95.0),
+        rsi_trade("c2", 3, "closed", 100.0),
+        rsi_trade("w3", 4, "win", 110.0),
+        rsi_trade("w4", 5, "win", 110.0),
+    ]
     with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
         json.dump(trades, f)
     r = client.get("/strategies", headers=auth)
-    assert b'class="sparkline"' in r.data
+    html = r.data.decode("utf-8")
+    assert 'class="sparkline"' in html
+
+    m = re.search(r'class="spark-line" stroke="(#[0-9a-f]{6})" points="([^"]+)"', html)
+    assert m is not None, html
+    color, points_attr = m.group(1), m.group(2)
+    coords = points_attr.split(" ")
+
+    # The scratch trade (day 3, "closed") must be excluded: only 4
+    # win/loss trades feed _rolling_win_rate_series, giving 4 rolling
+    # points, not 5 -- proving the route actually threads real trade
+    # data through the win/loss-only filter end to end, not just
+    # counting rows.
+    assert len(coords) == 4
+
+    # Rolling win-rate (window=10, so no truncation) over win, loss, win,
+    # win: [1/1, 1/2, 2/3, 3/4] * 100 = [100.0, 50.0, 66.667, 75.0].
+    # _sparkline_svg maps these onto default width=120, height=28:
+    #   x_i = i/3*120 -> 0.0, 40.0, 80.0, 120.0
+    #   y_i = 28 - v/100*28:
+    #     v=100.0    -> 28-28.0     = 0.0
+    #     v=50.0     -> 28-14.0     = 14.0
+    #     v=66.6667  -> 28-18.6667  = 9.3
+    #     v=75.0     -> 28-21.0     = 7.0
+    assert coords == ["0.0,0.0", "40.0,14.0", "80.0,9.3", "120.0,7.0"]
+
+    # Last rolling value is 75.0 -- lands in the ">=60 amber" bracket
+    # (not >=80 green, not <60 red), so the route's real trade data
+    # drives a specific, non-default color.
+    assert color == "#e2b25a"
