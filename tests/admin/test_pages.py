@@ -129,3 +129,25 @@ def test_lifecycle_strip_counts_and_click_filters(client, auth, monkeypatch):
     r2 = client.get("/plans?status=PENDING", headers=auth)
     html2 = r2.data.decode("utf-8")
     assert "AAPL" in html2 and "MSFT" not in html2
+
+
+def test_board_filters_by_tier_and_badge(client, auth):
+    # No rank_plans monkeypatch (see the note on test_lifecycle_strip_counts_
+    # and_click_filters above): rank_plans is pure and works fine on real
+    # TradePlanV2 instances -- mocking it to return dicts breaks
+    # _ranked_plan_rows's plan_to_dict()/follow_score() calls, which expect
+    # TradePlanV2 objects. .add(), not .update(): PlanStore().update() raises
+    # KeyError for an unseen plan_id.
+    PlanStore().add(_plan("p1", "AAPL", tier="A", badge="VALIDATED"))
+    PlanStore().add(_plan("p2", "MSFT", tier="B", badge="WEAK"))
+    r = client.get("/plans?tier=A&badge=VALIDATED", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "AAPL" in html and "MSFT" not in html
+
+
+def test_board_filters_by_ticker_substring(client, auth):
+    PlanStore().add(_plan("p1", "AAPL"))
+    PlanStore().add(_plan("p2", "MSFT"))
+    r = client.get("/plans?ticker=aap", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "AAPL" in html and "MSFT" not in html

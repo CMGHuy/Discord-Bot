@@ -11,6 +11,30 @@
   </a>
   {% endfor %}
 </div>
+<form method="get" action="{{ url_for('pages.plans_page') }}"
+      style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+  <select name="status" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+    <option value="">All statuses</option>
+    {% for s in ['PENDING','ACTIVE','PARTIAL','CLOSED','CANCELLED'] %}
+    <option value="{{ s }}" {{ 'selected' if filters.status == s else '' }}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="tier" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+    <option value="">All tiers</option>
+    {% for t in ['A','B','C'] %}
+    <option value="{{ t }}" {{ 'selected' if filters.tier == t else '' }}>Tier {{ t }}</option>
+    {% endfor %}
+  </select>
+  <select name="badge" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+    <option value="">All badges</option>
+    <option value="VALIDATED" {{ 'selected' if filters.badge == 'VALIDATED' else '' }}>VALIDATED</option>
+    <option value="WEAK" {{ 'selected' if filters.badge == 'WEAK' else '' }}>WEAK</option>
+  </select>
+  <input type="text" name="ticker" value="{{ filters.ticker }}" placeholder="Ticker…"
+         style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;padding:5px 10px;font-size:12.5px;width:130px;">
+  <button type="submit" class="secondary small">Filter</button>
+  <a href="{{ url_for('pages.plans_page') }}" class="secondary small btn" style="text-decoration:none;">✕ Clear</a>
+</form>
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <p class="card-title" style="margin:0;">Plans board

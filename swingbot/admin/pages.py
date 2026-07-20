@@ -32,7 +32,7 @@ def _ranked_plan_rows(plans: list) -> list[dict]:
 
 
 def _plan_rows(status: str | None = None, tier: str | None = None,
-               badge: str | None = None) -> dict:
+               badge: str | None = None, ticker: str | None = None) -> dict:
     """Shared by the Plans board page (this task) and /api/plans (api.py
     imports this function instead of keeping its own copy). Counts are
     always computed from the UNFILTERED set (Task C15 refines this
@@ -53,6 +53,9 @@ def _plan_rows(status: str | None = None, tier: str | None = None,
         rows = [r for r in rows if r["tier"] == tier]
     if badge:
         rows = [r for r in rows if r["badge"] == badge]
+    if ticker:
+        needle = ticker.strip().upper()
+        rows = [r for r in rows if needle in r["ticker"].upper()]
     return {"plans": rows, "counts": counts}
 
 
@@ -67,9 +70,10 @@ def plans_page():
         "status": request.args.get("status", ""),
         "tier": request.args.get("tier", ""),
         "badge": request.args.get("badge", ""),
+        "ticker": request.args.get("ticker", ""),
     }
     result = _plan_rows(status=filters["status"] or None, tier=filters["tier"] or None,
-                        badge=filters["badge"] or None)
+                        badge=filters["badge"] or None, ticker=filters["ticker"] or None)
     fragment = _render_plans_board(result["plans"], result["counts"], filters)
     return _render("Plans", "plans", "plans.html", fragment=fragment)
 
