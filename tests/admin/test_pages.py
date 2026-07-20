@@ -230,6 +230,20 @@ def test_plans_fragment_respects_filters(client, auth):
     assert "AAPL" in html and "MSFT" not in html
 
 
+def test_plans_page_morphdom_guards_input_and_select(client, auth):
+    # Regression test for the C18 review finding: without an onBeforeElUpdated
+    # guard, morphdom force-syncs the live .value/.selected DOM property on
+    # every INPUT/SELECT during each auto-refresh patch, silently wiping an
+    # in-progress filter-form edit (ticker text box, status/tier/badge
+    # dropdowns) on the next poll. Asserts the guard actually shipped in the
+    # served page, not just in a local edit.
+    r = client.get("/plans", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "onBeforeElUpdated" in html
+    assert "from.nodeName === 'INPUT'" in html
+    assert "from.nodeName === 'SELECT'" in html
+
+
 def test_close_active_plan_also_closes_linked_trade(client, auth):
     # Covers the gap flagged by the C17 review: plan_close()'s linked-trade
     # branch (tl = TradeLog(); linked = next(... t.get("plan_id") ==

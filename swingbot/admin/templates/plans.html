@@ -23,7 +23,13 @@
           var wrapper = document.createElement('div');
           wrapper.id = 'plans-fragment';
           wrapper.innerHTML = html;
-          morphdom(container, wrapper);
+          morphdom(container, wrapper, {
+            // Keep existing input values and focus state intact across patches
+            onBeforeElUpdated: function(from, to) {
+              if (from.nodeName === 'INPUT' || from.nodeName === 'SELECT') return false;
+              return true;
+            }
+          });
         } else {
           container.innerHTML = html;
         }
