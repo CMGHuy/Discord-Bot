@@ -57,12 +57,36 @@ def test_api_jobs_tune_409_when_busy(client, auth, monkeypatch):
     assert r.get_json() == {"error": "busy"}
 
 
+def test_api_jobs_tune_400_on_malformed_params_json(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
+    r = client.post("/api/jobs/tune", data={"strategy": "RSI", "params": "not-json"}, headers=auth)
+    assert r.status_code == 400
+
+
 def test_guardrail_blocks_validation_window():
     from swingbot.admin.jobs import assert_train_only, build_tune_args
     with pytest.raises(ValueError):
         assert_train_only(["--from", "2024-06-01", "--to", "2024-12-31"])
     with pytest.raises(ValueError):
         assert_train_only(["--validation"])
+    assert_train_only(build_tune_args("RSI", None))  # must not raise
+
+
+def test_guardrail_blocks_single_token_flag_equals_value():
+    from swingbot.admin.jobs import assert_train_only
+    with pytest.raises(ValueError):
+        assert_train_only(["--from=2024-06-01"])
+
+
+def test_guardrail_blocks_non_zero_padded_date():
+    from swingbot.admin.jobs import assert_train_only
+    with pytest.raises(ValueError):
+        assert_train_only(["2024-1-1"])
+
+
+def test_guardrail_no_false_positive_on_ordinary_args():
+    from swingbot.admin.jobs import assert_train_only, build_tune_args
+    assert_train_only(["--strategy", "RSI"])  # must not raise
     assert_train_only(build_tune_args("RSI", None))  # must not raise
 
 

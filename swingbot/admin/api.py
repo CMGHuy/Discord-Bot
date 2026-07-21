@@ -138,8 +138,8 @@ def api_registry():
 def api_jobs_tune():
     strategy = request.form.get("strategy", "")
     params_raw = request.form.get("params")
-    params = json.loads(params_raw) if params_raw else None
     try:
+        params = json.loads(params_raw) if params_raw else None
         args = build_tune_args(strategy, params)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

@@ -38,8 +38,16 @@ VALIDATION_WINDOW = ("2024-01-01", "2025-12-31")
 # visible even though it can't be changed from here).
 TRAIN_WINDOW = ("2020-01-01", "2023-12-31")
 
-_DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_LIKE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 _BANNED_DATE_FLAGS = {"--from", "--to", "--validation"}
+_VALIDATION_START_TUPLE = tuple(int(p) for p in VALIDATION_WINDOW[0].split("-"))
+
+
+def _date_tuple_if_matches(tok: str) -> tuple[int, int, int] | None:
+    m = _DATE_LIKE.match(tok)
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
 
 def assert_train_only(args: list[str]) -> None:
@@ -48,12 +56,17 @@ def assert_train_only(args: list[str]) -> None:
     doesn't even accept a date flag (ground-truth deviation #3) -- this is
     defense-in-depth against a FUTURE version of the script gaining one, not
     a fix for a live vulnerability. Raises ValueError on any --from/--to/
-    --validation token, or any bare YYYY-MM-DD date string >= 2024-01-01."""
+    --validation token (bare or as the --flag=value single-token form), or
+    any bare/`=`-attached YYYY-M-D (or zero-padded YYYY-MM-DD) date string
+    representing a calendar date >= 2024-01-01."""
     for tok in args:
-        if tok in _BANNED_DATE_FLAGS:
-            raise ValueError(f"tuning args may not include {tok!r} (VALIDATION window is off-limits)")
-        if _DATE_LIKE.match(tok) and tok >= VALIDATION_WINDOW[0]:
-            raise ValueError(f"tuning args may not reference a date >= {VALIDATION_WINDOW[0]} ({tok!r})")
+        flag_part, _, value_part = tok.partition("=")
+        if flag_part in _BANNED_DATE_FLAGS:
+            raise ValueError(f"tuning args may not include {flag_part!r} (VALIDATION window is off-limits)")
+        for candidate in (tok, value_part) if value_part else (tok,):
+            date_tuple = _date_tuple_if_matches(candidate)
+            if date_tuple is not None and date_tuple >= _VALIDATION_START_TUPLE:
+                raise ValueError(f"tuning args may not reference a date >= {VALIDATION_WINDOW[0]} ({candidate!r})")
 
 
 def build_tune_args(strategy: str, params: dict | None) -> list[str]:
