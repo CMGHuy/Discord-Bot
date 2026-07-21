@@ -162,21 +162,31 @@ def test_tuning_results_table_renders_and_highlights_passing_rows(client, auth):
     assert 'class="diff-add"' in html  # the passing row (N=40, WR=82, ExpR>0, excl=20%)
 
 
-def test_load_result_rejects_path_traversal_job_id(tmp_path, monkeypatch):
+def test_load_result_rejects_path_traversal_job_id(admin_app):
+    """job_id="../secret" resolves (via os.path.join(DATA_DIR, "tuning_results",
+    "../secret.json")) to DATA_DIR/secret.json, one level above tuning_results/.
+    Plant a real file exactly there so a regression here would leak it, proving
+    the guard -- not just an absent-file coincidence -- is what blocks the read."""
     from swingbot import config
     from swingbot.admin.pages import _load_result
 
-    outside = tmp_path / "outside.json"
-    outside.write_text('{"strategy": "MACD", "grid": [], "best": null}')
-    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    os.makedirs(os.path.join(config.DATA_DIR, "tuning_results"), exist_ok=True)
+    with open(os.path.join(config.DATA_DIR, "secret.json"), "w") as f:
+        json.dump({"strategy": "LEAKED_SECRET", "grid": [], "best": None}, f)
 
-    assert _load_result("../outside") is None
-    assert _load_result("..%2f..%2foutside") is None
-    assert _load_result("../../../../outside") is None
+    assert _load_result("../secret") is None
+    assert _load_result("../../secret") is None
 
 
 def test_tuning_page_ignores_path_traversal_job_id(client, auth):
-    r = client.get("/tuning?job_id=" + "..%2f..%2fsecret", headers=auth)
+    from swingbot import config
+
+    os.makedirs(os.path.join(config.DATA_DIR, "tuning_results"), exist_ok=True)
+    with open(os.path.join(config.DATA_DIR, "secret.json"), "w") as f:
+        json.dump({"strategy": "LEAKED_SECRET", "grid": [], "best": None}, f)
+
+    r = client.get("/tuning?job_id=" + "..%2fsecret", headers=auth)
     assert r.status_code == 200
     html = r.data.decode("utf-8")
+    assert "LEAKED_SECRET" not in html  # the planted file must never be read/rendered
     assert "Results —" not in html  # no result card rendered for a rejected id
