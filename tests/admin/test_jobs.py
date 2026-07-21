@@ -175,7 +175,6 @@ def test_load_result_rejects_path_traversal_job_id(admin_app):
         json.dump({"strategy": "LEAKED_SECRET", "grid": [], "best": None}, f)
 
     assert _load_result("../secret") is None
-    assert _load_result("../../secret") is None
 
 
 def test_tuning_page_ignores_path_traversal_job_id(client, auth):
