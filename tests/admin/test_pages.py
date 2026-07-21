@@ -717,3 +717,35 @@ def test_proposal_browser_renders_diff_and_delete_removes_file(client, auth):
     r2 = client.post(f"/tuning/proposals/{fname}/delete", headers=auth)
     assert r2.status_code == 302
     assert not os.path.exists(os.path.join(proposals_dir, fname))
+
+
+def test_tuning_proposal_delete_rejects_backslash_traversal(client, auth):
+    """On Windows, os.path.join treats '\\' as a separator (and a
+    drive-letter prefix like "C:\\" as an absolute-path override) -- unlike
+    '/', a literal '\\' is NOT rejected by Flask's <filename> URL-segment
+    converter. Plant a real file one level above proposals_dir (the actual
+    resolved target of a "..\\victim.json"-style payload) and confirm the
+    route never reaches it."""
+    from swingbot import config
+    proposals_dir = os.path.join(config.DATA_DIR, "tuning_proposals")
+    os.makedirs(proposals_dir, exist_ok=True)
+    victim = os.path.join(config.DATA_DIR, "victim.json")
+    with open(victim, "w") as f:
+        f.write("do-not-delete")
+
+    r = client.post("/tuning/proposals/..%5Cvictim.json/delete", headers=auth)
+    assert r.status_code == 400
+    assert os.path.exists(victim)
+
+
+def test_tuning_proposal_delete_rejects_non_matching_filename(client, auth):
+    from swingbot import config
+    proposals_dir = os.path.join(config.DATA_DIR, "tuning_proposals")
+    os.makedirs(proposals_dir, exist_ok=True)
+    inside = os.path.join(proposals_dir, "not-json.txt")
+    with open(inside, "w") as f:
+        f.write("do-not-delete")
+
+    r = client.post("/tuning/proposals/not-json.txt/delete", headers=auth)
+    assert r.status_code == 400
+    assert os.path.exists(inside)

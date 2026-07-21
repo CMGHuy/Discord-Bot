@@ -467,12 +467,23 @@ def tuning_propose():
     return redirect(url_for("pages.tuning_page", job_id=job_id, msg=f"Proposal saved: {fname}", ok=1))
 
 
+_PROPOSAL_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.json$")
+# Flask's <filename> URL-segment converter already rejects a literal '/' in
+# the segment, but NOT '\' -- on Windows, os.path.join treats '\' as a
+# separator (and a drive-letter prefix like "C:\" as an absolute-path
+# override that discards proposals_dir entirely), so an unguarded filename
+# here is an arbitrary-file-delete primitive on a Windows host. Same
+# allow-list shape as _JOB_ID_RE above.
+
+
 @pages.route("/tuning/proposals/<filename>/delete", methods=["POST"])
 @require_auth
 def tuning_proposal_delete(filename):
+    if not _PROPOSAL_FILENAME_RE.match(filename):
+        abort(400, "Invalid proposal filename.")
     proposals_dir = os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
     path = os.path.join(proposals_dir, filename)
-    if filename.endswith(".json") and os.path.exists(path):
+    if os.path.exists(path):
         os.remove(path)
     return redirect(url_for("pages.tuning_page", msg=f"Deleted proposal {filename}.", ok=1))
 
