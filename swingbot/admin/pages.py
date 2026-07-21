@@ -385,6 +385,9 @@ def _grid_row_passes(stats: dict) -> bool:
     )
 
 
+TUNING_PROPOSALS_DIR_NAME = "tuning_proposals"
+
+
 @pages.route("/tuning", methods=["GET"])
 @require_auth
 def tuning_page():
@@ -409,6 +412,42 @@ def tuning_page():
                    all_strategies=list(ALL_STRATEGIES), train_window=TRAIN_WINDOW,
                    recent_jobs=recent_jobs, result=result, job_id_param=job_id_param,
                    grid_row_passes=_grid_row_passes)
+
+
+@pages.route("/tuning/propose", methods=["POST"])
+@require_auth
+def tuning_propose():
+    job_id = request.form.get("job_id", "")
+    try:
+        row_index = int(request.form.get("row_index", "-1"))
+    except ValueError:
+        abort(400, "Invalid row index.")
+    result = _load_result(job_id)
+    if not result or row_index < 0 or row_index >= len(result.get("grid", [])):
+        abort(404, "Could not find that job/row.")
+
+    row = result["grid"][row_index]
+    strategy = result["strategy"]
+    proposal = {
+        "strategy": strategy,
+        "proposed_params": row["params"],
+        "train_stats": {k: v for k, v in row.items() if k != "params"},
+        "current_params": dict(entry_filters.DEFAULT_PARAMS.get(strategy, {})),
+        "job_id": job_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "note": (
+            "Apply by editing entry_filters.DEFAULT_PARAMS, run the suite, and only then "
+            "consider a validation shot — remembering the window is spent."
+        ),
+    }
+    proposals_dir = os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
+    os.makedirs(proposals_dir, exist_ok=True)
+    ts_slug = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    strat_slug = strategy.lower().replace(" ", "-").replace("/", "-").replace("&", "and")
+    fname = f"{ts_slug}-{strat_slug}.json"
+    with open(os.path.join(proposals_dir, fname), "w") as f:
+        json.dump(proposal, f, indent=2)
+    return redirect(url_for("pages.tuning_page", job_id=job_id, msg=f"Proposal saved: {fname}", ok=1))
 
 
 def _queue_manual_close_notify(plan) -> None:

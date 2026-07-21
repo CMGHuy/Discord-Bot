@@ -189,3 +189,36 @@ def test_tuning_page_ignores_path_traversal_job_id(client, auth):
     html = r.data.decode("utf-8")
     assert "LEAKED_SECRET" not in html  # the planted file must never be read/rendered
     assert "Results —" not in html  # no result card rendered for a rejected id
+
+
+def test_tuning_propose_writes_file_with_all_keys(client, auth):
+    from swingbot import config
+    results_dir = os.path.join(config.DATA_DIR, "tuning_results")
+    os.makedirs(results_dir, exist_ok=True)
+    payload = {"strategy": "MACD", "grid": [
+        {"params": {"ext_atr": 0.75}, "n_eval": 40, "win_rate": 82.0, "expectancy_r": 0.09, "excluded_share": 0.2},
+    ], "best": None}
+    with open(os.path.join(results_dir, "job1.json"), "w") as f:
+        json.dump(payload, f)
+
+    r = client.post("/tuning/propose", data={"job_id": "job1", "row_index": "0"}, headers=auth)
+    assert r.status_code == 302
+
+    proposals_dir = os.path.join(config.DATA_DIR, "tuning_proposals")
+    files = os.listdir(proposals_dir)
+    assert len(files) == 1
+    proposal = json.load(open(os.path.join(proposals_dir, files[0])))
+    assert set(proposal) == {
+        "strategy", "proposed_params", "train_stats", "current_params", "job_id", "created_at", "note",
+    }
+    assert "Apply by editing" in proposal["note"] and "entry_filters.DEFAULT_PARAMS" in proposal["note"]
+
+
+def test_tuning_propose_404_for_bad_row_index(client, auth):
+    from swingbot import config
+    results_dir = os.path.join(config.DATA_DIR, "tuning_results")
+    os.makedirs(results_dir, exist_ok=True)
+    with open(os.path.join(results_dir, "job1.json"), "w") as f:
+        json.dump({"strategy": "MACD", "grid": [], "best": None}, f)
+    r = client.post("/tuning/propose", data={"job_id": "job1", "row_index": "0"}, headers=auth)
+    assert r.status_code == 404
