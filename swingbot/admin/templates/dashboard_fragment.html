@@ -279,6 +279,8 @@
       {# Ticker #}
       <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
         <strong>{{ t.ticker }}</strong>
+        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}">{{ t.tier }}</span>{% endif %}
+        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}">{{ t.badge }}</span>{% endif %}
       </td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
@@ -384,6 +386,17 @@
         </form>
       </td>
     </tr>
+    {% if t.get('legs') and t.legs | length > 1 %}
+    <tr class="muted" style="font-size:11px;">
+      <td></td><td></td>
+      <td colspan="16" style="padding-left:24px;">
+        {% for leg in t.legs[1:] %}
+        ↳ runner {{ "%.0f%%"|format(leg.fraction * 100) }}:
+        {% if leg.exit_price %}{{ "%.2f"|format(leg.exit_price) }} ({{ "%+.2f"|format(leg.r) }}R){% else %}runner: live{% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+    {% endif %}
     {% endfor %}
     </tbody>
   </table>
@@ -724,7 +737,11 @@
         {% elif t.status == 'loss' %}<span class="outcome-loss">L</span>
         {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
-      <td title="{{ t.ticker }} -- click this row to open the trade's detail page"><strong>{{ t.ticker }}</strong></td>
+      <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
+        <strong>{{ t.ticker }}</strong>
+        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}">{{ t.tier }}</span>{% endif %}
+        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}">{{ t.badge }}</span>{% endif %}
+      </td>
       {%- set _ct_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
       <td title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>
       <td title="{{ horizon_labels.get(t.horizon_key, t.horizon_key) if horizon_labels is defined else t.horizon_key }} swing horizon this trade was opened under"><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
@@ -774,6 +791,17 @@
         </form>
       </td>
     </tr>
+    {% if t.get('legs') and t.legs | length > 1 %}
+    <tr class="muted" style="font-size:11px;">
+      <td></td><td></td>
+      <td colspan="14" style="padding-left:24px;">
+        {% for leg in t.legs[1:] %}
+        ↳ runner {{ "%.0f%%"|format(leg.fraction * 100) }}:
+        {% if leg.exit_price %}{{ "%.2f"|format(leg.exit_price) }} ({{ "%+.2f"|format(leg.r) }}R){% else %}runner: live{% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+    {% endif %}
     {% endfor %}
     </tbody>
   </table>
