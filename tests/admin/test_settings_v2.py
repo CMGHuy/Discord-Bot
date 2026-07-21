@@ -85,3 +85,14 @@ def test_settings_import_route_applies_and_redirects(client, auth, admin_app):
     assert r.status_code == 302
     from swingbot.admin.helpers import _read_env_values
     assert _read_env_values()["SCAN_INTERVAL_MINUTES"] == "7"
+
+
+def test_settings_page_has_changed_only_toggle_and_reset_buttons(client, auth, admin_app):
+    from swingbot import config
+    with open(config.ENV_PATH, "w") as f:
+        f.write("SCAN_INTERVAL_MINUTES=99\n")
+    r = client.get("/settings", headers=auth)
+    html = r.data.decode("utf-8")
+    assert 'id="settings-only-changed"' in html
+    assert "data-default=" in html
+    assert 'data-target="fld_SCAN_INTERVAL_MINUTES"' in html

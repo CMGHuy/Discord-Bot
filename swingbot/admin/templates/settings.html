@@ -49,6 +49,11 @@
       <label for="fld_{{ f.key }}">{{ f.label }}</label>
       {% if f.default is not none and f.default != '' %}<span class="default-badge" title="Default value">{{ f.default }}</span>{% endif %}
       {% if not f.hot_reloadable %}<span class="restart-badge" title="Requires container restart to take effect">↺ restart</span>{% endif %}
+      {% if not is_default and f.type != 'checkbox' %}
+      <button type="button" class="icon-btn secondary reset-field-btn"
+              data-target="fld_{{ f.key }}" data-default="{{ f.default }}"
+              title="Reset to default ({{ f.default }})">↺</button>
+      {% endif %}
     </div>
     {% if f.key == 'POSITION_SIZING_MODE' %}
     <div class="field-desc">{{ f.help | safe }}</div>
@@ -90,6 +95,9 @@
 <div class="settings-toolbar">
   <input id="settings-filter" type="text" placeholder="Search settings by name or description…"
          oninput="filterSettings()" autocomplete="off">
+  <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="settings-only-changed" onchange="filterSettings()"> Only changed
+  </label>
   <span class="muted" style="font-size:12px;">
     <span class="changed-dot" style="position:static;"></span> = changed from default
   </span>
@@ -241,15 +249,24 @@
 <script>
   function filterSettings() {
     var q = document.getElementById('settings-filter').value.toLowerCase().trim();
+    var onlyChanged = document.getElementById('settings-only-changed').checked;
     document.querySelectorAll('[data-section-card]').forEach(function(card) {
       var anyVisible = false;
       card.querySelectorAll('[data-field-search]').forEach(function(field) {
         var match = !q || field.dataset.fieldSearch.includes(q);
+        if (match && onlyChanged) { match = !!field.querySelector('.changed-dot'); }
         field.style.display = match ? '' : 'none';
         if (match) anyVisible = true;
       });
       card.style.display = anyVisible ? '' : 'none';
     });
   }
+
+  document.querySelectorAll('.reset-field-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = document.getElementById(btn.dataset.target);
+      if (target) { target.value = btn.dataset.default; }
+    });
+  });
 </script>
 {% endblock %}
