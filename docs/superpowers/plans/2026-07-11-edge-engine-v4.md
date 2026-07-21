@@ -18,9 +18,10 @@
 
 ## Progress
 
-> - **Branch:** `feature/edge-engine`
-> - **Completed:** —
-> - **Next:** Task E1
+> - **Branch:** — (executing directly on `main`, by explicit user decision; no worktree/branch for this plan)
+> - Task E1 (`edge` package + growth equations — `per_trade_growth`, `trades_to_multiple`, `eta_days`, `growth_table`) done: brief verified fully accurate against the golden numbers, no corrections needed.
+> - Task E2 (`!growth` reality dashboard) done: controller pre-corrected two real assumed-shape bugs before wiring `_collect_stats()` — the analytics snapshot's `overall` dict has no `trades_per_month`/`closed_trades` keys (real count key is `"n"`; trade pace isn't stored anywhere and is derived here from the equity curve's own per-close `points`), and `account.load_account_config()` has no `starting_balance` key (real key is `base_balance`, with `balance` as the current effective balance). Also corrected the registration target: every command module is actually imported in `bot.py`, not `bot_core.py` as the brief assumed (`bot_core.py` only owns `COMMAND_USAGE`). Full suite green (746 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure in `test_trade_monitor_wiring.py`, carried forward from cockpit-v3).
+> - **Next:** Task E3 (Bootstrap Monte Carlo — drawdown & ruin)
 
 ## Global Constraints
 
@@ -71,7 +72,7 @@ tests/  test_edge_*.py, test_wf_*.py, test_universe.py, test_decision_chart.py .
 - Produces: `per_trade_growth(risk_pct, expectancy_r) -> float`; `trades_to_multiple(multiple, risk_pct, expectancy_r) -> int | None` (None when expectancy ≤ 0); `eta_days(trades_needed, trades_per_month) -> int | None`; `growth_table(expectancies=(0.05,0.10,0.15,0.20), risks=(0.5,1.0,1.5,2.0)) -> list[dict]`.
 - Consumed by: E2 (`!growth`), E9 (growth path), E70/E71 charts.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_growth.py
@@ -117,12 +118,12 @@ def test_growth_table_shape():
     assert at_1pct[0.20] < at_1pct[0.05]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_growth.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.edge'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/edge/__init__.py
@@ -199,12 +200,12 @@ def growth_table(expectancies: tuple = (0.05, 0.10, 0.15, 0.20),
     return rows
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_growth.py -v`
 Expected: PASS (5 tests). Then full suite: `python -m pytest tests/ -q` — green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/__init__.py swingbot/core/edge/growth.py tests/test_edge_growth.py
@@ -222,7 +223,7 @@ git commit -m "feat: growth equations (the honest 10x math)"
 - Produces: `growth_report(stats: dict, target: float = 10.0) -> str` — the tested unit. `stats` keys (all optional, graceful degradation): `expectancy_r`, `trades_per_month`, `risk_pct`, `current_multiple`, `n_closed`. Command `!growth [target_multiple]` assembles `stats` from the analytics snapshot (`swingbot.core.analytics.snapshots.load_snapshot()`, cockpit Part 1) + `account.load_account_config()` and posts the report in a code block.
 - Consumes: E1 functions.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_growth.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_growth.py`)
 
 ```python
 def test_growth_report_contains_trades_and_eta():
@@ -244,12 +245,12 @@ def test_growth_report_handles_no_edge():
     assert "N=15" in out              # sample size always shown
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_growth.py -v`
 Expected: FAIL — `ImportError: cannot import name 'growth_report'`
 
-- [ ] **Step 3: Implement the renderer** (append to `swingbot/core/edge/growth.py`)
+- [x] **Step 3: Implement the renderer** (append to `swingbot/core/edge/growth.py`)
 
 ```python
 def growth_report(stats: dict, target: float = 10.0) -> str:
@@ -331,11 +332,11 @@ async def growth_command(ctx, target: float = 10.0):
 
 Register the module exactly like the existing command modules: add `from swingbot.commands import growth  # noqa: F401` to the command-import block in `swingbot/bot_core.py`, and add `!growth` to the help catalog / `COMMAND_USAGE` dict where the other commands are listed.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_growth.py -v` — PASS. Full suite `python -m pytest tests/ -q` — green (the command module imports lazily; no Discord connection in tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/growth.py swingbot/commands/growth.py swingbot/bot_core.py
