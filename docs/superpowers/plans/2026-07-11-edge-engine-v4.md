@@ -21,7 +21,10 @@
 > - **Branch:** — (executing directly on `main`, by explicit user decision; no worktree/branch for this plan)
 > - Task E1 (`edge` package + growth equations — `per_trade_growth`, `trades_to_multiple`, `eta_days`, `growth_table`) done: brief verified fully accurate against the golden numbers, no corrections needed.
 > - Task E2 (`!growth` reality dashboard) done: controller pre-corrected two real assumed-shape bugs before wiring `_collect_stats()` — the analytics snapshot's `overall` dict has no `trades_per_month`/`closed_trades` keys (real count key is `"n"`; trade pace isn't stored anywhere and is derived here from the equity curve's own per-close `points`), and `account.load_account_config()` has no `starting_balance` key (real key is `base_balance`, with `balance` as the current effective balance). Also corrected the registration target: every command module is actually imported in `bot.py`, not `bot_core.py` as the brief assumed (`bot_core.py` only owns `COMMAND_USAGE`). Full suite green (746 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure in `test_trade_monitor_wiring.py`, carried forward from cockpit-v3).
-> - **Next:** Task E3 (Bootstrap Monte Carlo — drawdown & ruin)
+> - Task E3 (Bootstrap Monte Carlo — drawdown & ruin, `simulate()`) done: brief verified fully accurate, no corrections needed.
+> - Task E4 (Fractional-Kelly sizing, `kelly_fraction`/`kelly_risk_pct`) done: brief verified fully accurate against hand-derived golden numbers, no corrections needed.
+> - Full suite green after each (756 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
+> - **Next:** Task E5 (Volatility-targeted sizing)
 
 ## Global Constraints
 
@@ -353,7 +356,7 @@ git commit -m "feat: !growth reality dashboard"
 - Produces: `simulate(r_multiples: list[float], *, risk_pct: float, n_trades: int = 1000, n_paths: int = 2000, seed: int = 42) -> dict` with keys `p50_final_multiple, p05_final_multiple, max_dd_p50, max_dd_p95, p_ruin, p_10x` (ruin = equity dips below 0.5× start at any point; 10x = equity reaches 10× at any point). Deterministic under `seed`. Raises `ValueError` on an empty R list.
 - Consumed by: E2/E10 smoke, E51 portfolio doc, E53 weekly report, E70 fan chart.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_ruin.py
@@ -391,12 +394,12 @@ def test_empty_history_raises():
         simulate([], risk_pct=1.0)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_ruin.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.edge.ruin'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/edge/ruin.py
@@ -444,11 +447,11 @@ def simulate(r_multiples: list[float], *, risk_pct: float,
     }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_ruin.py -v` — PASS (4 tests, ~1s: 2000×1000 is a 2M-cell array, vectorized).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/ruin.py tests/test_edge_ruin.py
@@ -466,7 +469,7 @@ git commit -m "feat: bootstrap Monte Carlo ruin/drawdown simulator"
 - `stats` dict keys: `win_rate` (0–1), `avg_win_r`, `avg_loss_r` (positive magnitude), `n` (kelly returns the config floor when `n < 30` — a Kelly estimate off 12 trades is noise).
 - Consumed by: E6 (`compute_position_size`), E50 portfolio replay, E55 shadow comparison.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_sizing.py
@@ -512,12 +515,12 @@ def test_constants_frozen():
     assert RISK_FLOOR_PCT == 0.25 and RISK_CEILING_PCT == 2.0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_sizing.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.edge.sizing'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/edge/sizing.py
@@ -562,11 +565,11 @@ def kelly_risk_pct(stats: dict, cap: float = KELLY_FRACTION_CAP) -> float:
     return max(RISK_FLOOR_PCT, min(pct, RISK_CEILING_PCT))
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_sizing.py -v` — PASS (6 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/sizing.py tests/test_edge_sizing.py
