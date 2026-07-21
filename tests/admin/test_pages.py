@@ -599,6 +599,17 @@ def test_calibration_page_renders_chart_data_and_tier_table(client, auth, monkey
     assert "❌" in html  # the failing tier C row
 
 
+def test_calibration_page_shows_empty_states_for_tiers_and_drift(client, auth, monkeypatch):
+    fake_snapshot = {
+        "built_at": "x",
+        "calibration": {"deciles": [], "tiers": [], "drift": []},
+    }
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: fake_snapshot)
+    r = client.get("/calibration", headers=auth)
+    html = r.data.decode("utf-8")
+    assert html.count("empty-state") == 2
+
+
 class _FakeJournalStoreForPages:
     _ENTRIES = [
         {"trade_id": "t1", "ticker": "AAPL", "strategy": "RSI", "tags": ["clean_breakout"], "outcome": "win",

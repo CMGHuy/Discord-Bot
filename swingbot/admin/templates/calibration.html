@@ -23,6 +23,12 @@
 
 <div class="card">
   <p class="card-title">Tier calibration</p>
+  {% if not tiers %}
+  <div class="empty-state">
+    <div class="empty-icon">📐</div>
+    <p>No tier calibration data yet — needs at least one closed, scored trade per tier.</p>
+  </div>
+  {% else %}
   <div style="overflow-x:auto;">
   <table>
     <thead><tr><th>Tier</th><th>N</th><th>Live WR</th><th>Expected band</th><th>Pass</th></tr></thead>
@@ -39,10 +45,17 @@
     </tbody>
   </table>
   </div>
+  {% endif %}
 </div>
 
 <div class="card">
   <p class="card-title">Badge drift</p>
+  {% if not drift %}
+  <div class="empty-state">
+    <div class="empty-icon">📉</div>
+    <p>No badge drift data yet — needs at least one VALIDATED strategy in the registry.</p>
+  </div>
+  {% else %}
   <div style="overflow-x:auto;">
   <table>
     <thead><tr><th>Strategy</th><th>Live WR</th><th>OOS WR</th><th>Δ</th><th>Decayed</th></tr></thead>
@@ -61,6 +74,7 @@
     </tbody>
   </table>
   </div>
+  {% endif %}
 </div>
 
 <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
