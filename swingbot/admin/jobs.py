@@ -74,12 +74,21 @@ def build_tune_args(strategy: str, params: dict | None) -> list[str]:
     against backtest.ALL_STRATEGIES, appends only the flags
     scripts/tune_strategy.py actually accepts today (--strategy,
     optional --be-trigger), and accepts no date argument at all. Every
-    call site (api.py's /api/jobs/tune) must route through this."""
+    call site (api.py's /api/jobs/tune) must route through this. Also the
+    single place that validates params' own shape -- callers only need to
+    catch ValueError, never TypeError, for any malformed input."""
     if strategy not in ALL_STRATEGIES:
         raise ValueError(f"unknown strategy {strategy!r}; must be one of {ALL_STRATEGIES}")
+    if params is not None and not isinstance(params, dict):
+        raise ValueError(f"params must be a dict or null, got {type(params).__name__}")
     args = ["--strategy", strategy]
     if params and "be_trigger" in params:
-        args += ["--be-trigger", str(float(params["be_trigger"]))]
+        be_trigger = params["be_trigger"]
+        try:
+            be_trigger = float(be_trigger)
+        except (TypeError, ValueError):
+            raise ValueError(f"be_trigger must be a number, got {be_trigger!r}")
+        args += ["--be-trigger", str(be_trigger)]
     assert_train_only(args)
     return args
 

@@ -63,6 +63,22 @@ def test_api_jobs_tune_400_on_malformed_params_json(client, auth, monkeypatch):
     assert r.status_code == 400
 
 
+def test_api_jobs_tune_400_on_non_dict_params(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
+    r = client.post("/api/jobs/tune", data={"strategy": "RSI", "params": "42"}, headers=auth)
+    assert r.status_code == 400
+
+
+def test_api_jobs_tune_400_on_non_numeric_be_trigger(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
+    r = client.post(
+        "/api/jobs/tune",
+        data={"strategy": "RSI", "params": '{"be_trigger": [1,2,3]}'},
+        headers=auth,
+    )
+    assert r.status_code == 400
+
+
 def test_guardrail_blocks_validation_window():
     from swingbot.admin.jobs import assert_train_only, build_tune_args
     with pytest.raises(ValueError):
@@ -100,6 +116,18 @@ def test_build_tune_args_passes_be_trigger_through():
     from swingbot.admin.jobs import build_tune_args
     args = build_tune_args("RSI", {"be_trigger": 0.6})
     assert args == ["--strategy", "RSI", "--be-trigger", "0.6"]
+
+
+def test_build_tune_args_rejects_non_dict_params():
+    from swingbot.admin.jobs import build_tune_args
+    with pytest.raises(ValueError):
+        build_tune_args("RSI", 42)
+
+
+def test_build_tune_args_rejects_non_numeric_be_trigger():
+    from swingbot.admin.jobs import build_tune_args
+    with pytest.raises(ValueError):
+        build_tune_args("RSI", {"be_trigger": [1, 2, 3]})
 
 
 def test_job_manager_start_enforces_guardrail_even_if_caller_bypasses_builder(admin_app):
