@@ -21,6 +21,54 @@ import uuid
 from datetime import datetime, timezone
 
 from swingbot import config
+from swingbot.core.backtest import ALL_STRATEGIES
+
+# The out-of-sample window already consumed by round-1 validation
+# (docs/superpowers/results/2026-07-validation.md). Reusing it for
+# parameter SELECTION is silent overfitting: any "improvement" measured
+# against a window whose numbers already informed strategy/gate choices
+# is no longer really out-of-sample. Tuning stays on TRAIN below;
+# VALIDATION is run once, manually, via the CLI (scripts/run_backtest_range.py
+# --validation), never through this admin UI.
+VALIDATION_WINDOW = ("2024-01-01", "2025-12-31")
+
+# What scripts/tune_strategy.py itself hard-codes as TRAIN today (see this
+# plan's ground-truth deviation #3 -- the script has no date CLI flag at
+# all yet; this constant is shown on the Tuning page so the window is
+# visible even though it can't be changed from here).
+TRAIN_WINDOW = ("2020-01-01", "2023-12-31")
+
+_DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_BANNED_DATE_FLAGS = {"--from", "--to", "--validation"}
+
+
+def assert_train_only(args: list[str]) -> None:
+    """The ONLY gate standing between the admin UI and scripts/tune_strategy.py
+    ever being pointed at the VALIDATION window. Today's tune_strategy.py CLI
+    doesn't even accept a date flag (ground-truth deviation #3) -- this is
+    defense-in-depth against a FUTURE version of the script gaining one, not
+    a fix for a live vulnerability. Raises ValueError on any --from/--to/
+    --validation token, or any bare YYYY-MM-DD date string >= 2024-01-01."""
+    for tok in args:
+        if tok in _BANNED_DATE_FLAGS:
+            raise ValueError(f"tuning args may not include {tok!r} (VALIDATION window is off-limits)")
+        if _DATE_LIKE.match(tok) and tok >= VALIDATION_WINDOW[0]:
+            raise ValueError(f"tuning args may not reference a date >= {VALIDATION_WINDOW[0]} ({tok!r})")
+
+
+def build_tune_args(strategy: str, params: dict | None) -> list[str]:
+    """THE only constructor of a tuning job's argv. Whitelists strategy
+    against backtest.ALL_STRATEGIES, appends only the flags
+    scripts/tune_strategy.py actually accepts today (--strategy,
+    optional --be-trigger), and accepts no date argument at all. Every
+    call site (api.py's /api/jobs/tune) must route through this."""
+    if strategy not in ALL_STRATEGIES:
+        raise ValueError(f"unknown strategy {strategy!r}; must be one of {ALL_STRATEGIES}")
+    args = ["--strategy", strategy]
+    if params and "be_trigger" in params:
+        args += ["--be-trigger", str(float(params["be_trigger"]))]
+    assert_train_only(args)
+    return args
 
 
 def _jobs_path() -> str:
@@ -83,6 +131,8 @@ class JobManager:
             _write_jobs(jobs)
 
     def start(self, kind: str, args: list[str]) -> str:
+        if kind == "tune":
+            assert_train_only(args)
         with self._lock:
             jobs = _read_jobs()
             self._reap_stale(jobs)

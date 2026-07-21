@@ -6,6 +6,7 @@ but returns a JSON 401 body instead of an HTML challenge page/redirect,
 since a JS fetch() caller needs a body it can actually parse rather than
 a login-style response.
 """
+import json
 from functools import wraps
 
 from flask import Blueprint, jsonify, request
@@ -13,6 +14,7 @@ from flask import Blueprint, jsonify, request
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.snapshots import load_snapshot
 from swingbot.core.analytics.snapshots import refresh_snapshot as _rebuild_snapshot
+from swingbot.admin.jobs import build_tune_args
 from swingbot.admin.jobs import manager as job_manager
 
 from .app import ADMIN_PASSWORD, ADMIN_USERNAME
@@ -135,7 +137,12 @@ def api_registry():
 @require_auth_json
 def api_jobs_tune():
     strategy = request.form.get("strategy", "")
-    args = ["--strategy", strategy]  # Task C31 replaces this line with build_tune_args(strategy, params)
+    params_raw = request.form.get("params")
+    params = json.loads(params_raw) if params_raw else None
+    try:
+        args = build_tune_args(strategy, params)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     try:
         job_id = job_manager.start("tune", args)
     except RuntimeError:

@@ -55,3 +55,31 @@ def test_api_jobs_tune_409_when_busy(client, auth, monkeypatch):
     r = client.post("/api/jobs/tune", data={"strategy": "RSI"}, headers=auth)
     assert r.status_code == 409
     assert r.get_json() == {"error": "busy"}
+
+
+def test_guardrail_blocks_validation_window():
+    from swingbot.admin.jobs import assert_train_only, build_tune_args
+    with pytest.raises(ValueError):
+        assert_train_only(["--from", "2024-06-01", "--to", "2024-12-31"])
+    with pytest.raises(ValueError):
+        assert_train_only(["--validation"])
+    assert_train_only(build_tune_args("RSI", None))  # must not raise
+
+
+def test_build_tune_args_rejects_unknown_strategy():
+    from swingbot.admin.jobs import build_tune_args
+    with pytest.raises(ValueError, match="unknown strategy"):
+        build_tune_args("Not A Real Strategy", None)
+
+
+def test_build_tune_args_passes_be_trigger_through():
+    from swingbot.admin.jobs import build_tune_args
+    args = build_tune_args("RSI", {"be_trigger": 0.6})
+    assert args == ["--strategy", "RSI", "--be-trigger", "0.6"]
+
+
+def test_job_manager_start_enforces_guardrail_even_if_caller_bypasses_builder(admin_app):
+    from swingbot.admin.jobs import JobManager
+    mgr = JobManager()
+    with pytest.raises(ValueError):
+        mgr.start("tune", ["--strategy", "RSI", "--from", "2024-01-01"])
