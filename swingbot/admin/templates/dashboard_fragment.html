@@ -50,6 +50,17 @@
 })();
 </script>
 
+{# ── Lifecycle strip ─────────────────────────────────────────────────────── #}
+<div class="lifecycle-strip">
+  {% for status, display in [('PENDING','PENDING'), ('ACTIVE','ACTIVE'), ('PARTIAL','PARTIAL'),
+                              ('CLOSED','CLOSED (today)'), ('CANCELLED','CANCELLED (today)')] %}
+  <a class="lifecycle-card" href="{{ url_for('pages.plans_page', status=status) }}">
+    <span class="lc-count">{{ plan_counts.get(status, 0) }}</span>
+    <span class="lc-label">{{ display }}</span>
+  </a>
+  {% endfor %}
+</div>
+
 {# ── Stat cards ──────────────────────────────────────────────────────────── #}
 <div class="stat-row">
   <div class="stat-card stat-card-wide accent-blue" title="Current account balance and its movement so far today (Europe/Berlin calendar day), updating automatically as trades close.">
@@ -72,6 +83,13 @@
         ({{ stats.account.trades_closed_today }} closed today)
       {% endif %}
     </div>
+  </div>
+  <div class="stat-card stat-card-wide" title="Last 30 points of the analytics snapshot's equity curve">
+    <div class="stat-label">Equity (30d)</div>
+    <div class="stat-value" style="color: #6ea8fe;">
+      {{ '{:,.2f}'.format(stats.account.balance) if stats.account.balance is not none else '—' }}
+    </div>
+    <div class="stat-sub">{{ equity_sparkline_svg | safe }}</div>
   </div>
   <div class="stat-card stat-card-wide"
        title="What a trade actually costs right now, based on today's account balance and sizing settings. This only reflects trades opened under these exact settings -- an already-open trade keeps whatever it was actually sized at when it opened (see the Unreal. P&amp;L column tooltip below), so it won't retroactively match this if you've changed the balance, risk %, or sizing mode since.">

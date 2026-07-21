@@ -64,6 +64,7 @@ from swingbot.core.data import get_company_name, get_currency_symbol, get_curren
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.backtest_cache import ensure_cached_background
 from swingbot.core.ticker_directory import search_tickers
+from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
 # Pure helper functions (.env parsing, Docker container control, confidence-hex,
 # log tailing) live in their own module -- see helpers.py's own docstring for why.
 from .helpers import (
@@ -623,6 +624,32 @@ def _render_dashboard_fragment() -> str:
     # with no extra JS/websocket plumbing needed.
     stats["account"] = get_daily_summary()
 
+    # Local import -- pages.py does `from .app import _render, require_auth`
+    # at its own top, so a module-level import here would deadlock on the
+    # circular reference. Both modules are fully loaded by request time.
+    from .pages import _plan_rows, _sparkline_svg
+
+    plan_counts = _plan_rows()["counts"]
+
+    # Equity (30d) sparkline. snap["equity_curve"] is {"points": [...],
+    # "skipped_n": ...} (see metrics.equity_curve), not a bare list -- each
+    # point's balance key is "date"/"balance", not "ts"/"balance". Balances
+    # are raw account-currency figures (e.g. 10000+), not the 0-100 scale
+    # _sparkline_svg assumes (it's shared with the win-rate sparkline), so
+    # they're min-max normalized to 0-100 purely for the sparkline's shape;
+    # the headline number below still shows the real current balance.
+    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    equity_points_raw = [
+        p["balance"] for p in ((snap or {}).get("equity_curve") or {}).get("points", [])[-30:]
+    ]
+    if equity_points_raw:
+        lo, hi = min(equity_points_raw), max(equity_points_raw)
+        span = hi - lo
+        equity_points = [(v - lo) / span * 100.0 if span else 50.0 for v in equity_points_raw]
+        equity_sparkline_svg = _sparkline_svg(equity_points, ref=None)
+    else:
+        equity_sparkline_svg = "&mdash;"
+
     return render_template(
         "dashboard_fragment.html",
         open_trades=open_trades, stats=stats, confidence_hex=_confidence_hex,
@@ -634,6 +661,7 @@ def _render_dashboard_fragment() -> str:
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
         is_market_active=is_us_market_active(),
         dashboard_mode=mode,
+        plan_counts=plan_counts, equity_sparkline_svg=equity_sparkline_svg,
     )
 
 

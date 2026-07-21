@@ -51,3 +51,19 @@ def test_dashboard_open_trade_renders_pedigree_chip_and_runner_row(client, auth,
     html = r.data.decode("utf-8")
     assert "chip-tier-a" in html
     assert "runner" in html
+
+
+def test_dashboard_fragment_shows_lifecycle_strip_and_equity_sparkline(client, auth, admin_app, monkeypatch):
+    fake_snapshot = {
+        "built_at": "x",
+        "equity_curve": {
+            "points": [{"date": f"2026-06-{i + 1:02d}", "balance": 10000 + i * 10, "pnl": 10.0} for i in range(30)],
+            "skipped_n": 0,
+        },
+    }
+    monkeypatch.setattr("swingbot.admin.app.load_snapshot", lambda max_age_seconds=3600: fake_snapshot)
+    monkeypatch.setattr("swingbot.admin.pages.rank_plans", lambda plans: [])
+    r = client.get("/dashboard/fragment", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "lifecycle-strip" in html
+    assert "<svg" in html
