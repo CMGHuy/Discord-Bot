@@ -286,7 +286,14 @@ def strategies_page():
 @pages.route("/calibration", methods=["GET"])
 @require_auth
 def calibration_page():
-    return _render("Calibration", "calibration", "calibration.html")
+    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    calibration = (snap or {}).get("calibration", {})
+    chart_data_json = json.dumps({"deciles": calibration.get("deciles", [])})
+    return _render(
+        "Calibration", "calibration", "calibration.html",
+        tiers=calibration.get("tiers", []), drift=calibration.get("drift", []),
+        chart_data_json=chart_data_json,
+    )
 
 
 @pages.route("/journal", methods=["GET"])

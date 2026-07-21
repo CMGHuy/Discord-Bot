@@ -1,7 +1,109 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="empty-state">
-  <div class="empty-icon">📐</div>
-  <p>The calibration page lands in Task C25.</p>
+<script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+
+<div class="card">
+  <p class="card-title">What is calibration?</p>
+  <p class="muted" style="font-size:13px;line-height:1.6;margin:0;">
+    Calibration asks one question: does a higher confidence score actually win more? Every closed
+    trade is bucketed into a decile by its confidence score at entry, and each decile's realized win
+    rate is plotted against the 80% target line below. A well-calibrated system produces a roughly
+    upward-sloping staircase — top-decile trades should win noticeably more often than bottom-decile
+    trades. A flat or inverted staircase means the score isn't actually predictive yet and needs
+    revisiting before it's trusted for sizing or filtering decisions.
+  </p>
 </div>
+
+<div class="chart-card">
+  <div class="chart-title">📐 Score deciles — realized win rate vs 80% target</div>
+  <div class="chart-wrap" style="height:220px;">
+    <canvas id="chart-deciles"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <p class="card-title">Tier calibration</p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Tier</th><th>N</th><th>Live WR</th><th>Expected band</th><th>Pass</th></tr></thead>
+    <tbody>
+    {% for row in tiers %}
+    <tr>
+      <td><span class="chip chip-tier-{{ row.tier | lower }}">{{ row.tier }}</span></td>
+      <td>{{ row.n }}</td>
+      <td>{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
+      <td class="muted">{{ row.expected_band }}</td>
+      <td>{% if row.ok %}✅{% elif row.ok is sameas false %}❌{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <p class="card-title">Badge drift</p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Strategy</th><th>Live WR</th><th>OOS WR</th><th>Δ</th><th>Decayed</th></tr></thead>
+    <tbody>
+    {% for d in drift %}
+    <tr>
+      <td>{{ d.strategy }}</td>
+      <td>{{ "%.1f%%"|format(d.live_wr) if d.live_wr is not none else '—' }}</td>
+      <td>{{ "%.1f%%"|format(d.oos_wr) if d.oos_wr is not none else '—' }}</td>
+      <td style="color:{% if d.delta_wr is none %}#5a6275{% elif d.delta_wr < 0 %}#da6d6d{% else %}#6dda9e{% endif %};">
+        {{ "%+.1f"|format(d.delta_wr) if d.delta_wr is not none else '—' }}
+      </td>
+      <td>{% if d.drift_alert %}<span class="chip chip-decay">DECAY</span>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script>
+(function () {
+  "use strict";
+  var raw = JSON.parse(document.getElementById('chart-data').textContent);
+  var deciles = raw.deciles || [];
+  new Chart(document.getElementById('chart-deciles'), {
+    type: 'bar',
+    data: {
+      labels: deciles.map(function (d) { return 'D' + d.decile; }),
+      datasets: [{
+        label: 'Realized win rate %',
+        data: deciles.map(function (d) { return d.win_rate; }),
+        backgroundColor: deciles.map(function (d) { return d.win_rate >= 80 ? 'rgba(109,218,158,.75)' : 'rgba(226,178,90,.75)'; }),
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0, max: 100, grid: { color: '#1a1d26' }, ticks: { color: '#5a6275' } },
+        x: { grid: { color: '#1a1d26' }, ticks: { color: '#5a6275' } },
+      },
+    },
+    plugins: [{
+      id: 'target-line',
+      afterDraw: function (chart) {
+        var yScale = chart.scales.y;
+        var ctx = chart.ctx;
+        var y = yScale.getPixelForValue(80);
+        ctx.save();
+        ctx.strokeStyle = '#6ea8fe';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(chart.chartArea.left, y);
+        ctx.lineTo(chart.chartArea.right, y);
+        ctx.stroke();
+        ctx.restore();
+      },
+    }],
+  });
+})();
+</script>
 {% endblock %}

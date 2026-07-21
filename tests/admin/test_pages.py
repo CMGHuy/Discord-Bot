@@ -577,3 +577,23 @@ def test_plans_board_strategy_cell_links_to_strategies_anchor(client, auth):
     r = client.get("/plans", headers=auth)
     html = r.data.decode("utf-8")
     assert "/strategies#strategy-rsi" in html
+
+
+def test_calibration_page_renders_chart_data_and_tier_table(client, auth, monkeypatch):
+    fake_snapshot = {
+        "built_at": "x",
+        "calibration": {
+            "deciles": [{"decile": 10, "n": 30, "win_rate": 88.0}, {"decile": 1, "n": 25, "win_rate": 55.0}],
+            "tiers": [
+                {"tier": "A", "n": 200, "win_rate": 84.0, "expected_band": "80-100", "ok": True},
+                {"tier": "C", "n": 40, "win_rate": 55.0, "expected_band": "0-60", "ok": False},
+            ],
+            "drift": [],
+        },
+    }
+    monkeypatch.setattr("swingbot.admin.pages.load_snapshot", lambda max_age_seconds=3600: fake_snapshot)
+    r = client.get("/calibration", headers=auth)
+    html = r.data.decode("utf-8")
+    assert r.status_code == 200
+    assert '"deciles"' in html
+    assert "❌" in html  # the failing tier C row
