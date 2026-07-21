@@ -649,3 +649,11 @@ def test_journal_weekly_digest_view(client, auth, monkeypatch):
     html = r.data.decode("utf-8")
     assert "12 trades, 9 wins (75%)" in html
     assert "Wait for the retest" in html
+
+
+def test_tuning_page_shows_current_state(client, auth):
+    r = client.get("/tuning?strategy=RSI", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "0.40" in html          # RSI's real current STRATEGY_RR_OVERRIDE
+    assert "2026-07-18" in html    # RSI's real committed registry run_date
+    assert "never applies" in html

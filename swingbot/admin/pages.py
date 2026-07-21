@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, abort, redirect, render_template, request, send_file, url_for
 
 from swingbot import config
+from swingbot.core import entry_filters
 from swingbot.core.analytics.insights import top_lessons, weekly_digest
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.metrics import win_rate
@@ -26,7 +27,7 @@ from swingbot.core.data import get_daily_data
 from swingbot.core.performance import TradeLog, primary_strategy_label
 from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transition
 from swingbot.core.plan_store import PlanStore
-from swingbot.core.registry import load_registry
+from swingbot.core.registry import load_registry, get_badge
 from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 
 from .app import MANUAL_CLOSE_QUEUE, _is_today_berlin, _render, require_auth
@@ -335,7 +336,20 @@ def journal_page():
 @pages.route("/tuning", methods=["GET"])
 @require_auth
 def tuning_page():
-    return _render("Tuning", "tuning", "tuning.html")
+    strategy_filter = request.args.get("strategy") or None
+    strategies = [strategy_filter] if strategy_filter else list(ALL_STRATEGIES)
+    current_state = []
+    for s in strategies:
+        badge = get_badge("strategy", s)
+        current_state.append({
+            "strategy": s,
+            "gate_description": _gate_description(s),
+            "rr_override": STRATEGY_RR_OVERRIDE.get(s),
+            "default_params": dict(entry_filters.DEFAULT_PARAMS.get(s, {})),
+            "badge": badge.status, "window": badge.window, "run_date": badge.run_date,
+        })
+    return _render("Tuning", "tuning", "tuning.html", current_state=current_state,
+                   strategy_filter=strategy_filter or "")
 
 
 def _queue_manual_close_notify(plan) -> None:

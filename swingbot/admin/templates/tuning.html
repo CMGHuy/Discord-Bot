@@ -1,7 +1,32 @@
+{# swingbot/admin/templates/tuning.html -- full replacement #}
 {% extends "base.html" %}
 {% block body %}
-<div class="empty-state">
-  <div class="empty-icon">🛠</div>
-  <p>The tuning workbench lands in Task C32.</p>
+<div class="card">
+  <p class="card-title">Current parameters</p>
+  <p class="muted" style="font-size:12.5px;">
+    Values are code, changed only via reviewed commits. This page proposes; it never applies.
+  </p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Strategy</th><th>Badge</th><th>R:R</th><th>Gate</th><th>Default params</th><th>Window</th><th>Run date</th></tr>
+    </thead>
+    <tbody>
+    {% for s in current_state %}
+    <tr>
+      <td><strong>{{ s.strategy }}</strong></td>
+      <td><span class="chip {{ 'chip-validated' if s.badge == 'VALIDATED' else 'chip-weak' }}">{{ s.badge }}</span></td>
+      <td>{{ "%.2f"|format(s.rr_override) if s.rr_override is not none else '—' }}</td>
+      <td class="muted">{{ s.gate_description }}</td>
+      <td class="muted">
+        {% for k, v in s.default_params.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+      </td>
+      <td class="muted">{{ s.window }}</td>
+      <td class="muted">{{ s.run_date }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
 </div>
 {% endblock %}
