@@ -451,3 +451,23 @@ def test_no_heat_blocked_attr_adds_no_field():
     item = make_item()
     embed = _build(item)
     assert not [f for f in embed.fields if "heat cap" in f.name.lower()]
+
+
+def test_cluster_blocked_item_renders_headline_field_with_size_zero():
+    # Edge plan E8: correlated-cluster cap is flagged on the embed, never
+    # hidden -- engine.py sets item.cluster_blocked right before build_embed.
+    item = make_item()
+    item.cluster_blocked = {"allowed": False, "cluster": ["AAPL", "MSFT"],
+                            "correlated_heat": 4.0, "max_corr": 0.91, "remaining": 0.0, "cap": 3.0}
+    embed = _build(item)
+    cluster_fields = [f for f in embed.fields if "correlated cluster" in f.name.lower()]
+    assert len(cluster_fields) == 1
+    assert "AAPL, MSFT" in cluster_fields[0].value
+    assert "4.0%" in cluster_fields[0].value and "3.0%" in cluster_fields[0].value
+    assert "0 shares" in cluster_fields[0].value
+
+
+def test_no_cluster_blocked_attr_adds_no_field():
+    item = make_item()
+    embed = _build(item)
+    assert not [f for f in embed.fields if "correlated cluster" in f.name.lower()]

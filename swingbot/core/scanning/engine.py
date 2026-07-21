@@ -56,6 +56,7 @@ from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core import levels
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import heat as heat_mod
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
@@ -905,6 +906,19 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                        candidate_risk_pct=account_cfg.get("risk_pct", 1.0))
         if not heat_chk["allowed"]:
             item.heat_blocked = heat_chk
+
+        # Correlation-aware cluster cap (Edge plan E8): same flagged-not-
+        # hidden pattern as E7. `dfs` reuses `fresh_data` -- every ticker's
+        # OHLCV was already crawled once at the top of this scan pass (see
+        # _crawl_latest_data's docstring: analysis code never re-fetches
+        # its own data) -- so this costs zero extra network calls.
+        # `sectors` stays None until the universe file (E13) lands with
+        # sector tags; until then this only ever uses price correlation.
+        cluster_exp = corr_mod.cluster_exposure(open_trades, result.ticker, fresh_data,
+                                                account_cfg.get("balance", 0.0))
+        cluster_chk = corr_mod.cluster_check(cluster_exp, account_cfg.get("risk_pct", 1.0))
+        if not cluster_chk["allowed"]:
+            item.cluster_blocked = cluster_chk
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)

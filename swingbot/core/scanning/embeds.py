@@ -483,6 +483,18 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
+    cluster_blocked = getattr(item, "cluster_blocked", None)
+    if cluster_blocked is not None:
+        # Same flagged-not-hidden pattern as the portfolio heat cap above
+        # (Edge plan E8).
+        tickers_str = ", ".join(cluster_blocked.get("cluster", [])) or "—"
+        sections["headline"].append((
+            "⛔ ENTRY BLOCKED — correlated cluster",
+            (f"Correlated with {tickers_str} (cluster heat {cluster_blocked['correlated_heat']}% / "
+             f"cap {cluster_blocked['cap']}%) — suggested size **0 shares**."),
+            False,
+        ))
+
     if plan_v2 is not None and plan_v2.badge == "WEAK":
         # First field on the embed for any WEAK plan, both layouts -- a
         # single-line caution replacing the old multi-line badge_field_for
