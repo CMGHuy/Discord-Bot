@@ -629,3 +629,12 @@ def test_journal_page_filters_and_shows_lesson(client, auth, monkeypatch):
     assert "AAPL" in html
     assert "MSFT" not in html
     assert "textbook execution" in html
+
+
+def test_journal_note_form_wired_to_api(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.JournalStore", _FakeJournalStoreForPages)
+    r = client.get("/journal", headers=auth)
+    html = r.data.decode("utf-8")
+    assert 'class="journal-note-form"' in html
+    assert 'data-trade-id="t1"' in html
+    assert "/api/journal/" in html

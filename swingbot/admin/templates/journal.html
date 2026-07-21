@@ -60,7 +60,38 @@
   {% if e.note %}
   <p style="font-size:13px;background:#0a0c10;border-radius:6px;padding:8px 10px;margin:0;">📝 {{ e.note }}</p>
   {% endif %}
+  <form class="journal-note-form" data-trade-id="{{ e.trade_id }}" onsubmit="return false;"
+        style="margin-top:8px;display:flex;gap:6px;">
+    <textarea name="note" rows="1" placeholder="Add a note…"
+              style="flex:1;background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:6px;
+                     padding:6px 8px;font-size:12.5px;font-family:inherit;resize:vertical;">{{ e.note or '' }}</textarea>
+    <button type="submit" class="secondary small">Save</button>
+    <span class="muted note-save-status" style="font-size:11px;"></span>
+  </form>
 </div>
 {% endfor %}
 {% endif %}
+
+<script>
+document.querySelectorAll('.journal-note-form').forEach(function (form) {
+  form.addEventListener('submit', function () {
+    var tradeId = form.dataset.tradeId;
+    var textarea = form.querySelector('textarea[name="note"]');
+    var status = form.querySelector('.note-save-status');
+    status.textContent = 'Saving…';
+    fetch('/api/journal/' + encodeURIComponent(tradeId) + '/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'note=' + encodeURIComponent(textarea.value),
+      credentials: 'include',
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        status.textContent = body.ok ? 'Saved ✓' : 'Not found';
+        setTimeout(function () { status.textContent = ''; }, 2000);
+      })
+      .catch(function () { status.textContent = 'Failed'; });
+  });
+});
+</script>
 {% endblock %}
