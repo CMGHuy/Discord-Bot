@@ -219,6 +219,7 @@ COMMAND_USAGE = {
     "lessons":             ("!lessons [n|week]", "!lessons 10  or  !lessons week"),
     "calibration":         ("!calibration", "!calibration"),
     "journal":             ("!journal TRADE_ID your note here", "!journal T-42 watch the gap next time  or  !journal NVDA"),
+    "growth":              ("!growth [target_multiple]", "!growth  or  !growth 5"),
     "ping":                ("!ping", "!ping"),
     "commands":            ("!commands", "!commands"),
 }

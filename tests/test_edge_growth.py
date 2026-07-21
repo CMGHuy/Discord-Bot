@@ -38,3 +38,22 @@ def test_growth_table_shape():
     # higher expectancy at same risk always needs fewer trades
     at_1pct = {r["expectancy_r"]: r["trades_to_10x"] for r in rows if r["risk_pct"] == 1.0}
     assert at_1pct[0.20] < at_1pct[0.05]
+
+
+def test_growth_report_contains_trades_and_eta():
+    from swingbot.core.edge.growth import growth_report
+    stats = {"expectancy_r": 0.10, "trades_per_month": 60,
+             "risk_pct": 1.0, "current_multiple": 1.0, "n_closed": 120}
+    out = growth_report(stats, target=10.0)
+    assert "2303" in out              # trades to 10x at current settings
+    assert "1169" in out or "1,169" in out  # ETA days
+    assert "+0.05R" in out            # sensitivity row header
+    assert "not financial advice" in out.lower() or "will differ" in out.lower()
+
+
+def test_growth_report_handles_no_edge():
+    from swingbot.core.edge.growth import growth_report
+    out = growth_report({"expectancy_r": -0.02, "trades_per_month": 10,
+                         "risk_pct": 1.0, "n_closed": 15})
+    assert "never" in out.lower() or "no positive edge" in out.lower()
+    assert "N=15" in out              # sample size always shown
