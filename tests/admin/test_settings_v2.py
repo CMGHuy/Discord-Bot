@@ -59,3 +59,24 @@ def test_settings_page_shows_recent_changes_panel(client, auth, admin_app):
     html = r.data.decode("utf-8")
     assert "Recent changes" in html
     assert "SCAN_INTERVAL_MINUTES" in html
+
+
+def test_settings_export_excludes_sensitive_fields_entirely(client, auth):
+    r = client.get("/settings/export", headers=auth)
+    assert r.status_code == 200
+    assert b"DISCORD_TOKEN" not in r.data
+    assert b"ADMIN_PASSWORD" not in r.data
+
+
+def test_import_env_text_applies_known_skips_unknown():
+    from swingbot.admin.helpers import import_env_text
+    applied, unknown = import_env_text("SCAN_INTERVAL_MINUTES=7\nBOGUS=1")
+    assert applied == 1
+    assert unknown == ["BOGUS"]
+
+
+def test_settings_import_route_applies_and_redirects(client, auth, admin_app):
+    r = client.post("/settings/import", data={"env_text": "SCAN_INTERVAL_MINUTES=7\nBOGUS=1"}, headers=auth)
+    assert r.status_code == 302
+    from swingbot.admin.helpers import _read_env_values
+    assert _read_env_values()["SCAN_INTERVAL_MINUTES"] == "7"

@@ -192,6 +192,35 @@
   </details>
 </div>
 
+<div class="card">
+  <p class="card-title">Settings profiles</p>
+  <div class="row">
+    <a href="{{ url_for('settings_export') }}" class="secondary small btn" style="text-decoration:none;">⬇ Export .env</a>
+    <button type="button" class="secondary small"
+            onclick="document.getElementById('settings-import-modal').style.display='flex';">⬆ Import .env</button>
+    <span class="muted" style="font-size:12px;">Export omits credentials/tokens entirely; import accepts them.</span>
+  </div>
+</div>
+
+<div id="settings-import-modal" class="cal-overlay" style="display:none;">
+  <div class="cal-modal">
+    <div class="cal-modal-header">
+      <span id="cal-modal-title">Import settings</span>
+      <button type="button" aria-label="Close"
+              onclick="document.getElementById('settings-import-modal').style.display='none';">&#10005;</button>
+    </div>
+    <form method="post" action="{{ url_for('settings_import') }}" enctype="multipart/form-data">
+      <textarea name="env_text" rows="6" placeholder="Paste .env text here…"
+                style="width:100%;background:#0a0c10;color:#dde1ea;border:1px solid #252933;
+                       border-radius:6px;padding:8px;font-family:monospace;font-size:12.5px;"></textarea>
+      <input type="file" name="env_file" accept=".env,text/plain" style="margin-top:8px;">
+      <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
+        <button type="submit" class="small">Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="card" style="margin-top: 24px;">
   <p class="card-title">Bot control</p>
   <div class="row">

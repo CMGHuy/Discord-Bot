@@ -72,7 +72,7 @@ from .helpers import (
     _field_display_value, _get_bot_container, _hot_reload_bot_container, _primary_strategy_label,
     _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
     _clear_admin_log, _write_env_text, get_versions, settings_diff,
-    append_settings_audit, read_settings_audit,
+    append_settings_audit, read_settings_audit, import_env_text,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -740,6 +740,37 @@ def save_settings():
         names = ", ".join(restart_needed_for)
         message += f" Note: {names} won't take effect until the bot container is actually restarted (see field help text)."
     return redirect(url_for("settings_page", msg=message, ok=1 if success else 0))
+
+
+@app.route("/settings/export", methods=["GET"])
+@require_auth
+def settings_export():
+    existing = _read_env_values()
+    lines = []
+    for f in config.FIELDS:
+        if f.sensitive:
+            continue  # omitted entirely, not masked -- an import must never accidentally blank a real secret
+        lines.append(f"{f.key}={existing.get(f.key, f.default)}")
+    body = "\n".join(lines) + "\n"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        body, mimetype="text/plain",
+        headers={"Content-Disposition": f"attachment; filename=swingbot-settings-{today}.env"},
+    )
+
+
+@app.route("/settings/import", methods=["POST"])
+@require_auth
+def settings_import():
+    text = request.form.get("env_text", "")
+    upload = request.files.get("env_file")
+    if upload and upload.filename:
+        text = upload.read().decode("utf-8", errors="replace")
+    applied_count, unknown_keys = import_env_text(text)
+    msg = f"Imported {applied_count} setting(s)."
+    if unknown_keys:
+        msg += f" Unknown keys skipped: {', '.join(unknown_keys[:10])}."
+    return redirect(url_for("settings_page", msg=msg, ok=1))
 
 
 @app.route("/bot/restart", methods=["POST"])

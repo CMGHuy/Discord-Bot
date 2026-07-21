@@ -7,6 +7,7 @@ they're split out of app.py into their own module rather than adding to
 that file's already-long list of routes; app.py imports every one of
 these back and calls them exactly as before.
 """
+import io
 import json
 import os
 from datetime import datetime, timezone
@@ -99,12 +100,17 @@ def _build_env_text(form, existing: dict) -> str:
 
 
 def _write_env_text(text: str) -> None:
+    # Explicit utf-8 on every handle here (matches dotenv_values' own
+    # default encoding='utf-8' used throughout this module) -- without it,
+    # `open()` falls back to the platform's locale-preferred encoding,
+    # which silently mangles a non-ASCII field default (e.g. CURRENCY_SYMBOL
+    # = "€") on any host whose locale isn't already UTF-8.
     if os.path.exists(ENV_PATH):
-        with open(ENV_PATH, "r") as f:
+        with open(ENV_PATH, "r", encoding="utf-8") as f:
             backup = f.read()
-        with open(ENV_PATH + ".bak", "w") as f:
+        with open(ENV_PATH + ".bak", "w", encoding="utf-8") as f:
             f.write(backup)
-    with open(ENV_PATH, "w") as f:
+    with open(ENV_PATH, "w", encoding="utf-8") as f:
         f.write(text)
 
 
@@ -192,6 +198,49 @@ def read_settings_audit(n: int = 20) -> list[dict]:
         except json.JSONDecodeError:
             continue
     return list(reversed(rows))
+
+
+def import_env_text(text: str) -> tuple[int, list[str]]:
+    """Parses a pasted/uploaded .env-format text, validates each key
+    against FIELDS_BY_KEY, type-checks numerics (a bad numeric value is
+    silently skipped rather than corrupting .env), and writes the result
+    through the same _write_env_text path save_settings itself uses.
+    Sensitive keys ARE applied (a deliberate paste of a real credential is
+    a legitimate use case) even though settings_export never emits them.
+    Returns (applied_count, unknown_keys)."""
+    existing = _read_env_values()
+    parsed = dotenv_values(stream=io.StringIO(text))
+    applied = 0
+    unknown = []
+    new_values = dict(existing)
+    for key, value in parsed.items():
+        if value is None:
+            continue
+        f = FIELDS_BY_KEY.get(key)
+        if f is None:
+            unknown.append(key)
+            continue
+        if f.type in ("number", "float"):
+            try:
+                float(value)
+            except ValueError:
+                continue
+        new_values[key] = value
+        applied += 1
+
+    lines = []
+    for section, fields in FIELDS_BY_SECTION:
+        lines.append(f"# --- {section} ---")
+        for f in fields:
+            lines.append(f"{f.key}={new_values.get(f.key, f.default)}")
+        lines.append("")
+    leftover = {k: v for k, v in new_values.items() if k not in FIELDS_BY_KEY}
+    if leftover:
+        lines.append("# --- Other / custom variables ---")
+        for k, v in leftover.items():
+            lines.append(f"{k}={v}")
+    _write_env_text("\n".join(lines))
+    return applied, unknown
 
 
 # ---------------------------------------------------------------------------
