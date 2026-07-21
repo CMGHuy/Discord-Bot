@@ -597,3 +597,35 @@ def test_calibration_page_renders_chart_data_and_tier_table(client, auth, monkey
     assert r.status_code == 200
     assert '"deciles"' in html
     assert "❌" in html  # the failing tier C row
+
+
+class _FakeJournalStoreForPages:
+    _ENTRIES = [
+        {"trade_id": "t1", "ticker": "AAPL", "strategy": "RSI", "tags": ["clean_breakout"], "outcome": "win",
+         "r_realized": 1.4, "mfe_r": 1.6, "mae_r": -0.2, "exit_efficiency": 0.87,
+         "auto_lesson": "Waited for full confirmation before entering -- textbook execution.", "note": None},
+        {"trade_id": "t2", "ticker": "MSFT", "strategy": "MACD", "tags": ["chased"], "outcome": "loss",
+         "r_realized": -1.0, "mfe_r": 0.1, "mae_r": -1.0, "exit_efficiency": 0.0,
+         "auto_lesson": "Entered after the move was already extended.", "note": "entered late"},
+    ]
+
+    def entries(self, *, strategy=None, tag=None, outcome=None, has_note=None):
+        rows = list(self._ENTRIES)
+        if strategy:
+            rows = [r for r in rows if r["strategy"] == strategy]
+        if tag:
+            rows = [r for r in rows if tag in r["tags"]]
+        if outcome:
+            rows = [r for r in rows if r["outcome"] == outcome]
+        if has_note is not None:
+            rows = [r for r in rows if (r["note"] is not None) == has_note]
+        return rows
+
+
+def test_journal_page_filters_and_shows_lesson(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.JournalStore", _FakeJournalStoreForPages)
+    r = client.get("/journal?tag=clean_breakout", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "AAPL" in html
+    assert "MSFT" not in html
+    assert "textbook execution" in html

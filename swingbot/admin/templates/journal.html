@@ -1,7 +1,66 @@
 {% extends "base.html" %}
 {% block body %}
+<form method="get" action="{{ url_for('pages.journal_page') }}" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+  <input type="text" name="strategy" value="{{ filters.strategy }}" placeholder="Strategy…"
+         style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;padding:5px 10px;font-size:12.5px;width:140px;">
+  <select name="tag" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+    <option value="">All tags</option>
+    {% for t in all_tags %}
+    <option value="{{ t }}" {{ 'selected' if filters.tag == t else '' }}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <select name="outcome" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+    <option value="">All outcomes</option>
+    <option value="win" {{ 'selected' if filters.outcome == 'win' else '' }}>WIN</option>
+    <option value="loss" {{ 'selected' if filters.outcome == 'loss' else '' }}>LOSS</option>
+    <option value="scratch" {{ 'selected' if filters.outcome == 'scratch' else '' }}>SCRATCH</option>
+    <option value="timeout" {{ 'selected' if filters.outcome == 'timeout' else '' }}>TIMEOUT</option>
+  </select>
+  <select name="has_note" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+    <option value="">Notes: any</option>
+    <option value="1" {{ 'selected' if filters.has_note == '1' else '' }}>Has note</option>
+    <option value="0" {{ 'selected' if filters.has_note == '0' else '' }}>No note</option>
+  </select>
+  <button type="submit" class="secondary small">Filter</button>
+  <a href="{{ url_for('pages.journal_page') }}" class="secondary small btn" style="text-decoration:none;">✕ Clear</a>
+</form>
+
+{% if not entries %}
 <div class="empty-state">
   <div class="empty-icon">📓</div>
-  <p>The journal browser lands in Task C26.</p>
+  <p>No journal entries match the current filters.</p>
 </div>
+{% else %}
+{% for e in entries %}
+<div class="card">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+    <span class="chip {{ 'chip-tier-a' if e.outcome == 'win' else ('chip-weak' if e.outcome == 'loss' else 'chip-tier-b') }}">
+      {{ e.outcome | upper }}
+    </span>
+    <strong>{{ e.ticker }}</strong>
+    <span class="muted">{{ e.strategy }}</span>
+    <span style="margin-left:auto;font-weight:700;color:{% if e.r_realized is none %}#5a6275{% elif e.r_realized >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+      {{ "%+.2fR"|format(e.r_realized) if e.r_realized is not none else '—' }}
+    </span>
+    <a href="{{ url_for('trade_detail', trade_id=e.trade_id) }}" class="secondary small btn" style="text-decoration:none;">Trade ↗</a>
+  </div>
+  <div class="muted" style="font-size:12px;margin-bottom:8px;">
+    MFE {{ "%.2f"|format(e.mfe_r) if e.mfe_r is not none else '—' }}R ·
+    MAE {{ "%.2f"|format(e.mae_r) if e.mae_r is not none else '—' }}R ·
+    Exit efficiency {{ "%.0f%%"|format(e.exit_efficiency * 100) if e.exit_efficiency is not none else '—' }}
+  </div>
+  {% if e.tags %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+    {% for t in e.tags %}<span class="pill">{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if e.auto_lesson %}
+  <p style="font-size:13px;color:#9aa0b0;font-style:italic;margin:0 0 8px;">"{{ e.auto_lesson }}"</p>
+  {% endif %}
+  {% if e.note %}
+  <p style="font-size:13px;background:#0a0c10;border-radius:6px;padding:8px 10px;margin:0;">📝 {{ e.note }}</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
 {% endblock %}

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, abort, redirect, render_template, request, send_file, url_for
 
 from swingbot import config
+from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.metrics import win_rate
 from swingbot.core.analytics.rank import follow_score, rank_plans
 from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
@@ -296,10 +297,31 @@ def calibration_page():
     )
 
 
+def _parse_bool_param(v: str | None) -> bool | None:
+    """Duplicated (deliberately) from api.py's identical 3-line helper --
+    two independent blueprints, not worth a shared micro-module for this."""
+    if v is None or v == "":
+        return None
+    return v.lower() in ("1", "true", "yes")
+
+
 @pages.route("/journal", methods=["GET"])
 @require_auth
 def journal_page():
-    return _render("Journal", "journal", "journal.html")
+    strategy = request.args.get("strategy") or None
+    tag = request.args.get("tag") or None
+    outcome = request.args.get("outcome") or None
+    has_note = _parse_bool_param(request.args.get("has_note"))
+    store = JournalStore()
+    limit = int(request.args.get("limit", 200))
+    entries = store.entries(strategy=strategy, tag=tag, outcome=outcome, has_note=has_note)[:limit]
+    all_tags = sorted({t for e in store.entries() for t in (e.get("tags") or [])})
+    filters = {
+        "strategy": strategy or "", "tag": tag or "", "outcome": outcome or "",
+        "has_note": request.args.get("has_note", ""),
+    }
+    return _render("Journal", "journal", "journal.html", view="entries",
+                   entries=entries, all_tags=all_tags, filters=filters)
 
 
 @pages.route("/tuning", methods=["GET"])
