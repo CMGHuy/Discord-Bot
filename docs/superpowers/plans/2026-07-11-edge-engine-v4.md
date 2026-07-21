@@ -27,7 +27,8 @@
 > - Task E5 (Volatility-targeted sizing, `vol_target_risk_pct`/`effective_risk_pct`) done: brief verified fully accurate against hand-derived golden numbers, no corrections needed.
 > - Task E6 (Sizing modes wired into `account.compute_position_size`) done: controller pre-corrected two real bugs in the brief before implementing/testing — (1) the suggested edge-mode resolution rewrote `account_cfg`'s dict entries **after** `risk_pct`/`mode` had already been extracted into local variables from the original dict, so the rewrite would have been silently inert; fixed by overriding the locals directly instead; (2) the brief's own test fixture omitted `max_position_value_absolute`/`max_risk_amount_absolute`, so every golden share-count silently capped down to 10 against this project's real $1000/$100 absolute-cap defaults — fixed by explicitly disabling both (0) in the fixture. One golden number in the brief was also arithmetically wrong ($25 risk / $2 stop = 12.5 shares, not the brief's stated 12) — corrected to the real value. Also extended `set_sizing_mode` (core/account.py, not mentioned by file path in the brief) to actually accept the three new modes so `!account sizing kelly|vol_target|min_of_all` is reachable at all, with a matching reply-text fix in `commands/account.py` so it doesn't mislabel a new mode as "Risk %"; added one test for this beyond the brief's own coverage. Full suite green throughout (final: 765 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
 > - Task E7 (Portfolio heat cap) done: controller pre-corrected a real wiring-location bug in the brief before implementing — position sizing and embed building actually happen in the confluence scan's alert-building loop (`core/scanning/engine.py`, right before its `build_embed()` call), not in `commands/scanning.py`'s `_send_alerts` as the brief assumed (that function only posts already-built `(embed, chart_path, plan)` tuples and never touches sizing — the brief's wiring point would have been a silent no-op). Also rendered the blocked-heat field through `embeds.py`'s existing `sections["headline"]` accumulator (respecting the fixed `SECTION_ORDER` flush) instead of the brief's raw `embed.add_field()` call, which would have broken field ordering on every alert. Added a `build_embed` regression test beyond the brief's own coverage (which only exercised `heat.py`'s pure functions) since this change touches a heavily-shared rendering function. `heat.py` itself (`trade_risk_pct`/`open_heat`/`heat_check`) verified fully accurate against golden numbers. Full suite green (772 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
-> - **Next:** Task E8 (Correlation-aware exposure)
+> - Task E8 (Correlation-aware exposure) done: `correlation.py` (`returns_corr`/`cluster_exposure`/`cluster_check`) verified fully accurate against the brief's golden numbers, no corrections needed. Same file-location correction as E7 applied to the alert-path wiring (the brief only said "mirrors E7 exactly", so the same fix carried over): wired into `core/scanning/engine.py`'s alert-building loop. Reuses `fresh_data` — the `{ticker: df}` dict every scan pass already crawls once at the top via `_crawl_latest_data` — as the correlation lookup source, so this costs zero extra network calls; `sectors` stays `None` until the universe file (E13) lands with sector tags, exactly as the brief's own deferral note anticipated. Rendered through `embeds.py`'s `sections["headline"]` accumulator, same pattern as E7's heat-cap field, with a matching regression test. Full suite green (779 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
+> - **Next:** Task E9 (Growth-path tracker)
 
 ## Global Constraints
 
@@ -964,7 +965,7 @@ git commit -m "feat: portfolio heat cap"
 - Produces: `returns_corr(df_a, df_b, window=90) -> float | None` (None when < 30 overlapping bars); `cluster_exposure(open_trades, candidate_ticker, dfs: dict[str, pd.DataFrame], balance: float, *, window=90, threshold=0.75, sectors: dict[str, str] | None = None) -> dict` with keys `max_corr, correlated_heat, cluster` (list of tickers whose 90-day returns-corr with the candidate > threshold, or same sector when price data is thin); `cluster_check(exposure, candidate_risk_pct, cap_pct=None) -> dict {allowed, ...}` mirroring E7's shape.
 - Consumed by: alert path (same flagged-not-hidden pattern as E7), E50 replay, E69 heatmap.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_correlation.py
@@ -1018,12 +1019,12 @@ def test_sector_fallback_when_data_thin():
     assert exp["cluster"] == ["AAA"]                 # same sector counted
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_correlation.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/edge/correlation.py
@@ -1088,11 +1089,11 @@ def cluster_check(exposure: dict, candidate_risk_pct: float,
 
 Alert-path wiring mirrors E7 exactly (same `_send_alerts` block, `item.cluster_blocked = chk`, embed field `⛔ ENTRY BLOCKED — correlated cluster {tickers}`), with `sectors` built from `universe.load(...)` when E13 has landed (soft import, `None` until then).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_correlation.py -v` — PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/correlation.py swingbot/config.py swingbot/commands/scanning.py swingbot/core/scanning/embeds.py tests/test_edge_correlation.py
