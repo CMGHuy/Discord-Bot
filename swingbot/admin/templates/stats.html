@@ -3,6 +3,58 @@
 
 {# ── Inject chart data ────────────────────────────────────────────────────── #}
 <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+<script id="calibration-chart-data" type="application/json">{{ calibration_chart_json | safe }}</script>
+
+<div class="chart-card">
+  <div class="chart-title">📐 Score deciles — realized win rate vs 80% target</div>
+  <div class="chart-wrap" style="height:200px;">
+    <canvas id="chart-calibration-deciles"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <p class="card-title">Tier calibration</p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Tier</th><th>N</th><th>Live WR</th><th>Expected band</th><th>Pass</th></tr></thead>
+    <tbody>
+    {% for row in tiers %}
+    <tr>
+      <td><span class="chip chip-tier-{{ row.tier | lower }}">{{ row.tier }}</span></td>
+      <td>{{ row.n }}</td>
+      <td>{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
+      <td class="muted">{{ row.expected_band }}</td>
+      <td>{% if row.ok %}✅{% elif row.ok is sameas false %}❌{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <p class="card-title">Badge drift</p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Strategy</th><th>Live WR</th><th>OOS WR</th><th>Δ</th><th>Decayed</th></tr></thead>
+    <tbody>
+    {% for d in drift %}
+    <tr>
+      <td>{{ d.strategy }}</td>
+      <td>{{ "%.1f%%"|format(d.live_wr) if d.live_wr is not none else '—' }}</td>
+      <td>{{ "%.1f%%"|format(d.oos_wr) if d.oos_wr is not none else '—' }}</td>
+      <td style="color:{% if d.delta_wr is none %}#5a6275{% elif d.delta_wr < 0 %}#da6d6d{% else %}#6dda9e{% endif %};">
+        {{ "%+.1f"|format(d.delta_wr) if d.delta_wr is not none else '—' }}
+      </td>
+      <td>{% if d.drift_alert %}<span class="chip chip-decay">DECAY</span>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% include "_heatmap.html" %}
 
 <style>
 /* Consistent breathing room between every top-level section on this page,
@@ -774,6 +826,30 @@ Chart.defaults.color           = chartDefaults.tickColor;
 Chart.defaults.font.family     = chartDefaults.font.family;
 Chart.defaults.font.size       = chartDefaults.font.size;
 Chart.defaults.plugins.legend.labels.color = '#9aa0b0';
+
+new Chart(document.getElementById('chart-calibration-deciles'), {
+  type: 'bar',
+  data: (function () {
+    var cal = JSON.parse(document.getElementById('calibration-chart-data').textContent);
+    var deciles = cal.deciles || [];
+    return {
+      labels: deciles.map(function (d) { return 'D' + d.decile; }),
+      datasets: [{
+        label: 'Realized win rate %',
+        data: deciles.map(function (d) { return d.win_rate; }),
+        backgroundColor: deciles.map(function (d) { return d.win_rate >= 80 ? 'rgba(109,218,158,.75)' : 'rgba(226,178,90,.75)'; }),
+      }],
+    };
+  })(),
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { min: 0, max: 100, grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor } },
+      x: { grid: { color: chartDefaults.gridColor }, ticks: { color: chartDefaults.tickColor } },
+    },
+  },
+});
 
 function gridOpts(y2=false) {
   return {

@@ -749,3 +749,22 @@ def test_tuning_proposal_delete_rejects_non_matching_filename(client, auth):
     r = client.post("/tuning/proposals/not-json.txt/delete", headers=auth)
     assert r.status_code == 400
     assert os.path.exists(inside)
+
+
+def test_performance_page_v2_panels(client, auth, monkeypatch):
+    fake_snapshot = {
+        "built_at": "x", "by": {"strategy": []},
+        "calibration": {
+            "deciles": [],
+            "tiers": [{"tier": "A", "n": 10, "win_rate": 90.0, "expectancy_r": 0.5,
+                       "expected_band": ">=80", "ok": True}],
+            "drift": [{"strategy": "RSI", "oos_n": 40, "oos_wr": 82.0, "live_n": 25,
+                       "live_wr": 80.0, "delta_wr": -2.0, "drift_alert": False}],
+        },
+    }
+    monkeypatch.setattr("swingbot.admin.app.load_snapshot", lambda max_age_seconds=3600: fake_snapshot)
+    r = client.get("/performance", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "heatmap-grid" in html
+    assert "RSI" in html                 # drift table row
+    assert 'id="chart-data"' in html     # legacy chart-data script tag untouched

@@ -1258,8 +1258,21 @@ def stats_page():
     tl = _trades()
     stats = tl.get_detailed_stats()
     chart_data_json = json.dumps(tl.get_chart_data())
-    return _render("Performance", "stats", "stats.html", stats=stats,
-                   chart_data_json=chart_data_json)
+
+    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    calibration = (snap or {}).get("calibration", {})
+    calibration_chart_json = json.dumps({"deciles": calibration.get("deciles", [])})
+
+    # Local import -- same circularity reasoning as _render_dashboard_fragment
+    # above (pages.py imports FROM app.py at its own top).
+    from .pages import _heatmap_color, _strategy_horizon_heatmap
+    heatmap = _strategy_horizon_heatmap()
+
+    return _render(
+        "Performance", "stats", "stats.html", stats=stats, chart_data_json=chart_data_json,
+        tiers=calibration.get("tiers", []), drift=calibration.get("drift", []),
+        heatmap=heatmap, heatmap_color=_heatmap_color, calibration_chart_json=calibration_chart_json,
+    )
 
 
 
