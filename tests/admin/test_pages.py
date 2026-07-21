@@ -657,3 +657,22 @@ def test_tuning_page_shows_current_state(client, auth):
     assert "0.40" in html          # RSI's real current STRATEGY_RR_OVERRIDE
     assert "2026-07-18" in html    # RSI's real committed registry run_date
     assert "never applies" in html
+
+
+def test_tuning_launch_form_present_when_idle(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.job_manager",
+                        type("M", (), {"all": staticmethod(lambda: [])})())
+    r = client.get("/tuning", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "/api/jobs/tune" in html
+    assert "Launch TRAIN grid" in html
+
+
+def test_tuning_shows_job_card_when_busy(client, auth, monkeypatch):
+    running = {"id": "job1", "kind": "tune", "args": ["--strategy", "RSI"], "state": "running", "started_at": "x"}
+    monkeypatch.setattr("swingbot.admin.pages.job_manager",
+                        type("M", (), {"all": staticmethod(lambda: [running])})())
+    r = client.get("/tuning", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "Launch TRAIN grid" not in html
+    assert "job1" in html

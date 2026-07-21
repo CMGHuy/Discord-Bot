@@ -29,4 +29,51 @@
   </table>
   </div>
 </div>
+<div class="card">
+  <p class="card-title">Run TRAIN grid</p>
+  {% if running_job %}
+  <div class="empty-state" style="padding:20px;">
+    <p>A tuning job is already running (<code>{{ running_job.id }}</code>) — see progress below.
+       Only one tuning job runs at a time.</p>
+  </div>
+  {% else %}
+  <div class="banner" style="border-left:3px solid #6ea8fe;margin-bottom:12px;">
+    TRAIN window (fixed, immutable): {{ train_window[0] }} .. {{ train_window[1] }} — no date input
+    is exposed on this page or anywhere in this workbench.
+  </div>
+  <form id="tune-launch-form" onsubmit="return false;">
+    <div style="margin-bottom:10px;">
+      <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">Strategy</label>
+      <select name="strategy" id="tune-strategy-select"
+              style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:6px 10px;font-size:13px;">
+        {% for s in all_strategies %}
+        <option value="{{ s }}" {{ 'selected' if s == strategy_filter else '' }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="small">▶ Launch TRAIN grid</button>
+    <span class="muted" id="tune-launch-status" style="font-size:12px;margin-left:8px;"></span>
+  </form>
+  <script>
+  document.getElementById('tune-launch-form').addEventListener('submit', function () {
+    var strategy = document.getElementById('tune-strategy-select').value;
+    var status = document.getElementById('tune-launch-status');
+    status.textContent = 'Launching…';
+    fetch('/api/jobs/tune', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'strategy=' + encodeURIComponent(strategy),
+      credentials: 'include',
+    })
+      .then(function (r) { return r.json().then(function (body) { return { httpStatus: r.status, body: body }; }); })
+      .then(function (res) {
+        if (res.httpStatus === 409) { status.textContent = 'Busy — a job is already running.'; return; }
+        if (res.httpStatus !== 200) { status.textContent = 'Error: ' + (res.body.error || 'unknown'); return; }
+        window.location.reload();  // now running -- reload shows the progress card (Task C34)
+      })
+      .catch(function () { status.textContent = 'Request failed.'; });
+  });
+  </script>
+  {% endif %}
+</div>
 {% endblock %}

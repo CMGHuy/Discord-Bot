@@ -29,10 +29,35 @@ from swingbot.core.plan_engine import PlanStatus, plan_to_dict, record_transitio
 from swingbot.core.plan_store import PlanStore
 from swingbot.core.registry import load_registry, get_badge
 from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
+from swingbot.admin.jobs import TRAIN_WINDOW
+from swingbot.admin.jobs import manager as job_manager
 
 from .app import MANUAL_CLOSE_QUEUE, _is_today_berlin, _render, require_auth
 
 pages = Blueprint("pages", __name__)
+
+# Reference list of the tunable-param names scripts/tune_strategy.py's own
+# PARAM_GRID exposes internally (see that script) -- kept as a plain
+# hardcoded list rather than importing PARAM_GRID directly, since that
+# import would pull the backtest/pandas/yfinance machinery into the admin
+# process just to read a dict of strings. NOT currently rendered as
+# checkboxes on the launch form: the script's CLI only accepts --strategy
+# and --be-trigger today (ground-truth deviation #3), so there is nothing
+# else real to submit yet. Update this list (and the launch form) once the
+# script's CLI actually grows a --param flag per PARAM_GRID key.
+TUNABLE_PARAMS_BY_STRATEGY = {
+    "EMA Crossover":      ["rsi_dip", "ext_atr"],
+    "VWAP":               ["ext_pct", "hold_bars_other"],
+    "Fibonacci":          ["ratios", "rsi_bull"],
+    "Support/Resistance": ["base_atr", "close_frac"],
+    "RSI":                ["os_level", "confirm"],
+    "MACD":               ["ext_atr"],
+    "Elliott Wave":       ["depth_min", "depth_max"],
+    "MA Ribbon":          ["ext_pct"],
+    "Break & Retest":     ["hold_tol_pct"],
+    "RSI Divergence":     ["rsi_reclaim"],
+    "Volume Profile":     ["node_share", "prox_pct"],
+}
 
 _ALL_PLAN_STATUSES = (
     PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL,
@@ -348,8 +373,10 @@ def tuning_page():
             "default_params": dict(entry_filters.DEFAULT_PARAMS.get(s, {})),
             "badge": badge.status, "window": badge.window, "run_date": badge.run_date,
         })
+    running_job = next((j for j in job_manager.all() if j["state"] in ("queued", "running")), None)
     return _render("Tuning", "tuning", "tuning.html", current_state=current_state,
-                   strategy_filter=strategy_filter or "")
+                   strategy_filter=strategy_filter or "", running_job=running_job,
+                   all_strategies=list(ALL_STRATEGIES), train_window=TRAIN_WINDOW)
 
 
 def _queue_manual_close_notify(plan) -> None:
