@@ -98,6 +98,32 @@
   </script>
   {% endif %}
 </div>
+{% if result %}
+<div class="card">
+  <p class="card-title">Results — {{ result.strategy }} (job {{ job_id_param }})</p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Params</th><th>N</th><th>Win rate</th><th>ExpR</th><th>Excl%</th><th>Pass</th></tr>
+    </thead>
+    <tbody>
+    {% for row in result.grid %}
+    <tr class="{{ 'diff-add' if grid_row_passes(row) else '' }}">
+      <td class="muted">
+        {% for k, v in row.params.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+      </td>
+      <td>{{ row.n_eval }}</td>
+      <td>{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
+      <td>{{ "%+.3f"|format(row.expectancy_r) if row.expectancy_r is not none else '—' }}</td>
+      <td>{{ "%.0f%%"|format(row.excluded_share * 100) }}</td>
+      <td>{% if grid_row_passes(row) %}✅{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
 <div class="card">
   <p class="card-title">Recent jobs</p>
   {% if not recent_jobs %}

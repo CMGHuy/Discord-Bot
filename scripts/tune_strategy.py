@@ -9,6 +9,7 @@ best candidates so the failure policy (gating directions/horizons) can be
 applied by hand in Task 19."""
 import argparse
 import itertools
+import json
 import sys
 import warnings
 from collections import defaultdict
@@ -113,6 +114,8 @@ def main():
     ap.add_argument("--exit-model", dest="exit_model", choices=["v1", "v2"],
                     default="v1")
     ap.add_argument("--scale-out", dest="scale_out", action="store_true")
+    ap.add_argument("--json", type=str, default=None,
+                    help="Write results (grid + best) as JSON to this path.")
     args = ap.parse_args()
     strategy = args.strategy
     if args.grid:
@@ -157,6 +160,16 @@ def main():
     print("Top 5:")
     for p, s in ranked[:5]:
         print(f"  {p} -> N={s['n_eval']} WR={s['win_rate'] and round(s['win_rate'],1)} ExpR={s['expectancy_r'] and round(s['expectancy_r'],3)}")
+
+    if args.json:
+        best = ranked[0] if ranked else None
+        payload = {
+            "strategy": strategy,
+            "grid": [{"params": p, **s} for p, s in rows],
+            "best": ({"params": best[0], **best[1]} if best else None),
+        }
+        Path(args.json).write_text(json.dumps(payload, indent=2))
+        print(f"Wrote results to {args.json}")
 
 
 if __name__ == "__main__":

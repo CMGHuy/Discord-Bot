@@ -358,6 +358,26 @@ def journal_page():
                    entries=entries, all_tags=all_tags, filters=filters)
 
 
+def _load_result(job_id: str) -> dict | None:
+    path = os.path.join(config.DATA_DIR, "tuning_results", f"{job_id}.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _grid_row_passes(stats: dict) -> bool:
+    """Same acceptance gate scripts/tune_strategy.py itself already prints
+    -- restated here purely to color a table row, never to decide anything."""
+    return (
+        stats.get("n_eval", 0) >= 30 and (stats.get("win_rate") or 0) >= 80
+        and (stats.get("expectancy_r") or 0) > 0 and stats.get("excluded_share", 1) <= 0.5
+    )
+
+
 @pages.route("/tuning", methods=["GET"])
 @require_auth
 def tuning_page():
@@ -375,10 +395,13 @@ def tuning_page():
         })
     running_job = next((j for j in job_manager.all() if j["state"] in ("queued", "running")), None)
     recent_jobs = job_manager.all()[:5]
+    job_id_param = request.args.get("job_id")
+    result = _load_result(job_id_param) if job_id_param else None
     return _render("Tuning", "tuning", "tuning.html", current_state=current_state,
                    strategy_filter=strategy_filter or "", running_job=running_job,
                    all_strategies=list(ALL_STRATEGIES), train_window=TRAIN_WINDOW,
-                   recent_jobs=recent_jobs)
+                   recent_jobs=recent_jobs, result=result, job_id_param=job_id_param,
+                   grid_row_passes=_grid_row_passes)
 
 
 def _queue_manual_close_notify(plan) -> None:

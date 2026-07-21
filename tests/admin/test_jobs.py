@@ -135,3 +135,28 @@ def test_job_manager_start_enforces_guardrail_even_if_caller_bypasses_builder(ad
     mgr = JobManager()
     with pytest.raises(ValueError):
         mgr.start("tune", ["--strategy", "RSI", "--from", "2024-01-01"])
+
+
+import json
+import os
+
+
+def test_tuning_results_table_renders_and_highlights_passing_rows(client, auth):
+    from swingbot import config
+    results_dir = os.path.join(config.DATA_DIR, "tuning_results")
+    os.makedirs(results_dir, exist_ok=True)
+    payload = {
+        "strategy": "MACD",
+        "grid": [
+            {"params": {"ext_atr": 0.75}, "n_eval": 40, "win_rate": 82.0, "expectancy_r": 0.09, "excluded_share": 0.2},
+            {"params": {"ext_atr": 1.5}, "n_eval": 10, "win_rate": 60.0, "expectancy_r": -0.02, "excluded_share": 0.6},
+        ],
+        "best": None,
+    }
+    with open(os.path.join(results_dir, "job1.json"), "w") as f:
+        json.dump(payload, f)
+
+    r = client.get("/tuning?job_id=job1", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "82.0" in html
+    assert 'class="diff-add"' in html  # the passing row (N=40, WR=82, ExpR>0, excl=20%)

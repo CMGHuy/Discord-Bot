@@ -163,9 +163,13 @@ class JobManager:
 
             job_id = uuid.uuid4().hex[:12]
             log_path = os.path.join(_log_dir(), f"{job_id}.log")
+            result_path = None
             if kind == "tune":
                 script = os.path.join(config._PROJECT_ROOT, "scripts", "tune_strategy.py")
-                argv = [sys.executable, script, *args]
+                results_dir = os.path.join(config.DATA_DIR, "tuning_results")
+                os.makedirs(results_dir, exist_ok=True)
+                result_path = os.path.join(results_dir, f"{job_id}.json")
+                argv = [sys.executable, script, *args, "--json", result_path]
             else:
                 # kind="test" (or any other future raw-argv kind) -- args is
                 # the full argv tail after the interpreter itself.
@@ -177,7 +181,7 @@ class JobManager:
             jobs[job_id] = {
                 "id": job_id, "kind": kind, "args": args, "state": "running",
                 "started_at": datetime.now(timezone.utc).isoformat(), "finished_at": None,
-                "returncode": None, "log_path": log_path, "pid": proc.pid,
+                "returncode": None, "log_path": log_path, "pid": proc.pid, "result_path": result_path,
             }
             _write_jobs(jobs)
 
