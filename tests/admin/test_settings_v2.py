@@ -68,7 +68,12 @@ def test_settings_export_excludes_sensitive_fields_entirely(client, auth):
     assert b"ADMIN_PASSWORD" not in r.data
 
 
-def test_import_env_text_applies_known_skips_unknown():
+def test_import_env_text_applies_known_skips_unknown(admin_app):
+    # admin_app is required (unused directly) -- it monkeypatches
+    # config.DATA_DIR/ENV_PATH and reloads helpers.py so import_env_text
+    # writes to an isolated tmp .env, not the real project .env. See
+    # conftest.py's admin_app docstring: without this fixture, Settings
+    # tests (C38-C41) that save/export/import would write the real file.
     from swingbot.admin.helpers import import_env_text
     applied, unknown = import_env_text("SCAN_INTERVAL_MINUTES=7\nBOGUS=1")
     assert applied == 1
