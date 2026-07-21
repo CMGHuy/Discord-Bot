@@ -1,5 +1,29 @@
 {% extends "base.html" %}
 {% block body %}
+<div class="row" style="margin-bottom:12px;">
+  <a href="{{ url_for('pages.journal_page') }}" class="secondary small btn" style="text-decoration:none;{{ 'font-weight:700;color:#6ea8fe;' if view != 'weekly' else '' }}">Entries</a>
+  <a href="{{ url_for('pages.journal_page', view='weekly') }}" class="secondary small btn" style="text-decoration:none;{{ 'font-weight:700;color:#6ea8fe;' if view == 'weekly' else '' }}">Weekly digest</a>
+</div>
+
+{% if view == 'weekly' %}
+  {% if not digest %}
+  <div class="empty-state"><div class="empty-icon">📅</div><p>No digest messages for the trailing week yet.</p></div>
+  {% else %}
+    {% for msg in digest %}
+    <div class="card"><p style="font-size:13px;white-space:pre-wrap;margin:0;">{{ msg }}</p></div>
+    {% endfor %}
+  {% endif %}
+  {% if lessons %}
+  <div class="card">
+    <p class="card-title">Top lessons</p>
+    <ul style="margin:0;padding-left:20px;">
+      {% for lesson in lessons %}
+      <li style="font-size:13px;margin-bottom:6px;">{{ lesson }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+{% else %}
 <form method="get" action="{{ url_for('pages.journal_page') }}" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
   <input type="text" name="strategy" value="{{ filters.strategy }}" placeholder="Strategy…"
          style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;padding:5px 10px;font-size:12.5px;width:140px;">
@@ -70,6 +94,7 @@
   </form>
 </div>
 {% endfor %}
+{% endif %}
 {% endif %}
 
 <script>

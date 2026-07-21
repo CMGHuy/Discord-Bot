@@ -638,3 +638,14 @@ def test_journal_note_form_wired_to_api(client, auth, monkeypatch):
     assert 'class="journal-note-form"' in html
     assert 'data-trade-id="t1"' in html
     assert "/api/journal/" in html
+
+
+def test_journal_weekly_digest_view(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.pages.weekly_digest",
+                        lambda *a, **kw: ["This week: 12 trades, 9 wins (75%), +3.2R total."])
+    monkeypatch.setattr("swingbot.admin.pages.top_lessons",
+                        lambda *a, **kw: ["Wait for the retest before entering breakouts."])
+    r = client.get("/journal?view=weekly", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "12 trades, 9 wins (75%)" in html
+    assert "Wait for the retest" in html

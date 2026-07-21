@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, abort, redirect, render_template, request, send_file, url_for
 
 from swingbot import config
+from swingbot.core.analytics.insights import top_lessons, weekly_digest
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.metrics import win_rate
 from swingbot.core.analytics.rank import follow_score, rank_plans
@@ -308,11 +309,18 @@ def _parse_bool_param(v: str | None) -> bool | None:
 @pages.route("/journal", methods=["GET"])
 @require_auth
 def journal_page():
+    store = JournalStore()
+    view = request.args.get("view", "entries")
+    if view == "weekly":
+        tl = TradeLog()
+        closed = [t for t in tl.get_trades(status=None, limit=None) if t["status"] in ("win", "loss", "closed")]
+        return _render("Journal", "journal", "journal.html", view="weekly",
+                       digest=weekly_digest(store.entries(), closed, today=datetime.now().date()),
+                       lessons=top_lessons(store.entries()))
     strategy = request.args.get("strategy") or None
     tag = request.args.get("tag") or None
     outcome = request.args.get("outcome") or None
     has_note = _parse_bool_param(request.args.get("has_note"))
-    store = JournalStore()
     limit = int(request.args.get("limit", 200))
     entries = store.entries(strategy=strategy, tag=tag, outcome=outcome, has_note=has_note)[:limit]
     all_tags = sorted({t for e in store.entries() for t in (e.get("tags") or [])})
