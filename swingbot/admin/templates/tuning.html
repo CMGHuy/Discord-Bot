@@ -146,4 +146,40 @@
   </ul>
   {% endif %}
 </div>
+<div class="card">
+  <p class="card-title">Tuning proposals</p>
+  {% if not proposals %}
+  <p class="muted">No proposals yet.</p>
+  {% else %}
+  {% for p in proposals %}
+  <div class="card" style="background:#0f1219;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <strong>{{ p.strategy }}</strong>
+      <span class="muted" style="font-size:11px;">{{ p.created_at }} · job {{ p.job_id }}</span>
+    </div>
+    <table class="diff-table">
+      <thead><tr><th>Param</th><th>Current</th><th>Proposed</th></tr></thead>
+      <tbody>
+      {% for k, new_v in p.proposed_params.items() %}
+      <tr>
+        <td>{{ k }}</td>
+        <td class="diff-del">{{ p.current_params.get(k) }}</td>
+        <td class="diff-add">{{ new_v }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="muted" style="font-size:12px;margin:8px 0;">
+      TRAIN stats: N={{ p.train_stats.n_eval }}
+      WR={{ "%.1f%%"|format(p.train_stats.win_rate) if p.train_stats.win_rate is not none else '—' }}
+      ExpR={{ "%+.3f"|format(p.train_stats.expectancy_r) if p.train_stats.expectancy_r is not none else '—' }}
+    </div>
+    <form method="post" action="{{ url_for('pages.tuning_proposal_delete', filename=p.filename) }}" style="margin:0;"
+          onsubmit="return confirm('Delete this proposal?');">
+      <button type="submit" class="danger small">🗑 Delete</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
 {% endblock %}

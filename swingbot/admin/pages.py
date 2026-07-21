@@ -388,6 +388,23 @@ def _grid_row_passes(stats: dict) -> bool:
 TUNING_PROPOSALS_DIR_NAME = "tuning_proposals"
 
 
+def _list_proposals() -> list[dict]:
+    proposals_dir = os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
+    if not os.path.exists(proposals_dir):
+        return []
+    rows = []
+    for fname in sorted(os.listdir(proposals_dir), reverse=True):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(proposals_dir, fname), "r", encoding="utf-8") as f:
+                data = json.load(f)
+            rows.append({"filename": fname, **data})
+        except (OSError, json.JSONDecodeError):
+            continue
+    return rows
+
+
 @pages.route("/tuning", methods=["GET"])
 @require_auth
 def tuning_page():
@@ -411,7 +428,7 @@ def tuning_page():
                    strategy_filter=strategy_filter or "", running_job=running_job,
                    all_strategies=list(ALL_STRATEGIES), train_window=TRAIN_WINDOW,
                    recent_jobs=recent_jobs, result=result, job_id_param=job_id_param,
-                   grid_row_passes=_grid_row_passes)
+                   grid_row_passes=_grid_row_passes, proposals=_list_proposals())
 
 
 @pages.route("/tuning/propose", methods=["POST"])
@@ -448,6 +465,16 @@ def tuning_propose():
     with open(os.path.join(proposals_dir, fname), "w") as f:
         json.dump(proposal, f, indent=2)
     return redirect(url_for("pages.tuning_page", job_id=job_id, msg=f"Proposal saved: {fname}", ok=1))
+
+
+@pages.route("/tuning/proposals/<filename>/delete", methods=["POST"])
+@require_auth
+def tuning_proposal_delete(filename):
+    proposals_dir = os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
+    path = os.path.join(proposals_dir, filename)
+    if filename.endswith(".json") and os.path.exists(path):
+        os.remove(path)
+    return redirect(url_for("pages.tuning_page", msg=f"Deleted proposal {filename}.", ok=1))
 
 
 def _queue_manual_close_notify(plan) -> None:

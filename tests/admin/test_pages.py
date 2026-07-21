@@ -695,3 +695,25 @@ def test_tuning_page_lists_recent_jobs(client, auth, monkeypatch):
     r = client.get("/tuning", headers=auth)
     html = r.data.decode("utf-8")
     assert "job1" in html and "done" in html
+
+
+def test_proposal_browser_renders_diff_and_delete_removes_file(client, auth):
+    from swingbot import config
+    proposals_dir = os.path.join(config.DATA_DIR, "tuning_proposals")
+    os.makedirs(proposals_dir, exist_ok=True)
+    proposal = {
+        "strategy": "MACD", "proposed_params": {"ext_atr": 0.75}, "current_params": {"ext_atr": 1.0},
+        "train_stats": {"n_eval": 40, "win_rate": 82.0, "expectancy_r": 0.09, "excluded_share": 0.2},
+        "job_id": "job1", "created_at": "2026-07-11T00:00:00+00:00", "note": "...",
+    }
+    fname = "20260711000000-macd.json"
+    with open(os.path.join(proposals_dir, fname), "w") as f:
+        json.dump(proposal, f)
+
+    r = client.get("/tuning", headers=auth)
+    html = r.data.decode("utf-8")
+    assert 'class="diff-del"' in html and 'class="diff-add"' in html
+
+    r2 = client.post(f"/tuning/proposals/{fname}/delete", headers=auth)
+    assert r2.status_code == 302
+    assert not os.path.exists(os.path.join(proposals_dir, fname))
