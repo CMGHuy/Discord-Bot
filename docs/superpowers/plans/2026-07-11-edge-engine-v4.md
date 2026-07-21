@@ -26,7 +26,8 @@
 > - Full suite green after each (756 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
 > - Task E5 (Volatility-targeted sizing, `vol_target_risk_pct`/`effective_risk_pct`) done: brief verified fully accurate against hand-derived golden numbers, no corrections needed.
 > - Task E6 (Sizing modes wired into `account.compute_position_size`) done: controller pre-corrected two real bugs in the brief before implementing/testing — (1) the suggested edge-mode resolution rewrote `account_cfg`'s dict entries **after** `risk_pct`/`mode` had already been extracted into local variables from the original dict, so the rewrite would have been silently inert; fixed by overriding the locals directly instead; (2) the brief's own test fixture omitted `max_position_value_absolute`/`max_risk_amount_absolute`, so every golden share-count silently capped down to 10 against this project's real $1000/$100 absolute-cap defaults — fixed by explicitly disabling both (0) in the fixture. One golden number in the brief was also arithmetically wrong ($25 risk / $2 stop = 12.5 shares, not the brief's stated 12) — corrected to the real value. Also extended `set_sizing_mode` (core/account.py, not mentioned by file path in the brief) to actually accept the three new modes so `!account sizing kelly|vol_target|min_of_all` is reachable at all, with a matching reply-text fix in `commands/account.py` so it doesn't mislabel a new mode as "Risk %"; added one test for this beyond the brief's own coverage. Full suite green throughout (final: 765 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
-> - **Next:** Task E7 (Portfolio heat cap)
+> - Task E7 (Portfolio heat cap) done: controller pre-corrected a real wiring-location bug in the brief before implementing — position sizing and embed building actually happen in the confluence scan's alert-building loop (`core/scanning/engine.py`, right before its `build_embed()` call), not in `commands/scanning.py`'s `_send_alerts` as the brief assumed (that function only posts already-built `(embed, chart_path, plan)` tuples and never touches sizing — the brief's wiring point would have been a silent no-op). Also rendered the blocked-heat field through `embeds.py`'s existing `sections["headline"]` accumulator (respecting the fixed `SECTION_ORDER` flush) instead of the brief's raw `embed.add_field()` call, which would have broken field ordering on every alert. Added a `build_embed` regression test beyond the brief's own coverage (which only exercised `heat.py`'s pure functions) since this change touches a heavily-shared rendering function. `heat.py` itself (`trade_risk_pct`/`open_heat`/`heat_check`) verified fully accurate against golden numbers. Full suite green (772 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
+> - **Next:** Task E8 (Correlation-aware exposure)
 
 ## Global Constraints
 
@@ -828,7 +829,7 @@ git commit -m "feat: kelly/vol-target sizing modes (default unchanged)"
 - Blocking is **flagged, not hidden** (user-requirement pattern): a blocked plan still alerts, labeled `⛔ heat cap` with suggested size 0.
 - Consumed by: E49 (sector cap extends this file), E50 portfolio replay, E52 `!portfolio`, E68 treemap.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_heat.py
@@ -871,12 +872,12 @@ def test_closing_one_frees_heat():
     assert chk["remaining"] == pytest.approx(2.0)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_heat.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.edge.heat'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/edge/heat.py
@@ -941,11 +942,11 @@ and in `swingbot/core/scanning/embeds.py` (`build_embed`), when `getattr(item, "
             inline=False)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_heat.py -v` — PASS (5 tests). Full suite green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/heat.py swingbot/config.py swingbot/commands/scanning.py swingbot/core/scanning/embeds.py tests/test_edge_heat.py
