@@ -10,6 +10,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 
 from flask import Blueprint, Response, abort, redirect, render_template, request, send_file, url_for
@@ -358,7 +359,13 @@ def journal_page():
                    entries=entries, all_tags=all_tags, filters=filters)
 
 
+_JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # no '/', '\', or '.' -- blocks path traversal
+
+
 def _load_result(job_id: str) -> dict | None:
+    if not _JOB_ID_RE.match(job_id):
+        return None  # reject anything that isn't a real job id -- job_id flows
+        # straight from the ?job_id= query param into a filesystem path below
     path = os.path.join(config.DATA_DIR, "tuning_results", f"{job_id}.json")
     if not os.path.exists(path):
         return None

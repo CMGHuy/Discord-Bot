@@ -160,3 +160,23 @@ def test_tuning_results_table_renders_and_highlights_passing_rows(client, auth):
     html = r.data.decode("utf-8")
     assert "82.0" in html
     assert 'class="diff-add"' in html  # the passing row (N=40, WR=82, ExpR>0, excl=20%)
+
+
+def test_load_result_rejects_path_traversal_job_id(tmp_path, monkeypatch):
+    from swingbot import config
+    from swingbot.admin.pages import _load_result
+
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"strategy": "MACD", "grid": [], "best": null}')
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+
+    assert _load_result("../outside") is None
+    assert _load_result("..%2f..%2foutside") is None
+    assert _load_result("../../../../outside") is None
+
+
+def test_tuning_page_ignores_path_traversal_job_id(client, auth):
+    r = client.get("/tuning?job_id=" + "..%2f..%2fsecret", headers=auth)
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    assert "Results —" not in html  # no result card rendered for a rejected id
