@@ -159,6 +159,41 @@ def settings_diff(form, existing: dict) -> list[dict]:
     return changed
 
 
+def _audit_log_path() -> str:
+    # Resolved at call time (not module-import time) so tests that
+    # monkeypatch config.DATA_DIR per-test are honored -- same reasoning
+    # as PlanStore._path() and JobManager's _jobs_path().
+    return os.path.join(config.DATA_DIR, "settings_audit.jsonl")
+
+
+def append_settings_audit(diff: list) -> None:
+    if not diff:
+        return
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "changes": [{"key": d["key"], "old": d["old"], "new": d["new"]} for d in diff],
+    }
+    path = _audit_log_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def read_settings_audit(n: int = 20) -> list[dict]:
+    path = _audit_log_path()
+    if not os.path.exists(path):
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    rows = []
+    for line in lines[-n:]:
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return list(reversed(rows))
+
+
 # ---------------------------------------------------------------------------
 # Bot container control (Docker socket, optional)
 # ---------------------------------------------------------------------------

@@ -172,6 +172,26 @@
 })();
 </script>
 
+<div class="card" style="margin-top:24px;">
+  <details>
+    <summary class="card-title" style="cursor:pointer;">Recent changes ({{ settings_audit | length }})</summary>
+    {% if not settings_audit %}
+    <p class="muted">No settings changes recorded yet.</p>
+    {% else %}
+      {% for entry in settings_audit %}
+      <div style="border-top:1px solid #1f2330;padding:10px 0;">
+        <div class="muted" style="font-size:11px;margin-bottom:4px;">{{ entry.ts }}</div>
+        <table class="diff-table">
+          {% for c in entry.changes %}
+          <tr><td>{{ c.key }}</td><td class="diff-del">{{ c.old }}</td><td class="diff-add">{{ c.new }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </details>
+</div>
+
 <div class="card" style="margin-top: 24px;">
   <p class="card-title">Bot control</p>
   <div class="row">

@@ -72,6 +72,7 @@ from .helpers import (
     _field_display_value, _get_bot_container, _hot_reload_bot_container, _primary_strategy_label,
     _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
     _clear_admin_log, _write_env_text, get_versions, settings_diff,
+    append_settings_audit, read_settings_audit,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -711,6 +712,7 @@ def settings_page():
         field_value=lambda f: _field_display_value(f, env_values),
         restart_available=restart_available,
         section_meta=_SECTION_META,
+        settings_audit=read_settings_audit(20),
     )
 
 
@@ -726,10 +728,12 @@ def settings_preview():
 @require_auth
 def save_settings():
     existing = _read_env_values()
+    diff = settings_diff(request.form, existing)
     restart_needed_for = _changed_non_hot_reloadable_fields(existing, request.form)
 
     new_text = _build_env_text(request.form, existing)
     _write_env_text(new_text)
+    append_settings_audit(diff)
 
     success, message = _hot_reload_bot_container()
     if restart_needed_for:

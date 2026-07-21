@@ -1,5 +1,7 @@
 """Settings v2: diff preview, audit trail, export/import profiles,
 changed-only filter + resets."""
+import json
+import os
 
 
 def test_settings_diff_masks_sensitive_and_includes_only_changed(admin_app):
@@ -33,3 +35,27 @@ def test_settings_preview_route_no_changes(client, auth):
     existing = _read_env_values()
     r = client.post("/settings/preview", data=existing, headers=auth)
     assert b"Nothing changed" in r.data
+
+
+def test_settings_save_appends_masked_audit_line(client, auth, admin_app):
+    from swingbot import config
+    r = client.post("/settings/save", data={"SCAN_INTERVAL_MINUTES": "7"}, headers=auth)
+    assert r.status_code == 302
+    audit_path = os.path.join(config.DATA_DIR, "settings_audit.jsonl")
+    assert os.path.exists(audit_path)
+    entry = json.loads(open(audit_path).readlines()[0])
+    changed_keys = [c["key"] for c in entry["changes"]]
+    assert "SCAN_INTERVAL_MINUTES" in changed_keys
+
+
+def test_settings_page_shows_recent_changes_panel(client, auth, admin_app):
+    from swingbot import config
+    audit_path = os.path.join(config.DATA_DIR, "settings_audit.jsonl")
+    entry = {"ts": "2026-07-11T00:00:00+00:00",
+             "changes": [{"key": "SCAN_INTERVAL_MINUTES", "old": "30", "new": "7"}]}
+    with open(audit_path, "w") as f:
+        f.write(json.dumps(entry) + "\n")
+    r = client.get("/settings", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "Recent changes" in html
+    assert "SCAN_INTERVAL_MINUTES" in html
