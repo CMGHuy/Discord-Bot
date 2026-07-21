@@ -122,6 +122,43 @@ def _changed_non_hot_reloadable_fields(old_values: dict, form) -> list:
     return changed
 
 
+def settings_diff(form, existing: dict) -> list[dict]:
+    """[{key, label, old, new, sensitive}] for CHANGED fields only --
+    sensitive values masked "•••" on both sides regardless of what they
+    actually changed to/from, since this is rendered straight into an
+    HTML fragment the browser (and, via /settings/preview, the network)
+    sees. Mirrors _build_env_text's own "blank form value == no change"
+    rule so the diff and the actual save never disagree about what
+    counts as a real change."""
+    changed = []
+    for f in config.FIELDS:
+        if f.type == "checkbox":
+            # A real full-form submission always represents every checkbox
+            # (present as "on" if checked, silently absent if unchecked), so
+            # "not in form" normally does mean "unchecked" -- but if a
+            # checkbox is missing from BOTH the submitted form and the
+            # existing .env, neither side is actually saying anything about
+            # it (e.g. a checkbox still at its default on a brand-new .env
+            # that's never been saved), so treat that combination as "no
+            # change" rather than manufacturing a false true->false diff.
+            if f.key not in existing and f.key not in form:
+                continue
+            old = existing.get(f.key, f.default)
+            new = "true" if form.get(f.key) == "on" else "false"
+        else:
+            old = existing.get(f.key, f.default)
+            new = form.get(f.key, old)
+            if new == "" and f.key in existing:
+                new = old
+        if str(old) == str(new):
+            continue
+        display_old = "•••" if f.sensitive else old
+        display_new = "•••" if f.sensitive else new
+        changed.append({"key": f.key, "label": f.label, "old": display_old,
+                        "new": display_new, "sensitive": f.sensitive})
+    return changed
+
+
 # ---------------------------------------------------------------------------
 # Bot container control (Docker socket, optional)
 # ---------------------------------------------------------------------------

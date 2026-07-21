@@ -1,0 +1,16 @@
+{% if not diff %}
+<p class="muted">Nothing changed.</p>
+{% else %}
+<table class="diff-table">
+  <thead><tr><th>Setting</th><th>Current</th><th>New</th></tr></thead>
+  <tbody>
+  {% for d in diff %}
+  <tr>
+    <td title="{{ d.key }}">{{ d.label }}</td>
+    <td class="diff-del">{{ d.old }}</td>
+    <td class="diff-add">{{ d.new }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}

@@ -71,7 +71,7 @@ from .helpers import (
     _build_env_text, _changed_non_hot_reloadable_fields, _clear_log, _confidence_hex,
     _field_display_value, _get_bot_container, _hot_reload_bot_container, _primary_strategy_label,
     _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
-    _clear_admin_log, _write_env_text, get_versions,
+    _clear_admin_log, _write_env_text, get_versions, settings_diff,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -712,6 +712,14 @@ def settings_page():
         restart_available=restart_available,
         section_meta=_SECTION_META,
     )
+
+
+@app.route("/settings/preview", methods=["POST"])
+@require_auth
+def settings_preview():
+    existing = _read_env_values()
+    diff = settings_diff(request.form, existing)
+    return render_template("_settings_diff.html", diff=diff)
 
 
 @app.route("/settings/save", methods=["POST"])

@@ -1,6 +1,38 @@
 {% extends "base.html" %}
 {% block body %}
 
+{# Page-local modal-shell styling for the diff-preview confirm modal below
+   (Task C38). Copied verbatim from stats.html's own page-local <style>
+   block for its calendar drill-down modal -- .cal-overlay/.cal-modal/
+   .cal-modal-header/#cal-modal-title live ONLY there, not in the shared
+   static/style.css, so they render completely unstyled if referenced from
+   any other template without redefining them locally (see plan_detail.html
+   lines 33-34 for the same gap hit once before). Only the four generic
+   modal-shell rules are copied here -- not stats.html's calendar-grid-
+   specific rules (.cal-grid, .cal-day*, etc.), which this modal doesn't use. #}
+<style>
+.cal-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.cal-modal {
+  background: #13161d; border: 1px solid #1f2330; border-radius: 12px;
+  max-width: 680px; width: 100%; max-height: 88vh; overflow-y: auto;
+  padding: 20px 22px 22px; color: #dde1ea;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.cal-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+#cal-modal-title {
+  font-size: 20px; font-weight: 800; color: #fff;
+  letter-spacing: 0.03em; text-transform: uppercase;
+}
+</style>
+
 {# Single field renderer shared by both the checkbox row and the regular
    field grid below, so the label/help/changed-dot/input markup is only
    defined once regardless of which layout a field ends up in. #}
@@ -93,8 +125,52 @@
   <div class="save-bar">
     <button type="submit">💾 Save &amp; reload bot</button>
     <span class="save-hint">Saves to .env and hot-reloads the bot — no restart needed<br>except for fields marked <span class="restart-badge">↺ restart</span> (token, credentials, port).</span>
+    <span class="muted" id="settings-save-status" style="margin-left:8px;font-size:12px;"></span>
   </div>
 </form>
+
+<div id="settings-diff-modal" class="cal-overlay" style="display:none;">
+  <div class="cal-modal" style="max-width:600px;">
+    <div class="cal-modal-header">
+      <span id="cal-modal-title">Review changes</span>
+      <button id="settings-diff-close" type="button" aria-label="Close">&#10005;</button>
+    </div>
+    <div id="settings-diff-body"></div>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" class="secondary small" id="settings-diff-cancel">Cancel</button>
+      <button type="button" class="small" id="settings-diff-confirm">Confirm &amp; Save</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var form = document.getElementById('settings-form');
+  var modal = document.getElementById('settings-diff-modal');
+  var body = document.getElementById('settings-diff-body');
+  var status = document.getElementById('settings-save-status');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var formData = new FormData(form);
+    fetch('{{ url_for("settings_preview") }}', { method: 'POST', body: formData, credentials: 'include' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        body.innerHTML = html;
+        if (!body.querySelector('table')) {
+          status.textContent = 'Nothing changed.';
+          setTimeout(function () { status.textContent = ''; }, 2500);
+          return;
+        }
+        modal.style.display = 'flex';
+      });
+  });
+  document.getElementById('settings-diff-cancel').addEventListener('click', function () { modal.style.display = 'none'; });
+  document.getElementById('settings-diff-close').addEventListener('click', function () { modal.style.display = 'none'; });
+  document.getElementById('settings-diff-confirm').addEventListener('click', function () {
+    modal.style.display = 'none';
+    form.submit();  // real submit -> POST /settings/save, unchanged endpoint
+  });
+})();
+</script>
 
 <div class="card" style="margin-top: 24px;">
   <p class="card-title">Bot control</p>
