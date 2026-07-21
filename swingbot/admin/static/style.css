@@ -404,6 +404,10 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
    generated/natural pixel size whenever that was narrower than the card,
    leaving empty space on either side instead of filling the available area. */
 .chart-wrap img { width: 100%; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid #1f2330; display: block; margin: 0 auto; }
+.chart-card { background: #13161d; border: 1px solid #1f2330;
+              border-radius: 8px; padding: 16px; margin-top: 16px; }
+.chart-title { font-size: 12px; font-weight: 600; color: #5a6275;
+               text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
 
 /* ---- Chart loading state (trade detail: chart generation can take several seconds) ---- */
 .chart-loading {
