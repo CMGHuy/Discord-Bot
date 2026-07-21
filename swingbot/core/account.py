@@ -257,8 +257,15 @@ def set_sizing_mode(mode: str, path: str = CONFIG_PATH) -> dict:
         mode = "account_pct"
     elif mode in ("risk", "risk_pct"):
         mode = "risk_pct"
+    elif mode == "kelly":
+        mode = "kelly"
+    elif mode in ("vol_target", "voltarget", "vol"):
+        mode = "vol_target"
+    elif mode in ("min_of_all", "minofall", "min"):
+        mode = "min_of_all"
     else:
-        raise ValueError(f"Unknown sizing mode {mode!r} -- use 'risk' or 'account'.")
+        raise ValueError(
+            f"Unknown sizing mode {mode!r} -- use 'risk', 'account', 'kelly', 'vol_target', or 'min_of_all'.")
     config = load_account_config(path)
     config["sizing_mode"] = mode
     save_account_config(config, path)
@@ -404,7 +411,9 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None, path: str = CONFIG_
     return config
 
 
-def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None) -> dict | None:
+def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None,
+                          *, strategy_stats: dict = None, ticker_atr_pct: float = None,
+                          open_positions: int = 0) -> dict | None:
     """
     Position sizing -- see this module's docstring for the two modes
     (account_cfg["sizing_mode"]: "risk_pct" or "account_pct").
@@ -457,6 +466,24 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     max_risk_amount_absolute = float(account_cfg.get(
         "max_risk_amount_absolute", app_config.MAX_RISK_AMOUNT_ABSOLUTE))
     mode = account_cfg.get("sizing_mode", "risk_pct")
+
+    # --- Edge sizing modes (E6): resolve to an effective risk_pct, then
+    # fall through to the ordinary risk_pct branch below. Optional inputs
+    # missing -> that estimator simply doesn't participate in the min().
+    # NOTE: this overrides the local risk_pct/mode variables directly --
+    # both were already extracted from account_cfg above, so rewriting
+    # account_cfg itself at this point (as an earlier draft of this
+    # change assumed) would silently do nothing.
+    if mode in ("kelly", "vol_target", "min_of_all"):
+        from swingbot.core.edge import sizing as edge_sizing
+        kelly = vol = None
+        if mode in ("kelly", "min_of_all") and strategy_stats:
+            kelly = edge_sizing.kelly_risk_pct(strategy_stats)
+        if mode in ("vol_target", "min_of_all") and ticker_atr_pct:
+            vol = edge_sizing.vol_target_risk_pct(
+                ticker_atr_pct, app_config.PORTFOLIO_TARGET_DAILY_VOL_PCT, open_positions)
+        risk_pct = edge_sizing.effective_risk_pct(risk_pct, kelly_risk=kelly, vol_risk=vol)
+        mode = "risk_pct"
 
     if balance <= 0 or entry <= 0:
         return None

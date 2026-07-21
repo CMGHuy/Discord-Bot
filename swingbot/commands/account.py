@@ -7,12 +7,20 @@ from swingbot.core.account import (
 from swingbot.bot_core import bot
 
 
+_EDGE_SIZING_LABELS = {
+    "kelly": "Quarter-Kelly", "vol_target": "Vol-target", "min_of_all": "Min-of-all",
+}
+
+
 @bot.group(name="account", invoke_without_command=True)
 async def account_cmd(ctx):
     cfg = load_account_config()
     mode = cfg.get("sizing_mode", "risk_pct")
     if mode == "account_pct":
         sizing_line = f"Position sizing: **Account %** -- {cfg.get('position_pct', 0.1)}% of balance per trade"
+    elif mode in _EDGE_SIZING_LABELS:
+        sizing_line = (f"Position sizing: **{_EDGE_SIZING_LABELS[mode]}** -- effective risk computed "
+                       f"per-trade from strategy/volatility stats (config risk % {cfg['risk_pct']} is the ceiling)")
     else:
         sizing_line = f"Position sizing: **Risk %** -- {cfg['risk_pct']}% of balance risked per trade"
     await ctx.send(
@@ -65,6 +73,12 @@ async def account_sizing(ctx, mode: str):
             f"Position sizing set to **Account %** -- every trade now opens at "
             f"{cfg.get('position_pct', 0.1)}% of the account balance ({cfg['balance']}), "
             f"regardless of stop distance. Change the % with `!account positionpct <pct>`."
+        )
+    elif cfg["sizing_mode"] in _EDGE_SIZING_LABELS:
+        await ctx.send(
+            f"Position sizing set to **{_EDGE_SIZING_LABELS[cfg['sizing_mode']]}** -- effective risk is "
+            f"computed per-trade from strategy/volatility stats, never above your risk % "
+            f"({cfg['risk_pct']}%, the ceiling) or the frozen 2% hard cap."
         )
     else:
         await ctx.send(

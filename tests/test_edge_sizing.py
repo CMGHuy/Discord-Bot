@@ -66,3 +66,67 @@ def test_effective_risk_takes_the_min():
     assert effective_risk_pct(1.0) == 1.0                      # nothing else supplied
     assert effective_risk_pct(1.0, throttle_mult=0.5) == 0.5   # throttle multiplies last
     assert effective_risk_pct(1.0, throttle_mult=0.0) == 0.0   # kill = truly zero
+
+
+def _cfg(mode):
+    # max_position_value_absolute/max_risk_amount_absolute explicitly
+    # disabled (0) -- compute_position_size falls back to the real
+    # project's app_config defaults ($1000 / $100) for any key this dict
+    # doesn't supply, which would silently cap every shares figure below
+    # to 10 and make these golden numbers wrong.
+    return {"balance": 10_000.0, "risk_pct": 1.0, "sizing_mode": mode,
+            "max_open_positions": 5, "max_position_pct": 100.0,
+            "max_position_value_absolute": 0, "max_risk_amount_absolute": 0}
+
+
+def test_default_mode_unchanged():
+    from swingbot.core.account import compute_position_size
+    # entry 100, stop 98 -> $2 risk/share; 1% of 10k = $100 -> 50 shares.
+    out = compute_position_size(100.0, 98.0, _cfg("risk_pct"))
+    assert out["shares"] == 50
+
+
+def test_kelly_mode_uses_strategy_stats():
+    from swingbot.core.account import compute_position_size
+    stats = {"win_rate": 0.80, "avg_win_r": 0.4, "avg_loss_r": 1.0, "n": 200}
+    # kelly says 2.0% but min(config 1.0, kelly 2.0) = 1.0 -> same 50 shares
+    out = compute_position_size(100.0, 98.0, _cfg("kelly"), strategy_stats=stats)
+    assert out["shares"] == 50
+    # weak stats: kelly floors at 0.25% -> min(1.0, 0.25) -> $25 risk -> 12.5 shares
+    # (the plan's own brief said "12 shares" here -- $25 / $2 stop distance is
+    # exactly 12.5, not 12; verified against the real compute_position_size
+    # output rather than trusting the brief's arithmetic)
+    weak = {"win_rate": 0.60, "avg_win_r": 0.3, "avg_loss_r": 1.0, "n": 200}
+    out = compute_position_size(100.0, 98.0, _cfg("kelly"), strategy_stats=weak)
+    assert out["shares"] == 12.5
+
+
+def test_vol_target_mode_shrinks_wild_tickers():
+    from swingbot.core.account import compute_position_size
+    out = compute_position_size(100.0, 98.0, _cfg("vol_target"), ticker_atr_pct=3.0)
+    # vol-target 0.7% -> min(1.0, 0.7) -> $70 risk -> 35 shares
+    assert out["shares"] == 35
+
+
+def test_min_of_all_takes_the_smallest():
+    from swingbot.core.account import compute_position_size
+    stats = {"win_rate": 0.80, "avg_win_r": 0.4, "avg_loss_r": 1.0, "n": 200}
+    out = compute_position_size(100.0, 98.0, _cfg("min_of_all"),
+                                strategy_stats=stats, ticker_atr_pct=3.0)
+    assert out["shares"] == 35  # min(1.0 config, 2.0 kelly, 0.7 vol) = 0.7
+
+
+def test_new_modes_without_inputs_fall_back_to_config_risk():
+    from swingbot.core.account import compute_position_size
+    out = compute_position_size(100.0, 98.0, _cfg("min_of_all"))
+    assert out["shares"] == 50
+
+
+def test_set_sizing_mode_accepts_the_three_edge_modes(tmp_path):
+    from swingbot.core.account import set_sizing_mode
+    path = str(tmp_path / "account.json")
+    assert set_sizing_mode("kelly", path=path)["sizing_mode"] == "kelly"
+    assert set_sizing_mode("vol_target", path=path)["sizing_mode"] == "vol_target"
+    assert set_sizing_mode("min_of_all", path=path)["sizing_mode"] == "min_of_all"
+    with pytest.raises(ValueError):
+        set_sizing_mode("not_a_real_mode", path=path)

@@ -242,13 +242,26 @@ FIELDS: list[Field] = [
                "$5 stock suggests 10× as many shares as a $5 stop on a $50 stock). 20% is a sensible "
                "ceiling for a single position; lower if you want more diversification headroom."),
     Field("POSITION_SIZING_MODE", "POSITION_SIZING_MODE", "Account Defaults", "Position sizing mode",
-          type="select", default="risk_pct", options=[("risk_pct", "Risk % (fixed-fractional)"), ("account_pct", "Account % (fixed allocation)")],
+          type="select", default="risk_pct",
+          options=[("risk_pct", "Fixed risk % per trade"),
+                   ("account_pct", "Fixed % of account"),
+                   ("kelly", "Quarter-Kelly of strategy stats (capped 2%)"),
+                   ("vol_target", "Volatility-targeted (portfolio vol budget)"),
+                   ("min_of_all", "Minimum of all estimates (most conservative)")],
           help="<b>Risk %</b> (the original model): size so a full stop-out costs exactly Risk per trade % of "
                "the account -- position size varies with how tight the stop is. <b>Account %</b>: size so the "
                "position itself is always exactly Position size % of account (below) of the account balance, "
                "regardless of stop distance -- e.g. a €1,000,000 account at 0.1% always opens a €1,000 "
-               "position. Live-editable per account via `!account sizing risk|account`, same as the other "
-               "Account Defaults below -- this .env value only seeds a brand-new data/account.json."),
+               "position. <b>kelly/vol_target/min_of_all</b> are Edge-plan modes: they can only ever REDUCE "
+               "risk below your risk % (hard ceiling 2%, quarter-Kelly cap frozen) -- see `!growth` for what "
+               "each mode does to the compounding ETA. Live-editable per account via `!account sizing "
+               "risk|account|kelly|vol_target|min_of_all`, same as the other Account Defaults below -- this "
+               ".env value only seeds a brand-new data/account.json."),
+    Field("PORTFOLIO_TARGET_DAILY_VOL_PCT", "PORTFOLIO_TARGET_DAILY_VOL_PCT", "Account Defaults",
+          "Portfolio daily vol target (%)", type="float", default="0.7",
+          min=0.1, max=3.0, step=0.1,
+          help="Only used in 'vol_target'/'min_of_all' sizing mode. Keeps estimated portfolio daily "
+               "volatility near this. 0.7% daily ≈ 11% annualized -- calm enough to hold through."),
     Field("POSITION_SIZE_PCT_OF_ACCOUNT", "POSITION_SIZE_PCT_OF_ACCOUNT", "Account Defaults",
           "Position size % of account",
           type="float", default="0.1", min=0.001, max=100, step=0.01,
