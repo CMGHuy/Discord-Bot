@@ -24,7 +24,9 @@
 > - Task E3 (Bootstrap Monte Carlo — drawdown & ruin, `simulate()`) done: brief verified fully accurate, no corrections needed.
 > - Task E4 (Fractional-Kelly sizing, `kelly_fraction`/`kelly_risk_pct`) done: brief verified fully accurate against hand-derived golden numbers, no corrections needed.
 > - Full suite green after each (756 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
-> - **Next:** Task E5 (Volatility-targeted sizing)
+> - Task E5 (Volatility-targeted sizing, `vol_target_risk_pct`/`effective_risk_pct`) done: brief verified fully accurate against hand-derived golden numbers, no corrections needed.
+> - Task E6 (Sizing modes wired into `account.compute_position_size`) done: controller pre-corrected two real bugs in the brief before implementing/testing — (1) the suggested edge-mode resolution rewrote `account_cfg`'s dict entries **after** `risk_pct`/`mode` had already been extracted into local variables from the original dict, so the rewrite would have been silently inert; fixed by overriding the locals directly instead; (2) the brief's own test fixture omitted `max_position_value_absolute`/`max_risk_amount_absolute`, so every golden share-count silently capped down to 10 against this project's real $1000/$100 absolute-cap defaults — fixed by explicitly disabling both (0) in the fixture. One golden number in the brief was also arithmetically wrong ($25 risk / $2 stop = 12.5 shares, not the brief's stated 12) — corrected to the real value. Also extended `set_sizing_mode` (core/account.py, not mentioned by file path in the brief) to actually accept the three new modes so `!account sizing kelly|vol_target|min_of_all` is reachable at all, with a matching reply-text fix in `commands/account.py` so it doesn't mislabel a new mode as "Risk %"; added one test for this beyond the brief's own coverage. Full suite green throughout (final: 765 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward).
+> - **Next:** Task E7 (Portfolio heat cap)
 
 ## Global Constraints
 
@@ -585,7 +587,7 @@ git commit -m "feat: fractional-Kelly sizing math"
 **Interfaces:**
 - Produces: `vol_target_risk_pct(ticker_atr_pct, portfolio_target_daily_vol_pct=0.7, open_positions=0, stop_cap_pct=3.0) -> float`; `effective_risk_pct(config_risk, kelly_risk=None, vol_risk=None, throttle_mult=1.0) -> float` — the min-chain every sizing decision flows through from E6 on (E45's throttle multiplies at the end, floor at `RISK_FLOOR_PCT` unless the throttle says 0).
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_sizing.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_sizing.py`)
 
 ```python
 def test_high_atr_ticker_gets_less_risk():
@@ -616,12 +618,12 @@ def test_effective_risk_takes_the_min():
     assert effective_risk_pct(1.0, throttle_mult=0.0) == 0.0   # kill = truly zero
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_sizing.py -v`
 Expected: FAIL — `ImportError: cannot import name 'vol_target_risk_pct'`
 
-- [ ] **Step 3: Write the implementation** (append to `swingbot/core/edge/sizing.py`)
+- [x] **Step 3: Write the implementation** (append to `swingbot/core/edge/sizing.py`)
 
 ```python
 import math
@@ -671,11 +673,11 @@ def effective_risk_pct(config_risk: float, kelly_risk: float | None = None,
 
 Wait — `effective_risk_pct(1.0, throttle_mult=0.5) == 0.5` and the floor is 0.25, so `max(0.25, 0.5)` = 0.5 ✓; a throttled `0.25 * 0.5 = 0.125` would floor at 0.25 — that is intended (the floor keeps positions tradeable; the PAUSE rung uses `throttle_mult=0`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_sizing.py -v` — PASS (9 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/sizing.py tests/test_edge_sizing.py
@@ -694,7 +696,7 @@ git commit -m "feat: volatility-targeted sizing"
 - `POSITION_SIZING_MODE` options become `risk_pct | account_pct | kelly | vol_target | min_of_all` (default `risk_pct` — **no behavior change**). New modes compute `effective_risk_pct(...)` and then reuse the existing `risk_pct` sizing branch.
 - New Field: `PORTFOLIO_TARGET_DAILY_VOL_PCT` (float, default 0.7, min 0.1, max 3.0, step 0.1, section "Account Defaults").
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_sizing.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_sizing.py`)
 
 ```python
 def _cfg(mode):
@@ -742,12 +744,12 @@ def test_new_modes_without_inputs_fall_back_to_config_risk():
     assert out["shares"] == 50
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_edge_sizing.py -v`
 Expected: FAIL — `TypeError: compute_position_size() got an unexpected keyword argument 'strategy_stats'` (and/or unknown-mode handling).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `swingbot/core/account.py`, change the signature and insert the mode resolution right where `mode = account_cfg.get("sizing_mode", "risk_pct")` is read (line ~457):
 
@@ -802,11 +804,11 @@ In `swingbot/config.py`: extend the existing Field's options and add the new Fie
 
 (Keep the existing Field's other kwargs — only `options` and `help` change. `!account sizing` in `swingbot/commands/account.py` validates against the mode list; extend its accepted set to the five values.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_edge_sizing.py -v` — PASS (14 tests). Full suite `python -m pytest tests/ -q` — green (default mode byte-for-byte unchanged; the parity test `scripts/parity_sizing.py` still agrees).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/account.py swingbot/config.py swingbot/commands/account.py tests/test_edge_sizing.py
