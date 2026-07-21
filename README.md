@@ -533,6 +533,46 @@ fallen more than 10 points below the number it validated at out-of-sample —
 loosening either threshold after watching live results would turn an
 early-warning signal into a curve-fit one.
 
+## Admin cockpit
+
+Beyond the original Dashboard/Watchlist/Settings/Logs pages, the admin UI
+(`python admin_ui.py`) is a decision cockpit built entirely on top of the
+analytics core above — every page renders numbers computed once, never
+recomputed per-view:
+
+| Page | What it's for |
+|---|---|
+| **Plans** (`/plans`) | The live plan board — every `TradePlanV2` ranked by `follow_score`, filterable by status/tier/badge/ticker, with cancel/close actions and a detail page (chart, timeline, quality breakdown, linked trade). |
+| **Strategies** (`/strategies`) | Registry provenance per strategy (badge, R:R override, OOS N/WR/expectancy, validation window/run date), a strategy×horizon live win-rate heatmap, drift chips, and rolling-WR sparklines. |
+| **Calibration** (`/calibration`) | Does a higher quality score actually win more? Score-decile chart vs the 80% target line, tier-vs-design-band pass/fail, and the badge-drift table (see the edge-decay rule above). |
+| **Journal** (`/journal`) | Browses `JournalStore` entries (MFE/MAE, exit efficiency, tags, auto-lesson) with tag/outcome/strategy filters and inline note editing, plus a Weekly digest tab. |
+| **Tuning** (`/tuning`) | A workbench over `scripts/tune_strategy.py`: current per-strategy parameters, a grid-launch form, live job-progress streaming, and a results/proposal browser. See the TRAIN-only guardrail below — this page can only ever *propose* a parameter change. |
+
+**Job system.** `swingbot/admin/jobs.py`'s `JobManager` runs at most one
+tuning grid at a time as a background subprocess; live progress streams to
+the Tuning page via polling. Job logs live under `logs/jobs/<job_id>.log`,
+grid results under `data/tuning_results/<job_id>.json`
+(`scripts/tune_strategy.py --json`), and a proposed parameter change (never
+auto-applied) under `data/tuning_proposals/`.
+
+**TRAIN-only guardrail.** The tuning workbench physically cannot touch the
+2024-01-01..2025-12-31 validation window — `assert_train_only` rejects any
+grid launch whose date range overlaps it (including flag-injection and
+non-padded-date bypass attempts, both explicitly tested). Validation stays
+a deliberate, manual CLI act (`run_backtest_range.py --validation`), never
+something the UI can trigger. A tuning proposal is a JSON file for a human
+to review; nothing in this plan's code path ever writes it into
+`DEFAULT_PARAMS`.
+
+**Settings audit trail.** Every saved change appends a masked before/after
+diff to `data/settings_audit.jsonl`, shown on the Settings page's "Recent
+changes" panel. Sensitive fields (bot token, webhook URLs, credentials) are
+masked (`•••`) in both the save-confirmation diff and the audit log — never
+logged or exported in the clear. `.env` profile export omits sensitive
+fields entirely (not just masked); import applies any recognized field it's
+handed, sensitive or not (pasting a real credential back in is the whole
+point of import), skipping only keys the schema doesn't recognize at all.
+
 ## Files
 
 The project is laid out as a proper package:
