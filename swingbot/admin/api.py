@@ -13,6 +13,7 @@ from flask import Blueprint, jsonify, request
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.analytics.snapshots import load_snapshot
 from swingbot.core.analytics.snapshots import refresh_snapshot as _rebuild_snapshot
+from swingbot.admin.jobs import manager as job_manager
 
 from .app import ADMIN_PASSWORD, ADMIN_USERNAME
 from .helpers import get_versions
@@ -128,3 +129,30 @@ def api_calibration():
 @require_auth_json
 def api_registry():
     return jsonify({"registry": _registry_rows()})
+
+
+@api.route("/jobs/tune", methods=["POST"])
+@require_auth_json
+def api_jobs_tune():
+    strategy = request.form.get("strategy", "")
+    args = ["--strategy", strategy]  # Task C31 replaces this line with build_tune_args(strategy, params)
+    try:
+        job_id = job_manager.start("tune", args)
+    except RuntimeError:
+        return jsonify({"error": "busy"}), 409
+    return jsonify({"job_id": job_id})
+
+
+@api.route("/jobs/<job_id>", methods=["GET"])
+@require_auth_json
+def api_job_status(job_id):
+    status = job_manager.status(job_id)
+    if not status:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({**status, "log_tail": job_manager.tail(job_id, n=50)})
+
+
+@api.route("/jobs", methods=["GET"])
+@require_auth_json
+def api_jobs_list():
+    return jsonify({"jobs": job_manager.all()[:20]})

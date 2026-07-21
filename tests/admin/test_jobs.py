@@ -32,3 +32,26 @@ def test_concurrent_start_raises_while_busy(admin_app):
     mgr.start("test", ["-c", "import time; time.sleep(2)"])
     with pytest.raises(RuntimeError, match="already running"):
         mgr.start("test", ["-c", "print('should not start')"])
+
+
+class _FakeManagerOK:
+    def start(self, kind, args):
+        return "job123"
+
+
+class _FakeManagerBusy:
+    def start(self, kind, args):
+        raise RuntimeError("job already running")
+
+
+def test_api_jobs_tune_returns_job_id(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
+    r = client.post("/api/jobs/tune", data={"strategy": "RSI"}, headers=auth)
+    assert r.get_json() == {"job_id": "job123"}
+
+
+def test_api_jobs_tune_409_when_busy(client, auth, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerBusy())
+    r = client.post("/api/jobs/tune", data={"strategy": "RSI"}, headers=auth)
+    assert r.status_code == 409
+    assert r.get_json() == {"error": "busy"}
