@@ -433,3 +433,21 @@ def test_closed_trade_embed_trade_id_field_shows_plan_engine_v2_suffix_when_v2()
     assert "trade-42" in trade_id_field.value
     assert "Plan Engine v2" in trade_id_field.value
     assert "plan plan-abc" in embed.footer.text
+
+
+def test_heat_blocked_item_renders_headline_field_with_size_zero():
+    # Edge plan E7: portfolio heat cap is flagged on the embed, never
+    # hidden -- engine.py sets item.heat_blocked right before build_embed.
+    item = make_item()
+    item.heat_blocked = {"allowed": False, "open_heat": 6.4, "remaining": 0.0, "cap": 6.0}
+    embed = _build(item)
+    heat_fields = [f for f in embed.fields if "heat cap" in f.name.lower()]
+    assert len(heat_fields) == 1
+    assert "6.4%" in heat_fields[0].value and "6.0%" in heat_fields[0].value
+    assert "0 shares" in heat_fields[0].value
+
+
+def test_no_heat_blocked_attr_adds_no_field():
+    item = make_item()
+    embed = _build(item)
+    assert not [f for f in embed.fields if "heat cap" in f.name.lower()]

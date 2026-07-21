@@ -56,6 +56,7 @@ from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core import levels
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.edge import heat as heat_mod
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
 from swingbot.core.events import earnings_within_window
@@ -893,6 +894,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         except Exception as e:
             log.warning("Could not generate trade chart for %s: %s", result.ticker, e, exc_info=True)
             chart_path, chart_filename = None, None
+
+        # Portfolio heat cap (Edge plan E7): flagged, never hidden -- the
+        # alert still posts, labeled, with build_embed showing suggested
+        # size 0, so the operator always sees what the cap cost them.
+        # open_trades re-read per item (not once per scan) so heat from
+        # trades logged earlier in THIS same scan pass is accounted for.
+        open_trades = trade_log.get_trades(status="open", limit=None)
+        heat_chk = heat_mod.heat_check(open_trades, account_cfg.get("balance", 0.0),
+                                       candidate_risk_pct=account_cfg.get("risk_pct", 1.0))
+        if not heat_chk["allowed"]:
+            item.heat_blocked = heat_chk
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)

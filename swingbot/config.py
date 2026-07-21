@@ -262,6 +262,12 @@ FIELDS: list[Field] = [
           min=0.1, max=3.0, step=0.1,
           help="Only used in 'vol_target'/'min_of_all' sizing mode. Keeps estimated portfolio daily "
                "volatility near this. 0.7% daily ≈ 11% annualized -- calm enough to hold through."),
+    Field("PORTFOLIO_HEAT_CAP_PCT", "PORTFOLIO_HEAT_CAP_PCT", "Account Defaults",
+          "Portfolio heat cap (%)", type="float", default="6.0",
+          min=1, max=20, step=0.5,
+          help="Sum of risk-to-stop across every open position never alerts a new entry past this % "
+               "of equity. Blocking is flagged, not hidden -- a blocked plan still alerts, labeled "
+               "'⛔ heat cap', with suggested size 0, so you can free heat deliberately."),
     Field("POSITION_SIZE_PCT_OF_ACCOUNT", "POSITION_SIZE_PCT_OF_ACCOUNT", "Account Defaults",
           "Position size % of account",
           type="float", default="0.1", min=0.001, max=100, step=0.01,

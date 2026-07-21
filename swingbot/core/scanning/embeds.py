@@ -471,6 +471,18 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
 
     sections: dict[str, list[tuple]] = {k: [] for k in theme.SECTION_ORDER}
 
+    heat_blocked = getattr(item, "heat_blocked", None)
+    if heat_blocked is not None:
+        # Blocking is FLAGGED, never hidden (Edge plan E7) -- the alert
+        # still posts with this headline field, suggested size 0, so the
+        # operator always sees what the cap cost them.
+        sections["headline"].append((
+            "⛔ ENTRY BLOCKED — portfolio heat cap",
+            (f"Open heat {heat_blocked['open_heat']}% / cap {heat_blocked['cap']}% — "
+             f"suggested size **0 shares**. Close or trim a position to free heat."),
+            False,
+        ))
+
     if plan_v2 is not None and plan_v2.badge == "WEAK":
         # First field on the embed for any WEAK plan, both layouts -- a
         # single-line caution replacing the old multi-line badge_field_for
