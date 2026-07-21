@@ -676,3 +676,22 @@ def test_tuning_shows_job_card_when_busy(client, auth, monkeypatch):
     html = r.data.decode("utf-8")
     assert "Launch TRAIN grid" not in html
     assert "job1" in html
+
+
+def test_tuning_page_includes_job_progress_poller(client, auth, monkeypatch):
+    running = {"id": "job1", "kind": "tune", "args": ["--strategy", "RSI"], "state": "running", "started_at": "x"}
+    monkeypatch.setattr("swingbot.admin.pages.job_manager",
+                        type("M", (), {"all": staticmethod(lambda: [running])})())
+    r = client.get("/tuning", headers=auth)
+    html = r.data.decode("utf-8")
+    assert 'data-job-id="job1"' in html
+    assert "/api/jobs/' + jobId" in html
+
+
+def test_tuning_page_lists_recent_jobs(client, auth, monkeypatch):
+    jobs = [{"id": "job1", "kind": "tune", "args": [], "state": "done", "started_at": "2026-07-11T00:00:00+00:00"}]
+    monkeypatch.setattr("swingbot.admin.pages.job_manager",
+                        type("M", (), {"all": staticmethod(lambda: jobs)})())
+    r = client.get("/tuning", headers=auth)
+    html = r.data.decode("utf-8")
+    assert "job1" in html and "done" in html

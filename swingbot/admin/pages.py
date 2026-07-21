@@ -374,9 +374,11 @@ def tuning_page():
             "badge": badge.status, "window": badge.window, "run_date": badge.run_date,
         })
     running_job = next((j for j in job_manager.all() if j["state"] in ("queued", "running")), None)
+    recent_jobs = job_manager.all()[:5]
     return _render("Tuning", "tuning", "tuning.html", current_state=current_state,
                    strategy_filter=strategy_filter or "", running_job=running_job,
-                   all_strategies=list(ALL_STRATEGIES), train_window=TRAIN_WINDOW)
+                   all_strategies=list(ALL_STRATEGIES), train_window=TRAIN_WINDOW,
+                   recent_jobs=recent_jobs)
 
 
 def _queue_manual_close_notify(plan) -> None:

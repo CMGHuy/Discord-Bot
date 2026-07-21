@@ -32,10 +32,32 @@
 <div class="card">
   <p class="card-title">Run TRAIN grid</p>
   {% if running_job %}
-  <div class="empty-state" style="padding:20px;">
-    <p>A tuning job is already running (<code>{{ running_job.id }}</code>) — see progress below.
-       Only one tuning job runs at a time.</p>
+  <div class="card" id="job-progress-card" data-job-id="{{ running_job.id }}" style="margin-top:0;">
+    <p class="card-title">Job in progress — <code>{{ running_job.id }}</code></p>
+    <div id="job-state-label" class="pill">RUNNING</div>
+    <div class="job-log" id="job-log-box" style="margin-top:8px;">Loading…</div>
   </div>
+  <script>
+  (function () {
+    var jobId = document.getElementById('job-progress-card').dataset.jobId;
+    function poll() {
+      fetch('/api/jobs/' + jobId, { credentials: 'include' })
+        .then(function (r) { return r.json(); })
+        .then(function (job) {
+          document.getElementById('job-log-box').textContent = job.log_tail || '';
+          var label = document.getElementById('job-state-label');
+          label.textContent = job.state.toUpperCase() + (job.returncode !== null ? ' (exit ' + job.returncode + ')' : '');
+          if (job.state === 'running' || job.state === 'queued') {
+            setTimeout(poll, 3000);
+          } else {
+            window.location.reload();  // done/failed -- refresh to show results (C35) + a fresh launch form
+          }
+        })
+        .catch(function () { setTimeout(poll, 3000); });
+    }
+    poll();
+  })();
+  </script>
   {% else %}
   <div class="banner" style="border-left:3px solid #6ea8fe;margin-bottom:12px;">
     TRAIN window (fixed, immutable): {{ train_window[0] }} .. {{ train_window[1] }} — no date input
@@ -74,6 +96,21 @@
       .catch(function () { status.textContent = 'Request failed.'; });
   });
   </script>
+  {% endif %}
+</div>
+<div class="card">
+  <p class="card-title">Recent jobs</p>
+  {% if not recent_jobs %}
+  <p class="muted">No tuning jobs have run yet.</p>
+  {% else %}
+  <ul style="margin:0;padding-left:20px;">
+    {% for j in recent_jobs %}
+    <li style="font-size:13px;margin-bottom:4px;">
+      <code>{{ j.id }}</code> — {{ j.state }} — started {{ j.started_at }}
+      {% if j.state == 'done' %}· <a href="{{ url_for('pages.tuning_page', job_id=j.id) }}">view results</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
   {% endif %}
 </div>
 {% endblock %}
