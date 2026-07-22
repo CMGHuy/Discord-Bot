@@ -17,6 +17,7 @@ from Yahoo Finance -- that data isn't available for free anywhere at that
 granularity going back years. `download_and_cache('1m')` pulls the maximum
 Yahoo actually has (~30 days) and says so plainly in the result.
 """
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -24,6 +25,8 @@ import pandas as pd
 import yfinance as yf
 
 from .ticker_utils import candidate_symbols
+
+log = logging.getLogger("swing-bot.data_store")
 
 DATA_DIR = "market_data"
 
@@ -132,3 +135,51 @@ def download_and_cache(ticker: str, interval: str = "1m", base_dir: str = DATA_D
         "path": path,
         "max_days_available": cfg["max_days"],  # None means full history
     }
+
+
+def _default_ranged_fetch(symbol: str, start) -> "pd.DataFrame | None":
+    try:
+        df = yf.download(symbol, start=str(start), interval="1d",
+                         auto_adjust=True, progress=False)
+        if df is None or df.empty:
+            return None
+        return _normalize_columns(df)
+    except Exception as exc:  # network flake: skip symbol this run
+        log.warning("ranged fetch %s failed: %s", symbol, exc)
+        return None
+
+
+def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
+                 fetch_fn=None) -> dict:
+    """Incremental cache update: fetch only bars newer than each CSV's
+    last date; atomic replace so a crash mid-write never corrupts a file."""
+    fetch = fetch_fn or _default_ranged_fetch
+    result = {}
+    for symbol in symbols:
+        existing = load_from_disk(symbol, interval, base_dir=base_dir)
+        if existing is None or existing.empty:
+            fresh = fetch(symbol, "2018-06-01")
+            if fresh is None or fresh.empty:
+                result[symbol] = 0
+                continue
+            save_to_disk(fresh, symbol, interval, base_dir=base_dir)
+            result[symbol] = len(fresh)
+            continue
+        last = existing.index.max()
+        # Keep as a Timestamp (not `.date()`): fetch_fn implementations may
+        # compare `start` against a DatetimeIndex, and pandas raises
+        # TypeError comparing datetime64 to a bare `datetime.date`.
+        # `_default_ranged_fetch` stringifies this fine for yfinance either way.
+        fresh = fetch(symbol, last + pd.Timedelta(days=1))
+        fresh = fresh[fresh.index > last] if fresh is not None else None
+        if fresh is None or fresh.empty:
+            result[symbol] = 0
+            continue
+        merged = pd.concat([existing, fresh])
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        path = cache_path(symbol, interval, base_dir=base_dir)
+        tmp = path + ".tmp"
+        merged.to_csv(tmp)
+        os.replace(tmp, path)
+        result[symbol] = len(fresh)
+    return result

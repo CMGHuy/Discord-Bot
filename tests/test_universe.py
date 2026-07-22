@@ -90,3 +90,35 @@ def test_spy_plan_builds_end_to_end():
     plan = build_strategy_plan(df, len(df) - 1, ticker="SPY", strategy="MACD",
                                 horizon_key="4w", direction="bullish")
     assert plan is not None and plan.stop_loss < plan.entry_price
+
+
+def test_update_cache_appends_only_new_bars(tmp_path):
+    import numpy as np
+    import pandas as pd
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import save_to_disk, load_from_disk, update_cache
+
+    old = make_ohlcv(np.full(50, 100.0), start="2026-01-01")
+    save_to_disk(old, "TEST", "1d", base_dir=str(tmp_path))
+
+    fresh = make_ohlcv(np.full(60, 101.0), start="2026-01-01")  # 10 newer bars, 50 overlap
+
+    def fake_fetch(symbol, start):
+        return fresh[fresh.index >= start]
+
+    result = update_cache(["TEST"], base_dir=str(tmp_path), fetch_fn=fake_fetch)
+    assert result["TEST"] == 10
+    merged = load_from_disk("TEST", "1d", base_dir=str(tmp_path))
+    assert len(merged) == 60
+    assert not merged.index.duplicated().any()
+
+
+def test_update_cache_empty_delta_is_noop(tmp_path):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import save_to_disk, update_cache
+    save_to_disk(make_ohlcv(np.full(50, 100.0), start="2026-01-01"), "TEST", "1d",
+                 base_dir=str(tmp_path))
+    result = update_cache(["TEST"], base_dir=str(tmp_path),
+                          fetch_fn=lambda s, start: None)
+    assert result["TEST"] == 0
