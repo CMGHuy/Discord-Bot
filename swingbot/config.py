@@ -455,6 +455,10 @@ FIELDS: list[Field] = [
                "many days (0 = off). ETFs are always exempt (they don't report earnings). "
                "Gate is defined in swingbot/core/edge/gates.py:in_earnings_blackout but not "
                "yet wired into the scan/alert path -- flag-gated filter candidate for E33."),
+    Field("SCAN_WORKERS", "SCAN_WORKERS", "Universe & Scanning", "Scan thread-pool size",
+          type="number", default="4", min=1, max=16, step=1,
+          help="Thread-pool size for per-ticker scanning. 4 is CX23-safe; raise only with "
+               "the E82 telemetry watching."),
 ]
 
 _CASTERS = {

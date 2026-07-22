@@ -47,6 +47,7 @@ import logging
 import os
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -368,6 +369,363 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     return results
 
 
+def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
+    """Order-preserving, error-isolated parallel map for the scan loop.
+    The per-ticker work is pandas/numpy-heavy (releases the GIL in C) so
+    threads give real speedup without multiprocessing's pickling pain.
+
+    Unlike _crawl_latest_data (network-bound, kept strictly sequential --
+    see that function's docstring for the yfinance thread-safety reason),
+    this is for the ANALYZE phase only, which never touches yfinance --
+    it's safe to parallelize.
+    """
+    n = workers if workers is not None else getattr(config, "SCAN_WORKERS", 4)
+
+    def safe(t):
+        try:
+            return fn(t)
+        except Exception:
+            log.exception("scan worker failed for %s", t)
+            return None
+
+    if n <= 1 or len(tickers) <= 1:
+        return [safe(t) for t in tickers]
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        return list(pool.map(safe, tickers))
+
+
+def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
+              regime, effective_min_confluence: int) -> dict:
+    """
+    Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
+    so it can run inside a map_tickers() worker thread (Task E20). Handles
+    everything the old inline per-ticker loop did EXCEPT the confirmation
+    debounce: existing-trade monitoring (update_open_trades/
+    _check_near_close), the E12 liquidity screen, the E16 data-quality
+    screen, and -- if the ticker clears both screens -- the full
+    per-horizon levels/scenarios/confidence/requirements/ScanItem/plan_v2
+    build.
+
+    Deliberately never calls state.confirm_or_update(): even though
+    StateStore's own lock makes that call safe to run concurrently (no
+    data corruption), the debounce counter's scan-to-scan transitions need
+    a fixed, predictable, serial order across tickers -- not one that
+    depends on thread-scheduling. So this function always builds and
+    returns EVERY scenario it finds as a ScanItem, qualifying or not --
+    exactly like the require_confirmation=False (`!check`) code path used
+    to do inline -- and leaves the require_confirmation gate entirely to
+    the caller, applied serially after map_tickers()'s join (see
+    _sync_run_scan).
+
+    Similarly never mutates the shared funnel counters (checked_count,
+    no_entry_point, etc.) or conf_level_counts/failed_counts directly --
+    unlike StateStore/TradeLog those are bare ints/dicts with no lock, so
+    concurrent in-place mutation from multiple worker threads would be a
+    real race. Instead every count this ticker contributes is accumulated
+    into the `stats` dict returned below, for the caller to sum/merge
+    after the join into the exact same variables the old serial loop used
+    to mutate live.
+
+    progress.done/progress.current_ticker writes DO stay as direct
+    attribute writes here (worker threads) -- ScanProgress's own docstring
+    already documents plain attribute writes as GIL-safe, unlike the bare
+    counter mutation above.
+
+    Returns a dict: {"items": [ScanItem, ...], "newly_closed": [...],
+    "near_close_warnings": [...], "checked": int, "no_entry_point": int,
+    "scenarios_found": int, "fully_qualifying": int,
+    "failed_counts": {...}, "conf_level_counts": {...}}.
+    """
+    stats = {
+        "items": [],
+        "newly_closed": [],
+        "near_close_warnings": [],
+        "checked": 0,
+        "no_entry_point": 0,
+        "scenarios_found": 0,
+        "fully_qualifying": 0,
+        "failed_counts": {
+            "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
+            "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
+        },
+        "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
+    }
+
+    if is_stop_requested():
+        # Cooperative, checked once per ticker just like the old serial
+        # loop did -- see the module-level _STOP_FILE docstring for why
+        # this is file-based and only checked at per-ticker checkpoints.
+        # Under map_tickers() this only stops tickers that haven't started
+        # yet (a worker already mid-flight on another ticker still
+        # finishes it); see _sync_run_scan for the post-join summary log.
+        if progress is not None:
+            progress.stopped = True
+        log.debug("Analyze: stop requested -- skipping %s", ticker)
+        return stats
+
+    if progress is not None:
+        progress.current_ticker = ticker
+
+    if df is None:
+        # Already logged by _crawl_latest_data -- this ticker's fetch
+        # failed during the crawl phase, so there's nothing to analyze it
+        # with. Counts as every one of its horizons at once (none of them
+        # can run either) so progress.total still adds up correctly
+        # against horizons_to_scan-per-ticker.
+        if progress is not None:
+            progress.done += max(1, len(horizons_to_scan))
+        return stats
+    log.debug("Fetched %d bars for %s (close=%.2f)", len(df), ticker, float(df["Close"].iloc[-1]))
+
+    # Fetch live price (incl. premarket/aftermarket) once per ticker and use
+    # it both for SL/TP hit detection and as the current_price for new plans.
+    live = get_current_price(ticker)
+    current_price = live if (live and live > 0) else float(df["Close"].iloc[-1])
+
+    newly_closed = trade_log.update_open_trades(ticker, df, live_price=current_price)
+    if newly_closed:
+        log.info("%s: %d open trade(s) closed this scan (%s)", ticker, len(newly_closed),
+                  ", ".join(f"{t['id']}={t['status']}" for t in newly_closed))
+    stats["newly_closed"].extend(newly_closed)
+
+    # Check remaining open trades (that didn't just close) for near-close proximity,
+    # reusing this same already-fetched df -- no extra API calls.
+    near_close = _check_near_close(ticker, df)
+    if near_close:
+        log.info("%s: %d trade(s) newly near their stop-loss/take-profit", ticker, len(near_close))
+    stats["near_close_warnings"].extend(near_close)
+
+    bars_available = len(df)
+
+    # E12 liquidity screen: gates NEW-SIGNAL scanning only (level maps,
+    # confluence, plan building for this ticker/scan) -- deliberately
+    # placed AFTER update_open_trades/_check_near_close above, not
+    # right after the df fetch. An already-open paper trade must keep
+    # being monitored for its own SL/TP every scan regardless of
+    # today's liquidity reading; it doesn't stop existing just because
+    # dollar volume dipped today. `return` here only skips the
+    # horizon loop below (levels/scenarios/confidence/plan-v2), which
+    # is the only thing left in this per-ticker analysis.
+    illiquid_reason = universe.liquidity_reason(df)
+    if illiquid_reason is not None:
+        log.info("%s: skipping new-signal scan -- %s", ticker, illiquid_reason)
+        if progress is not None:
+            progress.done += max(1, len(horizons_to_scan))
+        return stats
+
+    # E16 data-quality screen: same placement/rationale as the E12
+    # liquidity check just above -- gates new-signal scanning only, on
+    # the same already-fetched df, so an open paper trade still gets
+    # monitored every scan regardless of today's data quality reading.
+    quality_issues = universe.data_quality_issues(df, ticker)
+    if quality_issues:
+        log.info("%s: skipping new-signal scan -- data quality: %s",
+                  ticker, "; ".join(quality_issues))
+        if progress is not None:
+            progress.done += max(1, len(horizons_to_scan))
+        return stats
+
+    for horizon_key in horizons_to_scan:
+        h = HORIZONS[horizon_key]
+        if bars_available < MIN_BARS[horizon_key]:
+            if progress is not None:
+                progress.done += 1
+            continue
+
+        log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
+        supports, resistances = levels.build_level_map(df, h, current_price)
+        log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
+                   ticker, horizon_key, len(supports), len(resistances))
+        floor_pct = levels.atr_floor_pct(df, current_price, h)
+        # Reward/stop bounds are widened toward this horizon's OWN scale
+        # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
+        # in strategy_types.py -- up to 22%/11% for a 9-month swing)
+        # rather than the flat, horizon-blind config.MIN_REWARD_PCT/
+        # MAX_STOP_LOSS_PCT (3%/7%) that used to be applied identically to
+        # every horizon from 2 weeks to 9 months. That flat floor let a
+        # "9-month swing" scenario qualify with just a 3% target and sit
+        # inside a 2-7% stop -- small enough for a couple of ordinary
+        # trading days' volatility to fully traverse, which is why trades
+        # meant to run for weeks/months were actually closing within
+        # hours/days.
+        #
+        # Progressively loosened after each round came back too strict:
+        # full sr_target_min_pct (100%) -> too strict (15-22% targets are
+        # rare) -> half (50%) -> still too strict -> 30% -> still not
+        # enough trade plans. Now at 15% of the horizon's own target-min,
+        # e.g. 9m needs only ~3.3% instead of ~6.6%/11%/22%. This is only
+        # barely above config.MIN_REWARD_PCT (3%) for most horizons now --
+        # still SOME horizon-awareness (longer horizons ask for a little
+        # more room than shorter ones) rather than being fully flat again,
+        # but the floor itself is no longer doing much of the "stop
+        # trades from closing too fast" work on its own. If trades are
+        # still closing too quickly after this, the near-TP timeout
+        # scaling (performance.py's check_near_tp_timeout) and the
+        # confidence/expectancy gate are the other levers actually worth
+        # revisiting -- this min-reward floor is close to its practical
+        # floor already. The max stop widening (the ceiling, not a floor)
+        # is left at the horizon's full max_risk_pct -- widening a
+        # ceiling can only let MORE scenarios qualify, never fewer.
+        effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.15)
+        effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
+        scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
+                                            atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
+                                            max_stop_distance_pct=effective_max_stop,
+                                            min_risk_reward=config.MIN_RISK_REWARD_RATIO)
+        stats["checked"] += 1
+        if not scenarios:
+            # Either no genuine support AND resistance both exist
+            # (no strategy found a real entry point at all), or a
+            # real entry point exists but doesn't clear one of the
+            # hard requirements (min reward %, stop distance bounds,
+            # min reward:risk) -- those are enforced exactly as
+            # configured, no exceptions, so a scenario failing any
+            # of them is never built in the first place. Either way,
+            # nothing to show for this ticker/horizon right now.
+            stats["no_entry_point"] += 1
+            log.debug("%s (%s): no qualifying entry point (either no genuine support/resistance on both "
+                       "sides, or the reward/stop/risk-reward requirements weren't met)", ticker, horizon_key)
+
+        for scenario in scenarios:
+            stats["scenarios_found"] += 1
+            if scenario.tight_stop:
+                log.info("%s (%s, %s): tight stop -- %.1f%% away, below this horizon's normal ATR cushion (%.1f%%)",
+                          ticker, horizon_key, scenario.direction, scenario.stop_distance_pct, scenario.atr_floor_pct)
+
+            # Simulate EVERY supported strategy independently against
+            # this ticker (see levels.count_confirming_strategies) and
+            # count how many land within CONFLUENCE_DEVIATION_PCT of
+            # this scenario's target/stop -- feeds BOTH the "min
+            # strategies confirmed" requirement below AND confidence
+            # scoring's target/stop confluence factors, so the two
+            # can never disagree about what "N strategies agree" means.
+            target_confluence = levels.count_confirming_strategies(
+                df, h, current_price, scenario.take_profit, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+            )
+            stop_confluence = levels.count_confirming_strategies(
+                df, h, current_price, scenario.stop_loss, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+            )
+
+            # Empirical win rate of previously-closed trades that
+            # reached this scenario's own base level (strategy count
+            # alone, before quality/expectancy adjust it further) --
+            # confidence.py's expectancy factor (see confidence.py's
+            # docstring, Step 4) uses this plus the scenario's own
+            # reward:risk to answer "does this payoff/win-rate combo
+            # actually make money", not just "does it look clean".
+            base_level_preview = max(1, min(5, target_confluence[0]))
+            base_level_stats = trade_log.get_stats(base_level_preview)
+            track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
+
+            conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
+                                     target_confluence=target_confluence, stop_confluence=stop_confluence,
+                                     track_record=track_record)
+
+            # Multi-timeframe confluence: check this ticker's own
+            # higher-timeframe EMA bias (50-day for short horizons,
+            # 200-day for longer ones) using the already-fetched daily
+            # df -- no extra API call. A counter-trend signal gets a
+            # configurable penalty subtracted from its raw score, which
+            # can drop it one level and thus below MIN_ALERT_CONFIDENCE_LEVEL.
+            htf_result = get_htf_bias(df, horizon_key)
+            htf_counter_trend = (
+                htf_result is not None
+                and htf_result["bias"] != scenario.direction
+            )
+            if htf_counter_trend and config.HTF_COUNTER_TREND_PENALTY > 0:
+                penalty = config.HTF_COUNTER_TREND_PENALTY
+                new_score = max(0, conf.score - penalty)
+                # Re-bucket the level from the adjusted score using the
+                # same 20-point band boundaries as confidence.py uses.
+                new_level = max(1, min(5, 1 + new_score // 20))
+                from .confidence import LEVELS as _CONF_LEVELS
+                new_label = next(
+                    (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
+                    conf.label,
+                )
+                conf = ConfidenceResult(
+                    level=new_level, score=new_score, label=new_label,
+                    breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
+                )
+                log.info(
+                    "%s (%s, %s): HTF counter-trend (signal=%s, %d-day EMA=%s) -- "
+                    "confidence reduced by %d pts to Lv%d(%d/100)",
+                    ticker, horizon_key, scenario.direction,
+                    scenario.direction, htf_result["ema_period"], htf_result["bias"],
+                    penalty, new_level, new_score,
+                )
+
+            log.debug(
+                "%s %s (%s): target_confluence=%d(%s) stop_confluence=%d(%s) confidence=Lv%d(%d/100)%s",
+                ticker, scenario.direction, horizon_key,
+                target_confluence[0], ",".join(target_confluence[1][:3]),
+                stop_confluence[0], ",".join(stop_confluence[1][:3]),
+                conf.level, conf.score,
+                " [HTF counter-trend]" if htf_counter_trend else "",
+            )
+
+            stats["conf_level_counts"][conf.level] = stats["conf_level_counts"].get(conf.level, 0) + 1
+
+            # Every requirement is checked and kept, always -- see
+            # _build_requirement_checks. A scenario with a real entry
+            # point never disappears here just because one number
+            # falls short; it's tallied below and shown (marked) by
+            # the caller instead of silently dropped.
+            requirements = _build_requirement_checks(scenario, target_confluence, conf, effective_min_confluence)
+            all_ok = True
+            for r in requirements:
+                if not r.passed:
+                    stats["failed_counts"][r.key] += 1
+                    all_ok = False
+            if all_ok:
+                stats["fully_qualifying"] += 1
+
+            result = levels.ScenarioSignal(
+                ticker=ticker, horizon_key=horizon_key, horizon_label=h["label"],
+                trend=scenario.direction, close=current_price, scenario=scenario,
+                strategy=primary_strategy_for(scenario),
+            )
+
+            # Build htf_info dict for the embed only when counter-trend
+            # (so the embed knows to show the warning field); otherwise None.
+            htf_info_for_item = None
+            if htf_counter_trend and htf_result is not None:
+                htf_info_for_item = {
+                    "htf_bias": htf_result["bias"],
+                    "counter_trend": True,
+                    "ema_period": htf_result["ema_period"],
+                    "horizon_key": horizon_key,
+                    "pct_above_ema": htf_result["pct_above_ema"],
+                }
+
+            # Confirmation debounce (require_confirmation) and the final
+            # all_ok gate for POSTING an alert are both applied by the
+            # caller after the join -- see this function's own docstring.
+            # Every scenario, qualifying or not, is built and returned
+            # here (mirrors the require_confirmation=False/`!check` path
+            # the old inline loop already used unconditionally).
+            item = ScanItem(
+                result=result, plan=scenario, conf=conf, requirements=requirements,
+                target_confluence=target_confluence, stop_confluence=stop_confluence,
+                htf_info=htf_info_for_item,
+            )
+            if all_ok:
+                attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
+                if item.plan_v2 is not None:
+                    item.plan_v2.regime_aligned = not (
+                        item.htf_info and item.htf_info.get("counter_trend", False)
+                    )
+            stats["items"].append(item)
+
+        # One unit of progress per (ticker, horizon) pair -- see the
+        # horizons_to_scan comment above for why this moved from once
+        # per ticker to once per horizon.
+        if progress is not None:
+            progress.done += 1
+
+    return stats
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None) -> tuple:
     """
@@ -442,288 +800,87 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     conf_level_counts: dict = {}   # {1..5: number of scenarios scored at that level}
     filtered_by_confirmation = 0
 
-    for ticker in tickers:
-        if is_stop_requested():
-            log.info("Analyze: stop requested -- ending early (%d/%d ticker(s) reached, %d scenario(s) already found)",
-                      progress.done if progress is not None else 0, len(tickers), len(scan_items))
-            if progress is not None:
-                progress.stopped = True
-            break
-        if progress is not None:
-            progress.current_ticker = ticker
-        df = fresh_data.get(ticker)
-        if df is None:
-            # Already logged by _crawl_latest_data -- this ticker's
-            # fetch failed during the crawl phase, so there's nothing
-            # to analyze it with. Skip, same as the old inline error
-            # handling did. Counts as every one of its horizons at once
-            # (none of them can run either) so progress.total still adds
-            # up correctly against horizons_to_scan-per-ticker.
-            if progress is not None:
-                progress.done += max(1, len(horizons_to_scan))
-            continue
-        log.debug("Fetched %d bars for %s (close=%.2f)", len(df), ticker, float(df["Close"].iloc[-1]))
+    # ANALYZE phase (Task E20): the per-ticker candidate-building work
+    # (_scan_one) runs in a bounded thread pool via map_tickers() -- it's
+    # pandas/numpy-heavy and releases the GIL in C, so real tickers see
+    # real speedup. Two things stay strictly serial, in the main thread,
+    # AFTER the join below, on purpose:
+    #   1. state.confirm_or_update() -- the debounce counter's scan-to-
+    #      scan transitions need a fixed, thread-scheduling-independent
+    #      order (see _scan_one's own docstring for the full rationale;
+    #      StateStore's lock makes this safe from corruption but not
+    #      deterministic).
+    #   2. the funnel counters (checked_count, no_entry_point, ...,
+    #      conf_level_counts, failed_counts) -- bare ints/dicts with no
+    #      lock, so concurrent in-place mutation from worker threads would
+    #      be a real race; _scan_one returns its own per-ticker stats
+    #      instead, summed here.
+    # _scan_one always builds and returns every scenario it finds,
+    # qualifying or not -- the require_confirmation gate below is applied
+    # uniformly to the aggregated candidates, not decided per-ticker.
+    per_ticker_results = map_tickers(
+        lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence),
+        tickers,
+    )
 
-        # Fetch live price (incl. premarket/aftermarket) once per ticker and use
-        # it both for SL/TP hit detection and as the current_price for new plans.
-        live = get_current_price(ticker)
-        current_price = live if (live and live > 0) else float(df["Close"].iloc[-1])
-
-        newly_closed = trade_log.update_open_trades(ticker, df, live_price=current_price)
-        if newly_closed:
-            log.info("%s: %d open trade(s) closed this scan (%s)", ticker, len(newly_closed),
-                      ", ".join(f"{t['id']}={t['status']}" for t in newly_closed))
-        all_newly_closed.extend(newly_closed)
-
-        # Check remaining open trades (that didn't just close) for near-close proximity,
-        # reusing this same already-fetched df -- no extra API calls.
-        near_close = _check_near_close(ticker, df)
-        if near_close:
-            log.info("%s: %d trade(s) newly near their stop-loss/take-profit", ticker, len(near_close))
-        all_near_close_warnings.extend(near_close)
-
-        bars_available = len(df)
-
-        # E12 liquidity screen: gates NEW-SIGNAL scanning only (level maps,
-        # confluence, plan building for this ticker/scan) -- deliberately
-        # placed AFTER update_open_trades/_check_near_close above, not
-        # right after the df fetch. An already-open paper trade must keep
-        # being monitored for its own SL/TP every scan regardless of
-        # today's liquidity reading; it doesn't stop existing just because
-        # dollar volume dipped today. `continue` here only skips the
-        # horizon loop below (levels/scenarios/confidence/plan-v2), which
-        # is the only thing left in this per-ticker iteration.
-        illiquid_reason = universe.liquidity_reason(df)
-        if illiquid_reason is not None:
-            log.info("%s: skipping new-signal scan -- %s", ticker, illiquid_reason)
-            if progress is not None:
-                progress.done += max(1, len(horizons_to_scan))
+    for per_ticker in per_ticker_results:
+        if per_ticker is None:
+            # map_tickers()'s own error-isolation contract: an exception
+            # inside _scan_one for this ticker was already logged there
+            # (log.exception, inside map_tickers' safe() wrapper) --
+            # treat it exactly like "this ticker contributed nothing",
+            # never let one bad ticker's None slot crash the merge.
             continue
 
-        # E16 data-quality screen: same placement/rationale as the E12
-        # liquidity check just above -- gates new-signal scanning only, on
-        # the same already-fetched df, so an open paper trade still gets
-        # monitored every scan regardless of today's data quality reading.
-        quality_issues = universe.data_quality_issues(df, ticker)
-        if quality_issues:
-            log.info("%s: skipping new-signal scan -- data quality: %s",
-                      ticker, "; ".join(quality_issues))
-            if progress is not None:
-                progress.done += max(1, len(horizons_to_scan))
-            continue
+        all_newly_closed.extend(per_ticker["newly_closed"])
+        all_near_close_warnings.extend(per_ticker["near_close_warnings"])
+        checked_count += per_ticker["checked"]
+        no_entry_point += per_ticker["no_entry_point"]
+        scenarios_found_count += per_ticker["scenarios_found"]
+        fully_qualifying_count += per_ticker["fully_qualifying"]
+        for key, count in per_ticker["failed_counts"].items():
+            failed_counts[key] += count
+        for level, count in per_ticker["conf_level_counts"].items():
+            conf_level_counts[level] = conf_level_counts.get(level, 0) + count
 
-        for horizon_key in horizons_to_scan:
-            h = HORIZONS[horizon_key]
-            if bars_available < MIN_BARS[horizon_key]:
-                if progress is not None:
-                    progress.done += 1
-                continue
-
-            log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
-            supports, resistances = levels.build_level_map(df, h, current_price)
-            log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
-                       ticker, horizon_key, len(supports), len(resistances))
-            floor_pct = levels.atr_floor_pct(df, current_price, h)
-            # Reward/stop bounds are widened toward this horizon's OWN scale
-            # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
-            # in strategy_types.py -- up to 22%/11% for a 9-month swing)
-            # rather than the flat, horizon-blind config.MIN_REWARD_PCT/
-            # MAX_STOP_LOSS_PCT (3%/7%) that used to be applied identically to
-            # every horizon from 2 weeks to 9 months. That flat floor let a
-            # "9-month swing" scenario qualify with just a 3% target and sit
-            # inside a 2-7% stop -- small enough for a couple of ordinary
-            # trading days' volatility to fully traverse, which is why trades
-            # meant to run for weeks/months were actually closing within
-            # hours/days.
-            #
-            # Progressively loosened after each round came back too strict:
-            # full sr_target_min_pct (100%) -> too strict (15-22% targets are
-            # rare) -> half (50%) -> still too strict -> 30% -> still not
-            # enough trade plans. Now at 15% of the horizon's own target-min,
-            # e.g. 9m needs only ~3.3% instead of ~6.6%/11%/22%. This is only
-            # barely above config.MIN_REWARD_PCT (3%) for most horizons now --
-            # still SOME horizon-awareness (longer horizons ask for a little
-            # more room than shorter ones) rather than being fully flat again,
-            # but the floor itself is no longer doing much of the "stop
-            # trades from closing too fast" work on its own. If trades are
-            # still closing too quickly after this, the near-TP timeout
-            # scaling (performance.py's check_near_tp_timeout) and the
-            # confidence/expectancy gate are the other levers actually worth
-            # revisiting -- this min-reward floor is close to its practical
-            # floor already. The max stop widening (the ceiling, not a floor)
-            # is left at the horizon's full max_risk_pct -- widening a
-            # ceiling can only let MORE scenarios qualify, never fewer.
-            effective_min_reward = max(config.MIN_REWARD_PCT, h.get("sr_target_min_pct", config.MIN_REWARD_PCT) * 0.15)
-            effective_max_stop = max(config.MAX_STOP_LOSS_PCT, h.get("max_risk_pct", config.MAX_STOP_LOSS_PCT))
-            scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
-                                                atr_floor=floor_pct, min_stop_distance_pct=config.MIN_STOP_DISTANCE_PCT,
-                                                max_stop_distance_pct=effective_max_stop,
-                                                min_risk_reward=config.MIN_RISK_REWARD_RATIO)
-            checked_count += 1
-            if not scenarios:
-                # Either no genuine support AND resistance both exist
-                # (no strategy found a real entry point at all), or a
-                # real entry point exists but doesn't clear one of the
-                # hard requirements (min reward %, stop distance bounds,
-                # min reward:risk) -- those are enforced exactly as
-                # configured, no exceptions, so a scenario failing any
-                # of them is never built in the first place. Either way,
-                # nothing to show for this ticker/horizon right now.
-                no_entry_point += 1
-                log.debug("%s (%s): no qualifying entry point (either no genuine support/resistance on both "
-                           "sides, or the reward/stop/risk-reward requirements weren't met)", ticker, horizon_key)
-
-            for scenario in scenarios:
-                scenarios_found_count += 1
-                if scenario.tight_stop:
-                    log.info("%s (%s, %s): tight stop -- %.1f%% away, below this horizon's normal ATR cushion (%.1f%%)",
-                              ticker, horizon_key, scenario.direction, scenario.stop_distance_pct, scenario.atr_floor_pct)
-
-                # Simulate EVERY supported strategy independently against
-                # this ticker (see levels.count_confirming_strategies) and
-                # count how many land within CONFLUENCE_DEVIATION_PCT of
-                # this scenario's target/stop -- feeds BOTH the "min
-                # strategies confirmed" requirement below AND confidence
-                # scoring's target/stop confluence factors, so the two
-                # can never disagree about what "N strategies agree" means.
-                target_confluence = levels.count_confirming_strategies(
-                    df, h, current_price, scenario.take_profit, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
+        for item in per_ticker["items"]:
+            if require_confirmation:
+                # Automatic background scan: only debounce-track (and
+                # eventually post) a scenario once EVERY requirement is
+                # met -- `!check` (require_confirmation=False) also only
+                # POSTS fully-qualifying scenarios (see the alert-
+                # building loop below), it just skips the confirmation
+                # debounce below since it's a one-off on-demand look,
+                # not a repeating alert. A scenario that isn't all_ok
+                # never reaches state.confirm_or_update at all -- same as
+                # the old inline loop, which never even built it.
+                if not item.all_requirements_met:
+                    continue
+                confirmed = state.confirm_or_update(
+                    item.result.state_key, item.result.state_value,
+                    required_confirmations=config.SIGNAL_CONFIRMATION_SCANS,
                 )
-                stop_confluence = levels.count_confirming_strategies(
-                    df, h, current_price, scenario.stop_loss, tolerance_pct=config.CONFLUENCE_DEVIATION_PCT,
-                )
+                if not confirmed:
+                    filtered_by_confirmation += 1
+                    log.debug("%s (%s, %s): awaiting confirmation (needs %d consecutive scans)",
+                               item.result.ticker, item.result.horizon_key, item.result.trend,
+                               config.SIGNAL_CONFIRMATION_SCANS)
+                    continue
+            scan_items.append(item)
 
-                # Empirical win rate of previously-closed trades that
-                # reached this scenario's own base level (strategy count
-                # alone, before quality/expectancy adjust it further) --
-                # confidence.py's expectancy factor (see confidence.py's
-                # docstring, Step 4) uses this plus the scenario's own
-                # reward:risk to answer "does this payoff/win-rate combo
-                # actually make money", not just "does it look clean".
-                base_level_preview = max(1, min(5, target_confluence[0]))
-                base_level_stats = trade_log.get_stats(base_level_preview)
-                track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
-
-                conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
-                                         target_confluence=target_confluence, stop_confluence=stop_confluence,
-                                         track_record=track_record)
-
-                # Multi-timeframe confluence: check this ticker's own
-                # higher-timeframe EMA bias (50-day for short horizons,
-                # 200-day for longer ones) using the already-fetched daily
-                # df -- no extra API call. A counter-trend signal gets a
-                # configurable penalty subtracted from its raw score, which
-                # can drop it one level and thus below MIN_ALERT_CONFIDENCE_LEVEL.
-                htf_result = get_htf_bias(df, horizon_key)
-                htf_counter_trend = (
-                    htf_result is not None
-                    and htf_result["bias"] != scenario.direction
-                )
-                if htf_counter_trend and config.HTF_COUNTER_TREND_PENALTY > 0:
-                    penalty = config.HTF_COUNTER_TREND_PENALTY
-                    new_score = max(0, conf.score - penalty)
-                    # Re-bucket the level from the adjusted score using the
-                    # same 20-point band boundaries as confidence.py uses.
-                    new_level = max(1, min(5, 1 + new_score // 20))
-                    from .confidence import LEVELS as _CONF_LEVELS
-                    new_label = next(
-                        (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
-                        conf.label,
-                    )
-                    conf = ConfidenceResult(
-                        level=new_level, score=new_score, label=new_label,
-                        breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
-                    )
-                    log.info(
-                        "%s (%s, %s): HTF counter-trend (signal=%s, %d-day EMA=%s) -- "
-                        "confidence reduced by %d pts to Lv%d(%d/100)",
-                        ticker, horizon_key, scenario.direction,
-                        scenario.direction, htf_result["ema_period"], htf_result["bias"],
-                        penalty, new_level, new_score,
-                    )
-
-                log.debug(
-                    "%s %s (%s): target_confluence=%d(%s) stop_confluence=%d(%s) confidence=Lv%d(%d/100)%s",
-                    ticker, scenario.direction, horizon_key,
-                    target_confluence[0], ",".join(target_confluence[1][:3]),
-                    stop_confluence[0], ",".join(stop_confluence[1][:3]),
-                    conf.level, conf.score,
-                    " [HTF counter-trend]" if htf_counter_trend else "",
-                )
-
-                conf_level_counts[conf.level] = conf_level_counts.get(conf.level, 0) + 1
-
-                # Every requirement is checked and kept, always -- see
-                # _build_requirement_checks. A scenario with a real entry
-                # point never disappears here just because one number
-                # falls short; it's tallied below and shown (marked) by
-                # the caller instead of silently dropped.
-                requirements = _build_requirement_checks(scenario, target_confluence, conf, effective_min_confluence)
-                all_ok = True
-                for r in requirements:
-                    if not r.passed:
-                        failed_counts[r.key] += 1
-                        all_ok = False
-                if all_ok:
-                    fully_qualifying_count += 1
-
-                result = levels.ScenarioSignal(
-                    ticker=ticker, horizon_key=horizon_key, horizon_label=h["label"],
-                    trend=scenario.direction, close=current_price, scenario=scenario,
-                    strategy=primary_strategy_for(scenario),
-                )
-
-                if require_confirmation:
-                    # Automatic background scan: only debounce-track (and
-                    # eventually post) a scenario once EVERY requirement is
-                    # met -- `!check` (require_confirmation=False) also only
-                    # POSTS fully-qualifying scenarios (see the alert-
-                    # building loop below), it just skips the confirmation
-                    # debounce below since it's a one-off on-demand look,
-                    # not a repeating alert.
-                    if not all_ok:
-                        continue
-                    confirmed = state.confirm_or_update(
-                        result.state_key, result.state_value, required_confirmations=config.SIGNAL_CONFIRMATION_SCANS
-                    )
-                    if not confirmed:
-                        filtered_by_confirmation += 1
-                        log.debug("%s (%s, %s): awaiting confirmation (needs %d consecutive scans)",
-                                   ticker, horizon_key, scenario.direction, config.SIGNAL_CONFIRMATION_SCANS)
-                        continue
-
-                # Build htf_info dict for the embed only when counter-trend
-                # (so the embed knows to show the warning field); otherwise None.
-                htf_info_for_item = None
-                if htf_counter_trend and htf_result is not None:
-                    htf_info_for_item = {
-                        "htf_bias": htf_result["bias"],
-                        "counter_trend": True,
-                        "ema_period": htf_result["ema_period"],
-                        "horizon_key": horizon_key,
-                        "pct_above_ema": htf_result["pct_above_ema"],
-                    }
-
-                item = ScanItem(
-                    result=result, plan=scenario, conf=conf, requirements=requirements,
-                    target_confluence=target_confluence, stop_confluence=stop_confluence,
-                    htf_info=htf_info_for_item,
-                )
-                if all_ok:
-                    attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
-                    if item.plan_v2 is not None:
-                        item.plan_v2.regime_aligned = not (
-                            item.htf_info and item.htf_info.get("counter_trend", False)
-                        )
-                scan_items.append(item)
-                if progress is not None:
-                    progress.qualifying_found = len(scan_items)
-
-            # One unit of progress per (ticker, horizon) pair -- see the
-            # horizons_to_scan comment above for why this moved from once
-            # per ticker to once per horizon.
-            if progress is not None:
-                progress.done += 1
+    if progress is not None:
+        # Replaces the old live "progress.qualifying_found = len(scan_items)"
+        # update that used to fire after every scenario appended inside the
+        # (now-parallel) per-ticker loop -- scan_items isn't assembled until
+        # after the join above, so there's no equivalent mid-scan running
+        # count to update from in-thread anymore. Set once, to the final
+        # count, after the confirmation gate above has decided what's
+        # actually in scan_items -- cosmetic (progress UI granularity)
+        # only, not a correctness concern.
+        progress.qualifying_found = len(scan_items)
+        if progress.stopped:
+            log.info("Analyze: stop requested -- scan ended early (%d ticker/horizon combo(s) "
+                      "checked, %d scenario(s) found before the stop)", checked_count, len(scan_items))
 
     log.info(
         "Signal funnel: %d ticker/horizon combo(s) checked -> %d had no qualifying entry point (no real "

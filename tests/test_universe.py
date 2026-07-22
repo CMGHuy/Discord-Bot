@@ -192,3 +192,23 @@ def test_get_intraday_none_on_fetch_error(tmp_path):
         raise RuntimeError("rate limited")
 
     assert get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=broken) is None
+
+
+# --- Scan parallelization (E20) ---------------------------------------------
+
+def test_map_tickers_preserves_order_and_matches_serial():
+    from swingbot.core.scanning.engine import map_tickers
+    tickers = [f"T{i}" for i in range(10)]
+    fn = lambda t: t.lower()
+    assert map_tickers(fn, tickers, workers=4) == map_tickers(fn, tickers, workers=1)
+    assert map_tickers(fn, tickers, workers=4) == [t.lower() for t in tickers]
+
+
+def test_map_tickers_isolates_errors():
+    from swingbot.core.scanning.engine import map_tickers
+    def flaky(t):
+        if t == "BOOM":
+            raise RuntimeError("bad ticker")
+        return t
+    out = map_tickers(flaky, ["A", "BOOM", "C"], workers=3)
+    assert out == ["A", None, "C"]
