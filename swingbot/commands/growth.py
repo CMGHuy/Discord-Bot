@@ -4,7 +4,7 @@ from datetime import date
 
 from swingbot.bot_core import bot
 from swingbot.core import account as account_module
-from swingbot.core.edge.growth import AVG_DAYS_PER_MONTH, growth_report
+from swingbot.core.edge.growth import AVG_DAYS_PER_MONTH, growth_report, growth_path
 
 
 def _collect_stats() -> dict:
@@ -33,6 +33,7 @@ def _collect_stats() -> dict:
     base = cfg.get("base_balance")
     if base:
         stats["current_multiple"] = cfg.get("balance", base) / base
+        stats["growth_path"] = growth_path(account_module.get_balance_history_points(), base)
     return stats
 
 
@@ -40,4 +41,10 @@ def _collect_stats() -> dict:
 async def growth_command(ctx, target: float = 10.0):
     """Show the honest math to <target>x at current expectancy/frequency."""
     stats = await asyncio.to_thread(_collect_stats)
-    await ctx.send(f"```\n{growth_report(stats, target=target)}\n```")
+    report = growth_report(stats, target=target)
+    gp = stats.get("growth_path")
+    if gp and gp.get("realized_daily_growth") is not None:
+        on_track = gp["on_track_vs"].get(8, False)
+        on_track_str = "yes" if on_track else "no"
+        report += f"\nat {gp['current_multiple']:.2f}x — {gp['pct_to_target']:.1f}% of the way (log scale); on track for 10x-in-8y: {on_track_str}"
+    await ctx.send(f"```\n{report}\n```")

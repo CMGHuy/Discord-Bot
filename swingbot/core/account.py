@@ -287,6 +287,11 @@ def get_balance_history(path: str = CONFIG_PATH) -> list:
     return load_account_config(path).get("balance_history", [])
 
 
+def get_balance_history_points(path: str = CONFIG_PATH) -> list:
+    """Adapter: (date_str, balance) tuples from balance_history for growth_path()."""
+    return [(entry["ts"][:10], entry["balance"]) for entry in get_balance_history(path)]
+
+
 def _to_berlin(ts_iso: str) -> datetime | None:
     try:
         dt = datetime.fromisoformat(ts_iso)

@@ -61,6 +61,37 @@ def growth_table(expectancies: tuple = (0.05, 0.10, 0.15, 0.20),
     return rows
 
 
+import datetime as _dt
+
+
+def growth_path(equity_curve_points: list, start_balance: float,
+                target_multiple: float = 10.0,
+                horizons_years: tuple = (3, 5, 8)) -> dict:
+    """Where the account actually is on the road to `target_multiple`,
+    measured in log space (compounding progress, not linear dollars)."""
+    if not equity_curve_points or start_balance <= 0:
+        return {"current_multiple": 1.0, "pct_to_target": 0.0,
+                "required_daily_growth": {y: (target_multiple ** (1 / (y * 365.25)) - 1)
+                                          for y in horizons_years},
+                "realized_daily_growth": None,
+                "on_track_vs": {y: False for y in horizons_years}}
+    first_date = _dt.date.fromisoformat(str(equity_curve_points[0][0])[:10])
+    last_date = _dt.date.fromisoformat(str(equity_curve_points[-1][0])[:10])
+    current = equity_curve_points[-1][1] / start_balance
+    days = max(1, (last_date - first_date).days)
+    realized = current ** (1 / days) - 1 if current > 0 else None
+    remaining = max(target_multiple / max(current, 1e-9), 1.0)
+    required = {y: remaining ** (1 / (y * 365.25)) - 1 for y in horizons_years}
+    return {
+        "current_multiple": round(current, 4),
+        "pct_to_target": round(math.log(max(current, 1e-9)) / math.log(target_multiple) * 100, 2),
+        "required_daily_growth": required,
+        "realized_daily_growth": realized,
+        "on_track_vs": {y: (realized is not None and realized >= r)
+                        for y, r in required.items()},
+    }
+
+
 def growth_report(stats: dict, target: float = 10.0) -> str:
     """Plain-text reality dashboard for !growth. Never promises anything:
     it prints the arithmetic of the CURRENT numbers and what each lever

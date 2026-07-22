@@ -57,3 +57,26 @@ def test_growth_report_handles_no_edge():
                          "risk_pct": 1.0, "n_closed": 15})
     assert "never" in out.lower() or "no positive edge" in out.lower()
     assert "N=15" in out              # sample size always shown
+
+
+def test_growth_path_fixture():
+    from swingbot.core.edge.growth import growth_path
+    import math
+    # 365 days from 10k to 15k -> 1.5x
+    points = [("2025-07-12", 10_000.0), ("2026-07-12", 15_000.0)]
+    gp = growth_path(points, start_balance=10_000.0)
+    assert gp["current_multiple"] == pytest.approx(1.5)
+    # log progress: ln(1.5)/ln(10) = 17.6%
+    assert gp["pct_to_target"] == pytest.approx(17.6, abs=0.1)
+    # required daily growth for 10x-in-3y from 1.5x: (10/1.5)^(1/1095.75)-1
+    want = (10 / 1.5) ** (1 / (3 * 365.25)) - 1
+    assert gp["required_daily_growth"][3] == pytest.approx(want, rel=1e-6)
+    # realized: 1.5^(1/365) - 1 per day ≈ 0.111%/day
+    assert gp["realized_daily_growth"] == pytest.approx(1.5 ** (1 / 365) - 1, rel=1e-4)
+    assert gp["on_track_vs"][8] in (True, False)
+
+
+def test_growth_path_empty_curve():
+    from swingbot.core.edge.growth import growth_path
+    gp = growth_path([], start_balance=10_000.0)
+    assert gp["current_multiple"] == 1.0 and gp["realized_daily_growth"] is None
