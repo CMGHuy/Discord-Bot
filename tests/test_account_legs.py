@@ -41,3 +41,37 @@ def test_recompute_falls_back_to_settle_legs_when_amount_missing(tmp_path):
     path = tmp_path / "trades.json"
     path.write_text(json.dumps(trades))
     assert account._sum_realized_pnl(trades_path=str(path)) == pytest.approx(17.50)
+
+
+def test_get_balance_history_points_adapts_to_date_balance_tuples(tmp_path):
+    # get_balance_history_points() feeds growth_path(), which expects
+    # [(date_str, balance), ...] with the date truncated to YYYY-MM-DD.
+    cfg = {
+        "base_balance": 10_000.0,
+        "risk_pct": 1.0,
+        "max_open_positions": 5,
+        "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct",
+        "position_pct": 5.0,
+        "max_position_value_absolute": 0,
+        "max_risk_amount_absolute": 0,
+        "balance": 15_000.0,
+        "balance_history": [
+            {
+                "ts": "2025-07-12T00:00:00+00:00",
+                "balance": 10_000.0,
+                "pnl_amount": None,
+                "reason": "account created",
+            },
+            {
+                "ts": "2026-07-12T09:30:00+00:00",
+                "balance": 15_000.0,
+                "pnl_amount": 5_000.0,
+                "reason": "trade settled",
+            },
+        ],
+    }
+    path = tmp_path / "account.json"
+    path.write_text(json.dumps(cfg))
+    points = account.get_balance_history_points(path=str(path))
+    assert points == [("2025-07-12", 10_000.0), ("2026-07-12", 15_000.0)]

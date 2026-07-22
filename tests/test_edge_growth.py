@@ -80,3 +80,30 @@ def test_growth_path_empty_curve():
     from swingbot.core.edge.growth import growth_path
     gp = growth_path([], start_balance=10_000.0)
     assert gp["current_multiple"] == 1.0 and gp["realized_daily_growth"] is None
+
+
+def test_collect_stats_threads_target_into_growth_path(monkeypatch):
+    # Regression: _collect_stats() used to always call growth_path() with its
+    # hardcoded default target_multiple=10.0, so `!growth 5` (or any non-10
+    # target) computed pct_to_target/on_track_vs against 10x instead of the
+    # user's requested target -- inconsistent with the main growth_report()
+    # line a few feet away, which DID honor `target`.
+    from swingbot.commands import growth as growth_cmd
+    from swingbot.core import account as account_module
+
+    points = [("2025-07-12", 10_000.0), ("2026-07-12", 15_000.0)]  # 1.5x
+    monkeypatch.setattr(account_module, "load_account_config",
+                        lambda: {"risk_pct": 1.0, "base_balance": 10_000.0, "balance": 15_000.0})
+    monkeypatch.setattr(account_module, "get_balance_history_points", lambda: points)
+
+    stats_default = growth_cmd._collect_stats()
+    stats_5x = growth_cmd._collect_stats(target=5.0)
+
+    assert stats_default["growth_path"]["pct_to_target"] == pytest.approx(17.6, abs=0.1)  # vs 10x
+    # Same current_multiple (1.5x), but measured against a 5x target instead
+    # of the hardcoded 10x -- pct_to_target and on_track_vs must both differ.
+    import math
+    want_5x = math.log(1.5) / math.log(5.0) * 100
+    assert stats_5x["growth_path"]["pct_to_target"] == pytest.approx(want_5x, abs=0.01)
+    assert stats_5x["growth_path"]["pct_to_target"] != stats_default["growth_path"]["pct_to_target"]
+    assert stats_5x["growth_path"]["required_daily_growth"] != stats_default["growth_path"]["required_daily_growth"]
