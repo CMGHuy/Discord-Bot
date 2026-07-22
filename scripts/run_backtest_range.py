@@ -26,6 +26,7 @@ from fetch_backtest_data import load_cached, load_watchlist
 from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
 from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.universe import liquidity_reason
 
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
@@ -77,19 +78,32 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
     standard table with strategy column `confluence/<horizon>`."""
     tickers = sorted(load_watchlist())
     frames = {}
+    excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
     for ticker in tickers:
         df = load_cached(ticker)
-        if df is not None:
-            frames[ticker] = df
-    print(f"loaded {len(frames)}/{len(tickers)} cached tickers", flush=True)
+        if df is None:
+            continue
+        reason = liquidity_reason(df)
+        if reason is not None:
+            excluded_illiquid.append((ticker, reason))
+            continue
+        frames[ticker] = df
+    print(f"loaded {len(frames)}/{len(tickers)} cached tickers "
+          f"({len(excluded_illiquid)} excluded illiquid)", flush=True)
 
     stats = run_scenario_backtest(frames, date_from, date_to,
                                   gates=CONFLUENCE_GATES, scale_out=scale_out,
                                   horizons=list(HORIZONS))
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
-    lines = [f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
-             f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==", header]
+    lines = []
+    if excluded_illiquid:
+        lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
+        lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_illiquid)
+        lines.append("")
+    lines.append(f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
+                 f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
+    lines.append(header)
     for hk in HORIZONS:
         st = _scenario_row_stats(stats["by_horizon"][hk])
         if st["n_eval"] == 0 and st["scratches"] == 0 and st["timeouts"] == 0:
@@ -224,9 +238,15 @@ def main():
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
     tickers = sorted(load_watchlist())
+    excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
     for ti, ticker in enumerate(tickers, 1):
         df = load_cached(ticker)
         if df is None:
+            continue
+        reason = liquidity_reason(df)
+        if reason is not None:
+            excluded_illiquid.append((ticker, reason))
+            print(f"[{ti}/{len(tickers)}] {ticker}: excluded (illiquid) -- {reason}", flush=True)
             continue
         print(f"[{ti}/{len(tickers)}] {ticker}", flush=True)
         for hk in HORIZONS:
@@ -256,8 +276,13 @@ def main():
     if show_runner_cols:
         header += f" {'tp2%':>6s} {'trail%':>6s} {'be%':>6s} {'rto%':>6s}"
     header += "  PASS"
-    lines = [f"== {label} {date_from} .. {date_to} | pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==",
-             header]
+    lines = []
+    if excluded_illiquid:
+        lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
+        lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_illiquid)
+        lines.append("")
+    lines.append(f"== {label} {date_from} .. {date_to} | pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
+    lines.append(header)
     results = {}
     for strat in strategies:
         st = pool(by_strategy[strat])

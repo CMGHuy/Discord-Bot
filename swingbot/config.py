@@ -430,6 +430,19 @@ FIELDS: list[Field] = [
           help="Dollar risk-per-trade assumed when converting commission into an R deduction (default "
                "$100 risked/trade = 1% of a $10k account). Purely a unit-conversion constant for the "
                "unit-less backtest -- it does not change position sizing."),
+
+    # --- Universe & Scanning (Edge plan Task E12) ---
+    Field("UNIVERSE_MIN_DOLLAR_VOL", "UNIVERSE_MIN_DOLLAR_VOL", "Universe & Scanning", "Min avg dollar volume ($/day)",
+          type="float", default="20000000",
+          help="20-day average of Close x Volume must clear this floor or the ticker is skipped for NEW "
+               "signals this scan (existing open trades keep being monitored regardless -- see "
+               "swingbot/core/universe.py). $20M/day is what makes the E11 slippage assumption (5 bps) "
+               "defensible; thinner names would see much worse real-world fills than that models."),
+    Field("UNIVERSE_MIN_PRICE", "UNIVERSE_MIN_PRICE", "Universe & Scanning", "Min last close price ($)",
+          type="float", default="5.0", min=0, step=0.5,
+          help="Last close below this floor skips the ticker for new signals this scan -- filters penny "
+               "stocks, whose price action/spreads behave differently from the swing-trade universe this "
+               "bot is tuned for."),
 ]
 
 _CASTERS = {

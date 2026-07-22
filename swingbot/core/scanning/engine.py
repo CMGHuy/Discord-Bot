@@ -70,6 +70,7 @@ from swingbot.core.plan_engine import (build_confluence_plan,
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
 from swingbot.core.strategy import HORIZONS, MIN_BARS
+from swingbot.core import universe
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.watchlist import load_watchlist
 from .embeds import (
@@ -478,6 +479,22 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         all_near_close_warnings.extend(near_close)
 
         bars_available = len(df)
+
+        # E12 liquidity screen: gates NEW-SIGNAL scanning only (level maps,
+        # confluence, plan building for this ticker/scan) -- deliberately
+        # placed AFTER update_open_trades/_check_near_close above, not
+        # right after the df fetch. An already-open paper trade must keep
+        # being monitored for its own SL/TP every scan regardless of
+        # today's liquidity reading; it doesn't stop existing just because
+        # dollar volume dipped today. `continue` here only skips the
+        # horizon loop below (levels/scenarios/confidence/plan-v2), which
+        # is the only thing left in this per-ticker iteration.
+        illiquid_reason = universe.liquidity_reason(df)
+        if illiquid_reason is not None:
+            log.info("%s: skipping new-signal scan -- %s", ticker, illiquid_reason)
+            if progress is not None:
+                progress.done += max(1, len(horizons_to_scan))
+            continue
 
         for horizon_key in horizons_to_scan:
             h = HORIZONS[horizon_key]

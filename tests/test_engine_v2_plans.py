@@ -140,3 +140,76 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path):
         "attach_plan_v2 SHOULD be called (plan_v2 must be set) for a scenario that passes "
         "every requirement check -- the engine.py:676-677 `if all_ok:` gate's other branch"
     )
+
+
+def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkeypatch, tmp_path):
+    """
+    Task E12 regression: the liquidity screen must gate NEW-signal scanning
+    only (level maps / scenarios / confluence / plan-v2 for this ticker this
+    scan), never the existing-open-trade monitoring
+    (update_open_trades/_check_near_close) that already runs earlier in the
+    same per-ticker iteration -- an open paper trade's SL/TP must keep being
+    checked every scan even on a day the ticker fails the liquidity floor.
+    See the ordering comment right above the `illiquid_reason` check in
+    engine.py's _sync_run_scan.
+
+    Uses the same structured trend+box fixture as
+    test_sync_run_scan_gates_attach_plan_v2_on_all_ok (proven to make
+    levels.build_scenarios() return real scenarios) but with volume low
+    enough ($100 x 10k shares = $1M/day) to fail config.UNIVERSE_MIN_DOLLAR_VOL's
+    default $20M/day floor -- real liquidity_reason() is exercised, not
+    monkeypatched, so this is a genuine integration check of the wiring.
+    """
+    df = _structured_df()
+    # Collapse volume well under the $20M/day default floor without touching
+    # price (which the fixture's scenario-building relies on).
+    df = df.assign(Volume=10_000.0)
+
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(
+        engine, "get_daily_data",
+        lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
+    )
+    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
+    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+
+    test_log = TradeLog(path=str(tmp_path / "trades.json"))
+    monkeypatch.setattr(engine, "trade_log", test_log)
+
+    calls = {"update_open_trades": [], "check_near_close": []}
+    real_update_open_trades = test_log.update_open_trades
+    real_check_near_close = engine._check_near_close
+
+    def _spy_update_open_trades(ticker, df, live_price=None):
+        calls["update_open_trades"].append(ticker)
+        return real_update_open_trades(ticker, df, live_price=live_price)
+
+    def _spy_check_near_close(ticker, df):
+        calls["check_near_close"].append(ticker)
+        return real_check_near_close(ticker, df)
+
+    monkeypatch.setattr(test_log, "update_open_trades", _spy_update_open_trades)
+    monkeypatch.setattr(engine, "_check_near_close", _spy_check_near_close)
+
+    captured = {}
+
+    def _capture_and_shortcircuit(items):
+        captured["items"] = list(items)
+        return []
+
+    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+
+    engine._sync_run_scan("4w", require_confirmation=False, progress=None)
+
+    assert calls["update_open_trades"] == ["TEST"], (
+        "update_open_trades must still run for an illiquid ticker -- an existing open "
+        "trade's SL/TP monitoring must not stop just because liquidity dipped today"
+    )
+    assert calls["check_near_close"] == ["TEST"], (
+        "_check_near_close must still run for an illiquid ticker for the same reason"
+    )
+    assert captured["items"] == [], (
+        "an illiquid ticker must produce NO new scan items -- level maps/scenarios/plan-v2 "
+        "building must be skipped entirely by the E12 liquidity screen"
+    )
