@@ -19,6 +19,7 @@ Yahoo actually has (~30 days) and says so plainly in the result.
 """
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -183,3 +184,32 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
         os.replace(tmp, path)
         result[symbol] = len(fresh)
     return result
+
+
+INTRADAY_MAX_AGE_SECONDS = 4 * 3600
+
+
+def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
+                 fetch_fn=None) -> "pd.DataFrame | None":
+    """Cached 1h bars for the E29 entry-timing annotation. NEVER required:
+    every caller must treat None as 'no intraday data, stay neutral'."""
+    path = cache_path(symbol, interval, base_dir=base_dir)
+    fresh_enough = (os.path.exists(path)
+                    and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS)
+    if fresh_enough:
+        return load_from_disk(symbol, interval, base_dir=base_dir)
+
+    def _default_fetch(sym, iv):
+        df = yf.download(sym, period="700d", interval=iv,
+                         auto_adjust=True, progress=False)
+        return _normalize_columns(df) if df is not None and not df.empty else None
+
+    try:
+        df = (fetch_fn or _default_fetch)(symbol, interval)
+    except Exception as exc:
+        log.warning("intraday fetch %s failed: %s", symbol, exc)
+        df = None
+    if df is None or df.empty:
+        return load_from_disk(symbol, interval, base_dir=base_dir)  # stale > nothing
+    save_to_disk(df, symbol, interval, base_dir=base_dir)
+    return df

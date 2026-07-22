@@ -162,3 +162,33 @@ def test_negative_price_and_gap_flagged():
     issues = data_quality_issues(df, "X")
     assert any("non-positive" in i for i in issues)
     assert any("gap" in i for i in issues)
+
+
+# --- Intraday confirmation data cache (E19) ---------------------------------
+
+def test_get_intraday_roundtrip_and_cache(tmp_path):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import get_intraday
+
+    frame = make_ohlcv(np.full(40, 100.0), start="2026-07-01")
+    calls = {"n": 0}
+
+    def fake_fetch(symbol, interval):
+        calls["n"] += 1
+        return frame
+
+    a = get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=fake_fetch)
+    b = get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=fake_fetch)
+    assert a is not None and len(a) == 40
+    assert len(b) == 40
+    assert calls["n"] == 1          # second call served from the fresh cache
+
+
+def test_get_intraday_none_on_fetch_error(tmp_path):
+    from swingbot.core.data_store import get_intraday
+
+    def broken(symbol, interval):
+        raise RuntimeError("rate limited")
+
+    assert get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=broken) is None
