@@ -448,6 +448,13 @@ FIELDS: list[Field] = [
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
           help="What the scanner covers. The watchlist is ALWAYS included on top of any "
                "universe. Flip beyond watchlist only after the E77 rollout checklist."),
+    Field("EARNINGS_BLACKOUT_DAYS", "EARNINGS_BLACKOUT_DAYS", "Universe & Scanning",
+          "Earnings blackout window (days)",
+          type="number", default="0", min=0, max=10, step=1,
+          help="New entries are blocked when the ticker's next earnings date is within this "
+               "many days (0 = off). ETFs are always exempt (they don't report earnings). "
+               "Gate is defined in swingbot/core/edge/gates.py:in_earnings_blackout but not "
+               "yet wired into the scan/alert path -- flag-gated filter candidate for E33."),
 ]
 
 _CASTERS = {

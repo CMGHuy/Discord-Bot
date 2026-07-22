@@ -27,3 +27,17 @@ def test_stop_inside_gap_noise_is_fragile():
     # stop 1.5% away, P90 gap 3% -> a coin flip, not risk control
     assert stop_beyond_gap_noise(1.5, 3.0) is False
     assert stop_beyond_gap_noise(4.0, 3.0) is True
+
+
+def test_earnings_blackout_window():
+    from swingbot.core.edge.gates import in_earnings_blackout
+    assert in_earnings_blackout("NVDA", days=3, days_to_earnings_fn=lambda s: 2) is True
+    assert in_earnings_blackout("NVDA", days=3, days_to_earnings_fn=lambda s: 5) is False
+    assert in_earnings_blackout("NVDA", days=3, days_to_earnings_fn=lambda s: None) is False
+    assert in_earnings_blackout("NVDA", days=0, days_to_earnings_fn=lambda s: 1) is False  # off
+
+
+def test_earnings_blackout_etf_exempt():
+    from swingbot.core.edge.gates import in_earnings_blackout
+    # default source is ETF-exempt (E14 returns None) -> never blacked out
+    assert in_earnings_blackout("SPY", days=5) is False
