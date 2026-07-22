@@ -443,6 +443,11 @@ FIELDS: list[Field] = [
           help="Last close below this floor skips the ticker for new signals this scan -- filters penny "
                "stocks, whose price action/spreads behave differently from the swing-trade universe this "
                "bot is tuned for."),
+    Field("SCAN_UNIVERSE", "SCAN_UNIVERSE", "Universe & Scanning", "Scan universe",
+          type="select", default="watchlist",
+          options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],
+          help="What the scanner covers. The watchlist is ALWAYS included on top of any "
+               "universe. Flip beyond watchlist only after the E77 rollout checklist."),
 ]
 
 _CASTERS = {

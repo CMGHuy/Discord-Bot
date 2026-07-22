@@ -23,3 +23,31 @@ def test_thin_name_fails_dollar_volume():
 def test_explicit_thresholds_override_config():
     df = make_ohlcv(np.full(60, 30.0), volumes=np.full(60, 100_000.0))
     assert liquidity_ok(df, min_avg_dollar_vol=1_000_000, min_price=1.0) is True
+
+
+def test_load_etfs_universe():
+    from swingbot.core.universe import load, universe_symbols
+    rows = load("etfs")
+    syms = universe_symbols("etfs")
+    assert "SPY" in syms and "QQQ" in syms and "GLD" in syms and "TLT" in syms
+    assert all(set(r) >= {"symbol", "name", "sector", "etf"} for r in rows)
+    assert all(r["etf"] is True for r in rows)
+
+
+def test_load_dedupes_and_unknown_is_empty(tmp_path, monkeypatch):
+    import json
+    from swingbot.core import universe
+    d = tmp_path / "universe"; d.mkdir()
+    (d / "dup.json").write_text(json.dumps([
+        {"symbol": "AAA", "name": "A", "sector": "Energy", "etf": False},
+        {"symbol": "AAA", "name": "A again", "sector": "Energy", "etf": False},
+    ]))
+    monkeypatch.setattr(universe, "UNIVERSE_DIR", str(d))
+    assert len(universe.load("dup")) == 1
+    assert universe.load("nope") == []
+
+
+def test_sector_map():
+    from swingbot.core.universe import sector_map
+    m = sector_map("etfs")
+    assert m.get("XLE") == "Energy"

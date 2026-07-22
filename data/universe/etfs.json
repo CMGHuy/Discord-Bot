@@ -1,0 +1,19 @@
+[
+  {"symbol": "SPY", "name": "SPDR S&P 500", "sector": "Broad Market", "etf": true},
+  {"symbol": "QQQ", "name": "Invesco Nasdaq 100", "sector": "Broad Market", "etf": true},
+  {"symbol": "IWM", "name": "iShares Russell 2000", "sector": "Broad Market", "etf": true},
+  {"symbol": "DIA", "name": "SPDR Dow Jones", "sector": "Broad Market", "etf": true},
+  {"symbol": "XLK", "name": "Technology Select", "sector": "Information Technology", "etf": true},
+  {"symbol": "XLF", "name": "Financial Select", "sector": "Financials", "etf": true},
+  {"symbol": "XLE", "name": "Energy Select", "sector": "Energy", "etf": true},
+  {"symbol": "XLV", "name": "Health Care Select", "sector": "Health Care", "etf": true},
+  {"symbol": "XLI", "name": "Industrial Select", "sector": "Industrials", "etf": true},
+  {"symbol": "XLP", "name": "Consumer Staples Select", "sector": "Consumer Staples", "etf": true},
+  {"symbol": "XLY", "name": "Consumer Discretionary Select", "sector": "Consumer Discretionary", "etf": true},
+  {"symbol": "XLU", "name": "Utilities Select", "sector": "Utilities", "etf": true},
+  {"symbol": "XLB", "name": "Materials Select", "sector": "Materials", "etf": true},
+  {"symbol": "XLRE", "name": "Real Estate Select", "sector": "Real Estate", "etf": true},
+  {"symbol": "XLC", "name": "Communication Services Select", "sector": "Communication Services", "etf": true},
+  {"symbol": "GLD", "name": "SPDR Gold Shares", "sector": "Commodities", "etf": true},
+  {"symbol": "TLT", "name": "iShares 20+ Year Treasury", "sector": "Bonds", "etf": true}
+]

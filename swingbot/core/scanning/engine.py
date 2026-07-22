@@ -392,6 +392,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         ))
 
     tickers = load_watchlist()
+    if config.SCAN_UNIVERSE != "watchlist":
+        extra = [s for s in universe.universe_symbols(config.SCAN_UNIVERSE)
+                 if s not in set(tickers)]
+        tickers = tickers + extra
     effective_min_confluence = config.MIN_TARGET_CONFLUENCE_COUNT if min_confluence is None else min_confluence
     log.info("Scan starting: horizon_filter=%s require_confirmation=%s watchlist=%d ticker(s) min_confluence=%d",
               horizon_filter, require_confirmation, len(tickers), effective_min_confluence)
