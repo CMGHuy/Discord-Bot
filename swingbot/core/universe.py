@@ -89,3 +89,26 @@ def universe_symbols(name: str) -> list[str]:
 
 def sector_map(name: str) -> dict:
     return {r["symbol"]: r["sector"] for r in load(name)}
+
+
+# --- ETF tagging (E14) ------------------------------------------------------
+#
+# ETFs/index funds don't report earnings; the earnings-proximity gate in
+# events.py short-circuits on this instead of hitting Yahoo with a lookup
+# that can never succeed. Cached per process across both universe files so
+# it works whether the symbol only appears in etfs.json or was also folded
+# into sp500.json.
+
+_ETF_CACHE: set | None = None
+
+
+def is_etf(symbol: str) -> bool:
+    global _ETF_CACHE
+    if _ETF_CACHE is None:
+        cache = set()
+        for name in ("etfs", "sp500"):
+            for row in load(name):
+                if row["etf"]:
+                    cache.add(row["symbol"])
+        _ETF_CACHE = cache
+    return symbol.upper() in _ETF_CACHE

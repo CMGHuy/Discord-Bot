@@ -51,3 +51,42 @@ def test_sector_map():
     from swingbot.core.universe import sector_map
     m = sector_map("etfs")
     assert m.get("XLE") == "Energy"
+
+
+def test_is_etf():
+    from swingbot.core.universe import is_etf
+    assert is_etf("SPY") is True
+    assert is_etf("spy") is True          # case-insensitive
+    assert is_etf("NVDA") is False
+
+
+def test_etf_skips_earnings_lookup(monkeypatch):
+    # get_next_earnings_date must return None for ETFs WITHOUT ever calling
+    # yfinance. Note: the function's per-candidate loop wraps yf.Ticker(...)
+    # in `except Exception`, so a monkeypatch that raises would be silently
+    # swallowed and this test would pass even with the short-circuit
+    # removed. Use a call-recording spy instead so the assertion on `calls`
+    # is a genuine "no network call happened" proof.
+    from swingbot.core import events
+
+    calls = []
+
+    def spy_ticker(candidate):
+        calls.append(candidate)
+        raise RuntimeError("should never be reached for an ETF")
+
+    monkeypatch.setattr(events.yf, "Ticker", spy_ticker)
+    assert events.get_next_earnings_date("SPY") is None
+    assert calls == []
+    assert events.earnings_within_window("SPY", 30) is None
+    assert calls == []
+
+
+def test_spy_plan_builds_end_to_end():
+    from tests.conftest import make_trend_df
+    from swingbot.core.plan_engine import build_strategy_plan
+
+    df = make_trend_df(300, +0.15)
+    plan = build_strategy_plan(df, len(df) - 1, ticker="SPY", strategy="MACD",
+                                horizon_key="4w", direction="bullish")
+    assert plan is not None and plan.stop_loss < plan.entry_price

@@ -17,12 +17,16 @@ import logging
 import yfinance as yf
 
 from .ticker_utils import candidate_symbols
+from .universe import is_etf
 
 log = logging.getLogger("swing-bot.events")
 
 
 def get_next_earnings_date(ticker: str) -> dt.date | None:
     """Returns the next known earnings date for a ticker, or None if unavailable."""
+    if is_etf(ticker):
+        return None  # funds don't report earnings; never gate or fetch
+
     for candidate in candidate_symbols(ticker):
         try:
             calendar = yf.Ticker(candidate).calendar
