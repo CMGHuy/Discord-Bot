@@ -41,6 +41,13 @@ def _collect_stats(target: float = 10.0) -> dict:
 @bot.command(name="growth")
 async def growth_command(ctx, target: float = 10.0):
     """Show the honest math to <target>x at current expectancy/frequency."""
+    if target <= 1:
+        await ctx.send(
+            f"Target must be greater than 1x (got {target:g}x) -- a target of 1x or "
+            "less means \"no growth needed\" or \"shrink\", which this dashboard doesn't model. "
+            "Try e.g. `!growth 10`."
+        )
+        return
     stats = await asyncio.to_thread(_collect_stats, target)
     report = growth_report(stats, target=target)
     gp = stats.get("growth_path")
