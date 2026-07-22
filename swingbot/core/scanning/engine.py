@@ -500,6 +500,18 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 progress.done += max(1, len(horizons_to_scan))
             continue
 
+        # E16 data-quality screen: same placement/rationale as the E12
+        # liquidity check just above -- gates new-signal scanning only, on
+        # the same already-fetched df, so an open paper trade still gets
+        # monitored every scan regardless of today's data quality reading.
+        quality_issues = universe.data_quality_issues(df, ticker)
+        if quality_issues:
+            log.info("%s: skipping new-signal scan -- data quality: %s",
+                      ticker, "; ".join(quality_issues))
+            if progress is not None:
+                progress.done += max(1, len(horizons_to_scan))
+            continue
+
         for horizon_key in horizons_to_scan:
             h = HORIZONS[horizon_key]
             if bars_available < MIN_BARS[horizon_key]:

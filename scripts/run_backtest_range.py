@@ -26,7 +26,7 @@ from fetch_backtest_data import load_cached, load_watchlist
 from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
 from swingbot.core.strategy_types import HORIZONS
-from swingbot.core.universe import liquidity_reason
+from swingbot.core.universe import data_quality_issues, liquidity_reason
 
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
@@ -79,6 +79,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
     tickers = sorted(load_watchlist())
     frames = {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
+    excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ticker in tickers:
         df = load_cached(ticker)
         if df is None:
@@ -87,9 +88,14 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
         if reason is not None:
             excluded_illiquid.append((ticker, reason))
             continue
+        issues = data_quality_issues(df, ticker)
+        if issues:
+            excluded_bad_data.append((ticker, "; ".join(issues)))
+            continue
         frames[ticker] = df
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers "
-          f"({len(excluded_illiquid)} excluded illiquid)", flush=True)
+          f"({len(excluded_illiquid)} excluded illiquid, "
+          f"{len(excluded_bad_data)} excluded bad data)", flush=True)
 
     stats = run_scenario_backtest(frames, date_from, date_to,
                                   gates=CONFLUENCE_GATES, scale_out=scale_out,
@@ -100,6 +106,10 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
     if excluded_illiquid:
         lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_illiquid)
+        lines.append("")
+    if excluded_bad_data:
+        lines.append(f"-- excluded (bad data, Task E16): {len(excluded_bad_data)} of {len(tickers)} ticker(s) --")
+        lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_bad_data)
         lines.append("")
     lines.append(f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
                  f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
@@ -239,6 +249,7 @@ def main():
 
     tickers = sorted(load_watchlist())
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
+    excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ti, ticker in enumerate(tickers, 1):
         df = load_cached(ticker)
         if df is None:
@@ -247,6 +258,11 @@ def main():
         if reason is not None:
             excluded_illiquid.append((ticker, reason))
             print(f"[{ti}/{len(tickers)}] {ticker}: excluded (illiquid) -- {reason}", flush=True)
+            continue
+        issues = data_quality_issues(df, ticker)
+        if issues:
+            excluded_bad_data.append((ticker, "; ".join(issues)))
+            print(f"[{ti}/{len(tickers)}] {ticker}: excluded (bad data) -- {'; '.join(issues)}", flush=True)
             continue
         print(f"[{ti}/{len(tickers)}] {ticker}", flush=True)
         for hk in HORIZONS:
@@ -280,6 +296,10 @@ def main():
     if excluded_illiquid:
         lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_illiquid)
+        lines.append("")
+    if excluded_bad_data:
+        lines.append(f"-- excluded (bad data, Task E16): {len(excluded_bad_data)} of {len(tickers)} ticker(s) --")
+        lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_bad_data)
         lines.append("")
     lines.append(f"== {label} {date_from} .. {date_to} | pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
     lines.append(header)

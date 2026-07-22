@@ -122,3 +122,43 @@ def test_update_cache_empty_delta_is_noop(tmp_path):
     result = update_cache(["TEST"], base_dir=str(tmp_path),
                           fetch_fn=lambda s, start: None)
     assert result["TEST"] == 0
+
+
+# --- Data-quality validator (E16) -------------------------------------------
+
+def _clean_frame(n=100):
+    import numpy as np
+    rng = np.random.default_rng(7)
+    from tests.conftest import make_ohlcv
+    return make_ohlcv(100 * np.cumprod(1 + rng.normal(0.0005, 0.01, n)),
+                      volumes=rng.integers(1_000_000, 2_000_000, n).astype(float))
+
+
+def test_clean_frame_has_no_issues():
+    from swingbot.core.universe import data_quality_issues
+    assert data_quality_issues(_clean_frame(), "OK") == []
+
+
+def test_flat_closes_flagged():
+    from swingbot.core.universe import data_quality_issues
+    df = _clean_frame()
+    df.iloc[40:47, df.columns.get_loc("Close")] = 55.5   # 7 identical closes
+    assert any("identical closes" in i for i in data_quality_issues(df, "X"))
+
+
+def test_unadjusted_split_flagged():
+    from swingbot.core.universe import data_quality_issues
+    df = _clean_frame()
+    df.iloc[50:, df.columns.get_loc("Close")] *= 0.5     # -50% jump, volume unchanged
+    assert any("split" in i for i in data_quality_issues(df, "X"))
+
+
+def test_negative_price_and_gap_flagged():
+    import pandas as pd
+    from swingbot.core.universe import data_quality_issues
+    df = _clean_frame()
+    df.iloc[10, df.columns.get_loc("Low")] = -1.0
+    df = df.drop(df.index[60:75])                        # 15-bar hole ≈ 21 calendar days
+    issues = data_quality_issues(df, "X")
+    assert any("non-positive" in i for i in issues)
+    assert any("gap" in i for i in issues)

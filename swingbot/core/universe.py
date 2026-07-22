@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 
+import numpy as np
 import pandas as pd
 
 from swingbot import config
@@ -112,3 +113,42 @@ def is_etf(symbol: str) -> bool:
                     cache.add(row["symbol"])
         _ETF_CACHE = cache
     return symbol.upper() in _ETF_CACHE
+
+
+# --- Data-quality validator (E16) -------------------------------------------
+#
+# A sibling screen to liquidity_reason above: bad data makes every downstream
+# number a lie, so this flags a ticker's cached df rather than trusting it.
+# Wired into the same three call sites as the E12 liquidity skip (scanning/
+# engine.py's _sync_run_scan, and both ticker loops in
+# scripts/run_backtest_range.py) -- skip + log, same pattern.
+
+def data_quality_issues(df: pd.DataFrame, symbol: str) -> list[str]:
+    """Bad data makes every downstream number a lie -- flag, skip, report."""
+    issues: list[str] = []
+    if df is None or len(df) < 30:
+        return [f"{symbol}: <30 bars of history"]
+
+    close = df["Close"]
+    # 1) frozen feed: >5 consecutive identical closes
+    runs = (close != close.shift()).cumsum()
+    if int(close.groupby(runs).transform("size").max()) > 5:
+        issues.append(f"{symbol}: >5 consecutive identical closes (frozen feed?)")
+
+    # 2) unadjusted split: >40% single-bar move without a >=3x volume spike
+    move = close.pct_change().abs()
+    vol_ratio = df["Volume"] / df["Volume"].rolling(20).mean()
+    suspicious = (move > 0.40) & ~(vol_ratio >= 3.0)
+    if suspicious.fillna(False).any():
+        d = df.index[suspicious.fillna(False)][0].date()
+        issues.append(f"{symbol}: >40% bar on {d} without volume spike (bad split adjust?)")
+
+    # 3) non-positive prices
+    if (df[["Open", "High", "Low", "Close"]] <= 0).any().any():
+        issues.append(f"{symbol}: non-positive price values")
+
+    # 4) calendar holes > 10 days
+    deltas = df.index.to_series().diff().dt.days.dropna()
+    if (deltas > 10).any():
+        issues.append(f"{symbol}: gap of {int(deltas.max())} calendar days in the index")
+    return issues
