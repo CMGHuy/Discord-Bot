@@ -21,7 +21,10 @@ def test_scratch_when_trigger_reached_then_returns_to_entry(monkeypatch):
     # (original stop 98 not hit, target 100.7 not hit), bar e+2 hits the moved
     # stop at entry -> scratch at ~0R.
     df = make_ohlcv(np.full(60, 100.0), spread_pct=1.0)
-    s = _run_with_forced_entry(monkeypatch, df, entry_bar=40)
+    # frictions=False: this test pins the scratch-classification/exit-price
+    # LOGIC (Task E11 leaves it exercising exact arithmetic, not economics --
+    # the friction haircut is covered separately by test_edge_frictions.py).
+    s = _run_with_forced_entry(monkeypatch, df, entry_bar=40, frictions=False)
     assert s.scratches == 1 and s.wins == 0 and s.losses == 0
     t = s.trades[0]
     assert t.outcome == "scratch"
@@ -44,7 +47,9 @@ def test_loss_when_original_stop_hit_before_trigger(monkeypatch):
     closes = np.full(60, 100.0)
     closes[41:] = 97.0                   # bar e+1 collapses: low 96.5 <= stop 98
     df = make_ohlcv(closes, spread_pct=1.0)
-    s = _run_with_forced_entry(monkeypatch, df, entry_bar=40)
+    # frictions=False: pins the exact -1R loss-classification arithmetic
+    # (Task E11's friction haircut is tested separately).
+    s = _run_with_forced_entry(monkeypatch, df, entry_bar=40, frictions=False)
     assert s.losses == 1 and s.wins == 0 and s.scratches == 0
     assert s.trades[0].r_multiple == pytest.approx(-1.0, abs=0.01)
 
@@ -123,7 +128,12 @@ CACHE = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_single_leg_reproduces_v1_exactly():
     df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
-    v1 = run_backtest("TSLA", df, "Elliott Wave", "4w")
+    # frictions=False on the v1 side: this test asserts the v2 exit simulator
+    # reproduces v1's frictionless arithmetic EXACTLY (Task E11's slippage/
+    # commission haircut only applies to the v1 loop, so leaving frictions on
+    # here would compare v1-with-friction against v2-without and fail by
+    # construction -- unrelated to this test's actual purpose).
+    v1 = run_backtest("TSLA", df, "Elliott Wave", "4w", frictions=False)
     v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=False)
     assert (v1.wins, v1.losses, v1.scratches, v1.timeouts) == \
            (v2.wins, v2.losses, v2.scratches, v2.timeouts)
@@ -141,7 +151,11 @@ def test_v2_scale_out_keeps_classification_and_expectancy():
     # the test deterministic regardless of how far the cache now extends.
     df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
     df = df.loc["2018-06-01":"2025-12-31"]
-    v1 = run_backtest("TSLA", df, "Elliott Wave", "4w")
+    # frictions=False: the "expectancy can only drop by rounding noise" floor
+    # below is a v1-vs-v2 economics comparison, not a Task E11 concern --
+    # leaving v1's friction haircut on would just add unrelated slack to the
+    # inequality instead of testing the floor it's meant to pin.
+    v1 = run_backtest("TSLA", df, "Elliott Wave", "4w", frictions=False)
     v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
     # TP1 unchanged => identical win/loss/scratch classification
     assert (v1.wins, v1.losses, v1.scratches) == (v2.wins, v2.losses, v2.scratches)

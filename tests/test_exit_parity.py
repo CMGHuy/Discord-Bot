@@ -37,7 +37,12 @@ def test_exit_parity(ticker, strategy, horizon_key):
         pytest.skip(f"{ticker}.csv missing")
     df = pd.read_csv(path, index_col="Date", parse_dates=True)
 
-    summary = run_backtest(ticker, df, strategy, horizon_key)
+    # frictions=False: this test re-walks the legacy v1 trade through the v2
+    # exit simulator and expects near-identical outcome/exit-bar/r_total --
+    # a Task E11 friction haircut on the v1 side would move the fed-in entry
+    # price and r_multiple away from what simulate_exit (unmodified, no
+    # frictions concept) computes, which is unrelated to this test's purpose.
+    summary = run_backtest(ticker, df, strategy, horizon_key, frictions=False)
     if not summary.trades:
         pytest.skip("no trades")
 

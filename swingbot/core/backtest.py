@@ -158,6 +158,7 @@ def run_backtest(
     exit_model: str = "v1",
     scale_out: bool = False,
     tp2_mode: str = "none",
+    frictions: bool = True,
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -171,6 +172,14 @@ def run_backtest(
     `plan_engine.simulate_exit` instead; the v1 loop is left completely
     untouched and remains the default until it is deleted at Task 91.
     `scale_out` and `tp2_mode` are only meaningful when `exit_model="v2"`.
+
+    frictions: (Task E11, v1 loop ONLY -- the v2 branch above is a separate,
+    already-validated production simulator and is untouched) if True (the
+    default -- this is the new honest baseline), every v1 entry/exit fill is
+    worsened by SLIPPAGE_BPS and every trade's r_multiple is reduced by the
+    round-trip COMMISSION_PER_TRADE expressed against COMMISSION_RISK_BASIS.
+    Set False to reproduce the old frictionless arithmetic (e.g. tests
+    asserting exact entry/exit/r_multiple logic rather than economics).
     """
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
@@ -294,7 +303,19 @@ def run_backtest(
             ))
             continue
 
-        # ---- v1 walk-forward loop (unchanged below) ----
+        # ---- v1 walk-forward loop ----
+        # --- E11: slip the entry fill (v1 only -- the v2 branch above already
+        # returned via `continue`, so this never touches its risk_per_share/
+        # return_pct arithmetic). Levels (stop/target/BE trigger) stay at
+        # their PLANNED prices below -- slippage moves your fill, not the
+        # chart -- so `entry` keeps meaning "planned entry" everywhere else
+        # in this loop; only `entry_fill` and the risk_per_share used for
+        # THIS trade's r_multiple/return_pct reflect the worse real fill.
+        entry_fill = entry
+        if frictions:
+            from swingbot.core.edge.frictions import apply_frictions, commission_r
+            entry_fill = apply_frictions(entry, "buy" if direction == "bullish" else "sell")
+            risk_per_share = abs(entry_fill - stop_loss)
         close_vals = df["Close"].values
         outcome, exit_price, exit_i = "timeout", None, None
         max_holding_days = HORIZONS[horizon_key]["max_holding_days"]
@@ -335,17 +356,24 @@ def run_backtest(
         if outcome == "timeout":
             exit_price, exit_i = float(close_vals[end]), end
 
+        # --- E11: slip the exit fill (opposite side of the entry).
+        exit_fill = exit_price
+        if frictions:
+            exit_fill = apply_frictions(exit_price, "sell" if direction == "bullish" else "buy")
+
         _open_until = exit_i
         sign = 1 if direction == "bullish" else -1
-        return_pct = (exit_price - entry) / entry * sign * 100
-        r_multiple = (exit_price - entry) * sign / risk_per_share
+        return_pct = (exit_fill - entry_fill) / entry_fill * sign * 100
+        r_multiple = (exit_fill - entry_fill) * sign / risk_per_share
+        if frictions:
+            r_multiple -= commission_r()
         holding_days = exit_i - i
 
         trades.append(BacktestTrade(
             entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
-            direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
+            direction=direction, entry=round(entry_fill, 4), stop_loss=round(stop_loss, 4),
             take_profit=round(take_profit, 4), outcome=outcome,
-            exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
+            exit_price=round(exit_fill, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
         ))
 
@@ -396,12 +424,12 @@ ALL_STRATEGIES = (
 )
 
 
-def run_full_backtest(ticker: str, df: pd.DataFrame) -> list[BacktestSummary]:
+def run_full_backtest(ticker: str, df: pd.DataFrame, frictions: bool = True) -> list[BacktestSummary]:
     """Backtest all strategies x all horizons for one ticker."""
     results = []
     for horizon_key in HORIZONS:
         for strategy in ALL_STRATEGIES:
-            results.append(run_backtest(ticker, df, strategy, horizon_key))
+            results.append(run_backtest(ticker, df, strategy, horizon_key, frictions=frictions))
     return results
 
 
@@ -412,6 +440,7 @@ def run_backtest_daterange(
     horizon_key: str,
     date_from: str,
     date_to: str,
+    frictions: bool = True,
 ) -> BacktestSummary:
     """
     Same as run_backtest() but only evaluates signals whose entry_date falls
@@ -419,7 +448,7 @@ def run_backtest_daterange(
     The full df is still used for indicator warmup; the filter is applied
     after the backtest so indicator values are correct for every bar.
     """
-    summary = run_backtest(ticker, df, strategy, horizon_key)
+    summary = run_backtest(ticker, df, strategy, horizon_key, frictions=frictions)
     if date_from or date_to:
         from_dt = date_from or "0000-01-01"
         to_dt   = date_to   or "9999-12-31"

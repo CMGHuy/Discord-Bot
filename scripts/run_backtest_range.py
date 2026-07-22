@@ -164,6 +164,10 @@ def main():
                          "(required with --emit-registry; explicit for reproducibility)")
     ap.add_argument("--exit-model", dest="exit_model", choices=["v1", "v2"], default="v1")
     ap.add_argument("--scale-out", dest="scale_out", action="store_true")
+    ap.add_argument("--frictions", dest="frictions", choices=["on", "off"], default="on",
+                    help="v1-only slippage+commission realism (Task E11). 'on' (default) is the "
+                         "honest baseline every later Edge-plan component must beat; 'off' "
+                         "reproduces the pre-E11 frictionless arithmetic.")
     ap.add_argument("--tp2", dest="tp2", choices=["none", "levels"], default="levels",
                     help="TP2 source for scale-out runs (v2 only)")
     ap.add_argument("--scenarios", action="store_true",
@@ -230,7 +234,7 @@ def main():
                 try:
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,
                                       exit_model=args.exit_model, scale_out=args.scale_out,
-                                      tp2_mode=tp2_mode)
+                                      tp2_mode=tp2_mode, frictions=(args.frictions == "on"))
                 except Exception as e:
                     print(f"    ! {strat}/{hk}: {e}")
                     continue

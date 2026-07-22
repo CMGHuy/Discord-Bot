@@ -411,6 +411,25 @@ FIELDS: list[Field] = [
           type="number", default="3", min=1, max=10, step=1,
           help="Default number of plans shown by `!top` when no explicit count is given, and the "
                "daily Top-Plans digest's plan count (Task B37). Purely a display cap."),
+
+    # --- Execution Realism (Edge plan Task E11) ---
+    Field("SLIPPAGE_BPS", "SLIPPAGE_BPS", "Execution Realism", "Slippage (bps per side)",
+          type="float", default="5", min=0, max=50, step=1,
+          help="Every backtest v1 entry/exit fill is worsened by this many basis points -- buys fill "
+               "higher, sells fill lower. 5 bps is a conservative-for-liquid-names default (the E12 "
+               "liquidity screen is what makes that assumption defensible). Only affects "
+               "`run_backtest(..., exit_model='v1')`; the v2 exit simulator (live Plan Engine) is "
+               "untouched."),
+    Field("COMMISSION_PER_TRADE", "COMMISSION_PER_TRADE", "Execution Realism", "Commission per side ($)",
+          type="float", default="1.0", min=0, max=20, step=0.5,
+          help="Flat commission charged per fill (entry and exit each pay this once, so a round trip "
+               "pays it twice). Converted to an R deduction against COMMISSION_RISK_BASIS and "
+               "subtracted from every v1 backtest trade's r_multiple."),
+    Field("COMMISSION_RISK_BASIS", "COMMISSION_RISK_BASIS", "Execution Realism", "Commission risk basis ($)",
+          type="float", default="100.0",
+          help="Dollar risk-per-trade assumed when converting commission into an R deduction (default "
+               "$100 risked/trade = 1% of a $10k account). Purely a unit-conversion constant for the "
+               "unit-less backtest -- it does not change position sizing."),
 ]
 
 _CASTERS = {
