@@ -156,6 +156,7 @@ class ScanItem:
     plan_v2: object = None            # TradePlanV2 | None
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
+    breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
 
     @property
     def all_requirements_met(self) -> bool:
@@ -766,6 +767,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # it's sequential, not concurrent).
     fresh_data = _crawl_latest_data(tickers, progress)
 
+    # Market breadth (Task E28): % of the just-crawled universe trading above
+    # its own 50-EMA, computed once per scan from data already in hand -- no
+    # extra fetch. Pure pandas math over local frames, so no try/except
+    # needed (unlike the network-bound regime/RS lookups below); returns
+    # None on a too-small universe and every downstream consumer treats
+    # None as "no reading" already.
+    breadth = rs_factors.breadth_pct_above_50ema(fresh_data)
+
     # Progress is tracked per (ticker, horizon) pair, not per ticker --
     # analyzing a single ticker means scoring it across up to 10 horizons
     # (2w through 9m), each running ~10 strategies' confluence counts plus
@@ -913,6 +922,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     fresh_data.get(item.result.ticker), spy_df,
                     universe_rels=list(rs_cache["rels"].values()),
                 )
+            item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
             scan_items.append(item)
 
     if progress is not None:
@@ -963,6 +973,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "shown": len(deduped),
             "min_confidence_level": config.MIN_ALERT_CONFIDENCE_LEVEL,
             "conf_level_counts": conf_level_counts,  # {1..5: count} across ALL found scenarios
+            "breadth": breadth,  # % of universe above its own 50-EMA at scan time (Task E28)
         }
 
     alerts = []
