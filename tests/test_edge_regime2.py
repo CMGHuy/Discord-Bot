@@ -38,3 +38,15 @@ def test_regime_series_aligned_and_labeled():
     assert s.index.equals(df.index)
     assert set(s.dropna().unique()) <= set(REGIMES)
     assert s.iloc[-1] == "bull_quiet"
+
+
+def test_classify_and_regime_series_agree_on_last_bar():
+    # regime_series' own docstring requires it to be "identical to
+    # classify(breadth=None) at every bar" -- the downtrend fixture is a
+    # real regression case: rv/vol_threshold take different pandas
+    # computation paths (rolling().std() vs rolling().quantile()) that can
+    # disagree at machine-epsilon precision on a perfectly deterministic
+    # series, which previously made classify() and regime_series() disagree
+    # right at the vol threshold (see _VOL_THRESHOLD_EPSILON's docstring).
+    for df in (make_trend_df(400, +0.15), make_trend_df(400, -0.15)):
+        assert classify(df) == regime_series(df).iloc[-1]

@@ -17,6 +17,16 @@ VOL_HISTORY = 252
 VOL_PCTILE_SPLIT = 0.60
 EMA_TIE_BAND_PCT = 1.0     # within +-1% of the EMA the trend call is a coin flip
 BREADTH_TIEBREAK = 50.0    # ...so breadth (E28), when available, decides
+# rv and vol_threshold are computed via different pandas paths (rolling().std()
+# vs rolling().quantile()) that can disagree at the machine-epsilon level on
+# a perfectly deterministic series (e.g. a synthetic test fixture) even when
+# they are mathematically equal -- without this floor, classify() and
+# regime_series() (which MUST agree, see regime_series' docstring) can
+# diverge on such inputs. 1e-12 carries orders of magnitude more headroom
+# than the ~1e-17/1e-18 noise actually observed, while still being far
+# below any realistic realized-volatility value (~1e-3 to 1e-1) so it can
+# never affect a real classification.
+_VOL_THRESHOLD_EPSILON = 1e-12
 
 
 def _trend_and_vol(spy_df: pd.DataFrame):
@@ -35,7 +45,7 @@ def classify(spy_df: pd.DataFrame, breadth: float | None = None) -> str:
     else:
         bull = c >= e
     t = thr.iloc[-1]
-    volatile = bool(not np.isnan(t) and rv.iloc[-1] >= (t + 1e-17))
+    volatile = bool(not np.isnan(t) and rv.iloc[-1] >= t + _VOL_THRESHOLD_EPSILON)
     return f"{'bull' if bull else 'bear'}_{'volatile' if volatile else 'quiet'}"
 
 
@@ -44,6 +54,6 @@ def regime_series(spy_df: pd.DataFrame) -> pd.Series:
     price rule; identical to classify(breadth=None) at every bar)."""
     close, ema, rv, thr = _trend_and_vol(spy_df)
     bull = close >= ema
-    volatile = (rv >= thr).fillna(False)
+    volatile = (rv >= thr + _VOL_THRESHOLD_EPSILON).fillna(False)
     labels = np.where(bull, "bull", "bear") + np.where(volatile, "_volatile", "_quiet")
     return pd.Series(labels, index=spy_df.index)
