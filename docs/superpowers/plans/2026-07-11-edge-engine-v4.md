@@ -47,7 +47,8 @@
 - Task E23 (Regime model v2) done: `swingbot/core/edge/regime2.py` (4-state bull/bear x quiet/volatile classifier — `classify()` for live single-bar use with breadth tie-break, `regime_series()` for vectorized backtest labeling) + `tests/test_edge_regime2.py`. Standalone infra, nothing wires it in yet (E24's job). Implementer (haiku) self-reported one deviation from the brief's literal sample: a floating-point epsilon added to `classify()`'s volatility comparison, needed because `rv` and `vol_threshold` take different pandas computation paths (`rolling().std()` vs `rolling().quantile()`) that can disagree at machine-epsilon precision on a perfectly deterministic synthetic-test series. Reviewer independently reproduced the exact noise (~9e-18) and confirmed the fix was genuine, not a misdiagnosed test failure — but found the epsilon was applied only to `classify()`, not `regime_series()`, breaking the module's own documented invariant that the two must agree at every bar (reviewer demonstrated a concrete disagreeing input). Fixed directly (commit eb93fe6): named the constant `_VOL_THRESHOLD_EPSILON`, widened 1e-17 -> 1e-12 for real safety margin (still ~9-11 orders of magnitude below realistic realized-volatility values), applied identically in both functions, added `test_classify_and_regime_series_agree_on_last_bar`. Re-review approved, zero remaining findings; targeted suite 6/6 passing.
 - Task E24 (Per-strategy regime gates) done: `strategy_types.REGIME_ALLOW: dict[str, tuple] = {}` (ships empty — no strategy is actually restricted yet) + `entry_filters.apply_regime_gate(bull, bear, strategy, regimes)` (no-op unless `config.REGIME_GATES_ENABLED` AND a `REGIME_ALLOW` entry AND a real `regimes` series are all present — all three are false/absent today) + `entries_for()` gained an optional trailing `regimes: pd.Series | None = None` parameter, calling `apply_regime_gate` right after the existing `STRATEGY_GATES` mask. SCOPE NARROWED before dispatch (verified, not scope-avoidance): the brief's own file list included `backtest.py`/`signals.py`, but `run_backtest()`/`_vectorized_entries()` (backtest.py) and all 11 `STRATEGY_FUNCS` (signals.py, via `strategy.evaluate_all()`) genuinely have no SPY/market dataframe anywhere in their call chains to build `regime2.regime_series(spy_df)` from — wiring that in would mean adding a new parameter to `run_backtest`/`evaluate_all` AND updating every caller (`run_backtest_range.py`, `tune_strategy.py`, `backtest_scenarios.py`, ...), a separate, much larger architectural task, not this one. Since `entries_for`'s new parameter is a backward-compatible trailing default, all 12 existing call sites needed zero changes. Reviewer independently re-verified the call chains and confirmed the scope call was correct, re-ran the targeted suite (8/8), and found only Minor polish notes (import-placement style, an empty-tuple-vs-missing-key edge case for whoever populates REGIME_ALLOW at E33, one brief-inherited untested assertion branch). Approved, no fix round needed.
 - Task E25 (Relative-strength factor) done: `swingbot/core/edge/factors.py` (`relative_return`, `rs_percentile`, `refresh_rs_cache`, `load_rs_cache`) + `tests/test_edge_factors.py` (4 tests). Brief's own sample code called a nonexistent `jsonio.write_json` — implementer correctly substituted the real `jsonio.atomic_write_json` (identical `(path, obj) -> None` signature, matches every other store in the codebase). Scan wiring (prose-only in the brief) resolved by the controller before dispatch and given as explicit instructions: fetch `spy_df` via the same try/except pattern `get_regime()` already uses; add `ScanItem.rs_percentile: float | None = None`; call `refresh_rs_cache(fresh_data, spy_df)` exactly once, in the main thread, BEFORE `map_tickers()` is even invoked (stronger than merely "not inside `_scan_one`" — eliminates any threading question entirely); stamp `item.rs_percentile` in the merge loop right before the single `scan_items.append(item)` call site shared by both `require_confirmation` branches; `spy_df is None` (or any fetch/cache-write failure) leaves every item's `rs_percentile` at its `None` default, never crashes the scan. Reviewer independently verified every one of these five points with file:line evidence and confirmed no reachable crash path. Approved, zero findings (two Minor notes: a negligible duplicate `relative_return` computation constrained by the brief's fixed signatures, and the implementer's choice to wrap both the fetch and the cache-write in one try/except rather than just the fetch — both accepted as correct, disclosed judgment calls).
-- **Next:** Task E26 (Sector RS)
+- Task E26 (Sector RS factor) done: `sector_rs_percentile()` + `rs_score()` appended to `swingbot/core/edge/factors.py` (pure additive, no wiring — E25's module already has the only file this task touches). Brief's own "Interfaces" prose said `sector_of_etf` defaults to `universe.sector_map('etfs')` "inverted", but the brief's own Step 3 code just calls `sector_map("etfs")` directly with no inversion — checked before dispatch: `sector_map(name)` (`universe.py:91-92`) already returns `{symbol: sector}`, exactly the shape needed, so the Step 3 code is correct and the prose is simply imprecise, not a real discrepancy. Implementer (haiku) transcribed the code verbatim, 6/6 tests pass (4 from E25 + 2 new). Controller reviewed directly (small, single-file, byte-for-byte match to brief, no wiring risk) rather than dispatching a separate reviewer — confirmed via `git show` diff and an independent test rerun. Approved.
+- **Next:** Task E27 (Multi-timeframe factor)
 
 ## Global Constraints
 
@@ -2733,7 +2734,7 @@ git commit -m "feat: relative-strength factor"
 **Interfaces:**
 - Produces: `sector_rs_percentile(sector: str, sector_etf_dfs: dict[str, pd.DataFrame], spy_df, sector_of_etf: dict[str, str] | None = None, window=63) -> float` — the sector's ETF relative return ranked against all 11 sector ETFs (0–100; 50.0 when unknown); `rs_score(ticker_pctile, sector_pctile) -> float` = `0.7 × ticker + 0.3 × sector`. `sector_of_etf` defaults to `universe.sector_map("etfs")` inverted (ETF symbol → sector).
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
 
 ```python
 def test_sector_rs_ranks_across_etfs():
@@ -2754,9 +2755,9 @@ def test_rs_score_weights():
     assert rs_score(80.0, 40.0) == pytest.approx(0.7 * 80 + 0.3 * 40)
 ```
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement** (append to `factors.py`)
+- [x] **Step 3: Implement** (append to `factors.py`)
 
 ```python
 def sector_rs_percentile(sector: str, sector_etf_dfs: dict, spy_df,
@@ -2782,9 +2783,9 @@ def rs_score(ticker_pctile: float, sector_pctile: float) -> float:
     return 0.7 * ticker_pctile + 0.3 * sector_pctile
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/factors.py tests/test_edge_factors.py
