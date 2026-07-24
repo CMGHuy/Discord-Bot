@@ -41,7 +41,8 @@
 > - Task E17 (Overnight gap model) done: `gap_stats()`/`stop_beyond_gap_noise()` added to new `swingbot/core/edge/gates.py`. Brief verified fully accurate, no corrections needed. No wiring into scan/alert path — explicitly deferred to E33/E64 per the brief's own prose note. Full suite 809 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure (plus one unrelated chart-test flake under load, confirmed passing in isolation), carried forward.
 > - Task E18 (Earnings blackout gate) done: `in_earnings_blackout()` appended to `gates.py`, `EARNINGS_BLACKOUT_DAYS` config Field (default 0/off). Same wrong-module issue as E14 recurred (brief assumed a nonexistent `market_events.days_to_earnings`) — pre-resolved before dispatch to use the real `events.get_next_earnings_date` (already ETF-exempt via E14's `is_etf` short-circuit), with day-count computed manually. Advisor's Finnhub soft-import (llm-advisor plan not merged) correctly left as dormant `try/except ImportError` per the brief's own forward-compat design. Reviewer traced the full ETF-exemption chain end-to-end (`gates.py` has no ETF special-case of its own — genuine delegation through `events.py`→`universe.is_etf`) and confirmed `window<=0` short-circuits before any day-count lookup. Not wired into the scan/alert path — deferred to E33, same pattern as E17. Full suite 812 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward. Approved, zero findings.
 > - Task E19 (Intraday confirmation data — 1h bars) done: `get_intraday()` appended to `data_store.py` (4-hour mtime-based freshness cache, injectable `fetch_fn`, stale-cache-beats-nothing fallback on fetch error). Brief verified fully accurate, no corrections needed. Standalone primitive, no wiring into any caller (consumed later by E29). Full suite 814 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward. Approved, zero findings.
-> - **Next:** Task E20 (Scan parallelization)
+> - Task E20 (Scan parallelization) done: `map_tickers()` (order-preserving, error-isolated `ThreadPoolExecutor` map, degrades to serial for `workers<=1`/single ticker) + `config.SCAN_WORKERS` (default 4) added to `swingbot/core/scanning/engine.py`; the per-ticker analysis body extracted into `_scan_one()`, dispatched through `map_tickers()`, with `state.confirm_or_update` and the unlocked funnel counters kept strictly serial/post-join as the brief required. This task was implemented and committed (29cda4c) in an earlier session without going through task review; retroactively reviewed this session. Reviewer found one real Important regression the original report had missed: `attach_plan_v2` had moved into the parallel `_scan_one` body and ran for every `all_ok` scenario on every scan pass (even ones still debouncing under `require_confirmation`), instead of only after a scenario survives the confirmation gate as in the pre-parallelization serial code — wasted work + new log noise, not data corruption, but a real behavior change the original report incorrectly claimed didn't exist. Also flagged zero test coverage of the real `ThreadPoolExecutor.map` path (every existing test used a 1-ticker watchlist, so `map_tickers`'s serial short-circuit always fired). Both fixed in commit fecaa1c: `attach_plan_v2` deferred to `_sync_run_scan`'s post-join merge loop (gated on the same `all_requirements_met` check that decides `scan_items.append`), and a new `test_sync_run_scan_parallel_dispatch_matches_serial` test drives 3 tickers through a genuine `SCAN_WORKERS=3` dispatch and asserts identical `scan_items`/`progress.funnel` vs. a `SCAN_WORKERS=1` serial run. Re-review approved, zero remaining findings. Full suite 816 passed/54 skipped (+1 known pre-existing wall-clock failure, carried forward), py_compile clean.
+> - **Next:** Task E21 (Universe-scale dry run — operational, needs user coordination for the sp500 fetch + live-channel dry run)
 
 ## Global Constraints
 
@@ -2291,7 +2292,7 @@ git commit -m "feat: 1h bar cache"
 **Interfaces:**
 - Produces: `map_tickers(fn, tickers, workers=None) -> list` — thread-pool map that (a) **preserves input order** in its results, (b) isolates errors (an exception in one ticker logs and yields `None` for that slot, never kills the scan), (c) degrades to serial when `workers <= 1`. The per-ticker analysis body of `_sync_run_scan` is extracted into a function and routed through it; the yfinance crawl (`_crawl_latest_data`) already batches and stays as-is.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_universe.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_universe.py`)
 
 ```python
 def test_map_tickers_preserves_order_and_matches_serial():
@@ -2312,9 +2313,9 @@ def test_map_tickers_isolates_errors():
     assert out == ["A", None, "C"]
 ```
 
-- [ ] **Step 2: Run — FAIL (`ImportError: map_tickers`).**
+- [x] **Step 2: Run — FAIL (`ImportError: map_tickers`).**
 
-- [ ] **Step 3: Implement** (add to `swingbot/core/scanning/engine.py`)
+- [x] **Step 3: Implement** (add to `swingbot/core/scanning/engine.py`)
 
 ```python
 from concurrent.futures import ThreadPoolExecutor
@@ -2348,9 +2349,9 @@ Then in `_sync_run_scan`, extract the existing per-ticker analysis body into `de
 
 `ScanProgress` updates (`progress.done += 1`) are plain attribute writes under the GIL — already safe per its docstring. Signal-confirmation state writes must stay in the main thread: `_scan_one` returns candidates; confirmation bookkeeping happens after the join, exactly where it happens today.
 
-- [ ] **Step 4: Run `python -m pytest tests/test_universe.py -v` — PASS. Full suite green (dedup and confirmation tests unchanged — same ordered item set).**
+- [x] **Step 4: Run `python -m pytest tests/test_universe.py -v` — PASS. Full suite green (dedup and confirmation tests unchanged — same ordered item set).**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/scanning/engine.py swingbot/config.py tests/test_universe.py
