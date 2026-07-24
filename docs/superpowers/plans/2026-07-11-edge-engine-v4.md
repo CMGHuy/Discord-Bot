@@ -45,7 +45,8 @@
 > - Task E21 (Universe-scale dry run) partially done, by user decision: `python scripts/fetch_backtest_data.py --universe sp500` run to completion (521/521 sp500+watchlist symbols now cached under `market_data/`, 330 newly updated this run, 653,019 new bars). The live-channel dry run (Step 2: `SCAN_UNIVERSE=sp500` + a test Discord channel, one live scan, wall-clock/RSS/alerts telemetry) was explicitly deferred — user chose "do the fetch, skip the live dry-run" rather than have an agent touch `.env`/trigger a live Discord scan unsupervised. Revisit Steps 2-4 (tune `SCAN_WORKERS`, record telemetry, revert `.env`) with the user directly when ready.
 - Task E22 (Phase E1 checkpoint) in progress: Step 1 (full suite + py_compile) confirmed green earlier this session (817 passed/54 skipped, +1 known pre-existing wall-clock failure) before this task started. Step 2 (finalize the baseline doc with liquidity-screened table + max DD + excluded-symbol list) required closing a gap the E11 doc had explicitly deferred — `scripts/run_backtest_range.py` had no pooled per-strategy max-DD column, and a prior attempt to add one by re-running the full grid a second time was abandoned as too slow. Added `pooled_max_dd_pct(trades, risk_pct=1.0)` to `run_backtest_range.py` (compounds a chronological, entry-date-ordered equity curve from the trades the grid run already collects — no second backtest run needed) plus a new `tests/scripts/test_run_backtest_range.py` (5 tests: golden compounding number, order-independence, no-drawdown, empty, all-None-r_multiple) and a new `MaxDD%` table column. Final TRAIN grid run (`--train --frictions on`, current code = frictions + E12 liquidity + E16 data-quality screening all active) kicked off in the background; results to be folded into `docs/superpowers/results/2026-07-22-edge-baseline.md` once it completes.
 - Task E23 (Regime model v2) done: `swingbot/core/edge/regime2.py` (4-state bull/bear x quiet/volatile classifier — `classify()` for live single-bar use with breadth tie-break, `regime_series()` for vectorized backtest labeling) + `tests/test_edge_regime2.py`. Standalone infra, nothing wires it in yet (E24's job). Implementer (haiku) self-reported one deviation from the brief's literal sample: a floating-point epsilon added to `classify()`'s volatility comparison, needed because `rv` and `vol_threshold` take different pandas computation paths (`rolling().std()` vs `rolling().quantile()`) that can disagree at machine-epsilon precision on a perfectly deterministic synthetic-test series. Reviewer independently reproduced the exact noise (~9e-18) and confirmed the fix was genuine, not a misdiagnosed test failure — but found the epsilon was applied only to `classify()`, not `regime_series()`, breaking the module's own documented invariant that the two must agree at every bar (reviewer demonstrated a concrete disagreeing input). Fixed directly (commit eb93fe6): named the constant `_VOL_THRESHOLD_EPSILON`, widened 1e-17 -> 1e-12 for real safety margin (still ~9-11 orders of magnitude below realistic realized-volatility values), applied identically in both functions, added `test_classify_and_regime_series_agree_on_last_bar`. Re-review approved, zero remaining findings; targeted suite 6/6 passing.
-- **Next:** finish Task E22 (pending the final TRAIN grid run), then Task E24 (Per-strategy regime gates)
+- Task E24 (Per-strategy regime gates) done: `strategy_types.REGIME_ALLOW: dict[str, tuple] = {}` (ships empty — no strategy is actually restricted yet) + `entry_filters.apply_regime_gate(bull, bear, strategy, regimes)` (no-op unless `config.REGIME_GATES_ENABLED` AND a `REGIME_ALLOW` entry AND a real `regimes` series are all present — all three are false/absent today) + `entries_for()` gained an optional trailing `regimes: pd.Series | None = None` parameter, calling `apply_regime_gate` right after the existing `STRATEGY_GATES` mask. SCOPE NARROWED before dispatch (verified, not scope-avoidance): the brief's own file list included `backtest.py`/`signals.py`, but `run_backtest()`/`_vectorized_entries()` (backtest.py) and all 11 `STRATEGY_FUNCS` (signals.py, via `strategy.evaluate_all()`) genuinely have no SPY/market dataframe anywhere in their call chains to build `regime2.regime_series(spy_df)` from — wiring that in would mean adding a new parameter to `run_backtest`/`evaluate_all` AND updating every caller (`run_backtest_range.py`, `tune_strategy.py`, `backtest_scenarios.py`, ...), a separate, much larger architectural task, not this one. Since `entries_for`'s new parameter is a backward-compatible trailing default, all 12 existing call sites needed zero changes. Reviewer independently re-verified the call chains and confirmed the scope call was correct, re-ran the targeted suite (8/8), and found only Minor polish notes (import-placement style, an empty-tuple-vs-missing-key edge case for whoever populates REGIME_ALLOW at E33, one brief-inherited untested assertion branch). Approved, no fix round needed.
+- **Next:** finish Task E22 (pending the final TRAIN grid run), then Task E25
 
 ## Global Constraints
 
@@ -2525,7 +2526,7 @@ git commit -m "feat: 4-state regime model"
 **Interfaces:**
 - Produces: `REGIME_ALLOW: dict[str, tuple[str, ...]]` in `strategy_types.py` — `{strategy: allowed regimes}`; **empty until E33's fold runs fill it** (this task ships mechanism only). `entry_filters.apply_regime_gate(bull, bear, strategy, regimes: pd.Series) -> tuple[pd.Series, pd.Series]` — zeroes entries on bars whose regime isn't allowed; missing key or flag off ⇒ untouched. Backtest and live share the gate through `entries_for` exactly like `STRATEGY_GATES`.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_regime2.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_regime2.py`)
 
 ```python
 def test_regime_gate_masks_disallowed_bars(monkeypatch):
@@ -2559,9 +2560,9 @@ def test_regime_gate_noop_when_unconfigured(monkeypatch):
     assert b2.tolist() == [True, True, True]
 ```
 
-- [ ] **Step 2: Run — FAIL (`AttributeError: REGIME_ALLOW` / `apply_regime_gate`).**
+- [x] **Step 2: Run — FAIL (`AttributeError: REGIME_ALLOW` / `apply_regime_gate`).**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `strategy_types.py` (append):
 
@@ -2592,9 +2593,9 @@ def apply_regime_gate(bull: pd.Series, bear: pd.Series, strategy: str,
 
 `entries_for(...)` gains an optional `regimes: pd.Series | None = None` parameter threaded from: the backtest (build `regime_series(spy_df)` once per run when the flag is on) and the live signal path (label the last bar via `classify`). Both pass `None` when the flag is off — zero behavior change.
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_regime2.py -v` — PASS. Full suite green (flag off everywhere).**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_regime2.py -v` — PASS. Full suite green (flag off everywhere).**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/strategy_types.py swingbot/core/entry_filters.py swingbot/core/backtest.py swingbot/core/signals.py swingbot/config.py tests/test_edge_regime2.py
