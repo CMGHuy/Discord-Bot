@@ -52,3 +52,48 @@ def test_sector_rs_ranks_across_etfs():
 def test_rs_score_weights():
     from swingbot.core.edge.factors import rs_score
     assert rs_score(80.0, 40.0) == pytest.approx(0.7 * 80 + 0.3 * 40)
+
+
+def test_clean_uptrend_aligns_fully():
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.edge.factors import mtf_alignment
+    rng = np.random.RandomState(1)
+    df = make_ohlcv(list(100 * np.cumprod(1 + rng.normal(0.0012, 0.01, 400))))
+    assert mtf_alignment(df, "bullish") == 3
+    assert mtf_alignment(df, "bearish") == 0
+
+
+def test_chop_scores_low():
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.edge.factors import mtf_alignment
+    rng = np.random.default_rng(7)
+    level = 100.0
+    prices = [level]
+    for _ in range(399):
+        level += -0.05 * (level - 100.0) + rng.normal(0, 1.0)
+        prices.append(level)
+    df = make_ohlcv(np.array(prices), spread_pct=2.0)
+    assert mtf_alignment(df, "bullish") <= 1
+
+
+def test_weekly_frame_shape():
+    from swingbot.core.edge.factors import weekly_frame
+    df = make_trend_df(400, +0.25)
+    w = weekly_frame(df)
+    assert list(w.columns) == ["Open", "High", "Low", "Close", "Volume"]
+    assert len(w) < len(df) / 4
+
+
+def test_breadth_split_universe():
+    from swingbot.core.edge.factors import breadth_pct_above_50ema
+    ups = {f"U{i}": make_trend_df(150, +0.3) for i in range(15)}
+    downs = {f"D{i}": make_trend_df(150, -0.3) for i in range(15)}
+    b = breadth_pct_above_50ema({**ups, **downs})
+    assert b == pytest.approx(50.0, abs=1.0)
+
+
+def test_breadth_none_when_universe_tiny():
+    from swingbot.core.edge.factors import breadth_pct_above_50ema
+    assert breadth_pct_above_50ema({"A": make_trend_df(150, +0.3)}) is None

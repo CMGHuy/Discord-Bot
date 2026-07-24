@@ -71,3 +71,63 @@ def rs_score(ticker_pctile: float, sector_pctile: float) -> float:
     """Combined RS: the stock carries most of the signal, its sector tide
     the rest. Weights are frozen constants, not tunables."""
     return 0.7 * ticker_pctile + 0.3 * sector_pctile
+
+
+def weekly_frame(daily_df: pd.DataFrame) -> pd.DataFrame:
+    return daily_df.resample("W-FRI").agg(
+        {"Open": "first", "High": "max", "Low": "min",
+         "Close": "last", "Volume": "sum"}).dropna()
+
+
+def _swing_lows(series: pd.Series, span: int = 2) -> list:
+    vals = series.values
+    return [vals[i] for i in range(span, len(vals) - span)
+            if vals[i] == min(vals[i - span:i + span + 1])]
+
+
+def mtf_alignment(daily_df: pd.DataFrame, direction: str) -> int:
+    """0-3: how many higher-timeframe boxes this direction ticks. Weekly
+    context is resampled from daily -- same data, longer lens."""
+    w = weekly_frame(daily_df)
+    if len(w) < 15:
+        return 0
+    bull = direction == "bullish"
+    score = 0
+
+    ema10 = w["Close"].ewm(span=10, adjust=False).mean()
+    ema_rising = ema10.iloc[-1] > ema10.iloc[-4]
+    above = w["Close"].iloc[-1] > ema10.iloc[-1]
+    if (above and ema_rising) if bull else (not above and not ema_rising):
+        score += 1
+
+    lows = _swing_lows(w["Low"].iloc[:-1])   # completed weeks only
+    highs = [-v for v in _swing_lows(-w["High"].iloc[:-1])]
+    if bull and len(lows) >= 2 and lows[-1] > lows[-2]:
+        score += 1
+    if not bull and len(highs) >= 2 and highs[-1] < highs[-2]:
+        score += 1
+
+    prev = w.iloc[-2]
+    pivot = (prev["High"] + prev["Low"] + prev["Close"]) / 3.0
+    daily_close = float(daily_df["Close"].iloc[-1])
+    if (daily_close > pivot) if bull else (daily_close < pivot):
+        score += 1
+    return score
+
+
+BREADTH_MIN_TICKERS = 20
+
+
+def breadth_pct_above_50ema(universe_dfs: dict) -> float | None:
+    """Market internals: % of the scanned universe above its own 50-EMA.
+    An index made of its members, not of cap-weighted illusions."""
+    above = total = 0
+    for df in universe_dfs.values():
+        if df is None or len(df) < 60:
+            continue
+        ema50 = df["Close"].ewm(span=50, adjust=False).mean()
+        total += 1
+        above += bool(df["Close"].iloc[-1] > ema50.iloc[-1])
+    if total < BREADTH_MIN_TICKERS:
+        return None
+    return round(100.0 * above / total, 1)
