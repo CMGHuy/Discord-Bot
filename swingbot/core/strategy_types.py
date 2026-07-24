@@ -303,3 +303,10 @@ class SignalResult:
             return f"{self.trend}:{self.details['Nearest level']}"
         return self.trend
 
+
+# Per-strategy allowed regimes (E24 mechanism; E33's fold runs decide the
+# actual sets). Missing key = allowed in every regime. Both the backtest
+# and live signals flow through entry_filters.apply_regime_gate, so the
+# gate can never diverge between them.
+REGIME_ALLOW: dict[str, tuple] = {}
+

@@ -109,8 +109,23 @@ def _off(df: pd.DataFrame) -> pd.Series:
     return pd.Series(False, index=df.index)
 
 
+def apply_regime_gate(bull: pd.Series, bear: pd.Series, strategy: str,
+                      regimes: "pd.Series | None"):
+    """Zero out entries on bars whose market regime the strategy isn't
+    allowed to trade. Flag-gated + empty-by-default: shipping the
+    mechanism costs nothing until E33's evidence fills REGIME_ALLOW."""
+    from swingbot import config
+    from swingbot.core.strategy_types import REGIME_ALLOW
+    allowed = REGIME_ALLOW.get(strategy)
+    if not getattr(config, "REGIME_GATES_ENABLED", False) or not allowed or regimes is None:
+        return bull, bear
+    ok = regimes.reindex(bull.index).isin(allowed).fillna(False)
+    return (bull & ok), (bear & ok)
+
+
 def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
-                params: dict | None = None) -> tuple[pd.Series, pd.Series]:
+                params: dict | None = None,
+                regimes: "pd.Series | None" = None) -> tuple[pd.Series, pd.Series]:
     """Dispatch to the strategy's entry function, then apply STRATEGY_GATES
     (direction/horizon restrictions decided by train-window tuning)."""
     bullish, bearish = ENTRY_FUNCS[strategy](df, horizon_key, params)
@@ -126,6 +141,8 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
                 bullish = _off(df)
             if "bearish" not in directions:
                 bearish = _off(df)
+
+    bullish, bearish = apply_regime_gate(bullish, bearish, strategy, regimes)
     return bullish, bearish
 
 

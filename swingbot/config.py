@@ -459,6 +459,13 @@ FIELDS: list[Field] = [
           type="number", default="4", min=1, max=16, step=1,
           help="Thread-pool size for per-ticker scanning. 4 is CX23-safe; raise only with "
                "the E82 telemetry watching."),
+    Field("REGIME_GATES_ENABLED", "REGIME_GATES_ENABLED", "Universe & Scanning",
+          "Per-strategy regime gates enabled",
+          type="checkbox", default="false",
+          help="Restricts each strategy's entries to the market regimes listed for it in "
+               "swingbot/core/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
+               "REGIME_ALLOW is empty until E33's walk-forward fold runs populate it, so this "
+               "is a complete no-op today even when enabled."),
 ]
 
 _CASTERS = {
