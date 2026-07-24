@@ -52,6 +52,30 @@ def pool(trades):
     }
 
 
+def pooled_max_dd_pct(trades, risk_pct=1.0):
+    """Compounded max drawdown %, pooling every ticker/horizon this
+    strategy traded into one chronological (entry_date order) equity
+    curve at a fixed assumed risk_pct per trade. This is a portfolio-level
+    PROXY, not a true concurrent-position-aware curve (overlapping trades
+    aren't modeled) -- but it's the standard, defensible way to turn a
+    pool of R-multiples into a single max-DD figure without a second full
+    backtest run (Task E22; the prior ad hoc attempt at this re-ran the
+    whole grid a second time and was abandoned as too slow -- this reuses
+    the trades already collected in the same run).
+    Returns None (not 0.0) for an empty trade list, so "no trades" isn't
+    misread as "no drawdown"."""
+    ordered = sorted((t for t in trades if t.r_multiple is not None), key=lambda t: t.entry_date)
+    if not ordered:
+        return None
+    equity = peak = 1.0
+    max_dd = 0.0
+    for t in ordered:
+        equity *= 1 + (risk_pct / 100.0) * t.r_multiple
+        peak = max(peak, equity)
+        max_dd = min(max_dd, (equity - peak) / peak * 100.0)
+    return max_dd
+
+
 def passes(stats, min_n):
     return (stats["n_eval"] >= min_n
             and stats["win_rate"] is not None and stats["win_rate"] >= 80
@@ -285,7 +309,7 @@ def main():
                     rb["timeout"] += sum(1 for t in tr if t.runner_outcome == "runner_timeout")
                     rb["wins"] += sum(1 for t in tr if t.outcome == "win")
 
-    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s}"
+    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'MaxDD%':>7s}"
     if show_runner_cols:
         header += f" {'AvgWinR':>7s}"
     header += f" {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}"
@@ -306,11 +330,13 @@ def main():
     results = {}
     for strat in strategies:
         st = pool(by_strategy[strat])
+        st["max_dd_pct"] = pooled_max_dd_pct(by_strategy[strat])
         results[strat] = dict(st)
         wr = f"{st['win_rate']:.1f}" if st["win_rate"] is not None else "n/a"
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
+        dd = f"{st['max_dd_pct']:.1f}" if st["max_dd_pct"] is not None else "n/a"
         flag = "PASS" if passes(st, min_n) else "FAIL"
-        row = f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s}"
+        row = f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s} {dd:>7s}"
         if show_runner_cols:
             awr = f"{st['avg_win_r']:+.3f}" if st["avg_win_r"] is not None else "n/a"
             row += f" {awr:>7s}"
