@@ -34,3 +34,21 @@ def test_rs_cache_roundtrip(tmp_path, monkeypatch):
     cache = factors.refresh_rs_cache({"STRONG": make_trend_df(200, +0.30)}, spy)
     assert "STRONG" in cache["rels"]
     assert factors.load_rs_cache()["rels"] == cache["rels"]
+
+
+def test_sector_rs_ranks_across_etfs():
+    from swingbot.core.edge.factors import sector_rs_percentile
+    spy = make_trend_df(200, +0.05)
+    etf_dfs = {"XLE": make_trend_df(200, +0.40),
+               "XLK": make_trend_df(200, +0.10),
+               "XLU": make_trend_df(200, -0.10)}
+    sectors = {"XLE": "Energy", "XLK": "Information Technology", "XLU": "Utilities"}
+    hot = sector_rs_percentile("Energy", etf_dfs, spy, sector_of_etf=sectors)
+    cold = sector_rs_percentile("Utilities", etf_dfs, spy, sector_of_etf=sectors)
+    assert hot > cold
+    assert sector_rs_percentile("Nonexistent", etf_dfs, spy, sector_of_etf=sectors) == 50.0
+
+
+def test_rs_score_weights():
+    from swingbot.core.edge.factors import rs_score
+    assert rs_score(80.0, 40.0) == pytest.approx(0.7 * 80 + 0.3 * 40)

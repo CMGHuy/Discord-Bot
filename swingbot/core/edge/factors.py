@@ -48,3 +48,26 @@ def refresh_rs_cache(universe_dfs: dict, spy_df: pd.DataFrame) -> dict:
 
 def load_rs_cache() -> dict:
     return read_json(RS_CACHE_PATH, {"as_of": None, "rels": {}})
+
+
+def sector_rs_percentile(sector: str, sector_etf_dfs: dict, spy_df,
+                         sector_of_etf: dict | None = None,
+                         window: int = RS_WINDOW) -> float:
+    if sector_of_etf is None:
+        from swingbot.core.universe import sector_map
+        sector_of_etf = sector_map("etfs")
+    rels = {}
+    for etf, df in sector_etf_dfs.items():
+        rel = relative_return(df, spy_df, window)
+        if rel is not None:
+            rels[sector_of_etf.get(etf)] = rel
+    mine = rels.get(sector)
+    if mine is None or len(rels) < 2:
+        return 50.0
+    return float(round(100.0 * np.mean([mine >= r for r in rels.values()]), 1))
+
+
+def rs_score(ticker_pctile: float, sector_pctile: float) -> float:
+    """Combined RS: the stock carries most of the signal, its sector tide
+    the rest. Weights are frozen constants, not tunables."""
+    return 0.7 * ticker_pctile + 0.3 * sector_pctile
