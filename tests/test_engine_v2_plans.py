@@ -3,6 +3,7 @@ import numpy as np
 import swingbot.config as config
 from swingbot.core.performance import TradeLog
 from swingbot.core.scanning import engine
+from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
 
 def _item():
@@ -213,3 +214,98 @@ def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkey
         "an illiquid ticker must produce NO new scan items -- level maps/scenarios/plan-v2 "
         "building must be skipped entirely by the E12 liquidity screen"
     )
+
+
+def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path):
+    """
+    Task E20 fix round 1, Finding 2: every existing _sync_run_scan-driving
+    test in this file uses a single-ticker watchlist
+    (`load_watchlist` -> ["TEST"]), so map_tickers()'s `len(tickers) <= 1`
+    branch always degrades to the serial `[safe(t) for t in tickers]`
+    fallback -- the real `ThreadPoolExecutor.map` path was previously only
+    ever exercised by the generic, business-logic-free tests in
+    tests/test_universe.py, never through the actual scan pipeline's
+    merge/confirmation/funnel-summing logic.
+
+    Drives _sync_run_scan with 3 real tickers, once with SCAN_WORKERS=1
+    (serial) and once with SCAN_WORKERS=3 (forces genuine parallel
+    dispatch -- map_tickers()'s `n <= 1 or len(tickers) <= 1`
+    short-circuit does NOT trigger with 3 workers and 3 tickers), and
+    asserts the two runs produce identical scan_items composition and
+    funnel counts.
+
+    Also re-verifies Finding 1's fix (attach_plan_v2 deferred out of
+    _scan_one into _sync_run_scan's post-join merge loop) holds under
+    real parallel dispatch: every item here is all_ok (min_confluence=0,
+    confidence floor dropped to 1 -- same recipe as
+    test_sync_run_scan_gates_attach_plan_v2_on_all_ok's Run 2), so
+    plan_v2 must be attached for all of them in both runs.
+    """
+    dfs = {ticker: _structured_df() for ticker in ("T0", "T1", "T2")}
+
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(config, "MIN_REWARD_PCT", 0.5)
+    monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
+    monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
+    monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
+    # Same per-horizon loosening as test_sync_run_scan_gates_attach_plan_v2_on_all_ok
+    # -- see that test's docstring for why 4w's default sr_target_min_pct
+    # would otherwise block this fixture from producing any scenario at all.
+    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+
+    monkeypatch.setattr(engine, "load_watchlist", lambda: ["T0", "T1", "T2"])
+    monkeypatch.setattr(
+        engine, "get_daily_data",
+        lambda ticker, period=None: dfs[ticker].copy() if ticker in dfs else None,
+    )
+    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
+    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+
+    def _run(workers: int):
+        # Fresh TradeLog and fresh ScanProgress per run -- neither the
+        # debounce state nor the progress/funnel state from one run may
+        # leak into the other.
+        monkeypatch.setattr(config, "SCAN_WORKERS", workers)
+        monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / f"trades_{workers}.json")))
+        progress = ScanProgress()
+
+        captured = {}
+
+        def _capture_and_shortcircuit(items):
+            captured["items"] = list(items)
+            return []   # skip the alert-building loop -- plan_v2/funnel are already decided by here
+
+        monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+
+        engine._sync_run_scan("4w", require_confirmation=False, progress=progress, min_confluence=0)
+        return captured["items"], progress.funnel
+
+    items_serial, funnel_serial = _run(1)
+    items_parallel, funnel_parallel = _run(3)
+
+    assert items_serial, "fixture must produce at least one real scenario across the 3 tickers"
+    assert len(items_serial) == len(items_parallel)
+
+    def _identity_set(items):
+        return {
+            (item.result.ticker, item.result.horizon_key, item.result.trend, item.plan_v2 is not None)
+            for item in items
+        }
+
+    assert _identity_set(items_serial) == _identity_set(items_parallel), (
+        "SCAN_WORKERS=3 (real ThreadPoolExecutor.map dispatch) must produce the exact same "
+        "scan_items composition as SCAN_WORKERS=1 (serial) for the same 3 tickers"
+    )
+
+    # Re-verify Finding 1's fix under real parallel dispatch: every scenario here is
+    # all_ok, so attach_plan_v2 must have run for all of them, in both runs.
+    assert all(item.plan_v2 is not None for item in items_serial)
+    assert all(item.plan_v2 is not None for item in items_parallel)
+
+    assert funnel_serial == funnel_parallel, (
+        "the funnel summary must be identical whether the ANALYZE phase ran serially or "
+        "through the real thread pool"
+    )
+    for key in ("checked", "scenarios_found", "fully_qualifying", "shown"):
+        assert funnel_serial[key] == funnel_parallel[key]

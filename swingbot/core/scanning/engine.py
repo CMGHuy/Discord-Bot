@@ -153,6 +153,7 @@ class ScanItem:
     combined_from: list = field(default_factory=list)
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
     plan_v2: object = None            # TradePlanV2 | None
+    level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
 
     @property
     def all_requirements_met(self) -> bool:
@@ -403,8 +404,11 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     debounce: existing-trade monitoring (update_open_trades/
     _check_near_close), the E12 liquidity screen, the E16 data-quality
     screen, and -- if the ticker clears both screens -- the full
-    per-horizon levels/scenarios/confidence/requirements/ScanItem/plan_v2
-    build.
+    per-horizon levels/scenarios/confidence/requirements/ScanItem build.
+    plan_v2 construction itself is NOT part of what this function does
+    (Task E20 fix): it only stages the level map on the ScanItem
+    (`item.level_map`) for the caller to attach v2 plans after the
+    confirmation gate, matching pre-parallelization timing.
 
     Deliberately never calls state.confirm_or_update(): even though
     StateStore's own lock makes that call safe to run concurrently (no
@@ -710,11 +714,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                 htf_info=htf_info_for_item,
             )
             if all_ok:
-                attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=(supports, resistances))
-                if item.plan_v2 is not None:
-                    item.plan_v2.regime_aligned = not (
-                        item.htf_info and item.htf_info.get("counter_trend", False)
-                    )
+                item.level_map = (supports, resistances)
             stats["items"].append(item)
 
         # One unit of progress per (ticker, horizon) pair -- see the
@@ -815,6 +815,16 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     #      lock, so concurrent in-place mutation from worker threads would
     #      be a real race; _scan_one returns its own per-ticker stats
     #      instead, summed here.
+    #   3. attach_plan_v2() itself -- deferred here too (Task E20 fix), for
+    #      the same reason it must happen only once confirmation is known:
+    #      calling it inside _scan_one built a full v2 plan (sizing, badge
+    #      stamping, quality scoring) for every all_ok scenario on every
+    #      scan pass, even ones still debouncing under require_confirmation.
+    #      _scan_one only stages the level map (item.level_map); the actual
+    #      attach_plan_v2 call lives in the merge loop below, gated on the
+    #      same all_requirements_met check that decides whether an item
+    #      reaches scan_items.append(item) -- do not move it back into
+    #      _scan_one.
     # _scan_one always builds and returns every scenario it finds,
     # qualifying or not -- the require_confirmation gate below is applied
     # uniformly to the aggregated candidates, not decided per-ticker.
@@ -866,6 +876,19 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                item.result.ticker, item.result.horizon_key, item.result.trend,
                                config.SIGNAL_CONFIRMATION_SCANS)
                     continue
+            if item.all_requirements_met:
+                # Deferred from _scan_one (fix for a task-review finding): only
+                # build the v2 plan for a scenario that actually survives the
+                # confirmation gate above, matching the pre-parallelization
+                # timing exactly -- a still-debouncing scenario no longer pays
+                # for plan construction on every scan pass.
+                attach_plan_v2(item, item.plan, fresh_data.get(item.result.ticker),
+                                item.result.ticker, item.result.horizon_key,
+                                level_map=item.level_map)
+                if item.plan_v2 is not None:
+                    item.plan_v2.regime_aligned = not (
+                        item.htf_info and item.htf_info.get("counter_trend", False)
+                    )
             scan_items.append(item)
 
     if progress is not None:
