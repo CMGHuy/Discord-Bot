@@ -46,6 +46,7 @@
 - Task E22 (Phase E1 checkpoint) done: Step 1 (full suite + py_compile) confirmed green (817 passed/54 skipped, +1 known pre-existing wall-clock failure). Step 2 (finalize the baseline doc) closed a gap the E11 doc had explicitly deferred — added `pooled_max_dd_pct(trades, risk_pct=1.0)` to `run_backtest_range.py` (chronological, entry-date-ordered compounding equity curve from the trades the grid run already collects — no second backtest run needed, unlike the E11-era attempt that re-ran the whole grid a second time and was abandoned as too slow) + `tests/scripts/test_run_backtest_range.py` (5/5 passing) + a new `MaxDD%` table column. Ran the TRAIN grid twice with current code (frictions on/off, both with E12 liquidity + E16 data-quality screening active) and discovered the E11-era tables actually predated E12/E16 taking effect — real N values shifted materially (e.g. Break & Retest 371 -> 324, Elliott Wave 118 -> 102) even though every strategy still PASSes both before and after. `docs/superpowers/results/2026-07-22-edge-baseline.md` rewritten: the finalized on/off/delta tables + the 10-symbol excluded list (2 illiquid, 8 bad-data) are now the top-level reference, old tables kept below marked stale for history. This was implemented directly (not via subagent-driven-development) as an analysis/scripting task, matching the precedent set by E13/E16's direct script-run handling.
 - Task E23 (Regime model v2) done: `swingbot/core/edge/regime2.py` (4-state bull/bear x quiet/volatile classifier — `classify()` for live single-bar use with breadth tie-break, `regime_series()` for vectorized backtest labeling) + `tests/test_edge_regime2.py`. Standalone infra, nothing wires it in yet (E24's job). Implementer (haiku) self-reported one deviation from the brief's literal sample: a floating-point epsilon added to `classify()`'s volatility comparison, needed because `rv` and `vol_threshold` take different pandas computation paths (`rolling().std()` vs `rolling().quantile()`) that can disagree at machine-epsilon precision on a perfectly deterministic synthetic-test series. Reviewer independently reproduced the exact noise (~9e-18) and confirmed the fix was genuine, not a misdiagnosed test failure — but found the epsilon was applied only to `classify()`, not `regime_series()`, breaking the module's own documented invariant that the two must agree at every bar (reviewer demonstrated a concrete disagreeing input). Fixed directly (commit eb93fe6): named the constant `_VOL_THRESHOLD_EPSILON`, widened 1e-17 -> 1e-12 for real safety margin (still ~9-11 orders of magnitude below realistic realized-volatility values), applied identically in both functions, added `test_classify_and_regime_series_agree_on_last_bar`. Re-review approved, zero remaining findings; targeted suite 6/6 passing.
 - Task E24 (Per-strategy regime gates) done: `strategy_types.REGIME_ALLOW: dict[str, tuple] = {}` (ships empty — no strategy is actually restricted yet) + `entry_filters.apply_regime_gate(bull, bear, strategy, regimes)` (no-op unless `config.REGIME_GATES_ENABLED` AND a `REGIME_ALLOW` entry AND a real `regimes` series are all present — all three are false/absent today) + `entries_for()` gained an optional trailing `regimes: pd.Series | None = None` parameter, calling `apply_regime_gate` right after the existing `STRATEGY_GATES` mask. SCOPE NARROWED before dispatch (verified, not scope-avoidance): the brief's own file list included `backtest.py`/`signals.py`, but `run_backtest()`/`_vectorized_entries()` (backtest.py) and all 11 `STRATEGY_FUNCS` (signals.py, via `strategy.evaluate_all()`) genuinely have no SPY/market dataframe anywhere in their call chains to build `regime2.regime_series(spy_df)` from — wiring that in would mean adding a new parameter to `run_backtest`/`evaluate_all` AND updating every caller (`run_backtest_range.py`, `tune_strategy.py`, `backtest_scenarios.py`, ...), a separate, much larger architectural task, not this one. Since `entries_for`'s new parameter is a backward-compatible trailing default, all 12 existing call sites needed zero changes. Reviewer independently re-verified the call chains and confirmed the scope call was correct, re-ran the targeted suite (8/8), and found only Minor polish notes (import-placement style, an empty-tuple-vs-missing-key edge case for whoever populates REGIME_ALLOW at E33, one brief-inherited untested assertion branch). Approved, no fix round needed.
+- Task E25 (Relative-strength factor) done: `swingbot/core/edge/factors.py` (`relative_return`, `rs_percentile`, `refresh_rs_cache`, `load_rs_cache`) + `tests/test_edge_factors.py` (4 tests). Brief's own sample code called a nonexistent `jsonio.write_json` — implementer correctly substituted the real `jsonio.atomic_write_json` (identical `(path, obj) -> None` signature, matches every other store in the codebase). Scan wiring (prose-only in the brief) resolved by the controller before dispatch and given as explicit instructions: fetch `spy_df` via the same try/except pattern `get_regime()` already uses; add `ScanItem.rs_percentile: float | None = None`; call `refresh_rs_cache(fresh_data, spy_df)` exactly once, in the main thread, BEFORE `map_tickers()` is even invoked (stronger than merely "not inside `_scan_one`" — eliminates any threading question entirely); stamp `item.rs_percentile` in the merge loop right before the single `scan_items.append(item)` call site shared by both `require_confirmation` branches; `spy_df is None` (or any fetch/cache-write failure) leaves every item's `rs_percentile` at its `None` default, never crashes the scan. Reviewer independently verified every one of these five points with file:line evidence and confirmed no reachable crash path. Approved, zero findings (two Minor notes: a negligible duplicate `relative_return` computation constrained by the brief's fixed signatures, and the implementer's choice to wrap both the fetch and the cache-write in one try/except rather than just the fetch — both accepted as correct, disclosed judgment calls).
 - **Next:** Task E26 (Sector RS)
 
 ## Global Constraints
@@ -2612,7 +2613,7 @@ git commit -m "feat: regime gate mechanism"
 - Produces: `relative_return(ticker_df, spy_df, window=63) -> float | None` (ticker 63-bar return minus SPY's, as a fraction); `rs_percentile(ticker_df, spy_df, window=63, universe_rels: list[float] | None = None) -> float` — percentile (0–100) of the ticker's relative return within the scanned universe's relative returns; `universe_rels=None` ⇒ neutral 50.0. `refresh_rs_cache(universe_dfs: dict, spy_df) -> dict` writes `data/universe/rs_cache.json` (`{"as_of": iso, "rels": {symbol: rel}}`, via `jsonio.write_json`) once per scan; `load_rs_cache() -> dict`.
 - Filter candidate for E33: `rs_min` on long entries (grid {50, 60, 70}).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_factors.py
@@ -2654,9 +2655,9 @@ def test_rs_cache_roundtrip(tmp_path, monkeypatch):
     assert factors.load_rs_cache()["rels"] == cache["rels"]
 ```
 
-- [ ] **Step 2: Run — FAIL (`ModuleNotFoundError`).**
+- [x] **Step 2: Run — FAIL (`ModuleNotFoundError`).**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # swingbot/core/edge/factors.py
@@ -2714,9 +2715,9 @@ def load_rs_cache() -> dict:
 
 Scan wiring: `_sync_run_scan` calls `refresh_rs_cache(dfs, spy_df)` once after the crawl; each item gets `item.rs_percentile = rs_percentile(df, spy_df, universe_rels=list(cache["rels"].values()))` for E37's score and the E60 chart strip.
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/factors.py swingbot/core/scanning/engine.py tests/test_edge_factors.py
