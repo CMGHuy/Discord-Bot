@@ -58,6 +58,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core import levels
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
 from swingbot.core.edge import correlation as corr_mod
+from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
@@ -154,6 +155,7 @@ class ScanItem:
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
     plan_v2: object = None            # TradePlanV2 | None
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
+    rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
 
     @property
     def all_requirements_met(self) -> bool:
@@ -784,6 +786,23 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     regime = get_regime()
     if regime:
         log.info("Market regime: %s (%s vs 200EMA %+.1f%%)", regime.label, regime.ticker, regime.pct_above_ema)
+
+    # Relative-strength factor (Task E25): fetch the benchmark once per scan
+    # (same try/except pattern as get_regime() above -- an RS failure must
+    # never break the scan) and build the whole universe's relative-return
+    # cache once, so every item's rs_percentile below is a cheap lookup
+    # against `rs_cache["rels"].values()` instead of a per-ticker refetch.
+    spy_df = None
+    rs_cache = None
+    try:
+        spy_df = get_daily_data(config.MARKET_REGIME_TICKER)
+        if spy_df is not None:
+            rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
+    except Exception as e:
+        log.warning("Could not compute relative-strength cache: %s", e)
+        spy_df = None
+        rs_cache = None
+
     account_cfg = load_account_config()
 
     scan_items = []
@@ -889,6 +908,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     item.plan_v2.regime_aligned = not (
                         item.htf_info and item.htf_info.get("counter_trend", False)
                     )
+            if rs_cache is not None:
+                item.rs_percentile = rs_factors.rs_percentile(
+                    fresh_data.get(item.result.ticker), spy_df,
+                    universe_rels=list(rs_cache["rels"].values()),
+                )
             scan_items.append(item)
 
     if progress is not None:
