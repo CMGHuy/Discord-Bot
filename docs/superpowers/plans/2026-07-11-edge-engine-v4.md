@@ -42,7 +42,10 @@
 > - Task E18 (Earnings blackout gate) done: `in_earnings_blackout()` appended to `gates.py`, `EARNINGS_BLACKOUT_DAYS` config Field (default 0/off). Same wrong-module issue as E14 recurred (brief assumed a nonexistent `market_events.days_to_earnings`) — pre-resolved before dispatch to use the real `events.get_next_earnings_date` (already ETF-exempt via E14's `is_etf` short-circuit), with day-count computed manually. Advisor's Finnhub soft-import (llm-advisor plan not merged) correctly left as dormant `try/except ImportError` per the brief's own forward-compat design. Reviewer traced the full ETF-exemption chain end-to-end (`gates.py` has no ETF special-case of its own — genuine delegation through `events.py`→`universe.is_etf`) and confirmed `window<=0` short-circuits before any day-count lookup. Not wired into the scan/alert path — deferred to E33, same pattern as E17. Full suite 812 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward. Approved, zero findings.
 > - Task E19 (Intraday confirmation data — 1h bars) done: `get_intraday()` appended to `data_store.py` (4-hour mtime-based freshness cache, injectable `fetch_fn`, stale-cache-beats-nothing fallback on fetch error). Brief verified fully accurate, no corrections needed. Standalone primitive, no wiring into any caller (consumed later by E29). Full suite 814 passed, 54 skipped, +1 known pre-existing unrelated wall-clock failure, carried forward. Approved, zero findings.
 > - Task E20 (Scan parallelization) done: `map_tickers()` (order-preserving, error-isolated `ThreadPoolExecutor` map, degrades to serial for `workers<=1`/single ticker) + `config.SCAN_WORKERS` (default 4) added to `swingbot/core/scanning/engine.py`; the per-ticker analysis body extracted into `_scan_one()`, dispatched through `map_tickers()`, with `state.confirm_or_update` and the unlocked funnel counters kept strictly serial/post-join as the brief required. This task was implemented and committed (29cda4c) in an earlier session without going through task review; retroactively reviewed this session. Reviewer found one real Important regression the original report had missed: `attach_plan_v2` had moved into the parallel `_scan_one` body and ran for every `all_ok` scenario on every scan pass (even ones still debouncing under `require_confirmation`), instead of only after a scenario survives the confirmation gate as in the pre-parallelization serial code — wasted work + new log noise, not data corruption, but a real behavior change the original report incorrectly claimed didn't exist. Also flagged zero test coverage of the real `ThreadPoolExecutor.map` path (every existing test used a 1-ticker watchlist, so `map_tickers`'s serial short-circuit always fired). Both fixed in commit fecaa1c: `attach_plan_v2` deferred to `_sync_run_scan`'s post-join merge loop (gated on the same `all_requirements_met` check that decides `scan_items.append`), and a new `test_sync_run_scan_parallel_dispatch_matches_serial` test drives 3 tickers through a genuine `SCAN_WORKERS=3` dispatch and asserts identical `scan_items`/`progress.funnel` vs. a `SCAN_WORKERS=1` serial run. Re-review approved, zero remaining findings. Full suite 816 passed/54 skipped (+1 known pre-existing wall-clock failure, carried forward), py_compile clean.
-> - **Next:** Task E21 (Universe-scale dry run — operational, needs user coordination for the sp500 fetch + live-channel dry run)
+> - Task E21 (Universe-scale dry run) partially done, by user decision: `python scripts/fetch_backtest_data.py --universe sp500` run to completion (521/521 sp500+watchlist symbols now cached under `market_data/`, 330 newly updated this run, 653,019 new bars). The live-channel dry run (Step 2: `SCAN_UNIVERSE=sp500` + a test Discord channel, one live scan, wall-clock/RSS/alerts telemetry) was explicitly deferred — user chose "do the fetch, skip the live dry-run" rather than have an agent touch `.env`/trigger a live Discord scan unsupervised. Revisit Steps 2-4 (tune `SCAN_WORKERS`, record telemetry, revert `.env`) with the user directly when ready.
+- Task E22 (Phase E1 checkpoint) in progress: Step 1 (full suite + py_compile) confirmed green earlier this session (817 passed/54 skipped, +1 known pre-existing wall-clock failure) before this task started. Step 2 (finalize the baseline doc with liquidity-screened table + max DD + excluded-symbol list) required closing a gap the E11 doc had explicitly deferred — `scripts/run_backtest_range.py` had no pooled per-strategy max-DD column, and a prior attempt to add one by re-running the full grid a second time was abandoned as too slow. Added `pooled_max_dd_pct(trades, risk_pct=1.0)` to `run_backtest_range.py` (compounds a chronological, entry-date-ordered equity curve from the trades the grid run already collects — no second backtest run needed) plus a new `tests/scripts/test_run_backtest_range.py` (5 tests: golden compounding number, order-independence, no-drawdown, empty, all-None-r_multiple) and a new `MaxDD%` table column. Final TRAIN grid run (`--train --frictions on`, current code = frictions + E12 liquidity + E16 data-quality screening all active) kicked off in the background; results to be folded into `docs/superpowers/results/2026-07-22-edge-baseline.md` once it completes.
+- Task E23 (Regime model v2) done: `swingbot/core/edge/regime2.py` (4-state bull/bear x quiet/volatile classifier — `classify()` for live single-bar use with breadth tie-break, `regime_series()` for vectorized backtest labeling) + `tests/test_edge_regime2.py`. Standalone infra, nothing wires it in yet (E24's job). Implementer (haiku) self-reported one deviation from the brief's literal sample: a floating-point epsilon added to `classify()`'s volatility comparison, needed because `rv` and `vol_threshold` take different pandas computation paths (`rolling().std()` vs `rolling().quantile()`) that can disagree at machine-epsilon precision on a perfectly deterministic synthetic-test series. Reviewer independently reproduced the exact noise (~9e-18) and confirmed the fix was genuine, not a misdiagnosed test failure — but found the epsilon was applied only to `classify()`, not `regime_series()`, breaking the module's own documented invariant that the two must agree at every bar (reviewer demonstrated a concrete disagreeing input). Fixed directly (commit eb93fe6): named the constant `_VOL_THRESHOLD_EPSILON`, widened 1e-17 -> 1e-12 for real safety margin (still ~9-11 orders of magnitude below realistic realized-volatility values), applied identically in both functions, added `test_classify_and_regime_series_agree_on_last_bar`. Re-review approved, zero remaining findings; targeted suite 6/6 passing.
+- **Next:** finish Task E22 (pending the final TRAIN grid run), then Task E24 (Per-strategy regime gates)
 
 ## Global Constraints
 
@@ -2362,9 +2365,9 @@ git commit -m "perf: parallel scan"
 
 Operational task — no new code.
 
-- [ ] **Step 1: Fetch the full cache:** `python scripts/fetch_backtest_data.py --universe sp500` (first run is the big one; nightly incrementals are cheap after E15).
-- [ ] **Step 2: Dry-run a full scan** in a test channel: set `SCAN_UNIVERSE=sp500` and `DISCORD_CHANNEL_TRADES_ID=<test channel>` in `.env`, trigger one scan, and record in the Progress block: wall-clock duration, peak RSS (`ps` / Task Manager), alerts produced, errors logged.
-- [ ] **Step 3: Tune if needed:** if the scan exceeds ~15 min on the CX23, adjust `SCAN_WORKERS` (try 6) and/or confirm the E15 cache is being hit rather than live-fetching; re-run and re-record. Revert `.env` to `watchlist` when done.
+- [x] **Step 1: Fetch the full cache:** `python scripts/fetch_backtest_data.py --universe sp500` (first run is the big one; nightly incrementals are cheap after E15).
+- [ ] **Step 2: Dry-run a full scan** in a test channel: set `SCAN_UNIVERSE=sp500` and `DISCORD_CHANNEL_TRADES_ID=<test channel>` in `.env`, trigger one scan, and record in the Progress block: wall-clock duration, peak RSS (`ps` / Task Manager), alerts produced, errors logged. **DEFERRED** — needs the user to run it directly (touches `.env` + a live Discord channel).
+- [ ] **Step 3: Tune if needed:** if the scan exceeds ~15 min on the CX23, adjust `SCAN_WORKERS` (try 6) and/or confirm the E15 cache is being hit rather than live-fetching; re-run and re-record. Revert `.env` to `watchlist` when done. **DEFERRED**, depends on Step 2.
 - [ ] **Step 4: Commit the notes**
 
 ```bash
@@ -2400,7 +2403,7 @@ Every factor lands the same way: pure function → flag-gated filter/score → w
 - Rules (transparent, frozen): trend = last close vs 200-EMA (breadth ≥ 50 breaks the tie when price is within ±1% of the EMA and breadth is provided); vol = 20d realized vol vs its own trailing 252d 60th percentile (`quiet` below, `volatile` at/above).
 - Consumed by: E24 gates, E61 shading, E72 timeline, `!regime`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_edge_regime2.py
@@ -2446,9 +2449,9 @@ def test_regime_series_aligned_and_labeled():
     assert s.iloc[-1] == "bull_quiet"
 ```
 
-- [ ] **Step 2: Run — FAIL (`ModuleNotFoundError`).**
+- [x] **Step 2: Run — FAIL (`ModuleNotFoundError`).**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # swingbot/core/edge/regime2.py
@@ -2503,9 +2506,9 @@ def regime_series(spy_df: pd.DataFrame) -> pd.Series:
     return pd.Series(labels, index=spy_df.index)
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_regime2.py -v` — PASS (5 tests).**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_regime2.py -v` — PASS (5 tests).**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/regime2.py tests/test_edge_regime2.py
