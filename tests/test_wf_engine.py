@@ -157,6 +157,13 @@ def test_default_run_passes_a_horizon_to_the_backtest(monkeypatch):
     # with -- otherwise fold deltas aren't comparable to that baseline.
     assert kw["frictions"] is True
     assert kw["exit_model"] == "v2" and kw["scale_out"] is True
+    # tp2_mode="levels" matches the E22 baseline tooling's own default AND
+    # is what makes level-sourced components (AVWAP, HVN/LVN) reach the
+    # backtest at all -- with "none" build_level_map is never called and
+    # those folds would score a meaningless 0.0000 delta. Verified
+    # empirically before pinning: flipping AVWAP_LEVELS_ENABLED moves
+    # expectancy under "levels" and is bit-identical under "none".
+    assert kw["tp2_mode"] == "levels"
 
 
 def test_default_run_ignores_trades_without_an_r_multiple(monkeypatch):
@@ -190,3 +197,27 @@ def test_run_backtest_daterange_defaults_are_unchanged():
     assert params["exit_model"].default == "v1"
     assert params["scale_out"].default is False
     assert params["tp2_mode"].default == "none"
+
+
+def test_folds_read_the_same_cache_the_baseline_was_measured_on(tmp_path, monkeypatch):
+    """backtest_cache/, not market_data/. The E22 baseline these folds are
+    judged against came from that cache, and market_data/ starts 2018-06 --
+    right at the folds' own anchor, so indicators would get no warm-up."""
+    import pandas as pd
+    from swingbot.core import backtest_wf as wf
+
+    monkeypatch.setattr("swingbot.core.backtest_cache.CACHE_DIR", tmp_path)
+    assert wf._frame_for("NOPE") is None
+
+    frame = pd.DataFrame({"Open": [1.0], "High": [1.0], "Low": [1.0],
+                          "Close": [1.0], "Volume": [1.0]},
+                         index=pd.to_datetime(["2021-01-04"]))
+    frame.to_csv(tmp_path / "AAA.csv")
+    got = wf._frame_for("AAA")
+    assert got is not None and list(got.columns) == ["Open", "High", "Low", "Close", "Volume"]
+
+    def _boom(*a, **k):
+        raise ValueError("corrupt csv")
+
+    monkeypatch.setattr("pandas.read_csv", _boom)
+    assert wf._frame_for("AAA") is None   # one bad file can't kill a sweep

@@ -411,12 +411,28 @@ def _partial_plan(**over):
     return TradePlanV2(**fields)
 
 
+def _campaign_r(plan, exit_price, add=None):
+    """Whole-campaign R at a single exit price, in R of the ORIGINAL
+    position (size normalised to 1.0). TP1 was banked on tp1_fraction; the
+    remainder and any pyramid add both exit at `exit_price`."""
+    size, risk = 1.0, abs(plan.entry_price - plan.stop_loss)
+    sign = 1 if plan.direction == "bullish" else -1
+    banked = (plan.tp1 - plan.entry_price) * sign * (size * plan.tp1_fraction)
+    remainder = (exit_price - plan.entry_price) * sign * (size * (1 - plan.tp1_fraction))
+    pnl = banked + remainder
+    if add is not None:
+        pnl += (exit_price - add["add_entry"]) * sign * (size * add["add_shares_fraction"])
+    return pnl / (risk * size)
+
+
 def test_pyramid_fires_at_plus_1r():
     from swingbot.core.plan_manager import maybe_pyramid
     plan = _partial_plan()
     assert maybe_pyramid(plan, price=101.9) is None          # < entry + 1R
     add = maybe_pyramid(plan, price=102.0)                   # == entry + 1R
-    assert add == {"add_shares_fraction": 0.5, "add_entry": 102.0,
+    # Fraction is DERIVED, not the fixed 0.5 the rule is usually quoted
+    # with: 0.5 banked x (101-100) / 2R = 0.25.
+    assert add == {"add_shares_fraction": 0.25, "add_entry": 102.0,
                    "add_stop": 100.0}
 
 
@@ -425,7 +441,7 @@ def test_pyramid_mirrors_for_a_short():
     plan = _partial_plan(direction="bearish", stop_loss=102.0, tp1=99.0)
     assert maybe_pyramid(plan, price=98.1) is None
     assert maybe_pyramid(plan, price=98.0) == {
-        "add_shares_fraction": 0.5, "add_entry": 98.0, "add_stop": 100.0}
+        "add_shares_fraction": 0.25, "add_entry": 98.0, "add_stop": 100.0}
 
 
 def test_pyramid_only_from_partial():
@@ -436,55 +452,72 @@ def test_pyramid_only_from_partial():
         assert maybe_pyramid(_partial_plan(status=status), price=105.0) is None
 
 
-def _campaign_r(plan, exit_price, add=None):
-    """Whole-campaign R at a single exit price, in R of the ORIGINAL
-    position (size normalised to 1.0). TP1 was banked on tp1_fraction; the
-    remainder and any pyramid add both exit at `exit_price`."""
-    size, risk = 1.0, abs(plan.entry_price - plan.stop_loss)
-    banked = (plan.tp1 - plan.entry_price) * (size * plan.tp1_fraction)
-    remainder = (exit_price - plan.entry_price) * (size * (1 - plan.tp1_fraction))
-    pnl = banked + remainder
-    if add is not None:
-        pnl += (exit_price - add["add_entry"]) * (size * add["add_shares_fraction"])
-    return pnl / (risk * size)
+def test_a_fixed_half_size_add_would_break_the_invariant():
+    """Why the fraction is derived, kept as a regression.
 
-
-def test_the_briefs_claimed_risk_invariant_does_not_hold():
-    """DOCUMENTED FAILURE, pinned deliberately.
-
-    The brief asserts the add's stop at the original entry "caps total
-    position risk at <= the original 1R at every moment", that a normal
-    stop-out "nets >= breakeven on the whole campaign", and that a gap
-    costs at most 1R of new downside. With this project's own frozen R:R
-    (TP1 lands at ~0.35-0.5R, here +0.5R) none of the three is true, and
-    the brief's own test asserts a bound its own numbers violate.
-
-    The rule still ships -- pure, flag-gated OFF, for the folds to judge --
-    but the numbers are pinned here so a redesign starts from facts.
+    The rule as originally specified adds a FIXED 0.5 of the original
+    position. At this project's R:R (TP1 near 0.35-0.5R) the banked TP1
+    cannot pay for that: a clean stop-out -- no gap at all -- turns a
+    +0.25R campaign into -0.25R, and the gap-to-97 case costs 1.25R of new
+    downside rather than the 1R it was claimed to be bounded by. Anyone
+    re-hardcoding 0.5 reintroduces exactly this.
     """
+    plan = _partial_plan()
+    fixed_half = {"add_shares_fraction": 0.5, "add_entry": 102.0, "add_stop": 100.0}
+    assert _campaign_r(plan, 100.0) == pytest.approx(+0.25)
+    assert _campaign_r(plan, 100.0, fixed_half) == pytest.approx(-0.25)
+    assert _campaign_r(plan, 97.0) - _campaign_r(plan, 97.0, fixed_half) == pytest.approx(1.25)
+
+
+def test_clean_stop_out_now_nets_at_or_above_breakeven():
+    """Invariant 1, the one the fix exists to make true: remainder at
+    breakeven + add at the original entry, no gap, campaign >= 0."""
+    from swingbot.core.plan_manager import maybe_pyramid
+    for tp1 in (100.4, 101.0, 101.5, 103.0):
+        plan = _partial_plan(tp1=tp1)
+        add = maybe_pyramid(plan, price=102.0)
+        if add is None:
+            continue
+        assert _campaign_r(plan, plan.entry_price, add) >= -1e-12, tp1
+
+
+def test_a_gap_to_the_original_stop_beats_the_plans_own_1r_risk():
+    """Invariant 2: even gapping through everything down to the plan's
+    ORIGINAL stop, the campaign is better off than the -1R that plan was
+    always willing to lose."""
     from swingbot.core.plan_manager import maybe_pyramid
     plan = _partial_plan()
     add = maybe_pyramid(plan, price=102.0)
+    assert _campaign_r(plan, plan.stop_loss, add) == pytest.approx(-0.75)
+    assert _campaign_r(plan, plan.stop_loss, add) > -1.0
 
-    # 1) A CLEAN stop-out at the add's own stop (no gap at all) is already
-    #    net negative: +0.25R campaign becomes -0.25R.
-    assert _campaign_r(plan, 100.0) == pytest.approx(+0.25)
-    assert _campaign_r(plan, 100.0, add) == pytest.approx(-0.25)
 
-    # 2) The brief's own gap example (fill everything at 97) breaks its own
-    #    "at most 1R of new downside" assertion: the delta is 1.25R.
-    no_pyramid = _campaign_r(plan, 97.0)
-    with_pyramid = _campaign_r(plan, 97.0, add)
-    assert no_pyramid - with_pyramid == pytest.approx(1.25)
-    assert not (with_pyramid >= no_pyramid - 1.0), "brief's assertion, shown false"
+def test_a_gap_beyond_the_original_stop_stays_unbounded():
+    """Invariant 3, stated honestly: no stop-based rule bounds a gap. The
+    add scales that exposure, it does not create or remove it -- and the
+    derived fraction still more than halves it versus a fixed 0.5 add."""
+    from swingbot.core.plan_manager import maybe_pyramid
+    plan = _partial_plan()
+    add = maybe_pyramid(plan, price=102.0)
+    extra = _campaign_r(plan, 90.0) - _campaign_r(plan, 90.0, add)
+    assert extra > 1.0                       # unbounded, as documented
+    fixed_half = dict(add, add_shares_fraction=0.5)
+    assert extra < _campaign_r(plan, 90.0) - _campaign_r(plan, 90.0, fixed_half)
 
-    # 3) Even a gap no worse than the ORIGINAL stop (98) leaves the campaign
-    #    at -1.25R, worse than the un-pyramided plan's own original -1R risk.
-    assert _campaign_r(plan, 98.0, add) == pytest.approx(-1.25)
 
-    # 4) The true break-even for the whole campaign sits ABOVE the add's
-    #    stop, so the add can never be exited at its stop for free.
-    assert _campaign_r(plan, 100.5, add) == pytest.approx(0.0)
+def test_an_add_too_small_to_matter_is_not_suggested():
+    from swingbot.core.plan_manager import PYRAMID_MIN_FRACTION, maybe_pyramid
+    # TP1 banked almost nothing -> derived fraction 0.025, below the floor.
+    assert maybe_pyramid(_partial_plan(tp1=100.1), price=102.0) is None
+    assert PYRAMID_MIN_FRACTION == 0.05
+
+
+def test_the_add_fraction_is_capped():
+    from swingbot.core.plan_manager import (PYRAMID_MAX_FRACTION,
+                                            pyramid_add_fraction)
+    # A TP1 far beyond 1R would derive a fraction > 1; the cap holds.
+    assert pyramid_add_fraction(_partial_plan(tp1=130.0)) == PYRAMID_MAX_FRACTION
+    assert pyramid_add_fraction(_partial_plan(stop_loss=100.0)) == 0.0   # zero risk
 
 
 def test_pyramiding_ships_flag_gated_off():
@@ -513,7 +546,7 @@ def test_manager_emits_a_suggestion_once_and_never_sizes_money(monkeypatch):
 
     events = mgr._step_partial(plan, 102.0)
     assert [e.transition for e in events] == ["pyramid_add"]
-    assert events[0].detail["add_shares_fraction"] == 0.5
+    assert events[0].detail["add_shares_fraction"] == 0.25
     assert plan.status == PlanStatus.PARTIAL
     assert plan.legs_realized == [] and plan.working_stop == 100.0
     assert plan.pyramid_add is not None

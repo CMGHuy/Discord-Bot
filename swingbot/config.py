@@ -478,13 +478,13 @@ FIELDS: list[Field] = [
     Field("PYRAMIDING_ENABLED", "PYRAMIDING_ENABLED", "Universe & Scanning",
           "Pyramid-add suggestions enabled",
           type="checkbox", default="false",
-          help="Once per plan, at PARTIAL and +1R, posts a SUGGESTION to add half size with "
-               "the add's stop at the original entry (swingbot/core/plan_manager.py:"
-               "maybe_pyramid). Never sizes money and never moves a stop. WARNING: at this "
-               "project's frozen R:R (TP1 near 0.35-0.5R) the banked TP1 does not pay for the "
-               "add -- even a clean stop-out at the add's own stop turns a +0.25R campaign "
-               "into -0.25R. Off until the fold harness judges it; the rule probably needs "
-               "redesigning first."),
+          help="Once per plan, at PARTIAL and +1R, posts a SUGGESTION to add size with the "
+               "add's stop at the original entry (swingbot/core/plan_manager.py:maybe_pyramid). "
+               "Never sizes money and never moves a stop. The add fraction is DERIVED from the "
+               "plan's own banked TP1 (tp1_fraction x TP1 distance / 1R, capped at 0.50) so a "
+               "clean stop-out always nets at or above breakeven -- a fixed half-size add would "
+               "not, at this project's R:R. A gap beyond the original stop remains unbounded, "
+               "as for any stop. Off until the fold harness judges it."),
     Field("VOLUME_PROFILE_NODES_ENABLED", "VOLUME_PROFILE_NODES_ENABLED", "Universe & Scanning",
           "Volume-profile HVN/LVN levels enabled",
           type="checkbox", default="false",

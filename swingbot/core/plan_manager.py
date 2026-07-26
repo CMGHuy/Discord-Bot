@@ -40,25 +40,63 @@ class PlanEvent:
     detail: dict = field(default_factory=dict)
 
 
+# Below this the suggested add is too small to be worth acting on -- a
+# 3%-of-position add is noise once real commissions are paid.
+PYRAMID_MIN_FRACTION = 0.05
+PYRAMID_MAX_FRACTION = 0.50
+
+
+def pyramid_add_fraction(plan) -> float:
+    """The largest add that keeps the campaign at or above breakeven on a
+    clean stop-out, as a fraction of the ORIGINAL position size.
+
+    Derivation (bullish; the short side mirrors exactly). At the moment
+    everything stops -- remainder at breakeven, add at the original entry
+    -- the campaign is worth::
+
+        banked   = tp1_fraction * (tp1 - entry)      # already realized
+        remainder= 0                                 # stopped at breakeven
+        add      = -f * (trigger - entry) = -f * R    # trigger is entry + 1R
+
+    so `banked - f*R >= 0` iff `f <= tp1_fraction * (tp1 - entry) / R`.
+
+    The plan's own numbers are used rather than the R:R constant, so the
+    bound stays correct for every strategy in STRATEGY_RR_OVERRIDE and for
+    a plan whose TP1 was re-priced. A FIXED 0.5 add -- the size this rule
+    is usually quoted with -- violates the bound at every R:R this project
+    actually trades (TP1 sits near 0.35-0.5R, so the ceiling is 0.175-0.25)
+    and turns a winning campaign into a losing one on a clean stop-out.
+    """
+    risk = abs(plan.entry_price - plan.stop_loss)
+    if risk <= 0:
+        return 0.0
+    banked_r = plan.tp1_fraction * abs(plan.tp1 - plan.entry_price) / risk
+    return min(banked_r, PYRAMID_MAX_FRACTION)
+
+
 def maybe_pyramid(plan, price: float) -> dict | None:
-    """Add half size at +1R with the add's stop at the ORIGINAL entry.
-    Only from PARTIAL (TP1 banked, remainder stopped at breakeven).
+    """Add size at +1R with the add's stop at the ORIGINAL entry. Only from
+    PARTIAL (TP1 banked, remainder stopped at breakeven).
 
     A PURE DECISION, and a suggestion only -- the bot never sizes real
     money. 1R is taken from `abs(entry_price - stop_loss)`: TradePlanV2 has
     no `risk_per_share` field, and `stop_loss` is safe to read here because
     the breakeven move writes `working_stop` and never mutates it.
 
-    WARNING -- the risk story this rule is usually sold with does NOT hold
-    at this project's frozen R:R. With TP1 at ~0.35-0.5R, banking half at
-    TP1 does not pay for the add: a CLEAN stop-out at the add's own stop
-    already turns a +0.25R campaign into -0.25R, and a gap costs more than
-    1R of new downside. The exact numbers are pinned in
-    tests/test_edge_stops.py::test_the_briefs_claimed_risk_invariant_does_not_hold.
-    That is why this ships behind PYRAMIDING_ENABLED, default off, for the
-    fold harness to judge -- and why the rule likely needs redesigning
-    (a smaller add, a later trigger, or a TP1 beyond 1R) before it is
-    worth enabling.
+    RISK PROPERTIES, all three pinned by tests rather than asserted here:
+
+      1. A clean stop-out -- remainder at breakeven, add at the original
+         entry, no gap -- nets >= breakeven on the whole campaign. True by
+         construction, because the add is sized by pyramid_add_fraction().
+      2. Even a gap all the way to the plan's ORIGINAL stop leaves the
+         campaign better than that plan's own original 1R risk.
+      3. A gap BEYOND the original stop is unbounded, exactly as it is for
+         any stop-based rule. Pyramiding does not create that exposure but
+         it does scale it, and no sizing rule can remove it.
+
+    Returns None when the derived add would be smaller than
+    PYRAMID_MIN_FRACTION: a plan whose TP1 banked too little to pay for any
+    meaningful add should not pyramid at all.
     """
     if getattr(plan, "status", None) != "PARTIAL":
         return None
@@ -66,9 +104,12 @@ def maybe_pyramid(plan, price: float) -> dict | None:
     risk = abs(plan.entry_price - plan.stop_loss)
     if risk <= 0:
         return None
+    fraction = pyramid_add_fraction(plan)
+    if fraction < PYRAMID_MIN_FRACTION:
+        return None
     trigger = plan.entry_price + risk if bull else plan.entry_price - risk
     if (price >= trigger) if bull else (price <= trigger):
-        return {"add_shares_fraction": 0.5, "add_entry": price,
+        return {"add_shares_fraction": round(fraction, 4), "add_entry": price,
                 "add_stop": plan.entry_price}
     return None
 

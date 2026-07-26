@@ -60,12 +60,34 @@ def _symbols_for_folds() -> list:
 
 
 def _frame_for(symbol: str):
-    """Daily bars for one symbol, or None. Note this reads `market_data/`
-    (data_store), NOT `data/backtest_cache/` -- the two OHLCV caches in
-    this repo are not interchangeable, and the Edge universe work
-    populates this one."""
-    from swingbot.core.data_store import load_from_disk
-    return load_from_disk(symbol, "1d")
+    """Daily bars for one symbol, or None.
+
+    Reads `data/backtest_cache/` -- NOT `market_data/`. This repo has two
+    parallel OHLCV caches and they are not interchangeable. The choice
+    matters twice over here:
+
+      * COMPARABILITY. Every number these folds are judged against (the
+        E22 friction-adjusted baseline) came from scripts/run_backtest_
+        range.py, which reads this cache. Folds measured on the other one
+        would be comparing against a different dataset.
+      * WARM-UP DEPTH. market_data/ starts 2018-06 (measured), i.e. right
+        at the folds' own anchor, leaving indicators no warm-up before
+        the first train window. backtest_cache goes back to 2000. On AAPL
+        the same strategies produce 13 trades from backtest_cache vs 1
+        from market_data over identical windows -- the fold N would have
+        been starved by the data source alone.
+    """
+    from swingbot.core.backtest_cache import CACHE_DIR
+    import pandas as pd
+
+    path = CACHE_DIR / f"{symbol}.csv"
+    if not path.exists():
+        return None
+    try:
+        return pd.read_csv(path, index_col=0, parse_dates=True)
+    except Exception as exc:
+        log.warning("fold frame unreadable for %s: %s", symbol, exc)
+        return None
 
 
 def _default_run(start: str, end: str, overrides: dict,
@@ -93,12 +115,18 @@ def _default_run(start: str, end: str, overrides: dict,
                 # The plan's own snippet omitted horizon_key entirely and
                 # was never callable: run_backtest_daterange is
                 # (ticker, df, strategy, horizon_key, date_from, date_to).
-                # exit_model/scale_out match what the E22 friction-adjusted
-                # baseline was measured with, or fold deltas would be
-                # comparing against a different exit model.
+                # exit_model/scale_out/tp2_mode match what the E22
+                # friction-adjusted baseline was measured with
+                # (run_backtest_range.py defaults --tp2 levels), or fold
+                # deltas would be comparing against a different exit model.
+                #
+                # tp2_mode="levels" is also what makes level-sourced
+                # components VISIBLE here at all: with "none" the backtest
+                # never calls build_level_map, so AVWAP and HVN/LVN change
+                # nothing and their folds would score a meaningless 0.0000.
                 s = run_backtest_daterange(sym, df, strat, hk, start, end,
                                            frictions=True, exit_model="v2",
-                                           scale_out=True)
+                                           scale_out=True, tp2_mode="levels")
                 rs.extend(t.r_multiple for t in (s.trades or [])
                           if t.r_multiple is not None)
     return {"expectancy_r": float(np.mean(rs)) if rs else None, "n": len(rs)}
