@@ -3,8 +3,9 @@ must handle data=None with a placeholder -- panels are optional, alerts
 are not."""
 import mplfinance as mpf
 
-from swingbot.core.charts.chart_style import (CHART_BG, CHIP_EDGE, GRID_COLOR,
-                                              MUTED_TEXT_COLOR, PRO_STYLE, TEXT_COLOR)
+from swingbot.core.charts.chart_style import (CHART_BG, CHIP_EDGE, DOWN_COLOR,
+                                              GRID_COLOR, MUTED_TEXT_COLOR,
+                                              PRO_STYLE, TEXT_COLOR, UP_COLOR)
 from swingbot.core.charts.decision_chart import draw_placeholder
 
 
@@ -40,9 +41,21 @@ def _weekly(ax, ctx):
     ax.set_facecolor(CHART_BG)
 
 
-def _rs(ax, rs_ctx):
-    """Implemented in E60."""
-    draw_placeholder(ax, "pending")
+def _rs(ax, ctx):
+    s = ctx["rel_series"].tail(130)
+    if s.empty:
+        draw_placeholder(ax, "no RS history")
+        return
+    x = range(len(s))
+    ax.plot(x, s.values, color=UP_COLOR, lw=1.0)
+    ax.axhline(0.0, color=MUTED_TEXT_COLOR, lw=0.7)
+    ax.fill_between(x, s.values, 0, where=(s.values < 0),
+                    color=DOWN_COLOR, alpha=0.25)
+    pct = ctx.get("percentile")
+    if pct is not None:
+        ax.set_title(f"RS vs SPY — {pct:.0f}th pct", color=MUTED_TEXT_COLOR,
+                     fontsize=8, loc="left")
+    ax.set_xticks([]); ax.set_facecolor(CHART_BG)
 
 
 def _info(ax, sizing_ctx, quality_ctx):
