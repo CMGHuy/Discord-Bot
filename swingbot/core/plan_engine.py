@@ -122,6 +122,10 @@ class TradePlanV2:
     # E48's recycler is the intended consumer.
     tp2_r_applied: float | None = None
     time_stop_days: int | None = None
+    # E38: the one pyramid SUGGESTION emitted for this plan, or None. Its
+    # presence is what makes the add fire at most once. The bot never sizes
+    # real money -- this records what was suggested, not a position.
+    pyramid_add: dict | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:

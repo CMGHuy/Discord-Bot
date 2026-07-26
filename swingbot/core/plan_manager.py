@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from swingbot import config
 from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition)
@@ -35,8 +36,41 @@ def gap_target_fill(bar_open: float, level: float, direction: str) -> float:
 class PlanEvent:
     plan_id: str
     transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
-                         # "be_moved"|"tp1_partial"|"closed"
+                         # "be_moved"|"tp1_partial"|"closed"|"pyramid_add"
     detail: dict = field(default_factory=dict)
+
+
+def maybe_pyramid(plan, price: float) -> dict | None:
+    """Add half size at +1R with the add's stop at the ORIGINAL entry.
+    Only from PARTIAL (TP1 banked, remainder stopped at breakeven).
+
+    A PURE DECISION, and a suggestion only -- the bot never sizes real
+    money. 1R is taken from `abs(entry_price - stop_loss)`: TradePlanV2 has
+    no `risk_per_share` field, and `stop_loss` is safe to read here because
+    the breakeven move writes `working_stop` and never mutates it.
+
+    WARNING -- the risk story this rule is usually sold with does NOT hold
+    at this project's frozen R:R. With TP1 at ~0.35-0.5R, banking half at
+    TP1 does not pay for the add: a CLEAN stop-out at the add's own stop
+    already turns a +0.25R campaign into -0.25R, and a gap costs more than
+    1R of new downside. The exact numbers are pinned in
+    tests/test_edge_stops.py::test_the_briefs_claimed_risk_invariant_does_not_hold.
+    That is why this ships behind PYRAMIDING_ENABLED, default off, for the
+    fold harness to judge -- and why the rule likely needs redesigning
+    (a smaller add, a later trigger, or a TP1 beyond 1R) before it is
+    worth enabling.
+    """
+    if getattr(plan, "status", None) != "PARTIAL":
+        return None
+    bull = plan.direction == "bullish"
+    risk = abs(plan.entry_price - plan.stop_loss)
+    if risk <= 0:
+        return None
+    trigger = plan.entry_price + risk if bull else plan.entry_price - risk
+    if (price >= trigger) if bull else (price <= trigger):
+        return {"add_shares_fraction": 0.5, "add_entry": price,
+                "add_stop": plan.entry_price}
+    return None
 
 
 class PlanManager:
@@ -198,6 +232,18 @@ class PlanManager:
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
         stop = plan.working_stop if plan.working_stop is not None else entry
+
+        # Pyramiding (edge E38), flag-gated OFF and at most once per plan.
+        # Emits a SUGGESTION only: no leg is realized, no stop is moved, no
+        # status changes -- the Discord layer posts it and the operator
+        # decides. Checked before the stop/TP2 branches so it can't fire on
+        # the same tick that closes the runner.
+        if config.PYRAMIDING_ENABLED and plan.pyramid_add is None:
+            add = maybe_pyramid(plan, price)
+            if add is not None:
+                plan.pyramid_add = add
+                self.store.update(plan)
+                return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
 
         hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:

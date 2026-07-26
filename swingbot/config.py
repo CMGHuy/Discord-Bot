@@ -475,6 +475,16 @@ FIELDS: list[Field] = [
                "every confluence count -- a scenario can gain a confirming family and clear "
                "MIN_CONFLUENCE it would previously have failed -- so it ships off until the "
                "E33 walk-forward folds and the E40 shadow forward-gate have judged it."),
+    Field("PYRAMIDING_ENABLED", "PYRAMIDING_ENABLED", "Universe & Scanning",
+          "Pyramid-add suggestions enabled",
+          type="checkbox", default="false",
+          help="Once per plan, at PARTIAL and +1R, posts a SUGGESTION to add half size with "
+               "the add's stop at the original entry (swingbot/core/plan_manager.py:"
+               "maybe_pyramid). Never sizes money and never moves a stop. WARNING: at this "
+               "project's frozen R:R (TP1 near 0.35-0.5R) the banked TP1 does not pay for the "
+               "add -- even a clean stop-out at the add's own stop turns a +0.25R campaign "
+               "into -0.25R. Off until the fold harness judges it; the rule probably needs "
+               "redesigning first."),
     Field("VOLUME_PROFILE_NODES_ENABLED", "VOLUME_PROFILE_NODES_ENABLED", "Universe & Scanning",
           "Volume-profile HVN/LVN levels enabled",
           type="checkbox", default="false",

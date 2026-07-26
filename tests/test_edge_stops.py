@@ -388,3 +388,140 @@ def test_the_leg_cap_ceilings_any_mfe_tp2_at_four_times_rr(df):
     assert _macd_plan(df, tp2_r=ceiling - 0.01).tp2_r_applied == pytest.approx(ceiling - 0.01)
     over_ceiling = _macd_plan(df, tp2_r=ceiling + 0.01)
     assert over_ceiling.tp2_r_applied is None and over_ceiling.tp2 == base.tp2
+
+
+# --- E38: pyramiding ---------------------------------------------------------
+
+def _partial_plan(**over):
+    """A real TradePlanV2 at PARTIAL, not a stand-in: TradePlanV2 has no
+    `risk_per_share` field (the brief's stub invents one). Original 1R is
+    entry - stop_loss = $2; stop_loss keeps the ORIGINAL stop because the
+    breakeven move writes plan.working_stop, never plan.stop_loss."""
+    from swingbot.core.plan_engine import PlanStatus, TradePlanV2
+    fields = dict(
+        plan_id="p1", ticker="TEST", created_at="2026-01-01", source="strategy",
+        strategy="RSI", horizon_key="4w", direction="bullish",
+        entry_type="market", trigger_price=100.0, entry_price=100.0,
+        expiry_bars=5, stop_loss=98.0, tp1=101.0, tp1_fraction=0.5, tp2=None,
+        breakeven_trigger_fraction=0.5, trail_atr_mult=2.5, quality_score=0,
+        quality_breakdown=[], tier="C", badge="WEAK", badge_stats={},
+        status=PlanStatus.PARTIAL, working_stop=100.0,
+    )
+    fields.update(over)
+    return TradePlanV2(**fields)
+
+
+def test_pyramid_fires_at_plus_1r():
+    from swingbot.core.plan_manager import maybe_pyramid
+    plan = _partial_plan()
+    assert maybe_pyramid(plan, price=101.9) is None          # < entry + 1R
+    add = maybe_pyramid(plan, price=102.0)                   # == entry + 1R
+    assert add == {"add_shares_fraction": 0.5, "add_entry": 102.0,
+                   "add_stop": 100.0}
+
+
+def test_pyramid_mirrors_for_a_short():
+    from swingbot.core.plan_manager import maybe_pyramid
+    plan = _partial_plan(direction="bearish", stop_loss=102.0, tp1=99.0)
+    assert maybe_pyramid(plan, price=98.1) is None
+    assert maybe_pyramid(plan, price=98.0) == {
+        "add_shares_fraction": 0.5, "add_entry": 98.0, "add_stop": 100.0}
+
+
+def test_pyramid_only_from_partial():
+    from swingbot.core.plan_engine import PlanStatus
+    from swingbot.core.plan_manager import maybe_pyramid
+    for status in (PlanStatus.PENDING, PlanStatus.ACTIVE,
+                   PlanStatus.CLOSED, PlanStatus.CANCELLED):
+        assert maybe_pyramid(_partial_plan(status=status), price=105.0) is None
+
+
+def _campaign_r(plan, exit_price, add=None):
+    """Whole-campaign R at a single exit price, in R of the ORIGINAL
+    position (size normalised to 1.0). TP1 was banked on tp1_fraction; the
+    remainder and any pyramid add both exit at `exit_price`."""
+    size, risk = 1.0, abs(plan.entry_price - plan.stop_loss)
+    banked = (plan.tp1 - plan.entry_price) * (size * plan.tp1_fraction)
+    remainder = (exit_price - plan.entry_price) * (size * (1 - plan.tp1_fraction))
+    pnl = banked + remainder
+    if add is not None:
+        pnl += (exit_price - add["add_entry"]) * (size * add["add_shares_fraction"])
+    return pnl / (risk * size)
+
+
+def test_the_briefs_claimed_risk_invariant_does_not_hold():
+    """DOCUMENTED FAILURE, pinned deliberately.
+
+    The brief asserts the add's stop at the original entry "caps total
+    position risk at <= the original 1R at every moment", that a normal
+    stop-out "nets >= breakeven on the whole campaign", and that a gap
+    costs at most 1R of new downside. With this project's own frozen R:R
+    (TP1 lands at ~0.35-0.5R, here +0.5R) none of the three is true, and
+    the brief's own test asserts a bound its own numbers violate.
+
+    The rule still ships -- pure, flag-gated OFF, for the folds to judge --
+    but the numbers are pinned here so a redesign starts from facts.
+    """
+    from swingbot.core.plan_manager import maybe_pyramid
+    plan = _partial_plan()
+    add = maybe_pyramid(plan, price=102.0)
+
+    # 1) A CLEAN stop-out at the add's own stop (no gap at all) is already
+    #    net negative: +0.25R campaign becomes -0.25R.
+    assert _campaign_r(plan, 100.0) == pytest.approx(+0.25)
+    assert _campaign_r(plan, 100.0, add) == pytest.approx(-0.25)
+
+    # 2) The brief's own gap example (fill everything at 97) breaks its own
+    #    "at most 1R of new downside" assertion: the delta is 1.25R.
+    no_pyramid = _campaign_r(plan, 97.0)
+    with_pyramid = _campaign_r(plan, 97.0, add)
+    assert no_pyramid - with_pyramid == pytest.approx(1.25)
+    assert not (with_pyramid >= no_pyramid - 1.0), "brief's assertion, shown false"
+
+    # 3) Even a gap no worse than the ORIGINAL stop (98) leaves the campaign
+    #    at -1.25R, worse than the un-pyramided plan's own original -1R risk.
+    assert _campaign_r(plan, 98.0, add) == pytest.approx(-1.25)
+
+    # 4) The true break-even for the whole campaign sits ABOVE the add's
+    #    stop, so the add can never be exited at its stop for free.
+    assert _campaign_r(plan, 100.5, add) == pytest.approx(0.0)
+
+
+def test_pyramiding_ships_flag_gated_off():
+    from swingbot import config
+    assert config.PYRAMIDING_ENABLED is False
+
+
+def test_manager_emits_a_suggestion_once_and_never_sizes_money(monkeypatch):
+    """The tick emits a `pyramid_add` PlanEvent for the Discord layer to
+    post as a SUGGESTION -- it must not touch legs_realized, working_stop
+    or the status, and must not fire twice for the same plan."""
+    from swingbot import config
+    from swingbot.core import plan_manager
+    from swingbot.core.plan_engine import PlanStatus
+
+    plan = _partial_plan()
+    monkeypatch.setattr(config, "PYRAMIDING_ENABLED", True)
+
+    class _Store:
+        def update(self, p):
+            pass
+
+    mgr = plan_manager.PlanManager.__new__(plan_manager.PlanManager)
+    mgr.store = _Store()
+    mgr.atr_fn = None
+
+    events = mgr._step_partial(plan, 102.0)
+    assert [e.transition for e in events] == ["pyramid_add"]
+    assert events[0].detail["add_shares_fraction"] == 0.5
+    assert plan.status == PlanStatus.PARTIAL
+    assert plan.legs_realized == [] and plan.working_stop == 100.0
+    assert plan.pyramid_add is not None
+
+    # Second tick at an even better price: no repeat.
+    assert mgr._step_partial(plan, 110.0) == []
+
+    monkeypatch.setattr(config, "PYRAMIDING_ENABLED", False)
+    fresh = _partial_plan()
+    assert mgr._step_partial(fresh, 102.0) == []
+    assert fresh.pyramid_add is None
