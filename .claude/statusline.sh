@@ -1,7 +1,14 @@
 #!/bin/sh
 # Claude Code statusline: profile, model, cwd, git branch/dirty count,
 # context %, session usage %, and reset time — each with an icon + color.
+#
+# Session usage comes straight off the live statusLine JSON payload
+# (rate_limits.five_hour), which Claude Code refreshes on every render —
+# NOT from the cachedUsageUtilization blob in <config>/.claude.json, which
+# only updates when something (e.g. /usage) explicitly refetches it and can
+# sit stale for many minutes.
 
+script_dir=$(dirname "$0")
 input=$(cat)
 
 RESET='\033[0m'
@@ -15,9 +22,12 @@ YELLOW='\033[33m'
 RED='\033[31m'
 GRAY='\033[90m'
 
-# --- gather raw values ---
-model=$(printf '%s' "$input" | sed -n 's/.*"display_name" *: *"\([^"]*\)".*/\1/p' | head -1)
-ctx_raw=$(printf '%s' "$input" | sed -n 's/.*"used_percentage" *: *\([0-9.]*\).*/\1/p' | head -1)
+# --- gather values: one python pass over the live JSON payload ---
+fields=$(printf '%s' "$input" | python "$script_dir/statusline_fields.py" 2>/dev/null)
+IFS='	' read -r model ctx_raw sess reset_epoch <<EOF
+$fields
+EOF
+
 branch=$(git --no-optional-locks rev-parse --abbrev-ref HEAD 2>/dev/null)
 dirty=$(git --no-optional-locks status --porcelain 2>/dev/null | wc -l | tr -d ' ')
 dir=$(basename "$PWD")
@@ -27,24 +37,27 @@ profile=$(printf '%s' "$cfgdir" | sed 's#.*[\\/]##')
 profile=${profile#config-}
 [ -n "$profile" ] && profile="claude-$profile"
 
-cfgfile="$cfgdir/.claude.json"
-sess=""
 reset=""
-age_min=""
-if [ -f "$cfgfile" ]; then
-  flat=$(tr -d '\n' < "$cfgfile")
-  block=$(printf '%s' "$flat" | grep -o '"kind": "session"[^}]*}' | head -1)
-  sess=$(printf '%s' "$block" | sed -n 's/.*"percent": *\([0-9]*\).*/\1/p')
-  reset_raw=$(printf '%s' "$block" | sed -n 's/.*"resets_at": *"\([^"]*\)".*/\1/p')
-  [ -n "$reset_raw" ] && reset=$(date -d "$reset_raw" +"%H:%M" 2>/dev/null)
+[ -n "$reset_epoch" ] && reset=$(date -d "@$reset_epoch" +"%H:%M" 2>/dev/null)
 
-  # cachedUsageUtilization is a poll-based snapshot, not a live push (no usage
-  # hook event exists) — surface its age so a frozen % during a long tool call
-  # reads as "stale", not as a wrong/broken reading.
-  fetched_ms=$(printf '%s' "$flat" | sed -n 's/.*"fetchedAtMs": *\([0-9]*\).*/\1/p' | head -1)
-  if [ -n "$fetched_ms" ]; then
-    now_ms=$(date +%s%3N)
-    age_min=$(awk -v now="$now_ms" -v fetched="$fetched_ms" 'BEGIN { printf "%.0f", (now - fetched) / 60000 }' 2>/dev/null)
+# fallback for older Claude Code builds whose statusLine payload has no
+# rate_limits block yet: fall back to the profile's cached usage snapshot,
+# flagged with its age since that path really can be stale.
+age_min=""
+if [ -z "$sess" ]; then
+  cfgfile="$cfgdir/.claude.json"
+  if [ -f "$cfgfile" ]; then
+    flat=$(tr -d '\n' < "$cfgfile")
+    block=$(printf '%s' "$flat" | grep -o '"kind": "session"[^}]*}' | head -1)
+    sess=$(printf '%s' "$block" | sed -n 's/.*"percent": *\([0-9]*\).*/\1/p')
+    reset_raw=$(printf '%s' "$block" | sed -n 's/.*"resets_at": *"\([^"]*\)".*/\1/p')
+    [ -n "$reset_raw" ] && reset=$(date -d "$reset_raw" +"%H:%M" 2>/dev/null)
+
+    fetched_ms=$(printf '%s' "$flat" | sed -n 's/.*"fetchedAtMs": *\([0-9]*\).*/\1/p' | head -1)
+    if [ -n "$fetched_ms" ]; then
+      now_ms=$(date +%s%3N)
+      age_min=$(awk -v now="$now_ms" -v fetched="$fetched_ms" 'BEGIN { printf "%.0f", (now - fetched) / 60000 }' 2>/dev/null)
+    fi
   fi
 fi
 
