@@ -322,6 +322,8 @@ def _collect_weekly_risk_stats(all_trades: list, today: dt.date) -> dict:
             if not cluster:
                 continue
             group = sorted(frozenset({ticker}) | frozenset(cluster))
+            if len(group) < 2:
+                continue
             if len(group) > len(best_group):
                 best_group = group
         stats["biggest_cluster"] = best_group

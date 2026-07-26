@@ -1,3 +1,5 @@
+import datetime as dt
+
 import pytest
 
 from swingbot.core.edge.heat import heat_check, open_heat, trade_risk_pct
@@ -114,3 +116,70 @@ def test_weekly_risk_report_renders():
     assert "62" in out and "NVDA" in out
     assert "p95 drawdown 18%" in out
     assert "+1.4%" in out
+
+
+def test_collect_weekly_risk_stats_excludes_self_correlated_singleton(monkeypatch):
+    """Task E53 review Finding (Important): _collect_weekly_risk_stats's
+    biggest_cluster loop was missing the size->=2 filter that
+    _collect_portfolio_state (E52, growth.py) has. correlation.cluster_exposure
+    never excludes the candidate ticker from its own open_trades list, and
+    returns_corr(df, df) (a ticker correlated with itself) always yields 1.0,
+    which is > the 0.75 threshold once there are >=30 overlapping bars. With
+    only a single open ticker (no other position to genuinely correlate
+    against), the pre-fix loop produced a spurious singleton like ["AAPL"]
+    instead of the correct empty result."""
+    from tests.conftest import make_trend_df
+    from swingbot.core import retrospective
+    from swingbot.core import account as account_module
+    from swingbot.core.performance import TradeLog
+    from swingbot.core import universe
+    from swingbot.core import data as data_module
+
+    df = make_trend_df(120, +0.20)  # >= MIN_OVERLAP_BARS(30) of valid price history
+
+    monkeypatch.setattr(account_module, "load_account_config",
+                         lambda: {"balance": 10_000.0, "base_balance": 10_000.0})
+    monkeypatch.setattr(TradeLog, "get_trades",
+                         lambda self, status=None, limit=None: [
+                             {"ticker": "AAPL", "entry": 100.0, "stop_loss": 98.0, "shares": 10}
+                         ])
+    monkeypatch.setattr(universe, "sector_map", lambda universe_name: {})
+    monkeypatch.setattr(data_module, "get_daily_data", lambda ticker: df)
+
+    stats = retrospective._collect_weekly_risk_stats([], dt.date(2026, 7, 26))
+
+    assert stats["biggest_cluster"] == []
+
+
+def test_collect_weekly_risk_stats_excludes_uncorrelated_pair(monkeypatch):
+    """Same finding as above, but with two open tickers whose price series
+    are NOT correlated with each other (only self-correlated). Each
+    candidate's own cluster_exposure call would spuriously include itself
+    (corr(df, df) == 1.0); the fix must not let that self-match alone count
+    as 'the biggest cluster' for either ticker."""
+    from tests.conftest import make_trend_df
+    from swingbot.core import retrospective
+    from swingbot.core import account as account_module
+    from swingbot.core.performance import TradeLog
+    from swingbot.core import universe
+    from swingbot.core import data as data_module
+
+    df_a = make_trend_df(120, +0.20, start_price=100.0)
+    df_b = make_trend_df(120, -0.35, start_price=50.0, spread_pct=6.0)
+
+    dfs = {"AAA": df_a, "BBB": df_b}
+    trades = [
+        {"ticker": "AAA", "entry": 100.0, "stop_loss": 98.0, "shares": 10},
+        {"ticker": "BBB", "entry": 50.0, "stop_loss": 48.0, "shares": 10},
+    ]
+
+    monkeypatch.setattr(account_module, "load_account_config",
+                         lambda: {"balance": 10_000.0, "base_balance": 10_000.0})
+    monkeypatch.setattr(TradeLog, "get_trades",
+                         lambda self, status=None, limit=None: trades)
+    monkeypatch.setattr(universe, "sector_map", lambda universe_name: {})
+    monkeypatch.setattr(data_module, "get_daily_data", lambda ticker: dfs[ticker])
+
+    stats = retrospective._collect_weekly_risk_stats([], dt.date(2026, 7, 26))
+
+    assert stats["biggest_cluster"] == []
