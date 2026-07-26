@@ -101,8 +101,55 @@ class QualityResult:
     breakdown: list   # [(component_name, points)] -- rendered verbatim in embeds
 
 
+# --- Edge v2 components (E37). Frozen weights; the decile audit judges
+# them as a set, the ablation harness (E43) judges them individually.
+#
+# Every one of these inputs is genuinely optional -- there may be no RS
+# benchmark, the scanned universe may be too small for a breadth reading,
+# a plan may not have a level-touch bar to grade. None scores 0 and is
+# omitted from the breakdown entirely, so an absent reading never reads
+# as a real one that happened to score nothing.
+
+
+def rs_points(rs_pctile: float | None) -> int:
+    if rs_pctile is None:
+        return 0
+    return int(round(max(0.0, min(rs_pctile - 50.0, 50.0)) / 5.0))
+
+
+def mtf_points(mtf_score: int | None) -> int:
+    if mtf_score is None:
+        return 0
+    return {0: 0, 1: 3, 2: 6, 3: 10}.get(int(mtf_score), 0)
+
+
+def breadth_points(breadth: float | None) -> int:
+    if breadth is None:
+        return 0
+    return int(round(max(0.0, min(breadth - 40.0, 20.0)) / 4.0))
+
+
+def candle_points(candle_quality: int | None) -> int:
+    if candle_quality is None:
+        return 0
+    return int(min(candle_quality, 10) // 2)
+
+
+def gap_penalty(gap_fragile: bool) -> int:
+    return -10 if gap_fragile else 0
+
+
 def score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio,
-               atr_pct, trigger_distance_pct, badge_status) -> QualityResult:
+               atr_pct, trigger_distance_pct, badge_status,
+               rs_percentile=None, mtf=None, breadth=None,
+               candle_quality=None, gap_fragile=False) -> QualityResult:
+    """The edge inputs (E37) are keyword-only with inert defaults, so every
+    existing caller -- including the offline decile-audit harness under
+    scripts/, whose table is the evidence behind the current A/B/C
+    thresholds -- gets a bit-identical score and breakdown. A component
+    only appears in the breakdown when its input was actually supplied;
+    the breakdown is rendered verbatim in embeds, so a row must mean a
+    real reading."""
     breakdown = [
         ("regime", component_regime(direction, regime)),
         ("htf", component_htf(direction, htf_bias)),
@@ -112,5 +159,14 @@ def score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio,
         ("trigger_distance", component_distance(trigger_distance_pct)),
         ("badge", component_badge(badge_status)),
     ]
+    for name, value, fn in (("rs", rs_percentile, rs_points),
+                            ("mtf", mtf, mtf_points),
+                            ("breadth", breadth, breadth_points),
+                            ("candle", candle_quality, candle_points)):
+        if value is not None:
+            breakdown.append((name, fn(value)))
+    if gap_fragile:
+        breakdown.append(("gap", gap_penalty(True)))
+
     score = max(0, min(100, sum(pts for _, pts in breakdown)))
     return QualityResult(score=score, tier=_tier(score), breakdown=breakdown)
