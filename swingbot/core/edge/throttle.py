@@ -29,3 +29,35 @@ def current_throttle(equity_points: list, was_paused: bool = False) -> tuple:
         if dd > threshold:
             mult = m
     return mult, mult == 0.0
+
+
+STREAK_TRIGGER = 4
+STREAK_MULT = 0.5
+STREAK_RECOVERY_WINS = 2
+COMBINED_FLOOR = 0.25
+
+
+def streak_multiplier(recent_closed: list) -> float:
+    """4 consecutive losses halve new-entry risk until 2 wins land.
+    Scratches/timeouts are noise: they neither break nor extend a streak."""
+    decisive = [o for o in recent_closed if o in ("win", "loss")]
+    streak = wins_after = 0
+    triggered = False
+    for o in decisive:
+        if o == "loss":
+            streak += 1
+            if streak >= STREAK_TRIGGER:
+                triggered, wins_after = True, 0
+        else:
+            streak = 0
+            if triggered:
+                wins_after += 1
+                if wins_after >= STREAK_RECOVERY_WINS:
+                    triggered = False
+    return STREAK_MULT if triggered else 1.0
+
+
+def combined_throttle(dd_mult: float, streak_mult: float) -> float:
+    if dd_mult <= 0.0:
+        return 0.0
+    return max(COMBINED_FLOOR, dd_mult * streak_mult)

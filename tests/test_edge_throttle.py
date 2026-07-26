@@ -25,3 +25,24 @@ def test_hysteresis_stays_paused_until_15():
     assert (mult, paused) == (0.0, True)     # 18% still paused (came from >20%)
     mult, paused = current_throttle(_curve(14.0), was_paused=True)
     assert paused is False and mult == 0.50  # recovered below 15 -> back on the ladder
+
+
+def test_streak_damper_kicks_in_at_4():
+    from swingbot.core.edge.throttle import streak_multiplier
+    assert streak_multiplier(["loss"] * 3) == 1.0
+    assert streak_multiplier(["loss"] * 4) == 0.5
+    assert streak_multiplier(["win", "loss", "loss", "scratch", "loss", "loss"]) == 0.5
+    # scratches don't extend: 3 losses + scratch + loss is still 4 consecutive
+
+
+def test_streak_recovers_after_two_wins():
+    from swingbot.core.edge.throttle import streak_multiplier
+    assert streak_multiplier(["loss"] * 4 + ["win"]) == 0.5      # one win: not yet
+    assert streak_multiplier(["loss"] * 4 + ["win", "win"]) == 1.0
+
+
+def test_combined_floor():
+    from swingbot.core.edge.throttle import combined_throttle
+    assert combined_throttle(0.75, 0.5) == pytest.approx(0.375)
+    assert combined_throttle(0.25, 0.5) == 0.25       # floor
+    assert combined_throttle(0.0, 1.0) == 0.0         # pause always wins
