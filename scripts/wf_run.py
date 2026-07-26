@@ -37,6 +37,10 @@ def main() -> int:
                         "signals and run them through portfolio_replay() under real "
                         "heat/sector caps, instead of the per-signal expectancy above. "
                         "THIS is the number that feeds honest 10x ETAs.")
+    p.add_argument("--r-sequence-json", default="data/replay_r_sequence.json",
+                   help="portfolio mode: write the replay's r_multiples_taken list here "
+                        "(Task E51) so ruin.simulate() can bootstrap from the trades "
+                        "actually taken, not the raw per-signal pool. Pass '' to skip.")
     p.add_argument("--start", default=ANCHORED_FOLDS[0][2],
                    help="portfolio mode: replay window start (default: first anchored "
                         "fold's test-window start, %(default)s)")
@@ -57,6 +61,11 @@ def main() -> int:
             with open(args.json, "w", encoding="utf-8") as fh:
                 json.dump(result, fh, indent=2, default=str)
             print(f"wrote {args.json}")
+        if args.r_sequence_json:
+            with open(args.r_sequence_json, "w", encoding="utf-8") as fh:
+                json.dump(result["r_multiples_taken"], fh)
+            print(f"wrote {args.r_sequence_json} "
+                  f"({len(result['r_multiples_taken'])} r-multiples)")
         return 0
 
     overrides = {} if args.full else json.loads(args.component_json)

@@ -199,6 +199,11 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
     open_pos: list[dict] = []      # {"exit_date", "ticker", "sector", "risk_pct", "r"}
     taken = skipped = 0
     paused = False
+    # R-multiples for trades actually opened, in the order this loop takes
+    # them (chronological by entry date) -- the fixed distribution ruin.
+    # simulate() bootstraps from. Recorded at open time, not close time, so
+    # it excludes every signal this replay's heat/sector caps skipped.
+    r_multiples_taken: list[float] = []
 
     for sig in events:
         # 1) close everything that exited before this signal's date
@@ -230,6 +235,7 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
         open_pos.append({"exit_date": sig["exit_date"], "ticker": sig["ticker"],
                          "sector": sec, "risk_pct": eff_risk, "r": sig["r_multiple"]})
         taken += 1
+        r_multiples_taken.append(sig["r_multiple"])
 
     for p in sorted(open_pos, key=lambda p: p["exit_date"]):
         balance *= 1 + (p["risk_pct"] / 100.0) * p["r"]
@@ -250,7 +256,8 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
 
     return {"equity_curve": curve, "final_multiple": balance / start_balance,
             "max_dd_pct": round(max_dd, 2), "trades_taken": taken,
-            "trades_skipped": skipped, "trades_per_month": round(taken / months, 1)}
+            "trades_skipped": skipped, "trades_per_month": round(taken / months, 1),
+            "r_multiples_taken": r_multiples_taken}
 
 
 def _trades_similar(a, b, tol_pct: float) -> bool:

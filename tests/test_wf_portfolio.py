@@ -33,6 +33,20 @@ def test_heat_cap_forces_skips_deterministically():
     out = portfolio_replay(sigs, heat_cap_pct=6.0, sector_cap_pct=100.0)
     assert out["trades_taken"] == 6
     assert out["trades_skipped"] == 2
+    # r_multiples_taken tracks only opened trades -- one entry per taken
+    # trade, none for the 2 skipped by the heat cap.
+    assert len(out["r_multiples_taken"]) == 6
+    assert out["r_multiples_taken"] == [0.4] * 6
+
+
+def test_r_multiples_taken_excludes_skipped_and_preserves_order():
+    # LATE only opens once an early exit frees heat; its r must still show
+    # up in r_multiples_taken, appended after the 6 that opened first.
+    sigs = ([_sig("2021-01-04", f"A{i}", 0.4, "2021-01-10") for i in range(6)]
+            + [_sig("2021-01-11", "LATE", -0.7, "2021-02-01")])
+    out = portfolio_replay(sigs, heat_cap_pct=6.0, sector_cap_pct=100.0)
+    assert out["trades_taken"] == 7
+    assert out["r_multiples_taken"] == [0.4] * 6 + [-0.7]
 
 
 def test_heat_frees_on_exit():
