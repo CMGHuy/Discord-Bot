@@ -22,6 +22,8 @@ import time
 
 import pandas as pd
 
+from .. import config
+from .jsonio import atomic_write_json, read_json
 from .data_store import (
     DATA_DIR,
     TIMEFRAMES,
@@ -46,106 +48,237 @@ REFRESH_HOURS = {
 }
 DEFAULT_REFRESH_HOURS = 24.0
 
+# Transient-fault retry (see _with_retry -- provider depth caps are NOT
+# retried; they are a refusal, not a fault).
+RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY = 2.0
+
+# A symbol/timeframe that failed every attempt is re-tried this soon rather
+# than waiting out its normal staleness window, so the bot keeps chipping at
+# genuine gaps for as long as it runs.
+FAILED_RETRY_HOURS = 0.5
+
+STATE_FILE = os.path.join(config.DATA_DIR, "market_data_state.json")
+
+
+def load_state() -> dict:
+    """Per-(symbol,timeframe) coverage + failure record. Survives restarts so
+    an unresolved gap keeps being retried across bot sessions."""
+    return read_json(STATE_FILE, {}) or {}
+
+
+def save_state(state: dict) -> None:
+    try:
+        atomic_write_json(STATE_FILE, state)
+    except Exception as exc:            # never let bookkeeping break a refresh
+        log.warning("could not write %s: %s", STATE_FILE, exc)
+
+
+def _key(symbol: str, timeframe: str) -> str:
+    return f"{symbol.upper()}|{timeframe}"
+
 
 def is_stale(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
-             max_age_hours: float = None) -> bool:
-    """True when this symbol/timeframe is missing or old enough to re-fetch."""
+             max_age_hours: float = None, state: dict = None) -> bool:
+    """True when this symbol/timeframe is missing or old enough to re-fetch.
+
+    A record that failed its last attempt becomes eligible again after
+    FAILED_RETRY_HOURS instead of its normal (much longer) staleness window,
+    so transient outages get chipped away at while the bot runs rather than
+    waiting a full day.
+    """
     tf = timeframe_name(timeframe)
     path = cache_path(symbol, tf, base_dir=base_dir)
     if not os.path.exists(path):
         return True
     if max_age_hours is None:
         max_age_hours = REFRESH_HOURS.get(tf, DEFAULT_REFRESH_HOURS)
+        if state is not None:
+            rec = state.get(_key(symbol, tf))
+            if rec and rec.get("last_status") == "failed":
+                max_age_hours = min(max_age_hours, FAILED_RETRY_HOURS)
     age_hours = (time.time() - os.path.getmtime(path)) / 3600.0
     return age_hours >= max_age_hours
 
 
+def _align_tz(a, b):
+    """Make two DatetimeIndexes comparable. Intraday frames come back
+    tz-aware, daily-and-coarser naive, and a cached CSV can round-trip
+    either way depending on which timeframe wrote it."""
+    try:
+        if a.index.tz is not None and b.index.tz is None:
+            a = a.copy(); a.index = a.index.tz_localize(None)
+        elif a.index.tz is None and b.index.tz is not None:
+            b = b.copy(); b.index = b.index.tz_localize(None)
+    except (AttributeError, TypeError):
+        pass
+    return a, b
+
+
+def _merge_save(existing, fresh, symbol: str, timeframe: str,
+                base_dir: str) -> tuple:
+    """UNION existing with fresh and write atomically. Returns (df, added).
+
+    Never overwrites: bars already on disk survive even when the provider
+    stops serving them. This is what lets the archive grow deeper than the
+    provider's window over time -- a plain save_to_disk() here would let a
+    shallower response silently destroy accumulated history.
+    """
+    if existing is None or len(existing) == 0:
+        merged, added = fresh, len(fresh)
+    else:
+        existing, fresh = _align_tz(existing, fresh)
+        before = set(existing.index)
+        merged = pd.concat([existing, fresh])
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        added = sum(1 for i in fresh.index if i not in before)
+
+    path = cache_path(symbol, timeframe, base_dir=base_dir)
+    tmp = path + ".tmp"
+    merged.to_csv(tmp)
+    os.replace(tmp, path)          # atomic: a crash mid-write can't truncate
+    return merged, added
+
+
+def _with_retry(fn, *args, attempts: int = None, base_delay: float = None,
+                label: str = ""):
+    """Call fn with exponential backoff. Raises the last error if all
+    attempts fail.
+
+    Only worth doing for TRANSIENT faults -- curl timeouts, rate limiting,
+    a momentarily empty response. A provider depth limit is a refusal, not
+    a fault: it returns the same truncated window every time, so retrying
+    it is pure waste and is deliberately NOT retried here.
+    """
+    attempts = attempts or RETRY_ATTEMPTS
+    base_delay = base_delay if base_delay is not None else RETRY_BASE_DELAY
+    last = None
+    for i in range(attempts):
+        try:
+            return fn(*args)
+        except Exception as exc:
+            last = exc
+            if i < attempts - 1:
+                delay = base_delay * (2 ** i)
+                log.info("retry %s in %.1fs (attempt %d/%d): %s",
+                         label, delay, i + 1, attempts, str(exc)[:120])
+                time.sleep(delay)
+    raise last
+
+
 def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
-                   force: bool = False) -> dict:
+                   force: bool = False, state: dict = None) -> dict:
     """Bring one symbol/timeframe up to date. Returns a result dict with
-    status 'full' | 'incremental' | 'fresh' | 'skipped' | 'failed'."""
+    status 'full' | 'incremental' | 'fresh' | 'failed'.
+
+    Transient failures are retried with backoff. Whatever is already on
+    disk is always preserved -- see _merge_save.
+    """
     tf = timeframe_name(timeframe)
     out = {"symbol": symbol, "timeframe": tf, "rows": 0, "added": 0}
+    existing = load_from_disk(symbol, tf, base_dir=base_dir)
+    have = 0 if existing is None else len(existing)
 
-    if not force and not is_stale(symbol, tf, base_dir=base_dir):
-        existing = load_from_disk(symbol, tf, base_dir=base_dir)
-        return {**out, "status": "fresh", "rows": len(existing) if existing is not None else 0}
+    if not force and not is_stale(symbol, tf, base_dir=base_dir, state=state):
+        return {**out, "status": "fresh", "rows": have}
 
-    existing = None if force else load_from_disk(symbol, tf, base_dir=base_dir)
-
-    # Cold (or forced): pull the deepest history this timeframe allows.
-    if existing is None or existing.empty:
+    # Cold, or forced: pull the deepest history this timeframe allows.
+    # NOTE force no longer discards `existing` -- it re-pulls full depth and
+    # merges, so a forced refresh can only ever ADD bars.
+    if have == 0 or force:
         try:
-            df = fetch_interval_data(symbol, tf)
+            df = _with_retry(fetch_interval_data, symbol, tf,
+                             label=f"{symbol}/{tf} full")
         except Exception as exc:
-            log.warning("refresh %s/%s failed: %s", symbol, tf, exc)
-            return {**out, "status": "failed", "error": str(exc)[:200]}
-        save_to_disk(df, symbol, tf, base_dir=base_dir)
-        return {**out, "status": "full", "rows": len(df), "added": len(df)}
+            log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc)
+            return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
+        merged, added = _merge_save(existing, df, symbol, tf, base_dir)
+        return {**out, "status": "full" if have == 0 else "incremental",
+                "rows": len(merged), "added": added}
 
     # Warm: fetch only what is newer than the last cached bar.
     last = existing.index.max()
     try:
-        fresh = _default_ranged_fetch(symbol, last, tf)
+        fresh = _with_retry(_default_ranged_fetch, symbol, last, tf,
+                            label=f"{symbol}/{tf} incremental")
     except Exception as exc:
-        log.warning("incremental %s/%s failed: %s", symbol, tf, exc)
-        return {**out, "status": "failed", "rows": len(existing), "error": str(exc)[:200]}
+        log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc)
+        return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
 
-    if fresh is None or fresh.empty:
+    if fresh is None or len(fresh) == 0:
         # Nothing new, but touch the file so a closed market doesn't make
         # every tick re-request the same empty window.
         os.utime(cache_path(symbol, tf, base_dir=base_dir), None)
-        return {**out, "status": "fresh", "rows": len(existing)}
+        return {**out, "status": "fresh", "rows": have}
 
-    # Align tz-awareness before comparing/concatenating: intraday frames come
-    # back tz-aware, daily-and-coarser naive, and a cached CSV can round-trip
-    # either way depending on which timeframe wrote it.
-    try:
-        if fresh.index.tz is not None and existing.index.tz is None:
-            fresh.index = fresh.index.tz_localize(None)
-        elif fresh.index.tz is None and existing.index.tz is not None:
-            existing.index = existing.index.tz_localize(None)
-    except (AttributeError, TypeError):
-        pass
-
-    fresh = fresh[fresh.index > last]
-    if fresh.empty:
+    merged, added = _merge_save(existing, fresh, symbol, tf, base_dir)
+    if added == 0:
         os.utime(cache_path(symbol, tf, base_dir=base_dir), None)
-        return {**out, "status": "fresh", "rows": len(existing)}
+        return {**out, "status": "fresh", "rows": len(merged)}
+    return {**out, "status": "incremental", "rows": len(merged), "added": added}
 
-    merged = pd.concat([existing, fresh])
-    merged = merged[~merged.index.duplicated(keep="last")].sort_index()
 
-    # Atomic replace so a crash mid-write never leaves a truncated CSV.
-    path = cache_path(symbol, tf, base_dir=base_dir)
-    tmp = path + ".tmp"
-    merged.to_csv(tmp)
-    os.replace(tmp, path)
-    return {**out, "status": "incremental", "rows": len(merged), "added": len(fresh)}
+def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
+    """Update the persistent coverage/failure record for one pair."""
+    k = _key(symbol, tf)
+    rec = dict(state.get(k) or {})
+    rec["last_status"] = r["status"]
+    rec["last_attempt"] = int(time.time())
+    if r["status"] == "failed":
+        rec["fail_count"] = int(rec.get("fail_count", 0)) + 1
+        rec["last_error"] = str(r.get("error", ""))[:200]
+    else:
+        rec["fail_count"] = 0
+        rec.pop("last_error", None)
+        rec["last_success"] = rec["last_attempt"]
+        rec["rows"] = r.get("rows", 0)
+        # Earliest bar we hold. Tracked because it is the ONLY evidence that
+        # the archive is outgrowing the provider's window: it should stay put
+        # (or move earlier) forever, and must never drift later.
+        try:
+            df = load_from_disk(symbol, tf, base_dir=base_dir)
+            if df is not None and len(df):
+                earliest = str(df.index.min())[:10]
+                prev = rec.get("earliest")
+                if prev and earliest > prev:
+                    log.error(
+                        "COVERAGE REGRESSION %s/%s: earliest bar moved %s -> %s "
+                        "(history was lost, not merged)", symbol, tf, prev, earliest)
+                else:
+                    rec["earliest"] = earliest
+                rec["latest"] = str(df.index.max())[:10]
+        except Exception:
+            pass
+    state[k] = rec
 
 
 def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DIR,
                 force: bool = False, sleep_seconds: float = 0.0,
-                on_progress=None) -> dict:
+                on_progress=None, state: dict = None,
+                persist_state: bool = True) -> dict:
     """Refresh every (symbol, timeframe) pair. Never raises."""
     timeframes = [timeframe_name(t) for t in timeframes]
     summary = {tf: {"full": 0, "incremental": 0, "fresh": 0, "failed": 0,
                     "added": 0} for tf in timeframes}
     failures = []
+    if state is None:
+        state = load_state() if persist_state else {}
 
     for tf in timeframes:
         for symbol in symbols:
             try:
-                r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force)
+                r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force,
+                                   state=state)
             except Exception as exc:      # belt-and-braces: loop must survive
                 log.warning("refresh %s/%s crashed: %s", symbol, tf, exc)
                 r = {"symbol": symbol, "timeframe": tf, "status": "failed",
-                     "added": 0, "error": str(exc)[:200]}
+                     "rows": 0, "added": 0, "error": str(exc)[:200]}
             bucket = summary[tf]
             bucket[r["status"]] = bucket.get(r["status"], 0) + 1
             bucket["added"] += r.get("added", 0)
             if r["status"] == "failed":
                 failures.append((symbol, tf, r.get("error", "")))
+            _record(state, symbol, tf, r, base_dir)
             if on_progress:
                 try:
                     on_progress(r)
@@ -154,7 +287,18 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
             if sleep_seconds and r["status"] not in ("fresh", "skipped"):
                 time.sleep(sleep_seconds)
 
-    return {"summary": summary, "failures": failures}
+    if persist_state:
+        save_state(state)
+    return {"summary": summary, "failures": failures, "state": state}
+
+
+def pending_gaps(state: dict = None) -> list:
+    """Pairs whose last attempt failed -- what the loop keeps retrying."""
+    state = load_state() if state is None else state
+    return [(k.split("|")[0], k.split("|")[1], rec.get("fail_count", 0),
+             rec.get("last_error", ""))
+            for k, rec in sorted(state.items())
+            if rec.get("last_status") == "failed"]
 
 
 def summary_line(result: dict) -> str:

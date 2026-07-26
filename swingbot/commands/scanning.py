@@ -1054,7 +1054,9 @@ async def market_data_refresh():
         return
 
     try:
-        from swingbot.core.data_refresh import refresh_all, summary_line
+        from swingbot.core.data_refresh import (
+            FAILED_RETRY_HOURS, pending_gaps, refresh_all, summary_line,
+        )
         result = await asyncio.to_thread(
             refresh_all, symbols, timeframes, sleep_seconds=0.3,
         )
@@ -1070,6 +1072,18 @@ async def market_data_refresh():
                     " ..." if len(result["failures"]) > 5 else "")
     elif line != "all timeframes already fresh":
         log.info("market_data_refresh: %s", line)
+
+    # Anything still unresolved stays on the books and is re-attempted on the
+    # next tick (failed pairs go stale after FAILED_RETRY_HOURS instead of
+    # their normal window), so gaps keep being chipped at for as long as the
+    # bot runs. Note this covers RECOVERABLE gaps only -- a provider depth cap
+    # is a refusal, not a gap, and is never queued for retry.
+    gaps = pending_gaps(result.get("state"))
+    if gaps:
+        worst = sorted(gaps, key=lambda g: -g[2])[:3]
+        log.info("market_data_refresh: %d gap(s) queued for retry (~%.1fh): %s",
+                 len(gaps), FAILED_RETRY_HOURS,
+                 ", ".join(f"{s}/{tf} x{n}" for s, tf, n, _ in worst))
 
 
 @market_data_refresh.before_loop

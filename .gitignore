@@ -13,6 +13,16 @@ exports/
 market_data/
 data/backtest_cache/
 .vscode/
+.claude/settings.local.json
+.claude/worktrees/
 logs/
 backtest_range_summary.txt
 validation_results.json
+
+# Backtest / fold run output. NOTE: this ignores the WHOLE directory, including
+# future *.md and *.json validation deliverables — and the backtest methodology in
+# CLAUDE.md requires those be committed with their table and selection rule. The 27
+# result files tracked before this rule was added stay tracked (gitignore does not
+# untrack), so only NEW result files become invisible. If the intent was only to
+# drop the noisy run logs, narrow this to: docs/superpowers/results/*.log
+docs/superpowers/results/

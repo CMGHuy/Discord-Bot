@@ -363,7 +363,128 @@ def test_refresh_all_survives_a_failing_symbol(tmp_path, monkeypatch):
         return make_ohlcv(np.full(10, 100.0))
 
     monkeypatch.setattr(data_refresh, "fetch_interval_data", flaky)
-    res = data_refresh.refresh_all(["GOOD", "BAD"], ["daily"], base_dir=str(tmp_path))
+    monkeypatch.setattr(data_refresh, "RETRY_BASE_DELAY", 0.0)
+    # persist_state=False: refresh_all writes to the REAL data/ state file by
+    # default, and a test must never leave a fake symbol in production state.
+    res = data_refresh.refresh_all(["GOOD", "BAD"], ["daily"],
+                                   base_dir=str(tmp_path), persist_state=False)
     assert res["summary"]["daily"]["full"] == 1
     assert res["summary"]["daily"]["failed"] == 1
     assert res["failures"][0][0] == "BAD"
+
+
+# --- Never lose accumulated history (forward accumulation) -------------------
+
+def test_forced_refresh_merges_never_overwrites(tmp_path, monkeypatch):
+    """The provider's window slides forward. A later full-fetch returning a
+    SHALLOWER span must not destroy bars already archived -- that is what
+    lets the cache outgrow the provider's cap over time."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+    from swingbot.core.data_store import save_to_disk, load_from_disk
+
+    deep = make_ohlcv(np.full(60, 100.0), start="2026-01-01")   # archived
+    save_to_disk(deep, "TEST", "hourly", base_dir=str(tmp_path))
+
+    # Provider now only serves the last 20 bars (window slid forward)
+    shallow = deep.iloc[-20:]
+    monkeypatch.setattr(data_refresh, "fetch_interval_data",
+                        lambda s, tf: shallow)
+
+    r = data_refresh.refresh_symbol("TEST", "hourly", base_dir=str(tmp_path),
+                                    force=True)
+    kept = load_from_disk("TEST", "hourly", base_dir=str(tmp_path))
+    assert len(kept) == 60, "archived bars were destroyed by a shallower fetch"
+    assert kept.index.min() == deep.index.min()
+    assert r["added"] == 0
+
+
+def test_archive_grows_past_provider_window(tmp_path, monkeypatch):
+    """Two successive fetches of non-overlapping windows accumulate."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+    from swingbot.core.data_store import load_from_disk, cache_path
+
+    old_window = make_ohlcv(np.full(30, 100.0), start="2026-01-01")
+    monkeypatch.setattr(data_refresh, "fetch_interval_data",
+                        lambda s, tf: old_window)
+    data_refresh.refresh_symbol("TEST", "hourly", base_dir=str(tmp_path))
+
+    # Later: provider has moved on, serving a newer window entirely
+    new_window = make_ohlcv(np.full(30, 101.0), start="2026-03-01")
+    monkeypatch.setattr(data_refresh, "_default_ranged_fetch",
+                        lambda s, start, tf: new_window)
+    _age_cache(cache_path("TEST", "hourly", base_dir=str(tmp_path)), 48)
+    data_refresh.refresh_symbol("TEST", "hourly", base_dir=str(tmp_path))
+
+    kept = load_from_disk("TEST", "hourly", base_dir=str(tmp_path))
+    assert len(kept) == 60                      # both windows retained
+    assert str(kept.index.min())[:10] == "2026-01-01"
+
+
+def test_transient_failure_is_retried_then_succeeds(tmp_path, monkeypatch):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+
+    calls = {"n": 0}
+    frame = make_ohlcv(np.full(10, 100.0))
+
+    def flaky(symbol, tf):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("curl timeout")
+        return frame
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", flaky)
+    monkeypatch.setattr(data_refresh, "RETRY_BASE_DELAY", 0.0)
+    r = data_refresh.refresh_symbol("TEST", "daily", base_dir=str(tmp_path))
+    assert r["status"] == "full"
+    assert calls["n"] == 3          # failed twice, succeeded on the third
+
+
+def test_retry_gives_up_after_attempts(tmp_path, monkeypatch):
+    from swingbot.core import data_refresh
+    calls = {"n": 0}
+
+    def always_fails(symbol, tf):
+        calls["n"] += 1
+        raise RuntimeError("rate limited")
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", always_fails)
+    monkeypatch.setattr(data_refresh, "RETRY_BASE_DELAY", 0.0)
+    r = data_refresh.refresh_symbol("TEST", "daily", base_dir=str(tmp_path))
+    assert r["status"] == "failed"
+    assert calls["n"] == data_refresh.RETRY_ATTEMPTS   # bounded, not infinite
+
+
+def test_failed_pair_is_retried_sooner_and_tracked(tmp_path, monkeypatch):
+    """A failure must stay on the books and come back around quickly."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+    from swingbot.core.data_store import save_to_disk, cache_path
+
+    save_to_disk(make_ohlcv(np.full(5, 100.0)), "TEST", "monthly",
+                 base_dir=str(tmp_path))
+    # monthly normally waits 24h; 1h old is NOT stale under that rule
+    _age_cache(cache_path("TEST", "monthly", base_dir=str(tmp_path)), 1)
+    assert data_refresh.is_stale("TEST", "monthly", base_dir=str(tmp_path)) is False
+
+    # but with a recorded failure it becomes eligible again after 0.5h
+    state = {data_refresh._key("TEST", "monthly"): {"last_status": "failed"}}
+    assert data_refresh.is_stale("TEST", "monthly", base_dir=str(tmp_path),
+                                 state=state) is True
+
+
+def test_pending_gaps_lists_failures(tmp_path, monkeypatch):
+    from swingbot.core import data_refresh
+    monkeypatch.setattr(data_refresh, "fetch_interval_data",
+                        lambda s, tf: (_ for _ in ()).throw(RuntimeError("down")))
+    monkeypatch.setattr(data_refresh, "RETRY_BASE_DELAY", 0.0)
+    res = data_refresh.refresh_all(["AAA"], ["daily"], base_dir=str(tmp_path),
+                                   persist_state=False)
+    gaps = data_refresh.pending_gaps(res["state"])
+    assert ("AAA", "daily") == (gaps[0][0], gaps[0][1])
