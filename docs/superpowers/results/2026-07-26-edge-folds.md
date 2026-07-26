@@ -119,3 +119,43 @@ E44's evidence pack closes honestly at "0 components adopted this phase,"
 not because the phase's underlying research (E23-E37's factor math) was
 wrong, but because most of it was never connected to anything measurable.
 
+## E44 — Phase E2/E3 checkpoint
+
+**Evidence pack:** fold doc (this file, E33) — complete, 0/2 adopted.
+Permutation p-values (E41) and plateau evidence (E42) — N/A, no adopted
+components to evaluate; both tools exist and pass their own unit tests
+(`tests/test_wf_engine.py`). Ablation table (E43) — N/A, documented above.
+`docs/superpowers/results/adopted_components.json` — committed, `{}`.
+
+**Full suite:** `python -m pytest tests/ -q` run 2026-07-26 against
+commit `9039507`. 3 failures, only 1 attributable to this plan's work
+(none — see below):
+
+- `tests/test_trade_monitor_wiring.py::test_flag_on_polls_open_plans` —
+  the one documented pre-existing wall-clock-dependent failure from
+  CLAUDE.md's known-good baseline (carried since Task E7). Not a
+  regression.
+- `tests/admin/test_jobs.py::test_job_runs_and_tail_captures_output` —
+  spawns a real subprocess and waits on it; failed under the heavy
+  concurrent load this machine was under (multiple sessions active in
+  this shared working tree). Re-ran in isolation: passes (29.5s — slow,
+  confirming load, not a logic bug). Flaky under load, not a regression;
+  nothing in this plan's work touches `swingbot/admin/jobs.py`.
+- `tests/admin/test_risk_panel.py::test_risk_page_renders` — this test
+  file is **untracked** (`git ls-files` confirms it was never committed)
+  and belongs to a concurrent session's own in-progress work building an
+  admin risk panel — it fails because that session's `risk.html` template
+  doesn't exist yet in the working tree. Not part of this plan's commit
+  history, not something this checkpoint touches or completes on that
+  session's behalf.
+
+`python -m py_compile` clean across `bot.py`, `admin_ui.py`, and every
+`swingbot/**/*.py` (run against the same commit).
+
+**Flags stay off.** Neither `AVWAP_LEVELS_ENABLED` nor
+`VOLUME_PROFILE_NODES_ENABLED` defaults changed — both failed, both stay
+at their existing config default (already off). No `REGIME_ALLOW` change.
+Phase E2/E3 checkpoint closes clean for this plan's own code; the two
+non-baseline failures above are shared-working-tree noise from concurrent
+sessions, not regressions introduced here.
+
