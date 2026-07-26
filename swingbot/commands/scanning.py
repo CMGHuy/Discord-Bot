@@ -1028,6 +1028,58 @@ async def daily_recap():
         log.exception("daily_recap: failed to post retrospective: %s", exc)
 
 
+@tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)
+async def market_data_refresh():
+    """
+    Keeps market_data/{timeframe}/{TICKER}.csv current for the training
+    timeframes while the bot runs.
+
+    Cheap by construction: each timeframe carries its own staleness window
+    (hourly 4h, daily 12h, weekly/monthly 24h), so most wake-ups fetch
+    nothing and return immediately. The actual fetching runs off the event
+    loop via asyncio.to_thread -- yfinance is blocking, and a full sweep can
+    take minutes under Yahoo throttling, which would otherwise stall every
+    Discord command for the duration.
+
+    Failures are logged and counted, never raised: a rate-limited window or
+    a single delisted symbol must not kill the loop.
+    """
+    if not config.MARKET_DATA_AUTO_REFRESH:
+        return
+
+    timeframes = [t.strip() for t in
+                  str(config.MARKET_DATA_TIMEFRAMES).split(",") if t.strip()]
+    symbols = load_watchlist()
+    if not timeframes or not symbols:
+        return
+
+    try:
+        from swingbot.core.data_refresh import refresh_all, summary_line
+        result = await asyncio.to_thread(
+            refresh_all, symbols, timeframes, sleep_seconds=0.3,
+        )
+    except Exception as exc:
+        log.exception("market_data_refresh: refresh failed: %s", exc)
+        return
+
+    line = summary_line(result)
+    if result["failures"]:
+        sample = ", ".join(f"{s}/{tf}" for s, tf, _ in result["failures"][:5])
+        log.warning("market_data_refresh: %s | %d failure(s): %s%s",
+                    line, len(result["failures"]), sample,
+                    " ..." if len(result["failures"]) > 5 else "")
+    elif line != "all timeframes already fresh":
+        log.info("market_data_refresh: %s", line)
+
+
+@market_data_refresh.before_loop
+async def _before_market_data_refresh():
+    # Don't compete with startup: let the bot connect and the first scan
+    # settle before a potentially minutes-long network sweep begins.
+    await bot.wait_until_ready()
+    await asyncio.sleep(60)
+
+
 @on_config_reload
 def _apply_scan_interval_change(changed: dict):
     """SCAN_INTERVAL_MINUTES is baked into @tasks.loop() at decoration time
@@ -1037,6 +1089,10 @@ def _apply_scan_interval_change(changed: dict):
         new_minutes = config.SCAN_INTERVAL_MINUTES
         session_scan.change_interval(minutes=new_minutes)
         log.info("Scan interval hot-reloaded to every %d minute(s) (takes effect next tick).", new_minutes)
+    if "MARKET_DATA_REFRESH_MINUTES" in changed and market_data_refresh.is_running():
+        market_data_refresh.change_interval(minutes=config.MARKET_DATA_REFRESH_MINUTES)
+        log.info("Market-data refresh interval hot-reloaded to every %d minute(s).",
+                 config.MARKET_DATA_REFRESH_MINUTES)
 
 
 @bot.event
@@ -1063,6 +1119,8 @@ async def on_ready():
         trade_monitor.start()
     if not daily_recap.is_running():
         daily_recap.start()
+    if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
+        market_data_refresh.start()
     await _refresh_presence()
 
     # Sync slash commands to Discord (runs once on startup; safe to call every time)

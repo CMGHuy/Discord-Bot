@@ -473,6 +473,27 @@ FIELDS: list[Field] = [
           type="number", default="4", min=1, max=16, step=1,
           help="Thread-pool size for per-ticker scanning. 4 is CX23-safe; raise only with "
                "the E82 telemetry watching."),
+    Field("MARKET_DATA_AUTO_REFRESH", "MARKET_DATA_AUTO_REFRESH", "Universe & Scanning",
+          "Auto-refresh market data cache",
+          type="checkbox", default="true",
+          help="While the bot runs, keep market_data/{timeframe}/{TICKER}.csv current for the "
+               "training timeframes (monthly, weekly, daily, hourly). Incremental: only bars "
+               "newer than each CSV's last row are fetched, and each timeframe is re-checked "
+               "on its own schedule (hourly every 4h, daily 12h, weekly/monthly 24h), so a "
+               "typical wake-up costs no network at all."),
+    Field("MARKET_DATA_REFRESH_MINUTES", "MARKET_DATA_REFRESH_MINUTES", "Universe & Scanning",
+          "Market data refresh check (minutes)",
+          type="number", default="60", min=15, max=1440, step=15,
+          help="How often the auto-refresh loop WAKES UP. It does not fetch on every wake -- "
+               "the per-timeframe staleness rule decides that. Lower this only if you want "
+               "new hourly candles picked up sooner."),
+    Field("MARKET_DATA_TIMEFRAMES", "MARKET_DATA_TIMEFRAMES", "Universe & Scanning",
+          "Auto-refreshed timeframes",
+          type="text", default="monthly,weekly,daily,hourly",
+          help="Comma-separated timeframe folders to keep current. Names come from "
+               "swingbot/core/data_store.py:TIMEFRAMES. Sub-hourly ones (15min, 5min, 1min) "
+               "are accepted but Yahoo only serves them for the trailing 30-60 days, so they "
+               "cannot support training -- leave them out unless you want live entry timing."),
     Field("REGIME_GATES_ENABLED", "REGIME_GATES_ENABLED", "Universe & Scanning",
           "Per-strategy regime gates enabled",
           type="checkbox", default="false",

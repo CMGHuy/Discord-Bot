@@ -254,3 +254,116 @@ def test_both_spellings_hit_the_same_file(tmp_path):
     save_to_disk(make_ohlcv(np.full(12, 100.0)), "TEST", "1h", base_dir=str(tmp_path))
     assert len(load_from_disk("TEST", "hourly", base_dir=str(tmp_path))) == 12
 
+
+# --- Auto-refresh (data_refresh) --------------------------------------------
+
+def test_is_stale_true_when_missing(tmp_path):
+    from swingbot.core.data_refresh import is_stale
+    assert is_stale("NOPE", "daily", base_dir=str(tmp_path)) is True
+
+
+def test_is_stale_false_for_just_written_file(tmp_path):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import save_to_disk
+    from swingbot.core.data_refresh import is_stale
+    save_to_disk(make_ohlcv(np.full(5, 100.0)), "TEST", "daily", base_dir=str(tmp_path))
+    assert is_stale("TEST", "daily", base_dir=str(tmp_path)) is False
+
+
+def test_refresh_symbol_skips_fresh_cache(tmp_path, monkeypatch):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+    from swingbot.core.data_store import save_to_disk
+
+    save_to_disk(make_ohlcv(np.full(5, 100.0)), "TEST", "daily", base_dir=str(tmp_path))
+
+    def boom(*a, **k):
+        raise AssertionError("must not fetch a fresh cache")
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", boom)
+    monkeypatch.setattr(data_refresh, "_default_ranged_fetch", boom)
+    r = data_refresh.refresh_symbol("TEST", "daily", base_dir=str(tmp_path))
+    assert r["status"] == "fresh"
+
+
+def test_refresh_symbol_cold_does_full_fetch(tmp_path, monkeypatch):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+
+    frame = make_ohlcv(np.full(30, 100.0))
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", lambda s, tf: frame)
+    r = data_refresh.refresh_symbol("COLD", "daily", base_dir=str(tmp_path))
+    assert r["status"] == "full" and r["rows"] == 30
+
+
+def _age_cache(path, hours):
+    """Backdate a cached CSV's mtime so the staleness gate lets it through."""
+    import time as _t
+    old = _t.time() - hours * 3600
+    os.utime(path, (old, old))
+
+
+def test_refresh_symbol_appends_only_new_bars(tmp_path, monkeypatch):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+    from swingbot.core.data_store import save_to_disk, load_from_disk, cache_path
+
+    old = make_ohlcv(np.full(20, 100.0), start="2026-01-01")
+    save_to_disk(old, "TEST", "daily", base_dir=str(tmp_path))
+    # Must be STALE and NOT forced: force=True routes to the cold full-fetch
+    # path, which would call the real (unpatched) network fetch and hang.
+    _age_cache(cache_path("TEST", "daily", base_dir=str(tmp_path)), 48)
+
+    full = make_ohlcv(np.full(26, 101.0), start="2026-01-01")   # 6 newer bars
+    monkeypatch.setattr(data_refresh, "_default_ranged_fetch",
+                        lambda s, start, tf: full)
+    monkeypatch.setattr(data_refresh, "fetch_interval_data",
+                        lambda *a, **k: pytest.fail("took the cold-fetch path"))
+
+    r = data_refresh.refresh_symbol("TEST", "daily", base_dir=str(tmp_path))
+    assert r["status"] == "incremental"
+    assert r["added"] == 6
+
+    merged = load_from_disk("TEST", "daily", base_dir=str(tmp_path))
+    assert len(merged) == 26
+    assert not merged.index.duplicated().any()
+
+
+def test_refresh_symbol_no_new_bars_touches_mtime(tmp_path, monkeypatch):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_refresh
+    from swingbot.core.data_store import save_to_disk, cache_path
+
+    save_to_disk(make_ohlcv(np.full(20, 100.0), start="2026-01-01"), "TEST",
+                 "daily", base_dir=str(tmp_path))
+    _age_cache(cache_path("TEST", "daily", base_dir=str(tmp_path)), 48)
+
+    monkeypatch.setattr(data_refresh, "_default_ranged_fetch",
+                        lambda s, start, tf: None)
+    r = data_refresh.refresh_symbol("TEST", "daily", base_dir=str(tmp_path))
+    assert r["status"] == "fresh"
+    # mtime touched, so a closed market doesn't re-request the same empty
+    # window on every single tick
+    assert data_refresh.is_stale("TEST", "daily", base_dir=str(tmp_path)) is False
+
+
+def test_refresh_all_survives_a_failing_symbol(tmp_path, monkeypatch):
+    from swingbot.core import data_refresh
+
+    def flaky(symbol, tf):
+        if symbol == "BAD":
+            raise RuntimeError("rate limited")
+        import numpy as np
+        from tests.conftest import make_ohlcv
+        return make_ohlcv(np.full(10, 100.0))
+
+    monkeypatch.setattr(data_refresh, "fetch_interval_data", flaky)
+    res = data_refresh.refresh_all(["GOOD", "BAD"], ["daily"], base_dir=str(tmp_path))
+    assert res["summary"]["daily"]["full"] == 1
+    assert res["summary"]["daily"]["failed"] == 1
+    assert res["failures"][0][0] == "BAD"
