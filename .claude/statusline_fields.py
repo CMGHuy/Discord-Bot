@@ -2,6 +2,15 @@ import json
 import sys
 
 
+def whole_pct(value):
+    # rate_limits percentages arrive as floats with binary-representation
+    # noise (e.g. 7.000000000000001) - these are whole-number percentages by
+    # definition, so round rather than display the float artifact.
+    if value == "":
+        return ""
+    return str(round(value))
+
+
 def main():
     data = json.load(sys.stdin)
     model = data.get("model", {}).get("display_name", "")
@@ -12,9 +21,9 @@ def main():
     fields = (
         model,
         ctx,
-        five_hour.get("used_percentage", ""),
+        whole_pct(five_hour.get("used_percentage", "")),
         five_hour.get("resets_at", ""),
-        seven_day.get("used_percentage", ""),
+        whole_pct(seven_day.get("used_percentage", "")),
         seven_day.get("resets_at", ""),
     )
     print("\t".join(str(v) for v in fields))
