@@ -62,6 +62,7 @@ rather than a genuine reversal.
 import math
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from swingbot import config
@@ -128,6 +129,49 @@ def _cluster_levels(candidates: list, tolerance_pct: float = CLUSTER_TOLERANCE_P
 
     clusters.append(Level(price=sum(bucket_prices) / len(bucket_prices), sources=bucket_sources))
     return clusters
+
+
+def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
+                         bins: int = 42) -> dict:
+    """High/low-volume nodes from volume-at-price. HVNs are acceptance
+    (stop shelter), LVNs are vacuum (price transits fast -> TP zones).
+
+    The scan covers EVERY bin including the first and last. The obvious
+    `range(1, len(hist)-1)` looks safer but is wrong here: np.histogram
+    puts the data's own extremes in the boundary bins, so a bimodal
+    profile whose two modes are the period's high and low -- the textbook
+    case this function exists to find -- returns zero HVNs. Boundary bins
+    are compared against their single existing neighbour instead.
+    """
+    part = df.tail(lookback_days)
+    tp = (part["High"] + part["Low"] + part["Close"]) / 3.0
+    lo, hi = float(tp.min()), float(tp.max())
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        # A window with no price range at all has no acceptance shelf and
+        # no vacuum. np.histogram pads the range around a constant series,
+        # and every one of those padded bins is an empty local minimum --
+        # without this guard a stock that never moved reports ~40 "LVNs"
+        # at prices it never traded.
+        return {"hvn": [], "lvn": []}
+
+    hist, edges = np.histogram(tp, bins=bins, weights=part["Volume"])
+    centers = (edges[:-1] + edges[1:]) / 2.0
+    med = np.median(hist[hist > 0]) if (hist > 0).any() else 0
+    if not med:
+        return {"hvn": [], "lvn": []}
+
+    hvn, lvn = [], []
+    for i in range(len(hist)):
+        if not (lo <= centers[i] <= hi):
+            continue   # histogram padding, not a price the market visited
+        neighbours = [hist[j] for j in (i - 1, i + 1) if 0 <= j < len(hist)]
+        local_max = all(hist[i] >= n for n in neighbours)
+        local_min = all(hist[i] <= n for n in neighbours)
+        if local_max and hist[i] >= 1.5 * med:
+            hvn.append(float(centers[i]))
+        elif local_min and hist[i] <= 0.5 * med:
+            lvn.append(float(centers[i]))
+    return {"hvn": hvn, "lvn": lvn}
 
 
 def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) -> list:
@@ -304,6 +348,25 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
                 v = float(anchored_vwap(df, a).iloc[-1])
                 if v > 0:
                     candidates.append((v, "AVWAP"))
+        except Exception:
+            pass
+
+    # Volume-profile HVN/LVN nodes (edge E35). Labelled under the existing
+    # "Volume Profile" family on purpose -- these are the same strategy as
+    # the single compute_hvn_level candidate above, just at histogram
+    # resolution, and strategy_family() exists precisely so one piece of
+    # evidence isn't counted as several agreeing "strategies". The brief's
+    # bare "HVN"/"LVN" labels would have fallen through to themselves as
+    # two unregistered families (the E30 trap again).
+    #
+    # Flag-gated, default off, same reasoning as AVWAP above: it adds
+    # candidates, which moves cluster prices and can hand the Volume
+    # Profile family to scenarios that didn't have it. E33 judges it.
+    if config.VOLUME_PROFILE_NODES_ENABLED:
+        try:
+            nodes = volume_profile_nodes(df)
+            candidates.extend((p, "Volume Profile HVN") for p in nodes["hvn"])
+            candidates.extend((p, "Volume Profile LVN") for p in nodes["lvn"])
         except Exception:
             pass
 

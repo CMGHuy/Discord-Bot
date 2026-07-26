@@ -56,7 +56,8 @@
 - Task E32 (MFE-informed TP2 + time stops) done: `TP2_FLOOR_R`, `TIME_STOP_COVERAGE`, `mfe_informed_tp2_r`, `optimal_time_stop_days` appended to `stops.py` (brief's math transcribed, all four of its golden numbers verified by hand first), plus plan-engine wiring mirroring E31 exactly — `tp2_r`/`time_stop_days` as injected trailing params, journal resolution only at the `build_strategy_plan` boundary behind the same `DATA_DRIVEN_STOPS_ENABLED` flag, results recorded in two new typed `TradePlanV2` fields (`tp2_r_applied`, `time_stop_days`; both trailing defaults, round-trip and old-plan-load tested). The brief says only "TP2 override" — the R-multiple→price conversion it leaves unstated is `entry ± |entry-stop| × tp2_r`, and the new `_tp2_from_r` helper puts it under **the same two invariants `select_tp2` enforces** on a level-derived TP2 (strictly beyond TP1; TP1→TP2 leg ≤ `MAX_TARGET2_LEG_MULTIPLE` × entry→TP1 leg), returning None rather than clobbering the level-based TP2 with a number that breaks them. **Finding worth having before E33 reads the folds:** that frozen cap (3.0) ceilings any MFE-informed TP2 at `4 × rr` — **1.4R for MACD's rr=0.35** — so a P60 winner-MFE above 1.4R is simply not adoptable as a TP2 without moving a frozen constant. Found by a test failing on an arbitrary 1.5R, not by reading the code; now pinned by `test_the_leg_cap_ceilings_any_mfe_tp2_at_four_times_rr`. Scope calls, both deliberate and tested: the override changes the TP2 *price* where the frozen per-strategy `tp2` on/off table already enables it (MACD only today) and never switches TP2 *on* for a strategy validated without one — that would be a different exit model than E33 is set up to judge; and `build_confluence_plan` stays untouched (its stop and target come from the scenario's own structure, same reasoning that keeps E31 off the Fibonacci/Elliott builders), asserted by a signature test. `time_stop_days` is advisory: recorded on the plan for E48's recycler, closes nothing, asserted by a lifecycle test. **Honest gap:** nothing in the codebase produces `days_to_half_r` yet — `journal.build_entry` emits `mfe_r`/`mae_r`/`exit_efficiency`/`holding_days` but not this — so `optimal_time_stop_days` returns None against the real journal until the exit simulator (fold trades) or live journal MFE tracking starts emitting it. The brief anticipates exactly that, so it is a forward dependency on E39/E48, not something to fix here. Tests: 14 new in `tests/test_edge_stops.py` (brief's 4 + loser/other-strategy exclusion + 9 wiring/invariant/regression), 32 in the file total. Full suite 888 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 102 files.
 - Task E33 (Fold-tune the Phase-E2 filter set) NOT EXECUTED — deferred by the plan's own ordering note: it executes AFTER E39 (the fold engine it consumes). Build E34–E39 first, then return here.
 - Task E34 (Candlestick quality at levels) done: `pattern_quality_at_level(df, idx, level, direction)` appended to `factors.py` — 0-10 from close-position-in-range (0-4), volume vs its own 20-bar average (0-3), and a rejection wick that pierced the level AND closed back beyond it (0-3). Brief verified fully accurate: both of its golden assertions were hand-checked before implementing (the hammer case scores 9, the drift case 3) and the transcribed code reproduces them. No wiring — a SCORE COMPONENT for E37's composite, explicitly not a hard filter, so nothing consumes it yet and nothing in the live path changes. Tests: 5 (brief's 2 + a bearish mirror, a zero-range/bounds guard, and a pierce-without-reclaim case proving a level BREAK doesn't score like a bounce). Full suite 898 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 102 files.
-- **Next:** Task E35 (Volume profile HVN/LVN targets)
+- Task E35 (Volume profile HVN/LVN targets) done: `volume_profile_nodes(df, lookback_days=180, bins=42)` added to `levels.py` + flag-gated `collect_candidate_levels` wiring + `VOLUME_PROFILE_NODES_ENABLED` config Field (default false). **The brief's implementation finds ZERO HVNs on the brief's own test fixture** — verified empirically by running it before writing a line of production code, not reasoned about. Cause: `range(1, len(hist) - 1)` skips the first and last histogram bin, and `np.histogram` puts the data's own extremes exactly there, so a bimodal profile whose two modes ARE the window's high and low — the textbook case this function exists to find, and precisely what the brief's fixture builds — returns nothing. Two of that test's three assertions fail as written. Fixed by scanning every bin and comparing the boundary bins against their single existing neighbour. A second defect surfaced from a degenerate-input test: a constant-price window made `np.histogram` pad the range, and every padded bin is an empty local minimum, so a stock that never moved reported ~40 "LVNs" at prices it never traded — fixed with an `hi <= lo` guard plus an interior-range filter that drops bins outside the actually-traded range. Label correction (the E30 trap again): the brief's bare `"HVN"`/`"LVN"` labels don't match any `_STRATEGY_FAMILY_PREFIXES` entry, so `strategy_family()` would return them as two unregistered families absent from `ALL_STRATEGY_FAMILIES`, AND would count them as extra "agreeing strategies" alongside the existing `compute_hvn_level` candidate — double-counting one piece of evidence, exactly what family collapse exists to prevent. Labelled `"Volume Profile HVN"`/`"Volume Profile LVN"` instead, which collapses into the existing Volume Profile family through the existing prefix with no registry change. Flag-gated default off for the same reason as E30: it adds candidates, which moves clustered level PRICES even though it can't inflate confluence COUNTS. Real-data smoke (AAPL, 180-day window, flag forced on): 8 HVNs + 9 LVNs, 35 base candidates → 52; sane spread, no explosion. **Note for E33:** +17 candidates on one ticker is a large share of the level map, and their cluster-mean pull is the same effect recorded under E30. Tests: 5 (brief's 1 + an edge-bin regression pinning the boundary fix, a flat-profile degenerate case, a family-collapse assertion, and a flag-gating assertion). Full suite 898 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 102 files.
+- **Next:** Task E36 (Divergence quality upgrade)
 
 ## Global Constraints
 
@@ -3497,7 +3498,7 @@ git commit -m "feat: level-touch candle quality"
 **Interfaces:**
 - Produces: `volume_profile_nodes(df, lookback_days=180, bins=42) -> dict {"hvn": [prices], "lvn": [prices]}` — high-volume nodes = local maxima of the volume-at-price histogram (≥1.5× median bin), low-volume nodes = local minima (≤0.5× median). `collect_candidate_levels` appends `(price, "HVN")` / `(price, "LVN")`. Pure level-map enrichment: LVNs naturally become TP-zone material (price moves fast through them), HVNs stop shelter — the existing confluence machinery does the rest.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
 
 ```python
 def test_bimodal_volume_finds_nodes():
@@ -3515,9 +3516,9 @@ def test_bimodal_volume_finds_nodes():
     assert any(102 < p < 118 for p in nodes["lvn"])
 ```
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement** (add to `levels.py`, near the other source builders)
+- [x] **Step 3: Implement** (add to `levels.py`, near the other source builders)
 
 ```python
 def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
@@ -3551,9 +3552,9 @@ and in `collect_candidate_levels`:
         pass
 ```
 
-- [ ] **Step 4: Run the levels tests + new test — PASS.**
+- [x] **Step 4: Run the levels tests + new test — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/levels.py tests/test_edge_factors.py

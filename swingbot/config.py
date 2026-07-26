@@ -475,6 +475,15 @@ FIELDS: list[Field] = [
                "every confluence count -- a scenario can gain a confirming family and clear "
                "MIN_CONFLUENCE it would previously have failed -- so it ships off until the "
                "E33 walk-forward folds and the E40 shadow forward-gate have judged it."),
+    Field("VOLUME_PROFILE_NODES_ENABLED", "VOLUME_PROFILE_NODES_ENABLED", "Universe & Scanning",
+          "Volume-profile HVN/LVN levels enabled",
+          type="checkbox", default="false",
+          help="Adds every high- and low-volume node of the 180-day volume-at-price histogram "
+               "(swingbot/core/levels.py:volume_profile_nodes) to the candidate level map, on "
+               "top of the single highest-volume node already used. They register under the "
+               "existing Volume Profile strategy family, so confluence COUNTS don't inflate -- "
+               "but the extra candidates do move clustered level prices. Off until the E33 "
+               "walk-forward folds judge it."),
     Field("DATA_DRIVEN_STOPS_ENABLED", "DATA_DRIVEN_STOPS_ENABLED", "Universe & Scanning",
           "MAE-informed stop sizing enabled",
           type="checkbox", default="false",

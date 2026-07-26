@@ -295,3 +295,81 @@ def test_pierce_without_reclaim_earns_no_rejection_points():
     held = _bar(-1, 100.0, 100.2, 97.0, 100.1, 3_000_000)   # closed back above 98
     assert pattern_quality_at_level(broke, len(broke) - 1, 98.0, "bullish") < \
            pattern_quality_at_level(held, len(held) - 1, 98.0, "bullish")
+
+
+def test_bimodal_volume_finds_nodes():
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.levels import volume_profile_nodes
+    # price spends time at 100 and 120 (heavy volume), races through 110
+    closes = np.concatenate([np.full(80, 100.0), np.linspace(100, 120, 20),
+                             np.full(80, 120.0)])
+    vols = np.concatenate([np.full(80, 5e6), np.full(20, 4e5), np.full(80, 5e6)])
+    df = make_ohlcv(closes, spread_pct=1.0, volumes=vols)
+    nodes = volume_profile_nodes(df)
+    assert any(abs(p - 100) < 2 for p in nodes["hvn"])
+    assert any(abs(p - 120) < 2 for p in nodes["hvn"])
+    assert any(102 < p < 118 for p in nodes["lvn"])
+
+
+def test_edge_bins_are_scanned_too():
+    """Regression for the brief's own loop bounds: `range(1, len(hist)-1)`
+    skips the first and last bin, and np.histogram puts the data's extremes
+    exactly there -- so a bimodal profile whose two modes ARE the min and
+    max price (the brief's own fixture) returned zero HVNs. Verified
+    empirically before fixing, not reasoned about."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.levels import volume_profile_nodes
+    closes = np.concatenate([np.full(60, 100.0), np.linspace(100, 110, 10),
+                             np.full(60, 110.0)])
+    vols = np.concatenate([np.full(60, 5e6), np.full(10, 4e5), np.full(60, 5e6)])
+    nodes = volume_profile_nodes(make_ohlcv(closes, spread_pct=1.0, volumes=vols))
+    lo = min(nodes["hvn"])
+    hi = max(nodes["hvn"])
+    assert lo < 101 and hi > 109, f"boundary modes missed: {nodes['hvn']}"
+
+
+def test_flat_profile_yields_no_nodes():
+    """No structure, no claims: a single price with uniform volume has no
+    acceptance shelf and no vacuum."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.levels import volume_profile_nodes
+    df = make_ohlcv(np.full(120, 100.0), spread_pct=0.0,
+                    volumes=np.full(120, 1e6))
+    nodes = volume_profile_nodes(df)
+    assert nodes["lvn"] == []
+
+
+def test_hvn_lvn_collapse_into_the_existing_volume_profile_family():
+    """They are the same strategy as levels.py's existing "Volume Profile
+    HVN" candidate, computed at more resolution -- counting them as extra
+    distinct families would double-count one piece of evidence, which is
+    the exact thing strategy_family() exists to prevent."""
+    from swingbot.core import levels
+    assert levels.strategy_family("Volume Profile HVN") == "Volume Profile"
+    assert levels.strategy_family("Volume Profile LVN") == "Volume Profile"
+
+
+def test_hvn_lvn_levels_are_flag_gated(monkeypatch):
+    import numpy as np
+    from swingbot import config
+    from swingbot.core import levels
+    from swingbot.core.strategy_types import HORIZONS
+    from tests.conftest import make_ohlcv
+    closes = np.concatenate([np.full(80, 100.0), np.linspace(100, 120, 20),
+                             np.full(80, 120.0)])
+    vols = np.concatenate([np.full(80, 5e6), np.full(20, 4e5), np.full(80, 5e6)])
+    df = make_ohlcv(closes, spread_pct=1.0, volumes=vols)
+    price = float(df["Close"].iloc[-1])
+
+    assert config.VOLUME_PROFILE_NODES_ENABLED is False, "this source must ship default-off"
+    off = levels.collect_candidate_levels(df, HORIZONS["4w"], price)
+    assert not any(src.endswith(("HVN", "LVN")) and src != "Volume Profile HVN"
+                   for _, src in off)
+
+    monkeypatch.setattr(config, "VOLUME_PROFILE_NODES_ENABLED", True)
+    on = levels.collect_candidate_levels(df, HORIZONS["4w"], price)
+    assert any(src == "Volume Profile LVN" for _, src in on)
+    assert len(on) > len(off)
