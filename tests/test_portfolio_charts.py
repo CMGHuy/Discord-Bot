@@ -44,3 +44,10 @@ def test_mc_fan_renders(tmp_path):
     path = render_mc_fan(sim, 10_000.0, str(tmp_path),
                          percentile_paths=sim["percentile_paths"])
     assert os.path.getsize(path) > 5_000
+
+
+def test_growth_path_chart_renders(tmp_path):
+    from swingbot.core.charts.portfolio_charts import render_growth_path
+    curve = [(f"2026-{m:02d}-01", 10_000 * (1.02 ** m)) for m in range(1, 13)]
+    path = render_growth_path(curve, str(tmp_path))
+    assert os.path.getsize(path) > 5_000

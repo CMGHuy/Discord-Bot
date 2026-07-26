@@ -125,3 +125,31 @@ def render_mc_fan(sim_result: dict, start_balance: float, out_dir: str,
     ax.grid(color=GRID_COLOR, lw=0.4)
     ax.legend(loc="upper left", fontsize=8)
     return _save(fig, out_dir, "mc_fan.png")
+
+
+def render_growth_path(equity_curve: list, out_dir: str, target: float = 10.0,
+                       horizons_years: tuple = (3, 5, 8)) -> str:
+    import datetime as dt
+    fig, ax = plt.subplots(figsize=(10, 5.5), facecolor=CHART_BG, dpi=110)
+    ax.set_facecolor(CHART_BG)
+    dates = [dt.date.fromisoformat(str(d)[:10]) for d, _ in equity_curve]
+    values = [v for _, v in equity_curve]
+    start = values[0]
+    ax.plot(dates, values, color=UP_COLOR, lw=1.6, label="actual")
+    for years in horizons_years:
+        daily = target ** (1 / (years * 365.25))
+        ref_dates = [dates[0] + dt.timedelta(days=i)
+                     for i in range(0, years * 366, 14)]
+        ax.plot(ref_dates, [start * daily ** (d - dates[0]).days for d in ref_dates],
+                lw=0.9, ls="--", alpha=0.6, color=MUTED_TEXT_COLOR)
+        ax.annotate(f"10x in {years}y", xy=(ref_dates[-1], start * target),
+                    fontsize=7, color=MUTED_TEXT_COLOR)
+    ax.plot([dates[-1]], [values[-1]], "o", color=TEXT_COLOR)
+    ax.annotate(f"{values[-1] / start:.2f}x", xy=(dates[-1], values[-1]),
+                color=TEXT_COLOR, fontsize=9, va="bottom")
+    ax.set_yscale("log")
+    ax.grid(color=GRID_COLOR, lw=0.4)
+    ax.tick_params(colors=MUTED_TEXT_COLOR)
+    ax.set_title("growth path vs required rates", color=TEXT_COLOR, fontsize=10, loc="left")
+    ax.legend(loc="upper left", fontsize=8)
+    return _save(fig, out_dir, "growth_path.png")
