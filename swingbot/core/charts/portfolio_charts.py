@@ -65,3 +65,36 @@ def render_heat_map(open_trades: list, caps: dict, out_dir: str) -> str:
     ax.set_title(f"portfolio heat — cap {total_cap:.1f}%", color=TEXT_COLOR,
                  fontsize=11, loc="left")
     return _save(fig, out_dir, "heat_treemap.png")
+
+
+def render_corr_matrix(open_trades: list, dfs: dict, out_dir: str) -> str:
+    from swingbot.core.edge.correlation import DEFAULT_THRESHOLD, returns_corr
+    tickers = [t["ticker"] for t in open_trades if t["ticker"] in dfs]
+    n = len(tickers)
+    fig, ax = plt.subplots(figsize=(1.2 * max(n, 4), 1.0 * max(n, 4)),
+                           facecolor=CHART_BG, dpi=110)
+    ax.set_facecolor(CHART_BG)
+    if n < 2:
+        ax.text(0.5, 0.5, "need 2+ open positions", ha="center", va="center",
+                color=MUTED_TEXT_COLOR, transform=ax.transAxes)
+        ax.set_xticks([]); ax.set_yticks([])
+        return _save(fig, out_dir, "corr_matrix.png")
+    m = np.eye(n)
+    for i in range(n):
+        for j in range(i + 1, n):
+            c = returns_corr(dfs[tickers[i]], dfs[tickers[j]]) or 0.0
+            m[i, j] = m[j, i] = c
+    im = ax.imshow(m, cmap="RdYlGn_r", vmin=-1, vmax=1)
+    for i in range(n):
+        for j in range(n):
+            ax.text(j, i, f"{m[i, j]:.2f}", ha="center", va="center",
+                    fontsize=7, color=TEXT_COLOR)
+            if i != j and m[i, j] > DEFAULT_THRESHOLD:
+                ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
+                                           edgecolor=DOWN_COLOR, lw=2))
+    ax.set_xticks(range(n), tickers, rotation=45, color=TEXT_COLOR, fontsize=8)
+    ax.set_yticks(range(n), tickers, color=TEXT_COLOR, fontsize=8)
+    ax.set_title("90d returns correlation — outlined > 0.75", color=TEXT_COLOR,
+                 fontsize=10, loc="left")
+    fig.colorbar(im, ax=ax, shrink=0.8)
+    return _save(fig, out_dir, "corr_matrix.png")
