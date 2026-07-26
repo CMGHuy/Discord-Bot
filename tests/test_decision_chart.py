@@ -31,3 +31,11 @@ def test_skeleton_renders_with_empty_context(tmp_path, daily_df):
     assert os.path.exists(path)
     assert os.path.getsize(path) > 10_000       # a real figure, not a stub
     assert path.endswith(".png")
+
+
+def test_weekly_panel_renders(tmp_path, daily_df):
+    from swingbot.core.edge.factors import weekly_frame
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    ctx = {"weekly": {"df": weekly_frame(daily_df), "pivots": [105.0, 112.0]}}
+    path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
+    assert os.path.getsize(path) > 10_000
