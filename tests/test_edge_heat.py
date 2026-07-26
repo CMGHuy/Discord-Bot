@@ -52,3 +52,27 @@ def test_unknown_sector_never_blocks():
     from swingbot.core.edge.heat import sector_check
     chk = sector_check([], BALANCE, "MYSTERY", 1.0, sectors={}, cap_pct=3.0)
     assert chk["allowed"] is True
+
+
+def test_portfolio_report_renders_every_section():
+    from swingbot.commands.growth import portfolio_report
+    state = {"open_heat": 4.5, "heat_cap": 6.0,
+             "sector_heat": {"Energy": 3.0, "Tech": 1.5},
+             "clusters": [["XOM", "CVX"]],
+             "throttle_mult": 0.75, "paused": False,
+             "kill": {"on": False, "reason": None},
+             "growth": {"current_multiple": 1.32, "pct_to_target": 12.1}}
+    out = portfolio_report(state)
+    assert "4.5% / 6.0%" in out
+    assert "Energy" in out and "3.0%" in out
+    assert "XOM" in out and "CVX" in out
+    assert "x0.75" in out
+    assert "1.32x" in out
+
+
+def test_portfolio_report_kill_state_prominent():
+    from swingbot.commands.growth import portfolio_report
+    state = {"open_heat": 0.0, "heat_cap": 6.0, "sector_heat": {}, "clusters": [],
+             "throttle_mult": 0.0, "paused": True,
+             "kill": {"on": True, "reason": "manual"}, "growth": {}}
+    assert "KILL SWITCH ON" in portfolio_report(state)
