@@ -483,8 +483,14 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         # with. Counts as every one of its horizons at once (none of them
         # can run either) so progress.total still adds up correctly
         # against horizons_to_scan-per-ticker.
+        # E47 fix (task-review finding 1): a total fetch failure is the
+        # worst case data_fail_frac exists to catch (a broken feed), so it
+        # must feed the same flag/denominator as the E16 quality-issues
+        # path below -- otherwise a mass outage where most tickers return
+        # df=None never raises data_fail_frac at all.
         if progress is not None:
             progress.done += max(1, len(horizons_to_scan))
+        stats["data_quality_failed"] = True
         return stats
     log.debug("Fetched %d bars for %s (close=%.2f)", len(df), ticker, float(df["Close"].iloc[-1]))
 

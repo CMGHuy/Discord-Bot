@@ -473,6 +473,92 @@ def test_no_cluster_blocked_attr_adds_no_field():
     assert not [f for f in embed.fields if "correlated cluster" in f.name.lower()]
 
 
+def _stub_sizing(monkeypatch, shares=100.0, position_value=10_000.0, risk_amount=100.0):
+    # Deterministic non-zero "real" sizing so the zeroed-vs-real contrast in
+    # the kill-switch tests below is unambiguous either way. Both entry
+    # points the trade-plan table exercises need stubbing: the 3-arg legacy
+    # compute_position_size(entry, stop, account_cfg) imported directly into
+    # embeds_mod's namespace, and the 2-arg account.compute_position_size(entry,
+    # stop) that leg_rows() calls via the `account` module reference (same
+    # split tests/test_embeds_badges.py's leg_rows tests already rely on).
+    monkeypatch.setattr(embeds_mod, "load_account_config",
+                        lambda: {"balance": 10_000.0, "risk_pct": 1.0})
+    monkeypatch.setattr(embeds_mod, "compute_position_size",
+                        lambda entry, stop, cfg: {
+                            "shares": shares, "position_value": position_value,
+                            "risk_amount": risk_amount, "balance": 10_000.0,
+                            "risk_pct": 1.0, "capped": False, "max_position_pct": 100.0,
+                        })
+    monkeypatch.setattr(embeds_mod.account, "compute_position_size",
+                        lambda entry, stop: {
+                            "shares": shares, "position_value": position_value,
+                            "risk_amount": risk_amount, "balance": 10_000.0,
+                            "risk_pct": 1.0, "capped": False, "max_position_pct": 100.0,
+                        })
+
+
+def test_kill_switch_blocked_item_zeroes_suggested_size_and_pnl(monkeypatch):
+    _stub_sizing(monkeypatch)
+    item = make_item()
+    item.kill_switch_blocked = {"on": True, "reason": "drawdown >20%", "at": "2026-07-26T00:00:00+00:00"}
+    embed = _build(item)
+    cur = config.CURRENCY_SYMBOL
+
+    headline_fields = [f for f in embed.fields if "ENTRIES PAUSED" in f.name]
+    assert len(headline_fields) == 1
+    assert "drawdown >20%" in headline_fields[0].name
+    assert "0 shares" in headline_fields[0].value
+
+    plan_field = next(f for f in embed.fields if f.name.startswith("🎯 Trade plan"))
+    assert "Suggested size" in plan_field.value
+    assert "~0.0 shares" in plan_field.value
+    # Exact "{currency}0" (not a substring of a real number like "10,000")
+    # proves these rows were actually zeroed, not just coincidentally small.
+    assert f"{cur}0 deployed" in plan_field.value
+    assert f"{cur}0 at risk" in plan_field.value
+    pnl_line = next(line for line in plan_field.value.splitlines() if "Possible P&L" in line)
+    assert f"+{cur}0 at target" in pnl_line
+    assert f"-{cur}0 at stop" in pnl_line
+
+
+def test_no_kill_switch_blocked_attr_shows_real_suggested_size(monkeypatch):
+    # Contrast: without item.kill_switch_blocked set, the exact same stubbed
+    # sizing renders the REAL (nonzero) numbers -- proves the zeroing above
+    # is conditional on the attribute, not a permanent regression that
+    # always renders 0.
+    _stub_sizing(monkeypatch, shares=100.0, position_value=10_000.0, risk_amount=100.0)
+    item = make_item()
+    embed = _build(item)
+    cur = config.CURRENCY_SYMBOL
+
+    assert not [f for f in embed.fields if "ENTRIES PAUSED" in f.name]
+    plan_field = next(f for f in embed.fields if f.name.startswith("🎯 Trade plan"))
+    assert "~100.0 shares" in plan_field.value
+    assert "~0.0 shares" not in plan_field.value
+    assert f"{cur}10,000 deployed" in plan_field.value
+    pnl_line = next(line for line in plan_field.value.splitlines() if "Possible P&L" in line)
+    assert f"{cur}0 at target" not in pnl_line
+    assert f"{cur}0 at stop" not in pnl_line
+
+
+def test_kill_switch_blocked_v2_leg_rows_omit_pnl(monkeypatch):
+    # Task E47 review Finding 2c, v2-plan surface: force_zero=True (wired in
+    # _build_trade_plan_table when item.kill_switch_blocked is set) makes
+    # leg_rows' `if sizing and sizing.get("shares")` guard False for the
+    # zeroed 0.0 share count, so the TP1 leg row shows the level with no
+    # dollar P&L at all -- same "no $ figure" contract test_leg_rows_unsized
+    # already covers for a None sizing (tests/test_embeds_badges.py).
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    _stub_sizing(monkeypatch, shares=100.0, position_value=10_000.0, risk_amount=100.0)
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item.kill_switch_blocked = {"on": True, "reason": "drawdown >20%", "at": "2026-07-26T00:00:00+00:00"}
+    embed = _build(item)
+
+    plan_field = next(f for f in embed.fields if f.name.startswith("🎯 Trade plan"))
+    tp1_line = next(line for line in plan_field.value.splitlines() if "TP1 leg" in line)
+    assert "$" not in tp1_line and "€" not in tp1_line and "£" not in tp1_line
+
+
 def _intraday_field(embed):
     fields = [f for f in embed.fields if "intraday" in f.name.lower()]
     assert len(fields) <= 1

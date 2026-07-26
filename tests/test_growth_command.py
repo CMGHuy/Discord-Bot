@@ -7,9 +7,10 @@ that math ever runs."""
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 
-from swingbot.commands.growth import growth_command
+from swingbot.commands.growth import growth_command, killswitch_command
 
 
 @pytest.mark.parametrize("target", [1.0, 0.0, -3.0])
@@ -53,3 +54,84 @@ def test_growth_command_normal_target_proceeds_past_validation(monkeypatch):
     assert "```" in message
     assert "GROWTH REALITY CHECK" in message
     assert "target 5x" in message
+
+
+# --- !killswitch (Task E47 review Finding 2b) ------------------------------
+# The command's own logic (status/on/off replies) is tested via
+# killswitch_command.callback(ctx, action=...) directly -- same pattern as
+# growth_command above, bypassing discord.py's command-invocation machinery
+# so no real Discord connection is needed. The @commands.has_permissions
+# guard is tested separately below since it lives on the Command wrapper
+# (killswitch_command.checks), not inside the callback -- calling .callback
+# directly, as the reply tests do, would never exercise it.
+
+def test_killswitch_command_status_reports_off_by_default(monkeypatch, tmp_path):
+    from swingbot.core.edge import throttle
+    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(killswitch_command.callback(ctx, action="status"))
+
+    ctx.send.assert_awaited_once()
+    message = ctx.send.call_args[0][0]
+    assert "off" in message
+
+
+def test_killswitch_command_on_engages_and_status_reflects_it(monkeypatch, tmp_path):
+    from swingbot.core.edge import throttle
+    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(killswitch_command.callback(ctx, action="on"))
+    message = ctx.send.call_args[0][0]
+    assert "engaged" in message
+    assert throttle.kill_state()["on"] is True
+
+    ctx.send.reset_mock()
+    asyncio.run(killswitch_command.callback(ctx, action="status"))
+    message = ctx.send.call_args[0][0]
+    assert "ON" in message and "manual" in message
+
+
+def test_killswitch_command_off_releases(monkeypatch, tmp_path):
+    from swingbot.core.edge import throttle
+    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
+    throttle.set_kill(True, reason="manual")
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(killswitch_command.callback(ctx, action="off"))
+    message = ctx.send.call_args[0][0]
+    assert "released" in message
+    assert throttle.kill_state()["on"] is False
+
+
+def test_killswitch_command_has_administrator_permission_guard():
+    """The decorator must actually be present -- not just documented in the
+    docstring -- so !killswitch can't be engaged/released by a non-admin."""
+    assert killswitch_command.checks, (
+        "killswitch_command must carry at least one check "
+        "(the @commands.has_permissions(administrator=True) guard)"
+    )
+
+
+def test_killswitch_command_permission_check_rejects_non_administrator():
+    from discord.ext.commands.errors import MissingPermissions
+
+    ctx = MagicMock()
+    ctx.permissions = discord.Permissions.none()
+
+    with pytest.raises(MissingPermissions):
+        killswitch_command.checks[0](ctx)
+
+
+def test_killswitch_command_permission_check_allows_administrator():
+    ctx = MagicMock()
+    ctx.permissions = discord.Permissions.all()
+
+    assert killswitch_command.checks[0](ctx) is True

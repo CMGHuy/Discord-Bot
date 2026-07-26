@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import numpy as np
 import swingbot.config as config
+from swingbot.core.edge import throttle
 from swingbot.core.performance import TradeLog
 from swingbot.core.scanning import engine
 from swingbot.core.scanning.engine import ScanProgress
@@ -393,3 +394,47 @@ def test_intraday_lookup_failure_never_breaks_the_alert(monkeypatch, tmp_path):
 
     items = _drive_alert_loop(monkeypatch, tmp_path, _boom)
     assert all(item.intraday is None for item in items)
+
+
+def test_mass_fetch_failure_raises_data_fail_frac_and_engages_kill_switch(monkeypatch, tmp_path):
+    """Task E47 review Finding 1 regression: a total per-ticker fetch
+    failure (get_daily_data returns None, the `df is None` early-return in
+    _scan_one) must count toward data_fail_frac the same way the later E16
+    data-quality-issues path does. Before the fix, stats["data_quality_failed"]
+    stayed at its default False on the df-is-None path, so the denominator
+    (len(tickers)) never moved for a mass feed outage -- the kill switch's
+    "broken data feed" trigger couldn't see the worst version of the failure
+    mode it exists to catch.
+
+    4 of 5 watchlist tickers here fetch as None (80% > KILL_DATA_FAIL_FRAC's
+    20%); the 5th ("OK") fetches real data so the scan has something to
+    analyze. SPY (config.MARKET_REGIME_TICKER) also resolves to None through
+    the same stub, which keeps spy_move_pct at 0 -- and the balance-history
+    stub keeps dd_pct at 0 -- so the ONLY trigger that can fire here is the
+    data-quality one under test. dedup_scan_items short-circuits to `[]`
+    (same pattern as every other _sync_run_scan test in this file) since the
+    kill-switch computation happens before the alert-building loop and
+    doesn't need it to run.
+    """
+    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
+    assert throttle.kill_state()["on"] is False   # sanity: off before the scan
+
+    good_df = _structured_df()
+    tickers = ["OK", "BAD1", "BAD2", "BAD3", "BAD4"]
+
+    monkeypatch.setattr(engine, "load_watchlist", lambda: tickers)
+    monkeypatch.setattr(
+        engine, "get_daily_data",
+        lambda ticker, period=None: good_df.copy() if ticker == "OK" else None,
+    )
+    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
+    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+    monkeypatch.setattr(engine.account_module, "get_balance_history_points", lambda: [])
+    monkeypatch.setattr(engine, "dedup_scan_items", lambda items: [])
+
+    engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
+
+    st = throttle.kill_state()
+    assert st["on"] is True, "80% fetch-failure rate must cross KILL_DATA_FAIL_FRAC and engage the switch"
+    assert "data quality" in st["reason"]
