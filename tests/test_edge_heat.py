@@ -76,3 +76,27 @@ def test_portfolio_report_kill_state_prominent():
              "throttle_mult": 0.0, "paused": True,
              "kill": {"on": True, "reason": "manual"}, "growth": {}}
     assert "KILL SWITCH ON" in portfolio_report(state)
+
+
+def test_collect_portfolio_state_degrades_on_account_config_failure(monkeypatch):
+    """Task E52 review Finding (Important): load_account_config() is file I/O
+    plus a possible write-back and was the one sub-collector in
+    _collect_portfolio_state() NOT try/excepted. If it raises, `balance`
+    must still fall back to 0.0 (not NameError) and the growth-path section
+    must degrade to {} rather than the whole command crashing."""
+    from swingbot.commands.growth import _collect_portfolio_state
+    from swingbot.core import account as account_module
+
+    def _boom():
+        raise OSError("disk read failed")
+
+    monkeypatch.setattr(account_module, "load_account_config", _boom)
+
+    state = _collect_portfolio_state()
+
+    # Must return a dict with safe defaults, not propagate the exception.
+    assert isinstance(state, dict)
+    assert state.get("growth") == {}
+    # heat/sector_heat/throttle must have used balance=0.0, not raised.
+    assert state.get("open_heat") == pytest.approx(0.0)
+    assert state.get("sector_heat") == {}

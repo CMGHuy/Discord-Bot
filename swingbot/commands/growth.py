@@ -87,8 +87,12 @@ def _collect_portfolio_state() -> dict:
 
     state: dict = {}
 
-    cfg = account_module.load_account_config()
-    balance = cfg.get("balance", cfg.get("base_balance", 0.0))
+    try:
+        cfg = account_module.load_account_config()
+        balance = cfg.get("balance", cfg.get("base_balance", 0.0))
+    except Exception:
+        cfg = {}
+        balance = 0.0
 
     open_trades: list = []
     try:
