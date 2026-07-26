@@ -276,6 +276,13 @@ FIELDS: list[Field] = [
                "against this separate, tighter budget -- three 'different' 0.9-correlated trades are "
                "really one trade at 3x size. Blocking is flagged, not hidden, same as the portfolio "
                "heat cap above."),
+    Field("SECTOR_HEAT_CAP_PCT", "SECTOR_HEAT_CAP_PCT", "Account Defaults",
+          "Sector heat cap (%)", type="float", default="3.0",
+          min=0.5, max=10, step=0.5,
+          help="Sum of risk-to-stop across every open position in the same sector never alerts a new entry "
+               "in that sector past this % of equity. Prevents overconcentration in a single sector. Blocking "
+               "is flagged, not hidden -- a blocked plan still alerts, labeled with the sector name and heat, "
+               "so you can diversify deliberately."),
     Field("POSITION_SIZE_PCT_OF_ACCOUNT", "POSITION_SIZE_PCT_OF_ACCOUNT", "Account Defaults",
           "Position size % of account",
           type="float", default="0.1", min=0.001, max=100, step=0.01,

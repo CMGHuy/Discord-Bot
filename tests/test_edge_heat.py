@@ -35,3 +35,20 @@ def test_closing_one_frees_heat():
     chk = heat_check(trades, BALANCE, candidate_risk_pct=1.0, cap_pct=6.0)
     assert chk["allowed"] is True
     assert chk["remaining"] == pytest.approx(2.0)
+
+
+def test_sector_heat_and_cap():
+    from swingbot.core.edge.heat import sector_check, sector_heat
+    sectors = {"AAA": "Energy", "BBB": "Energy", "CCC": "Utilities", "CAND": "Energy"}
+    trades = [{"ticker": "AAA", "risk_pct": 2.0}, {"ticker": "BBB", "risk_pct": 1.0},
+              {"ticker": "CCC", "risk_pct": 2.0}]
+    heat = sector_heat(trades, BALANCE, sectors)
+    assert heat["Energy"] == pytest.approx(3.0)
+    chk = sector_check(trades, BALANCE, "CAND", 1.0, sectors, cap_pct=3.0)
+    assert chk["allowed"] is False and chk["sector"] == "Energy"
+
+
+def test_unknown_sector_never_blocks():
+    from swingbot.core.edge.heat import sector_check
+    chk = sector_check([], BALANCE, "MYSTERY", 1.0, sectors={}, cap_pct=3.0)
+    assert chk["allowed"] is True

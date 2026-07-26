@@ -35,3 +35,26 @@ def heat_check(open_trades: list, balance: float, candidate_risk_pct: float,
         "remaining": round(remaining, 3),
         "cap": cap,
     }
+
+
+def sector_heat(open_trades: list, balance: float, sectors: dict) -> dict:
+    out: dict = {}
+    for t in open_trades:
+        sec = sectors.get(t.get("ticker"))
+        if sec:
+            out[sec] = out.get(sec, 0.0) + trade_risk_pct(t, balance)
+    return {k: round(v, 3) for k, v in out.items()}
+
+
+def sector_check(open_trades: list, balance: float, candidate_ticker: str,
+                 candidate_risk_pct: float, sectors: dict,
+                 cap_pct: float | None = None) -> dict:
+    cap = cap_pct if cap_pct is not None else getattr(config, "SECTOR_HEAT_CAP_PCT", 3.0)
+    sec = sectors.get(candidate_ticker)
+    if sec is None:
+        return {"allowed": True, "sector": None, "sector_heat": 0.0,
+                "remaining": cap, "cap": cap}
+    heat = sector_heat(open_trades, balance, sectors).get(sec, 0.0)
+    remaining = max(0.0, cap - heat)
+    return {"allowed": candidate_risk_pct <= remaining + 1e-9, "sector": sec,
+            "sector_heat": heat, "remaining": round(remaining, 3), "cap": cap}
