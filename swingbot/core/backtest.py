@@ -441,14 +441,24 @@ def run_backtest_daterange(
     date_from: str,
     date_to: str,
     frictions: bool = True,
+    exit_model: str = "v1",
+    scale_out: bool = False,
+    tp2_mode: str = "none",
 ) -> BacktestSummary:
     """
     Same as run_backtest() but only evaluates signals whose entry_date falls
     within [date_from, date_to] (both inclusive, ISO format YYYY-MM-DD).
     The full df is still used for indicator warmup; the filter is applied
     after the backtest so indicator values are correct for every bar.
+
+    `exit_model`/`scale_out`/`tp2_mode` are pass-throughs added for the E39
+    walk-forward harness, which has to measure folds under the same exit
+    model the E22 friction-adjusted baseline was measured with. Their
+    defaults match run_backtest's, so every existing caller is unaffected.
     """
-    summary = run_backtest(ticker, df, strategy, horizon_key, frictions=frictions)
+    summary = run_backtest(ticker, df, strategy, horizon_key, frictions=frictions,
+                           exit_model=exit_model, scale_out=scale_out,
+                           tp2_mode=tp2_mode)
     if date_from or date_to:
         from_dt = date_from or "0000-01-01"
         to_dt   = date_to   or "9999-12-31"
