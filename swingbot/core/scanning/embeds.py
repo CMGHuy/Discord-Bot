@@ -495,6 +495,23 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
+    intraday = getattr(item, "intraday", None)
+    if intraday is not None:
+        # Edge plan E29: a LIVE-ONLY annotation. The stop-entry trigger is
+        # still the daily one -- this only tells the operator whether the
+        # 1h tape is currently on the plan's side. It is deliberately NOT a
+        # backtest filter (no honest intraday history to fold-test it), so
+        # it must never be presented as validated, and `None` (no data)
+        # renders nothing at all rather than a misleading "against".
+        sections["headline"].append((
+            "⏱ Intraday timing",
+            ("✅ confirms — last 1h close is on the plan's side of today's VWAP"
+             if intraday else
+             "⚠️ against — last 1h close is on the wrong side of today's VWAP; "
+             "the daily trigger is unchanged, but entering now fights the tape"),
+            False,
+        ))
+
     if plan_v2 is not None and plan_v2.badge == "WEAK":
         # First field on the embed for any WEAK plan, both layouts -- a
         # single-line caution replacing the old multi-line badge_field_for

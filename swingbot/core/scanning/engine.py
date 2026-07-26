@@ -157,6 +157,7 @@ class ScanItem:
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
+    intraday: bool | None = None      # 1h close vs today's VWAP on this plan's side; None = no reading = neutral, never blocks (Task E29)
 
     @property
     def all_requirements_met(self) -> bool:
@@ -1167,6 +1168,20 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         cluster_chk = corr_mod.cluster_check(cluster_exp, account_cfg.get("risk_pct", 1.0))
         if not cluster_chk["allowed"]:
             item.cluster_blocked = cluster_chk
+
+        # Intraday entry-timing annotation (Edge plan E29). Live-only and
+        # advisory: it never gates, resizes, or reprices anything -- the
+        # plan's daily stop-entry trigger is untouched. Computed here, in
+        # the alert loop, so it costs one lookup per POSTED alert (a
+        # handful per scan) rather than one per scanned ticker; the E19
+        # cache makes repeats free for 4h. Any failure leaves it None,
+        # which renders as no field at all -- an annotation must never be
+        # able to take down an alert.
+        try:
+            item.intraday = rs_factors.intraday_confirms(result.ticker, result.trend)
+        except Exception as e:
+            log.debug("Intraday confirmation unavailable for %s: %s", result.ticker, e)
+            item.intraday = None
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)

@@ -97,3 +97,56 @@ def test_breadth_split_universe():
 def test_breadth_none_when_universe_tiny():
     from swingbot.core.edge.factors import breadth_pct_above_50ema
     assert breadth_pct_above_50ema({"A": make_trend_df(150, +0.3)}) is None
+
+
+def _hourly_day(prices, volumes=None, start="2026-07-10 14:30"):
+    import pandas as pd
+    idx = pd.date_range(start, periods=len(prices), freq="h")
+    v = volumes or [1_000_000] * len(prices)
+    return pd.DataFrame({"Open": prices, "High": [p * 1.001 for p in prices],
+                         "Low": [p * 0.999 for p in prices], "Close": prices,
+                         "Volume": v}, index=idx)
+
+
+def test_intraday_confirms_above_vwap():
+    from swingbot.core.edge.factors import intraday_confirms
+    rising = _hourly_day([100.0, 100.5, 101.0, 101.5])   # last close > day VWAP
+    assert intraday_confirms("X", "bullish", intraday_df=rising) is True
+    assert intraday_confirms("X", "bearish", intraday_df=rising) is False
+
+
+def test_intraday_none_is_neutral():
+    from swingbot.core.edge.factors import intraday_confirms
+    assert intraday_confirms("X", "bullish", intraday_df=None,
+                             fetch=lambda s: None) is None
+
+
+def test_intraday_uses_only_the_last_day_of_bars():
+    """A multi-day frame must be scored against TODAY's running VWAP only --
+    yesterday's session cannot be allowed to anchor today's reading."""
+    import pandas as pd
+    from swingbot.core.edge.factors import intraday_confirms
+    yesterday = _hourly_day([200.0] * 4, start="2026-07-09 14:30")
+    today = _hourly_day([100.0, 100.5, 101.0, 101.5], start="2026-07-10 14:30")
+    both = pd.concat([yesterday, today])
+    # Pooled across both days the last close (101.5) is far BELOW the
+    # combined VWAP (~150); scored on today alone it is above.
+    assert intraday_confirms("X", "bullish", intraday_df=both) is True
+
+
+def test_intraday_falls_back_to_fetch_and_stays_neutral_on_empty():
+    import pandas as pd
+    from swingbot.core.edge.factors import intraday_confirms
+    calls = []
+
+    def fetch(sym):
+        calls.append(sym)
+        return _hourly_day([100.0, 99.5, 99.0, 98.5])
+
+    assert intraday_confirms("AAPL", "bullish", fetch=fetch) is False
+    assert intraday_confirms("AAPL", "bearish", fetch=fetch) is True
+    assert calls == ["AAPL", "AAPL"]
+    # Empty frame and a zero-volume day are both "no reading", not False.
+    assert intraday_confirms("X", "bullish", intraday_df=pd.DataFrame()) is None
+    assert intraday_confirms("X", "bullish",
+                             intraday_df=_hourly_day([100.0, 101.0], volumes=[0, 0])) is None

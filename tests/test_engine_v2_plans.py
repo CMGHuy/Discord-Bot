@@ -309,3 +309,87 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path):
     )
     for key in ("checked", "scenarios_found", "fully_qualifying", "shown"):
         assert funnel_serial[key] == funnel_parallel[key]
+
+
+def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
+    """Run _sync_run_scan all the way THROUGH the alert-building loop.
+
+    Every other _sync_run_scan test in this file short-circuits
+    `dedup_scan_items` to `[]` precisely so this loop never runs (it is
+    network-bound: charts, earnings lookups, secondary notifications).
+    Task E29's intraday annotation is wired INSIDE that loop, so testing
+    it means letting the loop run with its network-bound helpers stubbed
+    out -- otherwise the wiring has zero coverage and could be deleted
+    without a single test noticing.
+
+    Returns the ScanItem list exactly as it looked when build_embed was
+    called, i.e. after the loop stamped item.intraday.
+    """
+    df = _structured_df()
+
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(config, "MIN_REWARD_PCT", 0.5)
+    monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
+    monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
+    monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
+    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+
+    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(
+        engine, "get_daily_data",
+        lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
+    )
+    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
+    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+
+    # Network / filesystem-bound parts of the alert loop, stubbed.
+    monkeypatch.setattr(engine, "earnings_within_window", lambda t, d: None)
+    monkeypatch.setattr(engine, "get_market_events", lambda d: [])
+    monkeypatch.setattr(engine, "generate_trade_chart",
+                        lambda *a, **k: str(tmp_path / "chart.png"))
+    monkeypatch.setattr(engine, "notify_secondary", lambda *a, **k: None)
+
+    # The annotation under test.
+    monkeypatch.setattr(engine.rs_factors, "intraday_confirms", intraday_fn)
+
+    seen = []
+
+    def _capture_embed(item, *a, **k):
+        seen.append(item)
+        return SimpleNamespace(fields=[])
+
+    monkeypatch.setattr(engine, "build_embed", _capture_embed)
+
+    engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
+    assert seen, "fixture must produce at least one alert to exercise the loop"
+    return seen
+
+
+def test_alert_loop_stamps_intraday_annotation_on_every_item(monkeypatch, tmp_path):
+    """Task E29: the alert loop asks for a 1h/VWAP reading per posted alert
+    and stamps it on the item so build_embed can render it."""
+    calls = []
+
+    def _confirms(ticker, direction):
+        calls.append((ticker, direction))
+        return True
+
+    items = _drive_alert_loop(monkeypatch, tmp_path, _confirms)
+    assert all(item.intraday is True for item in items)
+    assert calls and all(t == "TEST" for t, _ in calls)
+    assert all(d in ("bullish", "bearish") for _, d in calls)
+    # One lookup per POSTED alert, not per scanned ticker-horizon.
+    assert len(calls) == len(items)
+
+
+def test_intraday_lookup_failure_never_breaks_the_alert(monkeypatch, tmp_path):
+    """An advisory annotation must never be able to take down an alert:
+    a raising lookup leaves item.intraday at None (renders as no field)
+    and the alert is still built."""
+    def _boom(ticker, direction):
+        raise RuntimeError("yfinance is down")
+
+    items = _drive_alert_loop(monkeypatch, tmp_path, _boom)
+    assert all(item.intraday is None for item in items)

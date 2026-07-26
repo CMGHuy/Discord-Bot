@@ -471,3 +471,29 @@ def test_no_cluster_blocked_attr_adds_no_field():
     item = make_item()
     embed = _build(item)
     assert not [f for f in embed.fields if "correlated cluster" in f.name.lower()]
+
+
+def _intraday_field(embed):
+    fields = [f for f in embed.fields if "intraday" in f.name.lower()]
+    assert len(fields) <= 1
+    return fields[0] if fields else None
+
+
+def test_intraday_annotation_renders_confirm_and_against():
+    # Edge plan E29: a live-only annotation -- it never blocks or resizes
+    # anything, it just tells the operator whether the 1h tape agrees.
+    item = make_item()
+    item.intraday = True
+    assert "confirms" in _intraday_field(_build(item)).value
+
+    item = make_item()
+    item.intraday = False
+    assert "against" in _intraday_field(_build(item)).value
+
+
+def test_no_intraday_reading_adds_no_field():
+    # None = no data = neutral: nothing to say, so say nothing.
+    item = make_item()
+    item.intraday = None
+    assert _intraday_field(_build(item)) is None
+    assert _intraday_field(_build(make_item())) is None

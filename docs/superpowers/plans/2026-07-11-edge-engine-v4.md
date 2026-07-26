@@ -48,7 +48,10 @@
 - Task E24 (Per-strategy regime gates) done: `strategy_types.REGIME_ALLOW: dict[str, tuple] = {}` (ships empty — no strategy is actually restricted yet) + `entry_filters.apply_regime_gate(bull, bear, strategy, regimes)` (no-op unless `config.REGIME_GATES_ENABLED` AND a `REGIME_ALLOW` entry AND a real `regimes` series are all present — all three are false/absent today) + `entries_for()` gained an optional trailing `regimes: pd.Series | None = None` parameter, calling `apply_regime_gate` right after the existing `STRATEGY_GATES` mask. SCOPE NARROWED before dispatch (verified, not scope-avoidance): the brief's own file list included `backtest.py`/`signals.py`, but `run_backtest()`/`_vectorized_entries()` (backtest.py) and all 11 `STRATEGY_FUNCS` (signals.py, via `strategy.evaluate_all()`) genuinely have no SPY/market dataframe anywhere in their call chains to build `regime2.regime_series(spy_df)` from — wiring that in would mean adding a new parameter to `run_backtest`/`evaluate_all` AND updating every caller (`run_backtest_range.py`, `tune_strategy.py`, `backtest_scenarios.py`, ...), a separate, much larger architectural task, not this one. Since `entries_for`'s new parameter is a backward-compatible trailing default, all 12 existing call sites needed zero changes. Reviewer independently re-verified the call chains and confirmed the scope call was correct, re-ran the targeted suite (8/8), and found only Minor polish notes (import-placement style, an empty-tuple-vs-missing-key edge case for whoever populates REGIME_ALLOW at E33, one brief-inherited untested assertion branch). Approved, no fix round needed.
 - Task E25 (Relative-strength factor) done: `swingbot/core/edge/factors.py` (`relative_return`, `rs_percentile`, `refresh_rs_cache`, `load_rs_cache`) + `tests/test_edge_factors.py` (4 tests). Brief's own sample code called a nonexistent `jsonio.write_json` — implementer correctly substituted the real `jsonio.atomic_write_json` (identical `(path, obj) -> None` signature, matches every other store in the codebase). Scan wiring (prose-only in the brief) resolved by the controller before dispatch and given as explicit instructions: fetch `spy_df` via the same try/except pattern `get_regime()` already uses; add `ScanItem.rs_percentile: float | None = None`; call `refresh_rs_cache(fresh_data, spy_df)` exactly once, in the main thread, BEFORE `map_tickers()` is even invoked (stronger than merely "not inside `_scan_one`" — eliminates any threading question entirely); stamp `item.rs_percentile` in the merge loop right before the single `scan_items.append(item)` call site shared by both `require_confirmation` branches; `spy_df is None` (or any fetch/cache-write failure) leaves every item's `rs_percentile` at its `None` default, never crashes the scan. Reviewer independently verified every one of these five points with file:line evidence and confirmed no reachable crash path. Approved, zero findings (two Minor notes: a negligible duplicate `relative_return` computation constrained by the brief's fixed signatures, and the implementer's choice to wrap both the fetch and the cache-write in one try/except rather than just the fetch — both accepted as correct, disclosed judgment calls).
 - Task E26 (Sector RS factor) done: `sector_rs_percentile()` + `rs_score()` appended to `swingbot/core/edge/factors.py` (pure additive, no wiring — E25's module already has the only file this task touches). Brief's own "Interfaces" prose said `sector_of_etf` defaults to `universe.sector_map('etfs')` "inverted", but the brief's own Step 3 code just calls `sector_map("etfs")` directly with no inversion — checked before dispatch: `sector_map(name)` (`universe.py:91-92`) already returns `{symbol: sector}`, exactly the shape needed, so the Step 3 code is correct and the prose is simply imprecise, not a real discrepancy. Implementer (haiku) transcribed the code verbatim, 6/6 tests pass (4 from E25 + 2 new). Controller reviewed directly (small, single-file, byte-for-byte match to brief, no wiring risk) rather than dispatching a separate reviewer — confirmed via `git show` diff and an independent test rerun. Approved.
-- **Next:** Task E27 (Multi-timeframe factor)
+- Task E27 (Multi-timeframe alignment score) done (commit 2a84de2): `weekly_frame()` + `_swing_lows()` + `mtf_alignment()` appended to `factors.py`, 3 tests added. Pure additive, no wiring — `mtf_min` stays a filter *candidate* for the E33 grid, exactly as the brief specifies. Committed in an earlier session without a Progress-block entry; verified retroactively this session against `git show` and a targeted test rerun.
+- Task E28 (Breadth internals) done (commits 2a84de2 for `breadth_pct_above_50ema` + a7d23ab for the scan hook): `BREADTH_MIN_TICKERS = 20` / `breadth_pct_above_50ema()` in `factors.py` (2 tests), plus the `_sync_run_scan` hook — computed once per scan straight off the already-crawled `fresh_data` (zero extra fetches), stamped on every `ScanItem.breadth` in the post-join merge loop and published in the funnel dict for E37/E66. One deliberate deviation from the brief, verified this session: the brief also said "pass into `regime2.classify(spy_df, breadth)`", but `regime2` is not wired into the scan path at all yet (E24 left it standalone by an explicit, reviewed scope decision, and E33 is the task that wires regime into scanning) — there is no `classify()` call site in `engine.py` to pass breadth into, so that half is correctly deferred to E33 rather than silently dropped. Same retroactive-verification note as E27.
+- Task E29 (Intraday entry-timing check) done: `intraday_confirms(symbol, direction, intraday_df=None, fetch=None)` appended to `factors.py` — last 1h close vs today's running VWAP, scored on the LAST DAY of bars only, `None` (neutral) on no data / empty day / zero-volume day. Wired as a **live-only annotation** exactly as the brief demands: `ScanItem.intraday` stamped in `engine.py`'s alert-building loop (one lookup per POSTED alert, not per scanned ticker — E19's 4h cache makes repeats free), rendered by `embeds.py` as a `⏱ Intraday timing` field through the `sections["headline"]` accumulator (never a raw `add_field`, per the SECTION_ORDER trap). It gates nothing, resizes nothing, reprices nothing; the daily stop-entry trigger is untouched and it is deliberately absent from the backtest (no honest intraday history to fold-test), so it is never presented as validated. Wiring location corrected from the brief before implementing: the brief's commit list named `swingbot/commands/scanning.py`, but that module's `_send_alerts` only posts already-built tuples — sizing/embed-building live in `core/scanning/engine.py`'s alert loop (the same correction E7/E8 already had to make). Two failures the annotation must survive are covered: a raising lookup leaves `intraday=None` and the alert still builds; `None` renders no field at all rather than a misleading "against". Test coverage beyond the brief's own two tests: a multi-day frame test proving yesterday's session can't anchor today's VWAP, a fetch-fallback/zero-volume test, 2 embed-rendering tests, and 2 alert-loop wiring tests (`_drive_alert_loop` drives `_sync_run_scan` all the way THROUGH the alert loop with only its network-bound helpers stubbed — every other `_sync_run_scan` test in the file short-circuits `dedup_scan_items` to `[]`, so without this the E29 wiring would have had literally zero coverage). Mutation-checked: deleting the wiring line turns `test_alert_loop_stamps_intraday_annotation_on_every_item` red. Full suite 849 passed / 54 skipped (+1 known pre-existing wall-clock failure in `test_trade_monitor_wiring.py`, carried forward), py_compile clean across 101 files.
+- **Next:** Task E30 (Anchored VWAP levels)
 
 ## Global Constraints
 
@@ -2801,7 +2804,7 @@ git commit -m "feat: sector RS"
 **Interfaces:**
 - Produces: `weekly_frame(daily_df) -> pd.DataFrame` (W-FRI resample: first/max/min/last/sum — no new data source); `mtf_alignment(daily_df, direction) -> int` (0–3) — one point each, mirrored for bearish: (1) weekly close above a rising 10-week EMA; (2) weekly higher-low structure (the two most recent completed weekly swing lows ascend); (3) daily close above the prior week's pivot `(H+L+C)/3`. Filter candidate `mtf_min` (grid {1, 2}) for E33.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
 
 ```python
 def test_clean_uptrend_aligns_fully():
@@ -2828,9 +2831,9 @@ def test_weekly_frame_shape():
     assert len(w) < len(df) / 4
 ```
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement** (append to `factors.py`)
+- [x] **Step 3: Implement** (append to `factors.py`)
 
 ```python
 def weekly_frame(daily_df: pd.DataFrame) -> pd.DataFrame:
@@ -2875,9 +2878,9 @@ def mtf_alignment(daily_df: pd.DataFrame, direction: str) -> int:
     return score
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/factors.py tests/test_edge_factors.py
@@ -2893,7 +2896,7 @@ git commit -m "feat: MTF alignment score"
 **Interfaces:**
 - Produces: `breadth_pct_above_50ema(universe_dfs: dict) -> float | None` — percent (0–100) of universe tickers whose last close is above their 50-EMA; `None` when fewer than 20 usable tickers (a breadth reading off 6 names is noise). Computed once per scan from the already-crawled universe frames; feeds `regime2.classify(breadth=...)` and the E33 filter candidate (`no new longs when breadth < X`, grid {40, 45, 50}).
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
 
 ```python
 def test_breadth_split_universe():
@@ -2909,9 +2912,9 @@ def test_breadth_none_when_universe_tiny():
     assert breadth_pct_above_50ema({"A": make_trend_df(150, +0.3)}) is None
 ```
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement** (append to `factors.py`)
+- [x] **Step 3: Implement** (append to `factors.py`)
 
 ```python
 BREADTH_MIN_TICKERS = 20
@@ -2934,9 +2937,9 @@ def breadth_pct_above_50ema(universe_dfs: dict) -> float | None:
 
 Scan hook (`_sync_run_scan`, right after the crawl): `breadth = breadth_pct_above_50ema(dfs)`; store it on the progress/funnel dict, pass into `regime2.classify(spy_df, breadth)`, and stamp `item.breadth = breadth` for E37/E66.
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/factors.py swingbot/core/scanning/engine.py tests/test_edge_factors.py
@@ -2953,7 +2956,7 @@ git commit -m "feat: market breadth factor"
 - Produces: `intraday_confirms(symbol, direction, intraday_df=None) -> bool | None` — last 1h close vs the current day's running VWAP (`cum(TP×V)/cum(V)` over today's bars): above ⇒ True for longs; `None` (neutral, NEVER blocks) when no intraday data / empty day. `intraday_df=None` fetches via `data_store.get_intraday` (E19).
 - **Live-only annotation** — stop-entry plans keep their daily trigger; this only annotates plan quality on the alert (`⏱ intraday: confirms/against/n-a`). Explicitly NOT a backtest filter: there is no intraday history depth to fold-test it honestly, and it must never be presented as validated.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
 
 ```python
 def _hourly_day(prices, volumes=None):
@@ -2978,9 +2981,9 @@ def test_intraday_none_is_neutral():
                              fetch=lambda s: None) is None
 ```
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement** (append to `factors.py`)
+- [x] **Step 3: Implement** (append to `factors.py`)
 
 ```python
 def intraday_confirms(symbol: str, direction: str,
@@ -3008,9 +3011,9 @@ def intraday_confirms(symbol: str, direction: str,
 
 Alert wiring: in the alert build (background thread), `item.intraday = intraday_confirms(ticker, direction)`; embed renders `⏱ intraday: ✅ confirms / ⚠️ against / — n/a`.
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/factors.py swingbot/commands/scanning.py tests/test_edge_factors.py

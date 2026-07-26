@@ -131,3 +131,26 @@ def breadth_pct_above_50ema(universe_dfs: dict) -> float | None:
     if total < BREADTH_MIN_TICKERS:
         return None
     return round(100.0 * above / total, 1)
+
+
+def intraday_confirms(symbol: str, direction: str,
+                      intraday_df: "pd.DataFrame | None" = None,
+                      fetch=None) -> bool | None:
+    """Last 1h close vs today's running VWAP. None = no data = NEUTRAL --
+    this annotation may inform the operator, never gate an alert, and is
+    deliberately absent from the backtest (no honest intraday history)."""
+    if intraday_df is None:
+        if fetch is None:
+            from swingbot.core.data_store import get_intraday
+            fetch = get_intraday
+        intraday_df = fetch(symbol)
+    if intraday_df is None or intraday_df.empty:
+        return None
+    last_day = intraday_df.index[-1].date()
+    day = intraday_df[intraday_df.index.date == last_day]
+    if day.empty or day["Volume"].sum() <= 0:
+        return None
+    tp = (day["High"] + day["Low"] + day["Close"]) / 3.0
+    vwap = float((tp * day["Volume"]).cumsum().iloc[-1] / day["Volume"].cumsum().iloc[-1])
+    above = float(day["Close"].iloc[-1]) >= vwap
+    return above if direction == "bullish" else not above
