@@ -153,3 +153,28 @@ def render_growth_path(equity_curve: list, out_dir: str, target: float = 10.0,
     ax.set_title("growth path vs required rates", color=TEXT_COLOR, fontsize=10, loc="left")
     ax.legend(loc="upper left", fontsize=8)
     return _save(fig, out_dir, "growth_path.png")
+
+
+def render_fold_evidence(component_results: list, out_dir: str) -> str:
+    from swingbot.core.backtest_wf import GATE_MAX_DEGRADATION_R
+    n = len(component_results)
+    fig, ax = plt.subplots(figsize=(max(8, 2.2 * n), 5), facecolor=CHART_BG, dpi=110)
+    ax.set_facecolor(CHART_BG)
+    width = 0.25
+    year_colors = ("#4dd0e1", "#ba68c8", "#ffa726")   # 2021/2022/2023
+    for gi, res in enumerate(component_results):
+        for fi, delta in enumerate(res["folds"]):
+            ax.bar(gi + (fi - 1) * width, delta, width * 0.9, color=year_colors[fi])
+        color = UP_COLOR if res["verdict"] == "PASS" else DOWN_COLOR
+        ax.text(gi, max(res["folds"]) + 0.005, f"{res['component']}\n{res['verdict']}",
+                ha="center", fontsize=7, color=color)
+    ax.axhline(0, color=MUTED_TEXT_COLOR, lw=0.8)
+    ax.axhline(-GATE_MAX_DEGRADATION_R, color=DOWN_COLOR, lw=0.8, ls="--")
+    ax.annotate("max allowed degradation", xy=(0.99, -GATE_MAX_DEGRADATION_R),
+                xycoords=("axes fraction", "data"), fontsize=7,
+                color=DOWN_COLOR, ha="right", va="top")
+    ax.set_xticks([]); ax.tick_params(colors=MUTED_TEXT_COLOR)
+    ax.set_ylabel("Δ expectancy_r vs baseline", color=MUTED_TEXT_COLOR, fontsize=8)
+    ax.set_title("walk-forward fold evidence (bars: 2021 / 2022 / 2023)",
+                 color=TEXT_COLOR, fontsize=10, loc="left")
+    return _save(fig, out_dir, "fold_evidence.png")

@@ -51,3 +51,11 @@ def test_growth_path_chart_renders(tmp_path):
     curve = [(f"2026-{m:02d}-01", 10_000 * (1.02 ** m)) for m in range(1, 13)]
     path = render_growth_path(curve, str(tmp_path))
     assert os.path.getsize(path) > 5_000
+
+
+def test_fold_evidence_renders(tmp_path):
+    from swingbot.core.charts.portfolio_charts import render_fold_evidence
+    results = [{"component": "rs_min_60", "folds": [0.03, 0.02, -0.01], "verdict": "PASS"},
+               {"component": "mtf_min_2", "folds": [0.01, -0.06, 0.02], "verdict": "FAIL"}]
+    path = render_fold_evidence(results, str(tmp_path))
+    assert os.path.getsize(path) > 5_000
