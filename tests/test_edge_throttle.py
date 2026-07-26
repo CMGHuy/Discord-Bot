@@ -65,3 +65,25 @@ def test_kill_state_roundtrip(tmp_path, monkeypatch):
     assert st["on"] is True and st["reason"] == "manual" and st["at"]
     throttle.set_kill(False)
     assert throttle.kill_state()["on"] is False
+
+
+def test_recycle_candidates():
+    import datetime as dt
+    from swingbot.core.plan_manager import recycle_candidates
+
+    class Plan:
+        def __init__(self, pid, age_days, time_stop, entry=100.0, rps=2.0):
+            self.plan_id = pid; self.ticker = pid
+            self.status = "ACTIVE"; self.direction = "bullish"
+            self.entry_price = entry; self.risk_per_share = rps
+            self.time_stop_days = time_stop
+            self.activated_at = (dt.date.today() - dt.timedelta(days=age_days)).isoformat()
+
+    stale = Plan("STALE", age_days=10, time_stop=5)      # old + going nowhere
+    young = Plan("YOUNG", age_days=2, time_stop=5)
+    mover = Plan("MOVER", age_days=10, time_stop=5)
+    out = recycle_candidates([stale, young, mover],
+                             prices={"STALE": 100.2, "YOUNG": 100.2, "MOVER": 101.5})
+    ids = [c["plan_id"] for c in out]
+    assert ids == ["STALE"]                              # mover is at +0.75R
+    assert out[0]["progress_r"] == pytest.approx(0.1)

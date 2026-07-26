@@ -439,3 +439,31 @@ def run_manager_tick() -> list[PlanEvent]:
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog())
     return _MANAGER.poll()
+
+
+RECYCLE_PROGRESS_R = 0.3
+
+
+def recycle_candidates(plans: list, prices: dict) -> list:
+    """Positions past their strategy's time stop with <0.3R to show for it.
+    Advice-only: the notice says 'this capital is statistically dead',
+    the operator decides."""
+    import datetime as dt
+    out = []
+    today = dt.date.today()
+    for p in plans:
+        if getattr(p, "status", None) not in ("ACTIVE", "PARTIAL"):
+            continue
+        ts_days = getattr(p, "time_stop_days", None)
+        price = prices.get(p.ticker)
+        if ts_days is None or price is None or not getattr(p, "activated_at", None):
+            continue
+        age = (today - dt.date.fromisoformat(p.activated_at[:10])).days
+        if age <= ts_days:
+            continue
+        sign = 1 if p.direction == "bullish" else -1
+        progress = (price - p.entry_price) * sign / p.risk_per_share
+        if progress < RECYCLE_PROGRESS_R:
+            out.append({"plan_id": p.plan_id, "ticker": p.ticker,
+                        "age_days": age, "progress_r": round(progress, 3)})
+    return out
