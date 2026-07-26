@@ -253,6 +253,22 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
             "trades_skipped": skipped, "trades_per_month": round(taken / months, 1)}
 
 
+def _trades_similar(a, b, tol_pct: float) -> bool:
+    """Same test `has_similar_open_trade` (performance.py) applies live: same
+    direction, entry/stop/target all within `tol_pct` of each other --
+    regardless of which strategy/horizon produced either trade."""
+    def _close(x, y):
+        ref = max(abs(x), abs(y))
+        if ref == 0:
+            return True
+        return abs(x - y) / ref * 100 <= tol_pct
+
+    return (a.direction == b.direction
+            and _close(a.entry, b.entry)
+            and _close(a.stop_loss, b.stop_loss)
+            and _close(a.take_profit, b.take_profit))
+
+
 def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=None) -> list:
     """Build a chronological signal list for `portfolio_replay` from real
     fold-run trades. Mirrors `_default_run`'s iteration structure (same
@@ -265,6 +281,23 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
     signals -- open/unresolved trades can't be replayed under capital
     constraints because `portfolio_replay` needs a known exit to free
     heat.
+
+    Dedup mirrors the live scanner's own same-ticker guard (`has_open_trade`
+    / `has_similar_open_trade` in performance.py, enforced from
+    scanning/engine.py ~1025-1039): the live account never opens a second
+    position on a ticker while a near-identical one (same direction,
+    entry/stop/target within `config.DEDUP_TOLERANCE_PCT`) is already open,
+    no matter which strategy/horizon found either one. Naively pooling every
+    (strategy, horizon) combo's trades here would let `portfolio_replay`
+    model several such "concurrent" near-duplicate positions on one ticker
+    stacking against the heat/sector caps -- capital the live account
+    structurally could never have committed twice. So per symbol, trades
+    are walked in entry-date order and a candidate is dropped (never becomes
+    a signal) if a still-open similar trade -- one whose exit_date is later
+    than this candidate's entry_date -- was already kept. This mirrors
+    `require_confirmation=True` (the automatic/scheduled scan path engine.py
+    actually applies the guard on), since a walk-forward replay models
+    repeated automatic scanning over time, not a one-off `!check`.
     """
     from swingbot.core.backtest import ALL_STRATEGIES, run_backtest_daterange
     from swingbot.core.strategy_types import HORIZONS
@@ -273,12 +306,15 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
     strategies = ALL_STRATEGIES if strategies is None else strategies
     horizons = list(HORIZONS) if horizons is None else horizons
     sectors = sector_map(getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
+    tol_pct = getattr(config, "DEDUP_TOLERANCE_PCT", 2.0)
 
     signals = []
     for sym in _symbols_for_folds():
         df = _frame_for(sym)
         if df is None or not liquidity_ok(df):
             continue
+
+        candidates = []
         for strat in strategies:
             for hk in horizons:
                 s = run_backtest_daterange(sym, df, strat, hk, start, end,
@@ -286,8 +322,17 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
                                            scale_out=True, tp2_mode="levels")
                 for t in (s.trades or []):
                     if t.r_multiple is not None and t.exit_date is not None:
-                        signals.append({"date": t.entry_date, "ticker": sym,
-                                        "sector": sectors.get(sym),
-                                        "r_multiple": t.r_multiple,
-                                        "exit_date": t.exit_date})
+                        candidates.append(t)
+
+        candidates.sort(key=lambda t: t.entry_date)
+        open_similar: list = []
+        for t in candidates:
+            open_similar = [o for o in open_similar if o.exit_date > t.entry_date]
+            if any(_trades_similar(o, t, tol_pct) for o in open_similar):
+                continue
+            open_similar.append(t)
+            signals.append({"date": t.entry_date, "ticker": sym,
+                            "sector": sectors.get(sym),
+                            "r_multiple": t.r_multiple,
+                            "exit_date": t.exit_date})
     return signals
