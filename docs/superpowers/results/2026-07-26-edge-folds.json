@@ -1,0 +1,211 @@
+{
+  "universe": "watchlist",
+  "symbols": [
+    "AAPL",
+    "ABNB",
+    "ADBE",
+    "AMAT",
+    "AMD",
+    "AMZN",
+    "ARM",
+    "ASML",
+    "ASTS",
+    "AVGO",
+    "AXON",
+    "BA",
+    "BKNG",
+    "CEG",
+    "CRM",
+    "CRWD",
+    "CRWV",
+    "CVX",
+    "DDOG",
+    "DELL",
+    "DOCU",
+    "EA",
+    "EBAY",
+    "FTNT",
+    "GC=F",
+    "GD",
+    "GEV",
+    "GLW",
+    "GM",
+    "GOOGL",
+    "GS",
+    "HD",
+    "HIMS",
+    "HOOD",
+    "HPQ",
+    "IBM",
+    "ILMN",
+    "INTC",
+    "INTU",
+    "IREN",
+    "ISRG",
+    "JNJ",
+    "JPM",
+    "META",
+    "MRNA",
+    "MRVL",
+    "MSFT",
+    "MSTR",
+    "MU",
+    "NBIS",
+    "NFLX",
+    "NKE",
+    "NOW",
+    "NVDA",
+    "ORCL",
+    "PANW",
+    "PEP",
+    "PFE",
+    "PLTR",
+    "PYPL",
+    "QBTS",
+    "QCOM",
+    "RKLB",
+    "SBUX",
+    "SHOP",
+    "SI=F",
+    "SNDK",
+    "SNOW",
+    "SNPS",
+    "SOFI",
+    "SPCX",
+    "STX",
+    "TSLA",
+    "UBER",
+    "UNH",
+    "V",
+    "WDC",
+    "WMT"
+  ],
+  "strategies": [
+    "EMA Crossover",
+    "VWAP",
+    "Fibonacci",
+    "Support/Resistance",
+    "RSI",
+    "MACD",
+    "Elliott Wave",
+    "MA Ribbon",
+    "Break & Retest",
+    "RSI Divergence",
+    "Volume Profile"
+  ],
+  "horizons": [
+    "2w",
+    "4w",
+    "2m",
+    "3m",
+    "4m",
+    "5m",
+    "6m",
+    "7m",
+    "8m",
+    "9m"
+  ],
+  "elapsed_sec": 15206.173228025436,
+  "inert": {
+    "DATA_DRIVEN_STOPS_ENABLED": "E31/E32 reach plan_engine.build_strategy_plan only; the backtest sizes through backtest._trade_plan_at, which takes no stop_mult/tp2_r. Needs those threaded through run_backtest first.",
+    "REGIME_GATES_ENABLED": "entry_filters.apply_regime_gate needs a `regimes` series that run_backtest -> _vectorized_entries -> entries_for never supplies, and strategy_types.REGIME_ALLOW is empty, so there is nothing to gate even if it did.",
+    "PYRAMIDING_ENABLED": "E38 lives in the live plan manager; plan_engine.simulate_exit has no pyramiding concept, so the backtest cannot observe it.",
+    "EARNINGS_BLACKOUT_DAYS": "E18's gate was never wired into the scan or backtest path."
+  },
+  "results": {
+    "AVWAP_LEVELS_ENABLED": {
+      "result": {
+        "folds": [
+          {
+            "test_years": "2021",
+            "baseline": {
+              "expectancy_r": 0.21253741496598638,
+              "n": 1617
+            },
+            "component": {
+              "expectancy_r": 0.21239641311069885,
+              "n": 1617
+            },
+            "delta_expectancy_r": -0.00014100185528753695,
+            "n": 1617
+          },
+          {
+            "test_years": "2022",
+            "baseline": {
+              "expectancy_r": 0.0345835322195704,
+              "n": 838
+            },
+            "component": {
+              "expectancy_r": 0.03448210023866348,
+              "n": 838
+            },
+            "delta_expectancy_r": -0.00010143198090691724,
+            "n": 838
+          },
+          {
+            "test_years": "2023",
+            "baseline": {
+              "expectancy_r": 0.18932992565055762,
+              "n": 1076
+            },
+            "component": {
+              "expectancy_r": 0.18925836431226764,
+              "n": 1076
+            },
+            "delta_expectancy_r": -7.156133828997713e-05,
+            "n": 1076
+          }
+        ],
+        "pooled_delta_expectancy_r": -0.0001046650581614771
+      },
+      "gate": "FAIL"
+    },
+    "VOLUME_PROFILE_NODES_ENABLED": {
+      "result": {
+        "folds": [
+          {
+            "test_years": "2021",
+            "baseline": {
+              "expectancy_r": 0.21253741496598638,
+              "n": 1617
+            },
+            "component": {
+              "expectancy_r": 0.2125170068027211,
+              "n": 1617
+            },
+            "delta_expectancy_r": -2.0408163265289714e-05,
+            "n": 1617
+          },
+          {
+            "test_years": "2022",
+            "baseline": {
+              "expectancy_r": 0.0345835322195704,
+              "n": 838
+            },
+            "component": {
+              "expectancy_r": 0.033821002386634845,
+              "n": 838
+            },
+            "delta_expectancy_r": -0.0007625298329355518,
+            "n": 838
+          },
+          {
+            "test_years": "2023",
+            "baseline": {
+              "expectancy_r": 0.18932992565055762,
+              "n": 1076
+            },
+            "component": {
+              "expectancy_r": 0.18961059479553904,
+              "n": 1076
+            },
+            "delta_expectancy_r": 0.0002806691449814269,
+            "n": 1076
+          }
+        ],
+        "pooled_delta_expectancy_r": -0.0001674229504064715
+      },
+      "gate": "FAIL"
+    }
+  }
+}
