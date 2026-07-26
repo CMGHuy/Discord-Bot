@@ -58,3 +58,12 @@ def test_rs_strip_renders(tmp_path, daily_df):
     ctx = {"rs": {"rel_series": rel, "percentile": 78.0}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
     assert os.path.getsize(path) > 10_000
+
+
+def test_regime_shading_renders(tmp_path, daily_df):
+    import pandas as pd
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    labels = (["bull_quiet"] * 150 + ["bear_volatile"] * 150)
+    ctx = {"regimes": pd.Series(labels, index=daily_df.index)}
+    path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
+    assert os.path.getsize(path) > 10_000

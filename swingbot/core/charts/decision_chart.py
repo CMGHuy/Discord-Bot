@@ -15,10 +15,13 @@ import pandas as pd
 
 from swingbot.core.charts.chart_style import (
     AVWAP_COLOR, CHART_BG, DISCLAIMER_TEXT, ENTRY_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
-    PRO_STYLE, STOP_COLOR, TARGET_COLOR, TEXT_COLOR,
+    PRO_STYLE, STOP_COLOR, TARGET_COLOR, TEXT_COLOR, UP_COLOR,
 )
 
 PANEL_LOOKBACK_BARS = 130
+
+REGIME_SHADE = {"bull_quiet": (UP_COLOR, 0.05), "bull_volatile": (UP_COLOR, 0.12),
+                "bear_quiet": (STOP_COLOR, 0.05), "bear_volatile": (STOP_COLOR, 0.12)}
 
 
 def draw_placeholder(ax, text: str) -> None:
@@ -28,8 +31,17 @@ def draw_placeholder(ax, text: str) -> None:
     ax.set_xticks([]); ax.set_yticks([])
 
 
-def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None) -> None:
+def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None) -> None:
     part = daily_df.tail(PANEL_LOOKBACK_BARS)
+    if regimes is not None:
+        r = regimes.reindex(part.index).ffill()
+        run_start = 0
+        vals = r.values
+        for i in range(1, len(vals) + 1):
+            if i == len(vals) or vals[i] != vals[run_start]:
+                color, alpha = REGIME_SHADE.get(vals[run_start], (GRID_COLOR, 0.0))
+                ax.axvspan(run_start - 0.5, i - 0.5, color=color, alpha=alpha, zorder=0)
+                run_start = i
     mpf.plot(part, type="candle", ax=ax, style=PRO_STYLE, warn_too_much_data=10_000)
     levels = [(plan.trigger_price or plan.entry_price, ENTRY_COLOR, "entry"),
               (plan.stop_loss, STOP_COLOR, "stop"),
@@ -67,7 +79,7 @@ def render_decision_chart(symbol: str, daily_df: pd.DataFrame, plan,
     ax_rs = fig.add_subplot(gs[1, 3])
     ax_info = fig.add_subplot(gs[2, 3])
 
-    _draw_main_panel(ax_main, daily_df, plan, context.get("avwaps"))
+    _draw_main_panel(ax_main, daily_df, plan, context.get("avwaps"), context.get("regimes"))
     # Later tasks replace these placeholders panel by panel:
     from swingbot.core.charts import decision_panels as panels  # this module, split below
     panels.draw_weekly(ax_weekly, context.get("weekly"))
