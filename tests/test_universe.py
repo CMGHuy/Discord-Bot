@@ -1,4 +1,7 @@
+import os
+
 import numpy as np
+import pytest
 
 from tests.conftest import make_ohlcv
 from swingbot.core.universe import liquidity_ok
@@ -212,3 +215,42 @@ def test_map_tickers_isolates_errors():
         return t
     out = map_tickers(flaky, ["A", "BOOM", "C"], workers=3)
     assert out == ["A", None, "C"]
+
+
+# --- Timeframe-grouped cache layout -----------------------------------------
+
+def test_timeframe_name_accepts_both_spellings():
+    from swingbot.core.data_store import timeframe_name
+    assert timeframe_name("1h") == "hourly"
+    assert timeframe_name("60m") == "hourly"
+    assert timeframe_name("hourly") == "hourly"
+    assert timeframe_name("1d") == timeframe_name("daily") == "daily"
+    assert timeframe_name("1wk") == timeframe_name("weekly") == "weekly"
+    assert timeframe_name("1mo") == timeframe_name("monthly") == "monthly"
+
+
+def test_timeframe_name_rejects_unknown():
+    import pytest
+    from swingbot.core.data_store import timeframe_name
+    with pytest.raises(ValueError):
+        timeframe_name("3decades")
+
+
+def test_cache_path_groups_by_timeframe_and_sanitizes(tmp_path):
+    from swingbot.core.data_store import cache_path
+    p = cache_path("AAPL", "1h", base_dir=str(tmp_path))
+    assert p.endswith(os.path.join("hourly", "AAPL.csv"))
+    # futures/index symbols must not create stray nested folders
+    assert cache_path("GC=F", "hourly", base_dir=str(tmp_path)).endswith(
+        os.path.join("hourly", "GC_F.csv"))
+    assert cache_path("^GSPC", "daily", base_dir=str(tmp_path)).endswith(
+        os.path.join("daily", "_GSPC.csv"))
+
+
+def test_both_spellings_hit_the_same_file(tmp_path):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import save_to_disk, load_from_disk
+    save_to_disk(make_ohlcv(np.full(12, 100.0)), "TEST", "1h", base_dir=str(tmp_path))
+    assert len(load_from_disk("TEST", "hourly", base_dir=str(tmp_path))) == 12
+

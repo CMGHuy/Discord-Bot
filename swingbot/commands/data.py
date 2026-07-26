@@ -89,24 +89,34 @@ async def cached_cmd(ctx):
         await ctx.send("Nothing cached yet. Use `!download INTERVAL [TICKER]` first.")
         return
 
+    # Layout is market_data/{timeframe}/{TICKER}.csv -- summarise per
+    # timeframe folder rather than listing every symbol, since a populated
+    # cache is 500+ files per timeframe and would blow the 2000-char limit.
     lines = ["**Locally cached data:**", "```"]
-    lines.append(f"{'Ticker':8s} {'Interval':9s} {'Rows':>7s} {'Size':>8s}")
+    lines.append(f"{'Timeframe':10s} {'Symbols':>8s} {'Rows':>10s} {'Size':>8s}")
     found = False
-    for ticker_dir in sorted(os.listdir(base_dir)):
-        full_dir = os.path.join(base_dir, ticker_dir)
+    for tf in sorted(os.listdir(base_dir)):
+        full_dir = os.path.join(base_dir, tf)
         if not os.path.isdir(full_dir):
             continue
+        symbols = rows = size_kb = 0
         for fname in sorted(os.listdir(full_dir)):
+            if not fname.endswith(".csv"):
+                continue
             path = os.path.join(full_dir, fname)
-            interval = fname.replace(".csv", "")
-            size_kb = os.path.getsize(path) / 1024
-            with open(path) as f:
-                rows = sum(1 for _ in f) - 1
-            lines.append(f"{ticker_dir:8s} {interval:9s} {rows:7d} {size_kb:7.0f}K")
+            symbols += 1
+            size_kb += os.path.getsize(path) / 1024
+            try:
+                with open(path) as f:
+                    rows += sum(1 for _ in f) - 1
+            except OSError:
+                continue
+        if symbols:
+            lines.append(f"{tf:10s} {symbols:8d} {rows:10d} {size_kb:7.0f}K")
             found = True
     lines.append("```")
     if not found:
-        await ctx.send("Nothing cached yet. Use `!download INTERVAL [TICKER]` first.")
+        await ctx.send("Nothing cached yet. Use `!download TIMEFRAME [TICKER]` first.")
         return
     await ctx.send("\n".join(lines))
 

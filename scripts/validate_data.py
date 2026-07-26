@@ -10,11 +10,11 @@ Dual-mode, mirroring the E15 precedent in fetch_backtest_data.py's
     backtest_scenarios.py) read. This is the meaningful mode: running it
     over the real, populated cache.
   * --universe NAME: validates market_data/ (owned by
-    swingbot.core.data_store, nested {TICKER}/{interval}.csv files) for
-    the watchlist + a named universe (e.g. sp500) -- data_store.py's
-    intended future cache for the expanded universe, not yet read by any
-    backtest script (same disclosed gap as fetch_backtest_data.py's
-    --universe mode).
+    swingbot.core.data_store, grouped by candle timeframe as
+    {timeframe}/{TICKER}.csv, e.g. market_data/daily/AAPL.csv) for the
+    watchlist + a named universe (e.g. sp500) -- data_store.py's intended
+    future cache for the expanded universe, not yet read by any backtest
+    script (same disclosed gap as fetch_backtest_data.py's --universe mode).
 
 Run:
     python scripts/validate_data.py
@@ -51,9 +51,9 @@ def _validate_backtest_cache() -> int:
 
 
 def _validate_universe_cache(name: str) -> int:
-    """--universe NAME mode: market_data/, nested {TICKER}/1d.csv files, for
-    the watchlist + named universe symbols (mirrors fetch_backtest_data.py's
-    E15 --universe mode)."""
+    """--universe NAME mode: market_data/daily/{TICKER}.csv, for the
+    watchlist + named universe symbols (mirrors fetch_backtest_data.py's
+    E15 --universe mode). "1d" below resolves to the daily/ folder."""
     from swingbot.core.data_store import DATA_DIR, load_from_disk
     from swingbot.core import universe as universe_mod
 

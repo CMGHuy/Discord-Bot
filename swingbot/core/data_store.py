@@ -2,8 +2,14 @@
 Local historical data cache.
 
 Downloads OHLCV data at any supported interval and saves it to disk under
-market_data/{TICKER}/{interval}.csv, so backtests, chart exports, and
-re-downloads don't have to keep re-fetching from Yahoo Finance.
+market_data/{timeframe}/{TICKER}.csv -- grouped by candle timeframe
+("monthly", "weekly", "daily", "hourly", "15min", ...) so a training run can
+point at one folder and get every symbol at that granularity, rather than
+walking 500+ per-ticker directories.
+
+Callers may pass EITHER the semantic folder name ("hourly") or the yfinance
+interval code ("1h"/"60m") anywhere an `interval` is accepted -- both resolve
+to the same folder, so existing call sites did not have to change.
 
 IMPORTANT -- Yahoo Finance's real intraday depth limits (not a choice we're
 making, this is what their API actually allows):
@@ -31,18 +37,69 @@ log = logging.getLogger("swing-bot.data_store")
 
 DATA_DIR = "market_data"
 
-# max_days = how far back Yahoo will serve this interval at all
-# chunk_days = max span allowed in a single request (chunk to cover max_days)
-INTERVAL_CONFIG = {
-    "1m":  {"max_days": 30, "chunk_days": 7},
-    "2m":  {"max_days": 60, "chunk_days": 60},
-    "5m":  {"max_days": 60, "chunk_days": 60},
-    "15m": {"max_days": 60, "chunk_days": 60},
-    "30m": {"max_days": 60, "chunk_days": 60},
-    "60m": {"max_days": 730, "chunk_days": 730},
-    "90m": {"max_days": 60, "chunk_days": 60},
-    "1d":  {"max_days": None, "chunk_days": None},
+# Semantic timeframe -> the yfinance interval code and Yahoo's real depth.
+# folder    = subdirectory under market_data/ (what training runs point at)
+# interval  = the code actually sent to yfinance
+# max_days  = how far back Yahoo will serve this interval at all (None = full)
+# chunk_days= max span allowed in one request (chunk to cover max_days)
+TIMEFRAMES = {
+    "monthly": {"interval": "1mo", "max_days": None, "chunk_days": None},
+    "weekly":  {"interval": "1wk", "max_days": None, "chunk_days": None},
+    "daily":   {"interval": "1d",  "max_days": None, "chunk_days": None},
+    "hourly":  {"interval": "1h",  "max_days": 730,  "chunk_days": 730},
+    "90min":   {"interval": "90m", "max_days": 60,   "chunk_days": 60},
+    "30min":   {"interval": "30m", "max_days": 60,   "chunk_days": 60},
+    "15min":   {"interval": "15m", "max_days": 60,   "chunk_days": 60},
+    "5min":    {"interval": "5m",  "max_days": 60,   "chunk_days": 60},
+    "2min":    {"interval": "2m",  "max_days": 60,   "chunk_days": 60},
+    "1min":    {"interval": "1m",  "max_days": 30,   "chunk_days": 7},
 }
+
+# The four the bot auto-refreshes: the only ones with enough depth to train
+# on. Everything below hourly is capped at 30-60 days by Yahoo and is for
+# live entry timing, not history.
+TRAINING_TIMEFRAMES = ("monthly", "weekly", "daily", "hourly")
+
+# Every accepted spelling -> canonical folder name. Both the semantic name
+# and the yfinance code resolve here, so old call sites passing "1h"/"1d"
+# keep working unchanged.
+_TIMEFRAME_ALIASES = {}
+for _name, _cfg in TIMEFRAMES.items():
+    _TIMEFRAME_ALIASES[_name] = _name
+    _TIMEFRAME_ALIASES[_cfg["interval"]] = _name
+_TIMEFRAME_ALIASES["60m"] = "hourly"   # Yahoo's other spelling of 1h
+
+# Back-compat: keyed by BOTH spellings so `!download 1h` and `!download
+# hourly` both validate. Values carry the same max_days/chunk_days shape
+# this module has always exposed.
+INTERVAL_CONFIG = {
+    alias: TIMEFRAMES[canonical]
+    for alias, canonical in _TIMEFRAME_ALIASES.items()
+}
+
+
+def timeframe_name(interval: str) -> str:
+    """Canonical folder name for any accepted interval spelling."""
+    key = str(interval).strip().lower()
+    name = _TIMEFRAME_ALIASES.get(key)
+    if name is None:
+        raise ValueError(
+            f"Unsupported interval '{interval}'. Use a timeframe name "
+            f"({', '.join(TIMEFRAMES)}) or a yfinance code "
+            f"({', '.join(c['interval'] for c in TIMEFRAMES.values())})."
+        )
+    return name
+
+
+def yf_interval(interval: str) -> str:
+    """The code to actually send to yfinance for any accepted spelling."""
+    return TIMEFRAMES[timeframe_name(interval)]["interval"]
+
+
+def safe_symbol(ticker: str) -> str:
+    """Filesystem-safe filename stem. Mirrors backtest_cache.cache_path's
+    scheme so `GC=F` lands as GC_F.csv in both caches, not a stray folder."""
+    return ticker.upper().strip().replace("=", "_").replace("^", "_").replace("/", "_")
 
 
 def chunk_windows(max_days: int, chunk_days: int, now: datetime = None):
@@ -81,21 +138,44 @@ def _chunked_fetch(ticker: str, interval: str, max_days: int, chunk_days: int) -
     return combined
 
 
-def fetch_interval_data(ticker: str, interval: str = "1m") -> pd.DataFrame:
-    cfg = INTERVAL_CONFIG.get(interval)
-    if cfg is None:
-        raise ValueError(f"Unsupported interval '{interval}'. Use one of: {', '.join(INTERVAL_CONFIG)}")
+def _capped_attempts(max_days: int):
+    """Request shapes for a depth-capped interval, widest first.
+
+    `period=<max_days>d` empirically returns MORE than max_days of calendar
+    history (Yahoo serves ~max_days of *trading* days), so it is tried first.
+    But for a symbol that listed inside the window yfinance clamps the start
+    to the listing date and Yahoo rejects the whole request -- so an
+    explicitly in-window start/end is the fallback that makes recent
+    listings work at all.
+    """
+    now = datetime.now(timezone.utc)
+    safe_start = now - timedelta(days=max_days - 2)
+    return [
+        {"period": f"{max_days}d"},
+        {"start": safe_start.strftime("%Y-%m-%d"), "end": now.strftime("%Y-%m-%d")},
+    ]
+
+
+def fetch_interval_data(ticker: str, interval: str = "1d") -> pd.DataFrame:
+    cfg = TIMEFRAMES[timeframe_name(interval)]
+    code = cfg["interval"]
 
     tried = []
     for candidate in candidate_symbols(ticker):
         tried.append(candidate)
         try:
             if cfg["max_days"] is None:
-                df = yf.download(candidate, period="max", interval=interval, progress=False, auto_adjust=True)
+                df = yf.download(candidate, period="max", interval=code,
+                                 progress=False, auto_adjust=True)
             elif cfg["chunk_days"] >= cfg["max_days"]:
-                df = yf.download(candidate, period=f"{cfg['max_days']}d", interval=interval, progress=False, auto_adjust=True)
+                df = None
+                for kwargs in _capped_attempts(cfg["max_days"]):
+                    df = yf.download(candidate, interval=code, progress=False,
+                                     auto_adjust=True, **kwargs)
+                    if df is not None and not df.empty:
+                        break
             else:
-                df = _chunked_fetch(candidate, interval, cfg["max_days"], cfg["chunk_days"])
+                df = _chunked_fetch(candidate, code, cfg["max_days"], cfg["chunk_days"])
         except Exception:
             continue
         if df is not None and not df.empty:
@@ -105,9 +185,10 @@ def fetch_interval_data(ticker: str, interval: str = "1m") -> pd.DataFrame:
 
 
 def cache_path(ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
-    d = os.path.join(base_dir, ticker.upper())
+    """market_data/{timeframe}/{TICKER}.csv -- grouped by candle timeframe."""
+    d = os.path.join(base_dir, timeframe_name(interval))
     os.makedirs(d, exist_ok=True)
-    return os.path.join(d, f"{interval}.csv")
+    return os.path.join(d, f"{safe_symbol(ticker)}.csv")
 
 
 def save_to_disk(df: pd.DataFrame, ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
@@ -123,13 +204,15 @@ def load_from_disk(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.D
     return pd.read_csv(path, index_col=0, parse_dates=True)
 
 
-def download_and_cache(ticker: str, interval: str = "1m", base_dir: str = DATA_DIR) -> dict:
-    df = fetch_interval_data(ticker, interval)
-    path = save_to_disk(df, ticker, interval, base_dir)
-    cfg = INTERVAL_CONFIG[interval]
+def download_and_cache(ticker: str, interval: str = "daily", base_dir: str = DATA_DIR) -> dict:
+    tf = timeframe_name(interval)
+    df = fetch_interval_data(ticker, tf)
+    path = save_to_disk(df, ticker, tf, base_dir)
+    cfg = TIMEFRAMES[tf]
     return {
         "ticker": ticker,
         "interval": interval,
+        "timeframe": tf,
         "rows": len(df),
         "start": str(df.index.min()),
         "end": str(df.index.max()),
@@ -138,9 +221,9 @@ def download_and_cache(ticker: str, interval: str = "1m", base_dir: str = DATA_D
     }
 
 
-def _default_ranged_fetch(symbol: str, start) -> "pd.DataFrame | None":
+def _default_ranged_fetch(symbol: str, start, interval: str = "1d") -> "pd.DataFrame | None":
     try:
-        df = yf.download(symbol, start=str(start), interval="1d",
+        df = yf.download(symbol, start=str(start), interval=yf_interval(interval),
                          auto_adjust=True, progress=False)
         if df is None or df.empty:
             return None
@@ -154,7 +237,9 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
                  fetch_fn=None) -> dict:
     """Incremental cache update: fetch only bars newer than each CSV's
     last date; atomic replace so a crash mid-write never corrupts a file."""
-    fetch = fetch_fn or _default_ranged_fetch
+    # Interval is bound here rather than threaded through the call: injected
+    # fetch_fn's are (symbol, start) two-arg callables and must stay that way.
+    fetch = fetch_fn or (lambda symbol, start: _default_ranged_fetch(symbol, start, interval))
     result = {}
     for symbol in symbols:
         existing = load_from_disk(symbol, interval, base_dir=base_dir)
