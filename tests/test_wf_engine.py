@@ -221,3 +221,132 @@ def test_folds_read_the_same_cache_the_baseline_was_measured_on(tmp_path, monkey
 
     monkeypatch.setattr("pandas.read_csv", _boom)
     assert wf._frame_for("AAA") is None   # one bad file can't kill a sweep
+
+
+# --- E40: shadow forward-gate ------------------------------------------------
+
+def _shadow_report():
+    """scripts/ is not a package (see tests/scripts/test_run_backtest_range.py
+    for the same dance) -- put it on the path and import by module name."""
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "scripts"))
+    from shadow_component_report import shadow_component_report
+    return shadow_component_report
+
+
+def _shadow_line(component, variant, fwd):
+    return {"ticker": "T", "component": component, "variant": variant,
+            "fwd_return_10d": fwd}
+
+
+def test_shadow_report_compares_cohorts():
+    shadow_component_report = _shadow_report()
+    lines = ([_shadow_line("rs_min", "on", 0.02)] * 30
+             + [_shadow_line("rs_min", "off", 0.01)] * 40
+             + [_shadow_line("other", "on", 9.9)] * 5)      # ignored
+    rep = shadow_component_report(lines, "rs_min")
+    assert rep["on"]["n"] == 30 and rep["off"]["n"] == 40
+    assert rep["on"]["fwd_expectancy"] > rep["off"]["fwd_expectancy"]
+    assert rep["verdict"] == "PROMOTE"
+
+
+def test_shadow_report_holds_when_component_underperforms():
+    shadow_component_report = _shadow_report()
+    lines = ([_shadow_line("rs_min", "on", 0.00)] * 30
+             + [_shadow_line("rs_min", "off", 0.02)] * 30)
+    assert shadow_component_report(lines, "rs_min")["verdict"] == "HOLD"
+
+
+def test_shadow_report_holds_on_a_thin_or_unresolved_cohort():
+    """Two ways a window can fail to decide anything, both of which must
+    read HOLD rather than PROMOTE: too few on-cohort entries, and entries
+    whose 10-day forward return has not been filled in yet."""
+    shadow_component_report = _shadow_report()
+    thin = ([_shadow_line("c", "on", 0.05)] * 19
+            + [_shadow_line("c", "off", 0.00)] * 30)
+    assert shadow_component_report(thin, "c")["verdict"] == "HOLD"
+
+    unresolved = ([_shadow_line("c", "on", None)] * 30
+                  + [_shadow_line("c", "off", 0.00)] * 30)
+    rep = shadow_component_report(unresolved, "c")
+    assert rep["on"]["n"] == 0 and rep["verdict"] == "HOLD"
+
+    assert shadow_component_report([], "c")["verdict"] == "HOLD"
+
+
+def test_shadow_report_promotes_on_an_exact_tie():
+    """The pre-registered bar is >=, not >. Recorded explicitly so nobody
+    'tightens' it later without a new pre-registration."""
+    shadow_component_report = _shadow_report()
+    tied = ([_shadow_line("c", "on", 0.01)] * 25
+            + [_shadow_line("c", "off", 0.01)] * 25)
+    assert shadow_component_report(tied, "c")["verdict"] == "PROMOTE"
+
+
+def test_shadow_logger_accepts_component_and_variant_tags(tmp_path):
+    import json
+    from swingbot.core import shadow_log
+    from swingbot.core.plan_engine import PlanStatus, TradePlanV2
+
+    plan = TradePlanV2(
+        plan_id="p", ticker="AAA", created_at="2026-01-01", source="strategy",
+        strategy="RSI", horizon_key="4w", direction="bullish",
+        entry_type="market", trigger_price=100.0, entry_price=100.0,
+        expiry_bars=5, stop_loss=98.0, tp1=101.0, tp1_fraction=0.5, tp2=None,
+        breakeven_trigger_fraction=0.5, trail_atr_mult=2.5, quality_score=0,
+        quality_breakdown=[], tier="C", badge="WEAK", badge_stats={},
+        status=PlanStatus.ACTIVE)
+    path = str(tmp_path / "shadow.jsonl")
+
+    shadow_log.append(plan, {"entry": 100.0}, path=path)            # untagged
+    shadow_log.append(plan, {"entry": 100.0}, path=path,
+                      component="AVWAP_LEVELS_ENABLED", variant="on")
+
+    rows = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
+    assert len(rows) == 2
+    # An untagged line must stay exactly as before -- shadow_parity_report.py
+    # already reads this file and must not see new keys it doesn't expect.
+    assert "component" not in rows[0] and "variant" not in rows[0]
+    assert rows[1]["component"] == "AVWAP_LEVELS_ENABLED"
+    assert rows[1]["variant"] == "on"
+    assert rows[1]["fwd_return_10d"] is None      # filled later by the backfill
+
+
+def test_forward_return_backfill_only_resolves_matured_entries(tmp_path):
+    """The gate compares 10-day forward returns, and nothing in this repo
+    produced them before this task. The backfill fills a line only once 10
+    trading bars exist after its scan date -- an immature line stays None
+    rather than being scored on a partial window."""
+    import json
+    import pandas as pd
+    from swingbot.core import shadow_log
+
+    path = tmp_path / "shadow.jsonl"
+    rows = [
+        {"ts_scan": "2026-01-05T12:00:00+00:00", "ticker": "AAA",
+         "plan": {"trigger_price": 100.0}, "component": "c", "variant": "on",
+         "fwd_return_10d": None},
+        {"ts_scan": "2026-03-02T12:00:00+00:00", "ticker": "AAA",
+         "plan": {"trigger_price": 100.0}, "component": "c", "variant": "off",
+         "fwd_return_10d": None},
+    ]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+    idx = pd.bdate_range("2026-01-01", periods=40)
+    frame = pd.DataFrame({"Close": [100.0 + i for i in range(40)]}, index=idx)
+
+    filled = shadow_log.backfill_forward_returns(
+        str(path), price_fn=lambda t: frame, horizon_days=10)
+    assert filled == 1
+
+    out = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
+    # 2026-01-05 is business-day bar 2 (close 102); ten TRADING bars later
+    # is bar 12 (close 112). The entry leg is the bar at/after the scan
+    # date, not the frame's first bar.
+    assert out[0]["fwd_return_10d"] == pytest.approx(112 / 102 - 1)
+    assert out[1]["fwd_return_10d"] is None       # not matured yet
+    # Idempotent: a second pass resolves nothing new.
+    assert shadow_log.backfill_forward_returns(
+        str(path), price_fn=lambda t: frame, horizon_days=10) == 0

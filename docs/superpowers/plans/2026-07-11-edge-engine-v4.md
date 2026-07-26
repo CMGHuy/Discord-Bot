@@ -68,8 +68,11 @@
 - **DEFERRED FIX LIST — to close before the plan ends.** Each is a real gap, none is a blocker for the tasks that follow:
   1. **Backtest wiring for the four inert flags** (above). Threading `stop_mult`/`tp2_r` through `run_backtest` → `_trade_plan_at`, and a `regimes` series through `_vectorized_entries`, are the two that unlock genuine fold tests; E24 already scoped the latter out once as "a separate, much larger architectural task". Until then those components cannot be fold-validated and must not be enabled live.
   2. **E37's decile audit** — 3 of its 5 new inputs (`rs_percentile`, `breadth`, `gap_fragile`) can't be produced by the offline per-ticker harness. Revisit at E43's ablation harness, which has universe context.
+  3. **E40's scan double-evaluation** — needs E33's fold-passing list, which does not exist yet.
   3. **`quality_inputs` is never passed by the live scan**, so every live v2 plan carries `quality_score=0, tier="C"` and E37's components are dormant in production. Not in any task's file list so far; worth an explicit task.
-- **Next:** Task E40 (shadow forward-gate) — E33's numbers land in its results file asynchronously and get read back then.
+- Task E40 (Shadow forward-gate) done **except its scan double-evaluation, which is blocked on E33; see below.** `scripts/shadow_component_report.py` (pure `shadow_component_report(lines, component)` + CLI) and `shadow_log.append(..., component=, variant=)` + `shadow_log.backfill_forward_returns(...)`. Two brief errors corrected: the log is `data/shadow_plans.jsonl`, not the `shadow_log.jsonl` the brief names (no such file exists), and **the "existing 10-day forward-return follow-up job" the brief says already fills `fwd_return_10d` does not exist anywhere in the repo** — without it this gate could never have returned anything but HOLD, however long a shadow window ran, because the report only counts rows whose forward return is resolved. Built it: `backfill_forward_returns` resolves a line only once 10 TRADING bars exist after its scan date (a partial window is no reading, not a shorter-horizon one), is idempotent, injectable for tests, and rewrites via temp-file + `os.replace` so a crash can't truncate the log the v2 cutover evidence also lives in. Tagging is strictly additive: an untagged line stays byte-identical, asserted by test, because `shadow_parity_report.py` already reads this file. Promotion stays a **human** decision — the CLI prints a verdict and says so; nothing writes config. Tests: 6 (brief's 2 + thin/unresolved/empty cohorts, an exact-tie case pinning that the bar is `>=` not `>`, the additive-tagging assertion, and a backfill maturity/idempotence test). Full suite 940 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 121 files.
+  - **BLOCKED sub-step:** "the scan's shadow pass evaluates each fold-passing component twice (flag forced on/off) and logs both cohorts". There is no list of fold-passing components yet — E33 is still running — and by construction the list can only contain components the fold harness can observe, which today is at most `AVWAP_LEVELS_ENABLED` / `VOLUME_PROFILE_NODES_ENABLED`. Wiring a double-evaluation pass into the live scan before knowing what it would evaluate would be building against an empty set. Added to the deferred fix list; revisit once E33's results file lands.
+- **Next:** Task E41 (Permutation test — reality check).
 
 ## Global Constraints
 
@@ -4023,7 +4026,7 @@ git commit -m "feat: anchored walk-forward harness"
 **Interfaces:**
 - Produces: shadow log lines (`data/shadow_log.jsonl`, one JSON per line) gain optional keys `component`, `variant` (`"on" | "off"`); during a component's 4-week shadow window the scan logs BOTH variants' would-be entries. `shadow_component_report(lines: list[dict], component: str) -> dict` — pure: pairs each cohort's would-be entries with their 10-day forward returns (already recorded by the shadow logger's follow-up job) and returns `{"on": {"n", "fwd_expectancy"}, "off": {...}, "verdict"}` where verdict is `"PROMOTE"` only when the on-cohort forward expectancy ≥ off-cohort (pre-registered promotion bar). Promotion itself = the **user** flips the flag after reading the report.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_wf_engine.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_wf_engine.py`)
 
 ```python
 def _shadow_line(component, variant, fwd):
@@ -4049,9 +4052,9 @@ def test_shadow_report_holds_when_component_underperforms():
     assert shadow_component_report(lines, "rs_min")["verdict"] == "HOLD"
 ```
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # scripts/shadow_component_report.py
@@ -4097,9 +4100,9 @@ if __name__ == "__main__":
 
 Shadow-logger change: the scan's shadow pass evaluates each fold-passing component twice (flag forced on / off via the E39 override helper, scan-local) and logs both cohorts' would-be entries with the tag. The existing 10-day forward-return follow-up job fills `fwd_return_10d` unchanged.
 
-- [ ] **Step 4: Run `python -m pytest tests/test_wf_engine.py -v` — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_wf_engine.py -v` — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/shadow_component_report.py swingbot/core/scanning/engine.py tests/test_wf_engine.py
