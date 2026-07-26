@@ -110,7 +110,7 @@ different horizons by construction.
 | risk_pct | p50 final multiple | p05 final multiple | max DD p50 | max DD p95 | `p_ruin` | `p_10x` |
 |---:|---:|---:|---:|---:|---:|---:|
 | 0.5% | 2.08x | 1.70x | 3.5% | 5.4% | 0.0% | 0.0% |
-| 1.0% | 4.25x | 2.86x | 7.0% | 10.7% | 0.1% | 0.1% |
+| 1.0% | 4.25x | 2.86x | 7.0% | 10.7% | 0.0% | 0.1% |
 | 1.5% | 8.56x | 4.74x | 10.3% | 15.6% | 0.0% | 36.1% |
 
 (`p_ruin`: fraction of paths whose equity ever fell below 0.5x start.
