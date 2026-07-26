@@ -1,0 +1,22 @@
+{
+  "$comment": [
+    "Project-scoped MCP servers, shared via git. Claude Code asks each user to",
+    "approve these once before they load.",
+    "",
+    "context7 provides live, version-correct API docs. It is here because the three",
+    "libraries this repo leans on hardest all break signatures between releases and",
+    "are exactly what plan files guess wrong about: yfinance 0.2.66 (fetch/columns",
+    "semantics), pandas-ta-classic 0.6.52, and discord.py 2.7.1 (embed and slash",
+    "command surfaces). pandas 2.3 / numpy 2.4 deprecations too.",
+    "",
+    "Requires node (verified: v24.16.0) and network access on first run.",
+    "CONTEXT7_API_KEY is optional; set it in the environment for higher rate limits,",
+    "never in this file - it is committed."
+  ],
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}
