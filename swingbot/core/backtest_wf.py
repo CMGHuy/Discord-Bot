@@ -25,6 +25,23 @@ GATE_MIN_IMPROVING_FOLDS = 2
 GATE_MAX_DEGRADATION_R = 0.05
 GATE_MIN_N_PER_FOLD = 30
 
+PLATEAU_TOLERANCE_R = 0.03
+
+
+def plateau_report(param_name: str, grid: list, expectancies: list,
+                   adopted_value) -> dict:
+    """Adopted values must sit on plateaus, never spikes: if moving one
+    grid step changes expectancy by more than PLATEAU_TOLERANCE_R, the
+    'optimum' is noise you happened to sample."""
+    i = grid.index(adopted_value)
+    neighbors = [j for j in (i - 1, i + 1) if 0 <= j < len(grid)]
+    is_plateau = all(abs(expectancies[j] - expectancies[i]) <= PLATEAU_TOLERANCE_R
+                     for j in neighbors)
+    return {"param": param_name, "grid": grid, "expectancies": expectancies,
+            "adopted": adopted_value,
+            "neighbors": {grid[j]: expectancies[j] for j in neighbors},
+            "is_plateau": is_plateau}
+
 
 def _apply_overrides(overrides: dict) -> dict:
     old = {}

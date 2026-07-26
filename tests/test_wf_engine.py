@@ -374,3 +374,13 @@ def test_planted_signal_beats_noise(monkeypatch):
         return float(rng.normal(0.0, 0.02))
     permuted2 = permuted_expectancies(noise_fn, n_perm=100, seed=2)
     assert p_value(noise_fn(0), permuted2) > 0.05       # luck not mistaken for skill
+
+
+def test_plateau_vs_spike():
+    from swingbot.core.backtest_wf import plateau_report
+    plateau = plateau_report("rs_min", [50, 60, 70], [0.10, 0.11, 0.09], 60)
+    assert plateau["is_plateau"] is True
+    spike = plateau_report("rs_min", [50, 60, 70], [0.02, 0.15, 0.03], 60)
+    assert spike["is_plateau"] is False
+    edge_val = plateau_report("rs_min", [50, 60, 70], [0.11, 0.10, 0.02], 50)
+    assert edge_val["is_plateau"] is True      # single neighbor within 0.03
