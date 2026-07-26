@@ -466,6 +466,15 @@ FIELDS: list[Field] = [
                "swingbot/core/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
                "REGIME_ALLOW is empty until E33's walk-forward fold runs populate it, so this "
                "is a complete no-op today even when enabled."),
+    Field("AVWAP_LEVELS_ENABLED", "AVWAP_LEVELS_ENABLED", "Universe & Scanning",
+          "Anchored VWAP level source enabled",
+          type="checkbox", default="false",
+          help="Adds anchored-VWAP levels (swing-pivot and highest-volume anchors, "
+               "swingbot/core/edge/factors.py:avwap_anchors) to the candidate level map as a "
+               "12th price-producing strategy family. Unlike a pure annotation this SHIFTS "
+               "every confluence count -- a scenario can gain a confirming family and clear "
+               "MIN_CONFLUENCE it would previously have failed -- so it ships off until the "
+               "E33 walk-forward folds and the E40 shadow forward-gate have judged it."),
 ]
 
 _CASTERS = {

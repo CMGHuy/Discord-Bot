@@ -51,7 +51,8 @@
 - Task E27 (Multi-timeframe alignment score) done (commit 2a84de2): `weekly_frame()` + `_swing_lows()` + `mtf_alignment()` appended to `factors.py`, 3 tests added. Pure additive, no wiring — `mtf_min` stays a filter *candidate* for the E33 grid, exactly as the brief specifies. Committed in an earlier session without a Progress-block entry; verified retroactively this session against `git show` and a targeted test rerun.
 - Task E28 (Breadth internals) done (commits 2a84de2 for `breadth_pct_above_50ema` + a7d23ab for the scan hook): `BREADTH_MIN_TICKERS = 20` / `breadth_pct_above_50ema()` in `factors.py` (2 tests), plus the `_sync_run_scan` hook — computed once per scan straight off the already-crawled `fresh_data` (zero extra fetches), stamped on every `ScanItem.breadth` in the post-join merge loop and published in the funnel dict for E37/E66. One deliberate deviation from the brief, verified this session: the brief also said "pass into `regime2.classify(spy_df, breadth)`", but `regime2` is not wired into the scan path at all yet (E24 left it standalone by an explicit, reviewed scope decision, and E33 is the task that wires regime into scanning) — there is no `classify()` call site in `engine.py` to pass breadth into, so that half is correctly deferred to E33 rather than silently dropped. Same retroactive-verification note as E27.
 - Task E29 (Intraday entry-timing check) done: `intraday_confirms(symbol, direction, intraday_df=None, fetch=None)` appended to `factors.py` — last 1h close vs today's running VWAP, scored on the LAST DAY of bars only, `None` (neutral) on no data / empty day / zero-volume day. Wired as a **live-only annotation** exactly as the brief demands: `ScanItem.intraday` stamped in `engine.py`'s alert-building loop (one lookup per POSTED alert, not per scanned ticker — E19's 4h cache makes repeats free), rendered by `embeds.py` as a `⏱ Intraday timing` field through the `sections["headline"]` accumulator (never a raw `add_field`, per the SECTION_ORDER trap). It gates nothing, resizes nothing, reprices nothing; the daily stop-entry trigger is untouched and it is deliberately absent from the backtest (no honest intraday history to fold-test), so it is never presented as validated. Wiring location corrected from the brief before implementing: the brief's commit list named `swingbot/commands/scanning.py`, but that module's `_send_alerts` only posts already-built tuples — sizing/embed-building live in `core/scanning/engine.py`'s alert loop (the same correction E7/E8 already had to make). Two failures the annotation must survive are covered: a raising lookup leaves `intraday=None` and the alert still builds; `None` renders no field at all rather than a misleading "against". Test coverage beyond the brief's own two tests: a multi-day frame test proving yesterday's session can't anchor today's VWAP, a fetch-fallback/zero-volume test, 2 embed-rendering tests, and 2 alert-loop wiring tests (`_drive_alert_loop` drives `_sync_run_scan` all the way THROUGH the alert loop with only its network-bound helpers stubbed — every other `_sync_run_scan` test in the file short-circuits `dedup_scan_items` to `[]`, so without this the E29 wiring would have had literally zero coverage). Mutation-checked: deleting the wiring line turns `test_alert_loop_stamps_intraday_annotation_on_every_item` red. Full suite 849 passed / 54 skipped (+1 known pre-existing wall-clock failure in `test_trade_monitor_wiring.py`, carried forward), py_compile clean across 101 files.
-- **Next:** Task E30 (Anchored VWAP levels)
+- Task E30 (Anchored VWAP levels) done: `anchored_vwap(df, anchor_idx)` + `avwap_anchors(df, lookback=120)` appended to `factors.py` (brief's math transcribed as written, verified against the brief's own golden number), plus the `collect_candidate_levels` wiring, an `AVWAP` entry in `_STRATEGY_FAMILY_PREFIXES`/`ALL_STRATEGY_FAMILIES`, and a new `AVWAP_LEVELS_ENABLED` config Field. **Deliberate deviation from the brief, applied under this plan's own Global Constraints:** the brief wires AVWAP into the level map unconditionally, but "every new gate/filter/factor is a flag-gated config Field, default off, promoted to live only after the E40 shadow forward-gate" — and unlike E29's annotation this is NOT additive. It is a 12th price-producing strategy family, so it moves `count_confirming_strategies` for every scenario, which moves the `MIN_CONFLUENCE` gate and the confidence score with it — a signal-quality change against a validation registry built without it. So the math ships unflagged (E59's decision-chart AVWAP overlay imports it directly and is unaffected) while the level-map wiring ships behind `AVWAP_LEVELS_ENABLED`, default false, for E33's folds to judge. Second correction, verified not assumed: the brief's "confluence counting picks them up with zero further changes" is wrong — `strategy_family()` matches on `startswith`, so `"AVWAP"` does *not* fall into the existing `"VWAP"` family; without registering it, it would have been counted as a confirming family whose name isn't in `ALL_STRATEGY_FAMILIES`, silently inconsistent with `trade_chart.simulate_all_strategy_levels`'s only consumer of that list. Registered explicitly as its own family instead — anchored VWAP (average cost since one event) and rolling VWAP (fixed window, no anchor) genuinely answer different questions. Real-data smoke (AAPL, 6674 cached bars, flag forced on): 5 anchors → 5 AVWAP candidates, +5 raw candidates over the flag-off run and byte-identical otherwise; confluence unchanged at a +5% probe. **Honest observation for E33:** all 5 anchors land within ~30 bars of each other (`pivots_lo[-2:]`/`pivots_hi[-2:]` are by construction the most recent), so their 5 today-values sit within ~1.2% and land in one `_cluster_levels` bucket, pulling that cluster's mean price toward the AVWAP values 5:1 against any single-candidate source sharing the bucket. This is pre-existing behavior for every multi-candidate source (Fibonacci's 5 ratios, floor pivots' 5 lines) and confluence/confidence are both family-deduped so neither inflates — but the cluster-mean pull is real and the folds should be read with it in mind. Tests: 7 new in `tests/test_edge_factors.py` (brief's 2 + anchor-exclusion, anchor sorting/dedup/range, lookback bound, flag-off absence, family registration). Full suite 856 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 101 files.
+- **Next:** Task E31 (Data-driven stops from MAE distributions)
 
 ## Global Constraints
 
@@ -3031,7 +3032,7 @@ git commit -m "feat: intraday confirmation annotation"
 - Produces: `anchored_vwap(df, anchor_idx: int) -> pd.Series` (cumulative `TP×V / V` from the anchor bar to the end); `avwap_anchors(df, lookback=120) -> list[int]` — positional indices of: the last 2 swing lows, last 2 swing highs (5-bar pivots), and the highest-volume bar of the lookback (deduped, sorted).
 - `collect_candidate_levels` appends `(avwap_value_today, "AVWAP")` for each anchor — AVWAPs then cluster with every other level source, so confluence counting picks them up with zero further changes.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_edge_factors.py`)
 
 ```python
 def test_avwap_math_golden():
@@ -3055,9 +3056,9 @@ def test_avwap_levels_enter_the_level_map():
 
 (If `collect_candidate_levels` needs more `h` keys, reuse the fixture/horizon dict existing levels tests use — check `tests/` for a prior fixture before inventing one.)
 
-- [ ] **Step 2: Run — FAIL.**
+- [x] **Step 2: Run — FAIL.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `factors.py`:
 
@@ -3103,9 +3104,9 @@ In `swingbot/core/levels.py::collect_candidate_levels`, alongside the other sour
         pass
 ```
 
-- [ ] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` and the existing levels tests — PASS.**
+- [x] **Step 4: Run `python -m pytest tests/test_edge_factors.py -v` and the existing levels tests — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/factors.py swingbot/core/levels.py tests/test_edge_factors.py

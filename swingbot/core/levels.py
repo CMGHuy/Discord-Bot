@@ -64,6 +64,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from swingbot import config
 from .indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
 from .volatility import bollinger_bands
 from .trendlines import trendline_levels
@@ -279,6 +280,33 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
     except Exception:
         pass
 
+    # Anchored VWAPs (edge E30) -- today's value of each anchored series:
+    # the market's own average cost since a swing pivot or a
+    # capitulation/breakout bar. Distinct from the rolling VWAP above
+    # (fixed window, no anchor) and from the Volume Profile HVN (one
+    # price, no time dimension), so it registers as its own strategy
+    # family -- see ALL_STRATEGY_FAMILIES.
+    #
+    # FLAG-GATED, DEFAULT OFF (this plan's Global Constraints). Every
+    # other source in this function has been live since before the
+    # validation registry was built; adding a 12th one changes what
+    # count_confirming_strategies returns for EVERY scenario, which moves
+    # the MIN_CONFLUENCE gate and the confidence score with it. That's a
+    # signal-quality change, not an additive annotation, so it stays dark
+    # until the E33 walk-forward folds and the E40 shadow forward-gate
+    # have actually judged it. The flag check sits OUTSIDE the try so a
+    # missing/renamed config Field fails loudly instead of silently
+    # turning this source off forever.
+    if config.AVWAP_LEVELS_ENABLED:
+        try:
+            from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
+            for a in avwap_anchors(df):
+                v = float(anchored_vwap(df, a).iloc[-1])
+                if v > 0:
+                    candidates.append((v, "AVWAP"))
+        except Exception:
+            pass
+
     return [(p, s) for p, s in candidates if p and p > 0 and pd.notna(p)]
 
 
@@ -294,6 +322,12 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
 # one currently among these).
 _STRATEGY_FAMILY_PREFIXES = [
     ("EMA", "EMA"),
+    # AVWAP before VWAP is belt-and-braces, not a real ambiguity: matching
+    # is startswith, so "AVWAP" never hits the "VWAP" prefix anyway. Listed
+    # explicitly so an anchored VWAP is registered rather than falling
+    # through strategy_family()'s "return label" default into a family
+    # name that isn't in ALL_STRATEGY_FAMILIES.
+    ("AVWAP", "AVWAP"),
     ("VWAP", "VWAP"),
     ("Fib", "Fibonacci"),
     ("Swing high", "Fibonacci"),
@@ -310,13 +344,20 @@ _STRATEGY_FAMILY_PREFIXES = [
     ("Candlestick:", "Candlestick Pattern"),
 ]
 
-# The 11 strategies that actually produce a PRICE (as opposed to the
+# The 12 strategies that actually produce a PRICE (as opposed to the
 # two bonus, non-price confirmation factors from confidence.py --
 # "Volatility Squeeze" and "Candlestick Pattern" -- which can't be
 # measured against a target price and so never come from
 # collect_candidate_levels in the first place).
+#
+# "AVWAP" (edge E30) is listed because it IS a price-producing family and
+# strategy_family() must resolve it, but it only ever reaches this list's
+# consumers while config.AVWAP_LEVELS_ENABLED is on -- collect_candidate_
+# levels emits no AVWAP candidate otherwise. With the flag off,
+# simulate_all_strategy_levels simply finds nothing for it, exactly as it
+# already does for any family a given ticker's data can't produce.
 ALL_STRATEGY_FAMILIES = [
-    "EMA", "VWAP", "Fibonacci", "Rolling S/R", "Zigzag Pivot",
+    "EMA", "VWAP", "AVWAP", "Fibonacci", "Rolling S/R", "Zigzag Pivot",
     "Bollinger Bands", "Donchian Channel", "Floor Pivot", "Trendline", "FVG",
     "Volume Profile",
 ]

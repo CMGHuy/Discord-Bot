@@ -150,3 +150,89 @@ def test_intraday_falls_back_to_fetch_and_stays_neutral_on_empty():
     assert intraday_confirms("X", "bullish", intraday_df=pd.DataFrame()) is None
     assert intraday_confirms("X", "bullish",
                              intraday_df=_hourly_day([100.0, 101.0], volumes=[0, 0])) is None
+
+
+def test_avwap_math_golden():
+    from swingbot.core.edge.factors import anchored_vwap
+    df = _hourly_day([100.0, 102.0, 104.0], volumes=[1000, 1000, 2000])
+    s = anchored_vwap(df, 0)
+    # TP == Close here (High/Low straddle by +/-0.1%): vwap_2 =
+    # (100*1000 + 102*1000 + 104*2000) / 4000 = 102.5 (+/-0.1% wick noise)
+    assert s.iloc[-1] == pytest.approx(102.5, rel=2e-3)
+    assert len(s) == 3 and s.index.equals(df.index)
+
+
+def test_avwap_from_a_later_anchor_ignores_earlier_bars():
+    """The whole point of an ANCHORED vwap: bars before the anchor must not
+    influence it at all, otherwise it is just a rolling vwap."""
+    from swingbot.core.edge.factors import anchored_vwap
+    df = _hourly_day([1000.0, 100.0, 102.0, 104.0], volumes=[9_999_999, 1000, 1000, 2000])
+    s = anchored_vwap(df, 1)
+    assert s.iloc[-1] == pytest.approx(102.5, rel=2e-3)   # the 1000.0 whale bar is excluded
+    assert len(s) == 3 and s.index.equals(df.index[1:])
+
+
+def test_avwap_anchors_are_sorted_deduped_and_in_range():
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.edge.factors import avwap_anchors
+    rng = np.random.RandomState(3)
+    closes = 100 * np.cumprod(1 + rng.normal(0.0, 0.015, 300))
+    vols = np.full(300, 1_000_000.0)
+    vols[250] = 9_000_000.0          # one unmistakable high-volume bar
+    df = make_ohlcv(closes, volumes=vols)
+
+    anchors = avwap_anchors(df, lookback=120)
+    assert anchors == sorted(set(anchors)), "anchors must be sorted and deduped"
+    assert all(0 <= a < len(df) for a in anchors)
+    assert 250 in anchors, "the highest-volume bar of the lookback must be an anchor"
+    # Swing pivots need `span` confirming bars on each side, so no anchor may
+    # sit inside the trailing unconfirmed window; the volume anchor is exempt
+    # (it needs no confirmation) but here it is at 250, well clear of the end.
+    assert max(a for a in anchors if a != 250) < len(df) - 5
+
+
+def test_avwap_anchors_ignore_bars_before_the_lookback():
+    """A 120-bar lookback must not anchor on ancient history -- except that
+    the pivot scan and the volume scan both start at the same `start` bar,
+    so nothing older than that can ever be returned."""
+    from swingbot.core.edge.factors import avwap_anchors
+    df = make_trend_df(300, +0.1)
+    assert all(a >= len(df) - 120 for a in avwap_anchors(df, lookback=120))
+
+
+def test_avwap_levels_enter_the_level_map_when_enabled(monkeypatch):
+    from swingbot import config
+    from swingbot.core import levels
+    from swingbot.core.strategy_types import HORIZONS
+    monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", True)
+    df = make_trend_df(300, +0.2)
+    cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
+    assert any(src == "AVWAP" for _, src in cands)
+    assert all(p > 0 for p, src in cands if src == "AVWAP")
+
+
+def test_avwap_levels_absent_while_the_flag_is_off(monkeypatch):
+    """Default-off, per this plan's Global Constraints: a new level source
+    shifts every confluence count, so it stays dark until the walk-forward
+    folds (E33) and the shadow forward-gate (E40) have judged it."""
+    from swingbot import config
+    from swingbot.core import levels
+    from swingbot.core.strategy_types import HORIZONS
+    assert config.AVWAP_LEVELS_ENABLED is False, "this factor must ship default-off"
+    monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", False)
+    df = make_trend_df(300, +0.2)
+    cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
+    assert not any(src == "AVWAP" for _, src in cands)
+
+
+def test_avwap_is_its_own_strategy_family():
+    """AVWAP must NOT collapse into the rolling-VWAP family: they answer
+    different questions (average cost since one event vs. over a fixed
+    window), and strategy_family() matches on startswith, so "AVWAP" would
+    otherwise fall through to itself unregistered and be counted as a
+    confirming strategy that isn't in ALL_STRATEGY_FAMILIES."""
+    from swingbot.core import levels
+    assert levels.strategy_family("AVWAP") == "AVWAP"
+    assert levels.strategy_family("VWAP") == "VWAP"
+    assert "AVWAP" in levels.ALL_STRATEGY_FAMILIES

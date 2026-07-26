@@ -154,3 +154,37 @@ def intraday_confirms(symbol: str, direction: str,
     vwap = float((tp * day["Volume"]).cumsum().iloc[-1] / day["Volume"].cumsum().iloc[-1])
     above = float(day["Close"].iloc[-1]) >= vwap
     return above if direction == "bullish" else not above
+
+
+def anchored_vwap(df: pd.DataFrame, anchor_idx: int) -> pd.Series:
+    """Volume-weighted average price anchored at a specific bar -- the
+    market's own average cost since that event. Institutions defend it;
+    that's why it acts as support/resistance."""
+    part = df.iloc[anchor_idx:]
+    tp = (part["High"] + part["Low"] + part["Close"]) / 3.0
+    return (tp * part["Volume"]).cumsum() / part["Volume"].cumsum()
+
+
+def avwap_anchors(df: pd.DataFrame, lookback: int = 120) -> list:
+    """Anchor bars that mean something: recent swing pivots + the highest-
+    volume day (a capitulation/breakout bar everyone remembers).
+
+    Pivots need `span` bars of confirmation on BOTH sides, so the scan
+    stops `span` bars short of the end -- an unconfirmed low that is only
+    a low because the data ran out is not a swing low. That also keeps
+    this side of the no-lookahead rule: every bar this reads is at or
+    before the frame's last bar, and no anchor depends on a bar that
+    hadn't printed yet when the anchor formed."""
+    n = len(df)
+    start = max(0, n - lookback)
+    lows, highs = df["Low"].values, df["High"].values
+    anchors = set()
+    span = 5
+    pivots_lo = [i for i in range(max(start, span), n - span)
+                 if lows[i] == min(lows[i - span:i + span + 1])]
+    pivots_hi = [i for i in range(max(start, span), n - span)
+                 if highs[i] == max(highs[i - span:i + span + 1])]
+    anchors.update(pivots_lo[-2:])
+    anchors.update(pivots_hi[-2:])
+    anchors.add(start + int(df["Volume"].values[start:].argmax()))
+    return sorted(anchors)
