@@ -69,6 +69,7 @@ from swingbot.core.explain import build_explanation
 from swingbot.core.market_events import get_market_events
 from swingbot.core.notifier import notify_secondary
 from swingbot.core.performance import TradeLog
+from swingbot.core.quality import atr_percentile as _atr_percentile
 from swingbot.core.plan_engine import (build_confluence_plan,
                                        primary_strategy_for, select_tp2)
 from swingbot.core.plan_store import PlanStore
@@ -243,16 +244,67 @@ def dedup_scan_items(items: list) -> list:
     return deduped
 
 
-def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None):
+def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
+                          rs_percentile=None, breadth=None) -> dict:
+    """Real inputs for quality.score_plan (Task E37 wiring fix). Before this,
+    attach_plan_v2 called build_confluence_plan with no quality_inputs at
+    all, so _apply_quality's `if quality_inputs is None: return` made every
+    live v2 plan permanently quality_score=0/tier="C" -- scoring never ran,
+    not "scored low". direction/badge_status are NOT included here: plan_
+    engine._apply_quality supplies those itself from the plan it just built
+    (plan.direction/plan.badge), so putting them in this dict too raises a
+    duplicate-keyword TypeError.
+
+    confluence_count/trigger_distance_pct are always real numbers (their
+    quality.py components do `int(count)`/`<= 0.5` with no None-guard) --
+    everything else degrades to None-safe component defaults on missing data.
+
+    candle_quality and gap_fragile are deliberately left out, not
+    fabricated: candle_quality needs a specific touch-bar+level the scan
+    loop doesn't track per plan, and gap_fragile has no wired gate anywhere
+    in this codebase yet (config.py's own comment confirms
+    edge.gates.in_earnings_blackout is defined but never called). Revisit
+    both as their own task rather than inventing a value here."""
+    current_price = float(df["Close"].iloc[-1])
+    volume_ratio = None
+    if len(df) >= 20:
+        avg_vol = df["Volume"].rolling(20).mean().iloc[-1]
+        if avg_vol:
+            volume_ratio = float(df["Volume"].iloc[-1] / avg_vol)
+    htf = get_htf_bias(df, horizon_key)
+    target_confluence = getattr(item, "target_confluence", None)
+    confluence_count = target_confluence[0] if target_confluence else 0
+    return {
+        "regime": regime.trend if regime else None,
+        "htf_bias": htf["bias"] if htf else None,
+        "confluence_count": confluence_count,
+        "volume_ratio": volume_ratio,
+        "atr_pct": _atr_percentile(df),
+        "trigger_distance_pct": abs(scenario.entry - current_price) / current_price * 100,
+        "rs_percentile": rs_percentile,
+        "mtf": rs_factors.mtf_alignment(df, scenario.direction),
+        "breadth": breadth,
+    }
+
+
+def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
+                    regime=None, rs_percentile=None, breadth=None):
     """Construct the v2 plan for a qualifying scan item, flag-gated.
     A v2 construction failure must NEVER break the legacy scan -- log and
-    move on (shadow mode exists precisely to surface such failures safely)."""
+    move on (shadow mode exists precisely to surface such failures safely).
+
+    regime/rs_percentile/breadth are scan-wide/per-item readings the caller
+    already has in scope (Task E37 wiring) -- see _build_quality_inputs."""
     if config.PLAN_ENGINE_V2 == "off":
         return
     try:
+        quality_inputs = _build_quality_inputs(
+            item, scenario, df, horizon_key, regime=regime,
+            rs_percentile=rs_percentile, breadth=breadth)
         plan = build_confluence_plan(
             scenario, df, ticker=ticker, horizon_key=horizon_key,
-            primary_strategy=primary_strategy_for(scenario))
+            primary_strategy=primary_strategy_for(scenario),
+            quality_inputs=quality_inputs)
         if plan.tp2 is None and level_map is not None:
             supports, resistances = level_map
             plan.tp2 = select_tp2([lv.price for lv in resistances],
@@ -919,6 +971,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                item.result.ticker, item.result.horizon_key, item.result.trend,
                                config.SIGNAL_CONFIRMATION_SCANS)
                     continue
+            # rs_percentile/breadth computed BEFORE attach_plan_v2 below (Task
+            # E37 wiring fix) specifically so quality scoring can see them --
+            # they used to be set after attach_plan_v2 ran, so every live
+            # plan's quality_inputs saw them as unset regardless of data
+            # availability. Unconditional for every item, same as before.
+            if rs_cache is not None:
+                item.rs_percentile = rs_factors.rs_percentile(
+                    fresh_data.get(item.result.ticker), spy_df,
+                    universe_rels=list(rs_cache["rels"].values()),
+                )
+            item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
             if item.all_requirements_met:
                 # Deferred from _scan_one (fix for a task-review finding): only
                 # build the v2 plan for a scenario that actually survives the
@@ -927,17 +990,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # for plan construction on every scan pass.
                 attach_plan_v2(item, item.plan, fresh_data.get(item.result.ticker),
                                 item.result.ticker, item.result.horizon_key,
-                                level_map=item.level_map)
+                                level_map=item.level_map, regime=regime,
+                                rs_percentile=item.rs_percentile, breadth=item.breadth)
                 if item.plan_v2 is not None:
                     item.plan_v2.regime_aligned = not (
                         item.htf_info and item.htf_info.get("counter_trend", False)
                     )
-            if rs_cache is not None:
-                item.rs_percentile = rs_factors.rs_percentile(
-                    fresh_data.get(item.result.ticker), spy_df,
-                    universe_rels=list(rs_cache["rels"].values()),
-                )
-            item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
             scan_items.append(item)
 
     # Kill switch (E47): computed once per scan, right here -- AFTER the

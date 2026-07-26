@@ -42,6 +42,49 @@ def test_plan_construction_failure_never_kills_the_scan(monkeypatch):
                           "AAPL", "4w", level_map=([], []))   # must not raise
     assert item.plan_v2 is None
 
+
+# --- quality_inputs wiring (Task E37 fix) -----------------------------------
+# Before this, attach_plan_v2 never built a quality_inputs dict at all, so
+# plan_engine._apply_quality's `if quality_inputs is None: return` made
+# every live v2 plan permanently quality_score=0/tier="C".
+
+def test_build_quality_inputs_never_duplicates_direction_or_badge_status():
+    # _apply_quality supplies direction/badge_status itself from the plan
+    # it just built (plan.direction/plan.badge) -- if quality_inputs also
+    # carried these, score_plan(**quality_inputs) would raise a duplicate-
+    # keyword TypeError on every single plan.
+    item = SimpleNamespace(target_confluence=(2, ["EMA21", "Fib"]))
+    out = engine._build_quality_inputs(item, _scenario(), make_ohlcv([100.0] * 60), "4w")
+    assert "direction" not in out
+    assert "badge_status" not in out
+    assert set(out) == {"regime", "htf_bias", "confluence_count", "volume_ratio",
+                        "atr_pct", "trigger_distance_pct", "rs_percentile",
+                        "mtf", "breadth"}
+
+
+def test_build_quality_inputs_confluence_count_defaults_to_zero_without_field():
+    # A minimal test double (or any object missing target_confluence) must
+    # degrade to 0, not crash -- component_confluence does int(count) with
+    # no None-guard.
+    item = SimpleNamespace()   # no target_confluence at all
+    out = engine._build_quality_inputs(item, _scenario(), make_ohlcv([100.0] * 60), "4w")
+    assert out["confluence_count"] == 0
+
+
+def test_quality_scoring_actually_runs_and_produces_a_nonzero_score(monkeypatch):
+    # The regression this whole fix is for: a plan built with real
+    # confluence/regime/rs_percentile/breadth inputs must NOT be stuck at
+    # quality_score=0/tier="C" the way every live plan was before wiring.
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    item = SimpleNamespace(plan_v2=None, target_confluence=(4, ["EMA21", "Fib", "S/R", "VWAP"]))
+    regime = SimpleNamespace(trend="bullish")
+    engine.attach_plan_v2(item, _scenario(), _structured_df(), "AAPL", "4w",
+                          level_map=([], []), regime=regime,
+                          rs_percentile=82.0, breadth=61.0)
+    assert item.plan_v2 is not None
+    assert item.plan_v2.quality_score > 0
+    assert item.plan_v2.quality_breakdown   # non-empty: at least one component scored
+
 def _structured_df():
     """Trend up, then a 60-bar consolidation between roughly ±5% of the
     trend's last close -- gives every level source (rolling S/R, Donchian,
