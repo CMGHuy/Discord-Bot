@@ -39,3 +39,13 @@ def test_weekly_panel_renders(tmp_path, daily_df):
     ctx = {"weekly": {"df": weekly_frame(daily_df), "pivots": [105.0, 112.0]}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
     assert os.path.getsize(path) > 10_000
+
+
+def test_avwap_overlay_renders(tmp_path, daily_df):
+    from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    avwaps = [{"series": anchored_vwap(daily_df, a), "anchor_label": f"⚓{a}"}
+              for a in avwap_anchors(daily_df)[:3]]
+    path = render_decision_chart("TEST", daily_df, FakePlan(),
+                                 {"avwaps": avwaps}, str(tmp_path))
+    assert os.path.getsize(path) > 10_000

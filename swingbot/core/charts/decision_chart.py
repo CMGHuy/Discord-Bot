@@ -14,7 +14,7 @@ import mplfinance as mpf
 import pandas as pd
 
 from swingbot.core.charts.chart_style import (
-    CHART_BG, DISCLAIMER_TEXT, ENTRY_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
+    AVWAP_COLOR, CHART_BG, DISCLAIMER_TEXT, ENTRY_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
     PRO_STYLE, STOP_COLOR, TARGET_COLOR, TEXT_COLOR,
 )
 
@@ -28,7 +28,7 @@ def draw_placeholder(ax, text: str) -> None:
     ax.set_xticks([]); ax.set_yticks([])
 
 
-def _draw_main_panel(ax, daily_df: pd.DataFrame, plan) -> None:
+def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None) -> None:
     part = daily_df.tail(PANEL_LOOKBACK_BARS)
     mpf.plot(part, type="candle", ax=ax, style=PRO_STYLE, warn_too_much_data=10_000)
     levels = [(plan.trigger_price or plan.entry_price, ENTRY_COLOR, "entry"),
@@ -42,6 +42,18 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan) -> None:
             ax.annotate(f"{label} {price:.2f}", xy=(1.0, price),
                         xycoords=("axes fraction", "data"),
                         fontsize=8, color=color, ha="right", va="bottom")
+    part_index = part.index
+    for av in (avwaps or []):
+        s = av["series"].reindex(part_index).dropna()
+        if s.empty:
+            continue
+        x0 = part_index.get_indexer([s.index[0]])[0]
+        xs = range(x0, x0 + len(s))
+        ax.plot(list(xs), s.values, color=AVWAP_COLOR, lw=1.2, alpha=0.85)
+        ax.annotate("⚓", xy=(x0, s.values[0]), color=AVWAP_COLOR, fontsize=9)
+        ax.annotate(f"AVWAP {s.values[-1]:.2f}", xy=(1.0, s.values[-1]),
+                    xycoords=("axes fraction", "data"), fontsize=7,
+                    color=AVWAP_COLOR, ha="right")
     ax.set_facecolor(CHART_BG)
 
 
@@ -55,7 +67,7 @@ def render_decision_chart(symbol: str, daily_df: pd.DataFrame, plan,
     ax_rs = fig.add_subplot(gs[1, 3])
     ax_info = fig.add_subplot(gs[2, 3])
 
-    _draw_main_panel(ax_main, daily_df, plan)
+    _draw_main_panel(ax_main, daily_df, plan, context.get("avwaps"))
     # Later tasks replace these placeholders panel by panel:
     from swingbot.core.charts import decision_panels as panels  # this module, split below
     panels.draw_weekly(ax_weekly, context.get("weekly"))

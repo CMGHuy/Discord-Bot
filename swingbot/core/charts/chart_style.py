@@ -37,6 +37,7 @@ TARGET2_COLOR = "#ab47bc"
 CURRENT_PRICE_COLOR = "#ffa726"  # distinct from entry -- entry is a planned limit level, this is where price actually is
 TRENDLINE_SUPPORT_COLOR = "#26c6da"
 TRENDLINE_RESISTANCE_COLOR = "#ec407a"
+AVWAP_COLOR = "#b39ddb"
 
 # Fixed accent colors for the confirmed-strategy overlay -- one per
 # SIDE of the scenario (whatever confirmed target 1, whatever confirmed
