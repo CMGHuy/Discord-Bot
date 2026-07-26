@@ -1,0 +1,36 @@
+# Search-tool ignore file — ripgrep honours this, so Claude Code's Grep does too.
+#
+# NOTE: Glob does NOT honour this file (verified 2026-07-26: `Glob("**/*.py")`
+# still returns 500 matches, ~70% of them worktree copies). Keep scoping Glob
+# patterns by hand, e.g. Glob("swingbot/**/*.py"). Only Grep is fixed here.
+#
+# Why this file exists: at repo root, `Grep("def sector_heat")` used to TIME OUT
+# after 20s and return nothing, because ripgrep was walking ~2,600 files / 160 MB
+# of caches, logs and three full worktree copies of the repo. It now answers
+# instantly. `Glob("**/*.py")` returns 500 matches for 232 real .py files.
+#
+# This is deliberately separate from .gitignore: .gitignore controls what git
+# tracks, this controls what code search walks. Some paths below are tracked or
+# untracked-but-wanted; they just must never be searched.
+#
+# To search these anyway, pass an explicit path: Grep(path="market_data/...").
+
+# Three full copies of this repo. Searching them points you at the wrong branch.
+.claude/worktrees/
+
+# OHLCV caches — 521 symbol dirs / 91 MB and 77 flat CSVs. Never grepped for code.
+market_data/
+data/backtest_cache/
+
+# Runtime JSON state + rotated logs.
+data/
+logs/
+exports/
+
+# SDD execution ledger: 130+ review diffs (largest 174 KB) and a 173 KB
+# progress.md. Read progress.md by tail, never by search.
+.superpowers/sdd/*.diff
+.superpowers/sdd/*.log
+
+__pycache__/
+.pytest_cache/
