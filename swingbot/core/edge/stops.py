@@ -27,3 +27,34 @@ def mae_informed_stop_mult(entries: list, strategy: str) -> float | None:
         return None
     p90 = float(np.percentile(maes, 90))
     return float(min(max(p90 + MAE_CUSHION_R, CLAMP[0]), CLAMP[1]))
+
+
+TP2_FLOOR_R = 0.5
+TIME_STOP_COVERAGE = 0.80
+
+
+def mfe_informed_tp2_r(entries: list, strategy: str) -> float | None:
+    """P60 of winners' max favorable excursion: a TP2 the runner actually
+    reaches more often than not, instead of a hope."""
+    mfes = [e["mfe_r"] for e in entries
+            if e.get("strategy") == strategy and e.get("outcome") == "win"
+            and e.get("mfe_r") is not None]
+    if len(mfes) < MIN_SAMPLE:
+        return None
+    return float(max(np.percentile(mfes, 60), TP2_FLOOR_R))
+
+
+def optimal_time_stop_days(entries: list, strategy: str) -> int | None:
+    """Day by which TIME_STOP_COVERAGE of eventual winners had already
+    reached +0.5R. A position slower than that is statistically dead
+    capital -- frequency (the compounding lever) says recycle it.
+
+    Advisory only: nothing in this codebase closes a position on it. E48's
+    recycler is the intended consumer."""
+    days = sorted(e["days_to_half_r"] for e in entries
+                  if e.get("strategy") == strategy and e.get("outcome") == "win"
+                  and e.get("days_to_half_r") is not None)
+    if len(days) < MIN_SAMPLE:
+        return None
+    idx = int(np.ceil(TIME_STOP_COVERAGE * len(days))) - 1
+    return int(days[idx])

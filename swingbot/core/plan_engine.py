@@ -115,6 +115,13 @@ class TradePlanV2:
     # persisted JSON. Kept on the plan so E33's folds and E40's shadow
     # gate can audit which plans were sized with it, after the fact.
     stop_mult_applied: float | None = None
+    # E32, same rationale: the MFE-derived R-multiple this plan's TP2 was
+    # priced at (None when the level-based TP2 stood), and the day by
+    # which most of this strategy's winners had already reached +0.5R.
+    # time_stop_days is ADVISORY -- nothing here closes a position on it;
+    # E48's recycler is the intended consumer.
+    tp2_r_applied: float | None = None
+    time_stop_days: int | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -317,17 +324,66 @@ def _resolve_stop_mult(strategy: str) -> float | None:
         return None
 
 
+def _resolve_tp2_r(strategy: str) -> float | None:
+    """Live-path resolution of E32's MFE-informed TP2 R-multiple. Same
+    flag, same degrade-to-None contract as _resolve_stop_mult."""
+    if not config.DATA_DRIVEN_STOPS_ENABLED:
+        return None
+    try:
+        from swingbot.core.edge.stops import mfe_informed_tp2_r
+        return mfe_informed_tp2_r(_journal_entries(), strategy)
+    except Exception as exc:
+        log.warning("MFE-informed TP2 lookup failed for %s: %s -- TP2 unchanged",
+                    strategy, exc)
+        return None
+
+
+def _resolve_time_stop_days(strategy: str) -> int | None:
+    """Live-path resolution of E32's time stop. Recorded on the plan for
+    E48's recycler; it closes nothing by itself."""
+    if not config.DATA_DRIVEN_STOPS_ENABLED:
+        return None
+    try:
+        from swingbot.core.edge.stops import optimal_time_stop_days
+        return optimal_time_stop_days(_journal_entries(), strategy)
+    except Exception as exc:
+        log.warning("Time-stop lookup failed for %s: %s -- not recorded", strategy, exc)
+        return None
+
+
+def _tp2_from_r(entry: float, stop: float, tp1: float, direction: str,
+                tp2_r: float) -> float | None:
+    """Convert an MFE R-multiple into a TP2 PRICE, under the same two
+    invariants select_tp2 enforces on a level-derived TP2: strictly beyond
+    TP1 in the trade direction, and a TP1->TP2 leg no longer than
+    MAX_TARGET2_LEG_MULTIPLE times the entry->TP1 leg. Returns None when
+    either fails, so the caller keeps whatever TP2 it already had rather
+    than replacing it with a nonsense number."""
+    risk = abs(entry - stop)
+    leg1 = abs(tp1 - entry)
+    if risk <= 0 or leg1 <= 0:
+        return None
+    is_bull = direction == "bullish"
+    candidate = entry + risk * tp2_r if is_bull else entry - risk * tp2_r
+    if not (candidate > tp1 if is_bull else candidate < tp1):
+        return None
+    if abs(candidate - tp1) > leg1 * MAX_TARGET2_LEG_MULTIPLE:
+        return None
+    return float(candidate)
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
-                        stop_mult=None) -> TradePlanV2 | None:
+                        stop_mult=None, tp2_r=None,
+                        time_stop_days=None) -> TradePlanV2 | None:
     """THE constructor for strategy-source plans. Returns None when the
     strategy has no valid structure at this bar (same conditions as the
     backtest reference).
 
-    `stop_mult` (edge E31): an explicit MAE-informed stop factor. Left
-    None, it is resolved from the live journal iff
-    config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path is
-    bit-identical to before and never opens the journal at all."""
+    `stop_mult` (edge E31), `tp2_r` and `time_stop_days` (edge E32): the
+    MAE/MFE-derived overrides. Left None, each is resolved from the live
+    journal iff config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path
+    is bit-identical to before and never opens the journal at all."""
     from swingbot.core.indicators import atr as atr_indicator
     from swingbot.core.indicators import elliott_wave3_entries
 
@@ -372,11 +428,24 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     created_at = df.index[index].date().isoformat()
     exit_params = exit_params_for(strategy)
     tp2 = None
-    if level_map is not None and exit_params["tp2"]:
-        supports, resistances = level_map
-        levels_above = [lv.price for lv in resistances]
-        levels_below = [lv.price for lv in supports]
-        tp2 = select_tp2(levels_above, levels_below, direction, close, tp1)
+    applied_tp2_r = None
+    if exit_params["tp2"]:
+        if level_map is not None:
+            supports, resistances = level_map
+            levels_above = [lv.price for lv in resistances]
+            levels_below = [lv.price for lv in supports]
+            tp2 = select_tp2(levels_above, levels_below, direction, close, tp1)
+        # MFE-informed TP2 (edge E32): re-price the runner target at the
+        # R-multiple this strategy's winners actually reached, when that
+        # produces a valid TP2. Deliberately does NOT switch TP2 on for a
+        # strategy whose exit params have none -- that on/off table is a
+        # frozen TRAIN-grid result, and forcing it would be a different
+        # exit model than E33 is set up to judge.
+        resolved_tp2_r = tp2_r if tp2_r is not None else _resolve_tp2_r(strategy)
+        if resolved_tp2_r is not None:
+            candidate = _tp2_from_r(close, stop, tp1, direction, resolved_tp2_r)
+            if candidate is not None:
+                tp2, applied_tp2_r = candidate, resolved_tp2_r
     plan = TradePlanV2(
         plan_id=str(uuid.uuid4()), ticker=ticker, created_at=created_at,
         source="strategy", strategy=strategy, horizon_key=horizon_key,
@@ -394,6 +463,9 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     stamp_badge(plan)
     _apply_quality(plan, quality_inputs)
     plan.stop_mult_applied = applied_stop_mult
+    plan.tp2_r_applied = applied_tp2_r
+    plan.time_stop_days = (time_stop_days if time_stop_days is not None
+                           else _resolve_time_stop_days(strategy))
     return plan
 
 
