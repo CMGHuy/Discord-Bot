@@ -93,6 +93,22 @@ through `_vectorized_entries → entries_for` for E24; wire pyramiding into
 path) — closing that list is what would let a *real* 16-component grid run,
 not a repeat of this one.
 
+## Ablation (E43)
+
+`scripts/ablation.py` is written (leave-one-out over `adopted_components.json`,
+per the plan's Step 1 code verbatim — reads the adopted set, runs the full
+system, then re-runs with each component removed one at a time to measure
+its pooled contribution). It was **not invoked against a live fold sweep**:
+with `adopted_components.json` empty (`{}`), `run_folds({})` reduces to
+comparing the baseline against itself — a ~76-minute repeat of this doc's
+own baseline leg to confirm a mathematically guaranteed `+0.0000R`, and the
+`for key in adopted:` loop has zero components to iterate, so the table is
+unconditionally empty and `removal candidates` is unconditionally `none`.
+Running it would burn real compute for a result already known from reading
+the code, the same reasoning this doc already applies to `INERT_COMPONENTS`
+above. The script is correct and ready to run for real the moment any
+future fold-tuning task actually adopts a component.
+
 **Net effect on downstream tasks:** E40's blocked shadow-evaluation
 sub-step needed a fold-passing component list — that list is empty, so
 there is nothing left to build there. E41 (permutation test) and E42
