@@ -75,6 +75,11 @@
 
   "preferredNotifChannel": "terminal_bell",
 
+  "statusLine": {
+    "type": "command",
+    "command": "bash .claude/statusline.sh"
+  },
+
   "hooks": {
     "SessionStart": [
       {
