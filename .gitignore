@@ -6,6 +6,7 @@ ticker_meta_cache.json
 retrospective_history.json
 journal.json
 analytics_snapshot.json
+market_data_state.json
 .env
 .env.bak
 __pycache__/
