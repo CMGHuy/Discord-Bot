@@ -182,3 +182,112 @@ def gate(result: dict) -> str:
     if any(d < -GATE_MAX_DEGRADATION_R for d in deltas):
         return "FAIL"
     return "PASS"
+
+
+def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
+                     risk_pct: float = 1.0, heat_cap_pct: float = 6.0,
+                     sector_cap_pct: float = 3.0, max_open: int | None = None,
+                     sectors: dict | None = None, throttles: bool = True) -> dict:
+    """Chronological replay under real capital constraints. Per-signal
+    expectancy answers 'is the edge real'; THIS answers 'what does the
+    account actually do'. The difference is skipped signals."""
+    from swingbot.core.edge.throttle import current_throttle
+
+    events = sorted(signals, key=lambda s: (s["date"], s["ticker"]))
+    balance = start_balance
+    curve = [(events[0]["date"] if events else "start", balance)]
+    open_pos: list[dict] = []      # {"exit_date", "ticker", "sector", "risk_pct", "r"}
+    taken = skipped = 0
+    paused = False
+
+    for sig in events:
+        # 1) close everything that exited before this signal's date
+        due = [p for p in open_pos if p["exit_date"] <= sig["date"]]
+        for p in sorted(due, key=lambda p: p["exit_date"]):
+            balance *= 1 + (p["risk_pct"] / 100.0) * p["r"]
+            curve.append((p["exit_date"], balance))
+            open_pos.remove(p)
+
+        # 2) throttle from the equity curve so far
+        mult = 1.0
+        if throttles:
+            mult, paused = current_throttle([b for _, b in curve], was_paused=paused)
+        eff_risk = risk_pct * mult
+        if eff_risk <= 0:
+            skipped += 1
+            continue
+
+        # 3) capacity checks
+        heat = sum(p["risk_pct"] for p in open_pos)
+        sec = (sectors or {}).get(sig["ticker"], sig.get("sector"))
+        sec_heat = sum(p["risk_pct"] for p in open_pos if p["sector"] == sec)
+        if (heat + eff_risk > heat_cap_pct + 1e-9
+                or (sec and sec_heat + eff_risk > sector_cap_pct + 1e-9)
+                or (max_open is not None and len(open_pos) >= max_open)):
+            skipped += 1
+            continue
+
+        open_pos.append({"exit_date": sig["exit_date"], "ticker": sig["ticker"],
+                         "sector": sec, "risk_pct": eff_risk, "r": sig["r_multiple"]})
+        taken += 1
+
+    for p in sorted(open_pos, key=lambda p: p["exit_date"]):
+        balance *= 1 + (p["risk_pct"] / 100.0) * p["r"]
+        curve.append((p["exit_date"], balance))
+
+    values = [b for _, b in curve]
+    peak, max_dd = values[0], 0.0
+    for v in values:
+        peak = max(peak, v)
+        max_dd = max(max_dd, (peak - v) / peak * 100.0)
+
+    months = 1.0
+    if taken and len(curve) > 1:
+        import datetime as dt
+        d0 = dt.date.fromisoformat(str(curve[0][0])[:10]) if curve[0][0] != "start" else None
+        d1 = dt.date.fromisoformat(str(curve[-1][0])[:10])
+        months = max(((d1 - d0).days / 30.44) if d0 else 1.0, 1.0)
+
+    return {"equity_curve": curve, "final_multiple": balance / start_balance,
+            "max_dd_pct": round(max_dd, 2), "trades_taken": taken,
+            "trades_skipped": skipped, "trades_per_month": round(taken / months, 1)}
+
+
+def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=None) -> list:
+    """Build a chronological signal list for `portfolio_replay` from real
+    fold-run trades. Mirrors `_default_run`'s iteration structure (same
+    symbol universe, same liquidity screen, same frictions/exit_model/
+    scale_out/tp2_mode) so the portfolio numbers stay comparable to the
+    E22 friction-adjusted baseline -- see `_frame_for` and `_default_run`
+    docstrings for why those specific arguments are frozen.
+
+    Only trades with both an `r_multiple` and an `exit_date` become
+    signals -- open/unresolved trades can't be replayed under capital
+    constraints because `portfolio_replay` needs a known exit to free
+    heat.
+    """
+    from swingbot.core.backtest import ALL_STRATEGIES, run_backtest_daterange
+    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.universe import liquidity_ok, sector_map
+
+    strategies = ALL_STRATEGIES if strategies is None else strategies
+    horizons = list(HORIZONS) if horizons is None else horizons
+    sectors = sector_map(getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
+
+    signals = []
+    for sym in _symbols_for_folds():
+        df = _frame_for(sym)
+        if df is None or not liquidity_ok(df):
+            continue
+        for strat in strategies:
+            for hk in horizons:
+                s = run_backtest_daterange(sym, df, strat, hk, start, end,
+                                           frictions=True, exit_model="v2",
+                                           scale_out=True, tp2_mode="levels")
+                for t in (s.trades or []):
+                    if t.r_multiple is not None and t.exit_date is not None:
+                        signals.append({"date": t.entry_date, "ticker": sym,
+                                        "sector": sectors.get(sym),
+                                        "r_multiple": t.r_multiple,
+                                        "exit_date": t.exit_date})
+    return signals
