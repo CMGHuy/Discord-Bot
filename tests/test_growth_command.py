@@ -56,6 +56,60 @@ def test_growth_command_normal_target_proceeds_past_validation(monkeypatch):
     assert "target 5x" in message
 
 
+# --- !growth Monte Carlo fan attachment (Task E70) --------------------------
+
+def _mc_trade(entry, stop, exit_price, direction="bullish"):
+    return {"entry": entry, "stop_loss": stop, "exit_price": exit_price, "direction": direction}
+
+
+def test_growth_command_attaches_mc_fan_with_enough_history(monkeypatch, tmp_path):
+    import discord
+    from swingbot.commands import growth as growth_mod
+    from swingbot.core import account as account_module
+
+    monkeypatch.setattr(account_module, "load_account_config",
+                        lambda: {"risk_pct": 1.0, "base_balance": 10_000.0, "balance": 10_000.0})
+    monkeypatch.setattr(account_module, "get_balance_history_points", lambda: [])
+    monkeypatch.setattr(growth_mod.config, "EXPORT_DIR", str(tmp_path))
+
+    trades = [_mc_trade(100, 98, 102) for _ in range(6)] + [_mc_trade(100, 98, 97) for _ in range(4)]
+    fake_log = MagicMock()
+    fake_log.get_trades.return_value = trades
+    monkeypatch.setattr(growth_mod, "TradeLog", lambda: fake_log)
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(growth_command.callback(ctx, target=10.0))
+
+    ctx.send.assert_awaited_once()
+    _, kwargs = ctx.send.call_args
+    assert isinstance(kwargs.get("file"), discord.File)
+
+
+def test_growth_command_no_chart_below_min_history(monkeypatch, tmp_path):
+    from swingbot.commands import growth as growth_mod
+    from swingbot.core import account as account_module
+
+    monkeypatch.setattr(account_module, "load_account_config",
+                        lambda: {"risk_pct": 1.0, "base_balance": 10_000.0, "balance": 10_000.0})
+    monkeypatch.setattr(account_module, "get_balance_history_points", lambda: [])
+    monkeypatch.setattr(growth_mod.config, "EXPORT_DIR", str(tmp_path))
+
+    fake_log = MagicMock()
+    fake_log.get_trades.return_value = [_mc_trade(100, 98, 102) for _ in range(3)]  # below MC_MIN_CLOSED_TRADES
+    monkeypatch.setattr(growth_mod, "TradeLog", lambda: fake_log)
+
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+
+    asyncio.run(growth_command.callback(ctx, target=10.0))
+
+    ctx.send.assert_awaited_once()
+    _, kwargs = ctx.send.call_args
+    assert kwargs.get("file") is None
+
+
 # --- !killswitch (Task E47 review Finding 2b) ------------------------------
 # The command's own logic (status/on/off replies) is tested via
 # killswitch_command.callback(ctx, action=...) directly -- same pattern as

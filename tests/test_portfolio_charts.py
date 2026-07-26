@@ -34,3 +34,13 @@ def test_corr_matrix_renders(tmp_path):
     trades = [{"ticker": t} for t in dfs]
     path = render_corr_matrix(trades, dfs, str(tmp_path))
     assert os.path.getsize(path) > 5_000
+
+
+def test_mc_fan_renders(tmp_path):
+    from swingbot.core.edge.ruin import simulate
+    from swingbot.core.charts.portfolio_charts import render_mc_fan
+    sim = simulate([0.4] * 8 + [-1.0] * 2, risk_pct=1.0,
+                   n_trades=300, n_paths=500, return_paths=True)
+    path = render_mc_fan(sim, 10_000.0, str(tmp_path),
+                         percentile_paths=sim["percentile_paths"])
+    assert os.path.getsize(path) > 5_000

@@ -1,7 +1,9 @@
 """!growth — the compounding reality dashboard (Edge plan E2)."""
 import asyncio
+import os
 from datetime import date
 
+import discord
 from discord.ext import commands
 
 from swingbot import config
@@ -9,6 +11,8 @@ from swingbot.bot_core import bot
 from swingbot.core import account as account_module
 from swingbot.core.edge.growth import AVG_DAYS_PER_MONTH, growth_report, growth_path
 from swingbot.core.performance import TradeLog
+
+MC_MIN_CLOSED_TRADES = 10   # below this a bootstrap R-multiple sample is noise
 
 
 def _collect_stats(target: float = 10.0) -> dict:
@@ -39,6 +43,22 @@ def _collect_stats(target: float = 10.0) -> dict:
         stats["current_multiple"] = cfg.get("balance", base) / base
         stats["growth_path"] = growth_path(
             account_module.get_balance_history_points(), base, target_multiple=target)
+
+    # Monte Carlo fan (E70): bootstrap over the account's OWN closed-trade
+    # R multiples -- soft, degrades to no chart (text report always posts)
+    # below MC_MIN_CLOSED_TRADES, on any missing balance, or on any error.
+    try:
+        from swingbot.core.analytics.metrics import r_multiple as _r_multiple
+        from swingbot.core.edge.ruin import simulate as _mc_simulate
+        from swingbot.core.charts.portfolio_charts import render_mc_fan
+        rs = [r for t in TradeLog().get_trades(limit=None)
+              if (r := _r_multiple(t)) is not None]
+        if len(rs) >= MC_MIN_CLOSED_TRADES and base:
+            sim = _mc_simulate(rs, risk_pct=stats["risk_pct"], return_paths=True)
+            stats["mc_chart_path"] = render_mc_fan(
+                sim, base, config.EXPORT_DIR, percentile_paths=sim["percentile_paths"])
+    except Exception:
+        pass
     return stats
 
 
@@ -60,7 +80,9 @@ async def growth_command(ctx, target: float = 10.0):
         on_track_str = "yes" if on_track else "no"
         report += (f"\nat {gp['current_multiple']:.2f}x — {gp['pct_to_target']:.1f}% of the way "
                    f"(log scale) toward {target:g}x; on track for {target:g}x-in-8y: {on_track_str}")
-    await ctx.send(f"```\n{report}\n```")
+    chart_path = stats.get("mc_chart_path")
+    file = discord.File(chart_path, filename=os.path.basename(chart_path)) if chart_path else None
+    await ctx.send(f"```\n{report}\n```", file=file)
 
 
 @bot.command(name="killswitch")

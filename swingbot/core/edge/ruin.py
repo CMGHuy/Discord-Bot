@@ -16,7 +16,8 @@ TARGET_MULTIPLE = 10.0
 
 
 def simulate(r_multiples: list[float], *, risk_pct: float,
-             n_trades: int = 1000, n_paths: int = 2000, seed: int = 42) -> dict:
+             n_trades: int = 1000, n_paths: int = 2000, seed: int = 42,
+             return_paths: bool = False) -> dict:
     r = np.asarray(list(r_multiples), dtype=float)
     if r.size == 0:
         raise ValueError("need at least one closed trade to bootstrap from")
@@ -32,7 +33,7 @@ def simulate(r_multiples: list[float], *, risk_pct: float,
     max_dd = 1.0 - (equity / peaks).min(axis=1)          # per-path max drawdown, fraction
     final = equity[:, -1]
 
-    return {
+    out = {
         "p50_final_multiple": float(np.percentile(final, 50)),
         "p05_final_multiple": float(np.percentile(final, 5)),
         "max_dd_p50": float(np.percentile(max_dd, 50)),
@@ -40,3 +41,8 @@ def simulate(r_multiples: list[float], *, risk_pct: float,
         "p_ruin": float((equity.min(axis=1) < RUIN_THRESHOLD).mean()),
         "p_10x": float((equity.max(axis=1) >= TARGET_MULTIPLE).mean()),
     }
+    if return_paths:
+        out["percentile_paths"] = {
+            f"p{q:02d}": np.percentile(equity, q, axis=0).tolist()
+            for q in (5, 25, 50, 75, 95)}
+    return out
