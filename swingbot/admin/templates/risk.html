@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block body %}
+{#
+  Portfolio risk panel (Task E54). Every number here comes from
+  _collect_portfolio_state() -- the same collector behind the !portfolio
+  Discord command -- so this page and that command can never disagree.
+  That collector try/excepts each sub-collector to a safe default, so any
+  value may legitimately be missing; each block below degrades rather than
+  raising.
+#}
+{% set heat = state.get('open_heat') or 0.0 %}
+{% set cap = state.get('heat_cap') or 0.0 %}
+{% set kill = state.get('kill') or {} %}
+{% set util = (heat / cap * 100.0) if cap else 0.0 %}
+
+{% if kill.get('on') %}
+<div class="card" style="margin-bottom:20px; border-color:#ef5350;">
+  <p class="card-title" style="color:#ef5350;">🛑 Kill switch ENGAGED</p>
+  <p class="muted" style="margin:0;">
+    No new entries are being taken.
+    {% if kill.get('reason') %}Reason: <strong>{{ kill.get('reason') }}</strong>.{% endif %}
+    Release is manual and deliberate -- it never clears itself.
+  </p>
+</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:20px;">
+  <p class="card-title">Portfolio heat</p>
+  <table>
+    <tr>
+      <th>Metric</th><th>Value</th><th>Cap</th><th>Utilisation</th>
+    </tr>
+    <tr>
+      <td>Open heat</td>
+      <td class="num">{{ '%.2f'|format(heat) }}%</td>
+      <td class="num">{{ '%.2f'|format(cap) }}%</td>
+      <td class="num {{ 'neg' if util >= 100 else '' }}">
+        {{ '%.0f'|format(util) }}%
+        <div class="pos-bar" style="width:120px;">
+          {# clamp the fill so an over-cap portfolio can't paint past the track #}
+          <div class="pos-bar-fill"
+               style="width:{{ [util, 100.0]|min }}%;
+                      background:{{ '#ef5350' if util >= 100 else ('#e2b25a' if util >= 75 else '#6dda9e') }};"></div>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <p class="muted" style="font-size:12.5px; margin-bottom:0;">
+    Open heat is the summed risk of every open position as a percent of account
+    balance. At or above the cap, new entries are blocked.
+  </p>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <p class="card-title">Sector heat</p>
+  {% set sectors = state.get('sector_heat') or {} %}
+  {% if sectors %}
+  <table>
+    <tr><th>Sector</th><th>Heat</th><th></th></tr>
+    {% for sector, pct in sectors|dictsort(by='value', reverse=true) %}
+    <tr>
+      <td>{{ sector }}</td>
+      <td class="num">{{ '%.2f'|format(pct or 0.0) }}%</td>
+      <td>
+        <div class="pos-bar" style="width:160px;">
+          <div class="pos-bar-fill"
+               style="width:{{ [((pct or 0.0) / cap * 100.0) if cap else 0.0, 100.0]|min }}%;
+                      background:#5a8dd6;"></div>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted" style="margin-bottom:0;">No sector exposure -- no open positions, or no sector map for the active universe.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <p class="card-title">Correlated clusters</p>
+  {% set clusters = state.get('clusters') or [] %}
+  {% if clusters %}
+  <table>
+    <tr><th>#</th><th>Tickers moving together</th><th>Size</th></tr>
+    {% for cluster in clusters %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td>{{ cluster|join(', ') }}</td>
+      <td class="num">{{ cluster|length }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="font-size:12.5px; margin-bottom:0;">
+    Positions in one cluster tend to lose together, so their combined risk is
+    larger than the per-trade numbers suggest.
+  </p>
+  {% else %}
+  <p class="muted" style="margin-bottom:0;">No correlated clusters among open positions.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+  <p class="card-title">Drawdown throttle</p>
+  {% set mult = state.get('throttle_mult') %}
+  {% set mult = 1.0 if mult is none else mult %}
+  <table>
+    <tr><th>Risk multiplier</th><th>State</th></tr>
+    <tr>
+      <td class="num {{ 'neg' if mult < 1.0 else '' }}">x{{ '%.2f'|format(mult) }}</td>
+      <td>
+        {% if state.get('paused') %}
+          <span style="color:#ef5350; font-weight:700;">PAUSED</span> -- no new entries
+        {% elif mult < 1.0 %}
+          <span style="color:#e2b25a; font-weight:600;">Throttled</span> -- position sizes reduced
+        {% else %}
+          <span style="color:#6dda9e; font-weight:600;">Normal</span>
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+  <p class="muted" style="font-size:12.5px; margin-bottom:0;">
+    Derived from the account's own equity curve: the deeper the current
+    drawdown, the smaller every new position, so a losing run compounds down
+    instead of up.
+  </p>
+</div>
+
+<div class="card">
+  <p class="card-title">Kill switch</p>
+  <p class="muted" style="font-size:12.5px; margin-top:0;">
+    A hard stop on new entries. Open positions keep being monitored for
+    stop-loss and take-profit either way -- this only prevents opening
+    anything new. It never releases itself; clearing it is always a
+    deliberate manual act.
+  </p>
+  <table>
+    <tr><th>Status</th><th>Reason</th><th>Action</th></tr>
+    <tr>
+      <td>
+        {% if kill.get('on') %}
+          <span style="color:#ef5350; font-weight:700;">ENGAGED</span>
+        {% else %}
+          <span style="color:#6dda9e; font-weight:600;">Clear</span>
+        {% endif %}
+      </td>
+      <td class="muted">{{ kill.get('reason') or '--' }}</td>
+      <td>
+        <form method="post" action="{{ url_for('risk_killswitch') }}" style="margin:0;">
+          {% if kill.get('on') %}
+            <input type="hidden" name="action" value="off">
+            <button type="submit" class="secondary small">Release kill switch</button>
+          {% else %}
+            <input type="hidden" name="action" value="on">
+            <button type="submit" class="small"
+                    onclick="return confirm('Engage the kill switch? No new entries will be taken until it is manually released.');">
+              Engage kill switch
+            </button>
+          {% endif %}
+        </form>
+      </td>
+    </tr>
+  </table>
+</div>
+{% endblock %}

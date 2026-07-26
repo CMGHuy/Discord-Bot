@@ -91,6 +91,7 @@ NAV_ITEMS = [
     ("journal",   "📓", "Journal", "pages.journal_page"),
     ("tuning",    "🛠", "Tuning", "pages.tuning_page"),
     ("watchlist", "📋", "Watchlist", "watchlist_page"),
+    ("risk",      "🛡", "Risk", "risk_panel"),
     ("settings",  "⚙️", "Settings", "settings_page"),
     ("logs",      "📜", "Logs", "logs_page"),
 ]
@@ -724,6 +725,29 @@ def delete_single_trade(trade_id):
     if deleted:
         return redirect(url_for("index", msg=f"Trade {trade_id} deleted.", ok=1))
     return redirect(url_for("index", msg=f"Trade {trade_id} not found.", ok=0))
+
+
+# ---------------------------------------------------------------------------
+# Routes -- Risk panel (Task E54). Stands alone off the existing admin nav
+# (no dashboard-card dependency): open heat vs cap, sector heat bars,
+# drawdown throttle multiplier, and the manual-release-only kill switch
+# (swingbot.core.edge.throttle) surfaced as a toggle. Reuses
+# _collect_portfolio_state (E52's !portfolio dashboard collector) so this
+# page and the Discord command always agree on the numbers.
+# ---------------------------------------------------------------------------
+@app.route("/risk")
+@require_auth
+def risk_panel():
+    from swingbot.commands.growth import _collect_portfolio_state
+    return _render("Portfolio Risk", "risk", "risk.html", state=_collect_portfolio_state())
+
+
+@app.route("/risk/killswitch", methods=["POST"])
+@require_auth
+def risk_killswitch():
+    from swingbot.core.edge import throttle
+    throttle.set_kill(request.form.get("action") == "on", reason="admin panel")
+    return redirect(url_for("risk_panel"))
 
 
 # ---------------------------------------------------------------------------
