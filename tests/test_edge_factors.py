@@ -236,3 +236,62 @@ def test_avwap_is_its_own_strategy_family():
     assert levels.strategy_family("AVWAP") == "AVWAP"
     assert levels.strategy_family("VWAP") == "VWAP"
     assert "AVWAP" in levels.ALL_STRATEGY_FAMILIES
+
+
+def _bar(df_idx, o, h, l, c, v, base_vol=1_000_000):
+    import pandas as pd
+    idx = pd.bdate_range("2026-01-01", periods=30)
+    df = pd.DataFrame({"Open": 100.0, "High": 101.0, "Low": 99.0,
+                       "Close": 100.0, "Volume": float(base_vol)}, index=idx)
+    df.iloc[-1] = [o, h, l, c, v]
+    return df
+
+
+def test_hammer_rejection_at_support_scores_high():
+    from swingbot.core.edge.factors import pattern_quality_at_level
+    # dipped through the 98 level, closed at the top of the bar, 3x volume
+    df = _bar(-1, 100.0, 100.6, 97.5, 100.5, 3_000_000)
+    assert pattern_quality_at_level(df, len(df) - 1, 98.0, "bullish") >= 8
+
+
+def test_weak_close_low_volume_scores_low():
+    from swingbot.core.edge.factors import pattern_quality_at_level
+    # never touched the level, closed mid-range, average volume
+    df = _bar(-1, 100.0, 101.0, 99.5, 100.2, 1_000_000)
+    assert pattern_quality_at_level(df, len(df) - 1, 98.0, "bullish") <= 4
+
+
+def test_pattern_quality_mirrors_for_bearish():
+    """The same bar that is a strong bullish rejection at support must be a
+    weak bearish one -- the close-position term flips."""
+    from swingbot.core.edge.factors import pattern_quality_at_level
+    df = _bar(-1, 100.0, 100.6, 97.5, 100.5, 3_000_000)
+    bull = pattern_quality_at_level(df, len(df) - 1, 98.0, "bullish")
+    bear = pattern_quality_at_level(df, len(df) - 1, 98.0, "bearish")
+    assert bull > bear
+
+    # ...and the mirror image at resistance: spiked through 103, closed at
+    # the bottom of the bar on heavy volume.
+    spike = _bar(-1, 100.0, 103.5, 99.4, 99.5, 3_000_000)
+    assert pattern_quality_at_level(spike, len(spike) - 1, 103.0, "bearish") >= 8
+
+
+def test_pattern_quality_is_bounded_and_survives_a_flat_bar():
+    from swingbot.core.edge.factors import pattern_quality_at_level
+    flat = _bar(-1, 100.0, 100.0, 100.0, 100.0, 5_000_000)   # zero range
+    assert pattern_quality_at_level(flat, len(flat) - 1, 98.0, "bullish") == 0
+
+    # A perfect bar cannot exceed the documented 0-10 range.
+    perfect = _bar(-1, 98.0, 101.0, 96.0, 101.0, 9_000_000)
+    score = pattern_quality_at_level(perfect, len(perfect) - 1, 98.0, "bullish")
+    assert 0 <= score <= 10
+
+
+def test_pierce_without_reclaim_earns_no_rejection_points():
+    """Piercing a level and CLOSING through it is a break, not a rejection --
+    it must not be rewarded like a bounce."""
+    from swingbot.core.edge.factors import pattern_quality_at_level
+    broke = _bar(-1, 100.0, 100.2, 97.0, 97.2, 3_000_000)   # closed below 98
+    held = _bar(-1, 100.0, 100.2, 97.0, 100.1, 3_000_000)   # closed back above 98
+    assert pattern_quality_at_level(broke, len(broke) - 1, 98.0, "bullish") < \
+           pattern_quality_at_level(held, len(held) - 1, 98.0, "bullish")

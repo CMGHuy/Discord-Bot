@@ -188,3 +188,38 @@ def avwap_anchors(df: pd.DataFrame, lookback: int = 120) -> list:
     anchors.update(pivots_hi[-2:])
     anchors.add(start + int(df["Volume"].values[start:].argmax()))
     return sorted(anchors)
+
+
+def pattern_quality_at_level(df: pd.DataFrame, idx: int, level: float,
+                             direction: str = "bullish") -> int:
+    """0-10 quality of the level-touch bar. Rewards conviction closes,
+    participation (volume), and an actual rejection wick THROUGH the
+    level -- the difference between a bounce and a drift.
+
+    A SCORE COMPONENT (consumed by E37's composite), never a hard filter:
+    a low score describes a weak touch, it does not veto a setup."""
+    bar = df.iloc[idx]
+    rng = float(bar["High"] - bar["Low"])
+    if rng <= 0:
+        return 0
+    bull = direction == "bullish"
+
+    # 1) close position in range: 0 (worst) .. 4 (closes at the favorable extreme)
+    pos = (bar["Close"] - bar["Low"]) / rng
+    pos = pos if bull else 1.0 - pos
+    score = round(4 * pos)
+
+    # 2) volume vs 20-bar average: >=2.5x -> 3, >=1.5x -> 2, >=1.0x -> 1
+    vol_avg = float(df["Volume"].iloc[max(0, idx - 20):idx].mean() or 0)
+    ratio = float(bar["Volume"]) / vol_avg if vol_avg > 0 else 0.0
+    score += 3 if ratio >= 2.5 else 2 if ratio >= 1.5 else 1 if ratio >= 1.0 else 0
+
+    # 3) wick rejection through the level: pierced it AND closed back beyond it.
+    # Both halves matter -- piercing and CLOSING through is a break, not a
+    # rejection, and must not score like a bounce.
+    pierced = bar["Low"] <= level if bull else bar["High"] >= level
+    reclaimed = bar["Close"] > level if bull else bar["Close"] < level
+    if pierced and reclaimed:
+        wick = (level - bar["Low"]) if bull else (bar["High"] - level)
+        score += 3 if wick / rng >= 0.25 else 2
+    return int(min(score, 10))
