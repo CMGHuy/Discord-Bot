@@ -46,3 +46,22 @@ def test_combined_floor():
     assert combined_throttle(0.75, 0.5) == pytest.approx(0.375)
     assert combined_throttle(0.25, 0.5) == 0.25       # floor
     assert combined_throttle(0.0, 1.0) == 0.0         # pause always wins
+
+
+def test_kill_triggers():
+    from swingbot.core.edge.throttle import check_kill_triggers
+    assert check_kill_triggers(21.0, 0.0, 0.0) == "drawdown >20%"
+    assert check_kill_triggers(0.0, -5.5, 0.0) == "SPY moved 5.5% in a day"
+    assert check_kill_triggers(0.0, 0.0, 0.30) == "30% of universe failed data quality"
+    assert check_kill_triggers(10.0, 2.0, 0.05) is None
+
+
+def test_kill_state_roundtrip(tmp_path, monkeypatch):
+    from swingbot.core.edge import throttle
+    monkeypatch.setattr(throttle, "KILLSWITCH_PATH", str(tmp_path / "killswitch.json"))
+    assert throttle.kill_state()["on"] is False              # default off
+    throttle.set_kill(True, reason="manual")
+    st = throttle.kill_state()
+    assert st["on"] is True and st["reason"] == "manual" and st["at"]
+    throttle.set_kill(False)
+    assert throttle.kill_state()["on"] is False

@@ -325,6 +325,15 @@ def _build_trade_plan_table(item) -> str:
     # are reflected immediately without a bot restart.
     account_cfg = load_account_config()
     pos = compute_position_size(entry, stop_loss, account_cfg)
+    kill_blocked = getattr(item, "kill_switch_blocked", None)
+    if kill_blocked is not None and pos:
+        # Kill switch (E47): unlike E7/E8's heat/cluster caps just below in
+        # build_embed (which only add a headline label -- this "Suggested
+        # size" row stays at its uncapped value for those two), the kill
+        # switch actually zeroes every number this row shows. Entries are
+        # fully paused scan-wide, so the honest suggested size IS zero,
+        # not a labeled-but-unchanged ideal.
+        pos = dict(pos, shares=0.0, position_value=0.0, risk_amount=0.0)
     if pos and pos["balance"] > 0:
         cur = config.CURRENCY_SYMBOL
         cap_note = f"  [capped at {pos['max_position_pct']:.0f}% of account]" if pos["capped"] else ""
@@ -348,7 +357,7 @@ def _build_trade_plan_table(item) -> str:
     if plan_v2 is not None:
         rows.append(("Entry (v2)", entry_line(plan_v2)))
         cur = config.CURRENCY_SYMBOL
-        tp1_row, runner_row = leg_rows(plan_v2, currency=cur)
+        tp1_row, runner_row = leg_rows(plan_v2, currency=cur, force_zero=kill_blocked is not None)
         rows.append(("TP1 leg (50%)", tp1_row))
         rows.append(("Runner leg (50%)", runner_row))
 
@@ -391,16 +400,22 @@ def entry_line(plan) -> str:
     return f"Entry: market ~{plan.trigger_price:.2f}"
 
 
-def leg_rows(plan, currency: str) -> tuple[str, str]:
+def leg_rows(plan, currency: str, force_zero: bool = False) -> tuple[str, str]:
     """('50% @ 102.00 → +$17.50', '50% → TP2 105.00 / trail') for the
     two-leg sizing block. P&L uses the SAME sizing snapshot source as the
-    legacy table (account.compute_position_size at render time)."""
+    legacy table (account.compute_position_size at render time).
+
+    force_zero=True (kill switch, Edge plan E47) zeroes the P&L this leg
+    would otherwise show -- entries are paused, so 0 is the honest number,
+    not a theoretical one."""
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
     frac1 = plan.tp1_fraction
     try:
         sizing = account.compute_position_size(entry, plan.stop_loss)
     except Exception:
         sizing = None
+    if force_zero and sizing:
+        sizing = dict(sizing, shares=0.0)
     tp1_pct = f"{frac1:.0%} @ {plan.tp1:.2f}"
     if sizing and sizing.get("shares"):
         sign = 1 if plan.direction == "bullish" else -1
@@ -492,6 +507,17 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             "⛔ ENTRY BLOCKED — correlated cluster",
             (f"Correlated with {tickers_str} (cluster heat {cluster_blocked['correlated_heat']}% / "
              f"cap {cluster_blocked['cap']}%) — suggested size **0 shares**."),
+            False,
+        ))
+
+    kill_blocked = getattr(item, "kill_switch_blocked", None)
+    if kill_blocked is not None:
+        # Kill switch (Edge plan E47): same flagged-not-hidden pattern as
+        # the E7/E8 blocks above -- informed, not blind. Unlike those two,
+        # release is manual-only (`!killswitch off`), never automatic.
+        sections["headline"].append((
+            f"⛔ ENTRIES PAUSED (kill switch: {kill_blocked.get('reason')})",
+            "Suggested size **0 shares** — a human needs to review before this re-engages (`!killswitch off`).",
             False,
         ))
 

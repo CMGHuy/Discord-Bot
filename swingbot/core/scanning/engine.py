@@ -56,10 +56,12 @@ import discord
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core import levels
+from swingbot.core import account as account_module
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import heat as heat_mod
+from swingbot.core.edge import throttle
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
 from swingbot.core.events import earnings_within_window
@@ -457,6 +459,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
         },
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
+        "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
     }
 
     if is_stop_requested():
@@ -531,6 +534,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                   ticker, "; ".join(quality_issues))
         if progress is not None:
             progress.done += max(1, len(horizons_to_scan))
+        stats["data_quality_failed"] = True
         return stats
 
     for horizon_key in horizons_to_scan:
@@ -822,6 +826,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     no_entry_point = 0
     scenarios_found_count = 0
     fully_qualifying_count = 0
+    data_quality_failed_count = 0   # E47: feeds check_kill_triggers' data_fail_frac
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
         "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
@@ -877,6 +882,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         no_entry_point += per_ticker["no_entry_point"]
         scenarios_found_count += per_ticker["scenarios_found"]
         fully_qualifying_count += per_ticker["fully_qualifying"]
+        if per_ticker.get("data_quality_failed"):
+            data_quality_failed_count += 1
         for key, count in per_ticker["failed_counts"].items():
             failed_counts[key] += count
         for level, count in per_ticker["conf_level_counts"].items():
@@ -925,6 +932,25 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 )
             item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
             scan_items.append(item)
+
+    # Kill switch (E47): computed once per scan, right here -- AFTER the
+    # merge loop above (data_quality_failed_count only exists once every
+    # per_ticker result has been folded in) and BEFORE the alert-building
+    # loop below (never inside it; this is a scan-wide reading, not a
+    # per-alert one). A firing trigger only *engages* the switch --
+    # release is manual-only (`!killswitch off`), see throttle.py's
+    # module docstring for why.
+    data_fail_frac = data_quality_failed_count / len(tickers) if tickers else 0.0
+    spy_move_pct = 0.0
+    if spy_df is not None and len(spy_df) >= 2:
+        spy_move_pct = (float(spy_df["Close"].iloc[-1]) / float(spy_df["Close"].iloc[-2]) - 1.0) * 100.0
+    equity_points = [bal for _, bal in account_module.get_balance_history_points()]
+    dd_pct = throttle.drawdown_pct(equity_points) if equity_points else 0.0
+    kill_reason = throttle.check_kill_triggers(dd_pct, spy_move_pct, data_fail_frac)
+    if kill_reason:
+        throttle.set_kill(True, kill_reason)
+        log.warning("Kill switch engaged: %s (dd=%.1f%% spy_move=%.1f%% data_fail=%.0f%%)",
+                     kill_reason, dd_pct, spy_move_pct, data_fail_frac * 100.0)
 
     if progress is not None:
         # Replaces the old live "progress.qualifying_found = len(scan_items)"
@@ -1168,6 +1194,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         cluster_chk = corr_mod.cluster_check(cluster_exp, account_cfg.get("risk_pct", 1.0))
         if not cluster_chk["allowed"]:
             item.cluster_blocked = cluster_chk
+
+        # Kill switch (E47): same flagged-not-hidden pattern as E7/E8 above,
+        # but ENTRIES-WIDE rather than per-ticker -- re-read per item (cheap
+        # file read) so a switch engaged mid-scan (right after the merge
+        # loop, above) still labels every alert built afterward this pass.
+        kill_st = throttle.kill_state()
+        if kill_st.get("on"):
+            item.kill_switch_blocked = kill_st
 
         # Intraday entry-timing annotation (Edge plan E29). Live-only and
         # advisory: it never gates, resizes, or reprices anything -- the

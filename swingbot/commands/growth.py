@@ -2,6 +2,8 @@
 import asyncio
 from datetime import date
 
+from discord.ext import commands
+
 from swingbot.bot_core import bot
 from swingbot.core import account as account_module
 from swingbot.core.edge.growth import AVG_DAYS_PER_MONTH, growth_report, growth_path
@@ -57,3 +59,16 @@ async def growth_command(ctx, target: float = 10.0):
         report += (f"\nat {gp['current_multiple']:.2f}x — {gp['pct_to_target']:.1f}% of the way "
                    f"(log scale) toward {target:g}x; on track for {target:g}x-in-8y: {on_track_str}")
     await ctx.send(f"```\n{report}\n```")
+
+
+@bot.command(name="killswitch")
+@commands.has_permissions(administrator=True)
+async def killswitch_command(ctx, action: str = "status"):
+    """!killswitch on|off|status — hard pause for all new entries."""
+    from swingbot.core.edge import throttle
+    if action == "status":
+        st = throttle.kill_state()
+        await ctx.send(f"kill switch: {'🔴 ON — ' + str(st['reason']) if st['on'] else '🟢 off'}")
+        return
+    st = throttle.set_kill(action == "on", reason="manual")
+    await ctx.send(f"kill switch {'engaged 🔴 — no new entries' if st['on'] else 'released 🟢'}")

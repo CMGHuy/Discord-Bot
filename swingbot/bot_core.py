@@ -220,6 +220,7 @@ COMMAND_USAGE = {
     "calibration":         ("!calibration", "!calibration"),
     "journal":             ("!journal TRADE_ID your note here", "!journal T-42 watch the gap next time  or  !journal NVDA"),
     "growth":              ("!growth [target_multiple]", "!growth  or  !growth 5"),
+    "killswitch":          ("!killswitch on|off|status", "!killswitch status  or  !killswitch on"),
     "ping":                ("!ping", "!ping"),
     "commands":            ("!commands", "!commands"),
 }
