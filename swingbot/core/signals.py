@@ -450,6 +450,41 @@ def break_retest_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Sign
 # Hidden bullish: price higher low + RSI lower low (uptrend continuation).
 # Hidden bearish: price lower high + RSI higher high (downtrend continuation).
 # ---------------------------------------------------------------------------
+def divergence_strength(price_lows: list, rsi_lows: list, volumes: list) -> int:
+    """0-10. More swing points, steeper disagreement, fading volume =
+    a divergence worth acting on rather than a two-touch accident.
+
+    Purely descriptive (edge E36): it grades a divergence the detector has
+    ALREADY found and never decides whether one exists. Detection stays in
+    entry_filters.rsi_divergence_entries, the single source the backtest
+    and the live scanner share -- scoring here cannot move a detection.
+
+    Works for both directions: pass the price/RSI swing LOWS for hidden
+    bullish, the swing HIGHS for hidden bearish. The slope-disagreement
+    term is symmetric, so no direction flag is needed.
+    """
+    score = min(len(price_lows) - 2, 3) if len(price_lows) >= 2 else 0
+    if len(price_lows) >= 2 and len(rsi_lows) >= 2 and price_lows[0] > 0:
+        price_slope = (price_lows[-1] - price_lows[0]) / price_lows[0]
+        rsi_slope = (rsi_lows[-1] - rsi_lows[0]) / 100.0
+        disagreement = abs(rsi_slope - price_slope)
+        score += min(int(disagreement * 40), 4)
+    if len(volumes) >= 2 and volumes[0] > 0:
+        fade = 1.0 - volumes[-1] / volumes[0]
+        score += 3 if fade >= 0.4 else 2 if fade >= 0.2 else 0
+    return int(min(score, 10))
+
+
+def _swing_volumes(df: pd.DataFrame, swings: list, lookback: int) -> list:
+    """Volume on each swing bar. `swings` carries positions inside the
+    trailing `lookback` window (that's the frame rsi_divergence_signal
+    detects swings on), so they're mapped back to the full frame here
+    rather than indexed straight into df -- off-by-one on that mapping
+    would silently score the wrong bars' volume."""
+    window_vol = df["Volume"].iloc[-lookback:].reset_index(drop=True)
+    return [float(window_vol.iloc[i]) for i, _ in swings if 0 <= i < len(window_vol)]
+
+
 def rsi_divergence_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> SignalResult:
     h = HORIZONS[horizon_key]
     close_series = df["Close"]
@@ -509,6 +544,12 @@ def rsi_divergence_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Si
                 # use the most recent swing low as a pullback/retest reference
                 # level without having to parse the display string.
                 "Recent swing low": round(pl2_v, 2),
+                # Edge E36: grades the divergence just described. Descriptive
+                # only -- `triggered` was decided by entries_for above and is
+                # not revisited here.
+                "Divergence strength": divergence_strength(
+                    [v for _, v in price_lows], [v for _, v in rsi_lows],
+                    _swing_volumes(df, price_lows, lookback)),
             })
 
     # Hidden bearish: price makes lower high, RSI makes higher high
@@ -524,6 +565,10 @@ def rsi_divergence_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Si
                 "RSI highs":   f"{round(near1[-1], 1)} → {round(near2[-1], 1)} (higher)",
                 # Raw float counterpart of "Price highs" above, for trade_plan.py.
                 "Recent swing high": round(ph2_v, 2),
+                # Edge E36, mirrored: same scorer, fed the swing HIGHS.
+                "Divergence strength": divergence_strength(
+                    [v for _, v in price_highs], [v for _, v in rsi_highs],
+                    _swing_volumes(df, price_highs, lookback)),
             })
 
     return SignalResult(

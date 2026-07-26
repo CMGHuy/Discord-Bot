@@ -373,3 +373,87 @@ def test_hvn_lvn_levels_are_flag_gated(monkeypatch):
     on = levels.collect_candidate_levels(df, HORIZONS["4w"], price)
     assert any(src == "Volume Profile LVN" for _, src in on)
     assert len(on) > len(off)
+
+
+# --- E36: divergence quality ------------------------------------------------
+
+def _divergence_df():
+    """A genuine hidden-BULLISH divergence: price swing lows 104 -> 108
+    (higher) while the matching RSI lows fall 33.3 -> 30.5. REPL-tuned
+    until the real `signals` swing-detection actually produced that shape
+    -- a fast V-dip leaves RSI only mildly oversold, while a long shallow
+    grind that bottoms ABOVE it drives RSI lower. Frozen here; don't
+    "simplify" the numbers without re-checking both swing lists."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    base = list(np.linspace(90, 120, 45))
+    dip = [118, 112, 104, 112, 116]
+    push = [117, 118, 119]
+    grind = [round(119 - 0.5 * i, 2) for i in range(1, 23)]
+    tail = [110.0, 112.0, 114.0]
+    return make_ohlcv(np.array(base + dip + push + grind + tail, dtype=float),
+                      spread_pct=1.5)
+
+
+def test_divergence_strength_golden():
+    from swingbot.core.signals import divergence_strength
+    # 4 swing points (+2), price +6.7% vs RSI -3 pts => disagreement 0.0967
+    # -> int(0.0967*40) = 3 (+3), volume fading 3M -> 1M = 67% (+3) = 8
+    score = divergence_strength([90.0, 92.0, 94.0, 96.0], [35.0, 32.0],
+                                [3_000_000.0, 1_000_000.0])
+    assert score == 8
+
+
+def test_divergence_strength_two_touch_accident_scores_zero():
+    from swingbot.core.signals import divergence_strength
+    # bare minimum swings, near-parallel slopes, flat volume
+    assert divergence_strength([100.0, 101.0], [40.0, 39.0],
+                               [1_000_000.0, 1_000_000.0]) == 0
+
+
+def test_divergence_strength_is_bounded():
+    from swingbot.core.signals import divergence_strength
+    score = divergence_strength([50.0] + [60.0] * 9, [90.0, 10.0],
+                                [9_000_000.0, 100_000.0])
+    assert 0 <= score <= 10
+    assert divergence_strength([], [], []) == 0
+    assert divergence_strength([0.0, 1.0], [40.0, 30.0], [0.0, 0.0]) >= 0
+
+
+def test_divergence_detection_is_unchanged_by_the_scoring(monkeypatch):
+    """Characterization: the scoring must not move a single detection.
+    It can't, structurally -- detection lives in entry_filters
+    (rsi_divergence_entries, the ONE source the backtest and the live
+    scanner share) and signals.rsi_divergence_signal delegates `triggered`
+    straight to entries_for. This pins that delegation so a future
+    'optimization' can't quietly reintroduce a second detector here."""
+    from swingbot.core import signals
+    from swingbot.core.entry_filters import entries_for
+    df = _divergence_df()
+    bull, bear = entries_for("RSI Divergence", df, "2m")
+    res = signals.rsi_divergence_signal("TEST", df, "2m")
+    expected = bool(bull.iloc[-1]) or bool(bear.iloc[-1])
+    assert res.triggered == expected
+
+
+def test_strength_is_attached_when_the_divergence_pattern_is_described():
+    """When the enrichment block recognises the pattern, the details it
+    renders now carry a 0-10 strength alongside the swing values."""
+    from swingbot.core import signals
+    df = _divergence_df()
+
+    # Force the entry gate open so the descriptive block runs; detection
+    # itself is covered by the characterization test above.
+    import pandas as pd
+    true_s = pd.Series(True, index=df.index)
+    false_s = pd.Series(False, index=df.index)
+    orig = signals.entries_for
+    signals.entries_for = lambda strategy, d, hk, *a, **k: (true_s, false_s)
+    try:
+        res = signals.rsi_divergence_signal("TEST", df, "2m")
+    finally:
+        signals.entries_for = orig
+
+    assert res.details.get("Pattern") == "Hidden bullish divergence", res.details
+    strength = res.details.get("Divergence strength")
+    assert strength is not None and 0 <= strength <= 10

@@ -57,7 +57,8 @@
 - Task E33 (Fold-tune the Phase-E2 filter set) NOT EXECUTED — deferred by the plan's own ordering note: it executes AFTER E39 (the fold engine it consumes). Build E34–E39 first, then return here.
 - Task E34 (Candlestick quality at levels) done: `pattern_quality_at_level(df, idx, level, direction)` appended to `factors.py` — 0-10 from close-position-in-range (0-4), volume vs its own 20-bar average (0-3), and a rejection wick that pierced the level AND closed back beyond it (0-3). Brief verified fully accurate: both of its golden assertions were hand-checked before implementing (the hammer case scores 9, the drift case 3) and the transcribed code reproduces them. No wiring — a SCORE COMPONENT for E37's composite, explicitly not a hard filter, so nothing consumes it yet and nothing in the live path changes. Tests: 5 (brief's 2 + a bearish mirror, a zero-range/bounds guard, and a pierce-without-reclaim case proving a level BREAK doesn't score like a bounce). Full suite 898 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 102 files.
 - Task E35 (Volume profile HVN/LVN targets) done: `volume_profile_nodes(df, lookback_days=180, bins=42)` added to `levels.py` + flag-gated `collect_candidate_levels` wiring + `VOLUME_PROFILE_NODES_ENABLED` config Field (default false). **The brief's implementation finds ZERO HVNs on the brief's own test fixture** — verified empirically by running it before writing a line of production code, not reasoned about. Cause: `range(1, len(hist) - 1)` skips the first and last histogram bin, and `np.histogram` puts the data's own extremes exactly there, so a bimodal profile whose two modes ARE the window's high and low — the textbook case this function exists to find, and precisely what the brief's fixture builds — returns nothing. Two of that test's three assertions fail as written. Fixed by scanning every bin and comparing the boundary bins against their single existing neighbour. A second defect surfaced from a degenerate-input test: a constant-price window made `np.histogram` pad the range, and every padded bin is an empty local minimum, so a stock that never moved reported ~40 "LVNs" at prices it never traded — fixed with an `hi <= lo` guard plus an interior-range filter that drops bins outside the actually-traded range. Label correction (the E30 trap again): the brief's bare `"HVN"`/`"LVN"` labels don't match any `_STRATEGY_FAMILY_PREFIXES` entry, so `strategy_family()` would return them as two unregistered families absent from `ALL_STRATEGY_FAMILIES`, AND would count them as extra "agreeing strategies" alongside the existing `compute_hvn_level` candidate — double-counting one piece of evidence, exactly what family collapse exists to prevent. Labelled `"Volume Profile HVN"`/`"Volume Profile LVN"` instead, which collapses into the existing Volume Profile family through the existing prefix with no registry change. Flag-gated default off for the same reason as E30: it adds candidates, which moves clustered level PRICES even though it can't inflate confluence COUNTS. Real-data smoke (AAPL, 180-day window, flag forced on): 8 HVNs + 9 LVNs, 35 base candidates → 52; sane spread, no explosion. **Note for E33:** +17 candidates on one ticker is a large share of the level map, and their cluster-mean pull is the same effect recorded under E30. Tests: 5 (brief's 1 + an edge-bin regression pinning the boundary fix, a flat-profile degenerate case, a family-collapse assertion, and a flag-gating assertion). Full suite 898 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 102 files.
-- **Next:** Task E36 (Divergence quality upgrade)
+- Task E36 (Divergence quality upgrade) done: `divergence_strength(price_lows, rsi_lows, volumes)` + a `_swing_volumes` helper added to `signals.py`, attached to both the hidden-bullish and hidden-bearish enrichment blocks of `rsi_divergence_signal` as `details["Divergence strength"]`. The brief's own accessor is a guess and says so — there is no `detect_rsi_divergence` returning dicts. The real shape: **detection lives in `entry_filters.rsi_divergence_entries`** (boolean Series, the ONE source the backtest and live scanner share) and `signals.rsi_divergence_signal` already delegates `triggered` straight to `entries_for`, computing swing lists only to describe the setup. So the score was attached in that descriptive layer and `entry_filters.py` was never opened — the brief's "keeps its exact current detections" requirement holds *structurally*, not just by test. The characterization test pins the delegation itself (`res.triggered == entries_for(...)`) so a future change can't quietly reintroduce a second detector in signals.py. The brief's two signatures disagree (Interfaces says `(df, price_swings, rsi_swings)`, Step 3 says `(price_lows, rsi_lows, volumes)`); the Step 3 form is the concrete one and was used. Swing positions are indices into the trailing `lookback` window, not the full frame — mapped back explicitly in `_swing_volumes`, since indexing `df` directly would have scored the wrong bars' volume. Fixture note: the hidden-bullish frame took real REPL tuning (a fast V-dip leaves RSI mildly oversold; a long shallow grind bottoming ABOVE it drives RSI lower — price lows 104→108 with RSI lows 33.3→30.5) and is frozen with a comment, per this repo's entry-filter fixture convention. Tests: 5 (3 pure-function goldens including bounds/degenerate inputs, 1 characterization, 1 attachment). `div_strength_min` stays a fold candidate for a LATER pre-registration, explicitly not in the E33 grid — it needs live scores accumulated first. Full suite 903 passed / 54 skipped (+1 known pre-existing wall-clock failure), py_compile clean across 102 files.
+- **Next:** Task E37 (Composite entry-quality score v2)
 
 ## Global Constraints
 
@@ -3570,7 +3571,7 @@ git commit -m "feat: HVN/LVN levels"
 **Interfaces:**
 - Produces: `divergence_strength(df, price_swings: list[int], rsi_swings: list[float]) -> int` (0–10): swing-point count beyond the minimum 2 (0–3), price/RSI slope differential magnitude (0–4), volume fading into the final swing (0–3). The detector keeps its exact current detections (characterization-tested) and attaches `strength` to each; fold candidate `div_strength_min` for a later pre-registration (NOT in the E33 grid — it needs live scores accumulated first).
 
-- [ ] **Step 1: Characterization test FIRST** (before touching the detector)
+- [x] **Step 1: Characterization test FIRST** (before touching the detector)
 
 ```python
 def test_divergence_detections_unchanged_with_score_attached():
@@ -3593,9 +3594,9 @@ def test_divergence_detections_unchanged_with_score_attached():
 
 (Adapt the accessor to the real detector name/return shape in `signals.py` — capture the current behavior exactly, then assert it is preserved. If the current return is a bare boolean Series, the upgrade wraps it: same Series plus a parallel `strength` Series.)
 
-- [ ] **Step 2: Run — currently PASSES against the old detector (it's a characterization); it FAILS once you add the strength assertion. Lock the old output in first.**
+- [x] **Step 2: Run — currently PASSES against the old detector (it's a characterization); it FAILS once you add the strength assertion. Lock the old output in first.**
 
-- [ ] **Step 3: Implement** — add the scoring function to `signals.py` and attach it without changing detection logic:
+- [x] **Step 3: Implement** — add the scoring function to `signals.py` and attach it without changing detection logic:
 
 ```python
 def divergence_strength(price_lows: list, rsi_lows: list, volumes: list) -> int:
@@ -3613,9 +3614,9 @@ def divergence_strength(price_lows: list, rsi_lows: list, volumes: list) -> int:
     return int(min(score, 10))
 ```
 
-- [ ] **Step 4: Run — characterization + strength tests PASS; full suite green (RSI-Divergence backtest goldens unchanged).**
+- [x] **Step 4: Run — characterization + strength tests PASS; full suite green (RSI-Divergence backtest goldens unchanged).**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/signals.py tests/test_edge_factors.py
