@@ -224,6 +224,44 @@ class TradeLog:
     def _save(self):
         atomic_write_json(self.path, self._trades)
 
+    def _shadow_sizing(self, strategy: str) -> dict | None:
+        """What each E6 sizing mode WOULD have sized this trade at, computed
+        from inputs available right here (this strategy's own R-multiple
+        history in this same log, and the current open-position count) --
+        never applied, purely recorded for the E55 shadow comparison.
+        ticker_atr_pct isn't wired into log_trade's call sites, so
+        vol_target is genuinely omitted rather than fabricated -- not a
+        missing feature, an honest gap (a future wiring task, matching the
+        rest of this plan's own recorded gaps).
+        """
+        from swingbot.core.analytics.metrics import r_multiple as _r_multiple
+        from swingbot.core.edge import sizing as edge_sizing
+
+        rs = [r for t in self._trades if t.get("strategy") == strategy
+              and (r := _r_multiple(t)) is not None]
+        shadow: dict = {}
+        kelly_val = None
+        if rs:
+            wins = [r for r in rs if r > 0]
+            losses = [r for r in rs if r <= 0]
+            stats = {
+                "n": len(rs),
+                "win_rate": len(wins) / len(rs),
+                "avg_win_r": (sum(wins) / len(wins)) if wins else 0.0,
+                "avg_loss_r": (abs(sum(losses) / len(losses)) if losses else 1.0),
+            }
+            kelly_val = edge_sizing.kelly_risk_pct(stats)
+            shadow["kelly"] = kelly_val
+
+        if kelly_val is not None:
+            try:
+                config_risk = float(account_module.load_account_config().get("risk_pct", 1.0))
+            except Exception:
+                config_risk = 1.0
+            shadow["min_of_all"] = edge_sizing.effective_risk_pct(config_risk, kelly_risk=kelly_val)
+
+        return shadow or None
+
     def log_trade(self, ticker, strategy, horizon_key, direction, confidence_level,
                   confidence_label, entry, stop_loss, take_profit, target2=None,
                   confidence_score=None, confidence_breakdown=None, target_sources=None,
@@ -304,6 +342,7 @@ class TradeLog:
         record["sizing_mode"] = sizing["mode"] if sizing else None
         record["realized_pnl_amount"] = None      # filled in on close by _settle_account_balance
         record["account_balance_after"] = None    # filled in on close by _settle_account_balance
+        record["shadow_sizing"] = self._shadow_sizing(strategy)
 
         with _LOCK:
             self._trades.append(record)

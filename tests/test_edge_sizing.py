@@ -130,3 +130,66 @@ def test_set_sizing_mode_accepts_the_three_edge_modes(tmp_path):
     assert set_sizing_mode("min_of_all", path=path)["sizing_mode"] == "min_of_all"
     with pytest.raises(ValueError):
         set_sizing_mode("not_a_real_mode", path=path)
+
+
+def test_sizing_shadow_report_compares_modes():
+    from scripts.sizing_shadow_report import sizing_shadow_report
+    trades = [
+        {"r_multiple": 1.0, "risk_pct": 1.0,
+         "shadow_sizing": {"kelly": 2.0, "vol_target": 0.7, "min_of_all": 0.7}},
+        {"r_multiple": -1.0, "risk_pct": 1.0,
+         "shadow_sizing": {"kelly": 2.0, "vol_target": 0.7, "min_of_all": 0.7}},
+        {"r_multiple": 1.0, "risk_pct": 1.0,
+         "shadow_sizing": {"kelly": 2.0, "vol_target": 0.7, "min_of_all": 0.7}},
+    ]
+    rep = sizing_shadow_report(trades)
+    assert rep["actual"]["multiple"] == pytest.approx(1.01 * 0.99 * 1.01, rel=1e-9)
+    assert rep["kelly"]["multiple"] == pytest.approx(1.02 * 0.98 * 1.02, rel=1e-9)
+    assert rep["kelly"]["max_dd_pct"] > rep["vol_target"]["max_dd_pct"]
+
+
+def test_sizing_shadow_report_ignores_trades_without_shadow_data():
+    from scripts.sizing_shadow_report import sizing_shadow_report
+    trades = [{"r_multiple": 1.0, "risk_pct": 1.0}]  # no shadow_sizing at all
+    rep = sizing_shadow_report(trades)
+    for mode in ("actual", "kelly", "vol_target", "min_of_all"):
+        assert rep[mode]["multiple"] == 1.0
+
+
+def test_log_trade_stamps_shadow_sizing_from_own_history(tmp_path):
+    from swingbot.core.performance import TradeLog
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    # seed one closed trade for the strategy so kelly has real R history to
+    # work with -- n=1 is well below KELLY_MIN_SAMPLE (30) so this exercises
+    # the floor path, not a golden Kelly number (that's covered above).
+    log.log_trade(
+        ticker="AAPL", strategy="RSI", horizon_key="4w", direction="bullish",
+        confidence_level=4, confidence_label="Strong", entry=100.0, stop_loss=95.0,
+        take_profit=110.0,
+    )
+    log._trades[0]["status"] = "win"
+    log._trades[0]["exit_price"] = 110.0
+
+    trade_id = log.log_trade(
+        ticker="MSFT", strategy="RSI", horizon_key="4w", direction="bullish",
+        confidence_level=4, confidence_label="Strong", entry=50.0, stop_loss=48.0,
+        take_profit=56.0,
+    )
+    t = log.get_trade_by_id(trade_id)
+    assert t["shadow_sizing"]["kelly"] == pytest.approx(RISK_FLOOR_PCT)
+    # ticker_atr_pct isn't wired into log_trade -- vol_target must be
+    # genuinely absent, not a fabricated value.
+    assert "vol_target" not in t["shadow_sizing"]
+    assert t["shadow_sizing"]["min_of_all"] is not None
+
+
+def test_log_trade_shadow_sizing_none_with_no_strategy_history(tmp_path):
+    from swingbot.core.performance import TradeLog
+    log = TradeLog(path=str(tmp_path / "trades.json"))
+    trade_id = log.log_trade(
+        ticker="AAPL", strategy="Brand New Strategy", horizon_key="4w", direction="bullish",
+        confidence_level=4, confidence_label="Strong", entry=100.0, stop_loss=95.0,
+        take_profit=110.0,
+    )
+    t = log.get_trade_by_id(trade_id)
+    assert t["shadow_sizing"] is None
