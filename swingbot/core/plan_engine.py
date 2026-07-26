@@ -8,11 +8,13 @@ backtests, the live plan manager — builds and prices it here.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import uuid
 from dataclasses import dataclass, field
 
 import numpy as np
 
+from swingbot import config
 from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
 from swingbot.core.registry import Badge, get_badge
 from swingbot.core.strategy_types import (
@@ -20,6 +22,8 @@ from swingbot.core.strategy_types import (
     HORIZONS,
     STRATEGY_RR_OVERRIDE,
 )
+
+log = logging.getLogger("swing-bot.plan_engine")
 
 # Same numbers backtest.py used before the extraction (parity-critical).
 STRUCTURE_BUFFER_ATR = 0.25   # cushion beyond swing high/low, in ATR units
@@ -101,6 +105,16 @@ class TradePlanV2:
     working_stop: float | None = None   # None = "use stop_loss"; live BE/trail floor
     legs_realized: list = field(default_factory=list)  # [{fraction, exit_price, r, reason}]
     runner_high_close: float | None = None  # extreme price since TP1 (bearish: extreme LOW)
+    # E31: the MAE-informed factor this plan's ATR stop was actually scaled
+    # by, or None when it wasn't (flag off / too few journaled winners /
+    # a structure-derived stop). Its own field rather than a
+    # quality_breakdown row because it is NOT a scored component -- that
+    # list is strictly (name, points) tuples, rendered as `{pts:+d}` by
+    # embeds.py and views.py and flattened by plan_to_dict, so a note
+    # smuggled in there would crash both renderers and corrupt the
+    # persisted JSON. Kept on the plan so E33's folds and E40's shadow
+    # gate can audit which plans were sized with it, after the fact.
+    stop_mult_applied: float | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -142,11 +156,27 @@ def _rr_for(strategy: str, horizon_key: str) -> float:
     return max(rr, RR_FLOOR)
 
 
-def _atr_plan(entry, atr_val, direction, horizon_key, strategy):
-    """Default volatility sizing: ATR-multiple stop, R:R-override target."""
+def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
+    """Default volatility sizing: ATR-multiple stop, R:R-override target.
+
+    `stop_mult` (edge E31) is an INJECTED MAE-informed adjustment factor,
+    never looked up here. That is deliberate: this function is the shared
+    sizing source for both live plans (build_strategy_plan) and the
+    backtest (backtest._trade_plan_at), so a journal read hidden in here
+    would silently price 2020 backtest trades off today's live journal.
+    Callers that legitimately have a multiplier pass it in; the E33 fold
+    harness will pass its own fold-train-derived value.
+
+    Scaling `risk_distance` (rather than the stop price) keeps R:R exactly
+    where it was -- the same distance feeds both the stop and the
+    R:R-override target, and the R:R table plus the 0.30 floor are frozen
+    constants this must not move.
+    """
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     risk_distance = h["atr_stop_multiple"] * atr_val
+    if stop_mult is not None:
+        risk_distance *= stop_mult
     rr = _rr_for(strategy, horizon_key)
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if risk_distance > max_risk_amount:
@@ -261,11 +291,43 @@ def select_tp2(levels_above: list, levels_below: list, direction: str,
     return candidate
 
 
+def _journal_entries() -> list:
+    """Every journal entry, for the MAE-informed stop lookup (edge E31).
+    Split out as a module-level seam so the lookup can be stubbed in tests
+    without touching disk, and so the import stays lazy -- plan_engine has
+    no business depending on the analytics package at import time."""
+    from swingbot.core.analytics.journal import JournalStore
+    return JournalStore().entries()
+
+
+def _resolve_stop_mult(strategy: str) -> float | None:
+    """Live-path resolution of E31's MAE-informed stop factor. Returns None
+    -- meaning "size exactly as before" -- when the flag is off, when the
+    strategy has fewer than stops.MIN_SAMPLE journaled winners, or when
+    reading the journal fails at all. Sizing must never depend on an
+    analytics file being readable."""
+    if not config.DATA_DRIVEN_STOPS_ENABLED:
+        return None
+    try:
+        from swingbot.core.edge.stops import mae_informed_stop_mult
+        return mae_informed_stop_mult(_journal_entries(), strategy)
+    except Exception as exc:
+        log.warning("MAE-informed stop lookup failed for %s: %s -- sizing unchanged",
+                    strategy, exc)
+        return None
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
-                        direction, level_map=None, quality_inputs=None) -> TradePlanV2 | None:
+                        direction, level_map=None, quality_inputs=None,
+                        stop_mult=None) -> TradePlanV2 | None:
     """THE constructor for strategy-source plans. Returns None when the
     strategy has no valid structure at this bar (same conditions as the
-    backtest reference)."""
+    backtest reference).
+
+    `stop_mult` (edge E31): an explicit MAE-informed stop factor. Left
+    None, it is resolved from the live journal iff
+    config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path is
+    bit-identical to before and never opens the journal at all."""
     from swingbot.core.indicators import atr as atr_indicator
     from swingbot.core.indicators import elliott_wave3_entries
 
@@ -273,6 +335,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     atr_series = atr_indicator(df, 14)
     atr_val = _safe_atr_value(close, float(atr_series.iloc[index]))
     h = HORIZONS[horizon_key]
+    applied_stop_mult = None
 
     if strategy == "Fibonacci":
         lookback = h["fib_lookback"]
@@ -291,7 +354,16 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
             return None
         stop, tp1 = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key)
     else:
-        stop, tp1 = _atr_plan(close, atr_val, direction, horizon_key, strategy)
+        # Only the genuine ATR-multiple path takes the MAE adjustment
+        # (edge E31). The three branches above put their stop behind real
+        # structure -- a fib swing, an Elliott wave-2 low, an S/R shelf --
+        # and scaling those would slide the stop off the very structure it
+        # exists to hide behind. That's a different, unvalidated idea from
+        # "give the ATR stop the room this strategy's winners actually
+        # used", so they stay structure-derived on purpose.
+        applied_stop_mult = stop_mult if stop_mult is not None else _resolve_stop_mult(strategy)
+        stop, tp1 = _atr_plan(close, atr_val, direction, horizon_key, strategy,
+                              stop_mult=applied_stop_mult)
 
     if abs(close - stop) <= 0:
         return None
@@ -321,6 +393,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
     stamp_badge(plan)
     _apply_quality(plan, quality_inputs)
+    plan.stop_mult_applied = applied_stop_mult
     return plan
 
 

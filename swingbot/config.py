@@ -475,6 +475,15 @@ FIELDS: list[Field] = [
                "every confluence count -- a scenario can gain a confirming family and clear "
                "MIN_CONFLUENCE it would previously have failed -- so it ships off until the "
                "E33 walk-forward folds and the E40 shadow forward-gate have judged it."),
+    Field("DATA_DRIVEN_STOPS_ENABLED", "DATA_DRIVEN_STOPS_ENABLED", "Universe & Scanning",
+          "MAE-informed stop sizing enabled",
+          type="checkbox", default="false",
+          help="Scales the ATR-multiple stop distance by the P90 maximum adverse excursion of "
+               "that strategy's own journaled WINNERS (swingbot/core/edge/stops.py:"
+               "mae_informed_stop_mult, clamped to 0.8-1.3x). Needs 40+ journaled winners for "
+               "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
+               "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
+               "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
 ]
 
 _CASTERS = {
