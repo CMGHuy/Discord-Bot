@@ -1,0 +1,111 @@
+{
+  "$comment": [
+    "Project-level permissions, shared via git. Personal/one-off grants belong in",
+    "settings.local.json (gitignored). Scope here is deliberately: read-only",
+    "inspection + the test/lint/backtest loop. Destructive or outward-facing",
+    "operations (git push, reset --hard, clean, rm -rf, docker down, deploy, ssh)",
+    "are intentionally left OUT so they still prompt."
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python scripts/run_backtest_range.py:*)",
+      "Bash(python scripts/tune_strategy.py:*)",
+      "Bash(python scripts/tune_exit_v2.py:*)",
+      "Bash(python scripts/tune_confluence_gates.py:*)",
+      "Bash(python scripts/shadow_parity_report.py:*)",
+      "Bash(python scripts/parity_exits.py:*)",
+      "Bash(python scripts/parity_sizing.py:*)",
+      "Bash(python scripts/validate_data.py:*)",
+      "Bash(python scripts/audit_quality_score.py:*)",
+      "Bash(python scripts/export_analytics.py:*)",
+      "Bash(python scripts/build_universe.py:*)",
+      "Bash(python scripts/run_confluence_validation.py:*)",
+
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git diff:*)",
+      "Bash(git grep:*)",
+      "Bash(git blame:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git worktree list)",
+      "Bash(git branch --list:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git stash list)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(find:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(diff:*)",
+      "Bash(echo:*)",
+      "Bash(cat data/*)",
+      "Bash(cat .superpowers/sdd/progress.md)",
+
+      "Bash(make check)",
+      "Bash(make logs)",
+      "Bash(make status)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose logs:*)",
+
+      "Read(//e/Documents/Private/Projects/Discord-Bot/**)",
+      "Read(//e/Claude/claude-config/**/plugins/cache/claude-plugins-official/superpowers/**)",
+
+      "Skill(superpowers:subagent-driven-development)",
+      "Skill(superpowers:test-driven-development)",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:verification-before-completion)",
+      "Skill(superpowers:writing-plans)",
+      "Skill(superpowers:brainstorming)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.bak)"
+    ]
+  },
+
+  "preferredNotifChannel": "terminal_bell",
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/session-cursor.ps1",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/usage-watch.ps1",
+            "timeout": 20,
+            "async": true
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/usage-watch.ps1",
+            "timeout": 20,
+            "async": true,
+            "statusMessage": "Checking usage limits..."
+          }
+        ]
+      }
+    ]
+  }
+}
