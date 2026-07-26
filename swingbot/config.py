@@ -298,6 +298,13 @@ FIELDS: list[Field] = [
                "balance. This is what actually guarantees a fixed max loss per trade -- a %-only risk setting "
                "silently stops meaning that the moment the balance changes. Set to 0 to disable. Live-editable "
                "with `!account maxrisk <amount>`."),
+    Field("DD_THROTTLE_ENABLED", "DD_THROTTLE_ENABLED", "Account Defaults",
+          "Drawdown throttle ladder enabled",
+          type="checkbox", default="false",
+          help="Enable a mechanical drawdown-based risk multiplier that cuts position size as equity "
+               "drawdown deepens: no cut at 0-8% DD, 0.75x at 8-12%, 0.50x at 12-16%, 0.25x at 16-20%, "
+               "and 0.0x (new entries paused) above 20%. Once paused, entries resume only after DD recovers "
+               "below 15% (hysteresis prevents flapping at the 20% line)."),
 
     # --- Secondary alerts (email + push, fires only on high-confidence qualifying setups) ---
     Field("SECONDARY_ALERT_MIN_CONFIDENCE", "SECONDARY_ALERT_MIN_CONFIDENCE", "Secondary Alerts",
