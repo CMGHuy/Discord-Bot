@@ -1,6 +1,8 @@
 # Gatekeeper v6 - Part Index (split of the 216-task master plan)
 
-The master plan `2026-07-14-gatekeeper-v6.md` (~19k lines) is split into the part files below so executing agents work from a document sized to their context. Content is verbatim; every part repeats the master's goal, honesty rules, prerequisites, global constraints and target file structure, so a part is self-contained.
+The master plan `2026-07-14-gatekeeper-v6.md` (~15k lines, 822 KB) was split into the part files below so executing agents work from a document sized to their context. Content is verbatim; every part repeats the master's goal, honesty rules, prerequisites, global constraints and target file structure, so a part is self-contained.
+
+> **The master file was deleted on 2026-07-26** — at 822 KB (~210k tokens) it was larger than a context window and served no purpose once split. These parts are the plan. Verified before deletion: all 216 task sections (G1–G216) present with no gaps, and every phase preamble carried over (repeated at the head of each continuation part), making the parts a strict content superset. The other 12 files' "extracted verbatim from the master plan" notes now refer to a file that exists only in git history — recover it with `git show 79178a5:docs/superpowers/plans/2026-07-14-gatekeeper-v6.md` if ever needed.
 
 **Execution rules**
 
