@@ -68,6 +68,8 @@ from .indicators import atr, elliott_wave3_entries
 from .strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE
 from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
 
+ENTRY_SHIFT = 0
+
 
 @dataclass
 class BacktestTrade:
@@ -191,6 +193,9 @@ def run_backtest(
         )
 
     bullish_entries, bearish_entries = _vectorized_entries(df, strategy, horizon_key)
+    if ENTRY_SHIFT:
+        bullish_entries = pd.Series(np.roll(bullish_entries.values, ENTRY_SHIFT), index=df.index)
+        bearish_entries = pd.Series(np.roll(bearish_entries.values, ENTRY_SHIFT), index=df.index)
     atr_series = atr(df, 14)
 
     swing_high_series = swing_low_series = None

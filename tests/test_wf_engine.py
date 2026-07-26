@@ -350,3 +350,27 @@ def test_forward_return_backfill_only_resolves_matured_entries(tmp_path):
     # Idempotent: a second pass resolves nothing new.
     assert shadow_log.backfill_forward_returns(
         str(path), price_fn=lambda t: frame, horizon_days=10) == 0
+
+
+def test_p_value_math():
+    from scripts.permutation_test import p_value
+    permuted = [0.01, 0.02, 0.03, 0.20]
+    assert p_value(0.15, permuted) == 0.25      # 1 of 4 >= real
+    assert p_value(0.30, permuted) == 0.0
+    assert p_value(-0.10, permuted) == 1.0
+
+
+def test_planted_signal_beats_noise(monkeypatch):
+    import numpy as np
+    from scripts.permutation_test import permuted_expectancies, p_value
+    rng = np.random.default_rng(0)
+    # a run_fn with real skill: expectancy 0.15 unshifted, ~0 shifted
+    def run_fn(shift):
+        return 0.15 if shift == 0 else float(rng.normal(0.0, 0.02))
+    permuted = permuted_expectancies(run_fn, n_perm=100, seed=1)
+    assert p_value(run_fn(0), permuted) < 0.05          # skill detected
+    # pure noise: the "real" run is just another draw
+    def noise_fn(shift):
+        return float(rng.normal(0.0, 0.02))
+    permuted2 = permuted_expectancies(noise_fn, n_perm=100, seed=2)
+    assert p_value(noise_fn(0), permuted2) > 0.05       # luck not mistaken for skill
