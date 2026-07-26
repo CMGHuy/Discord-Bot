@@ -100,3 +100,17 @@ def test_collect_portfolio_state_degrades_on_account_config_failure(monkeypatch)
     # heat/sector_heat/throttle must have used balance=0.0, not raised.
     assert state.get("open_heat") == pytest.approx(0.0)
     assert state.get("sector_heat") == {}
+
+
+def test_weekly_risk_report_renders():
+    from swingbot.commands.growth import weekly_risk_report
+    out = weekly_risk_report({
+        "heat_utilization_pct": 62.0,
+        "biggest_cluster": ["NVDA", "AMD", "AVGO"],
+        "throttle_activations": 1,
+        "mc": {"max_dd_p95": 0.18, "p_ruin": 0.002, "p_10x": 0.11},
+        "growth_delta": 0.014,
+    })
+    assert "62" in out and "NVDA" in out
+    assert "p95 drawdown 18%" in out
+    assert "+1.4%" in out

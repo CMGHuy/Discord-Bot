@@ -276,6 +276,87 @@ def _emit_table(title: str, header_line: str, sep: str, row_lines: list[str],
     return messages
 
 
+def _collect_weekly_risk_stats(all_trades: list, today: dt.date) -> dict:
+    """Assemble the !weekly-risk-report stats. Mirrors _collect_portfolio_state's
+    (Task E52, swingbot/commands/growth.py) soft-degrade-per-section philosophy:
+    each expensive/network-dependent piece is its own try/except so one failure
+    (e.g. a price fetch) never blocks the others."""
+    from swingbot.core.edge import correlation, ruin
+    from swingbot.core.data import get_daily_data
+    from swingbot.core.performance import TradeLog
+    from swingbot.core import universe
+
+    stats: dict = {
+        # E82 (scan health telemetry) hasn't landed -- there is no persisted
+        # open_heat/cap series to average over yet, so this honestly stays
+        # "n/a" per the brief rather than substituting a different metric.
+        "heat_utilization_pct": None,
+        # No mechanism anywhere in this codebase persists a count of throttle
+        # activations over time -- E45/E46's current_throttle()/streak
+        # multiplier are computed on-demand from the equity curve each call,
+        # not logged as discrete events. Building that tracking (new
+        # persisted state written every scan) is a separate feature; honestly
+        # report 0 rather than inventing a substitute.
+        "throttle_activations": 0,
+        "biggest_cluster": [],
+        "mc": {},
+        "growth_delta": None,
+    }
+
+    try:
+        cfg = account_module.load_account_config()
+        balance = cfg.get("balance", cfg.get("base_balance", 0.0))
+        open_trades = TradeLog().get_trades(status="open", limit=None)
+        sectors = universe.sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
+        tickers = sorted({t.get("ticker") for t in open_trades if t.get("ticker")})
+        dfs: dict = {}
+        for ticker in tickers:
+            try:
+                dfs[ticker] = get_daily_data(ticker)
+            except Exception:
+                continue
+        best_group: list = []
+        for ticker in tickers:
+            result = correlation.cluster_exposure(open_trades, ticker, dfs, balance, sectors=sectors)
+            cluster = result.get("cluster") or []
+            if not cluster:
+                continue
+            group = sorted(frozenset({ticker}) | frozenset(cluster))
+            if len(group) > len(best_group):
+                best_group = group
+        stats["biggest_cluster"] = best_group
+    except Exception:
+        stats["biggest_cluster"] = []
+
+    try:
+        r_multiples = [r for t in all_trades if (r := _r_multiple(t)) is not None]
+        if len(r_multiples) >= 10:
+            risk_pct = account_module.load_account_config().get("risk_pct", 1.0)
+            stats["mc"] = ruin.simulate(r_multiples, risk_pct=risk_pct)
+    except Exception:
+        stats["mc"] = {}
+
+    try:
+        cfg = account_module.load_account_config()
+        base = cfg.get("base_balance")
+        points = account_module.get_balance_history_points()
+        if base and points:
+            latest_balance = points[-1][1]
+            current_multiple = latest_balance / base
+            cutoff = (today - dt.timedelta(days=7)).isoformat()
+            past_multiple = 1.0
+            for date_str, bal in points:
+                if date_str <= cutoff:
+                    past_multiple = bal / base
+                else:
+                    break
+            stats["growth_delta"] = current_multiple - past_multiple
+    except Exception:
+        stats["growth_delta"] = None
+
+    return stats
+
+
 def _strategy_label(trade: dict) -> str:
     """Same resolution the Dashboard's Trades table / Trade Log use -- ranks
     target_sources/stop_sources via chart_drawing.METHOD_PRIORITY instead of
@@ -543,6 +624,15 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
                 lesson_lines.append(f"• {t['ticker']}: {entry['auto_lesson']}")
         if len(lesson_lines) > 1:
             messages.append("\n".join(lesson_lines))
+
+    # ── Part 8: Weekly risk report (Sundays only) ──────────────────────────
+    if today.weekday() == 6:
+        try:
+            from swingbot.commands.growth import weekly_risk_report
+            week_stats = _collect_weekly_risk_stats(all_trades, today)
+            messages.append(weekly_risk_report(week_stats))
+        except Exception:
+            log.exception("build_daily_retrospective: weekly risk report failed, skipping")
 
     return messages
 

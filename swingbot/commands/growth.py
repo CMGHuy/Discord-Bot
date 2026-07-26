@@ -195,3 +195,23 @@ async def portfolio_command(ctx):
     """Open heat vs cap, sector bars, clusters, throttle + kill state."""
     state = await asyncio.to_thread(_collect_portfolio_state)
     await ctx.send(f"```\n{portfolio_report(state)}\n```")
+
+
+def weekly_risk_report(week_stats: dict) -> str:
+    mc = week_stats.get("mc") or {}
+    cluster = week_stats.get("biggest_cluster") or []
+    util = week_stats.get("heat_utilization_pct")
+    lines = [
+        "🛡️ WEEKLY RISK REPORT",
+        f"heat utilization: {util:.0f}% of cap" if util is not None else "heat utilization: n/a",
+        f"biggest correlated cluster: {', '.join(cluster) if cluster else 'none'}",
+        f"throttle activations: {week_stats.get('throttle_activations', 0)}",
+    ]
+    if mc:
+        lines.append(f"Monte Carlo (updated R history): p95 drawdown {mc['max_dd_p95']:.0%}, "
+                     f"p(halve) {mc['p_ruin']:.1%}, p(10x within 1000 trades) {mc['p_10x']:.0%}")
+    gd = week_stats.get("growth_delta")
+    if gd is not None:
+        lines.append(f"growth path this week: {gd:+.1%}")
+    lines.append("Projections, not promises.")
+    return "\n".join(lines)
