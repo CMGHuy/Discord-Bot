@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U7
-> - **Next:** Task U8
+> - **Completed:** U1-U8
+> - **Next:** Task U9
 
 ## Global Constraints
 
@@ -296,7 +296,7 @@ thead th.num { text-align: right; }
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace input/select/label rules:
+- [x] **Step 1:** Replace input/select/label rules:
 
 ```css
 input[type="text"], input[type="number"], input[type="password"], select, textarea {
@@ -313,7 +313,7 @@ label { color: var(--text-2); font-size: var(--fs-sm); }
 input[type="checkbox"] { accent-color: var(--accent); }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: form input restyle`
+- [x] **Step 2: Verify + commit** `feat: form input restyle`
 
 ### Task U9: States, focus, scrollbars, flash
 
