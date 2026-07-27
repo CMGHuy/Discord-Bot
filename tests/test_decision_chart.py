@@ -115,3 +115,20 @@ def test_quality_box_renders(tmp_path, daily_df):
                        "advisor": "CAUTION (62) — earnings in 2 days"}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
     assert os.path.getsize(path) > 10_000
+
+
+def test_build_decision_context_never_raises(daily_df):
+    # NOTE: the plan's own brief says `swingbot.commands.scanning` -- wrong,
+    # same known trap as E49/E52 (commands/scanning.py only posts
+    # already-built tuples; the alert-building loop that has the real data
+    # lives in core/scanning/engine.py, so that's where this function is).
+    from swingbot.core.scanning.engine import build_decision_context
+
+    class Item:  # minimal ScanItem stand-in
+        plan = FakePlan()
+        rs_percentile = 70.0
+        breadth = 55.0
+        heat_blocked = None
+
+    ctx = build_decision_context(Item(), {"TEST": daily_df}, daily_df)
+    assert isinstance(ctx, dict)          # missing pieces -> keys absent, no raise

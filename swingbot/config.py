@@ -529,6 +529,14 @@ FIELDS: list[Field] = [
                "existing Volume Profile strategy family, so confluence COUNTS don't inflate -- "
                "but the extra candidates do move clustered level prices. Off until the E33 "
                "walk-forward folds judge it."),
+    Field("DECISION_CHART_ENABLED", "DECISION_CHART_ENABLED", "Universe & Scanning",
+          "One-pager decision chart on alerts",
+          type="checkbox", default="false",
+          help="Replaces the legacy per-alert trade chart with the composed decision one-pager "
+               "(swingbot/core/charts/decision_chart.py:render_decision_chart -- main panel, "
+               "weekly/RS/sizing/quality side panels) built by build_decision_context. Every "
+               "context piece degrades to an absent key on its own failure, never the alert -- "
+               "off leaves the legacy chart path byte-for-byte unchanged."),
     Field("DATA_DRIVEN_STOPS_ENABLED", "DATA_DRIVEN_STOPS_ENABLED", "Universe & Scanning",
           "MAE-informed stop sizing enabled",
           type="checkbox", default="false",

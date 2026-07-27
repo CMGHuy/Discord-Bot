@@ -60,8 +60,11 @@ from swingbot.core import account as account_module
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
+from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
+from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
+from swingbot.core.jsonio import read_json
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
 from swingbot.core.events import earnings_within_window
@@ -77,6 +80,7 @@ from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
 from swingbot.core.strategy import HORIZONS, MIN_BARS
 from swingbot.core import universe
+from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.watchlist import load_watchlist
 from .embeds import (
@@ -168,6 +172,126 @@ class ScanItem:
         """True if every requirement was checked and passed. True (not False) when there's nothing to check,
         so older/lightweight ScanItems built without requirements don't get treated as failing by default."""
         return all(r.passed for r in self.requirements) if self.requirements else True
+
+
+# Points-per-component ceiling for the decision chart's quality box (E66),
+# read off each component_* function's own max return in quality.py --
+# quality_breakdown itself only carries (name, points) pairs, no max, so
+# this is derived once here rather than plumbed through score_plan's
+# return type just for a display bar. "gap" is a penalty-only row (always
+# <= 0) and deliberately excluded: the bar math assumes 0 <= points <= max.
+_QUALITY_COMPONENT_MAX = {
+    "regime": 15, "htf": 15, "confluence": 20, "volume": 10,
+    "atr_percentile": 10, "trigger_distance": 10, "badge": 20,
+    "rs": 10, "mtf": 10, "breadth": 5, "candle": 5,
+}
+
+
+def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
+    """Assembles every swingbot.core.charts.decision_chart context key this
+    scan pass can honestly supply. Each block is independently try/excepted
+    to an absent key -- render_decision_chart's panels already degrade to a
+    placeholder on a missing key, so a bad reading here must never be able
+    to cost the alert itself (Task E67)."""
+    ctx: dict = {}
+    plan = getattr(item, "plan_v2", None) or getattr(item, "plan", None)
+    ticker = getattr(getattr(item, "result", None), "ticker", None) or getattr(item, "ticker", None)
+    df = dfs.get(ticker) if ticker else None
+
+    try:
+        pivots = [p for p in (plan.stop_loss, plan.trigger_price, plan.tp1) if p]
+        ctx["weekly"] = {"df": rs_factors.weekly_frame(df), "pivots": pivots}
+    except Exception:
+        pass
+
+    try:
+        ctx["avwaps"] = [{"series": rs_factors.anchored_vwap(df, a), "anchor_label": f"⚓{a}"}
+                          for a in rs_factors.avwap_anchors(df)[:3]]
+    except Exception:
+        pass
+
+    try:
+        rel = (df["Close"].pct_change(rs_factors.RS_WINDOW)
+               - spy_df["Close"].pct_change(rs_factors.RS_WINDOW)).dropna()
+        ctx["rs"] = {"rel_series": rel, "percentile": getattr(item, "rs_percentile", None)}
+    except Exception:
+        pass
+
+    try:
+        ctx["regimes"] = regime2.regime_series(spy_df)
+    except Exception:
+        pass
+
+    try:
+        gstats = gates_mod.gap_stats(df)
+        entry_px = plan.trigger_price or plan.entry_price
+        stop_distance_pct = abs(entry_px - plan.stop_loss) / entry_px * 100.0
+        fragile = not gates_mod.stop_beyond_gap_noise(stop_distance_pct, gstats["p90_gap_pct"])
+        ctx["gap"] = {"p90_gap_pct": gstats["p90_gap_pct"], "gap_fragile": fragile}
+    except Exception:
+        pass
+
+    try:
+        # E39's fold-trade cache -- doesn't exist yet for any strategy as of
+        # this task, so this is a real (documented) no-op until that lands,
+        # not a fabricated reading. read_json's own default handles the
+        # missing-file case without raising.
+        fold_path = os.path.join(config.DATA_DIR, "fold_trades", f"{plan.strategy}.json")
+        outcomes = read_json(fold_path, {}).get("outcomes")
+        if outcomes:
+            ctx["outcomes"] = outcomes
+    except Exception:
+        pass
+
+    # ev_cone (E32 per-day MFE/MAE trajectory percentiles) has no producer
+    # anywhere in this codebase -- E32 only ever shipped single-value
+    # percentiles (mae_informed_stop_mult, mfe_informed_tp2_r), never a
+    # day-by-day path distribution. Left absent rather than fabricated.
+
+    try:
+        account_cfg = load_account_config()
+        balance = account_cfg.get("balance", 0.0)
+        candidate_risk_pct = account_cfg.get("risk_pct", 1.0)
+        open_trades = trade_log.get_trades(status="open", limit=None)
+        heat_before = heat_mod.open_heat(open_trades, balance)
+        cap = getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0)
+        sizing = account_module.compute_position_size(
+            plan.trigger_price or plan.entry_price, plan.stop_loss, account_cfg)
+        cluster_note = None
+        if ticker:
+            cluster_exp = corr_mod.cluster_exposure(open_trades, ticker, dfs, balance)
+            if cluster_exp["cluster"]:
+                cluster_note = (f"corr {cluster_exp['max_corr']:.2f} with "
+                                f"{', '.join(cluster_exp['cluster'])}")
+        ctx["sizing"] = {
+            "risk_pct": sizing["risk_pct"] if sizing else candidate_risk_pct,
+            "risk_source": "config",  # live sizing chain (kelly/vol_target/throttle) not yet wired to this call site
+            "shares": sizing["shares"] if sizing else 0,
+            "heat_before": heat_before,
+            "heat_after": heat_before + candidate_risk_pct,
+            "cap": cap,
+            "cluster_note": cluster_note,
+        }
+    except Exception:
+        pass
+
+    try:
+        components = [(name, pts, _QUALITY_COMPONENT_MAX[name])
+                      for name, pts in getattr(plan, "quality_breakdown", [])
+                      if name in _QUALITY_COMPONENT_MAX]
+        ctx["quality"] = {
+            "score": plan.quality_score,
+            "components": components,
+            "follow_score": None,   # no follow-score producer in this codebase yet
+            "badge": plan.badge,
+            "badge_stats": (f"N={plan.badge_stats['n']} · {plan.badge_stats['win_rate']:.1f}% OOS"
+                            if getattr(plan, "badge_stats", None) else ""),
+            "advisor": None,        # no LLM-advisor module in this codebase yet (llm-advisor-v5 plan, not built)
+        }
+    except Exception:
+        pass
+
+    return ctx
 
 
 class ScanProgress:
@@ -1234,16 +1358,27 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         chart_filename = f"{result.ticker}_{trade_id or 'snapshot'}.png"
         log.debug("%s: generating trade chart (%s)", result.ticker, chart_filename)
         try:
-            chart_path = generate_trade_chart(
-                result.ticker, df, nums["entry"], nums["stop_loss"], nums["take_profit"], result.trend,
-                result.strategy, result.horizon_label, config.TRADE_CHART_DIR, filename=chart_filename,
-                currency_symbol=get_currency_symbol(result.ticker, config.CURRENCY_SYMBOL), target2=nums["target2"],
-                trendline_lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
-                target_sources=list(dict.fromkeys(plan.target_sources)),
-                stop_sources=list(dict.fromkeys(plan.stop_sources)),
-                horizon=h,
-                market_price=plan.market_price,
-            )
+            if config.DECISION_CHART_ENABLED and item.plan_v2 is not None:
+                # One-pager decision chart (Task E67): only when a v2 plan
+                # exists -- render_decision_chart reads TradePlanV2's own
+                # field names (trigger_price/tp1/tp2/...), which the legacy
+                # `plan` object here does not share. Flag off, or no v2
+                # plan yet, leaves the legacy path below byte-for-byte
+                # unchanged.
+                ctx = build_decision_context(item, fresh_data, spy_df)
+                chart_path = render_decision_chart(result.ticker, df, item.plan_v2, ctx,
+                                                   config.TRADE_CHART_DIR)
+            else:
+                chart_path = generate_trade_chart(
+                    result.ticker, df, nums["entry"], nums["stop_loss"], nums["take_profit"], result.trend,
+                    result.strategy, result.horizon_label, config.TRADE_CHART_DIR, filename=chart_filename,
+                    currency_symbol=get_currency_symbol(result.ticker, config.CURRENCY_SYMBOL), target2=nums["target2"],
+                    trendline_lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
+                    target_sources=list(dict.fromkeys(plan.target_sources)),
+                    stop_sources=list(dict.fromkeys(plan.stop_sources)),
+                    horizon=h,
+                    market_price=plan.market_price,
+                )
             log.info("Chart generated for %s -> %s", result.ticker, chart_filename)
         except Exception as e:
             log.warning("Could not generate trade chart for %s: %s", result.ticker, e, exc_info=True)
