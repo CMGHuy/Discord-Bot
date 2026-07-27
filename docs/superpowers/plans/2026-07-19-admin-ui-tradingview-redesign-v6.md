@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U11
-> - **Next:** Task U12
+> - **Completed:** U1-U12
+> - **Next:** Task U13
 
 ## Global Constraints
 
@@ -374,8 +374,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 **Files:** Modify `swingbot/admin/templates/stats.html`
 
-- [ ] **Step 1:** Convert the headline stat row into `tiles`/`tile` markup (`label`/`value`, delta chip with `pos`/`neg`); wrap each stats table in `<div class="card">`; `num` classes on all numeric columns as in U11.
-- [ ] **Step 2: Verify + commit** `feat: stats page tiles + cards`
+- [x] **Step 1:** Convert the headline stat row into `tiles`/`tile` markup (`label`/`value`, delta chip with `pos`/`neg`); wrap each stats table in `<div class="card">`; `num` classes on all numeric columns as in U11.
+- [x] **Step 2: Verify + commit** `feat: stats page tiles + cards`
 
 ### Task U13: Watchlist page
 
