@@ -50,6 +50,7 @@
     <nav>
       {% for key, icon, label, endpoint in nav_items %}
       <a href="{{ url_for(endpoint) }}" class="{{ 'active' if key == active_page else '' }}">
+        <span class="nav-bar"></span>
         <span class="icon">{{ icon }}</span>
         <span class="nav-label">{{ label }}</span>
       </a>

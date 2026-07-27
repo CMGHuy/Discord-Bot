@@ -12,31 +12,37 @@ a { color: var(--accent); }
 /* ---- Shell layout ---- */
 .shell { display: flex; min-height: 100vh; }
 .sidebar {
-  width: 210px; flex-shrink: 0; background: #13161d; border-right: 1px solid #1f2330;
-  display: flex; flex-direction: column; padding: 0; position: sticky; top: 0;
-  /* Locked to exactly one viewport tall (not min-height, which let the
-     sidebar stretch to match tall page content and pushed the footer --
-     Last updated + version tags -- below the fold, forcing a scroll to see
-     it). height:100vh + position:sticky keeps the sidebar's own box pinned
-     to exactly the viewport at all times, on every page, regardless of how
-     tall .content is. The <nav> list below is the only part that grows/
-     scrolls internally (flex:1 + overflow-y:auto on nav itself), so .brand
-     up top and .sidebar-footer down below always stay in view without any
-     scrolling of the sidebar as a whole. */
-  height: 100vh; overflow: hidden;
+  width: 216px; flex-shrink: 0; background: var(--bg-1);
+  border-right: 1px solid var(--border-1);
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
 }
+.sidebar nav { flex: 1; overflow-y: auto; padding: var(--sp-2) 0; }
+.sidebar nav a {
+  position: relative; display: flex; align-items: center; gap: var(--sp-3);
+  padding: 9px var(--sp-4); margin: 1px var(--sp-2); border-radius: var(--r-sm);
+  color: var(--text-2); text-decoration: none; font-size: var(--fs-sm);
+  font-weight: 500; transition: background var(--ease), color var(--ease);
+}
+.sidebar nav a:hover { background: var(--bg-2); color: var(--text-1); }
+.sidebar nav a.active { background: var(--accent-soft); color: var(--text-1); }
+.sidebar nav a .nav-bar {
+  position: absolute; left: -8px; top: 20%; height: 60%; width: 3px;
+  border-radius: 2px; background: transparent;
+}
+.sidebar nav a.active .nav-bar { background: var(--accent); }
+.brand { padding: var(--sp-4); border-bottom: 1px solid var(--border-1); }
 .sidebar .brand {
   display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 20px 16px;
-  border-bottom: 1px solid #1f2330; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border-1); font-size: 15px; font-weight: 700; color: var(--text-1); letter-spacing: -0.01em;
 }
-/* Bot avatar -- sits on the sidebar's own dark background (#13161d), matching
+/* Bot avatar -- sits on the sidebar's own dark background (var(--bg-1)), matching
    the image's own transparent corners, so it blends in seamlessly instead of
    showing a mismatched black square behind the circular photo. The gold ring
    echoes the favicon's accent color for a consistent brand accent. */
 .sidebar .brand .brand-avatar {
   width: 128px; height: 128px; border-radius: 50%; object-fit: cover;
-  background: #13161d; border: 3px solid #e2b25a;
-  box-shadow: 0 0 0 3px #13161d, 0 3px 14px rgba(0,0,0,0.45);
+  background: var(--bg-1); border: 3px solid #e2b25a;
+  box-shadow: 0 0 0 3px var(--bg-1), 0 3px 14px rgba(0,0,0,0.45);
 }
 .sidebar .brand .brand-row { display: flex; align-items: center; gap: 10px; }
 .sidebar .brand .logo { font-size: 22px; }
@@ -45,30 +51,23 @@ a { color: var(--accent); }
    .sidebar box; its own overflow-y:auto means if there are ever more nav
    items than fit, THIS list scrolls internally instead of the footer
    getting pushed off the bottom of the screen. */
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; padding: 10px 8px; overflow-y: auto; min-height: 0; }
-.sidebar nav a {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px; color: #8a92a6;
-  text-decoration: none; font-size: 13.5px; border-radius: 7px; transition: background 0.12s;
-}
-.sidebar nav a:hover { background: #1c2030; color: #dde1ea; }
-.sidebar nav a.active { background: #1a2540; color: #6ea8fe; font-weight: 600; }
 .sidebar nav a .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
-.sidebar-footer { padding: 14px 14px 18px; font-size: 11px; color: #4a5060; border-top: 1px solid #1f2330; }
-.version-tag { margin-top: 6px; font-size: 10.5px; color: #3d4354; letter-spacing: 0.01em; }
+.sidebar-footer { padding: 14px 14px 18px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--border-1); }
+.version-tag { margin-top: 6px; font-size: 10.5px; color: var(--text-3); letter-spacing: 0.01em; }
 
 .font-size-control {
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 10px 14px; border-top: 1px solid #1f2330;
+  padding: 10px 14px; border-top: 1px solid var(--border-1);
 }
 .font-size-control button {
-  background: #1a1e27; border: 1px solid #262b38; color: #9aa3b8;
+  background: var(--bg-2); border: 1px solid var(--border-2); color: var(--text-2);
   width: 26px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: background .12s, color .12s;
 }
-.font-size-control button:hover:not(:disabled) { background: #232838; color: #dde1ea; }
+.font-size-control button:hover:not(:disabled) { background: var(--border-1); color: var(--text-1); }
 .font-size-control button:disabled { opacity: 0.35; cursor: default; }
-#font-size-label { font-size: 11px; color: #5a6275; min-width: 34px; text-align: center; }
+#font-size-label { font-size: 11px; color: var(--text-3); min-width: 34px; text-align: center; }
 
 /* No max-width -- .content is the flex:1 remainder of .shell next to the
    fixed-width sidebar, so this lets wide tables (e.g. the Dashboard's open
@@ -578,10 +577,10 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .hamburger {
   display: none;
   background: transparent; border: none; box-shadow: none;
-  color: #8a92a6; font-size: 22px; padding: 4px 8px; cursor: pointer;
+  color: var(--text-2); font-size: 22px; padding: 4px 8px; cursor: pointer;
   line-height: 1; border-radius: 6px; flex-shrink: 0;
 }
-.hamburger:hover { background: #1c2030; color: #dde1ea; box-shadow: none; }
+.hamburger:hover { background: var(--bg-2); color: var(--text-1); box-shadow: none; }
 .hamburger:active { transform: none; }
 
 /* Overlay that dims the content when sidebar is open on mobile */
