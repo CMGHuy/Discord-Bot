@@ -25,10 +25,18 @@ flagged in the UI and the save confirmation message says so explicitly
 rather than claiming success it didn't achieve.
 
 This is meant for trusted, private use (e.g. behind your own firewall/
-VPN, or just on localhost) -- it's protected by a single HTTP Basic Auth
-username/password from the environment, not a full user/permissions
-system. Don't expose it to the open internet without putting a reverse
-proxy with real auth in front of it.
+VPN, or just on localhost) -- it's protected by a single ADMIN_USERNAME/
+ADMIN_PASSWORD from the environment, not a full user/permissions system.
+Don't expose it to the open internet without putting a reverse proxy with
+real auth in front of it.
+
+Two ways in, both checked against the same ADMIN_USERNAME/ADMIN_PASSWORD:
+a browser hitting any page gets redirected to /login (a real HTML form,
+so password managers can save it), which sets a long-lived (90-day)
+signed session cookie on success -- see the Auth section below. Anything
+that sends an HTTP Basic Auth header (scripts, this project's own test
+suite) is still checked the old way, untouched. Changing ADMIN_PASSWORD
+(and restarting, same as today) invalidates existing sessions immediately.
 
 Page markup lives in templates/*.html (Flask's standard auto-discovered
 templates/ folder next to this module) rather than inline Python string
@@ -38,13 +46,14 @@ edited/linted as HTML. Shared CSS lives in static/style.css.
 import csv
 import gzip
 import hashlib
+import hmac
 import io
 import json
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 
@@ -54,7 +63,7 @@ try:
 except Exception:
     _BERLIN_TZ = None
 
-from flask import Flask, Response, abort, redirect, render_template, request, send_file, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, send_file, session, url_for
 
 from swingbot import config
 from swingbot.core.performance import TradeLog, trade_proximity
@@ -74,6 +83,7 @@ from .helpers import (
     _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
     _clear_admin_log, _write_env_text, get_versions, settings_diff,
     append_settings_audit, read_settings_audit, import_env_text,
+    _load_or_create_secret_key,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -108,6 +118,20 @@ _SECTION_META = {
 }
 
 app = Flask(__name__)
+# Signed session cookie for the /login page (see below) -- Basic Auth (the
+# require_auth check further down) still works independently of this, so
+# scripts/tests hitting routes with an Authorization header are unaffected.
+app.secret_key = _load_or_create_secret_key()
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)
+# Lax (not the Flask/Werkzeug default of no attribute at all) means the
+# browser never attaches this cookie to a cross-site POST/PUT/DELETE -- the
+# session cookie can't be ridden by a CSRF attempt from another origin.
+# Basic Auth's cached-credentials path had this same class of exposure
+# already (out of scope here); this closes it for the new session-cookie
+# path specifically. Not forcing Secure=True: this app is documented as
+# often run over plain HTTP on a private network/localhost (see module
+# docstring), and Secure=True would silently break the cookie there.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Bounds the Trade History table's server-rendered payload -- see the
 # closed_trades slicing in _render_dashboard_fragment() below. High enough
@@ -198,17 +222,91 @@ def _trades() -> TradeLog:
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
+def _password_hash() -> str:
+    """Pinned into the session at login time and re-checked on every
+    request (see _session_authenticated) -- so if ADMIN_USERNAME/PASSWORD
+    change (Settings page) and the admin container restarts, any session
+    logged in under the old credentials stops working immediately, the same
+    way a stale Basic Auth header already does today. Without this, a
+    session cookie would otherwise keep working indefinitely: its secret
+    key is persisted (_load_or_create_secret_key) specifically so 90-day
+    sessions survive a restart, so it can't double as the "did the password
+    change" signal on its own.
+
+    Keyed HMAC, not a plain hash: Flask's session cookie is signed but not
+    encrypted, so a plain sha256(username:password) would sit in every
+    session cookie as an offline-crackable, unsalted password hash anyone
+    holding the cookie could brute-force. HMAC-ing it with the same secret
+    that signs the cookie means the value is meaningless without also
+    holding that server-side secret."""
+    return hmac.new(
+        app.secret_key.encode("utf-8"),
+        f"{ADMIN_USERNAME}:{ADMIN_PASSWORD}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _session_authenticated() -> bool:
+    return session.get("admin_authed") is True and hmac.compare_digest(
+        session.get("pw_hash", ""), _password_hash()
+    )
+
+
+def _safe_next(next_value: str | None) -> str:
+    """Only ever redirect to a same-site relative path -- next_value comes
+    from a query string / form field, so an unvalidated value (e.g.
+    "https://evil.example") would be an open-redirect vector."""
+    if next_value and next_value.startswith("/") and not next_value.startswith("//") and "://" not in next_value:
+        return next_value
+    return url_for("index")
+
+
 def require_auth(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
+        if _session_authenticated():
+            return view(*args, **kwargs)
         auth = request.authorization
-        if not auth or auth.username != ADMIN_USERNAME or auth.password != ADMIN_PASSWORD:
+        if auth:
+            # Client explicitly attempted Basic Auth (e.g. a script, or this
+            # suite's `auth` fixture) -- keep the original challenge behavior
+            # for that path rather than redirecting it to an HTML login page.
+            if auth.username == ADMIN_USERNAME and auth.password == ADMIN_PASSWORD:
+                return view(*args, **kwargs)
             return Response(
                 "Authentication required.", 401,
                 {"WWW-Authenticate": 'Basic realm="Swing Bot Admin"'},
             )
-        return view(*args, **kwargs)
+        next_path = request.full_path if request.query_string else request.path
+        return redirect(url_for("login_page", next=next_path))
     return wrapped
+
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    if _session_authenticated():
+        return redirect(url_for("index"))
+    return render_template("login.html", next=request.args.get("next", ""), error=None)
+
+
+@app.route("/login", methods=["POST"])
+def login_submit():
+    username = request.form.get("username", "")
+    password = request.form.get("password", "")
+    next_value = request.form.get("next", "")
+    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        session.clear()
+        session["admin_authed"] = True
+        session["pw_hash"] = _password_hash()
+        session.permanent = True
+        return redirect(_safe_next(next_value))
+    return render_template("login.html", next=next_value, error="Invalid username or password."), 401
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 
 # ---------------------------------------------------------------------------

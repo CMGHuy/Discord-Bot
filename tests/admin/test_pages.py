@@ -4,7 +4,13 @@ fixtures from conftest.py rather than talking to a real running server."""
 
 
 def test_index_requires_auth(client):
-    assert client.get("/").status_code == 401
+    # No auth at all -> redirected to the login page (see test_login.py),
+    # not a bare Basic-Auth 401 challenge. A request that actually attempts
+    # (and fails) Basic Auth still gets a 401 -- see
+    # test_login.py::test_basic_auth_failure_still_returns_401_challenge.
+    r = client.get("/")
+    assert r.status_code == 302
+    assert "/login" in r.headers["Location"]
 
 
 def test_index_renders(client, auth):
@@ -24,8 +30,11 @@ def test_new_pages_200_authed(client, auth, path):
 
 
 @pytest.mark.parametrize("path", NEW_PATHS)
-def test_new_pages_401_unauthed(client, path):
-    assert client.get(path).status_code == 401
+def test_new_pages_redirect_to_login_unauthed(client, path):
+    # No auth at all -> redirected to /login (see test_index_requires_auth).
+    r = client.get(path)
+    assert r.status_code == 302
+    assert "/login" in r.headers["Location"]
 
 
 def test_new_nav_items_in_sidebar(client, auth):

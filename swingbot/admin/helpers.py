@@ -10,6 +10,7 @@ these back and calls them exactly as before.
 import io
 import json
 import os
+import secrets
 from datetime import datetime, timezone
 from itertools import groupby
 
@@ -241,6 +242,42 @@ def import_env_text(text: str) -> tuple[int, list[str]]:
             lines.append(f"{k}={v}")
     _write_env_text("\n".join(lines))
     return applied, unknown
+
+
+# ---------------------------------------------------------------------------
+# Session auth (login page)
+# ---------------------------------------------------------------------------
+SECRET_KEY_PATH = os.path.join(config.DATA_DIR, "admin_session_secret")
+
+
+def _load_or_create_secret_key() -> str:
+    """Flask's signed session cookie needs a stable secret_key -- stable
+    across restarts, or every login would be silently invalidated the next
+    time the admin container restarts. Generated once and persisted here
+    (not a .env/Settings-page Field: it's an internal implementation detail,
+    never something a person edits), read on every subsequent startup.
+
+    Whoever holds this file can forge a session cookie, so it's written
+    owner-read/write-only (0600) rather than whatever the process's default
+    umask would otherwise leave it at -- os.chmod also runs on the
+    already-exists read path so an older install (from before this existed)
+    gets healed up to the same permissions the first time it's read."""
+    os.makedirs(config.DATA_DIR, exist_ok=True)
+    if os.path.exists(SECRET_KEY_PATH):
+        key = open(SECRET_KEY_PATH, "r", encoding="utf-8").read().strip()
+        if key:
+            try:
+                os.chmod(SECRET_KEY_PATH, 0o600)
+            except OSError:
+                pass  # e.g. Windows, where chmod can't express owner-only read/write
+            return key
+    key = secrets.token_hex(32)
+    fd = os.open(SECRET_KEY_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, key.encode("utf-8"))
+    finally:
+        os.close(fd)
+    return key
 
 
 # ---------------------------------------------------------------------------

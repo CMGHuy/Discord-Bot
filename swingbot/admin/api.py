@@ -17,7 +17,7 @@ from swingbot.core.analytics.snapshots import refresh_snapshot as _rebuild_snaps
 from swingbot.admin.jobs import build_tune_args
 from swingbot.admin.jobs import manager as job_manager
 
-from .app import ADMIN_PASSWORD, ADMIN_USERNAME
+from .app import ADMIN_PASSWORD, ADMIN_USERNAME, _session_authenticated
 from .helpers import get_versions
 from .pages import _plan_rows, _registry_rows
 
@@ -41,6 +41,8 @@ def require_auth_json(view):
     still get a parseable body instead of an HTML/text blob."""
     @wraps(view)
     def wrapped(*args, **kwargs):
+        if _session_authenticated():
+            return view(*args, **kwargs)
         auth = request.authorization
         if not auth or auth.username != ADMIN_USERNAME or auth.password != ADMIN_PASSWORD:
             return jsonify({"error": "auth"}), 401
