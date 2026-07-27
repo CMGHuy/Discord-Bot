@@ -739,7 +739,21 @@ def delete_single_trade(trade_id):
 @require_auth
 def risk_panel():
     from swingbot.commands.growth import _collect_portfolio_state
-    return _render("Portfolio Risk", "risk", "risk.html", state=_collect_portfolio_state())
+    from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
+    from swingbot.admin.helpers import scan_duration_sparkline
+
+    # Scan health (Task E82): best-effort, same degrade-not-crash treatment
+    # as every other _collect_portfolio_state sub-collector on this page.
+    try:
+        durations = [r["duration_s"] for r in recent_telemetry(50) if "duration_s" in r]
+        slowdown = scan_slowdown()
+    except Exception:
+        durations, slowdown = [], False
+
+    return _render("Portfolio Risk", "risk", "risk.html", state=_collect_portfolio_state(),
+                  scan_sparkline=scan_duration_sparkline(durations),
+                  scan_latest=durations[-1] if durations else None,
+                  scan_slowdown=slowdown)
 
 
 @app.route("/risk/killswitch", methods=["POST"])

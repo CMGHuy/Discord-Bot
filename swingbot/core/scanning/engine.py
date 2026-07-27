@@ -43,6 +43,7 @@ confirmed support/resistance setup (see levels.py) with a genuine
 MIN_REWARD_PCT+ move available, not on how much money to put behind it.
 """
 import asyncio
+import json as _json
 import logging
 import os
 import time
@@ -390,6 +391,40 @@ def dedup_sector_items(items: list) -> list:
         out.append(best)
     out.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
     return out
+
+
+TELEMETRY_PATH = os.path.join(config.DATA_DIR, "scan_telemetry.jsonl")
+
+
+def log_scan_telemetry(stats: dict, path: str | None = None) -> None:
+    """Task E82: one JSON line per scan (at, duration_s, tickers, errors,
+    data_skips, signals, alerts, open_heat) appended to scan_telemetry.jsonl
+    -- cheap append-only history for scan_slowdown()'s alarm and the admin
+    risk page's duration sparkline."""
+    import datetime as dt
+    row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), **stats}
+    with open(path or TELEMETRY_PATH, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(row) + "\n")
+
+
+def recent_telemetry(n: int = 50, path: str | None = None) -> list:
+    try:
+        with open(path or TELEMETRY_PATH, encoding="utf-8") as f:
+            lines = f.readlines()[-n:]
+        return [_json.loads(l) for l in lines if l.strip()]
+    except OSError:
+        return []
+
+
+def scan_slowdown(path: str | None = None) -> bool:
+    """True when the latest logged scan took more than 2x the median of
+    the prior 20 -- a real slowdown, not noise from a single slow ticker."""
+    rows = recent_telemetry(21, path=path)
+    if len(rows) < 6:
+        return False
+    import statistics
+    prior = [r["duration_s"] for r in rows[:-1]]
+    return rows[-1]["duration_s"] > 2 * statistics.median(prior)
 
 
 def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
@@ -955,6 +990,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     run only (used by `!check`'s optional argument); pass None (the
     default) to just use whatever's currently configured.
     """
+    _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
+
     # Auto-reload config if .env was changed on disk since last load
     # (e.g. via the admin UI). This works even without Docker socket /
     # SIGHUP -- settings saved in the UI take effect on the next scan.
@@ -1480,6 +1517,31 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if progress is not None and progress.funnel is not None:
         progress.funnel["deduped"] = len(deduped)
         progress.funnel["skipped_already_open"] = skipped_already_open
+
+    # Scan health telemetry (Task E82): logged unconditionally, wrapped so a
+    # telemetry failure (disk full, bad path, whatever) never takes down the
+    # scan return it's observing. open_trades/balance re-fetched fresh here
+    # rather than reusing the alert-loop's per-item `open_trades` (that
+    # variable is only assigned when `deduped` is non-empty -- a quiet scan
+    # with zero alerts must not NameError here).
+    try:
+        scan_stats = {
+            "duration_s": round(time.monotonic() - _scan_started, 1),
+            "tickers": len(tickers),
+            "errors": len(tickers) - len(fresh_data),
+            "data_skips": data_quality_failed_count,
+            "signals": scenarios_found_count,
+            "alerts": len(alerts),
+            "open_heat": heat_mod.open_heat(TradeLog().get_trades(status="open", limit=None),
+                                            account_cfg.get("balance", 0.0)),
+        }
+        log_scan_telemetry(scan_stats)
+        if scan_slowdown():
+            log.warning("Scan health: latest scan took %.1fs, more than 2x the median of "
+                        "the prior 20 -- possible slowdown (network, cache, or universe "
+                        "size growth).", scan_stats["duration_s"])
+    except Exception:
+        log.exception("Scan health telemetry failed -- not blocking the scan result")
 
     return alerts, all_newly_closed, all_near_close_warnings
 

@@ -7,6 +7,7 @@ retrospective_history.json
 journal.json
 analytics_snapshot.json
 market_data_state.json
+scan_telemetry.jsonl
 .env
 .env.bak
 __pycache__/

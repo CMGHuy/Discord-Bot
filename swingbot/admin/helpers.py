@@ -280,6 +280,28 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
+def scan_duration_sparkline(durations: list, *, width: int = 220, height: int = 40) -> str:
+    """Task E82: minimal inline SVG sparkline over recent scan durations
+    (seconds) for the admin risk page -- no charting library, just a
+    polyline scaled into the box. Returns "" for an empty/single-point
+    series (nothing meaningful to draw)."""
+    if not durations or len(durations) < 2:
+        return ""
+    lo, hi = min(durations), max(durations)
+    span = (hi - lo) or 1.0
+    step = width / (len(durations) - 1)
+    points = " ".join(
+        f"{i * step:.1f},{height - ((d - lo) / span) * height:.1f}"
+        for i, d in enumerate(durations)
+    )
+    return (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+        'xmlns="http://www.w3.org/2000/svg" role="img" aria-label="scan duration sparkline">'
+        f'<polyline fill="none" stroke="currentColor" stroke-width="1.5" points="{points}" />'
+        '</svg>'
+    )
+
+
 # _primary_strategy_label is now defined once, in core/performance.py (as
 # primary_strategy_label), and imported above under this same historical
 # name -- the admin Performance page (get_chart_data / get_detailed_stats)

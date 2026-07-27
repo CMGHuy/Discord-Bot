@@ -161,4 +161,23 @@
     </tr>
   </table>
 </div>
+
+<div class="card" style="margin-top:20px;">
+  <p class="card-title">Scan health</p>
+  {% if scan_slowdown %}
+  <p style="color:#ef5350; font-weight:600;">
+    ⚠️ Latest scan took {{ '%.1f'|format(scan_latest) }}s -- more than 2x the median of the
+    prior 20. Check for network slowness, a growing universe, or cache issues.
+  </p>
+  {% endif %}
+  {% if scan_sparkline %}
+  <div style="color:#5a8dd6;">{{ scan_sparkline|safe }}</div>
+  <p class="muted" style="font-size:12.5px; margin-bottom:0;">
+    Scan duration (seconds), last 50 scans. Latest:
+    {{ '%.1f'|format(scan_latest) if scan_latest is not none else 'n/a' }}s.
+  </p>
+  {% else %}
+  <p class="muted" style="margin-bottom:0;">No scan telemetry yet -- appears after the first scan.</p>
+  {% endif %}
+</div>
 {% endblock %}

@@ -649,6 +649,20 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         except Exception:
             log.exception("build_daily_retrospective: RS rotation report failed, skipping")
 
+    # ── Part 10: Scan health alarm (Task E82) ──────────────────────────────
+    try:
+        from swingbot.core.scanning.engine import recent_telemetry, scan_slowdown
+        if scan_slowdown():
+            rows = recent_telemetry(2)
+            duration = f"{rows[-1]['duration_s']:.1f}s" if rows else "a scan"
+            messages.append(
+                f"⚠️ **Scan health**: the latest scan took {duration} -- more than 2x the "
+                "median of the prior 20. Check for network slowness, a growing universe, "
+                "or cache issues."
+            )
+    except Exception:
+        log.exception("build_daily_retrospective: scan health alarm failed, skipping")
+
     return messages
 
 

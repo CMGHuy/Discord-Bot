@@ -514,3 +514,15 @@ def test_sector_dedup_collapses_to_best():
     out = dedup_sector_items(items)
     assert [i.ticker for i in out] == ["XOM", "MSFT"]
     assert out[0].also_qualifying == ["CVX"]
+
+
+def test_scan_telemetry_roundtrip_and_slowdown_alarm(tmp_path):
+    from swingbot.core.scanning.engine import log_scan_telemetry, recent_telemetry, scan_slowdown
+    p = str(tmp_path / "t.jsonl")
+    for d in [60] * 20:
+        log_scan_telemetry({"duration_s": d, "tickers": 150}, path=p)
+    rows = recent_telemetry(n=10, path=p)
+    assert len(rows) == 10 and rows[-1]["duration_s"] == 60
+    assert scan_slowdown(path=p) is False
+    log_scan_telemetry({"duration_s": 150, "tickers": 150}, path=p)
+    assert scan_slowdown(path=p) is True
