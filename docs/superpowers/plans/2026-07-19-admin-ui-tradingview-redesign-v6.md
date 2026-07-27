@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U8
-> - **Next:** Task U9
+> - **Completed:** U1-U9
+> - **Next:** Task U10
 
 ## Global Constraints
 
@@ -319,7 +319,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Add:
+- [x] **Step 1:** Add:
 
 ```css
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -338,7 +338,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .flash.error { background: var(--down-soft); border-color: var(--down); }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: focus rings, scrollbars, empty/skeleton/flash states`
+- [x] **Step 2: Verify + commit** `feat: focus rings, scrollbars, empty/skeleton/flash states`
 
 ---
 
