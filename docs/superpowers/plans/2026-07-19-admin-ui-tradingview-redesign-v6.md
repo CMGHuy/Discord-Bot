@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1
-> - **Next:** Task U2
+> - **Completed:** U1-U2
+> - **Next:** Task U3
 
 ## Global Constraints
 
@@ -94,7 +94,7 @@ def test_page_renders(client, path):
 
 **Files:** Create `swingbot/admin/static/vendor/inter/inter.css` (+ 4 woff2 files); Modify `swingbot/admin/templates/base.html`
 
-- [ ] **Step 1: Download the four weights** (Inter is OFL-licensed) into `swingbot/admin/static/vendor/inter/`:
+- [x] **Step 1: Download the four weights** (Inter is OFL-licensed) into `swingbot/admin/static/vendor/inter/`:
 
 ```bash
 cd swingbot/admin/static/vendor/inter
@@ -103,7 +103,7 @@ for w in 400 500 600 700; do curl -sL -o inter-$w.woff2 "https://cdn.jsdelivr.ne
 
 Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubusercontent.com/rsms/inter/master/LICENSE.txt"`
 
-- [ ] **Step 2: Write `inter.css`**
+- [x] **Step 2: Write `inter.css`**
 
 ```css
 /* Inter (SIL OFL 1.1) — self-hosted; see LICENSE.txt in this folder. */
@@ -113,14 +113,14 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 700; font-display: swap; src: url("inter-700.woff2") format("woff2"); }
 ```
 
-- [ ] **Step 3: In `base.html`** delete the two `fonts.googleapis.com`/`fonts.gstatic.com` preconnect links and the Google `<link href="https://fonts.googleapis.com/css2?family=Inter...">`; in their place add, ABOVE the style.css link:
+- [x] **Step 3: In `base.html`** delete the two `fonts.googleapis.com`/`fonts.gstatic.com` preconnect links and the Google `<link href="https://fonts.googleapis.com/css2?family=Inter...">`; in their place add, ABOVE the style.css link:
 
 ```html
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
 ```
 
-- [ ] **Step 4: Verify** `python -m pytest tests/test_admin_pages.py -q` (5 pass) and `grep -n "googleapis\|gstatic" swingbot/admin/templates/base.html` returns nothing.
-- [ ] **Step 5: Commit** `feat: self-host Inter, remove Google Fonts CDN`
+- [x] **Step 4: Verify** `python -m pytest tests/test_admin_pages.py -q` (5 pass) and `grep -n "googleapis\|gstatic" swingbot/admin/templates/base.html` returns nothing.
+- [x] **Step 5: Commit** `feat: self-host Inter, remove Google Fonts CDN`
 
 ### Task U3: Design tokens (`tokens.css`)
 
