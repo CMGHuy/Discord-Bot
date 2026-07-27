@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U5
-> - **Next:** Task U6
+> - **Completed:** U1-U6
+> - **Next:** Task U7
 
 ## Global Constraints
 
@@ -250,7 +250,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace/add:
+- [x] **Step 1:** Replace/add:
 
 ```css
 .card {
@@ -268,7 +268,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .tile .delta { font-size: var(--fs-xs); font-weight: 600; margin-left: var(--sp-1); }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: card + stat tile components`
+- [x] **Step 2: Verify + commit** `feat: card + stat tile components`
 
 ### Task U7: Tables
 
