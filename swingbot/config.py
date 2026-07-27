@@ -537,6 +537,13 @@ FIELDS: list[Field] = [
                "weekly/RS/sizing/quality side panels) built by build_decision_context. Every "
                "context piece degrades to an absent key on its own failure, never the alert -- "
                "off leaves the legacy chart path byte-for-byte unchanged."),
+    Field("MAX_ALERTS_PER_SCAN", "MAX_ALERTS_PER_SCAN", "Universe & Scanning",
+          "Max full alerts posted per scan",
+          type="number", default="10", min=1, max=50, step=1,
+          help="Alert-flood control for large universes: the best MAX_ALERTS_PER_SCAN alerts "
+               "(by follow score, commands/scanning.py:_ordered_alerts' existing ranking) post "
+               "in full; the rest collapse into one digest line on the last alert instead of "
+               "flooding the channel."),
     Field("DATA_DRIVEN_STOPS_ENABLED", "DATA_DRIVEN_STOPS_ENABLED", "Universe & Scanning",
           "MAE-informed stop sizing enabled",
           type="checkbox", default="false",

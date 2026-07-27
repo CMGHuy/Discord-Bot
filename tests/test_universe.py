@@ -488,3 +488,29 @@ def test_pending_gaps_lists_failures(tmp_path, monkeypatch):
                                    persist_state=False)
     gaps = data_refresh.pending_gaps(res["state"])
     assert ("AAA", "daily") == (gaps[0][0], gaps[0][1])
+
+
+def test_cap_alerts_ranks_by_follow_score():
+    from swingbot.commands.scanning import cap_alerts
+
+    class Item:
+        def __init__(self, t, fs):
+            self.ticker, self.follow_score = t, fs
+    items = [Item("LOW", 40), Item("HI", 90), Item("MID", 70)]
+    top, rest = cap_alerts(items, max_alerts=2)
+    assert [i.ticker for i in top] == ["HI", "MID"]
+    assert [i.ticker for i in rest] == ["LOW"]
+
+
+def test_sector_dedup_collapses_to_best():
+    from swingbot.core.scanning.engine import dedup_sector_items
+
+    class Item:
+        def __init__(self, t, sector, fs):
+            self.ticker, self.sector, self.follow_score = t, sector, fs
+            self.also_qualifying = []
+    items = [Item("XOM", "Energy", 80), Item("CVX", "Energy", 70),
+             Item("MSFT", "Tech", 60)]
+    out = dedup_sector_items(items)
+    assert [i.ticker for i in out] == ["XOM", "MSFT"]
+    assert out[0].also_qualifying == ["CVX"]

@@ -264,6 +264,17 @@ async def _post_daily_digest(channel) -> None:
         view.message = await channel.send(embed=embed, view=view)
 
 
+def cap_alerts(items: list, max_alerts: int | None = None) -> tuple:
+    """Alert-flood control for big universes: full alerts for the best
+    `max_alerts` by follow score, a digest line for the rest -- ranked,
+    not truncated arbitrarily."""
+    cap = max_alerts if max_alerts is not None else getattr(config, "MAX_ALERTS_PER_SCAN", 10)
+    ranked = sorted(items, key=lambda i: (getattr(i, "follow_score", None)
+                                          or getattr(i, "quality_score", 0) or 0),
+                    reverse=True)
+    return ranked[:cap], ranked[cap:]
+
+
 async def _send_alerts(destination, alerts):
     """alerts: list of (embed, chart_path, plan_or_none) 3-tuples.
 
@@ -279,8 +290,27 @@ async def _send_alerts(destination, alerts):
     tick).
     """
     from swingbot.commands.views import PlanActionView
+    from swingbot.core.analytics.rank import follow_score
 
-    for embed, chart_path, plan in _ordered_alerts(alerts):
+    # Alert-flood control (Task E77): _ordered_alerts already ranks by
+    # follow_score (rank_plans, THE shared ordering), so the cap is applied
+    # directly to that ranked list rather than re-ranking through the
+    # generic cap_alerts() above -- these are (embed, chart_path, plan)
+    # tuples, not follow_score-bearing objects, and follow_score is a
+    # function over a plan here, not a stored attribute.
+    ordered = _ordered_alerts(alerts)
+    cap = getattr(config, "MAX_ALERTS_PER_SCAN", 10)
+    to_send, overflow = ordered[:cap], ordered[cap:]
+    if overflow:
+        digest_items = [(p.ticker, round(follow_score(p))) for _, _, p in overflow if p is not None]
+        if digest_items:
+            digest = "+%d more: %s" % (len(digest_items),
+                                       ", ".join(f"{t} ({s})" for t, s in digest_items))
+            last_embed = to_send[-1][0]
+            existing_footer = last_embed.footer.text if last_embed.footer else None
+            last_embed.set_footer(text=f"{existing_footer} | {digest}" if existing_footer else digest)
+
+    for embed, chart_path, plan in to_send:
         view = PlanActionView(plan.plan_id, author_id=None) if plan is not None else None
         kwargs = {"embed": embed}
         if chart_path:

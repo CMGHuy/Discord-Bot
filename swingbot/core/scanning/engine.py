@@ -365,7 +365,31 @@ def dedup_scan_items(items: list) -> list:
             ]
             deduped.append(rep)
 
-    return deduped
+    return dedup_sector_items(deduped)
+
+
+def dedup_sector_items(items: list) -> list:
+    """Portfolio-level dedup (Task E78): multiple same-sector signals in one
+    scan collapse to the highest-follow-score one, gaining `also_qualifying`
+    -- the correlation/sector caps would block the extras anyway, so don't
+    tease untakeable trades. Items without a `sector` attribute (every real
+    ScanItem today -- sector stamping from universe.sector_map is not wired
+    up anywhere yet) pass through untouched, making this a documented no-op
+    live until that lands, same as this plan's other pre-registered-but-
+    unwired factors (E33's REGIME_ALLOW, E40's blocked sub-step)."""
+    by_sector: dict = {}
+    passthrough = []
+    for it in items:
+        sec = getattr(it, "sector", None)
+        (by_sector.setdefault(sec, []) if sec else passthrough).append(it)
+    out = list(passthrough)
+    for sec, group in by_sector.items():
+        group.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
+        best = group[0]
+        best.also_qualifying = [g.ticker for g in group[1:]]
+        out.append(best)
+    out.sort(key=lambda i: getattr(i, "follow_score", 0) or 0, reverse=True)
+    return out
 
 
 def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
