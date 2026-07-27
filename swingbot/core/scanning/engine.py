@@ -47,7 +47,7 @@ import json as _json
 import logging
 import os
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -427,6 +427,42 @@ def scan_slowdown(path: str | None = None) -> bool:
     return rows[-1]["duration_s"] > 2 * statistics.median(prior)
 
 
+class LRUFrames(OrderedDict):
+    """Bounded frame store for universe-scale scans on an 8GB box (Task
+    E83): CX23 has 8GB, and 500 tickers x ~2MB frames uncapped would eat
+    1GB+ alongside pandas temporaries. Evicted frames simply come back as
+    a cache miss (`.get(ticker)` -> None) to every consumer in this module
+    -- every real call site already treats a missing frame as "no data for
+    this ticker this scan" (the same as a failed fetch), so there is no
+    separate reload path to wire.
+
+    get() is overridden alongside __getitem__: CPython's dict.get() calls
+    into the C-level hash table directly and does NOT dispatch through a
+    subclass's __getitem__ override, and this module reads frames almost
+    exclusively via `fresh_data.get(ticker)`, never `fresh_data[ticker]` --
+    without this override, recency would only ever update on insert, and
+    eviction would silently degrade to FIFO instead of LRU."""
+    def __init__(self, max_frames: int = 200):
+        super().__init__()
+        self.max_frames = max_frames
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+    def get(self, key, default=None):
+        if key in self:
+            return self[key]
+        return default
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self.max_frames:
+            self.popitem(last=False)
+
+
 def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
                           rs_percentile=None, breadth=None) -> dict:
     """Real inputs for quality.score_plan (Task E37 wiring fix). Before this,
@@ -586,7 +622,7 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
         progress.done = 0
         progress.current_ticker = None
 
-    results = {}
+    results = LRUFrames()   # Task E83: bounded, evicts oldest frames past 200 tickers
     started = time.monotonic()
 
     for ticker in tickers:

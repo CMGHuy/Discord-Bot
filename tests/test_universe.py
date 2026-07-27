@@ -526,3 +526,26 @@ def test_scan_telemetry_roundtrip_and_slowdown_alarm(tmp_path):
     assert scan_slowdown(path=p) is False
     log_scan_telemetry({"duration_s": 150, "tickers": 150}, path=p)
     assert scan_slowdown(path=p) is True
+
+
+def test_lru_frames_evicts_least_recent():
+    from swingbot.core.scanning.engine import LRUFrames
+    lru = LRUFrames(max_frames=2)
+    lru["A"], lru["B"] = 1, 2
+    _ = lru["A"]              # touch A -> B is now least recent
+    lru["C"] = 3
+    assert "B" not in lru and "A" in lru and "C" in lru
+
+
+def test_lru_frames_get_also_counts_as_a_touch():
+    """dict.get() bypasses a subclass's __getitem__ override at the C level
+    -- this codebase's actual scan loop reads fresh_data almost exclusively
+    via .get(t), so LRUFrames must override get() too, or recency tracking
+    would silently degrade to insertion order and defeat the point of the
+    cache once eviction actually triggers (universe > max_frames)."""
+    from swingbot.core.scanning.engine import LRUFrames
+    lru = LRUFrames(max_frames=2)
+    lru["A"], lru["B"] = 1, 2
+    assert lru.get("A") == 1   # touch A via get() -> B is now least recent
+    lru["C"] = 3
+    assert "B" not in lru and "A" in lru and "C" in lru
