@@ -1,4 +1,4 @@
-# Gatekeeper v6 - Part 2/11: Macro data layer I: plumbing, FRED series, market internals (Tasks G9-G28)
+# Gatekeeper v7 - Part 2/11: Macro data layer I: plumbing, FRED series, market internals (Tasks G9-G28)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G9 -> G28).
 >
@@ -11,7 +11,7 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v6`
+> - **Branch:** `feature/gatekeeper-v7`
 > - **Completed:** —
 > - **Next:** Task G9
 
