@@ -39,6 +39,13 @@ def test_closing_one_frees_heat():
     assert chk["remaining"] == pytest.approx(2.0)
 
 
+def test_horizon_capacity():
+    from swingbot.core.edge.heat import horizon_check
+    trades = [{"horizon_key": "4w"}] * 4 + [{"horizon_key": "2m"}]
+    assert horizon_check(trades, "4w", max_per_horizon=4)["allowed"] is False
+    assert horizon_check(trades, "2m", max_per_horizon=4)["allowed"] is True
+
+
 def test_sector_heat_and_cap():
     from swingbot.core.edge.heat import sector_check, sector_heat
     sectors = {"AAA": "Energy", "BBB": "Energy", "CCC": "Utilities", "CAND": "Energy"}

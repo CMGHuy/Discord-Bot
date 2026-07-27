@@ -58,3 +58,11 @@ def sector_check(open_trades: list, balance: float, candidate_ticker: str,
     remaining = max(0.0, cap - heat)
     return {"allowed": candidate_risk_pct <= remaining + 1e-9, "sector": sec,
             "sector_heat": heat, "remaining": round(remaining, 3), "cap": cap}
+
+
+def horizon_check(open_trades: list, candidate_horizon: str,
+                  max_per_horizon: int | None = None) -> dict:
+    cap = max_per_horizon if max_per_horizon is not None else \
+        getattr(config, "MAX_OPEN_PER_HORIZON", 4)
+    n = sum(1 for t in open_trades if t.get("horizon_key") == candidate_horizon)
+    return {"allowed": n < cap, "open_in_horizon": n, "cap": cap}

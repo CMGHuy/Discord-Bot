@@ -283,6 +283,12 @@ FIELDS: list[Field] = [
                "in that sector past this % of equity. Prevents overconcentration in a single sector. Blocking "
                "is flagged, not hidden -- a blocked plan still alerts, labeled with the sector name and heat, "
                "so you can diversify deliberately."),
+    Field("MAX_OPEN_PER_HORIZON", "MAX_OPEN_PER_HORIZON", "Account Defaults",
+          "Max open trades per horizon",
+          type="number", default="4", min=1, max=20, step=1,
+          help="Caps how many open positions can share one swing horizon (e.g. all '4w' trades), "
+               "so capital doesn't concentrate in a single horizon's regime. Same flagged-not-hidden "
+               "treatment as the heat caps above -- a blocked plan still alerts, labeled, size 0."),
     Field("POSITION_SIZE_PCT_OF_ACCOUNT", "POSITION_SIZE_PCT_OF_ACCOUNT", "Account Defaults",
           "Position size % of account",
           type="float", default="0.1", min=0.001, max=100, step=0.01,
