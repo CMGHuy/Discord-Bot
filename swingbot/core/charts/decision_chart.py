@@ -19,6 +19,7 @@ from swingbot.core.charts.chart_style import (
 )
 
 PANEL_LOOKBACK_BARS = 130
+OUTCOME_MIN_SAMPLES = 20
 
 REGIME_SHADE = {"bull_quiet": (UP_COLOR, 0.05), "bull_volatile": (UP_COLOR, 0.12),
                 "bear_quiet": (STOP_COLOR, 0.05), "bear_volatile": (STOP_COLOR, 0.12)}
@@ -31,7 +32,8 @@ def draw_placeholder(ax, text: str) -> None:
     ax.set_xticks([]); ax.set_yticks([])
 
 
-def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None) -> None:
+def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None,
+                     outcomes=None) -> None:
     part = daily_df.tail(PANEL_LOOKBACK_BARS)
     if regimes is not None:
         r = regimes.reindex(part.index).ffill()
@@ -66,6 +68,20 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None
         ax.annotate(f"AVWAP {s.values[-1]:.2f}", xy=(1.0, s.values[-1]),
                     xycoords=("axes fraction", "data"), fontsize=7,
                     color=AVWAP_COLOR, ha="right")
+    if outcomes and len(outcomes) >= OUTCOME_MIN_SAMPLES:
+        entry_px = plan.trigger_price or plan.entry_price
+        rps = abs(entry_px - plan.stop_loss)
+        x0 = len(part) - 1
+        sign = 1 if plan.direction == "bullish" else -1
+        for o in outcomes:
+            ys = [entry_px + sign * r * rps for r in [0.0] + list(o["r_path"])]
+            color = TARGET_COLOR if o["outcome"] == "win" else STOP_COLOR
+            ax.plot(range(x0, x0 + len(ys)), ys, color=color, alpha=0.10, lw=0.8,
+                    zorder=1)
+        ax.annotate(f"outcome cloud: {len(outcomes)} past setups",
+                    xy=(0.02, 0.02), xycoords="axes fraction",
+                    fontsize=7, color=MUTED_TEXT_COLOR)
+        ax.set_xlim(0, len(part) + 15)
     ax.set_facecolor(CHART_BG)
 
 
@@ -79,7 +95,8 @@ def render_decision_chart(symbol: str, daily_df: pd.DataFrame, plan,
     ax_rs = fig.add_subplot(gs[1, 3])
     ax_info = fig.add_subplot(gs[2, 3])
 
-    _draw_main_panel(ax_main, daily_df, plan, context.get("avwaps"), context.get("regimes"))
+    _draw_main_panel(ax_main, daily_df, plan, context.get("avwaps"), context.get("regimes"),
+                     context.get("outcomes"))
     # Later tasks replace these placeholders panel by panel:
     from swingbot.core.charts import decision_panels as panels  # this module, split below
     panels.draw_weekly(ax_weekly, context.get("weekly"))

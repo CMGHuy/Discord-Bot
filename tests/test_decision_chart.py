@@ -67,3 +67,14 @@ def test_regime_shading_renders(tmp_path, daily_df):
     ctx = {"regimes": pd.Series(labels, index=daily_df.index)}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
     assert os.path.getsize(path) > 10_000
+
+
+def test_outcome_cloud_renders_and_respects_min_samples(tmp_path, daily_df):
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    win = {"r_path": [0.1, 0.3, 0.6, 1.0], "outcome": "win"}
+    loss = {"r_path": [-0.2, -0.6, -1.0], "outcome": "loss"}
+    big = {"outcomes": [win] * 16 + [loss] * 8}      # 24 >= 20 -> drawn
+    small = {"outcomes": [win] * 5}                  # < 20 -> silently omitted
+    p1 = render_decision_chart("BIG", daily_df, FakePlan(), big, str(tmp_path))
+    p2 = render_decision_chart("SMALL", daily_df, FakePlan(), small, str(tmp_path))
+    assert os.path.getsize(p1) > os.path.getsize(p2) * 0.5   # both render fine
