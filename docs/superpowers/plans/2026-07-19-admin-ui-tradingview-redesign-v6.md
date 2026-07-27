@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U4
-> - **Next:** Task U5
+> - **Completed:** U1-U5
+> - **Next:** Task U6
 
 ## Global Constraints
 
@@ -213,7 +213,7 @@ Keep every existing sidebar rule this doesn't replace (mobile overlay, footer) b
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace the existing button and `.pill` rules with:
+- [x] **Step 1:** Replace the existing button and `.pill` rules with:
 
 ```css
 button, .btn {
@@ -244,7 +244,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pill.tier-c { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: button hierarchy + badge pill system`
+- [x] **Step 2: Verify + commit** `feat: button hierarchy + badge pill system`
 
 ### Task U6: Cards + stat tiles
 
