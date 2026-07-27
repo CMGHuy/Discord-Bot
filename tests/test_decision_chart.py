@@ -132,3 +132,21 @@ def test_build_decision_context_never_raises(daily_df):
 
     ctx = build_decision_context(Item(), {"TEST": daily_df}, daily_df)
     assert isinstance(ctx, dict)          # missing pieces -> keys absent, no raise
+
+
+def test_render_decision_chart_saves_through_the_disclaimer():
+    """Task E97: decision_chart.py has exactly one savefig call (unlike
+    portfolio_charts.py's shared _save() helper, this is a single one-pager
+    renderer) -- assert DISCLAIMER_TEXT is drawn before that one savefig
+    call, so a future edit can't slip a second, disclaimer-free savefig
+    path into this module without this test catching it."""
+    import inspect
+    from swingbot.core.charts import decision_chart as dc
+
+    src = inspect.getsource(dc)
+    assert src.count("fig.savefig(") == 1
+    # rindex, not index: the FIRST "DISCLAIMER_TEXT" occurrence is just the
+    # module's import line, which trivially precedes savefig regardless of
+    # whether the actual fig.text(...) draw call still exists. The LAST
+    # occurrence is that real draw call -- it must precede the save.
+    assert src.rindex("DISCLAIMER_TEXT") < src.index("fig.savefig(")

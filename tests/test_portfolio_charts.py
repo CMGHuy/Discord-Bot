@@ -59,3 +59,22 @@ def test_fold_evidence_renders(tmp_path):
                {"component": "mtf_min_2", "folds": [0.01, -0.06, 0.02], "verdict": "FAIL"}]
     path = render_fold_evidence(results, str(tmp_path))
     assert os.path.getsize(path) > 5_000
+
+
+def test_every_renderer_saves_through_the_disclaimer_helper():
+    """Task E97: _save() is the ONLY place DISCLAIMER_TEXT gets drawn onto a
+    portfolio chart -- if any render_* function called fig.savefig directly
+    instead of returning _save(...), that chart would silently ship without
+    the risk disclosure. Source-grepped rather than pixel-checked because
+    the disclaimer text is 6pt, near-invisible in a saved-PNG byte-size
+    assertion, and this is a structural guarantee, not a rendering one."""
+    import inspect
+    from swingbot.core.charts import portfolio_charts as pc
+
+    src = inspect.getsource(pc)
+    # Exactly one real fig.savefig call in the whole module -- inside _save().
+    assert src.count("fig.savefig(") == 1
+    for name, fn in inspect.getmembers(pc, inspect.isfunction):
+        if name.startswith("render_"):
+            assert "return _save(" in inspect.getsource(fn), \
+                f"{name} does not return through _save() -- would ship without the disclaimer"

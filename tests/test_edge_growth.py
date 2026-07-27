@@ -107,3 +107,16 @@ def test_collect_stats_threads_target_into_growth_path(monkeypatch):
     assert stats_5x["growth_path"]["pct_to_target"] == pytest.approx(want_5x, abs=0.01)
     assert stats_5x["growth_path"]["pct_to_target"] != stats_default["growth_path"]["pct_to_target"]
     assert stats_5x["growth_path"]["required_daily_growth"] != stats_default["growth_path"]["required_daily_growth"]
+
+
+def test_every_edge_surface_carries_the_disclaimer():
+    from swingbot.core.edge.growth import growth_report
+    from swingbot.commands.growth import portfolio_report, weekly_risk_report
+    for text in (growth_report({"expectancy_r": 0.1, "trades_per_month": 10,
+                                "risk_pct": 1.0, "n_closed": 50}),
+                 portfolio_report({"open_heat": 0, "heat_cap": 6, "sector_heat": {},
+                                   "clusters": [], "throttle_mult": 1.0,
+                                   "paused": False, "kill": {"on": False}, "growth": {}}),
+                 weekly_risk_report({"heat_utilization_pct": 1.0})):
+        assert ("will differ" in text or "not promises" in text
+                or "financial advice" in text.lower())
