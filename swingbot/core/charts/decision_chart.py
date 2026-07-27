@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
 
+from swingbot.core.charts.chart_drawing import _spread_labels
 from swingbot.core.charts.chart_style import (
     AVWAP_COLOR, CHART_BG, DISCLAIMER_TEXT, ENTRY_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
     PRO_STYLE, STOP_COLOR, TARGET_COLOR, TEXT_COLOR, UP_COLOR,
@@ -50,12 +51,13 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None
               (plan.tp1, TARGET_COLOR, "TP1")]
     if getattr(plan, "tp2", None):
         levels.append((plan.tp2, TARGET_COLOR, "TP2"))
+    price_labels = []  # (price, color, text) -- spread via _spread_labels once every
+                        # right-edge label (entry/stop/TP + AVWAP) is known, so labels
+                        # sitting at nearly the same price don't render on top of each other
     for price, color, label in levels:
         if price:
             ax.axhline(price, color=color, lw=1.1, ls="--", alpha=0.9)
-            ax.annotate(f"{label} {price:.2f}", xy=(1.0, price),
-                        xycoords=("axes fraction", "data"),
-                        fontsize=8, color=color, ha="right", va="bottom")
+            price_labels.append((price, color, f"{label} {price:.2f}"))
     part_index = part.index
     for av in (avwaps or []):
         s = av["series"].reindex(part_index).dropna()
@@ -65,9 +67,11 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None
         xs = range(x0, x0 + len(s))
         ax.plot(list(xs), s.values, color=AVWAP_COLOR, lw=1.2, alpha=0.85)
         ax.annotate("⚓", xy=(x0, s.values[0]), color=AVWAP_COLOR, fontsize=9)
-        ax.annotate(f"AVWAP {s.values[-1]:.2f}", xy=(1.0, s.values[-1]),
-                    xycoords=("axes fraction", "data"), fontsize=7,
-                    color=AVWAP_COLOR, ha="right")
+        price_labels.append((s.values[-1], AVWAP_COLOR, f"AVWAP {s.values[-1]:.2f}"))
+    if price_labels:
+        for price, y, color, text in _spread_labels(price_labels, ax.get_ylim()):
+            ax.annotate(text, xy=(1.0, y), xycoords=("axes fraction", "data"),
+                        fontsize=8, color=color, ha="right", va="center")
     if outcomes and len(outcomes) >= OUTCOME_MIN_SAMPLES:
         entry_px = plan.trigger_price or plan.entry_price
         rps = abs(entry_px - plan.stop_loss)
@@ -76,8 +80,8 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None
         for o in outcomes:
             ys = [entry_px + sign * r * rps for r in [0.0] + list(o["r_path"])]
             color = TARGET_COLOR if o["outcome"] == "win" else STOP_COLOR
-            ax.plot(range(x0, x0 + len(ys)), ys, color=color, alpha=0.10, lw=0.8,
-                    zorder=1)
+            ax.plot(range(x0, x0 + len(ys)), ys, color=color, alpha=0.22, lw=0.9,
+                    zorder=2)
         ax.annotate(f"outcome cloud: {len(outcomes)} past setups",
                     xy=(0.02, 0.02), xycoords="axes fraction",
                     fontsize=7, color=MUTED_TEXT_COLOR)
