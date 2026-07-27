@@ -533,6 +533,19 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .field input[type=checkbox] { width: 17px; height: 17px; accent-color: #2558c9; cursor: pointer; flex-shrink: 0; }
 .field .checkbox-label { font-size: 13px; color: #7a8299; }
 
+input[type="text"], input[type="number"], input[type="password"], select, textarea {
+  background: var(--bg-2); color: var(--text-1);
+  border: 1px solid var(--border-2); border-radius: var(--r-sm);
+  padding: 7px 10px; font: 400 var(--fs-sm) var(--font-sans);
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+label { color: var(--text-2); font-size: var(--fs-sm); }
+input[type="checkbox"] { accent-color: var(--accent); }
+
 .restart-badge {
   font-size: 10px; padding: 2px 6px; border-radius: 5px; background: #261a06; color: #d4972a;
   font-weight: 700; white-space: nowrap; border: 1px solid #3d2a0a; letter-spacing: 0.02em;
