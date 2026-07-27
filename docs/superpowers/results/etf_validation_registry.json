@@ -1,0 +1,24 @@
+[
+ {
+  "source": "strategy",
+  "strategy": "Break & Retest",
+  "horizon": null,
+  "status": "WEAK",
+  "n": 234,
+  "win_rate": 74.8,
+  "expectancy_r": -0.05,
+  "window": "2020-01-01..2023-12-31",
+  "run_date": "2026-07-27"
+ },
+ {
+  "source": "strategy",
+  "strategy": "Support/Resistance",
+  "horizon": null,
+  "status": "VALIDATED",
+  "n": 36,
+  "win_rate": 97.2,
+  "expectancy_r": 0.142,
+  "window": "2020-01-01..2023-12-31",
+  "run_date": "2026-07-27"
+ }
+]

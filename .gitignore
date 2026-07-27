@@ -20,10 +20,8 @@ logs/
 backtest_range_summary.txt
 validation_results.json
 
-# Backtest / fold run output. NOTE: this ignores the WHOLE directory, including
-# future *.md and *.json validation deliverables — and the backtest methodology in
-# CLAUDE.md requires those be committed with their table and selection rule. The 27
-# result files tracked before this rule was added stay tracked (gitignore does not
-# untrack), so only NEW result files become invisible. If the intent was only to
-# drop the noisy run logs, narrow this to: docs/superpowers/results/*.log
-docs/superpowers/results/
+# Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
+# rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
+# deliverables the backtest methodology in CLAUDE.md requires be committed.
+# Caught when Task E80's results doc silently failed to `git add`.
+docs/superpowers/results/*.log
