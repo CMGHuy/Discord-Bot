@@ -1,20 +1,13 @@
-:root {
-  color-scheme: dark;
-  /* Inter first (loaded via Google Fonts in base.html) -- falls back
-     cleanly to the platform system-UI stack if the network request for it
-     ever fails, so the page never looks broken, just slightly plainer. */
-  --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
 *, *::before, *::after { box-sizing: border-box; }
 body {
-  background: #0d0f14; color: #dde1ea; margin: 0; font-size: 14px;
+  background: var(--bg-0); color: var(--text-1); margin: 0; font-size: 14px;
   font-family: var(--font-sans);
   /* Inter renders slightly darker/heavier than the old system stack at the
      same declared weight -- a touch of antialiasing keeps body text from
      looking overly bold on a dark background. */
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
-a { color: #6ea8fe; }
+a { color: var(--accent); }
 
 /* ---- Shell layout ---- */
 .shell { display: flex; min-height: 100vh; }
