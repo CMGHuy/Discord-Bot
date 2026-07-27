@@ -214,6 +214,11 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
     # simulate() bootstraps from. Recorded at open time, not close time, so
     # it excludes every signal this replay's heat/sector caps skipped.
     r_multiples_taken: list[float] = []
+    # (strategy, outcome) for every trade actually opened -- recorded here
+    # rather than read back off open_pos at the end, since open_pos entries
+    # for trades that have already closed are removed from that list as
+    # they exit (see step 1 above), same reasoning as r_multiples_taken.
+    taken_strategy_outcomes: list[tuple[str, str | None]] = []
 
     for sig in events:
         # 1) close everything that exited before this signal's date
@@ -246,6 +251,7 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
                          "sector": sec, "risk_pct": eff_risk, "r": sig["r_multiple"]})
         taken += 1
         r_multiples_taken.append(sig["r_multiple"])
+        taken_strategy_outcomes.append((sig.get("strategy", "UNKNOWN"), sig.get("outcome")))
 
     for p in sorted(open_pos, key=lambda p: p["exit_date"]):
         balance *= 1 + (p["risk_pct"] / 100.0) * p["r"]
@@ -264,10 +270,33 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
         d1 = dt.date.fromisoformat(str(curve[-1][0])[:10])
         months = max(((d1 - d0).days / 30.44) if d0 else 1.0, 1.0)
 
+    # Per-strategy win rate of trades ACTUALLY TAKEN (post heat/sector/dedup
+    # caps) -- the portfolio-level counterpart to run_backtest_range.py's
+    # pool()'s win_rate, same "win"/"loss" outcome convention (scratch/
+    # timeout excluded from both the numerator and denominator) so this is
+    # directly comparable to validation_registry.json's per-strategy figures
+    # (Task E92's per-strategy-WR-within-10-points gate).
+    per_strategy_counts: dict[str, dict[str, int]] = {}
+    for strat, outcome in taken_strategy_outcomes:
+        c = per_strategy_counts.setdefault(strat, {"wins": 0, "losses": 0})
+        if outcome == "win":
+            c["wins"] += 1
+        elif outcome == "loss":
+            c["losses"] += 1
+    per_strategy_wr = {
+        strat: {
+            "n": c["wins"] + c["losses"],
+            "win_rate": round(c["wins"] / (c["wins"] + c["losses"]) * 100, 1)
+                        if (c["wins"] + c["losses"]) else None,
+        }
+        for strat, c in per_strategy_counts.items()
+    }
+
     return {"equity_curve": curve, "final_multiple": balance / start_balance,
             "max_dd_pct": round(max_dd, 2), "trades_taken": taken,
             "trades_skipped": skipped, "trades_per_month": round(taken / months, 1),
-            "r_multiples_taken": r_multiples_taken}
+            "r_multiples_taken": r_multiples_taken,
+            "per_strategy_wr": per_strategy_wr}
 
 
 def _trades_similar(a, b, tol_pct: float) -> bool:
@@ -331,6 +360,10 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
         if df is None or not liquidity_ok(df):
             continue
 
+        # (strategy, trade) pairs -- BacktestTrade itself carries no strategy
+        # field (only the per-call BacktestSummary wrapper does), so the
+        # strategy name has to be tagged on here, before pooling across
+        # strategies erases which one produced each trade.
         candidates = []
         for strat in strategies:
             for hk in horizons:
@@ -339,17 +372,19 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
                                            scale_out=True, tp2_mode="levels")
                 for t in (s.trades or []):
                     if t.r_multiple is not None and t.exit_date is not None:
-                        candidates.append(t)
+                        candidates.append((strat, t))
 
-        candidates.sort(key=lambda t: t.entry_date)
+        candidates.sort(key=lambda pair: pair[1].entry_date)
         open_similar: list = []
-        for t in candidates:
-            open_similar = [o for o in open_similar if o.exit_date > t.entry_date]
-            if any(_trades_similar(o, t, tol_pct) for o in open_similar):
+        for strat, t in candidates:
+            open_similar = [o for o in open_similar if o[1].exit_date > t.entry_date]
+            if any(_trades_similar(o[1], t, tol_pct) for o in open_similar):
                 continue
-            open_similar.append(t)
+            open_similar.append((strat, t))
             signals.append({"date": t.entry_date, "ticker": sym,
                             "sector": sectors.get(sym),
                             "r_multiple": t.r_multiple,
-                            "exit_date": t.exit_date})
+                            "exit_date": t.exit_date,
+                            "strategy": strat,
+                            "outcome": t.outcome})
     return signals

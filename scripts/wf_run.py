@@ -51,13 +51,42 @@ def main() -> int:
     p.add_argument("--end", default=ANCHORED_FOLDS[-1][3],
                    help="portfolio mode: replay window end (default: last anchored "
                         "fold's test-window end, %(default)s -- covers all 3 test years)")
+    p.add_argument("--window", default=None,
+                   help="'START:END' shorthand for a single custom test window, e.g. "
+                        "'2024-01-01:2025-12-31' -- in --portfolio mode, overrides "
+                        "--start/--end; otherwise replaces the 3 ANCHORED_FOLDS with "
+                        "this one window (train_start/train_end are unused by "
+                        "run_folds() either way, see its docstring)")
+    p.add_argument("--once-guard", default=None,
+                   help="path to a markdown file that must NOT already contain a "
+                        "'## Result' section -- refuses to run (exit 1, no work done) "
+                        "if it does. For pre-registered one-shot validations (Task "
+                        "E92) that must never silently re-run on the same window; "
+                        "pass the same path you're appending results into.")
     args = p.parse_args()
 
+    if args.once_guard and os.path.exists(args.once_guard):
+        with open(args.once_guard, encoding="utf-8") as fh:
+            if "## Result" in fh.read():
+                print(f"REFUSING TO RUN: {args.once_guard} already has a "
+                      f"'## Result' section. This is a pre-registered one-shot "
+                      f"run -- no re-runs, no second attempts. If this is "
+                      f"genuinely a different run, use a different --once-guard "
+                      f"path (and a different results doc).", file=sys.stderr)
+                return 1
+
+    window_start = window_end = None
+    if args.window:
+        window_start, window_end = args.window.split(":")
+
     if args.portfolio:
+        if window_start:
+            args.start, args.end = window_start, window_end
         signals = collect_portfolio_signals(args.start, args.end,
                                             strategies=args.strategy,
                                             horizons=args.horizon)
         result = portfolio_replay(signals)
+        print("\n## Result\n")
         print(f"portfolio replay {args.start}..{args.end}: "
               f"{len(signals)} signals collected")
         print(json.dumps(result, indent=1, default=str))
@@ -87,9 +116,11 @@ def main() -> int:
         return _default_run(start, end, over, strategies=args.strategy,
                             horizons=args.horizon, tickers=tickers)
 
-    result = run_folds(overrides, run_fn=_guarded(run))
+    folds = ((window_start, window_start, window_start, window_end),) if window_start else ANCHORED_FOLDS
+    result = run_folds(overrides, folds=folds, run_fn=_guarded(run))
     verdict = gate(result)
 
+    print("\n## Result\n")
     print(f"component overrides: {overrides or '(none -- adopted defaults)'}")
     print(f"{'fold':<6}{'N':>8}{'baseline':>12}{'component':>12}{'delta':>10}")
     for f in result["folds"]:

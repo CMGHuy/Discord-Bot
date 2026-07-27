@@ -6,9 +6,12 @@ from swingbot.core.backtest import BacktestSummary, BacktestTrade
 from swingbot.core.backtest_wf import collect_portfolio_signals, portfolio_replay
 
 
-def _sig(date, ticker, r, exit_date, sector="Tech"):
+def _sig(date, ticker, r, exit_date, sector="Tech", strategy="RSI", outcome=None):
+    if outcome is None:
+        outcome = "win" if r > 0 else "loss"
     return {"date": date, "ticker": ticker, "sector": sector,
-            "r_multiple": r, "exit_date": exit_date}
+            "r_multiple": r, "exit_date": exit_date,
+            "strategy": strategy, "outcome": outcome}
 
 
 def _trade(entry_date, exit_date, entry, stop_loss, take_profit, r_multiple,
@@ -65,6 +68,43 @@ def test_equity_compounds_and_dd_measured():
     assert out["trades_per_month"] > 0
 
 
+def test_per_strategy_wr_of_taken_trades_only(monkeypatch):
+    # 2 RSI wins + 1 RSI loss taken (66.7% WR, n=3); 1 MACD win skipped by
+    # the heat cap -- it must NOT count toward MACD's win rate at all,
+    # since per_strategy_wr is about trades the portfolio actually took.
+    sigs = [
+        _sig("2021-01-04", "A", 1.0, "2021-01-10", strategy="RSI"),
+        _sig("2021-01-04", "B", 1.0, "2021-01-10", strategy="RSI"),
+        _sig("2021-01-04", "C", -1.0, "2021-01-10", strategy="RSI"),
+        _sig("2021-01-04", "D", 1.0, "2021-01-10", strategy="MACD"),
+    ]
+    out = portfolio_replay(sigs, heat_cap_pct=3.0, sector_cap_pct=100.0)
+    assert out["trades_taken"] == 3
+    assert out["trades_skipped"] == 1
+    assert out["per_strategy_wr"]["RSI"] == {"n": 3, "win_rate": pytest.approx(66.7)}
+    assert "MACD" not in out["per_strategy_wr"]
+
+
+def test_per_strategy_wr_excludes_scratch_and_timeout_outcomes():
+    # Mirrors run_backtest_range.py's pool(): win_rate = wins / (wins +
+    # losses), with scratch/timeout excluded from both wins and the
+    # denominator -- not silently counted as losses.
+    sigs = [
+        _sig("2021-01-04", "A", 1.0, "2021-01-10", strategy="RSI", outcome="win"),
+        _sig("2021-01-05", "B", 0.0, "2021-01-11", strategy="RSI", outcome="scratch"),
+        _sig("2021-01-06", "C", 0.0, "2021-01-12", strategy="RSI", outcome="timeout"),
+    ]
+    out = portfolio_replay(sigs, heat_cap_pct=100.0, sector_cap_pct=100.0)
+    assert out["trades_taken"] == 3
+    assert out["per_strategy_wr"]["RSI"] == {"n": 1, "win_rate": 100.0}
+
+
+def test_per_strategy_wr_none_when_no_win_loss_trades():
+    sigs = [_sig("2021-01-04", "A", 0.0, "2021-01-10", strategy="RSI", outcome="scratch")]
+    out = portfolio_replay(sigs, heat_cap_pct=100.0, sector_cap_pct=100.0)
+    assert out["per_strategy_wr"]["RSI"] == {"n": 0, "win_rate": None}
+
+
 def test_collect_portfolio_signals_dedupes_similar_same_ticker(monkeypatch):
     # Mirrors performance.py's has_open_trade/has_similar_open_trade guard
     # that engine.py's scan loop enforces (~line 1025-1039): the live
@@ -98,6 +138,12 @@ def test_collect_portfolio_signals_dedupes_similar_same_ticker(monkeypatch):
 
     assert len(signals) == 2
     assert sorted(s["date"] for s in signals) == ["2021-01-04", "2021-01-12"]
+    # strategy/outcome must be tagged onto the right trade, not mixed up by
+    # pooling both strategies' candidates into one list before the dedup pass.
+    by_date = {s["date"]: s for s in signals}
+    assert by_date["2021-01-04"]["strategy"] == "StratA"
+    assert by_date["2021-01-12"]["strategy"] == "StratB"
+    assert by_date["2021-01-04"]["outcome"] == "win"
 
 
 def test_collect_portfolio_signals_keeps_non_overlapping_similar_trades(monkeypatch):
