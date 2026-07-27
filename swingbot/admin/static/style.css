@@ -286,11 +286,18 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   box-shadow: 0 0 10px 2px var(--status-color, #6e778c);
   animation: trade-blink var(--blink-duration, 2.2s) ease-in-out infinite;
 }
-/* .ok/.bad modifiers -- static (non-blinking) variants for a binary
-   good/bad status dot, layered onto the same .trade-status-dot base
-   above rather than redefining its size/animation (that base is still
-   driven dynamically via --status-color for the per-row and bot-liveness
-   dots elsewhere on this page). */
+/* .ok/.bad modifiers -- semantic color states layered onto the EXISTING
+   .trade-status-dot base above, deliberately NOT redefining its size/
+   animation (that base is still driven dynamically via --status-color
+   for the per-row and bot-liveness dots elsewhere on this page).
+   IMPORTANT: this means class="trade-status-dot ok/bad" still renders
+   at the base rule's 12px and keeps blinking via the trade-blink
+   animation -- it is NOT the 8px, static (non-animated) dot originally
+   described in the U10 plan brief. A future task that wires these
+   modifiers onto real markup expecting that 8px/static spec will need
+   its own non-conflicting selector (e.g. a dedicated class, not bare
+   .trade-status-dot) rather than assuming these two rules alone
+   deliver it. */
 .trade-status-dot.ok { background: var(--up); box-shadow: 0 0 6px var(--up); }
 .trade-status-dot.bad { background: var(--down); }
 
