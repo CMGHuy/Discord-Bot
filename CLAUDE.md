@@ -79,6 +79,17 @@ Long backtest/grid runs: a full 75-ticker × 10-horizon sweep takes tens of
 minutes (`replay_scenarios` is ~30s per ticker-horizon — hours for a full
 grid; never run it casually). Chunk long grids per-strategy.
 
+**Any script meant to run in the background for more than a couple of
+minutes must print incremental progress** (one flushed line per unit of
+work — fold/ticker/chunk — not just a final summary once everything is
+done). `scripts/wf_run.py --full` is the counterexample that cost a whole
+monitoring session: it only prints the fold table after `run_folds()`
+fully returns, so a multi-hour run gives zero signal beyond OS-level CPU
+time until the very end. When writing or invoking a new long-running
+script, either confirm it already logs per-unit progress, or add a
+`print(..., flush=True)` (or `log.info`) per completed unit before
+kicking it off — don't discover this gap hours into an unmonitorable run.
+
 ## Reference docs
 
 Not auto-loaded — read the relevant one before starting work in that area.
