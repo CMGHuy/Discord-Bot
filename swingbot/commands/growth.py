@@ -237,3 +237,20 @@ def weekly_risk_report(week_stats: dict) -> str:
         lines.append(f"growth path this week: {gd:+.1%}")
     lines.append("Projections, not promises.")
     return "\n".join(lines)
+
+
+def rs_rotation_report(rels: dict, sectors: dict, top_n: int = 10) -> str:
+    ranked = sorted(((r, s) for s, r in rels.items() if r is not None), reverse=True)
+    lines = ["📈 RS ROTATION — universe leaders / laggards (63d vs SPY)"]
+    lines += [f"  {s:<6} {r:+.1%}" for r, s in ranked[:top_n]]
+    lines.append("  …")
+    lines += [f"  {s:<6} {r:+.1%}" for r, s in ranked[-top_n:]]
+    by_sector: dict = {}
+    for sym, r in rels.items():
+        sec = sectors.get(sym)
+        if sec and r is not None:
+            by_sector.setdefault(sec, []).append(r)
+    lines.append("sector tide:")
+    for sec, rs in sorted(by_sector.items(), key=lambda kv: -sum(kv[1]) / len(kv[1])):
+        lines.append(f"  {sec:<26} {sum(rs) / len(rs):+.1%} (n={len(rs)})")
+    return "\n".join(lines)

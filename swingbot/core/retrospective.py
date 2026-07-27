@@ -636,6 +636,19 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         except Exception:
             log.exception("build_daily_retrospective: weekly risk report failed, skipping")
 
+    # ── Part 9: RS rotation report (Sundays only, Task E81) ────────────────
+    if today.weekday() == 6:
+        try:
+            from swingbot.commands.growth import rs_rotation_report
+            from swingbot.core.edge.factors import load_rs_cache
+            from swingbot.core.universe import sector_map
+            rels = load_rs_cache().get("rels") or {}
+            if rels:
+                sectors = sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist"))
+                messages.append(rs_rotation_report(rels, sectors))
+        except Exception:
+            log.exception("build_daily_retrospective: RS rotation report failed, skipping")
+
     return messages
 
 

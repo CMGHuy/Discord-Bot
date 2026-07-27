@@ -528,3 +528,12 @@ def test_score_never_goes_negative_on_a_worst_case():
                        rs_percentile=0.0, mtf=0, breadth=0.0,
                        candle_quality=0, gap_fragile=True)
     assert worst.score == 0 and worst.tier == "C"
+
+
+def test_rs_rotation_report():
+    from swingbot.commands.growth import rs_rotation_report
+    rels = {f"T{i}": i / 100 for i in range(30)}          # T29 strongest
+    sectors = {f"T{i}": ("Energy" if i >= 15 else "Utilities") for i in range(30)}
+    out = rs_rotation_report(rels, sectors, top_n=5)
+    assert out.index("T29") < out.index("T0")             # leaders first
+    assert out.index("Energy") < out.index("Utilities")   # sector table sorted
