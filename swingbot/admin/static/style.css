@@ -9,6 +9,12 @@ body {
 }
 a { color: var(--accent); }
 
+/* ---- States: focus, scrollbars ---- */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3f4e; }
+
 /* ---- Shell layout ---- */
 .shell { display: flex; min-height: 100vh; }
 .sidebar {
@@ -801,9 +807,17 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .diff-table td { padding: 5px 8px; border-bottom: 1px solid #0d0f14; }
 
 /* ---- Empty states (every new page — Task C45) ----------------------------- */
-.empty-state {
-  text-align: center; padding: 40px 20px; color: #5a6275;
+.empty-state { text-align: center; color: var(--text-3); padding: var(--sp-6); font-size: var(--fs-sm); }
+.empty-state .glyph { font-size: 28px; display: block; margin-bottom: var(--sp-2); opacity: .5; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--border-1) 50%, var(--bg-2) 75%);
+  background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: var(--r-sm);
 }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.flash { border-radius: var(--r-sm); padding: 10px 14px; font-size: var(--fs-sm);
+  background: var(--accent-soft); color: var(--text-1); border: 1px solid var(--accent); }
+.flash.error { background: var(--down-soft); border-color: var(--down); }
 
 /* ---- Tooltips (shared across every page) -----------------------------------
    CSS-only, no JS: the tip text lives in the data-tip attribute so it reads
