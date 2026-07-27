@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U10
-> - **Next:** Task U11
+> - **Completed:** U1-U11
+> - **Next:** Task U12
 
 ## Global Constraints
 
@@ -367,8 +367,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 **Files:** Modify `swingbot/admin/templates/dashboard_fragment.html`
 
-- [ ] **Step 1:** Add `class="num"` to every numeric `<td>`/`<th>` (entry, stop, target, price, P/L%, R); add `class="num pos"`/`"num neg"` conditionally where the template already computes P/L sign (follow the template's existing Jinja conditionals — e.g. `class="num {{ 'pos' if t.pnl_pct and t.pnl_pct > 0 else 'neg' if t.pnl_pct and t.pnl_pct < 0 else '' }}"`). Add `data-ticker="{{ t.ticker }}"` to each `<tr>` (consumed by U31's modal). Badge cells: render `<span class="pill validated">✅ VALIDATED</span>` / `<span class="pill weak">⚠️ WEAK</span>` based on the existing badge field.
-- [ ] **Step 2: Verify + commit** `feat: dashboard trades table markup pass`
+- [x] **Step 1:** Add `class="num"` to every numeric `<td>`/`<th>` (entry, stop, target, price, P/L%, R); add `class="num pos"`/`"num neg"` conditionally where the template already computes P/L sign (follow the template's existing Jinja conditionals — e.g. `class="num {{ 'pos' if t.pnl_pct and t.pnl_pct > 0 else 'neg' if t.pnl_pct and t.pnl_pct < 0 else '' }}"`). Add `data-ticker="{{ t.ticker }}"` to each `<tr>` (consumed by U31's modal). Badge cells: render `<span class="pill validated">✅ VALIDATED</span>` / `<span class="pill weak">⚠️ WEAK</span>` based on the existing badge field.
+- [x] **Step 2: Verify + commit** `feat: dashboard trades table markup pass`
 
 ### Task U12: Stats page
 
