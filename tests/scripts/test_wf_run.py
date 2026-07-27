@@ -46,6 +46,27 @@ def test_once_guard_allows_run_when_no_result_section_yet(tmp_path, monkeypatch)
     assert len(calls) == 1
 
 
+def test_once_guard_ignores_prose_that_merely_mentions_the_marker(tmp_path, monkeypatch):
+    # A pre-registration doc describing its own one-shot mechanism will
+    # legitimately contain the phrase "## Result" in prose (e.g. explaining
+    # what the guard checks for) without an actual '## Result' heading ever
+    # having been appended -- that must NOT be mistaken for a completed run.
+    doc = tmp_path / "shot.md"
+    doc.write_text(
+        "# Pre-registration\n\n"
+        "This guard refuses to run if this file already has a `## Result` "
+        "section appended.\n",
+        encoding="utf-8",
+    )
+    calls = []
+    monkeypatch.setattr(wf_run, "collect_portfolio_signals",
+                        lambda start, end, strategies=None, horizons=None: calls.append(1) or [])
+    monkeypatch.setattr(sys, "argv", ["wf_run.py", "--portfolio", "--once-guard", str(doc)])
+
+    assert wf_run.main() == 0
+    assert calls == [1]
+
+
 def test_once_guard_allows_run_when_file_does_not_exist_yet(tmp_path, monkeypatch):
     doc = tmp_path / "does-not-exist-yet.md"
 

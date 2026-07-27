@@ -11,6 +11,7 @@ iterating; run the full sweep deliberately, not casually.
 import argparse
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,7 +68,11 @@ def main() -> int:
 
     if args.once_guard and os.path.exists(args.once_guard):
         with open(args.once_guard, encoding="utf-8") as fh:
-            if "## Result" in fh.read():
+            # A real markdown heading line, not just the phrase appearing
+            # anywhere -- e.g. in prose *describing* this guard, which a
+            # pre-registration doc explaining its own one-shot mechanism
+            # will legitimately contain without ever having actually run.
+            if re.search(r"(?m)^## Result\s*$", fh.read()):
                 print(f"REFUSING TO RUN: {args.once_guard} already has a "
                       f"'## Result' section. This is a pre-registered one-shot "
                       f"run -- no re-runs, no second attempts. If this is "
