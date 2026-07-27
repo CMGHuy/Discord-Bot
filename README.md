@@ -634,6 +634,15 @@ genuinely believe a rung is wrong, that's a deliberate `.env` edit to
 override), never a one-off bypass during an actual drawdown. The weekly
 risk report calls out any operator override, on purpose.
 
+**The quarterly re-validation ritual** (`scripts/quarterly_revalidation.py`,
+Task E96): the first weekend of January, April, July, and October, run it,
+read every line it prints, and prune anything it flags DEGRADED. It's
+deliberately a human-run script, not a cron job — a re-validation result
+that nobody reads is worse than not re-validating at all. Put a real
+calendar reminder on those four weekends; this system's edge is measured
+against 2018-2023 data; it will not stay valid forever without someone
+periodically checking that it still is.
+
 **Reading the Monte Carlo fan** (`!portfolio`'s fan chart,
 `edge/ruin.simulate` over your real closed-trade R-multiples): the shaded
 band is P25–P75 of simulated equity paths, the dotted outer lines are
