@@ -108,11 +108,16 @@ def _frame_for(symbol: str):
 
 
 def _default_run(start: str, end: str, overrides: dict,
-                 strategies=None, horizons=None) -> dict:
+                 strategies=None, horizons=None, tickers=None) -> dict:
     """Pooled expectancy over the cached universe for one window.
 
     Overrides are NOT applied here -- `run_folds` wraps every run function
     in `_guarded`, so applying them twice would double-restore.
+
+    `tickers`, when given, replaces `_symbols_for_folds()`'s SCAN_UNIVERSE
+    lookup entirely -- an explicit scope for one-off runs (e.g. an ETF-only
+    fold sweep) that doesn't require flipping the account's live SCAN_UNIVERSE
+    setting just to run a backtest.
     """
     import numpy as np
     from swingbot.core.backtest import ALL_STRATEGIES, run_backtest_daterange
@@ -123,7 +128,7 @@ def _default_run(start: str, end: str, overrides: dict,
     horizons = list(HORIZONS) if horizons is None else horizons
 
     rs = []
-    for sym in _symbols_for_folds():
+    for sym in (tickers if tickers is not None else _symbols_for_folds()):
         df = _frame_for(sym)
         if df is None or not liquidity_ok(df):
             continue
@@ -151,7 +156,12 @@ def _default_run(start: str, end: str, overrides: dict,
 
 def run_folds(overrides: dict, folds=ANCHORED_FOLDS, tickers=None,
               run_fn=None) -> dict:
-    run = _guarded(_default_run) if run_fn is None else run_fn
+    if run_fn is None:
+        def _scoped_default_run(start, end, ov):
+            return _default_run(start, end, ov, tickers=tickers)
+        run = _guarded(_scoped_default_run)
+    else:
+        run = run_fn
     fold_rows = []
     for train_start, train_end, test_start, test_end in folds:
         base = run(test_start, test_end, {})

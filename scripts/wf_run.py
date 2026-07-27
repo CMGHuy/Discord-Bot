@@ -31,6 +31,10 @@ def main() -> int:
                    help="limit to one strategy (repeatable) -- for iteration, not decisions")
     p.add_argument("--horizon", action="append", default=None,
                    help="limit to one horizon key (repeatable)")
+    p.add_argument("--universe", default=None,
+                   help="scope the fold sweep to a named universe (e.g. 'etfs') via "
+                        "swingbot.core.universe.universe_symbols, instead of the account's "
+                        "live SCAN_UNIVERSE setting -- for one-off scoped runs (Task E80)")
     p.add_argument("--json", default=None, help="write the raw result dict here")
     p.add_argument("--portfolio", action="store_true",
                    help="portfolio-level replay (Task E50): collect fold-run trades as "
@@ -73,9 +77,15 @@ def main() -> int:
         print("--full ignores --component-json (it measures the adopted defaults)",
               file=sys.stderr)
 
+    tickers = None
+    if args.universe:
+        from swingbot.core.universe import universe_symbols
+        tickers = universe_symbols(args.universe)
+        print(f"scoped to universe='{args.universe}': {len(tickers)} symbols")
+
     def run(start, end, over):
         return _default_run(start, end, over, strategies=args.strategy,
-                            horizons=args.horizon)
+                            horizons=args.horizon, tickers=tickers)
 
     result = run_folds(overrides, run_fn=_guarded(run))
     verdict = gate(result)

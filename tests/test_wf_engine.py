@@ -69,6 +69,41 @@ def test_run_folds_survives_a_window_with_no_trades():
     assert gate(result) == "FAIL"
 
 
+def test_default_run_respects_explicit_tickers(monkeypatch):
+    """tickers=[...] must replace _symbols_for_folds()'s SCAN_UNIVERSE
+    lookup entirely, so a one-off scoped run (e.g. ETF-only) never falls
+    back to sweeping the full configured universe."""
+    import swingbot.core.backtest_wf as wf
+
+    seen = []
+
+    def fake_frame_for(sym):
+        seen.append(sym)
+        return None   # short-circuits before liquidity_ok/run_backtest_daterange
+
+    def boom():
+        raise AssertionError("_symbols_for_folds should not be called when tickers is given")
+
+    monkeypatch.setattr(wf, "_frame_for", fake_frame_for)
+    monkeypatch.setattr(wf, "_symbols_for_folds", boom)
+    wf._default_run("2021-01-01", "2021-12-31", {}, tickers=["SPY", "QQQ"])
+    assert seen == ["SPY", "QQQ"]
+
+
+def test_run_folds_threads_tickers_into_default_run(monkeypatch):
+    import swingbot.core.backtest_wf as wf
+
+    captured = []
+
+    def fake_default_run(start, end, overrides, strategies=None, horizons=None, tickers=None):
+        captured.append(tickers)
+        return {"expectancy_r": 0.1, "n": 50}
+
+    monkeypatch.setattr(wf, "_default_run", fake_default_run)
+    wf.run_folds({"X": 1}, tickers=["SPY"])
+    assert captured and all(t == ["SPY"] for t in captured)
+
+
 def _result(deltas, n=100):
     folds = [{"test_years": f"202{i+1}", "baseline": {"expectancy_r": 0.10, "n": n},
               "component": {"expectancy_r": 0.10 + d, "n": n},
