@@ -78,3 +78,20 @@ def test_outcome_cloud_renders_and_respects_min_samples(tmp_path, daily_df):
     p1 = render_decision_chart("BIG", daily_df, FakePlan(), big, str(tmp_path))
     p2 = render_decision_chart("SMALL", daily_df, FakePlan(), small, str(tmp_path))
     assert os.path.getsize(p1) > os.path.getsize(p2) * 0.5   # both render fine
+
+
+def test_ev_cone_renders(tmp_path, daily_df):
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    ctx = {"ev_cone": {"p25_path": [0.05, 0.1, 0.2, 0.3],
+                       "p50_path": [0.1, 0.25, 0.45, 0.6],
+                       "p75_path": [0.2, 0.5, 0.8, 1.1],
+                       "ev_r": 0.14}}
+    path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
+    assert os.path.getsize(path) > 10_000
+
+
+def test_gap_band_renders(tmp_path, daily_df):
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    ctx = {"gap": {"p90_gap_pct": 2.5, "gap_fragile": True}}
+    path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
+    assert os.path.getsize(path) > 10_000

@@ -33,7 +33,7 @@ def draw_placeholder(ax, text: str) -> None:
 
 
 def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None,
-                     outcomes=None) -> None:
+                     outcomes=None, ev_cone=None, gap=None) -> None:
     part = daily_df.tail(PANEL_LOOKBACK_BARS)
     if regimes is not None:
         r = regimes.reindex(part.index).ffill()
@@ -82,6 +82,31 @@ def _draw_main_panel(ax, daily_df: pd.DataFrame, plan, avwaps=None, regimes=None
                     xy=(0.02, 0.02), xycoords="axes fraction",
                     fontsize=7, color=MUTED_TEXT_COLOR)
         ax.set_xlim(0, len(part) + 15)
+    if ev_cone:
+        entry_px = plan.trigger_price or plan.entry_price
+        rps = abs(entry_px - plan.stop_loss)
+        sign = 1 if plan.direction == "bullish" else -1
+        x0 = len(part) - 1
+        def to_px(path):
+            return [entry_px + sign * r * rps for r in [0.0] + list(path)]
+        lo, mid, hi = (to_px(ev_cone["p25_path"]), to_px(ev_cone["p50_path"]),
+                       to_px(ev_cone["p75_path"]))
+        xs = list(range(x0, x0 + len(mid)))
+        ax.fill_between(xs, lo, hi, color=TARGET_COLOR, alpha=0.12, zorder=1)
+        ax.plot(xs, mid, color=TARGET_COLOR, lw=1.0, ls="--", alpha=0.8)
+        ax.annotate(f"EV {ev_cone['ev_r']:+.2f}R", xy=(xs[-1], mid[-1]),
+                    fontsize=8, color=TARGET_COLOR, ha="left")
+    if gap and plan.stop_loss:
+        entry_px = plan.trigger_price or plan.entry_price
+        band = entry_px * gap["p90_gap_pct"] / 100.0
+        ax.axhspan(plan.stop_loss - band, plan.stop_loss + band,
+                   color=STOP_COLOR, alpha=0.08, hatch="//", zorder=0)
+        label = "P90 overnight gap band"
+        if gap.get("gap_fragile"):
+            label = "⚠ stop inside gap noise — " + label
+        ax.annotate(label, xy=(0.02, plan.stop_loss + band),
+                    xycoords=("axes fraction", "data"),
+                    fontsize=7, color=STOP_COLOR, va="bottom")
     ax.set_facecolor(CHART_BG)
 
 
@@ -96,7 +121,7 @@ def render_decision_chart(symbol: str, daily_df: pd.DataFrame, plan,
     ax_info = fig.add_subplot(gs[2, 3])
 
     _draw_main_panel(ax_main, daily_df, plan, context.get("avwaps"), context.get("regimes"),
-                     context.get("outcomes"))
+                     context.get("outcomes"), context.get("ev_cone"), context.get("gap"))
     # Later tasks replace these placeholders panel by panel:
     from swingbot.core.charts import decision_panels as panels  # this module, split below
     panels.draw_weekly(ax_weekly, context.get("weekly"))
