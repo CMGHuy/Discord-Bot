@@ -104,6 +104,8 @@ FIELDS: list[Field] = [
           help="Channel for WIN/LOSS and near-SL/TP notifications. Separate from the alerts channel so results don't get lost among new signals."),
     Field("DISCORD_CHANNEL_RETROSPECTIVE_ID", "DISCORD_CHANNEL_RETROSPECTIVE_ID", "Discord Connection", "Daily retrospective channel ID",
           help="Channel where the end-of-session retrospective is posted on weekdays. Leave blank to post to the closed-trades channel instead."),
+    Field("DISCORD_CHANNEL_FIREHOSE_ID", "DISCORD_CHANNEL_FIREHOSE_ID", "Discord Connection", "Firehose channel ID",
+          help="Channel for non-tier-A alerts. Empty = everything goes to the main alerts channel (no change)."),
 
     # --- Scanning & session ---
     Field("SESSION_START_HOUR", "SESSION_START_HOUR", "Scanning & Session", "Session start hour",

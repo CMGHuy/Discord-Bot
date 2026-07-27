@@ -549,3 +549,31 @@ def test_lru_frames_get_also_counts_as_a_touch():
     assert lru.get("A") == 1   # touch A via get() -> B is now least recent
     lru["C"] = 3
     assert "B" not in lru and "A" in lru and "C" in lru
+
+
+def test_alert_routing_by_tier(monkeypatch):
+    from swingbot import config
+    from swingbot.commands.scanning import route_channel_id
+
+    class Item:
+        def __init__(self, tier, badge):
+            self.plan = type("P", (), {"tier": tier, "badge": badge})()
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_ID", "111", raising=False)
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "222", raising=False)
+    assert route_channel_id(Item("A", "VALIDATED")) == "111"
+    assert route_channel_id(Item("B", "VALIDATED")) == "222"
+    assert route_channel_id(Item("A", "WEAK")) == "222"
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "", raising=False)
+    assert route_channel_id(Item("C", "WEAK")) == "111"   # unset -> no change
+
+
+def test_deep_scan_report_renders():
+    from swingbot.commands.scanning import deep_scan_report
+
+    class Item:
+        def __init__(self, t, score, dist):
+            self.ticker, self.quality_score, self.trigger_distance_pct = t, score, dist
+            self.plan = type("P", (), {"strategy": "MACD"})()
+    out = deep_scan_report([Item("AAA", 80, 1.2), Item("BBB", 60, 0.4)])
+    assert "AAA" in out and "MACD" in out and "1.2%" in out
+    assert "watchlist candidates" in out.lower()

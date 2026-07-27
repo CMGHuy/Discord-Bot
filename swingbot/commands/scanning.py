@@ -275,7 +275,33 @@ def cap_alerts(items: list, max_alerts: int | None = None) -> tuple:
     return ranked[:cap], ranked[cap:]
 
 
-async def _send_alerts(destination, alerts):
+def route_channel_id(item) -> str:
+    """Task E86: tier-A VALIDATED plans stay in the main alerts channel;
+    everything else goes to the firehose channel when one is configured
+    (empty DISCORD_CHANNEL_FIREHOSE_ID = no behavior change)."""
+    firehose = getattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "") or ""
+    plan = getattr(item, "plan", None)
+    tier_a = plan is not None and getattr(plan, "tier", "") == "A" \
+        and getattr(plan, "badge", "") == "VALIDATED"
+    if tier_a or not firehose:
+        return config.DISCORD_CHANNEL_TRADES_ID
+    return firehose
+
+
+def deep_scan_report(items: list) -> str:
+    """Task E87: renders the Saturday weekend-deep-scan candidate list --
+    NOT alerts, just a curated heads-up for Monday. Pure formatting; see
+    weekend_deep_scan() for how `items` gets built from a relaxed-threshold
+    scan pass."""
+    lines = ["🔭 WEEKEND DEEP SCAN — watchlist candidates for Monday",
+             "(forming setups at relaxed thresholds — NOT alerts, NOT validated signals)"]
+    for it in sorted(items, key=lambda i: -(i.quality_score or 0))[:15]:
+        lines.append(f"  {it.ticker:<6} {it.plan.strategy:<18} "
+                     f"q{it.quality_score} — {it.trigger_distance_pct:.1f}% from trigger")
+    return "\n".join(lines)
+
+
+async def _send_alerts(destination, alerts, route_by_tier: bool = False):
     """alerts: list of (embed, chart_path, plan_or_none) 3-tuples.
 
     Every plan-carrying alert gets a PlanActionView(plan.plan_id,
@@ -288,6 +314,13 @@ async def _send_alerts(destination, alerts):
     cycle exists), but the lazy import documents the intent and costs
     nothing at this call frequency (once per alert message, not per scan
     tick).
+
+    `route_by_tier` (Task E86) is opt-in and OFF by default: it re-routes
+    non-tier-A alerts to DISCORD_CHANNEL_FIREHOSE_ID (when configured) via
+    route_channel_id(). Only the automatic scheduled/UI-triggered scan
+    paths pass True -- a user's own `!check`/`!scan` command result must
+    keep posting back to wherever they invoked it (`ctx`), never get
+    silently redirected mid-command.
     """
     from swingbot.commands.views import PlanActionView
     from swingbot.core.analytics.rank import follow_score
@@ -310,14 +343,23 @@ async def _send_alerts(destination, alerts):
             existing_footer = last_embed.footer.text if last_embed.footer else None
             last_embed.set_footer(text=f"{existing_footer} | {digest}" if existing_footer else digest)
 
+    firehose_id = getattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "") or ""
+    firehose_channel = bot.get_channel(int(firehose_id)) if route_by_tier and firehose_id else None
+
     for embed, chart_path, plan in to_send:
+        send_to = destination
+        if route_by_tier and firehose_channel is not None and plan is not None:
+            target_id = route_channel_id(type("I", (), {"plan": plan})())
+            if target_id == firehose_id:
+                send_to = firehose_channel
+
         view = PlanActionView(plan.plan_id, author_id=None) if plan is not None else None
         kwargs = {"embed": embed}
         if chart_path:
             kwargs["file"] = discord.File(chart_path, filename=os.path.basename(chart_path))
         if view is not None:
             kwargs["view"] = view
-        msg = await destination.send(**kwargs)
+        msg = await send_to.send(**kwargs)
         if view is not None:
             view.message = msg
 
@@ -542,7 +584,7 @@ async def _session_scan_tick():
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
     alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
-    await _send_alerts(channel, alerts)
+    await _send_alerts(channel, alerts, route_by_tier=True)
 
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
@@ -857,7 +899,7 @@ async def config_watcher():
             finally:
                 poller.cancel()
 
-            await _send_alerts(channel, alerts)
+            await _send_alerts(channel, alerts, route_by_tier=True)
             f = progress.funnel
             if progress.stopped:
                 summary = (
@@ -972,15 +1014,10 @@ async def trade_monitor():
 _recap_fired_date: dt.date | None = None   # tracks the last date a recap was posted
 
 
-async def _post_retrospective(channel_id_override: int | None = None, today=None):
-    """Build and post today's (or `today`'s, if given) retrospective. Called
-    by daily_recap task and !recap command."""
-    from swingbot.core.retrospective import build_daily_retrospective
-
-    all_trades = trade_log.get_trades(limit=10_000)
-    messages   = build_daily_retrospective(all_trades, today=today)
-
-    # Resolve target channel: explicit override → DISCORD_CHANNEL_RETROSPECTIVE_ID → DISCORD_CHANNEL_TRADES_HISTORY_ID
+async def _resolve_retrospective_channel(channel_id_override: int | None = None, *, caller: str = "daily_recap"):
+    """Explicit override -> DISCORD_CHANNEL_RETROSPECTIVE_ID -> DISCORD_CHANNEL_TRADES_HISTORY_ID.
+    Shared by _post_retrospective and weekend_deep_scan (Task E87) -- both
+    post to the same "end-of-day/week wrap-up" channel."""
     cid = channel_id_override
     if not cid:
         rc = getattr(config, "DISCORD_CHANNEL_RETROSPECTIVE_ID", None)
@@ -997,16 +1034,30 @@ async def _post_retrospective(channel_id_override: int | None = None, today=None
             except (ValueError, TypeError):
                 pass
     if not cid:
-        log.warning("daily_recap: no channel configured (set DISCORD_CHANNEL_RETROSPECTIVE_ID or DISCORD_CHANNEL_TRADES_HISTORY_ID).")
-        return
+        log.warning("%s: no channel configured (set DISCORD_CHANNEL_RETROSPECTIVE_ID or DISCORD_CHANNEL_TRADES_HISTORY_ID).", caller)
+        return None
 
     channel = bot.get_channel(cid)
     if channel is None:
         try:
             channel = await bot.fetch_channel(cid)
         except Exception as exc:
-            log.warning("daily_recap: cannot resolve channel %s: %s", cid, exc)
-            return
+            log.warning("%s: cannot resolve channel %s: %s", caller, cid, exc)
+            return None
+    return channel
+
+
+async def _post_retrospective(channel_id_override: int | None = None, today=None):
+    """Build and post today's (or `today`'s, if given) retrospective. Called
+    by daily_recap task and !recap command."""
+    from swingbot.core.retrospective import build_daily_retrospective
+
+    all_trades = trade_log.get_trades(limit=10_000)
+    messages   = build_daily_retrospective(all_trades, today=today)
+
+    channel = await _resolve_retrospective_channel(channel_id_override)
+    if channel is None:
+        return
 
     for msg in messages:
         if not msg.strip():
@@ -1020,6 +1071,72 @@ async def _post_retrospective(channel_id_override: int | None = None, today=None
             msg = msg[split_at:]
         if msg.strip():
             await channel.send(msg)
+
+
+async def weekend_deep_scan() -> str:
+    """Task E87: Saturday-only job. Full-universe scan at relaxed
+    thresholds (SIGNAL_CONFIRMATION_SCANS forced to 1, MIN_ALERT_CONFIDENCE_LEVEL
+    lowered by 1) producing a watchlist-candidates report for Monday --
+    posted, not alerted (require_confirmation=False bypasses the debounce
+    counter but every item still has to pass the real entry/stop/reward/
+    confluence gates, so these are real, currently-valid setups, not noise).
+
+    HONEST GAP vs the brief's "quality floor lowered by 10": this codebase
+    has no 0-100 quality_score gate on whether an item becomes an alert --
+    quality_score is purely informational/ranking. The only real gate that
+    controls "does this item qualify at all" is MIN_ALERT_CONFIDENCE_LEVEL
+    (a 1-5 tier), so that's what gets relaxed here, by 1 tier, floored at 1.
+
+    trigger_distance_pct is likewise not stored on a built plan (it's a
+    transient scoring input inside _build_quality_inputs, discarded after
+    quality.score_plan runs) and run_scan doesn't expose its raw pre-alert
+    candidate list -- so this recomputes it fresh from each returned
+    alert's own trigger_price vs. current price, the same formula
+    _build_quality_inputs uses.
+
+    Goes through scan_engine.run_scan() (not the raw _sync_run_scan) so
+    this gets the same _scan_lock mutex, is_scan_running() flag, and
+    closed-trade/near-close notifications every other scan path gets --
+    a relaxed-threshold scan is still a real scan, not a side query.
+
+    Returns the report string that was posted (empty string if there was
+    nothing to report or the channel couldn't be resolved) -- for the
+    scheduler branch to log, and for testability without a live bot.
+    """
+    from swingbot.core.data import get_current_price
+
+    old_confirm = config.SIGNAL_CONFIRMATION_SCANS
+    old_min_conf = config.MIN_ALERT_CONFIDENCE_LEVEL
+    config.SIGNAL_CONFIRMATION_SCANS = 1
+    config.MIN_ALERT_CONFIDENCE_LEVEL = max(1, old_min_conf - 1)
+    try:
+        alerts = await scan_engine.run_scan(horizon_filter="all", require_confirmation=False, bot=bot)
+    finally:
+        config.SIGNAL_CONFIRMATION_SCANS = old_confirm
+        config.MIN_ALERT_CONFIDENCE_LEVEL = old_min_conf
+
+    items = []
+    for _embed, _chart_path, plan in alerts:
+        if plan is None:
+            continue
+        try:
+            current = get_current_price(plan.ticker)
+            dist = abs(plan.trigger_price - current) / current * 100 if current else 0.0
+        except Exception:
+            dist = 0.0
+        items.append(type("DeepScanItem", (), {
+            "ticker": plan.ticker, "quality_score": plan.quality_score,
+            "trigger_distance_pct": dist, "plan": plan,
+        })())
+
+    if not items:
+        return ""
+
+    report = deep_scan_report(items)
+    channel = await _resolve_retrospective_channel(caller="weekend_deep_scan")
+    if channel is not None:
+        await channel.send(report)
+    return report
 
 
 @tasks.loop(minutes=1)
@@ -1036,8 +1153,17 @@ async def daily_recap():
     except Exception:
         now = dt.datetime.utcnow()
 
-    # Only on Mon–Fri (weekday() 0–4)
-    if now.weekday() > 4:
+    # Mon-Fri (0-4): normal end-of-session retrospective. Sunday (6): the
+    # retrospective still fires -- its Parts 1-7 (trade tables, lessons)
+    # will mostly be empty on a non-trading day, which is expected, and its
+    # Sunday-gated Parts 8-10 (weekly risk report E53, RS rotation E81,
+    # scan health E82) exist SPECIFICALLY to post here. Excluding weekday()
+    # > 4 entirely (the original guard) meant those three already-shipped
+    # features could never actually fire from this scheduled loop -- caught
+    # while wiring E87's separate Saturday deep-scan job alongside this one.
+    # Saturday (5) is deliberately still excluded from THIS loop: it has its
+    # own separate job (weekend_deep_scan, Task E87), not a retrospective.
+    if now.weekday() == 5:
         return
 
     today = now.date()
@@ -1056,6 +1182,42 @@ async def daily_recap():
         await _post_retrospective()
     except Exception as exc:
         log.exception("daily_recap: failed to post retrospective: %s", exc)
+
+
+_weekend_scan_fired_date: dt.date | None = None   # tracks the last Saturday a deep scan was posted
+
+
+@tasks.loop(minutes=1)
+async def weekend_deep_scan_task():
+    """Task E87: Saturday-only sibling of daily_recap, same minute-resolution
+    poll + SESSION_END_HOUR:15 trigger + duplicate-post guard shape, kept as
+    its own loop rather than a branch inside daily_recap so a slow/failing
+    deep scan can never affect the weekday/Sunday retrospective's own timing."""
+    global _weekend_scan_fired_date
+    try:
+        from zoneinfo import ZoneInfo as _ZI
+        now = dt.datetime.now(_ZI("Europe/Berlin"))
+    except Exception:
+        now = dt.datetime.utcnow()
+
+    if now.weekday() != 5:   # Saturday only
+        return
+
+    today = now.date()
+    if _weekend_scan_fired_date == today:
+        return
+
+    trigger_hour   = config.SESSION_END_HOUR
+    trigger_minute = 15
+    if now.hour != trigger_hour or now.minute < trigger_minute:
+        return
+
+    log.info("weekend_deep_scan_task: running relaxed-threshold deep scan for %s", today)
+    _weekend_scan_fired_date = today
+    try:
+        await weekend_deep_scan()
+    except Exception:
+        log.exception("weekend_deep_scan_task: deep scan failed")
 
 
 @tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)
@@ -1163,6 +1325,8 @@ async def on_ready():
         trade_monitor.start()
     if not daily_recap.is_running():
         daily_recap.start()
+    if not weekend_deep_scan_task.is_running():
+        weekend_deep_scan_task.start()
     if config.MARKET_DATA_AUTO_REFRESH and not market_data_refresh.is_running():
         market_data_refresh.start()
     await _refresh_presence()
