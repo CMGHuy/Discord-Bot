@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U3
-> - **Next:** Task U4
+> - **Completed:** U1-U4
+> - **Next:** Task U5
 
 ## Global Constraints
 
@@ -178,8 +178,8 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 
 **Files:** Modify `style.css` (sidebar/shell sections), `base.html` (nav markup gains an active-bar span)
 
-- [ ] **Step 1:** In `base.html`, inside each nav `<a>`, prepend `<span class="nav-bar"></span>` before the icon span.
-- [ ] **Step 2:** Replace the sidebar CSS block in `style.css` with:
+- [x] **Step 1:** In `base.html`, inside each nav `<a>`, prepend `<span class="nav-bar"></span>` before the icon span.
+- [x] **Step 2:** Replace the sidebar CSS block in `style.css` with:
 
 ```css
 .shell { display: flex; min-height: 100vh; }
@@ -207,7 +207,7 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 
 Keep every existing sidebar rule this doesn't replace (mobile overlay, footer) but re-express their colors via tokens (`#13161d`→`var(--bg-1)`, `#1f2330`→`var(--border-1)` etc. — grep `#` in the sidebar section and convert each).
 
-- [ ] **Step 3: Verify + commit** — smoke tests; visual check active state on each page. Commit `feat: sidebar + shell restyle on tokens`.
+- [x] **Step 3: Verify + commit** — smoke tests; visual check active state on each page. Commit `feat: sidebar + shell restyle on tokens`.
 
 ### Task U5: Buttons + pills/badges
 
