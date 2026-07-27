@@ -265,6 +265,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pill.tier-c { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .muted { color: #5a6275; font-size: 13px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.toolbar .spacer { flex: 1; }
 .confidence-badge { display: inline-block; padding: 3px 12px; border-radius: 999px; font-weight: 700; font-size: 12.5px; border: 1px solid currentColor; }
 
 /* Trade-health status dot (dashboard "Status" column) -- color goes red
@@ -284,6 +286,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   box-shadow: 0 0 10px 2px var(--status-color, #6e778c);
   animation: trade-blink var(--blink-duration, 2.2s) ease-in-out infinite;
 }
+/* .ok/.bad modifiers -- static (non-blinking) variants for a binary
+   good/bad status dot, layered onto the same .trade-status-dot base
+   above rather than redefining its size/animation (that base is still
+   driven dynamically via --status-color for the per-row and bot-liveness
+   dots elsewhere on this page). */
+.trade-status-dot.ok { background: var(--up); box-shadow: 0 0 6px var(--up); }
+.trade-status-dot.bad { background: var(--down); }
 
 @keyframes trade-blink {
   0%, 100% { opacity: 1;    transform: scale(1);    }
