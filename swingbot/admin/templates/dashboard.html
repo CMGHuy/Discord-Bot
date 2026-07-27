@@ -1,20 +1,17 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="row" style="margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+<div class="toolbar">
   <div id="dashboard-mode-toggle" title="Which trades the stat cards/tables below summarize"
        style="display:flex; border:1px solid #2a2e3d; border-radius:8px; overflow:hidden;">
-    <button type="button" class="dashboard-mode-btn" data-mode="active"
+    <button type="button" class="btn ghost small dashboard-mode-btn{% if (dashboard_mode | default('active')) == 'active' %} secondary{% endif %}" data-mode="active"
             onclick="setDashboardMode('active')"
-            title="Today's new trades, plus every still-open position from any day"
-            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">Today + Open</button>
-    <button type="button" class="dashboard-mode-btn" data-mode="today"
+            title="Today's new trades, plus every still-open position from any day">Today + Open</button>
+    <button type="button" class="btn ghost small dashboard-mode-btn{% if (dashboard_mode | default('active')) == 'today' %} secondary{% endif %}" data-mode="today"
             onclick="setDashboardMode('today')"
-            title="Only today's activity -- trades opened or closed today"
-            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">Today only</button>
-    <button type="button" class="dashboard-mode-btn" data-mode="all"
+            title="Only today's activity -- trades opened or closed today">Today only</button>
+    <button type="button" class="btn ghost small dashboard-mode-btn{% if (dashboard_mode | default('active')) == 'all' %} secondary{% endif %}" data-mode="all"
             onclick="setDashboardMode('all')"
-            title="Every trade ever logged, no date filtering"
-            style="border:none; padding:6px 14px; font-size:12.5px; cursor:pointer;">All days</button>
+            title="Every trade ever logged, no date filtering">All days</button>
   </div>
   <label class="muted" style="display:flex;align-items:center;gap:6px;">
     <input type="checkbox" id="auto-refresh" checked> Auto-refresh every {{ dashboard_refresh_seconds }}s

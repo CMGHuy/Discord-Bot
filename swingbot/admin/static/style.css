@@ -9,34 +9,46 @@ body {
 }
 a { color: var(--accent); }
 
+/* ---- States: focus, scrollbars ---- */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3f4e; }
+
 /* ---- Shell layout ---- */
 .shell { display: flex; min-height: 100vh; }
 .sidebar {
-  width: 210px; flex-shrink: 0; background: #13161d; border-right: 1px solid #1f2330;
-  display: flex; flex-direction: column; padding: 0; position: sticky; top: 0;
-  /* Locked to exactly one viewport tall (not min-height, which let the
-     sidebar stretch to match tall page content and pushed the footer --
-     Last updated + version tags -- below the fold, forcing a scroll to see
-     it). height:100vh + position:sticky keeps the sidebar's own box pinned
-     to exactly the viewport at all times, on every page, regardless of how
-     tall .content is. The <nav> list below is the only part that grows/
-     scrolls internally (flex:1 + overflow-y:auto on nav itself), so .brand
-     up top and .sidebar-footer down below always stay in view without any
-     scrolling of the sidebar as a whole. */
-  height: 100vh; overflow: hidden;
+  width: 216px; flex-shrink: 0; background: var(--bg-1);
+  border-right: 1px solid var(--border-1);
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
 }
+.sidebar nav { flex: 1; overflow-y: auto; padding: var(--sp-2) 0; }
+.sidebar nav a {
+  position: relative; display: flex; align-items: center; gap: var(--sp-3);
+  padding: 9px var(--sp-4); margin: 1px var(--sp-2); border-radius: var(--r-sm);
+  color: var(--text-2); text-decoration: none; font-size: var(--fs-sm);
+  font-weight: 500; transition: background var(--ease), color var(--ease);
+}
+.sidebar nav a:hover { background: var(--bg-2); color: var(--text-1); }
+.sidebar nav a.active { background: var(--accent-soft); color: var(--text-1); }
+.sidebar nav a .nav-bar {
+  position: absolute; left: -8px; top: 20%; height: 60%; width: 3px;
+  border-radius: 2px; background: transparent;
+}
+.sidebar nav a.active .nav-bar { background: var(--accent); }
+.brand { padding: var(--sp-4); border-bottom: 1px solid var(--border-1); }
 .sidebar .brand {
   display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 20px 16px;
-  border-bottom: 1px solid #1f2330; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border-1); font-size: 15px; font-weight: 700; color: var(--text-1); letter-spacing: -0.01em;
 }
-/* Bot avatar -- sits on the sidebar's own dark background (#13161d), matching
+/* Bot avatar -- sits on the sidebar's own dark background (var(--bg-1)), matching
    the image's own transparent corners, so it blends in seamlessly instead of
    showing a mismatched black square behind the circular photo. The gold ring
    echoes the favicon's accent color for a consistent brand accent. */
 .sidebar .brand .brand-avatar {
   width: 128px; height: 128px; border-radius: 50%; object-fit: cover;
-  background: #13161d; border: 3px solid #e2b25a;
-  box-shadow: 0 0 0 3px #13161d, 0 3px 14px rgba(0,0,0,0.45);
+  background: var(--bg-1); border: 3px solid #e2b25a;
+  box-shadow: 0 0 0 3px var(--bg-1), 0 3px 14px rgba(0,0,0,0.45);
 }
 .sidebar .brand .brand-row { display: flex; align-items: center; gap: 10px; }
 .sidebar .brand .logo { font-size: 22px; }
@@ -45,30 +57,23 @@ a { color: var(--accent); }
    .sidebar box; its own overflow-y:auto means if there are ever more nav
    items than fit, THIS list scrolls internally instead of the footer
    getting pushed off the bottom of the screen. */
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; padding: 10px 8px; overflow-y: auto; min-height: 0; }
-.sidebar nav a {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px; color: #8a92a6;
-  text-decoration: none; font-size: 13.5px; border-radius: 7px; transition: background 0.12s;
-}
-.sidebar nav a:hover { background: #1c2030; color: #dde1ea; }
-.sidebar nav a.active { background: #1a2540; color: #6ea8fe; font-weight: 600; }
 .sidebar nav a .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
-.sidebar-footer { padding: 14px 14px 18px; font-size: 11px; color: #4a5060; border-top: 1px solid #1f2330; }
-.version-tag { margin-top: 6px; font-size: 10.5px; color: #3d4354; letter-spacing: 0.01em; }
+.sidebar-footer { padding: 14px 14px 18px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--border-1); }
+.version-tag { margin-top: 6px; font-size: 10.5px; color: var(--text-3); letter-spacing: 0.01em; }
 
 .font-size-control {
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 10px 14px; border-top: 1px solid #1f2330;
+  padding: 10px 14px; border-top: 1px solid var(--border-1);
 }
 .font-size-control button {
-  background: #1a1e27; border: 1px solid #262b38; color: #9aa3b8;
+  background: var(--bg-2); border: 1px solid var(--border-2); color: var(--text-2);
   width: 26px; height: 26px; border-radius: 6px; font-size: 12px; font-weight: 700;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: background .12s, color .12s;
 }
-.font-size-control button:hover:not(:disabled) { background: #232838; color: #dde1ea; }
+.font-size-control button:hover:not(:disabled) { background: var(--border-1); color: var(--text-1); }
 .font-size-control button:disabled { opacity: 0.35; cursor: default; }
-#font-size-label { font-size: 11px; color: #5a6275; min-width: 34px; text-align: center; }
+#font-size-label { font-size: 11px; color: var(--text-3); min-width: 34px; text-align: center; }
 
 /* No max-width -- .content is the flex:1 remainder of .shell next to the
    fixed-width sidebar, so this lets wide tables (e.g. the Dashboard's open
@@ -80,13 +85,9 @@ a { color: var(--accent); }
 
 /* ---- Cards ---- */
 .card {
-  background: #13161d; border: 1px solid #1f2330; border-radius: 12px;
-  padding: 22px 26px; margin-bottom: 22px;
-  /* Subtle one-time entrance + a gentle hover "lift" -- small, tasteful
-     motion cues rather than anything flashy, so the page reads as
-     responsive/alive without becoming distracting on a data-dense screen
-     that auto-refreshes every few seconds. animation-fill-mode isn't
-     needed since the keyframe already ends at the resting state. */
+  background: var(--bg-1); border: 1px solid var(--border-1);
+  border-radius: var(--r-md); padding: var(--sp-4); box-shadow: var(--shadow-1);
+  margin-bottom: 22px;
   animation: card-in 0.32s ease-out both;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
@@ -114,6 +115,15 @@ a { color: var(--accent); }
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
   color: #5a6275; margin: 0 0 16px;
 }
+.card > h2, .card > h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-md); font-weight: 600; color: var(--text-1); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-3); }
+.tile {
+  background: var(--bg-1); border: 1px solid var(--border-1); border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+.tile .label { font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.tile .value { font-size: var(--fs-xl); font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tile .delta { font-size: var(--fs-xs); font-weight: 600; margin-left: var(--sp-1); }
 
 /* ---- Banners ---- */
 .banner { padding: 12px 18px; border-radius: 9px; margin-bottom: 22px; font-size: 13.5px; }
@@ -121,10 +131,20 @@ a { color: var(--accent); }
 .banner.err { background: #2a0d0d; border: 1px solid #5c1c1c; color: #da6d6d; }
 
 /* ---- Tables ---- */
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 th { color: #5a6275; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
      padding: 6px 10px; border-bottom: 1px solid #1f2330; white-space: nowrap; text-align: left; }
 td { padding: 9px 10px; border-bottom: 1px solid #1a1e27; vertical-align: middle; transition: background 0.12s ease; }
+thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--bg-1);
+  color: var(--text-3); font-size: var(--fs-xs); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .05em; text-align: left;
+  padding: 8px 10px; border-bottom: 1px solid var(--border-2);
+}
+tbody td { padding: 8px 10px; border-bottom: 1px solid var(--border-1); color: var(--text-1); }
+tbody tr { transition: background var(--ease); }
+tbody tr:hover { background: var(--bg-2); }
+thead th.num { text-align: right; }
 tr:last-child td { border-bottom: none; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: #181c26; }
@@ -245,6 +265,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pill.tier-c { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .muted { color: #5a6275; font-size: 13px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.toolbar .spacer { flex: 1; }
 .confidence-badge { display: inline-block; padding: 3px 12px; border-radius: 999px; font-weight: 700; font-size: 12.5px; border: 1px solid currentColor; }
 
 /* Trade-health status dot (dashboard "Status" column) -- color goes red
@@ -264,6 +286,20 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   box-shadow: 0 0 10px 2px var(--status-color, #6e778c);
   animation: trade-blink var(--blink-duration, 2.2s) ease-in-out infinite;
 }
+/* .ok/.bad modifiers -- semantic color states layered onto the EXISTING
+   .trade-status-dot base above, deliberately NOT redefining its size/
+   animation (that base is still driven dynamically via --status-color
+   for the per-row and bot-liveness dots elsewhere on this page).
+   IMPORTANT: this means class="trade-status-dot ok/bad" still renders
+   at the base rule's 12px and keeps blinking via the trade-blink
+   animation -- it is NOT the 8px, static (non-animated) dot originally
+   described in the U10 plan brief. A future task that wires these
+   modifiers onto real markup expecting that 8px/static spec will need
+   its own non-conflicting selector (e.g. a dedicated class, not bare
+   .trade-status-dot) rather than assuming these two rules alone
+   deliver it. */
+.trade-status-dot.ok { background: var(--up); box-shadow: 0 0 6px var(--up); }
+.trade-status-dot.bad { background: var(--down); }
 
 @keyframes trade-blink {
   0%, 100% { opacity: 1;    transform: scale(1);    }
@@ -519,6 +555,19 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .field input[type=checkbox] { width: 17px; height: 17px; accent-color: #2558c9; cursor: pointer; flex-shrink: 0; }
 .field .checkbox-label { font-size: 13px; color: #7a8299; }
 
+input[type="text"], input[type="number"], input[type="password"], select, textarea {
+  background: var(--bg-2); color: var(--text-1);
+  border: 1px solid var(--border-2); border-radius: var(--r-sm);
+  padding: 7px 10px; font: 400 var(--fs-sm) var(--font-sans);
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+label { color: var(--text-2); font-size: var(--fs-sm); }
+input[type="checkbox"] { accent-color: var(--accent); }
+
 .restart-badge {
   font-size: 10px; padding: 2px 6px; border-radius: 5px; background: #261a06; color: #d4972a;
   font-weight: 700; white-space: nowrap; border: 1px solid #3d2a0a; letter-spacing: 0.02em;
@@ -582,10 +631,10 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .hamburger {
   display: none;
   background: transparent; border: none; box-shadow: none;
-  color: #8a92a6; font-size: 22px; padding: 4px 8px; cursor: pointer;
+  color: var(--text-2); font-size: 22px; padding: 4px 8px; cursor: pointer;
   line-height: 1; border-radius: 6px; flex-shrink: 0;
 }
-.hamburger:hover { background: #1c2030; color: #dde1ea; box-shadow: none; }
+.hamburger:hover { background: var(--bg-2); color: var(--text-1); box-shadow: none; }
 .hamburger:active { transform: none; }
 
 /* Overlay that dims the content when sidebar is open on mobile */
@@ -774,9 +823,17 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .diff-table td { padding: 5px 8px; border-bottom: 1px solid #0d0f14; }
 
 /* ---- Empty states (every new page — Task C45) ----------------------------- */
-.empty-state {
-  text-align: center; padding: 40px 20px; color: #5a6275;
+.empty-state { text-align: center; color: var(--text-3); padding: var(--sp-6); font-size: var(--fs-sm); }
+.empty-state .glyph { font-size: 28px; display: block; margin-bottom: var(--sp-2); opacity: .5; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--border-1) 50%, var(--bg-2) 75%);
+  background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: var(--r-sm);
 }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.flash { border-radius: var(--r-sm); padding: 10px 14px; font-size: var(--fs-sm);
+  background: var(--accent-soft); color: var(--text-1); border: 1px solid var(--accent); }
+.flash.error { background: var(--down-soft); border-color: var(--down); }
 
 /* ---- Tooltips (shared across every page) -----------------------------------
    CSS-only, no JS: the tip text lives in the data-tip attribute so it reads

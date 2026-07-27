@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** —
-> - **Next:** Task U1
+> - **Completed:** U1-U12
+> - **Next:** Task U13
 
 ## Global Constraints
 
@@ -52,7 +52,7 @@ tests/test_chart_theme.py                           NEW  theme sync + render smo
 
 **Interfaces — Produces:** pytest fixture `client` (authed Flask test client) that every later admin test imports from this module.
 
-- [ ] **Step 1: Write the harness + first test**
+- [x] **Step 1: Write the harness + first test**
 
 ```python
 # tests/test_admin_pages.py
@@ -87,14 +87,14 @@ def test_page_renders(client, path):
     assert resp.status_code == 200, f"{path} -> {resp.status_code}"
 ```
 
-- [ ] **Step 2: Run** `python -m pytest tests/test_admin_pages.py -v`. If a 401 comes back, read `swingbot/admin/app.py`'s `require_auth` to see where it reads credentials (module global vs `config.X` at call time) and adjust the monkeypatch target so the fixture authenticates — the fixture, not the app, is what changes. Expected: 5 PASS.
-- [ ] **Step 3: Commit** `test: admin page render smoke harness`
+- [x] **Step 2: Run** `python -m pytest tests/test_admin_pages.py -v`. If a 401 comes back, read `swingbot/admin/app.py`'s `require_auth` to see where it reads credentials (module global vs `config.X` at call time) and adjust the monkeypatch target so the fixture authenticates — the fixture, not the app, is what changes. Expected: 5 PASS.
+- [x] **Step 3: Commit** `test: admin page render smoke harness`
 
 ### Task U2: Self-host Inter, drop the Google Fonts CDN
 
 **Files:** Create `swingbot/admin/static/vendor/inter/inter.css` (+ 4 woff2 files); Modify `swingbot/admin/templates/base.html`
 
-- [ ] **Step 1: Download the four weights** (Inter is OFL-licensed) into `swingbot/admin/static/vendor/inter/`:
+- [x] **Step 1: Download the four weights** (Inter is OFL-licensed) into `swingbot/admin/static/vendor/inter/`:
 
 ```bash
 cd swingbot/admin/static/vendor/inter
@@ -103,7 +103,7 @@ for w in 400 500 600 700; do curl -sL -o inter-$w.woff2 "https://cdn.jsdelivr.ne
 
 Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubusercontent.com/rsms/inter/master/LICENSE.txt"`
 
-- [ ] **Step 2: Write `inter.css`**
+- [x] **Step 2: Write `inter.css`**
 
 ```css
 /* Inter (SIL OFL 1.1) — self-hosted; see LICENSE.txt in this folder. */
@@ -113,14 +113,14 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 700; font-display: swap; src: url("inter-700.woff2") format("woff2"); }
 ```
 
-- [ ] **Step 3: In `base.html`** delete the two `fonts.googleapis.com`/`fonts.gstatic.com` preconnect links and the Google `<link href="https://fonts.googleapis.com/css2?family=Inter...">`; in their place add, ABOVE the style.css link:
+- [x] **Step 3: In `base.html`** delete the two `fonts.googleapis.com`/`fonts.gstatic.com` preconnect links and the Google `<link href="https://fonts.googleapis.com/css2?family=Inter...">`; in their place add, ABOVE the style.css link:
 
 ```html
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
 ```
 
-- [ ] **Step 4: Verify** `python -m pytest tests/test_admin_pages.py -q` (5 pass) and `grep -n "googleapis\|gstatic" swingbot/admin/templates/base.html` returns nothing.
-- [ ] **Step 5: Commit** `feat: self-host Inter, remove Google Fonts CDN`
+- [x] **Step 4: Verify** `python -m pytest tests/test_admin_pages.py -q` (5 pass) and `grep -n "googleapis\|gstatic" swingbot/admin/templates/base.html` returns nothing.
+- [x] **Step 5: Commit** `feat: self-host Inter, remove Google Fonts CDN`
 
 ### Task U3: Design tokens (`tokens.css`)
 
@@ -128,7 +128,7 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 
 **Interfaces — Produces:** every CSS custom property below; ALL later CSS tasks reference these names verbatim.
 
-- [ ] **Step 1: Write `tokens.css` in full**
+- [x] **Step 1: Write `tokens.css` in full**
 
 ```css
 /* ============================================================
@@ -178,8 +178,8 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 
 **Files:** Modify `style.css` (sidebar/shell sections), `base.html` (nav markup gains an active-bar span)
 
-- [ ] **Step 1:** In `base.html`, inside each nav `<a>`, prepend `<span class="nav-bar"></span>` before the icon span.
-- [ ] **Step 2:** Replace the sidebar CSS block in `style.css` with:
+- [x] **Step 1:** In `base.html`, inside each nav `<a>`, prepend `<span class="nav-bar"></span>` before the icon span.
+- [x] **Step 2:** Replace the sidebar CSS block in `style.css` with:
 
 ```css
 .shell { display: flex; min-height: 100vh; }
@@ -207,13 +207,13 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 
 Keep every existing sidebar rule this doesn't replace (mobile overlay, footer) but re-express their colors via tokens (`#13161d`→`var(--bg-1)`, `#1f2330`→`var(--border-1)` etc. — grep `#` in the sidebar section and convert each).
 
-- [ ] **Step 3: Verify + commit** — smoke tests; visual check active state on each page. Commit `feat: sidebar + shell restyle on tokens`.
+- [x] **Step 3: Verify + commit** — smoke tests; visual check active state on each page. Commit `feat: sidebar + shell restyle on tokens`.
 
 ### Task U5: Buttons + pills/badges
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace the existing button and `.pill` rules with:
+- [x] **Step 1:** Replace the existing button and `.pill` rules with:
 
 ```css
 button, .btn {
@@ -244,13 +244,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pill.tier-c { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: button hierarchy + badge pill system`
+- [x] **Step 2: Verify + commit** `feat: button hierarchy + badge pill system`
 
 ### Task U6: Cards + stat tiles
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace/add:
+- [x] **Step 1:** Replace/add:
 
 ```css
 .card {
@@ -268,13 +268,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .tile .delta { font-size: var(--fs-xs); font-weight: 600; margin-left: var(--sp-1); }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: card + stat tile components`
+- [x] **Step 2: Verify + commit** `feat: card + stat tile components`
 
 ### Task U7: Tables
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace the table rules:
+- [x] **Step 1:** Replace the table rules:
 
 ```css
 table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
@@ -290,13 +290,13 @@ tbody tr:hover { background: var(--bg-2); }
 thead th.num { text-align: right; }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: table restyle (sticky head, hover, tabular nums)`
+- [x] **Step 2: Verify + commit** `feat: table restyle (sticky head, hover, tabular nums)`
 
 ### Task U8: Forms (settings inputs)
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace input/select/label rules:
+- [x] **Step 1:** Replace input/select/label rules:
 
 ```css
 input[type="text"], input[type="number"], input[type="password"], select, textarea {
@@ -313,13 +313,13 @@ label { color: var(--text-2); font-size: var(--fs-sm); }
 input[type="checkbox"] { accent-color: var(--accent); }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: form input restyle`
+- [x] **Step 2: Verify + commit** `feat: form input restyle`
 
 ### Task U9: States, focus, scrollbars, flash
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Add:
+- [x] **Step 1:** Add:
 
 ```css
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -338,7 +338,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .flash.error { background: var(--down-soft); border-color: var(--down); }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: focus rings, scrollbars, empty/skeleton/flash states`
+- [x] **Step 2: Verify + commit** `feat: focus rings, scrollbars, empty/skeleton/flash states`
 
 ---
 
@@ -350,8 +350,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 **Files:** Modify `swingbot/admin/templates/dashboard.html`, `style.css`
 
-- [ ] **Step 1:** Wrap the mode buttons row in `<div class="toolbar">`; convert mode buttons to `class="btn ghost small dashboard-mode-btn"` with the active one getting `secondary` (keep `data-mode` attributes and all JS hooks/ids untouched). Status cluster (`bot-status-dot`, pause badge, trigger buttons) stays functionally identical — only classes change (`secondary small`, `danger small` already exist and now inherit U5 styling).
-- [ ] **Step 2:** Add to `style.css`:
+- [x] **Step 1:** Wrap the mode buttons row in `<div class="toolbar">`; convert mode buttons to `class="btn ghost small dashboard-mode-btn"` with the active one getting `secondary` (keep `data-mode` attributes and all JS hooks/ids untouched). Status cluster (`bot-status-dot`, pause badge, trigger buttons) stays functionally identical — only classes change (`secondary small`, `danger small` already exist and now inherit U5 styling).
+- [x] **Step 2:** Add to `style.css`:
 
 ```css
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
@@ -361,21 +361,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .trade-status-dot.bad { background: var(--down); }
 ```
 
-- [ ] **Step 3: Verify + commit** `feat: dashboard toolbar restyle`
+- [x] **Step 3: Verify + commit** `feat: dashboard toolbar restyle`
 
 ### Task U11: Dashboard open-trades fragment
 
 **Files:** Modify `swingbot/admin/templates/dashboard_fragment.html`
 
-- [ ] **Step 1:** Add `class="num"` to every numeric `<td>`/`<th>` (entry, stop, target, price, P/L%, R); add `class="num pos"`/`"num neg"` conditionally where the template already computes P/L sign (follow the template's existing Jinja conditionals — e.g. `class="num {{ 'pos' if t.pnl_pct and t.pnl_pct > 0 else 'neg' if t.pnl_pct and t.pnl_pct < 0 else '' }}"`). Add `data-ticker="{{ t.ticker }}"` to each `<tr>` (consumed by U31's modal). Badge cells: render `<span class="pill validated">✅ VALIDATED</span>` / `<span class="pill weak">⚠️ WEAK</span>` based on the existing badge field.
-- [ ] **Step 2: Verify + commit** `feat: dashboard trades table markup pass`
+- [x] **Step 1:** Add `class="num"` to every numeric `<td>`/`<th>` (entry, stop, target, price, P/L%, R); add `class="num pos"`/`"num neg"` conditionally where the template already computes P/L sign (follow the template's existing Jinja conditionals — e.g. `class="num {{ 'pos' if t.pnl_pct and t.pnl_pct > 0 else 'neg' if t.pnl_pct and t.pnl_pct < 0 else '' }}"`). Add `data-ticker="{{ t.ticker }}"` to each `<tr>` (consumed by U31's modal). Badge cells: render `<span class="pill validated">✅ VALIDATED</span>` / `<span class="pill weak">⚠️ WEAK</span>` based on the existing badge field.
+- [x] **Step 2: Verify + commit** `feat: dashboard trades table markup pass`
 
 ### Task U12: Stats page
 
 **Files:** Modify `swingbot/admin/templates/stats.html`
 
-- [ ] **Step 1:** Convert the headline stat row into `tiles`/`tile` markup (`label`/`value`, delta chip with `pos`/`neg`); wrap each stats table in `<div class="card">`; `num` classes on all numeric columns as in U11.
-- [ ] **Step 2: Verify + commit** `feat: stats page tiles + cards`
+- [x] **Step 1:** Convert the headline stat row into `tiles`/`tile` markup (`label`/`value`, delta chip with `pos`/`neg`); wrap each stats table in `<div class="card">`; `num` classes on all numeric columns as in U11.
+- [x] **Step 2: Verify + commit** `feat: stats page tiles + cards`
 
 ### Task U13: Watchlist page
 

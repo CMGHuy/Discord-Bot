@@ -53,10 +53,33 @@ python scripts/wf_run.py --full --json docs/superpowers/results/2026-07-27-edge-
 "baseline" are the identical, unmodified system in every fold — expected
 to show `delta_expectancy_r == 0.0000` for every fold, the same
 zero-adopted-components sanity-check pattern already seen in E80's ETF
-fold check. *(This run was still in progress when this doc was first
-written; see the addendum at the bottom once it lands, or check
-`docs/superpowers/results/2026-07-27-edge-full-system-folds.json`
-directly if this note is still here.)*
+fold check.
+
+Wall-clock: ~7.5 hours (15:43-23:14). Result, confirming that expectation:
+
+```
+component overrides: (none -- adopted defaults)
+fold         N    baseline   component     delta
+2021      1617      0.2125      0.2125    0.0000
+2022       838      0.0346      0.0346    0.0000
+2023      1076      0.1893      0.1893    0.0000
+pooled delta expectancy_r: +0.0000
+PRE-REGISTERED GATE: FAIL
+```
+
+**Reading it:** `delta_expectancy_r` is exactly `0.0000` in every fold, as
+expected — baseline and "component" are the same system, so there's
+nothing for the gate to find. `PRE-REGISTERED GATE: FAIL` here is not a
+finding about the trading system; `gate()`'s pass rule requires a
+*positive* improvement to clear, and zero doesn't clear it — this run
+exists to sanity-check the harness (fold sizes, expectancy figures) with
+zero components adopted, not to pass/fail anything. The per-fold N's
+(1617 / 838 / 1076 signals) and per-fold baseline expectancy_r (0.2125 /
+0.0346 / 0.1893) are the actual new information: they're the same
+per-signal, non-portfolio-scoped expectancy Task E33's original grid
+worked from, now re-measured against however the codebase and cached
+data have drifted since then, and they're consistent in sign and rough
+magnitude with Run 1's portfolio-level 2.196x result above.
 
 ## Task E90: Full-system permutation test — NOT run, genuinely infeasible at n=200
 

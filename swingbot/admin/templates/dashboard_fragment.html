@@ -236,12 +236,12 @@
       <th data-col-id="direction" draggable="true" onclick="sortByHeader(this)" title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
       <th data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
       <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score out of a maximum of 100 points -- higher means more confluence factors lined up behind this setup.">Score <span class="sort-arrow" data-col-id="score"></span></th>
-      <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (incl. pre/aftermarket, cached ~15s)">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
-      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s).">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
-      <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
-      <th data-col-id="target" draggable="true" onclick="sortByHeader(this)">Target <span class="sort-arrow" data-col-id="target"></span></th>
-      <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
+      <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)" class="num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (incl. pre/aftermarket, cached ~15s)" class="num">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
+      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s)." class="num">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
+      <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)" class="num">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
+      <th data-col-id="target" draggable="true" onclick="sortByHeader(this)" class="num">Target <span class="sort-arrow" data-col-id="target"></span></th>
+      <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio" class="num">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
       <th data-col-id="size" draggable="true" onclick="sortByHeader(this)"
           title="Unrealized gain/loss in account currency = shares (snapshotted when this trade was opened) x (current price − entry price), direction-adjusted.">
         Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
@@ -261,7 +261,7 @@
     {%- set sizing = sizing_map.get(t.id) -%}
     {%- set is_bull = t.direction == 'bullish' -%}
     {%- set conf_score = t.get('confidence_score') -%}
-    <tr class="clickable" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
+    <tr class="clickable" data-ticker="{{ t.ticker }}" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
       <td class="muted" title="Row number, per the table's current sort order">{{ loop.index }}</td>
 
       {# ── Status cell: dot + bar + live SL/TP distances ─────────────────── #}
@@ -298,7 +298,7 @@
       <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
         <strong>{{ t.ticker }}</strong>
         {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
-        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ t.badge }}</span>{% endif %}
+        {% if t.get('badge') %}<span class="pill {{ 'validated' if t.badge == 'VALIDATED' else 'weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ '✅ VALIDATED' if t.badge == 'VALIDATED' else '⚠️ WEAK' }}</span>{% endif %}
       </td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
@@ -335,12 +335,12 @@
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
 
-      <td title="Planned entry price for this trade" style="color:#6ea8fe;font-weight:600;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td class="num" title="Planned entry price for this trade" style="color:#6ea8fe;font-weight:600;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
 
       {# Current price — direction-aware color + blink when live #}
       {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
       <td data-sort="{{ cur_price if cur_price is not none else 0 }}"
-          class="{% if cur_price is not none and is_market_active %}price-live{% endif %}"
+          class="num {% if cur_price is not none and is_market_active %}price-live{% endif %}"
           style="color: {% if cur_price is none %}#5a6275{% elif price_is_good %}#6dda9e{% else %}#e07070{% endif %}; font-weight: {% if cur_price is not none %}600{% else %}400{% endif %};"
           title="{% if cur_price is not none %}{{ 'Up from entry' if price_is_good else 'Down from entry' }} · prices refresh ~15s (incl. pre/aftermarket){% endif %}">
         {%- if cur_price is not none -%}
@@ -351,7 +351,8 @@
       </td>
 
       {# Unrealized P&L % — positive = in profit for this direction #}
-      <td data-sort="{{ pnl.pnl_pct if pnl else 0 }}"
+      <td class="num {% if pnl is none %}{% elif pnl.pnl_pct >= 0 %}pos{% else %}neg{% endif %}"
+          data-sort="{{ pnl.pnl_pct if pnl else 0 }}"
           style="font-weight:600;color: {% if pnl is none %}#5a6275{% elif pnl.pnl_pct >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
           title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~15s cache).">
         {%- if pnl -%}
@@ -361,9 +362,9 @@
         {%- endif -%}
       </td>
 
-      <td style="color:#da6d6d;" title="Stop-loss price -- this trade closes as a loss if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
-      <td style="color:#6dda9e;" title="Take-profit (target) price -- this trade closes as a win if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
-      <td title="Planned risk:reward ratio at entry -- reward distance (entry to target) ÷ risk distance (entry to stop)">{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
+      <td class="num" style="color:#da6d6d;" title="Stop-loss price -- this trade closes as a loss if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
+      <td class="num" style="color:#6dda9e;" title="Take-profit (target) price -- this trade closes as a win if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
+      <td class="num" title="Planned risk:reward ratio at entry -- reward distance (entry to target) ÷ risk distance (entry to stop)">{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
 
       {# Unrealized gain/loss in account currency -- ALWAYS the shares actually
          snapshotted onto this trade at open time (t.shares), never sizing_map's

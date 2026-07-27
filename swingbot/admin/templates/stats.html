@@ -23,18 +23,18 @@
   <table>
     <thead><tr>
       <th>Tier</th>
-      <th>N</th>
-      <th>Live WR</th>
-      <th>Expected band<span class="tip-icon" tabindex="0" data-tip="The win-rate range this tier is expected to land in, based on how the quality score was originally calibrated.">?</span></th>
+      <th class="num">N</th>
+      <th class="num">Live WR</th>
+      <th class="num">Expected band<span class="tip-icon" tabindex="0" data-tip="The win-rate range this tier is expected to land in, based on how the quality score was originally calibrated.">?</span></th>
       <th>Pass</th>
     </tr></thead>
     <tbody>
     {% for row in tiers %}
     <tr>
       <td><span class="chip chip-tier-{{ row.tier | lower }}">{{ row.tier }}</span></td>
-      <td>{{ row.n }}</td>
-      <td>{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
-      <td class="muted">{{ row.expected_band }}</td>
+      <td class="num">{{ row.n }}</td>
+      <td class="num">{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
+      <td class="num muted">{{ row.expected_band }}</td>
       <td>{% if row.ok %}✅{% elif row.ok is sameas false %}❌{% else %}—{% endif %}</td>
     </tr>
     {% endfor %}
@@ -50,14 +50,14 @@
   <p class="section-help">Flagged only once a strategy has at least 20 closed live trades (fewer than that is too noisy to judge) AND live win rate is more than 10 percentage points below its OOS win rate. See the Strategies page for the full per-strategy breakdown.</p>
   <div style="overflow-x:auto;">
   <table>
-    <thead><tr><th>Strategy</th><th>Live WR</th><th>OOS WR</th><th>Δ</th><th>Decayed</th></tr></thead>
+    <thead><tr><th>Strategy</th><th class="num">Live WR</th><th class="num">OOS WR</th><th class="num">Δ</th><th>Decayed</th></tr></thead>
     <tbody>
     {% for d in drift %}
     <tr>
       <td>{{ d.strategy }}</td>
-      <td>{{ "%.1f%%"|format(d.live_wr) if d.live_wr is not none else '—' }}</td>
-      <td>{{ "%.1f%%"|format(d.oos_wr) if d.oos_wr is not none else '—' }}</td>
-      <td style="color:{% if d.delta_wr is none %}#5a6275{% elif d.delta_wr < 0 %}#da6d6d{% else %}#6dda9e{% endif %};">
+      <td class="num">{{ "%.1f%%"|format(d.live_wr) if d.live_wr is not none else '—' }}</td>
+      <td class="num">{{ "%.1f%%"|format(d.oos_wr) if d.oos_wr is not none else '—' }}</td>
+      <td class="num {{ 'neg' if d.delta_wr is not none and d.delta_wr < 0 else 'pos' if d.delta_wr is not none else '' }}">
         {{ "%+.1f"|format(d.delta_wr) if d.delta_wr is not none else '—' }}
       </td>
       <td>{% if d.drift_alert %}<span class="chip chip-decay">DECAY</span>{% else %}—{% endif %}</td>
@@ -76,7 +76,7 @@
    whatever comes next regardless of whether the FOLLOWING section remembers
    to set its own margin-top (one plain .card here previously didn't, so it
    sat flush against the section above it with no gap at all). */
-#range-bar, .kpi-strip, .chart-card, .stats-two-col, .pie-panel-row,
+#range-bar, .kpi-strip, .tiles, .chart-card, .stats-two-col, .pie-panel-row,
 .detail-two-col { margin-bottom: 18px; }
 
 /* ── KPI strip ─────────────────────────────────────────────────────────── */
@@ -421,7 +421,7 @@
 </div>
 
 {# ── KPI strip (populated by JS) ─────────────────────────────────────────── #}
-<div class="kpi-strip" id="kpi-strip">
+<div class="tiles" id="kpi-strip">
   {% if stats.total_closed == 0 %}
   <div style="grid-column:1/-1; padding:24px; text-align:center; color:#5a6275;">
     No closed trades yet — stats will appear once trades resolve.
@@ -645,12 +645,12 @@
           <th data-col="2">Dir ↕</th>
           <th data-col="3">Opened ↕</th>
           <th data-col="4">Closed ↕</th>
-          <th data-col="5">Days ↕</th>
-          <th data-col="6">Entry ↕</th>
-          <th data-col="7">Exit ↕</th>
-          <th data-col="8">P&amp;L % ↕<span class="tip-icon" tabindex="0" data-tip="% change from entry to exit price.">?</span></th>
-          <th data-col="9">Gain/Loss ↕<span class="tip-icon" tabindex="0" data-tip="Realized P&amp;L in account currency for this trade's sized position (see the Sizing math box on its trade detail page).">?</span></th>
-          <th data-col="10">Conf ↕<span class="tip-icon" tabindex="0" data-tip="Confidence level (1-5) assigned at alert time, from how many independent methods confirmed the setup.">?</span></th>
+          <th data-col="5" class="num">Days ↕</th>
+          <th data-col="6" class="num">Entry ↕</th>
+          <th data-col="7" class="num">Exit ↕</th>
+          <th data-col="8" class="num">P&amp;L % ↕<span class="tip-icon" tabindex="0" data-tip="% change from entry to exit price.">?</span></th>
+          <th data-col="9" class="num">Gain/Loss ↕<span class="tip-icon" tabindex="0" data-tip="Realized P&amp;L in account currency for this trade's sized position (see the Sizing math box on its trade detail page).">?</span></th>
+          <th data-col="10" class="num">Conf ↕<span class="tip-icon" tabindex="0" data-tip="Confidence level (1-5) assigned at alert time, from how many independent methods confirmed the setup.">?</span></th>
           <th data-col="11">Result ↕<span class="tip-icon" tabindex="0" data-tip="Open, win, loss, or scratch (closed near breakeven).">?</span></th>
         </tr>
       </thead>
@@ -809,20 +809,20 @@ function buildBreakdownTable(rows, labelHeader) {
   let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
     <thead><tr style="border-bottom:1px solid #1f2330;">
       <th style="text-align:left;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">${labelHeader}</th>
-      <th style="text-align:right;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Trades</th>
-      <th style="text-align:right;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Win Rate</th>
-      <th style="text-align:right;padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Avg P&amp;L</th>
+      <th class="num" style="padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Trades</th>
+      <th class="num" style="padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Win Rate</th>
+      <th class="num" style="padding:6px 8px;color:#5a6275;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">Avg P&amp;L</th>
     </tr></thead><tbody>`;
   for (const r of rows) {
     const wrTxt   = r.win_rate != null ? r.win_rate.toFixed(1)+'%' : '—';
     const wrColor = r.win_rate == null ? '#9aa0b0' : r.win_rate>=60?'#44ff88':r.win_rate>=40?'#e2b25a':'#ff4444';
     const avgTxt   = r.avg_pnl != null ? (r.avg_pnl>=0?'+':'')+r.avg_pnl.toFixed(2)+'%' : '—';
-    const avgColor = r.avg_pnl == null ? '#9aa0b0' : (r.avg_pnl>=0?'#44ff88':'#ff4444');
+    const avgCls   = r.avg_pnl == null ? '' : (r.avg_pnl>=0?'pos':'neg');
     html += `<tr style="border-bottom:1px solid #0d0f14;">
       <td style="padding:6px 8px;color:#dde1ea;font-weight:600;">${r.key}</td>
-      <td style="padding:6px 8px;text-align:right;color:#9aa0b0;">${r.total}</td>
-      <td style="padding:6px 8px;text-align:right;color:${wrColor};font-weight:600;">${wrTxt}</td>
-      <td style="padding:6px 8px;text-align:right;color:${avgColor};">${avgTxt}</td>
+      <td class="num" style="padding:6px 8px;color:#9aa0b0;">${r.total}</td>
+      <td class="num" style="padding:6px 8px;color:${wrColor};font-weight:600;">${wrTxt}</td>
+      <td class="num ${avgCls}" style="padding:6px 8px;">${avgTxt}</td>
     </tr>`;
   }
   html += '</tbody></table>';
@@ -1003,7 +1003,7 @@ function renderAll(tradesIn, balanceHistoryIn) {
         'No closed trades in this range.</div>';
     } else {
       $('kpi-strip').innerHTML =
-        `<div class="kpi-card kpi-card-wide"><div class="kpi-val">${raw.account_balance != null ? raw.account_balance.toLocaleString() : '—'}</div><div class="kpi-lbl">Account Balance</div></div>` +
+        `<div class="tile" style="grid-column:span 2;"><div class="label">Account Balance</div><div class="value">${raw.account_balance != null ? raw.account_balance.toLocaleString() : '—'}</div></div>` +
         '<div style="grid-column:span 3;padding:12px;color:#5a6275;display:flex;align-items:center;">No closed trades in this range.</div>';
     }
     // Even with zero trades, keep the Trade Log table in sync (it should
@@ -1104,9 +1104,16 @@ const spyLast  = spyDates.length ? spyCum[spyDates[spyDates.length-1]] : null;
 /* ── KPI cards ──────────────────────────────────────────────────────────── */
 function kpi(val, label, cls='', wide=false, tip='') {
   const tipHtml = tip ? `<span class="tip-icon" tabindex="0" data-tip='${tip}'>?</span>` : '';
-  return `<div class="kpi-card${wide ? ' kpi-card-wide' : ''}">
-    <div class="kpi-val ${cls}">${val}</div>
-    <div class="kpi-lbl">${label}${tipHtml}</div>
+  // cls is the sign/quality indicator already computed by every call site
+  // below ('up'/'down'/'warn'/'') -- reused as-is here, not recomputed.
+  // 'up'/'down' map onto the shared pos/neg delta-chip vocabulary; 'warn'
+  // (a borderline/neutral state, not a true positive-or-negative signal)
+  // intentionally gets no chip rather than inventing a third chip color.
+  const deltaCls  = cls === 'up' ? 'pos' : cls === 'down' ? 'neg' : '';
+  const deltaHtml = deltaCls ? `<span class="delta ${deltaCls}">${cls === 'up' ? '▲' : '▼'}</span>` : '';
+  return `<div class="tile"${wide ? ' style="grid-column:span 2;"' : ''}>
+    <div class="label">${label}${tipHtml}</div>
+    <div class="value">${val}${deltaHtml}</div>
   </div>`;
 }
 
@@ -2107,12 +2114,12 @@ const holdItems = trades.filter(t => t.holding_days != null).map(t => ({ hours: 
         <td style="color:${dirCol};font-weight:600;" title="${d[2].includes('Long') ? 'Long (bullish)' : 'Short (bearish)'}">${d[2]}</td>
         <td title="${openedTitle}">${d[3]}</td>
         <td title="${closedTitle}">${d[4]}</td>
-        <td style="white-space:nowrap;" title="Time held, from open to close">${holdLabel !== null ? holdLabel : '—'}</td>
-        <td title="Entry price this trade was opened at">$${d[6]}</td>
-        <td title="Actual fill price when this trade closed">$${d[7]}</td>
-        <td class="${pnlCls}" title="Realized P&amp;L %, direction-adjusted">${pnlTxt}</td>
-        <td class="${amtCls}" title="Realized gain/loss in account currency, based on the position size snapshotted when this trade was opened">${amtTxt}</td>
-        <td style="color:#e2b25a;" title="Confidence level Lv${d[10]} of 5 at the time this trade was opened">Lv${d[10]}</td>
+        <td class="num" style="white-space:nowrap;" title="Time held, from open to close">${holdLabel !== null ? holdLabel : '—'}</td>
+        <td class="num" title="Entry price this trade was opened at">$${d[6]}</td>
+        <td class="num" title="Actual fill price when this trade closed">$${d[7]}</td>
+        <td class="num ${pnlCls}" title="Realized P&amp;L %, direction-adjusted">${pnlTxt}</td>
+        <td class="num ${amtCls}" title="Realized gain/loss in account currency, based on the position size snapshotted when this trade was opened">${amtTxt}</td>
+        <td class="num" style="color:#e2b25a;" title="Confidence level Lv${d[10]} of 5 at the time this trade was opened">Lv${d[10]}</td>
         <td class="${resCls}" style="text-transform:capitalize;" title="${outcomeTitle}">${d[11]}</td>
       </tr>`;
     }).join('');

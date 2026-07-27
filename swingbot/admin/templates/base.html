@@ -16,6 +16,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon-32.png') }}">
 <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='images/favicon-16.png') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/apple-touch-icon.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <script>
@@ -49,6 +50,7 @@
     <nav>
       {% for key, icon, label, endpoint in nav_items %}
       <a href="{{ url_for(endpoint) }}" class="{{ 'active' if key == active_page else '' }}">
+        <span class="nav-bar"></span>
         <span class="icon">{{ icon }}</span>
         <span class="nav-label">{{ label }}</span>
       </a>

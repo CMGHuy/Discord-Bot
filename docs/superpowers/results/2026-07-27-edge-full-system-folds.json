@@ -1,0 +1,48 @@
+{
+  "overrides": {},
+  "result": {
+    "folds": [
+      {
+        "test_years": "2021",
+        "baseline": {
+          "expectancy_r": 0.21253741496598638,
+          "n": 1617
+        },
+        "component": {
+          "expectancy_r": 0.21253741496598638,
+          "n": 1617
+        },
+        "delta_expectancy_r": 0.0,
+        "n": 1617
+      },
+      {
+        "test_years": "2022",
+        "baseline": {
+          "expectancy_r": 0.0345835322195704,
+          "n": 838
+        },
+        "component": {
+          "expectancy_r": 0.0345835322195704,
+          "n": 838
+        },
+        "delta_expectancy_r": 0.0,
+        "n": 838
+      },
+      {
+        "test_years": "2023",
+        "baseline": {
+          "expectancy_r": 0.18932992565055762,
+          "n": 1076
+        },
+        "component": {
+          "expectancy_r": 0.18932992565055762,
+          "n": 1076
+        },
+        "delta_expectancy_r": 0.0,
+        "n": 1076
+      }
+    ],
+    "pooled_delta_expectancy_r": 0.0
+  },
+  "gate": "FAIL"
+}
