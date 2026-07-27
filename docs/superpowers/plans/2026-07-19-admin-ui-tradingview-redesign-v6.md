@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U2
-> - **Next:** Task U3
+> - **Completed:** U1-U3
+> - **Next:** Task U4
 
 ## Global Constraints
 
@@ -128,7 +128,7 @@ Also save the OFL license: `curl -sL -o LICENSE.txt "https://raw.githubuserconte
 
 **Interfaces — Produces:** every CSS custom property below; ALL later CSS tasks reference these names verbatim.
 
-- [ ] **Step 1: Write `tokens.css` in full**
+- [x] **Step 1: Write `tokens.css` in full**
 
 ```css
 /* ============================================================
