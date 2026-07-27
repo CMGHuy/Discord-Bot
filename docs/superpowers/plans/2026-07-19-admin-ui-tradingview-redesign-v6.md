@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U9
-> - **Next:** Task U10
+> - **Completed:** U1-U10
+> - **Next:** Task U11
 
 ## Global Constraints
 
@@ -350,8 +350,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 **Files:** Modify `swingbot/admin/templates/dashboard.html`, `style.css`
 
-- [ ] **Step 1:** Wrap the mode buttons row in `<div class="toolbar">`; convert mode buttons to `class="btn ghost small dashboard-mode-btn"` with the active one getting `secondary` (keep `data-mode` attributes and all JS hooks/ids untouched). Status cluster (`bot-status-dot`, pause badge, trigger buttons) stays functionally identical — only classes change (`secondary small`, `danger small` already exist and now inherit U5 styling).
-- [ ] **Step 2:** Add to `style.css`:
+- [x] **Step 1:** Wrap the mode buttons row in `<div class="toolbar">`; convert mode buttons to `class="btn ghost small dashboard-mode-btn"` with the active one getting `secondary` (keep `data-mode` attributes and all JS hooks/ids untouched). Status cluster (`bot-status-dot`, pause badge, trigger buttons) stays functionally identical — only classes change (`secondary small`, `danger small` already exist and now inherit U5 styling).
+- [x] **Step 2:** Add to `style.css`:
 
 ```css
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
@@ -361,7 +361,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .trade-status-dot.bad { background: var(--down); }
 ```
 
-- [ ] **Step 3: Verify + commit** `feat: dashboard toolbar restyle`
+- [x] **Step 3: Verify + commit** `feat: dashboard toolbar restyle`
 
 ### Task U11: Dashboard open-trades fragment
 
