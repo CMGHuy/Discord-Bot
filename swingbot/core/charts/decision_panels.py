@@ -5,7 +5,8 @@ import mplfinance as mpf
 
 from swingbot.core.charts.chart_style import (CHART_BG, CHIP_EDGE, DOWN_COLOR,
                                               GRID_COLOR, MUTED_TEXT_COLOR,
-                                              PRO_STYLE, TEXT_COLOR, UP_COLOR)
+                                              PRO_STYLE, STOP_COLOR, TEXT_COLOR,
+                                              UP_COLOR)
 from swingbot.core.charts.decision_chart import draw_placeholder
 
 
@@ -59,5 +60,48 @@ def _rs(ax, ctx):
 
 
 def _info(ax, sizing_ctx, quality_ctx):
-    """Implemented in E65/E66."""
-    draw_placeholder(ax, "pending")
+    ax.set_facecolor(CHART_BG)
+    ax.set_xticks([]); ax.set_yticks([])
+    y = 0.97
+    if sizing_ctx:
+        rows = [
+            ("risk", f"{sizing_ctx['risk_pct']:.2f}%  (min: {sizing_ctx['risk_source']})"),
+            ("shares", f"{sizing_ctx['shares']}"),
+            ("heat", f"{sizing_ctx['heat_before']:.1f}% → {sizing_ctx['heat_after']:.1f}%"
+                     f" / {sizing_ctx['cap']:.1f}%"),
+        ]
+        if sizing_ctx.get("cluster_note"):
+            rows.append(("cluster", sizing_ctx["cluster_note"]))
+        over = sizing_ctx["heat_after"] > sizing_ctx["cap"]
+        for label, value in rows:
+            color = STOP_COLOR if (label == "heat" and over) else TEXT_COLOR
+            ax.text(0.04, y, f"{label:<8}", transform=ax.transAxes, fontsize=8,
+                    color=MUTED_TEXT_COLOR, family="monospace", va="top")
+            ax.text(0.30, y, value, transform=ax.transAxes, fontsize=8,
+                    color=color, family="monospace", va="top")
+            y -= 0.11
+    if quality_ctx:
+        y = _quality_rows(ax, quality_ctx, y)      # E66
+
+
+def _quality_rows(ax, q, y):
+    ax.text(0.04, y, f"quality {q['score']}/100   follow "
+            f"{q.get('follow_score') if q.get('follow_score') is not None else '—'}",
+            transform=ax.transAxes, fontsize=8, color=TEXT_COLOR,
+            family="monospace", va="top")
+    y -= 0.11
+    for label, pts, mx in q.get("components", []):
+        filled = int(round(6 * pts / mx)) if mx else 0
+        bar = "▮" * filled + "▯" * (6 - filled)
+        ax.text(0.04, y, f"{label:<8}{bar} {pts}/{mx}", transform=ax.transAxes,
+                fontsize=7, color=MUTED_TEXT_COLOR, family="monospace", va="top")
+        y -= 0.09
+    ax.text(0.04, y, f"{q.get('badge', 'WEAK')} · {q.get('badge_stats', '')}",
+            transform=ax.transAxes, fontsize=7, color=TEXT_COLOR,
+            family="monospace", va="top")
+    y -= 0.10
+    if q.get("advisor"):
+        ax.text(0.04, y, f"🤖 {q['advisor']}", transform=ax.transAxes, fontsize=7,
+                color=MUTED_TEXT_COLOR, family="monospace", va="top", wrap=True)
+        y -= 0.10
+    return y

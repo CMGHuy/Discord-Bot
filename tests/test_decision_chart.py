@@ -95,3 +95,23 @@ def test_gap_band_renders(tmp_path, daily_df):
     ctx = {"gap": {"p90_gap_pct": 2.5, "gap_fragile": True}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
     assert os.path.getsize(path) > 10_000
+
+
+def test_sizing_box_renders(tmp_path, daily_df):
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    ctx = {"sizing": {"risk_pct": 0.7, "risk_source": "vol_target",
+                      "shares": 35, "heat_before": 4.0, "heat_after": 4.7,
+                      "cap": 6.0, "cluster_note": "corr 0.82 with NVDA"}}
+    path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
+    assert os.path.getsize(path) > 10_000
+
+
+def test_quality_box_renders(tmp_path, daily_df):
+    from swingbot.core.charts.decision_chart import render_decision_chart
+    ctx = {"quality": {"score": 74,
+                       "components": [("RS", 8, 10), ("MTF", 6, 10), ("breadth", 3, 5)],
+                       "follow_score": 81.5, "badge": "VALIDATED",
+                       "badge_stats": "N=206 · 81.6% OOS",
+                       "advisor": "CAUTION (62) — earnings in 2 days"}}
+    path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
+    assert os.path.getsize(path) > 10_000
