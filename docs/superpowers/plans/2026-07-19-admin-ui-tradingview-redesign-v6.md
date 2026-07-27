@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U6
-> - **Next:** Task U7
+> - **Completed:** U1-U7
+> - **Next:** Task U8
 
 ## Global Constraints
 
@@ -274,7 +274,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Replace the table rules:
+- [x] **Step 1:** Replace the table rules:
 
 ```css
 table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
@@ -290,7 +290,7 @@ tbody tr:hover { background: var(--bg-2); }
 thead th.num { text-align: right; }
 ```
 
-- [ ] **Step 2: Verify + commit** `feat: table restyle (sticky head, hover, tabular nums)`
+- [x] **Step 2: Verify + commit** `feat: table restyle (sticky head, hover, tabular nums)`
 
 ### Task U8: Forms (settings inputs)
 
