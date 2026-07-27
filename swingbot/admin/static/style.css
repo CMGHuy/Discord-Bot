@@ -79,13 +79,9 @@ a { color: var(--accent); }
 
 /* ---- Cards ---- */
 .card {
-  background: #13161d; border: 1px solid #1f2330; border-radius: 12px;
-  padding: 22px 26px; margin-bottom: 22px;
-  /* Subtle one-time entrance + a gentle hover "lift" -- small, tasteful
-     motion cues rather than anything flashy, so the page reads as
-     responsive/alive without becoming distracting on a data-dense screen
-     that auto-refreshes every few seconds. animation-fill-mode isn't
-     needed since the keyframe already ends at the resting state. */
+  background: var(--bg-1); border: 1px solid var(--border-1);
+  border-radius: var(--r-md); padding: var(--sp-4); box-shadow: var(--shadow-1);
+  margin-bottom: 22px;
   animation: card-in 0.32s ease-out both;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
@@ -113,6 +109,15 @@ a { color: var(--accent); }
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
   color: #5a6275; margin: 0 0 16px;
 }
+.card > h2, .card > h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-md); font-weight: 600; color: var(--text-1); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-3); }
+.tile {
+  background: var(--bg-1); border: 1px solid var(--border-1); border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+.tile .label { font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.tile .value { font-size: var(--fs-xl); font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tile .delta { font-size: var(--fs-xs); font-weight: 600; margin-left: var(--sp-1); }
 
 /* ---- Banners ---- */
 .banner { padding: 12px 18px; border-radius: 9px; margin-bottom: 22px; font-size: 13.5px; }
