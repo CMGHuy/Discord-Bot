@@ -51,3 +51,19 @@ def test_pooled_max_dd_pct_empty_is_none():
 def test_pooled_max_dd_pct_skips_trades_with_no_r_multiple():
     trades = [_trade("2020-01-01", None), _trade("2020-01-02", None)]
     assert rbr.pooled_max_dd_pct(trades) is None
+
+
+def test_tickers_for_run_uses_named_universe(monkeypatch):
+    import swingbot.core.universe as universe
+
+    def boom():
+        raise AssertionError("load_watchlist should not be called when a universe is given")
+
+    monkeypatch.setattr(rbr, "load_watchlist", boom)
+    monkeypatch.setattr(universe, "universe_symbols", lambda name: ["QQQ", "SPY"])
+    assert rbr._tickers_for_run("etfs") == ["QQQ", "SPY"]
+
+
+def test_tickers_for_run_defaults_to_watchlist(monkeypatch):
+    monkeypatch.setattr(rbr, "load_watchlist", lambda: ["ZZZ", "AAA"])
+    assert rbr._tickers_for_run(None) == ["AAA", "ZZZ"]

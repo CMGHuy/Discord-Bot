@@ -96,11 +96,11 @@ def _scenario_row_stats(agg):
     }
 
 
-def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
+def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None):
     """--scenarios: replay the confluence scan itself (backtest_scenarios)
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
-    tickers = sorted(load_watchlist())
+    tickers = _tickers_for_run(universe)
     frames = {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
@@ -161,6 +161,16 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out):
     print("\nSaved backtest_range_summary.txt")
 
 
+def _tickers_for_run(universe: str | None) -> list:
+    """Ticker set for the scan: a named universe (e.g. 'etfs', Task E80)
+    when given, else the watchlist -- same override seam as
+    backtest_wf._symbols_for_folds/run_folds' tickers= param."""
+    if universe:
+        from swingbot.core.universe import universe_symbols
+        return sorted(universe_symbols(universe))
+    return sorted(load_watchlist())
+
+
 def build_registry_records(summaries, *, source, window, run_date,
                            horizon=None, pass_wr=80.0, min_n=15):
     """Turn pooled per-strategy summaries into validation-registry records.
@@ -204,6 +214,9 @@ def main():
     ap.add_argument("--from", dest="date_from")
     ap.add_argument("--to", dest="date_to")
     ap.add_argument("--strategy", default=None)
+    ap.add_argument("--universe", default=None,
+                    help="scope tickers to a named universe (e.g. 'etfs', Task E80) via "
+                         "swingbot.core.universe.universe_symbols, instead of the watchlist")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--emit-registry", dest="emit_registry", default=None,
                     help="path to validation_registry.json to merge records into")
@@ -256,7 +269,8 @@ def main():
         return
 
     if args.scenarios:
-        run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out)
+        run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out,
+                          universe=args.universe)
         return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
@@ -271,7 +285,7 @@ def main():
     show_runner_cols = args.exit_model == "v2" and args.scale_out
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
-    tickers = sorted(load_watchlist())
+    tickers = _tickers_for_run(args.universe)
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ti, ticker in enumerate(tickers, 1):
