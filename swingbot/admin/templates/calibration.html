@@ -31,7 +31,7 @@
   {% else %}
   <div style="overflow-x:auto;">
   <table>
-    <thead><tr><th>Tier</th><th>N</th><th>Live WR</th><th>Expected band</th><th>Pass</th></tr></thead>
+    <thead><tr><th>Tier</th><th>N</th><th>Live WR</th><th>Expected band<span class="tip-icon" tabindex="0" data-tip="The win-rate range this tier is expected to land in, based on how the quality score was originally calibrated.">?</span></th><th>Pass</th></tr></thead>
     <tbody>
     {% for row in tiers %}
     <tr>
@@ -49,7 +49,9 @@
 </div>
 
 <div class="card">
-  <p class="card-title">Badge drift</p>
+  <p class="card-title">Badge drift
+    <span class="tip-icon" tabindex="0" data-tip="&quot;Decay&quot; = edge decay: a VALIDATED strategy's live win rate has fallen more than 10 points below its out-of-sample win rate, with at least 20 live closed trades to judge it by.">?</span>
+  </p>
   {% if not drift %}
   <div class="empty-state">
     <div class="empty-icon">📉</div>

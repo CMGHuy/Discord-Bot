@@ -38,16 +38,35 @@ def reload_registry() -> None:
 
 def get_badge(source: str, strategy: str, horizon_key: str | None = None) -> Badge:
     """Most-specific match: exact horizon record, else pooled (horizon null),
-    else a default WEAK badge with zero sample."""
+    else a default WEAK badge with zero sample.
+
+    Every live scan-loop plan is attributed source="confluence" (see
+    build_confluence_plan), but the registry only ever records confluence
+    rows pooled under the literal strategy "ALL" -- the per-strategy
+    VALIDATED rows (RSI, Fibonacci, MACD, ...) all live under
+    source="strategy", a path the live scan loop never calls. Matching
+    source+strategy+horizon exactly therefore missed on every real plan and
+    fell straight through to a hardcoded WEAK/n=0 badge, regardless of how
+    well-validated that plan's primary confirming method actually was.
+    `strategy` here is already the plan's real primary confirming method
+    (see primary_strategy_for), so before giving up, check whether that
+    same strategy was independently OOS-validated on its own signal path --
+    that's real evidence about this plan too, not a coincidence."""
     records = load_registry()
 
-    def _find(hz):
+    def _find(src, strat, hz):
         for r in records:
-            if r["source"] == source and r["strategy"] == strategy and r.get("horizon") == hz:
+            if r["source"] == src and r["strategy"] == strat and r.get("horizon") == hz:
                 return r
         return None
 
-    rec = _find(horizon_key) or _find(None)
+    rec = (_find(source, strategy, horizon_key)
+           or _find(source, strategy, None)
+           or (source == "confluence" and (
+               _find("strategy", strategy, horizon_key)
+               or _find("strategy", strategy, None)))
+           or _find(source, "ALL", horizon_key)
+           or _find(source, "ALL", None))
     if rec is None:
         return Badge(status="WEAK", n=0, win_rate=0.0, expectancy_r=0.0)
     return Badge(status=rec["status"], n=rec["n"], win_rate=rec["win_rate"],

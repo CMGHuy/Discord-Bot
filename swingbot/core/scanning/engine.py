@@ -71,6 +71,7 @@ from swingbot.core.notifier import notify_secondary
 from swingbot.core.performance import TradeLog
 from swingbot.core.plan_engine import (build_confluence_plan,
                                        primary_strategy_for, select_tp2)
+from swingbot.core.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
 from swingbot.core.strategy import HORIZONS, MIN_BARS
@@ -1148,6 +1149,19 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 source=plan_v2.source if plan_v2 is not None else None,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
+            if plan_v2 is not None:
+                # Task-review fix: attach_plan_v2() builds the plan and the
+                # scanning loop uses it for the alert/chart/trade-log row above,
+                # but nothing previously persisted it into PlanStore -- the one
+                # store the admin Plans page and the intraday PlanManager
+                # (INTRADAY_MANAGER_V2) both read from. Without this, plans.json
+                # never gained an entry: the Plans page stayed at 0/0/0 forever
+                # and the intraday manager's poll() had nothing to ever act on.
+                try:
+                    PlanStore().add(plan_v2)
+                except Exception:
+                    log.warning("Failed to persist plan_v2 %s to PlanStore",
+                                plan_v2.plan_id, exc_info=True)
         else:
             log.info("%s (%s) already has an open trade -- not logging a duplicate", result.ticker, result.horizon_key)
 

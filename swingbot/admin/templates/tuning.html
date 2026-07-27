@@ -1,8 +1,19 @@
 {# swingbot/admin/templates/tuning.html -- full replacement #}
 {% extends "base.html" %}
 {% block body %}
+<p class="section-help">
+  "Tuning" is a parameter grid-search workbench: pick a strategy, run its parameters through every
+  combination in its tuning grid against a fixed, immutable TRAIN window (never the VALIDATION
+  window that badges on the Strategies page are measured against — that firewall is what keeps
+  those badges honest). A combination "passes" only if it clears win rate ≥80%, positive
+  expectancy, and at least 30 evaluated trades; among passing combinations the one with the
+  highest expectancy is the best candidate. Nothing here is applied automatically — "Propose"
+  just stages a suggested change for a human to review and commit by hand.
+</p>
 <div class="card">
-  <p class="card-title">Current parameters</p>
+  <p class="card-title">Current parameters
+    <span class="tip-icon" tabindex="0" data-tip="What's actually running right now, straight from the code -- not editable from here.">?</span>
+  </p>
   <p class="muted" style="font-size:12.5px;">
     Values are code, changed only via reviewed commits. This page proposes; it never applies.
   </p>
@@ -30,7 +41,9 @@
   </div>
 </div>
 <div class="card">
-  <p class="card-title">Run TRAIN grid</p>
+  <p class="card-title">Run TRAIN grid
+    <span class="tip-icon" tabindex="0" data-tip="Launches scripts/tune_strategy.py as a background job: it re-runs this strategy's backtest across every parameter combination in its tuning grid, TRAIN window only, and reports which combinations would have passed the acceptance bar.">?</span>
+  </p>
   {% if running_job %}
   <div class="card" id="job-progress-card" data-job-id="{{ running_job.id }}" style="margin-top:0;">
     <p class="card-title">Job in progress — <code>{{ running_job.id }}</code></p>
@@ -100,11 +113,21 @@
 </div>
 {% if result %}
 <div class="card">
-  <p class="card-title">Results — {{ result.strategy }} (job {{ job_id_param }})</p>
+  <p class="card-title">Results — {{ result.strategy }} (job {{ job_id_param }})
+    <span class="tip-icon" tabindex="0" data-tip="One row per parameter combination tried in the grid. Highlighted rows passed the acceptance bar (win rate ≥80%, positive expectancy, N≥30) -- of those, prefer the one with the highest expectancy.">?</span>
+  </p>
   <div style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Params</th><th>N</th><th>Win rate</th><th>ExpR</th><th>Excl%</th><th>Pass</th><th>Action</th></tr>
+      <tr>
+        <th>Params</th>
+        <th>N<span class="tip-icon" tabindex="0" data-tip="Number of trades this parameter combination produced in the TRAIN window.">?</span></th>
+        <th>Win rate</th>
+        <th>ExpR<span class="tip-icon" tabindex="0" data-tip="Expectancy in R-multiples -- average return per trade as a multiple of planned risk.">?</span></th>
+        <th>Excl%<span class="tip-icon" tabindex="0" data-tip="Share of candidate signals this parameter combination excluded/filtered out before ever reaching a trade.">?</span></th>
+        <th>Pass<span class="tip-icon" tabindex="0" data-tip="Cleared the acceptance bar: win rate ≥80%, positive expectancy, and at least 30 evaluated trades.">?</span></th>
+        <th>Action</th>
+      </tr>
     </thead>
     <tbody>
     {% for row in result.grid %}
@@ -132,7 +155,9 @@
 </div>
 {% endif %}
 <div class="card">
-  <p class="card-title">Recent jobs</p>
+  <p class="card-title">Recent jobs
+    <span class="tip-icon" tabindex="0" data-tip="History of TRAIN grid runs launched from this page, and links to their saved results.">?</span>
+  </p>
   {% if not recent_jobs %}
   <p class="muted">No tuning jobs have run yet.</p>
   {% else %}
@@ -147,7 +172,9 @@
   {% endif %}
 </div>
 <div class="card">
-  <p class="card-title">Tuning proposals</p>
+  <p class="card-title">Tuning proposals
+    <span class="tip-icon" tabindex="0" data-tip="Parameter changes staged from a passing grid row, shown as current vs. proposed. Nothing here is live -- someone still has to review and commit the change by hand for it to take effect, keeping the TRAIN/VALIDATION firewall intact.">?</span>
+  </p>
   {% if not proposals %}
   <p class="muted">No proposals yet.</p>
   {% else %}

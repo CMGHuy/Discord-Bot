@@ -780,4 +780,46 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .empty-state {
   text-align: center; padding: 40px 20px; color: #5a6275;
 }
+
+/* ---- Tooltips (shared across every page) -----------------------------------
+   CSS-only, no JS: the tip text lives in the data-tip attribute so it reads
+   naturally in template source. Any element can opt in by adding data-tip,
+   but the normal pattern is the small "?" affordance below (.tip-icon) next
+   to a label/header/stat that isn't self-explanatory, so a reader doesn't
+   have to guess or go dig through docs to know what a KPI/chip/column means.
+   tabindex=0 on the icon makes it keyboard-focusable (:focus-visible),
+   matching the :hover trigger, for non-mouse users. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; bottom: calc(100% + 9px);
+  transform: translateX(-50%) translateY(4px);
+  background: #1a1e27; color: #dde1ea; border: 1px solid #2a3040;
+  padding: 8px 10px; border-radius: 7px; font-size: 12px; font-weight: 400;
+  line-height: 1.45; white-space: pre-line; width: max-content; max-width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+  z-index: 80; text-align: left; text-transform: none; letter-spacing: normal;
+}
+[data-tip]::before {
+  content: ""; position: absolute; left: 50%; bottom: 100%;
+  transform: translateX(-50%) translateY(4px);
+  border: 5px solid transparent; border-top-color: #2a3040;
+  opacity: 0; visibility: hidden; transition: opacity .12s ease; z-index: 80;
+}
+[data-tip]:hover::after, [data-tip]:hover::before,
+[data-tip]:focus-visible::after, [data-tip]:focus-visible::before {
+  opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0);
+}
+.tip-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%; background: #262b38; color: #8a92a6;
+  font-size: 10px; font-weight: 700; font-style: normal; margin-left: 5px;
+  cursor: help; vertical-align: middle; flex-shrink: 0; line-height: 1;
+}
+.tip-icon:hover, .tip-icon:focus-visible { color: #dde1ea; background: #323848; outline: none; }
+.section-help {
+  font-size: 12.5px; color: #8a92a6; margin: -8px 0 14px; line-height: 1.5; max-width: 76ch;
+}
 .empty-state .empty-icon { font-size: 32px; opacity: .5; margin-bottom: 8px; }

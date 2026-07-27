@@ -7,6 +7,15 @@
   meaningfully below the OOS-validated figure.
 </div>
 {% endif %}
+<p class="section-help">
+  This page answers "is this strategy's edge still working?" for every confirming method the bot
+  trades. Each was backtested once on a held-out out-of-sample (OOS) window and given a
+  <strong>VALIDATED</strong> badge if it cleared the acceptance bar, or <strong>WEAK</strong> if it
+  didn't — that badge feeds directly into a live plan's quality score and A/B/C tier (see the
+  Performance page's Tier calibration table). The Live columns then track how that strategy is
+  actually doing right now; a "DECAY" chip means live win rate has fallen meaningfully below what
+  OOS testing promised — see the tip on "Δ vs OOS" below for the exact rule.
+</p>
 <div class="card">
   <p class="card-title">Strategy registry
     <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
@@ -18,18 +27,18 @@
     <thead>
       <tr>
         <th>Strategy</th>
-        <th title="Rolling win rate, last 10 closed trades">Rolling WR</th>
-        <th>Badge</th>
-        <th>R:R</th>
-        <th>OOS N</th>
-        <th>OOS WR</th>
-        <th>OOS ExpR</th>
-        <th>Live N</th>
-        <th>Live WR</th>
-        <th>Δ vs OOS</th>
-        <th>Window</th>
-        <th>Run date</th>
-        <th>Gate</th>
+        <th>Rolling WR<span class="tip-icon" tabindex="0" data-tip="Win rate over just the last 10 closed trades for this strategy -- a short-window sanity check, separate from the full Live WR column.">?</span></th>
+        <th>Badge<span class="tip-icon" tabindex="0" data-tip="VALIDATED = this strategy cleared its out-of-sample acceptance bar (win rate/expectancy threshold) in a one-shot backtest. WEAK = it didn't. A live plan only gets full badge-quality points when its primary confirming method is VALIDATED.">?</span></th>
+        <th>R:R<span class="tip-icon" tabindex="0" data-tip="This strategy's override for the entry-to-TP1 risk:reward ratio, if one was tuned/committed for it (see the Tuning page). Falls back to a 0.35 default when not set.">?</span></th>
+        <th>OOS N<span class="tip-icon" tabindex="0" data-tip="Number of trades in the out-of-sample backtest this strategy's badge is based on.">?</span></th>
+        <th>OOS WR<span class="tip-icon" tabindex="0" data-tip="Win rate this strategy achieved in that one-shot out-of-sample backtest -- the number the badge and live comparison are measured against.">?</span></th>
+        <th>OOS ExpR<span class="tip-icon" tabindex="0" data-tip="Expectancy in R-multiples from the same OOS backtest -- average return per trade as a multiple of planned risk.">?</span></th>
+        <th>Live N<span class="tip-icon" tabindex="0" data-tip="Number of closed LIVE trades attributed to this strategy so far.">?</span></th>
+        <th>Live WR<span class="tip-icon" tabindex="0" data-tip="Actual win rate from live closed trades attributed to this strategy.">?</span></th>
+        <th>Δ vs OOS<span class="tip-icon" tabindex="0" data-tip="Live WR minus OOS WR. DECAY is flagged once Live N reaches at least 20 trades AND this delta drops below -10 points -- enough live sample to trust, and a large enough gap to call it decay rather than noise.">?</span></th>
+        <th>Window<span class="tip-icon" tabindex="0" data-tip="The date range of historical data the OOS backtest was run over.">?</span></th>
+        <th>Run date<span class="tip-icon" tabindex="0" data-tip="When this strategy's OOS validation was last run and committed to the registry.">?</span></th>
+        <th>Gate<span class="tip-icon" tabindex="0" data-tip="The entry-confirmation rule this strategy must satisfy to fire a signal at all.">?</span></th>
       </tr>
     </thead>
     <tbody>

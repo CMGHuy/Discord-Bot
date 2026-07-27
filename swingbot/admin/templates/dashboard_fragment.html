@@ -114,22 +114,22 @@
       </div>
     {% endif %}
   </div>
-  <div class="stat-card accent-blue">
+  <div class="stat-card accent-blue" title="Trades currently open (any status: pending trigger, active, or partially closed at TP1) in this dashboard mode's date filter.">
     <div class="stat-label">Open trades</div>
     <div class="stat-value" style="color: #6ea8fe;">{{ stats.open }}</div>
     <div class="stat-sub">currently tracking</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" title="Closed trades that came out ahead, within this dashboard mode's date filter.">
     <div class="stat-label">Wins</div>
     <div class="stat-value" style="color: #6dda9e;">{{ stats.wins }}</div>
     <div class="stat-sub">closed profitable</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" title="Closed trades that lost money, within this dashboard mode's date filter.">
     <div class="stat-label">Losses</div>
     <div class="stat-value" style="color: #da6d6d;">{{ stats.losses }}</div>
     <div class="stat-sub">closed at loss</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" title="Wins ÷ (wins + losses) among closed trades in this filter -- see the Performance page for the full breakdown alongside Profit Factor and Expectancy.">
     <div class="stat-label">Win rate</div>
     <div class="stat-value" style="color: {% if stats.closed > 0 and stats.win_rate >= 50 %}#6dda9e{% elif stats.closed > 0 %}#da6d6d{% else %}#5a6275{% endif %};">
       {{ '%.0f%%'|format(stats.win_rate) if stats.closed > 0 else '—' }}
@@ -171,7 +171,7 @@
     </div>
     <div class="stat-sub">realized</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" title="Average 1-5 confidence level (how many independent methods confirmed the setup) across currently-open trades.">
     <div class="stat-label">Avg open confidence</div>
     <div class="stat-value" style="color: #6ea8fe;">
       {{ '%.1f/5'|format(stats.avg_open_confidence) if stats.avg_open_confidence is not none else '—' }}
@@ -297,8 +297,8 @@
       {# Ticker #}
       <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
         <strong>{{ t.ticker }}</strong>
-        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}">{{ t.tier }}</span>{% endif %}
-        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}">{{ t.badge }}</span>{% endif %}
+        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
+        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ t.badge }}</span>{% endif %}
       </td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
@@ -757,8 +757,8 @@
       </td>
       <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
         <strong>{{ t.ticker }}</strong>
-        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}">{{ t.tier }}</span>{% endif %}
-        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}">{{ t.badge }}</span>{% endif %}
+        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
+        {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ t.badge }}</span>{% endif %}
       </td>
       {%- set _ct_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
       <td title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>

@@ -2,35 +2,49 @@
    /plans/fragment (Task C18, ETag-polled) -- identical markup either way
    so morphdom's diff-patch has something stable to compare against. #}
 <div class="lifecycle-strip">
+  {% set lc_tips = {
+    'PENDING': 'Plan built and posted, but price has not yet reached the entry trigger. Cancelled automatically if it expires or the setup is invalidated first.',
+    'ACTIVE': 'Entry has filled -- position is open and being tracked toward TP1/stop.',
+    'PARTIAL': 'TP1 hit: half the position was closed for a partial win, the remainder rides toward TP2 with its stop moved to break-even.',
+    'CLOSED': 'Fully closed today (win, loss, or scratch) -- see Trade History on the Dashboard for the full log.',
+    'CANCELLED': 'Cancelled today, before ever filling -- either it expired waiting for entry, or the setup was invalidated.',
+  } %}
   {% for status, display in [('PENDING','PENDING'), ('ACTIVE','ACTIVE'), ('PARTIAL','PARTIAL'),
                               ('CLOSED','CLOSED (today)'), ('CANCELLED','CANCELLED (today)')] %}
   <a class="lifecycle-card {{ 'active-filter' if filters.status == status else '' }}"
+     title="{{ lc_tips[status] }}"
      href="{{ url_for('pages.plans_page', status=status, tier=filters.tier, badge=filters.badge, ticker=filters.ticker) }}">
     <span class="lc-count">{{ counts.get(status, 0) }}</span>
     <span class="lc-label">{{ display }}</span>
   </a>
   {% endfor %}
 </div>
+<p class="section-help">
+  A plan moves PENDING → ACTIVE → PARTIAL → CLOSED as price hits its entry trigger, TP1, then TP2/
+  stop (or CANCELLED if it expires/invalidates before filling). PENDING/ACTIVE/PARTIAL counts are
+  all-time; CLOSED/CANCELLED only count today's — click a card to filter the board below by that
+  status.
+</p>
 <form method="get" action="{{ url_for('pages.plans_page') }}"
       style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-  <select name="status" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+  <select name="status" title="Filter the board below to only this lifecycle status." style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
     <option value="">All statuses</option>
     {% for s in ['PENDING','ACTIVE','PARTIAL','CLOSED','CANCELLED'] %}
     <option value="{{ s }}" {{ 'selected' if filters.status == s else '' }}>{{ s }}</option>
     {% endfor %}
   </select>
-  <select name="tier" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+  <select name="tier" title="Filter to plans graded this quality tier (A ≥75, B 50-74, C below 50)." style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
     <option value="">All tiers</option>
     {% for t in ['A','B','C'] %}
     <option value="{{ t }}" {{ 'selected' if filters.tier == t else '' }}>Tier {{ t }}</option>
     {% endfor %}
   </select>
-  <select name="badge" style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
+  <select name="badge" title="Filter to plans whose primary strategy is VALIDATED (cleared OOS backtest) or WEAK (didn't)." style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:5px 9px;font-size:12.5px;">
     <option value="">All badges</option>
     <option value="VALIDATED" {{ 'selected' if filters.badge == 'VALIDATED' else '' }}>VALIDATED</option>
     <option value="WEAK" {{ 'selected' if filters.badge == 'WEAK' else '' }}>WEAK</option>
   </select>
-  <input type="text" name="ticker" value="{{ filters.ticker }}" placeholder="Ticker…"
+  <input type="text" name="ticker" value="{{ filters.ticker }}" placeholder="Ticker…" title="Filter to one ticker."
          style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;padding:5px 10px;font-size:12.5px;width:130px;">
   <button type="submit" class="secondary small">Filter</button>
   <a href="{{ url_for('pages.plans_page') }}" class="secondary small btn" style="text-decoration:none;">✕ Clear</a>
@@ -54,18 +68,18 @@
   <table id="plans-table">
     <thead>
     <tr>
-      <th>Tier / Badge</th>
+      <th title="Quality tier (A/B/C, from the plan's quality score) and validation badge (VALIDATED/WEAK, from the primary strategy's OOS backtest) -- see the Strategies page.">Tier / Badge</th>
       <th>Ticker</th>
-      <th>Strategy</th>
-      <th>Dir</th>
-      <th>Status</th>
+      <th title="The primary confirming method behind this plan's entry.">Strategy</th>
+      <th title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir</th>
+      <th title="Where this plan is in its PENDING → ACTIVE → PARTIAL → CLOSED/CANCELLED lifecycle.">Status</th>
       <th title="Composite ranking score from analytics.rank.rank_plans">Follow score</th>
-      <th>Entry / Trigger</th>
-      <th>SL</th>
-      <th>TP1</th>
-      <th>TP2</th>
-      <th>Age</th>
-      <th>Quality</th>
+      <th title="Fill price if already active, or the stop-entry trigger price still being waited on.">Entry / Trigger</th>
+      <th title="Stop-loss price.">SL</th>
+      <th title="First take-profit target -- half the position closes here.">TP1</th>
+      <th title="Second take-profit target for the runner (remainder after TP1), if this plan has one.">TP2</th>
+      <th title="How long ago this plan was created.">Age</th>
+      <th title="Quality score (0-100) this plan was graded at, driving its A/B/C tier.">Quality</th>
       <th>Action</th>
     </tr>
     </thead>

@@ -6,17 +6,28 @@
 <script id="calibration-chart-data" type="application/json">{{ calibration_chart_json | safe }}</script>
 
 <div class="chart-card">
-  <div class="chart-title">📐 Score deciles — realized win rate vs 80% target</div>
+  <div class="chart-title">📐 Score deciles — realized win rate vs 80% target
+    <span class="tip-icon" tabindex="0" data-tip="Every closed trade's quality score (0-100) is bucketed into deciles. If scoring is well-calibrated, higher-decile trades should show a higher realized win rate -- this chart is how you check that the score actually means something, rather than just trusting it.">?</span>
+  </div>
   <div class="chart-wrap" style="height:200px;">
     <canvas id="chart-calibration-deciles"></canvas>
   </div>
 </div>
 
 <div class="card">
-  <p class="card-title">Tier calibration</p>
+  <p class="card-title">Tier calibration
+    <span class="tip-icon" tabindex="0" data-tip="Every plan is graded A (score ≥75), B (50-74), or C (below 50) at the moment it's built. This table checks whether that grading holds up: does tier A actually win more often live than tier C? &quot;Pass&quot; means this tier's live win rate falls inside the win-rate band that tier is supposed to deliver.">?</span>
+  </p>
+  <p class="section-help">If A/B rows stay empty or thin (N small), it usually means too few trades have closed yet at that tier -- not that the tiering is broken. See the Strategies page for why a strategy's badge (VALIDATED vs WEAK) may be dragging its tier down.</p>
   <div style="overflow-x:auto;">
   <table>
-    <thead><tr><th>Tier</th><th>N</th><th>Live WR</th><th>Expected band</th><th>Pass</th></tr></thead>
+    <thead><tr>
+      <th>Tier</th>
+      <th>N</th>
+      <th>Live WR</th>
+      <th>Expected band<span class="tip-icon" tabindex="0" data-tip="The win-rate range this tier is expected to land in, based on how the quality score was originally calibrated.">?</span></th>
+      <th>Pass</th>
+    </tr></thead>
     <tbody>
     {% for row in tiers %}
     <tr>
@@ -33,7 +44,10 @@
 </div>
 
 <div class="card">
-  <p class="card-title">Badge drift</p>
+  <p class="card-title">Badge drift
+    <span class="tip-icon" tabindex="0" data-tip="&quot;Decay&quot; = edge decay. A strategy earns a VALIDATED badge from a historical out-of-sample backtest with a committed win rate (OOS WR). This table compares that to how the strategy is ACTUALLY performing live right now (Live WR). A DECAY flag means live performance has fallen meaningfully below what was promised -- an early warning that this strategy's edge may no longer hold in current market conditions.">?</span>
+  </p>
+  <p class="section-help">Flagged only once a strategy has at least 20 closed live trades (fewer than that is too noisy to judge) AND live win rate is more than 10 percentage points below its OOS win rate. See the Strategies page for the full per-strategy breakdown.</p>
   <div style="overflow-x:auto;">
   <table>
     <thead><tr><th>Strategy</th><th>Live WR</th><th>OOS WR</th><th>Δ</th><th>Decayed</th></tr></thead>
@@ -417,14 +431,18 @@
 
 {# ── Charts (all populated by JS) ────────────────────────────────────────── #}
 <div class="chart-card" id="balance-card" style="display:none;">
-  <div class="chart-title">🏦 Account balance over time <span class="muted" style="font-size:11px; font-weight:400;">(real currency, not %)</span></div>
+  <div class="chart-title">🏦 Account balance over time <span class="muted" style="font-size:11px; font-weight:400;">(real currency, not %)</span>
+    <span class="tip-icon" tabindex="0" data-tip="The paper-trading account balance over time, in currency units rather than %. Every dip is a real closed loss; every step up is a closed win being banked.">?</span>
+  </div>
   <div class="chart-wrap" style="height:200px;">
     <canvas id="chart-balance"></canvas>
   </div>
 </div>
 
 <div class="chart-card" id="activity-card" style="display:none;">
-  <div class="chart-title">📅 Daily Activity — wins &amp; losses per day</div>
+  <div class="chart-title">📅 Daily Activity — wins &amp; losses per day
+    <span class="tip-icon" tabindex="0" data-tip="How many trades closed as a win vs. a loss on each calendar day -- a quick read on how active and how streaky the bot has been recently.">?</span>
+  </div>
   <div class="chart-wrap" style="height:160px;">
     <canvas id="chart-activity"></canvas>
   </div>
@@ -432,13 +450,17 @@
 
 <div class="stats-two-col" id="equity-row">
   <div class="chart-card" style="margin-top:0;" id="equity-card">
-    <div class="chart-title">📈 Equity curve vs SPY benchmark</div>
+    <div class="chart-title">📈 Equity curve vs SPY benchmark
+      <span class="tip-icon" tabindex="0" data-tip="Account growth (%) plotted against SPY's own return over the same dates -- is this strategy actually beating just holding the S&amp;P 500 index?">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-equity"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="drawdown-card">
-    <div class="chart-title">🌊 Drawdown (% below peak)</div>
+    <div class="chart-title">🌊 Drawdown (% below peak)
+      <span class="tip-icon" tabindex="0" data-tip="How far the account balance sits below its own all-time high, at every point in time. Deeper/longer dips mean a harder strategy to stick with, even if it recovers eventually.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-drawdown"></canvas>
     </div>
@@ -446,14 +468,18 @@
 </div>
 
 <div class="chart-card" id="rolling-card" style="display:none;">
-  <div class="chart-title">🔄 Rolling returns (30-day &amp; 90-day cumulative %)</div>
+  <div class="chart-title">🔄 Rolling returns (30-day &amp; 90-day cumulative %)
+    <span class="tip-icon" tabindex="0" data-tip="Account return over the trailing 30 and 90 days, recalculated every day -- smooths out single-trade noise so you can see whether recent momentum is up or down.">?</span>
+  </div>
   <div class="chart-wrap" style="height:180px;">
     <canvas id="chart-rolling"></canvas>
   </div>
 </div>
 
 <div id="heatmap-card" class="chart-card" style="display:none;">
-  <div class="chart-title">🗓 Monthly returns heatmap <span class="muted" style="font-size:11px; font-weight:400;">(click a month to see the day-by-day calendar)</span></div>
+  <div class="chart-title">🗓 Monthly returns heatmap <span class="muted" style="font-size:11px; font-weight:400;">(click a month to see the day-by-day calendar)</span>
+    <span class="tip-icon" tabindex="0" data-tip="Each cell is one month's account return (%) -- greener is better, redder is worse. Click any month to drill into its day-by-day calendar.">?</span>
+  </div>
   <div id="heatmap-container"></div>
 </div>
 
@@ -470,13 +496,17 @@
 
 <div class="stats-two-col" id="hist-row">
   <div class="chart-card" style="margin-top:0;" id="pnl-hist-card">
-    <div class="chart-title">📊 P&amp;L distribution per trade (%)</div>
+    <div class="chart-title">📊 P&amp;L distribution per trade (%)
+      <span class="tip-icon" tabindex="0" data-tip="A histogram of every closed trade's % gain/loss -- shows the shape of outcomes: a healthy edge usually has a cluster of small losses and a tail of bigger wins.">?</span>
+    </div>
     <div class="chart-wrap" style="height:200px;">
       <canvas id="chart-pnl-hist"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="dur-hist-card">
-    <div class="chart-title">⏱ Holding period distribution (days)</div>
+    <div class="chart-title">⏱ Holding period distribution (days)
+      <span class="tip-icon" tabindex="0" data-tip="How many calendar days closed trades stayed open, bucketed. Helps spot whether the bot is mostly quick swing trades or long holds relative to each horizon's own expected window.">?</span>
+    </div>
     <div class="chart-wrap" style="height:200px;">
       <canvas id="chart-dur-hist"></canvas>
     </div>
@@ -485,43 +515,57 @@
 
 <div class="pie-panel-row" id="pie-row">
   <div class="chart-card" style="margin-top:0;" id="winloss-pie-card">
-    <div class="chart-title">🥧 Win / Loss split</div>
+    <div class="chart-title">🥧 Win / Loss split
+      <span class="tip-icon" tabindex="0" data-tip="Share of closed trades that were wins vs. losses -- the raw count behind the Win Rate KPI above.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-winloss-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="direction-pie-card">
-    <div class="chart-title">🥧 Long / Short split</div>
+    <div class="chart-title">🥧 Long / Short split
+      <span class="tip-icon" tabindex="0" data-tip="Share of trades taken on the bullish (long) side vs. the bearish (short) side.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-direction-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="strategy-pie-card">
-    <div class="chart-title">🧩 Trades by strategy</div>
+    <div class="chart-title">🧩 Trades by strategy
+      <span class="tip-icon" tabindex="0" data-tip="Which confirming method (RSI, Fibonacci, VWAP, etc.) was primarily behind each trade's entry -- see the Strategies page for how each one is validated.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-strategy-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="confidence-pie-card">
-    <div class="chart-title">🔬 Trades by confidence level</div>
+    <div class="chart-title">🔬 Trades by confidence level
+      <span class="tip-icon" tabindex="0" data-tip="How many trades landed at each 1-5 confidence level (how many independent signals confirmed the setup before it was allowed to alert).">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-confidence-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="ticker-pie-card">
-    <div class="chart-title">📈 Trades by ticker</div>
+    <div class="chart-title">📈 Trades by ticker
+      <span class="tip-icon" tabindex="0" data-tip="Which watchlist tickers generated the most trades -- useful for spotting whether performance is broad-based or riding on a handful of names.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-ticker-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="holding-pie-card">
-    <div class="chart-title">⏱ Holding period split</div>
+    <div class="chart-title">⏱ Holding period split
+      <span class="tip-icon" tabindex="0" data-tip="Trades bucketed into short/medium/long holding periods, as a share of the whole -- a coarser view of the Holding period distribution chart above.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-holding-pie"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="horizon-pie-card">
-    <div class="chart-title">🎯 Trades by horizon</div>
+    <div class="chart-title">🎯 Trades by horizon
+      <span class="tip-icon" tabindex="0" data-tip="Which swing horizon (2w through 9m -- see HORIZONS in strategy_types.py) each trade targeted. Different horizons carry different expected holding times and target distances.">?</span>
+    </div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="chart-horizon-pie"></canvas>
     </div>
@@ -530,13 +574,17 @@
 
 <div class="stats-two-col" id="extra-row">
   <div class="chart-card" style="margin-top:0;" id="r-multiple-card">
-    <div class="chart-title">📐 R-multiple distribution (P&amp;L ÷ planned risk)</div>
+    <div class="chart-title">📐 R-multiple distribution (P&amp;L ÷ planned risk)
+      <span class="tip-icon" tabindex="0" data-tip="Every trade's outcome expressed as a multiple of its own planned risk (1R = the distance from entry to stop-loss). A +2R trade made twice what it risked; a -1R trade hit its full stop. This normalizes wins/losses across trades with very different % moves.">?</span>
+    </div>
     <div class="chart-wrap" style="height:200px;">
       <canvas id="chart-r-multiple"></canvas>
     </div>
   </div>
   <div class="chart-card" style="margin-top:0;" id="confidence-card">
-    <div class="chart-title">🔬 Win rate by confidence level</div>
+    <div class="chart-title">🔬 Win rate by confidence level
+      <span class="tip-icon" tabindex="0" data-tip="Realized win rate broken out by the 1-5 confidence level assigned at alert time. If confidence is well-calibrated, Level 5 should win more often than Level 1 -- same idea as the Tier calibration table, but by confidence instead of quality tier.">?</span>
+    </div>
     <div class="chart-wrap" style="height:200px;">
       <canvas id="chart-confidence"></canvas>
     </div>
@@ -544,7 +592,9 @@
 </div>
 
 <div class="chart-card" id="cum-pnl-card" style="display:none;">
-  <div class="chart-title">💰 Cumulative P&amp;L by strategy</div>
+  <div class="chart-title">💰 Cumulative P&amp;L by strategy
+    <span class="tip-icon" tabindex="0" data-tip="Running total % P&amp;L contributed by each strategy over time -- which strategies are actually driving the account's growth (or drag).">?</span>
+  </div>
   <div class="chart-wrap" style="height:220px;">
     <canvas id="chart-cum-pnl-strategy"></canvas>
   </div>
@@ -555,17 +605,23 @@
    refresh them without a page reload) ─────────────────────────────────── #}
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; margin-top:16px;" class="detail-two-col">
   <div class="card" style="margin-top:0;">
-    <p class="card-title">📈 By Stock</p>
+    <p class="card-title">📈 By Stock
+      <span class="tip-icon" tabindex="0" data-tip="Win rate and P&amp;L broken out per ticker -- which watchlist names have actually paid off.">?</span>
+    </p>
     <div id="by-ticker-table"></div>
   </div>
   <div class="card" style="margin-top:0;">
-    <p class="card-title">🎯 By Strategy</p>
+    <p class="card-title">🎯 By Strategy
+      <span class="tip-icon" tabindex="0" data-tip="Win rate and P&amp;L broken out per strategy -- the live-trading counterpart to the OOS numbers on the Strategies page.">?</span>
+    </p>
     <div id="by-strategy-table"></div>
   </div>
 </div>
 
 <div class="card">
-  <p class="card-title">📅 By Day of Week <span class="muted" style="font-size:11px; font-weight:400;">(trade closed, Berlin time)</span></p>
+  <p class="card-title">📅 By Day of Week <span class="muted" style="font-size:11px; font-weight:400;">(trade closed, Berlin time)</span>
+    <span class="tip-icon" tabindex="0" data-tip="Win rate by the weekday a trade closed on -- can reveal whether certain days (e.g. Monday gaps, Friday closes) are systematically better or worse for this strategy mix.">?</span>
+  </p>
   <div id="dow-bars" style="display:flex; gap:24px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px;"></div>
   <div id="by-dow-table"></div>
 </div>
@@ -573,7 +629,9 @@
 {# ── Raw trade log ────────────────────────────────────────────────────────── #}
 <div class="card" style="margin-top:16px;">
   <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-    <p class="card-title" style="margin:0;">📋 Trade Log</p>
+    <p class="card-title" style="margin:0;">📋 Trade Log
+      <span class="tip-icon" tabindex="0" data-tip="One row per paper trade in the selected date range, open and closed. Click a column header to sort; use the filter box to narrow by ticker or strategy.">?</span>
+    </p>
     <input id="tl-search" type="text" placeholder="Filter ticker / strategy…"
            style="background:#0d0f14; border:1px solid #1f2330; border-radius:5px;
                   color:#dde1ea; padding:5px 10px; font-size:12px; width:200px;">
@@ -590,10 +648,10 @@
           <th data-col="5">Days ↕</th>
           <th data-col="6">Entry ↕</th>
           <th data-col="7">Exit ↕</th>
-          <th data-col="8">P&amp;L % ↕</th>
-          <th data-col="9">Gain/Loss ↕</th>
-          <th data-col="10">Conf ↕</th>
-          <th data-col="11">Result ↕</th>
+          <th data-col="8">P&amp;L % ↕<span class="tip-icon" tabindex="0" data-tip="% change from entry to exit price.">?</span></th>
+          <th data-col="9">Gain/Loss ↕<span class="tip-icon" tabindex="0" data-tip="Realized P&amp;L in account currency for this trade's sized position (see the Sizing math box on its trade detail page).">?</span></th>
+          <th data-col="10">Conf ↕<span class="tip-icon" tabindex="0" data-tip="Confidence level (1-5) assigned at alert time, from how many independent methods confirmed the setup.">?</span></th>
+          <th data-col="11">Result ↕<span class="tip-icon" tabindex="0" data-tip="Open, win, loss, or scratch (closed near breakeven).">?</span></th>
         </tr>
       </thead>
       <tbody id="trade-log-body"></tbody>
@@ -1044,33 +1102,53 @@ const spyDates = Object.keys(spyCum).sort();
 const spyLast  = spyDates.length ? spyCum[spyDates[spyDates.length-1]] : null;
 
 /* ── KPI cards ──────────────────────────────────────────────────────────── */
-function kpi(val, label, cls='', wide=false) {
+function kpi(val, label, cls='', wide=false, tip='') {
+  const tipHtml = tip ? `<span class="tip-icon" tabindex="0" data-tip='${tip}'>?</span>` : '';
   return `<div class="kpi-card${wide ? ' kpi-card-wide' : ''}">
     <div class="kpi-val ${cls}">${val}</div>
-    <div class="kpi-lbl">${label}</div>
+    <div class="kpi-lbl">${label}${tipHtml}</div>
   </div>`;
 }
 
 const kpiHtml = [
-  kpi(raw.account_balance != null ? raw.account_balance.toLocaleString(undefined,{maximumFractionDigits:2}) : '—', 'Account Balance', '', true),
-  kpi(totalTrades,              'Trades'),
-  kpi(wins.length,              'Wins',        'up'),
-  kpi(losses.length,            'Losses',      'down'),
-  kpi(winRate.toFixed(1)+'%',   'Win Rate',    winRate>=55?'up':winRate>=40?'warn':'down'),
-  kpi(fmtP(avgWin),             'Avg Win',     'up'),
-  kpi(fmtP(avgLoss),            'Avg Loss',    'down'),
-  kpi(fmtPF(profitFactor),      'Profit Factor', profitFactor!=null&&profitFactor>=1.5?'up':profitFactor!=null&&profitFactor>=1?'warn':'down'),
-  kpi(fmtP(expectancy),         'Expectancy',  sign(expectancy)),
-  kpi(fmtP(totalReturn),        'Total Return',sign(totalReturn)),
-  kpi(fmtP(annReturn),          'Ann. Return', sign(annReturn)),
-  kpi(sharpe  !=null?fmt2(sharpe) :'—', 'Sharpe',  sharpe !=null&&sharpe >=1?'up':sharpe !=null&&sharpe >=0?'warn':'down'),
-  kpi(sortino !=null?fmt2(sortino):'—', 'Sortino', sortino!=null&&sortino>=1?'up':sortino!=null&&sortino>=0?'warn':'down'),
-  kpi(maxDD.toFixed(1)+'%',     'Max Drawdown','down'),
-  kpi(calmar  !=null?fmt2(calmar) :'—', 'Calmar',  calmar !=null&&calmar >=1?'up':calmar !=null&&calmar >=0?'warn':'down'),
-  kpi(volatility.toFixed(1)+'%','Volatility (ann)'),
-  kpi(avgHold !=null?formatHoldingDuration(avgHold):'—','Avg Hold'),
-  kpi(fmt1(tradesPerMo)+'/mo',  'Trades/Month'),
-  kpi(fmt1(pctInMarket)+'%',    '% In Market'),
+  kpi(raw.account_balance != null ? raw.account_balance.toLocaleString(undefined,{maximumFractionDigits:2}) : '—', 'Account Balance', '', true,
+      'Current paper-trading account balance (starting balance plus every closed trade P&amp;L). This is simulated money -- the bot never places real orders.'),
+  kpi(totalTrades,              'Trades', '', false,
+      'Total number of trades in this date range, open and closed combined.'),
+  kpi(wins.length,              'Wins',        'up', false,
+      'Closed trades that came out ahead (a tp1/tp2 fill or any exit with a positive R-multiple).'),
+  kpi(losses.length,            'Losses',      'down', false,
+      'Closed trades that lost money (stopped out below entry, or any exit with a negative R-multiple).'),
+  kpi(winRate.toFixed(1)+'%',   'Win Rate',    winRate>=55?'up':winRate>=40?'warn':'down', false,
+      'Wins ÷ (wins + losses) among CLOSED trades. Green ≥55%, amber ≥40%, red below -- but win rate alone does not tell you if a strategy makes money: see Profit Factor and Expectancy too.'),
+  kpi(fmtP(avgWin),             'Avg Win',     'up', false,
+      'Average % gain across winning trades only.'),
+  kpi(fmtP(avgLoss),            'Avg Loss',    'down', false,
+      'Average % loss across losing trades only.'),
+  kpi(fmtPF(profitFactor),      'Profit Factor', profitFactor!=null&&profitFactor>=1.5?'up':profitFactor!=null&&profitFactor>=1?'warn':'down', false,
+      'Gross profit ÷ gross loss. Above 1.0 means the winners outweigh the losers in total dollars, regardless of win rate. Below 1.0 means this is losing money overall even if win rate looks fine.'),
+  kpi(fmtP(expectancy),         'Expectancy',  sign(expectancy), false,
+      'Average % return you would expect per trade, long-run, given this win rate and average win/loss size. The single number that answers &quot;does this edge actually pay?&quot;'),
+  kpi(fmtP(totalReturn),        'Total Return',sign(totalReturn), false,
+      'Cumulative % account growth over the whole date range shown.'),
+  kpi(fmtP(annReturn),          'Ann. Return', sign(annReturn), false,
+      'Total return normalized to a 12-month pace, so periods of different lengths are comparable.'),
+  kpi(sharpe  !=null?fmt2(sharpe) :'—', 'Sharpe',  sharpe !=null&&sharpe >=1?'up':sharpe !=null&&sharpe >=0?'warn':'down', false,
+      'Return per unit of total volatility (ups AND downs). Above 1.0 is generally considered decent for a trading strategy; higher is smoother/better risk-adjusted growth.'),
+  kpi(sortino !=null?fmt2(sortino):'—', 'Sortino', sortino!=null&&sortino>=1?'up':sortino!=null&&sortino>=0?'warn':'down', false,
+      'Like Sharpe, but only penalizes downside volatility -- a strategy with big up-swings and small down-swings scores better here than on Sharpe alone.'),
+  kpi(maxDD.toFixed(1)+'%',     'Max Drawdown','down', false,
+      'The largest peak-to-trough drop in account balance over this range. The worst-case pain you would have sat through holding this strategy.'),
+  kpi(calmar  !=null?fmt2(calmar) :'—', 'Calmar',  calmar !=null&&calmar >=1?'up':calmar !=null&&calmar >=0?'warn':'down', false,
+      'Annualized return ÷ Max Drawdown. Rewards strategies that grow the account without deep, painful dips along the way.'),
+  kpi(volatility.toFixed(1)+'%','Volatility (ann)', '', false,
+      'Annualized standard deviation of returns -- how much the account balance swings around its own average, regardless of direction.'),
+  kpi(avgHold !=null?formatHoldingDuration(avgHold):'—','Avg Hold', '', false,
+      'Average time a trade stayed open from entry to exit, across closed trades.'),
+  kpi(fmt1(tradesPerMo)+'/mo',  'Trades/Month', '', false,
+      'Average number of new trades opened per month in this range -- a sense of how active the bot has been.'),
+  kpi(fmt1(pctInMarket)+'%',    '% In Market', '', false,
+      'The % of days in this range with at least one open position. Low numbers mean capital sat in cash most of the time.'),
 ].join('');
 $('kpi-strip').innerHTML = kpiHtml;
 
