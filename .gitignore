@@ -11,6 +11,7 @@ scan_telemetry.jsonl
 docs/superpowers/results/_quarterly_wf_result.json
 .env
 .env.bak
+data/admin_session_secret
 __pycache__/
 exports/
 market_data/

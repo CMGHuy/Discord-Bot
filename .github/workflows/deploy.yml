@@ -213,7 +213,8 @@ jobs:
   #   - Dockerfile or requirements.txt breakage that a plain `pip install`
   #     in the earlier jobs wouldn't catch (e.g. system-level deps).
   #   - admin_ui.py failing to bind / Flask crashing on startup.
-  #   - Auth gate regression (unauthenticated request must return 401).
+  #   - Auth gate regression (unauthenticated browser request must redirect
+  #     to /login, not serve the dashboard; wrong credentials still 401).
   #   - Any route returning 5xx instead of 200.
   container-healthcheck:
     needs: [sanity-check, test]
@@ -303,14 +304,38 @@ jobs:
           docker logs swing-bot-admin-ci
           exit 1
 
-      - name: Auth gate — unauthenticated request must return 401
+      - name: Auth gate — unauthenticated browser request must redirect to /login
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234/)
-          if [ "$STATUS" != "401" ]; then
-            echo "FAIL: expected HTTP 401 without credentials, got HTTP $STATUS"
+          RESP=$(curl -s -D - -o /dev/null http://localhost:1234/)
+          STATUS=$(echo "$RESP" | head -1 | grep -oE "[0-9]{3}")
+          if [ "$STATUS" != "302" ]; then
+            echo "FAIL: expected HTTP 302 (redirect to /login) without credentials, got HTTP $STATUS"
             exit 1
           fi
-          echo "OK: auth gate returns 401"
+          LOCATION=$(echo "$RESP" | grep -i "^location:" | tr -d "\r" | awk '{print $2}')
+          if ! echo "$LOCATION" | grep -q "/login"; then
+            echo "FAIL: expected redirect Location to contain /login, got: '$LOCATION'"
+            exit 1
+          fi
+          echo "OK: unauthenticated request redirected to $LOCATION"
+
+      - name: Auth gate — /login page itself must be reachable without credentials
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234/login)
+          if [ "$STATUS" != "200" ]; then
+            echo "FAIL: expected HTTP 200 for /login without credentials, got HTTP $STATUS"
+            exit 1
+          fi
+          echo "OK: /login reachable"
+
+      - name: Auth gate — wrong Basic Auth credentials must still return 401
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u "ci:wrong-password" http://localhost:1234/)
+          if [ "$STATUS" != "401" ]; then
+            echo "FAIL: expected HTTP 401 with wrong Basic Auth credentials, got HTTP $STATUS"
+            exit 1
+          fi
+          echo "OK: wrong credentials rejected with 401"
 
       - name: Route smoke test — all key pages must return 200 with valid credentials
         run: |
