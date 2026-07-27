@@ -23,7 +23,7 @@ entry that feeds both the env parser and the admin UI's Settings page).
 
 - **NEVER read a plan file whole** — `cockpit-v3.md` is 662 KB, `edge-engine-v4.md`
   358 KB. Pull one task instead: `/task-brief E53` or
-  `grep -n "^### Task E53" -A 120 <plan>`. `gatekeeper-v6` exists only as
+  `grep -n "^### Task E53" -A 120 <plan>`. `gatekeeper-v7` exists only as
   `_0-index.md` + `_1..._11` parts (the 822 KB monolith was deleted; recover it
   from git history if needed). `grep -c "^### Task"` / `grep -n "^# Phase"` to orient.
 - **Grep respects the root `.ignore` file (hides `.claude/worktrees/`,
@@ -45,7 +45,7 @@ hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
 + task count, last/next task, git HEAD and dirty files, live worktrees, and any
 in-progress multi-hour backtest. Completed plans: unified-plan-engine-v2,
 strategy-winrate-redesign. On disk but not current focus: cockpit-v3,
-gatekeeper-v6, llm-advisor-v5, admin-ui-tradingview-redesign-v7.
+gatekeeper-v7, llm-advisor-v5, admin-ui-tradingview-redesign-v6.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
 preflights this repo's documented traps. `/gate` is the pre-commit verification
