@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** —
-> - **Next:** Task U1
+> - **Completed:** U1
+> - **Next:** Task U2
 
 ## Global Constraints
 
@@ -52,7 +52,7 @@ tests/test_chart_theme.py                           NEW  theme sync + render smo
 
 **Interfaces — Produces:** pytest fixture `client` (authed Flask test client) that every later admin test imports from this module.
 
-- [ ] **Step 1: Write the harness + first test**
+- [x] **Step 1: Write the harness + first test**
 
 ```python
 # tests/test_admin_pages.py
@@ -87,8 +87,8 @@ def test_page_renders(client, path):
     assert resp.status_code == 200, f"{path} -> {resp.status_code}"
 ```
 
-- [ ] **Step 2: Run** `python -m pytest tests/test_admin_pages.py -v`. If a 401 comes back, read `swingbot/admin/app.py`'s `require_auth` to see where it reads credentials (module global vs `config.X` at call time) and adjust the monkeypatch target so the fixture authenticates — the fixture, not the app, is what changes. Expected: 5 PASS.
-- [ ] **Step 3: Commit** `test: admin page render smoke harness`
+- [x] **Step 2: Run** `python -m pytest tests/test_admin_pages.py -v`. If a 401 comes back, read `swingbot/admin/app.py`'s `require_auth` to see where it reads credentials (module global vs `config.X` at call time) and adjust the monkeypatch target so the fixture authenticates — the fixture, not the app, is what changes. Expected: 5 PASS.
+- [x] **Step 3: Commit** `test: admin page render smoke harness`
 
 ### Task U2: Self-host Inter, drop the Google Fonts CDN
 
