@@ -655,6 +655,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .detail-two-col { grid-template-columns: 1fr !important; }
 }
 
+/* ---- Trade detail top-level layout (Task U16): chart area (flexible) +
+   facts card (fixed 320px) ---- */
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-4); }
+@media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }
+
 /* ==========================================================================
    RESPONSIVE LAYOUT
    Breakpoints:

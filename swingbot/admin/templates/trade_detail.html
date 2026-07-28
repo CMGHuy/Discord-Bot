@@ -2,24 +2,62 @@
 {% block body %}
 <a href="{{ url_for('index') }}" class="back-link">&#8592; Back to dashboard</a>
 
-<div class="card" style="margin-top: 16px; margin-bottom: 18px;">
-  <p class="card-title" style="display:flex; align-items:center; gap:8px;">
-    Visualization
-    <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;">
-      {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
-    </span>
-  </p>
-  <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">
-    <div class="chart-loading" id="chart-loading">
-      <div class="chart-spinner"></div>
-      <span>Generating chart for {{ t.ticker }}…</span>
+{%- set pnl_amt = t.get('realized_pnl_amount') -%}
+<div class="detail-grid" style="margin-top: 16px; margin-bottom: 18px;">
+  <div class="card" style="margin-top: 0;">
+    <p class="card-title" style="display:flex; align-items:center; gap:8px;">
+      Visualization
+      <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;">
+        {{ '&#128994; LONG (buy)' if is_bull else '&#128308; SHORT (sell)' }} &mdash; {{ t.ticker }}
+      </span>
+    </p>
+    <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">
+      <div class="chart-loading" id="chart-loading">
+        <div class="chart-spinner"></div>
+        <span>Generating chart for {{ t.ticker }}…</span>
+      </div>
+      <img id="chart-img" class="chart-img"
+           src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
+           alt="Chart for {{ t.ticker }}"
+           style="display:none; width:100%; border-radius: var(--r-md); border: 1px solid var(--border-1);"
+           onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
+           onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
     </div>
-    <img id="chart-img"
-         src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
-         alt="Chart for {{ t.ticker }}"
-         style="display:none;"
-         onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
-         onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
+  </div>
+
+  <div class="card" style="margin-top: 0;">
+    <p class="card-title">Trade facts</p>
+    <div class="row" style="gap:6px; margin-bottom:14px;">
+      <span class="pill" title="{{ t.strategy }} swing horizon">{{ t.strategy }} ({{ t.horizon_key }})</span>
+      {% if t.get('badge') %}
+      <span class="pill {{ 'validated' if t.badge == 'VALIDATED' else 'weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %}">{{ '&#9989; VALIDATED' if t.badge == 'VALIDATED' else '&#9888;&#65039; WEAK' }}</span>
+      {% endif %}
+      <span class="pill" style="{% if t.status == 'win' %}color:#6dda9e;{% elif t.status == 'loss' %}color:#da6d6d;{% endif %} font-weight:700;">
+        {%- if t.status == 'win' -%}WIN{%- elif t.status == 'loss' -%}LOSS{%- else -%}{{ t.status | upper }}{%- endif -%}
+      </span>
+    </div>
+
+    <table class="kv">
+      <tr><td>Entry</td><td class="num" style="color:#6ea8fe;font-weight:600;">{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
+      <tr><td>Stop loss</td><td class="num" style="color:#da6d6d;">{{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
+      <tr><td>{{ level_word }} 1 (Target)</td><td class="num" style="color:#6dda9e;">{{ cur }}{{ "%.2f"|format(t.take_profit) }}</td></tr>
+      {% if t.target2 %}
+      <tr><td>{{ level_word }} 2 (Stretch)</td><td class="num">{{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
+      {% endif %}
+      {% if t.risk_reward_ratio %}
+      <tr><td>Reward:Risk</td><td class="num">{{ t.risk_reward_ratio }}:1</td></tr>
+      {% endif %}
+      {% if t.status in ('win', 'loss') and pnl_amt is not none %}
+      <tr><td>Realized</td><td class="num {{ 'pos' if pnl_amt >= 0 else 'neg' }}" style="font-weight:600;">{{ '%+.2f'|format(pnl_amt) }} {{ cur }}</td></tr>
+      {% endif %}
+    </table>
+
+    {% if t.status == 'open' %}
+    <form method="post" action="{{ url_for('close_trade', trade_id=t.id) }}" style="margin-top:16px;"
+          onsubmit="return confirm('Mark {{ t.ticker }} trade as manually closed?');">
+      <button type="submit" class="btn danger" style="width:100%;">Close trade</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 
@@ -35,14 +73,14 @@
   <div class="card" style="margin-top:0; grid-column:1; grid-row:1;">
     <p class="card-title">&#127919; Trade plan</p>
     <table class="kv">
-      <tr><td>Entry (at alert time)</td><td style="color:#6ea8fe;font-weight:600;">{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
-      <tr><td>Stop loss</td><td style="color:#da6d6d;">{{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
-      <tr><td>{{ level_word }} 1 (Target)</td><td style="color:#6dda9e;">{{ cur }}{{ "%.2f"|format(t.take_profit) }}</td></tr>
+      <tr><td>Entry (at alert time)</td><td class="num" style="color:#6ea8fe;font-weight:600;">{{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
+      <tr><td>Stop loss</td><td class="num" style="color:#da6d6d;">{{ cur }}{{ "%.2f"|format(t.stop_loss) }}</td></tr>
+      <tr><td>{{ level_word }} 1 (Target)</td><td class="num" style="color:#6dda9e;">{{ cur }}{{ "%.2f"|format(t.take_profit) }}</td></tr>
       {% if t.target2 %}
-      <tr><td>{{ level_word }} 2 (Stretch)</td><td>{{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
+      <tr><td>{{ level_word }} 2 (Stretch)</td><td class="num">{{ cur }}{{ "%.2f"|format(t.target2) }}</td></tr>
       {% endif %}
       {% if t.risk_reward_ratio %}
-      <tr><td>Reward:Risk</td><td>{{ t.risk_reward_ratio }}:1</td></tr>
+      <tr><td>Reward:Risk</td><td class="num">{{ t.risk_reward_ratio }}:1</td></tr>
       {% endif %}
       {% if t.target_sources %}
       <tr><td>Target confirmed by</td><td>{{ sources_str(t.target_sources) }}</td></tr>
@@ -87,7 +125,6 @@
       <tr><td>Strategy</td><td>{{ t.strategy }} ({{ t.horizon_key }})</td></tr>
       <tr><td>Direction</td><td>{{ 'LONG (buy)' if is_bull else 'SHORT (sell)' }}</td></tr>
       {%- set conf_score = t.get('confidence_score') -%}
-      {%- set pnl_amt = t.get('realized_pnl_amount') -%}
       {%- set conf_breakdown = t.get('confidence_breakdown') -%}
       <tr><td>Confidence</td><td><span class="confidence-badge" style="color: {{ confidence_hex }};">
         {{ t.confidence_label }} (Lv{{ t.confidence_level }}/5{% if conf_score is not none %}, {{ conf_score }}/100{% endif %})
@@ -98,20 +135,22 @@
       </td></tr>
       {% endif %}
       <tr><td>Status</td><td>
+        <span class="pill" style="{% if t.status == 'win' %}color:#6dda9e;{% elif t.status == 'loss' %}color:#da6d6d;{% endif %} font-weight:700;">
         {%- if t.status == 'win' -%}
-        <span style="color:#6dda9e; font-weight:700;">WIN</span>
+        WIN
         {%- elif t.status == 'loss' -%}
-        <span style="color:#da6d6d; font-weight:700;">LOSS</span>
+        LOSS
         {%- else -%}
         {{ t.status | upper }}
         {%- endif -%}
+        </span>
       </td></tr>
       <tr><td>Opened</td><td title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }} (Berlin) @ {{ cur }}{{ "%.2f"|format(t.entry) }}</td></tr>
       {% if t.status != 'open' %}
       <tr><td>Closed</td><td>{{ t.closed_at | berlin_time if t.closed_at else 'n/a' }} @ {{ cur }}{{ '%.2f'|format(t.exit_price) if t.exit_price else 'n/a' }}</td></tr>
       {% endif %}
       {% if t.status in ('win', 'loss') and pnl_amt is not none %}
-      <tr><td>Realized gain/loss</td><td style="color:{{ '#6dda9e' if pnl_amt >= 0 else '#da6d6d' }}; font-weight:600;">
+      <tr><td>Realized gain/loss</td><td class="num {{ 'pos' if pnl_amt >= 0 else 'neg' }}" style="font-weight:600;">
         {{ '%+.2f'|format(pnl_amt) }} {{ cur }}
       </td></tr>
       {% endif %}
