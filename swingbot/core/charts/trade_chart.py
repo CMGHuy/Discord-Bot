@@ -1030,10 +1030,13 @@ def generate_trade_chart(
             log.debug("Volume Profile panel skipped: %s", exc)
 
         # Quieter axes: reduce tick density and mute label colors so the focus
-        # stays on price action and overlays, not on gridline scaffolding.
+        # stays on price action and overlays, not on gridline scaffolding. Skip
+        # MaxNLocator for axes that already have deliberately-set fixed ticks
+        # (e.g., RSI panel's 0/30/50/70/100 overbought/oversold bands).
         for ax_ in fig.axes:
             ax_.tick_params(labelsize=7, colors=MUTED_TEXT_COLOR, length=0)
-            ax_.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6, prune="both"))
+            if not isinstance(ax_.yaxis.get_major_locator(), matplotlib.ticker.FixedLocator):
+                ax_.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6, prune="both"))
 
         # Legal/liability fine print -- deliberately the very last thing drawn,
         # below every panel (price, volume, MACD/RSI when present), in figure

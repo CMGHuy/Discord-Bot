@@ -106,7 +106,7 @@ _MARKET_COLORS = mpf.make_marketcolors(
     up=UP_COLOR, down=DOWN_COLOR,
     edge={"up": UP_COLOR, "down": DOWN_COLOR},
     wick={"up": UP_COLOR, "down": DOWN_COLOR},
-    volume={"up": "#26a69a55", "down": "#ef535055"},
+    volume={"up": UP_COLOR + "55", "down": DOWN_COLOR + "55"},
     ohlc="inherit",
 )
 
