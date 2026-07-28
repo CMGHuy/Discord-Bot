@@ -432,6 +432,13 @@ def generate_trade_chart(
         if ax.get_legend():
             ax.get_legend().remove()
 
+        # Subtle ticker + horizon watermark in the price panel background
+        ax.text(
+            0.012, 0.985, f"{ticker}  ·  {horizon_label}",
+            transform=ax.transAxes, ha="left", va="top",
+            fontsize=15, fontweight="bold", color=TEXT_COLOR, alpha=0.16, zorder=1,
+        )
+
         # ---------------------------------------------------------------
         # Overlay legend — top-right of the price panel, one row per line type
         # so the user can tell apart the dashed horizontal levels, the KC bands,
