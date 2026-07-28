@@ -39,6 +39,16 @@ TRENDLINE_SUPPORT_COLOR = "#26c6da"
 TRENDLINE_RESISTANCE_COLOR = "#ec407a"
 AVWAP_COLOR = "#b39ddb"
 
+# Mirror of swingbot/admin/static/tokens.css — the admin UI and the chart
+# PNGs share one palette. tests/test_chart_theme.py asserts these pairs
+# stay equal to the module constants; change BOTH files together.
+THEME = {
+    "bg-1": "#131722", "border-1": "#232734", "border-2": "#2a2e39",
+    "text-1": "#d1d4dc", "text-3": "#787b86",
+    "up": "#26a69a", "down": "#ef5350", "accent": "#2f7dfa",
+    "warn": "#ffa726", "purple": "#ab47bc",
+}
+
 # Fixed accent colors for the confirmed-strategy overlay -- one per
 # SIDE of the scenario (whatever confirmed target 1, whatever confirmed
 # the stop), not per method, so the chart reads as a consistent
