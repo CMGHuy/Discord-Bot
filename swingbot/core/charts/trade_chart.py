@@ -45,11 +45,13 @@ a bare diagonal line doesn't make clear how well- or poorly-supported
 it really is; seeing the touch points does.
 
 When levels sit close together (a tight stop, or a target barely beyond
-entry), their price labels would naturally land on top of each other and
-become unreadable -- `chart_drawing._spread_labels` pushes them apart
-vertically by a minimum gap while drawing a short leader line back to the
-real price, so every value stays legible no matter how close the actual
-levels are.
+entry), their right-edge price pills (`_draw_level_pill`, TradingView-
+style, one per entry/stop/target line -- see below) would naturally land
+on top of each other and become unreadable -- the later one is nudged
+vertically by a small fixed offset in screen points (not data units, so
+the gap stays constant regardless of the y-axis scale) instead of moving
+its real anchor, so every value stays legible no matter how close the
+actual levels are.
 
 This module holds only the two top-level entry points
 (generate_trade_chart, generate_all_strategy_charts) -- the theme/style
@@ -87,7 +89,7 @@ from .chart_style import (
     VOLUME_PROFILE_PANEL_GAP_FRAC, VOLUME_PROFILE_PANEL_WIDTH_FRAC,
     _label_bbox,
 )
-from .chart_drawing import _draw_trendline, _fib_anchor_points, _pick_primary_source, _spread_labels
+from .chart_drawing import _draw_trendline, _fib_anchor_points, _pick_primary_source
 from .chart_strategy_overlay import _draw_confirmed_strategy, _draw_confirmed_strategy_secondary
 from .chart_volume_profile import _draw_volume_profile_panel
 
@@ -155,6 +157,18 @@ def _draw_last_price_pill(ax, df, color=CURRENT_PRICE_COLOR):
         xytext=(2, 0), textcoords="offset points", va="center", ha="left",
         fontsize=8, fontweight="bold", color=CHART_BG, zorder=6,
         bbox=dict(boxstyle="round,pad=0.28", fc=color, ec="none"),
+        annotation_clip=False,
+    )
+
+
+def _draw_level_pill(ax, y, text, color):
+    """Right-edge pill for a plan level (entry/SL/TP). Replaces the old
+    mid-chart chip boxes, matching TradingView's price-scale labels."""
+    ax.annotate(
+        f" {text} ", xy=(1.0, y), xycoords=("axes fraction", "data"),
+        xytext=(2, 0), textcoords="offset points", va="center", ha="left",
+        fontsize=7.5, fontweight="bold", color=CHART_BG, zorder=5,
+        bbox=dict(boxstyle="round,pad=0.25", fc=color, ec="none"),
         annotation_clip=False,
     )
 
@@ -816,19 +830,37 @@ def generate_trade_chart(
             raw_labels.append((market_price, CURRENT_PRICE_COLOR, "Current price"))
         if target2 is not None:
             raw_labels.append((target2, TARGET2_COLOR, "Target 2"))
-        spread = _spread_labels(raw_labels, ylim)
 
-        for price, label_y, color, label in spread:
-            if abs(label_y - price) > 1e-9:
-                # Leader line back to the real price when the label had to move.
-                ax.plot([x_right, label_x], [price, label_y], color=color, linewidth=0.9, alpha=0.55,
-                         linestyle=":", zorder=5, solid_capstyle="round")
-            ax.text(
-                label_x, label_y, f" {label} {currency_symbol}{price:.2f}",
-                color="white", va="center", ha="left", fontsize=9, fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.25", facecolor=color, edgecolor="none", alpha=0.9),
-                       zorder=7,
-            )
+        # Right-edge pills (TradingView-style), one per level line, pinned
+        # to the axes' right edge the same way the last-price pill below
+        # is -- replaces the old mid-chart chip boxes + leader lines.
+        # Processed in ascending price order so an overlap check only
+        # ever has to look at levels already placed below it; when a
+        # pill would land within 0.8% of the visible y-range of an
+        # already-placed one, it's nudged up by a fixed 10 offset points
+        # (screen space, not data units) instead of stacking on top of
+        # it -- the real anchor price (and so the horizontal level line
+        # itself) never moves, only where the pill's text renders.
+        # Seeded with the last close so entry (which very often IS the
+        # market price -- see entry_is_market_price above) doesn't land
+        # its pill directly under the separate last-price pill drawn
+        # further below; that one is always drawn on top (higher zorder)
+        # so without this seed it would silently clobber this one.
+        _pill_overlap_gap = (ylim[1] - ylim[0]) * 0.008
+        _placed_pill_ys = [float(recent["Close"].iloc[-1])]
+        for price, color, label in sorted(raw_labels, key=lambda item: item[0]):
+            pill_text = f"{label} {price:,.2f}"
+            if any(abs(price - placed_y) < _pill_overlap_gap for placed_y in _placed_pill_ys):
+                ax.annotate(
+                    f" {pill_text} ", xy=(1.0, price), xycoords=("axes fraction", "data"),
+                    xytext=(2, 10), textcoords="offset points", va="center", ha="left",
+                    fontsize=7.5, fontweight="bold", color=CHART_BG, zorder=5,
+                    bbox=dict(boxstyle="round,pad=0.25", fc=color, ec="none"),
+                    annotation_clip=False,
+                )
+            else:
+                _draw_level_pill(ax, price, pill_text, color)
+            _placed_pill_ys.append(price)
 
         # Last-price line + right-edge price pill -- TradingView-style dashed
         # ray at the most recent close plus a solid pill pinned to the right
