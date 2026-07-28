@@ -47,3 +47,21 @@ def test_ohlcv_levels_from_trade(client, monkeypatch):
     data = client.get("/api/ohlcv/AAPL?trade_id=t1").get_json()
     assert data["levels"] == {"entry": 100.0, "stop_loss": 95.0, "tp1": 108.0,
                              "tp2": 115.0, "direction": "bullish"}
+
+
+def test_ohlcv_bad_bars_param_falls_back(client, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.app._ohlcv_frame", lambda t: _fake_df())
+    assert len(client.get("/api/ohlcv/AAPL?bars=banana").get_json()["bars"]) == 260
+
+
+def test_ohlcv_fetch_failure_uses_cache(client, monkeypatch, tmp_path):
+    """Live fetch raising must fall through to the CSV cache."""
+    import swingbot.admin.app as admin_app
+    from swingbot import config as cfg
+    cache = tmp_path / "backtest_cache"; cache.mkdir()
+    _fake_df(60).rename_axis("Date").to_csv(cache / "ZZZZ.csv")
+    monkeypatch.setattr(cfg, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("swingbot.core.data.get_daily_data",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("net down")))
+    data = client.get("/api/ohlcv/ZZZZ").get_json()
+    assert len(data["bars"]) == 60
