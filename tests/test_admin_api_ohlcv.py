@@ -37,3 +37,13 @@ def test_ohlcv_requires_auth():
     app.config["TESTING"] = True
     with app.test_client() as anon:
         assert anon.get("/api/ohlcv/AAPL").status_code == 401
+
+
+def test_ohlcv_levels_from_trade(client, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.app._ohlcv_frame", lambda t: _fake_df())
+    fake = {"id": "t1", "ticker": "AAPL", "entry": 100.0, "stop_loss": 95.0,
+            "take_profit": 108.0, "target2_price": 115.0, "direction": "bullish"}
+    monkeypatch.setattr("swingbot.admin.app._trade_for_levels", lambda tid: fake)
+    data = client.get("/api/ohlcv/AAPL?trade_id=t1").get_json()
+    assert data["levels"] == {"entry": 100.0, "stop_loss": 95.0, "tp1": 108.0,
+                             "tp2": 115.0, "direction": "bullish"}

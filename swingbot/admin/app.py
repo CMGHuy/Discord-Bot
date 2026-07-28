@@ -1129,6 +1129,14 @@ def _ohlcv_frame(ticker: str):
     return None
 
 
+def _trade_for_levels(trade_id: str):
+    """Look up a trade record by id for the ohlcv payload's optional
+    `levels` block. Split out of the route for testability (tests
+    monkeypatch this), same pattern as `_ohlcv_frame`."""
+    from swingbot.core.performance import TradeLog
+    return TradeLog().get_trade_by_id(trade_id)
+
+
 @app.route("/api/ohlcv/<ticker>", methods=["GET"])
 def api_ohlcv(ticker):
     """Daily OHLCV bars for the interactive chart (U29's JS). Read-only,
@@ -1157,6 +1165,14 @@ def api_ohlcv(ticker):
     if df is None or not len(df):
         return Response(json.dumps({"error": "no data"}), status=404, mimetype="application/json")
     df = df.tail(bars)
+    trade_id = request.args.get("trade_id")
+    levels = None
+    if trade_id:
+        t = _trade_for_levels(trade_id)
+        if t:
+            levels = {"entry": t.get("entry"), "stop_loss": t.get("stop_loss"),
+                      "tp1": t.get("take_profit"), "tp2": t.get("target2_price"),
+                      "direction": t.get("direction")}
     payload = {
         "ticker": ticker,
         "bars": [
@@ -1166,6 +1182,8 @@ def api_ohlcv(ticker):
             for idx, r in df.iterrows()
         ],
     }
+    if levels is not None:
+        payload["levels"] = levels
     return Response(json.dumps(payload), mimetype="application/json")
 
 
