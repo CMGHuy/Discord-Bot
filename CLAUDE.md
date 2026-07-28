@@ -44,8 +44,14 @@ entry that feeds both the env parser and the admin UI's Settings page).
 hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
 + task count, last/next task, git HEAD and dirty files, live worktrees, and any
 in-progress multi-hour backtest. Completed plans: unified-plan-engine-v2,
-strategy-winrate-redesign. On disk but not current focus: cockpit-v3,
-gatekeeper-v7, llm-advisor-v5, admin-ui-tradingview-redesign-v6.
+strategy-winrate-redesign, admin-ui-tradingview-redesign-v6 (task IDs
+`U1`-`U36`; manual browser QA left for a future pass). On disk but not
+current focus: cockpit-v3, gatekeeper-v7, llm-advisor-v5.
+
+**Don't trust the hook's "NEXT" task ID blind** — it can name IDs (e.g. `E89`)
+that don't exist in the plan file it labels as active (which may use a
+different prefix, e.g. `U34`). Verify with `grep -n "^### Task" <plan>` before
+chasing a task the hook mentioned.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
 preflights this repo's documented traps. `/gate` is the pre-commit verification
