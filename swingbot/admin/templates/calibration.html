@@ -36,8 +36,8 @@
     {% for row in tiers %}
     <tr>
       <td><span class="chip chip-tier-{{ row.tier | lower }}">{{ row.tier }}</span></td>
-      <td>{{ row.n }}</td>
-      <td>{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
+      <td class="num">{{ row.n }}</td>
+      <td class="num">{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
       <td class="muted">{{ row.expected_band }}</td>
       <td>{% if row.ok %}✅{% elif row.ok is sameas false %}❌{% else %}—{% endif %}</td>
     </tr>
@@ -65,9 +65,9 @@
     {% for d in drift %}
     <tr>
       <td>{{ d.strategy }}</td>
-      <td>{{ "%.1f%%"|format(d.live_wr) if d.live_wr is not none else '—' }}</td>
-      <td>{{ "%.1f%%"|format(d.oos_wr) if d.oos_wr is not none else '—' }}</td>
-      <td style="color:{% if d.delta_wr is none %}#5a6275{% elif d.delta_wr < 0 %}#da6d6d{% else %}#6dda9e{% endif %};">
+      <td class="num">{{ "%.1f%%"|format(d.live_wr) if d.live_wr is not none else '—' }}</td>
+      <td class="num">{{ "%.1f%%"|format(d.oos_wr) if d.oos_wr is not none else '—' }}</td>
+      <td class="num {% if d.delta_wr is none %}{% elif d.delta_wr < 0 %}neg{% else %}pos{% endif %}">
         {{ "%+.1f"|format(d.delta_wr) if d.delta_wr is not none else '—' }}
       </td>
       <td>{% if d.drift_alert %}<span class="chip chip-decay">DECAY</span>{% else %}—{% endif %}</td>

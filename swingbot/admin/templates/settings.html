@@ -234,7 +234,7 @@
   <div class="row">
     <form method="post" action="{{ url_for('restart_bot') }}"
           onsubmit="return confirm('Restart the bot container now? It will be offline for a few seconds.');">
-      <button type="submit" class="warning" {{ '' if restart_available else 'disabled' }}>
+      <button type="submit" class="danger" {{ '' if restart_available else 'disabled' }}>
         🔄 Restart bot container
       </button>
     </form>

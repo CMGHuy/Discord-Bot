@@ -14,13 +14,13 @@
         <tr><td class="muted">Direction</td><td>{{ '▲ Long' if plan.direction == 'bullish' else '▼ Short' }}</td></tr>
         <tr><td class="muted">Entry type</td><td>{{ plan.entry_type }}</td></tr>
         <tr><td class="muted">Trigger / Entry</td>
-          <td>{{ "%.2f"|format(plan.trigger_price) }}{% if plan.entry_price %} / {{ "%.2f"|format(plan.entry_price) }}{% endif %}</td></tr>
-        <tr><td class="muted">Stop loss</td><td style="color:#da6d6d;">{{ "%.2f"|format(plan.stop_loss) }}</td></tr>
+          <td class="num">{{ "%.2f"|format(plan.trigger_price) }}{% if plan.entry_price %} / {{ "%.2f"|format(plan.entry_price) }}{% endif %}</td></tr>
+        <tr><td class="muted">Stop loss</td><td class="num" style="color:#da6d6d;">{{ "%.2f"|format(plan.stop_loss) }}</td></tr>
         <tr><td class="muted">TP1 ({{ "%.0f"|format(plan.tp1_fraction * 100) }}%)</td>
-          <td style="color:#6dda9e;">{{ "%.2f"|format(plan.tp1) }}</td></tr>
-        <tr><td class="muted">TP2 (runner)</td><td>{{ "%.2f"|format(plan.tp2) if plan.tp2 else '—' }}</td></tr>
-        <tr><td class="muted">Break-even trigger</td><td>{{ "%.0f%%"|format(plan.breakeven_trigger_fraction * 100) }} of TP1 distance</td></tr>
-        <tr><td class="muted">Quality score</td><td>{{ plan.quality_score }}</td></tr>
+          <td class="num" style="color:#6dda9e;">{{ "%.2f"|format(plan.tp1) }}</td></tr>
+        <tr><td class="muted">TP2 (runner)</td><td class="num">{{ "%.2f"|format(plan.tp2) if plan.tp2 else '—' }}</td></tr>
+        <tr><td class="muted">Break-even trigger</td><td class="num">{{ "%.0f%%"|format(plan.breakeven_trigger_fraction * 100) }} of TP1 distance</td></tr>
+        <tr><td class="muted">Quality score</td><td class="num">{{ plan.quality_score }}</td></tr>
       </table>
     </div>
     <div style="flex:1;min-width:280px;">
@@ -61,10 +61,10 @@ function closeLightbox() { document.getElementById('lightbox-overlay').style.dis
   <p class="card-title">Quality breakdown</p>
   {% if plan.quality_breakdown %}
   <table style="width:100%;font-size:13px;">
-    <thead><tr><th style="text-align:left;">Factor</th><th style="text-align:right;">Points</th></tr></thead>
+    <thead><tr><th>Factor</th><th class="num">Points</th></tr></thead>
     <tbody>
     {% for label, points in plan.quality_breakdown %}
-    <tr><td>{{ label }}</td><td style="text-align:right;">{{ points }}</td></tr>
+    <tr><td>{{ label }}</td><td class="num">{{ points }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -77,11 +77,11 @@ function closeLightbox() { document.getElementById('lightbox-overlay').style.dis
   <p class="card-title">Badge stats (out-of-sample validation)</p>
   <table style="width:100%;font-size:13px;">
     <tr><td class="muted">Status</td><td>{{ plan.badge_stats.get('status', plan.badge) }}</td></tr>
-    <tr><td class="muted">N</td><td>{{ plan.badge_stats.get('n', '—') }}</td></tr>
+    <tr><td class="muted">N</td><td class="num">{{ plan.badge_stats.get('n', '—') }}</td></tr>
     <tr><td class="muted">Win rate</td>
-      <td>{{ "%.1f%%"|format(plan.badge_stats.win_rate) if plan.badge_stats.get('win_rate') is not none else '—' }}</td></tr>
+      <td class="num">{{ "%.1f%%"|format(plan.badge_stats.win_rate) if plan.badge_stats.get('win_rate') is not none else '—' }}</td></tr>
     <tr><td class="muted">Expectancy</td>
-      <td>{{ "%+.3f"|format(plan.badge_stats.expectancy_r) if plan.badge_stats.get('expectancy_r') is not none else '—' }}</td></tr>
+      <td class="num">{{ "%+.3f"|format(plan.badge_stats.expectancy_r) if plan.badge_stats.get('expectancy_r') is not none else '—' }}</td></tr>
     <tr><td class="muted">Window</td><td>{{ plan.badge_stats.get('window', '—') }}</td></tr>
   </table>
 </div>
@@ -91,7 +91,7 @@ function closeLightbox() { document.getElementById('lightbox-overlay').style.dis
   <p class="card-title">Follow-score breakdown</p>
   <table style="width:100%;font-size:13px;">
     {% for factor, points in follow_breakdown %}
-    <tr><td class="muted">{{ factor }}</td><td style="text-align:right;">{{ points }}</td></tr>
+    <tr><td class="muted">{{ factor }}</td><td class="num">{{ points }}</td></tr>
     {% endfor %}
   </table>
 </div>

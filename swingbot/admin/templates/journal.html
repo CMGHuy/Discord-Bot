@@ -63,7 +63,7 @@
     </span>
     <strong>{{ e.ticker }}</strong>
     <span class="muted">{{ e.strategy }}</span>
-    <span style="margin-left:auto;font-weight:700;color:{% if e.r_realized is none %}#5a6275{% elif e.r_realized >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+    <span class="num {% if e.r_realized is none %}{% elif e.r_realized >= 0 %}pos{% else %}neg{% endif %}" style="margin-left:auto;font-weight:700;">
       {{ "%+.2fR"|format(e.r_realized) if e.r_realized is not none else '—' }}
     </span>
     <a href="{{ url_for('trade_detail', trade_id=e.trade_id) }}" class="secondary small btn" style="text-decoration:none;">Trade ↗</a>

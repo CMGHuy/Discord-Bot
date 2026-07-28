@@ -325,7 +325,7 @@
         </span>
       </td>
 
-      <td data-sort="{{ conf_score if conf_score is not none else 0 }}"
+      <td class="num" data-sort="{{ conf_score if conf_score is not none else 0 }}"
           title="Confidence score out of 100 -- the underlying number the Lv1-5 confidence level is derived from">
         {%- if conf_score is not none -%}
           <span style="font-weight:600;color:
@@ -353,7 +353,7 @@
       {# Unrealized P&L % — positive = in profit for this direction #}
       <td class="num {% if pnl is none %}{% elif pnl.pnl_pct >= 0 %}pos{% else %}neg{% endif %}"
           data-sort="{{ pnl.pnl_pct if pnl else 0 }}"
-          style="font-weight:600;color: {% if pnl is none %}#5a6275{% elif pnl.pnl_pct >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+          style="font-weight:600;"
           title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~15s cache).">
         {%- if pnl -%}
           {{ '%+.2f%%'|format(pnl.pnl_pct) }}
@@ -376,8 +376,9 @@
       {%- set actual_shares = t.shares if t.get('shares') else (sizing.shares if sizing else None) -%}
       {%- set unreal_amt = (actual_shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (actual_shares and cur_price is not none) else None -%}
       {%- set _snap_mode = t.get('sizing_mode') -%}
-      <td data-sort="{{ unreal_amt if unreal_amt is not none else 0 }}"
-          style="font-weight:700;color: {% if unreal_amt is none %}#5a6275{% elif unreal_amt >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+      <td class="num {% if unreal_amt is none %}{% elif unreal_amt >= 0 %}pos{% else %}neg{% endif %}"
+          data-sort="{{ unreal_amt if unreal_amt is not none else 0 }}"
+          style="font-weight:700;"
           title="{% if actual_shares and unreal_amt is not none %}~{{ actual_shares }} shares{{ ' (snapshotted at open)' if t.get('shares') else ' (est. -- no snapshot on this older trade)' }} · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(actual_shares * t.entry) }} deployed{% if _snap_mode %} · sized under {{ 'Account %' if _snap_mode == 'account_pct' else 'Risk %' }} mode when opened{% if _snap_mode != account_cfg.sizing_mode %} (today's setting is {{ 'Account %' if account_cfg.sizing_mode == 'account_pct' else 'Risk %' }} -- this won't match the current premium note above){% endif %}{% endif %}{% elif actual_shares %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
         {%- if unreal_amt is not none -%}
           {{ '%+.2f'|format(unreal_amt) }} {{ cur_map.get(t.ticker, '') }}
@@ -723,12 +724,12 @@
       <th data-col-id="horizon" onclick="sortClosedTable(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
       <th data-col-id="dir" onclick="sortClosedTable(this)">Dir <span class="sort-arrow" data-col-id="dir"></span></th>
       <th data-col-id="conf" onclick="sortClosedTable(this)">Conf <span class="sort-arrow" data-col-id="conf"></span></th>
-      <th data-col-id="entry" onclick="sortClosedTable(this)" style="text-align:right;">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="exit" onclick="sortClosedTable(this)" style="text-align:right;">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
-      <th data-col-id="pnlpct" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
-      <th data-col-id="gainloss" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
-      <th data-col-id="r" onclick="sortClosedTable(this)" style="text-align:right;" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
-      <th data-col-id="days" onclick="sortClosedTable(this)" style="text-align:right;" title="Holding period -- time held, from open to close, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
+      <th data-col-id="entry" onclick="sortClosedTable(this)" class="num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="exit" onclick="sortClosedTable(this)" class="num">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
+      <th data-col-id="pnlpct" onclick="sortClosedTable(this)" class="num" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
+      <th data-col-id="gainloss" onclick="sortClosedTable(this)" class="num" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
+      <th data-col-id="r" onclick="sortClosedTable(this)" class="num" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
+      <th data-col-id="days" onclick="sortClosedTable(this)" class="num" title="Holding period -- time held, from open to close, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
       <th data-col-id="opened" onclick="sortClosedTable(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="closed" onclick="sortClosedTable(this)">Closed <span class="sort-arrow" data-col-id="closed"></span></th>
       <th style="width:60px;"></th>
@@ -769,33 +770,33 @@
         </span>
       </td>
       <td title="Confidence level Lv{{ t.confidence_level }} of 5 at the time this trade was opened"><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
-      <td style="text-align:right;color:#6ea8fe;font-weight:600;" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
-      <td style="text-align:right;" data-sort="{{ t.exit_price if t.exit_price else -1 }}"
+      <td class="num" style="color:#6ea8fe;font-weight:600;" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td class="num" data-sort="{{ t.exit_price if t.exit_price else -1 }}"
           title="{{ 'Actual fill price when this trade closed' if t.exit_price else 'No exit price recorded for this trade' }}">
         {%- if t.exit_price -%}{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
-      <td style="text-align:right;font-weight:700;
-                 color:{% if c_pnl is none %}#5a6275{% elif c_pnl >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+      <td class="num {% if c_pnl is none %}{% elif c_pnl >= 0 %}pos{% else %}neg{% endif %}"
+          style="font-weight:700;"
           data-sort="{{ c_pnl if c_pnl is not none else -999999 }}"
           title="Realized P&amp;L %, direction-adjusted: (exit − entry) / entry, flipped in sign for short trades">
         {{ '%+.2f%%'|format(c_pnl) if c_pnl is not none else '—' }}
       </td>
-      <td style="text-align:right;font-weight:700;
-                 color:{% if pnl_amt is none %}#5a6275{% elif pnl_amt >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+      <td class="num {% if pnl_amt is none %}{% elif pnl_amt >= 0 %}pos{% else %}neg{% endif %}"
+          style="font-weight:700;"
           data-sort="{{ pnl_amt if pnl_amt is not none else -999999 }}"
           title="{{ 'Position size at open: ' ~ cur_map.get(t.ticker, '') ~ '%.2f'|format(pos_val) if pos_val else 'No sizing snapshot for this trade (logged before this feature existed)' }}">
         {%- if pnl_amt is not none -%}
           {{ '%+.2f'|format(pnl_amt) }} {{ cur_map.get(t.ticker, '') }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
-      <td style="text-align:right;font-weight:600;
-                 color:{% if c_r is none %}#5a6275{% elif c_r >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};"
+      <td class="num {% if c_r is none %}{% elif c_r >= 0 %}pos{% else %}neg{% endif %}"
+          style="font-weight:600;"
           data-sort="{{ c_r if c_r is not none else -999999 }}"
           title="Realized R-multiple: actual gain/loss ÷ planned risk (entry to stop distance) -- e.g. +2.00 means this trade made twice what it risked">
         {{ '%+.2f'|format(c_r) if c_r is not none else '—' }}
       </td>
-      <td style="text-align:right;white-space:nowrap;" class="muted" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}"
+      <td class="num muted" style="white-space:nowrap;" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}"
           title="Time this trade was actually held, from open to close">{{ c_days.label if c_days is not none else '—' }}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="Opened {{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.closed_at or '' }}" title="{% if t.closed_at %}Closed {{ t.closed_at[:16] }} UTC{% else %}Not yet closed{% endif %}">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>

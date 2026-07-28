@@ -51,13 +51,13 @@
       </td>
       <td>{{ row.sparkline_svg | safe }}</td>
       <td><span class="chip {{ 'chip-validated' if row.status == 'VALIDATED' else 'chip-weak' }}">{{ row.status }}</span></td>
-      <td>{{ "%.2f"|format(row.rr_override) if row.rr_override is not none else '—' }}</td>
-      <td>{{ row.n }}</td>
-      <td>{{ "%.1f%%"|format(row.win_rate) }}</td>
-      <td>{{ "%+.3f"|format(row.expectancy_r) }}</td>
-      <td>{{ row.live_n if row.live_n is not none else '—' }}</td>
-      <td>{{ "%.1f%%"|format(row.live_wr) if row.live_wr is not none else '—' }}</td>
-      <td style="color:{% if row.delta_vs_oos is none %}#5a6275{% elif row.delta_vs_oos < 0 %}#da6d6d{% else %}#6dda9e{% endif %};">
+      <td class="num">{{ "%.2f"|format(row.rr_override) if row.rr_override is not none else '—' }}</td>
+      <td class="num">{{ row.n }}</td>
+      <td class="num">{{ "%.1f%%"|format(row.win_rate) }}</td>
+      <td class="num">{{ "%+.3f"|format(row.expectancy_r) }}</td>
+      <td class="num">{{ row.live_n if row.live_n is not none else '—' }}</td>
+      <td class="num">{{ "%.1f%%"|format(row.live_wr) if row.live_wr is not none else '—' }}</td>
+      <td class="num {% if row.delta_vs_oos is none %}{% elif row.delta_vs_oos < 0 %}neg{% else %}pos{% endif %}">
         {{ "%+.1f"|format(row.delta_vs_oos) if row.delta_vs_oos is not none else '—' }}
         {% if row.decayed %}<span class="chip chip-decay">DECAY</span>{% endif %}
       </td>

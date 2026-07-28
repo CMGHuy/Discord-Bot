@@ -20,14 +20,14 @@
   <div style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Strategy</th><th>Badge</th><th>R:R</th><th>Gate</th><th>Default params</th><th>Window</th><th>Run date</th></tr>
+      <tr><th>Strategy</th><th>Badge</th><th class="num">R:R</th><th>Gate</th><th>Default params</th><th>Window</th><th>Run date</th></tr>
     </thead>
     <tbody>
     {% for s in current_state %}
     <tr>
       <td><strong>{{ s.strategy }}</strong></td>
       <td><span class="chip {{ 'chip-validated' if s.badge == 'VALIDATED' else 'chip-weak' }}">{{ s.badge }}</span></td>
-      <td>{{ "%.2f"|format(s.rr_override) if s.rr_override is not none else '—' }}</td>
+      <td class="num">{{ "%.2f"|format(s.rr_override) if s.rr_override is not none else '—' }}</td>
       <td class="muted">{{ s.gate_description }}</td>
       <td class="muted">
         {% for k, v in s.default_params.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
@@ -121,10 +121,10 @@
     <thead>
       <tr>
         <th>Params</th>
-        <th>N<span class="tip-icon" tabindex="0" data-tip="Number of trades this parameter combination produced in the TRAIN window.">?</span></th>
-        <th>Win rate</th>
-        <th>ExpR<span class="tip-icon" tabindex="0" data-tip="Expectancy in R-multiples -- average return per trade as a multiple of planned risk.">?</span></th>
-        <th>Excl%<span class="tip-icon" tabindex="0" data-tip="Share of candidate signals this parameter combination excluded/filtered out before ever reaching a trade.">?</span></th>
+        <th class="num">N<span class="tip-icon" tabindex="0" data-tip="Number of trades this parameter combination produced in the TRAIN window.">?</span></th>
+        <th class="num">Win rate</th>
+        <th class="num">ExpR<span class="tip-icon" tabindex="0" data-tip="Expectancy in R-multiples -- average return per trade as a multiple of planned risk.">?</span></th>
+        <th class="num">Excl%<span class="tip-icon" tabindex="0" data-tip="Share of candidate signals this parameter combination excluded/filtered out before ever reaching a trade.">?</span></th>
         <th>Pass<span class="tip-icon" tabindex="0" data-tip="Cleared the acceptance bar: win rate ≥80%, positive expectancy, and at least 30 evaluated trades.">?</span></th>
         <th>Action</th>
       </tr>
@@ -135,10 +135,10 @@
       <td class="muted">
         {% for k, v in row.params.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
       </td>
-      <td>{{ row.n_eval }}</td>
-      <td>{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
-      <td>{{ "%+.3f"|format(row.expectancy_r) if row.expectancy_r is not none else '—' }}</td>
-      <td>{{ "%.0f%%"|format(row.excluded_share * 100) }}</td>
+      <td class="num">{{ row.n_eval }}</td>
+      <td class="num">{{ "%.1f%%"|format(row.win_rate) if row.win_rate is not none else '—' }}</td>
+      <td class="num">{{ "%+.3f"|format(row.expectancy_r) if row.expectancy_r is not none else '—' }}</td>
+      <td class="num">{{ "%.0f%%"|format(row.excluded_share * 100) }}</td>
       <td>{% if grid_row_passes(row) %}✅{% else %}—{% endif %}</td>
       <td>
         <form method="post" action="{{ url_for('pages.tuning_propose') }}" style="margin:0;">

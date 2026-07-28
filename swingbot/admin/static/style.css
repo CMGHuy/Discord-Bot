@@ -381,7 +381,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   color: #5a6275;
   font-variant-numeric: tabular-nums;
 }
-.dist-progress.dist-danger { color: #ef5350; font-weight: 700; }  /* ≤20% — near SL */
+.dist-progress.dist-danger { color: var(--down); font-weight: 700; }  /* ≤20% — near SL */
 .dist-progress.dist-warn   { color: #e2b25a; font-weight: 600; }  /* 21–40% — drifting toward SL */
 .dist-progress.dist-tp-hit { color: #6dda9e; font-weight: 700; }  /* ≥80% — near TP */
 

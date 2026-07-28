@@ -73,13 +73,13 @@
       <th title="The primary confirming method behind this plan's entry.">Strategy</th>
       <th title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir</th>
       <th title="Where this plan is in its PENDING → ACTIVE → PARTIAL → CLOSED/CANCELLED lifecycle.">Status</th>
-      <th title="Composite ranking score from analytics.rank.rank_plans">Follow score</th>
-      <th title="Fill price if already active, or the stop-entry trigger price still being waited on.">Entry / Trigger</th>
-      <th title="Stop-loss price.">SL</th>
-      <th title="First take-profit target -- half the position closes here.">TP1</th>
-      <th title="Second take-profit target for the runner (remainder after TP1), if this plan has one.">TP2</th>
+      <th class="num" title="Composite ranking score from analytics.rank.rank_plans">Follow score</th>
+      <th class="num" title="Fill price if already active, or the stop-entry trigger price still being waited on.">Entry / Trigger</th>
+      <th class="num" title="Stop-loss price.">SL</th>
+      <th class="num" title="First take-profit target -- half the position closes here.">TP1</th>
+      <th class="num" title="Second take-profit target for the runner (remainder after TP1), if this plan has one.">TP2</th>
       <th title="How long ago this plan was created.">Age</th>
-      <th title="Quality score (0-100) this plan was graded at, driving its A/B/C tier.">Quality</th>
+      <th class="num" title="Quality score (0-100) this plan was graded at, driving its A/B/C tier.">Quality</th>
       <th>Action</th>
     </tr>
     </thead>
@@ -98,16 +98,16 @@
         </span>
       </td>
       <td><span class="pill">{{ p.status }}</span></td>
-      <td>{{ '%.0f'|format(p.follow_score) if p.follow_score is not none else '—' }}</td>
-      <td>
+      <td class="num">{{ '%.0f'|format(p.follow_score) if p.follow_score is not none else '—' }}</td>
+      <td class="num">
         {%- if p.entry_price -%}{{ "%.2f"|format(p.entry_price) }}
         {%- else -%}{{ "%.2f"|format(p.trigger_price) }} <span class="muted">(trigger)</span>{%- endif -%}
       </td>
-      <td style="color:#da6d6d;">{{ "%.2f"|format(p.stop_loss) }}</td>
-      <td style="color:#6dda9e;">{{ "%.2f"|format(p.tp1) }}</td>
-      <td>{{ "%.2f"|format(p.tp2) if p.tp2 else '—' }}</td>
+      <td class="num" style="color:#da6d6d;">{{ "%.2f"|format(p.stop_loss) }}</td>
+      <td class="num" style="color:#6dda9e;">{{ "%.2f"|format(p.tp1) }}</td>
+      <td class="num">{{ "%.2f"|format(p.tp2) if p.tp2 else '—' }}</td>
       <td class="muted">{{ p.created_at }}</td>
-      <td>{{ p.quality_score }}</td>
+      <td class="num">{{ p.quality_score }}</td>
       <td onclick="event.stopPropagation();">
         {% if p.status == 'PENDING' %}
         <form method="post" action="{{ url_for('pages.plan_cancel', plan_id=p.plan_id) }}" style="margin:0;display:inline;"
