@@ -628,7 +628,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .log-view { font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.6;
   background: var(--bg-1); border: 1px solid var(--border-1); border-radius: var(--r-md);
   padding: var(--sp-3); overflow: auto; }
-.log-view .lvl-warn { color: var(--warn); } .log-view .lvl-error { color: var(--down); }
 /* Each log line is its own block box (see logs.html's colorizeLog()) so the
    level filter checkboxes can hide/show whole lines with display:none
    without leaving a stray blank line behind -- the line break comes from
