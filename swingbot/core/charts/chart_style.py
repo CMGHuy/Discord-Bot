@@ -10,6 +10,17 @@ awkwardly between sibling modules.
 import matplotlib
 matplotlib.use("Agg")
 import mplfinance as mpf
+import os
+from matplotlib import font_manager as _fm
+
+_INTER = os.path.join(os.path.dirname(__file__), "..", "..", "admin", "static", "vendor", "inter", "inter-500.woff2")
+# matplotlib cannot load woff2 — only register if a ttf/otf is present.
+# Optional nicety: drop Inter-Medium.ttf into that folder to activate; the
+# charts fall back to the default sans (DejaVu) otherwise, by design.
+_INTER_TTF = _INTER.replace("inter-500.woff2", "Inter-Medium.ttf")
+if os.path.exists(_INTER_TTF):
+    _fm.fontManager.addfont(_INTER_TTF)
+    matplotlib.rcParams["font.family"] = "Inter"
 
 # ---------------------------------------------------------------------------
 # Professional dark theme -- a TradingView/Bloomberg-terminal-style palette
