@@ -23,3 +23,24 @@ def test_theme_matches_tokens_css():
     tokens = dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", css))
     for key in ("bg-1", "border-1", "border-2", "text-1", "text-3", "up", "down", "accent", "warn", "purple"):
         assert tokens[key].lower() == cs.THEME[key].lower(), key
+
+
+def test_generate_trade_chart_smoke(tmp_path, monkeypatch):
+    """End-to-end render on synthetic OHLCV: produces a non-trivial PNG.
+    No golden pixels (brittle) — existence + size only."""
+    import numpy as np
+    import pandas as pd
+    from swingbot.core.charts.trade_chart import generate_trade_chart
+
+    idx = pd.bdate_range("2025-01-01", periods=120)
+    close = pd.Series(100 + np.cumsum(np.random.default_rng(7).normal(0, 1, 120)), index=idx)
+    df = pd.DataFrame({"Open": close.shift(1).fillna(close), "High": close + 1,
+                       "Low": close - 1, "Close": close, "Volume": 1_000_000}, index=idx)
+    out = generate_trade_chart(
+        ticker="TEST", df=df, entry=float(close.iloc[-1]),
+        stop_loss=float(close.iloc[-1]) * 0.95, take_profit=float(close.iloc[-1]) * 1.08,
+        direction="bullish", strategy="RSI", horizon_label="2w", out_dir=str(tmp_path),
+    )
+    assert out is not None
+    import os
+    assert os.path.getsize(out) > 20_000  # a real rendered chart, not a stub
