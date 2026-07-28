@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction)
-> - **Completed:** U1-U18 (Phase 0 + Phase 1 done)
-> - **Next:** Task U19
+> - **Completed:** U1-U36 — all tasks done. Automated final checkpoint (U36 Step 1) green: full suite 1085 passed/54 skipped/1 known pre-existing wall-clock failure, py_compile clean, no CDN references. U36 Step 2 (manual browser QA) explicitly skipped per human-partner instruction this session — not performed.
+> - **Next:** None — plan complete pending a future manual QA pass (U36 Step 2).
 
 ## Global Constraints
 
@@ -1014,7 +1014,7 @@ def test_ohlcv_fetch_failure_uses_cache(client, monkeypatch, tmp_path):
 
 **Files:** Modify `docs/superpowers/plans/2026-07-11-cockpit-v3.md` (Part 3 intro, after the "Notes on assumptions" block)
 
-- [ ] **Step 1:** Add:
+- [x] **Step 1:** Add:
 
 ```markdown
 > **Deviation note (2026-07-19, admin-ui-tradingview-redesign):** the admin UI now
@@ -1027,17 +1027,17 @@ def test_ohlcv_fetch_failure_uses_cache(client, monkeypatch, tmp_path):
 > is available for any Part 3 page needing an interactive chart.
 ```
 
-- [ ] **Step 2: Commit** `docs: cockpit-v3 deviation note for UI redesign`
+- [x] **Step 2: Commit** `docs: cockpit-v3 deviation note for UI redesign`
 
 ### Task U35: README section
 
 **Files:** Modify `README.md` (after the "Analytics core" section)
 
-- [ ] **Step 1:** Add an "## Admin UI" section documenting: the token layer (`tokens.css` as the palette source of truth, mirrored by `chart_style.THEME` with a sync test), self-hosted Inter + vendored lightweight-charts 4.2.3 (no runtime CDN), the `/api/ohlcv/<ticker>?bars=&trade_id=` endpoint (authed, read-only, cache-fallback, 1000-bar cap), and the interactive chart surfaces (trade detail + dashboard modal). Match the README's existing voice (short paragraphs + one table max).
-- [ ] **Step 2: Commit** `docs: admin UI redesign section`
+- [x] **Step 1:** Add an "## Admin UI" section documenting: the token layer (`tokens.css` as the palette source of truth, mirrored by `chart_style.THEME` with a sync test), self-hosted Inter + vendored lightweight-charts 4.2.3 (no runtime CDN), the `/api/ohlcv/<ticker>?bars=&trade_id=` endpoint (authed, read-only, cache-fallback, 1000-bar cap), and the interactive chart surfaces (trade detail + dashboard modal). Match the README's existing voice (short paragraphs + one table max).
+- [x] **Step 2: Commit** `docs: admin UI redesign section`
 
 ### Task U36: Final checkpoint
 
-- [ ] **Step 1:** `python -m pytest tests/ -q` — full suite green; py_compile loop clean; `grep -rn "googleapis\|unpkg.com\|cdn\." swingbot/admin/templates/` → no matches (vendor files are local).
-- [ ] **Step 2:** Manual QA pass: all 7 pages at desktop + 380px, one interactive chart with levels, one Discord-style PNG regenerated and eyeballed side-by-side with an old one.
-- [ ] **Step 3:** Update this plan's Progress block (`Completed: U1–U36`), empty checkpoint commit `chore: ui-tradingview redesign checkpoint — all tasks complete`.
+- [x] **Step 1:** `python -m pytest tests/ -q` — full suite green (1085 passed, 54 skipped, 1 known pre-existing wall-clock failure — `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`, unrelated to this plan, matches CLAUDE.md's documented baseline); py_compile loop clean (bot.py, admin_ui.py, all 108 files under swingbot/); `grep -rn "googleapis\|unpkg.com\|cdn\." swingbot/admin/templates/` → no matches.
+- [ ] **Step 2:** Manual QA pass: all 7 pages at desktop + 380px, one interactive chart with levels, one Discord-style PNG regenerated and eyeballed side-by-side with an old one. **Skipped this session per explicit human-partner instruction** ("no need to start ui server to test") — not performed, left for a future live/manual pass.
+- [x] **Step 3:** Update this plan's Progress block (`Completed: U1–U36`), empty checkpoint commit `chore: ui-tradingview redesign checkpoint — all tasks complete`.

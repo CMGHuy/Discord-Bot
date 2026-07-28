@@ -476,6 +476,7 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 /* ---- Dashboard quick-chart modal ---- */
 .chart-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50;
   display: flex; align-items: center; justify-content: center; }
+.chart-modal[hidden] { display: none; }
 .chart-modal-panel { width: min(860px, 94vw); background: var(--bg-1);
   border: 1px solid var(--border-2); border-radius: var(--r-lg);
   padding: var(--sp-4); box-shadow: var(--shadow-2); }
