@@ -12,9 +12,9 @@
 
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/ui-tradingview` (from `main`)
-> - **Completed:** U1-U12
-> - **Next:** Task U13
+> - **Branch:** `main` (worked directly on main, per human partner's instruction)
+> - **Completed:** U1-U18 (Phase 0 + Phase 1 done)
+> - **Next:** Task U19
 
 ## Global Constraints
 
@@ -381,14 +381,14 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 **Files:** Modify `swingbot/admin/templates/watchlist.html`
 
-- [ ] **Step 1:** Ticker chips become `pill`; the add form inputs inherit U8; wrap sections in `card`; empty watchlist renders `<div class="empty-state"><span class="glyph">📄</span>No tickers yet — add one above.</div>`.
-- [ ] **Step 2: Verify + commit** `feat: watchlist page pass`
+- [x] **Step 1:** Ticker chips become `pill`; the add form inputs inherit U8; wrap sections in `card`; empty watchlist renders `<div class="empty-state"><span class="glyph">📄</span>No tickers yet — add one above.</div>`.
+- [x] **Step 2: Verify + commit** `feat: watchlist page pass`
 
 ### Task U14: Settings page
 
 **Files:** Modify `swingbot/admin/templates/settings.html`, `style.css`
 
-- [ ] **Step 1:** Each config section becomes a `card` with the section name as `<h3>`; two-column field grid:
+- [x] **Step 1:** Each config section becomes a `card` with the section name as `<h3>`; two-column field grid:
 
 ```css
 .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--sp-3) var(--sp-5); }
@@ -398,13 +398,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 Save button: `class="btn"` sticky footer bar (`position: sticky; bottom: 0; background: var(--bg-0); padding: var(--sp-3) 0;`).
 
-- [ ] **Step 2: Verify + commit** `feat: settings page cards + field grid`
+- [x] **Step 2: Verify + commit** `feat: settings page cards + field grid`
 
 ### Task U15: Logs page
 
 **Files:** Modify `swingbot/admin/templates/logs.html`, `style.css`
 
-- [ ] **Step 1:** Log viewer becomes:
+- [x] **Step 1:** Log viewer becomes:
 
 ```css
 .log-view { font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.6;
@@ -415,13 +415,13 @@ Save button: `class="btn"` sticky footer bar (`position: sticky; bottom: 0; back
 
 If the template renders raw lines, keep it raw — add the level classes only if it already splits lines; do not add server-side parsing.
 
-- [ ] **Step 2: Verify + commit** `feat: logs viewer restyle`
+- [x] **Step 2: Verify + commit** `feat: logs viewer restyle`
 
 ### Task U16: Trade-detail layout
 
 **Files:** Modify `swingbot/admin/templates/trade_detail.html`, `style.css`
 
-- [ ] **Step 1:** Two-column layout — chart area (flexible) + facts card (fixed 320px): plan numbers in a `card` with `num` values, badge pill, status pill, close button as `btn danger`. CSS:
+- [x] **Step 1:** Two-column layout — chart area (flexible) + facts card (fixed 320px): plan numbers in a `card` with `num` values, badge pill, status pill, close button as `btn danger`. CSS:
 
 ```css
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-4); }
@@ -430,20 +430,20 @@ If the template renders raw lines, keep it raw — add the level classes only if
 
 The PNG chart `<img>` gets `style="width:100%; border-radius: var(--r-md); border: 1px solid var(--border-1);"` (via a class `chart-img`).
 
-- [ ] **Step 2: Verify + commit** `feat: trade detail two-column layout`
+- [x] **Step 2: Verify + commit** `feat: trade detail two-column layout`
 
 ### Task U17: Responsive/mobile pass
 
 **Files:** Modify `style.css`
 
-- [ ] **Step 1:** Audit at 380px/768px widths: keep the existing sidebar-overlay mechanism; ensure `.tiles` collapses (it does via auto-fit); wrap wide tables in `<div class="table-scroll">` where needed with `.table-scroll { overflow-x: auto; }`; toolbar wraps (already `flex-wrap`).
-- [ ] **Step 2: Verify + commit** `fix: responsive pass at 380/768px`
+- [x] **Step 1:** Audit at 380px/768px widths: keep the existing sidebar-overlay mechanism; ensure `.tiles` collapses (it does via auto-fit); wrap wide tables in `<div class="table-scroll">` where needed with `.table-scroll { overflow-x: auto; }`; toolbar wraps (already `flex-wrap`).
+- [x] **Step 2: Verify + commit** `fix: responsive pass at 380/768px`
 
 ### Task U18: Marker-class smoke tests
 
 **Files:** Modify `tests/test_admin_pages.py`
 
-- [ ] **Step 1: Append**
+- [x] **Step 1: Append**
 
 ```python
 def test_tokens_and_font_are_linked(client):
@@ -461,7 +461,7 @@ def test_settings_page_has_cards(client):
     assert 'class="card' in client.get("/settings").get_data(as_text=True)
 ```
 
-- [ ] **Step 2: Run all + commit** `test: marker-class assertions for redesigned pages`
+- [x] **Step 2: Run all + commit** `test: marker-class assertions for redesigned pages`
 
 ---
 
