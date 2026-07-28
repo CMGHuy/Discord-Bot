@@ -77,7 +77,7 @@ from ..volatility import adx_trend_strength
 from ..trendlines import strongest_trendline_pair
 
 from .chart_style import (
-    CHIP_BG, CURRENT_PRICE_COLOR, DEFAULT_LOOKBACK_DAYS,
+    CHART_BG, CHIP_BG, CURRENT_PRICE_COLOR, DEFAULT_LOOKBACK_DAYS,
     DEFAULT_TRENDLINE_LOOKBACK_DAYS, DISCLAIMER_TEXT, DOWN_COLOR, ENTRY_COLOR, KC_COLOR,
     MACD_LINE_COLOR, MIN_LABEL_GAP_FRAC, MUTED_TEXT_COLOR, PRO_STYLE,
     REWARD_BAND_ALPHA, RISK_BAND_ALPHA, RSI_LINE_COLOR, RUNNER_BAND_ALPHA,
@@ -143,6 +143,20 @@ def _fib_note_lines(df: pd.DataFrame, lookback: int, label: str) -> list:
         f"  0%   {_fmt_note_date(date_high)}  {swing_high:.2f}",
         f"  100% {_fmt_note_date(date_low)}  {swing_low:.2f}",
     ]
+
+
+def _draw_last_price_pill(ax, df, color=CURRENT_PRICE_COLOR):
+    """TradingView-style: dashed horizontal ray at the last close plus a
+    solid price pill pinned to the right edge of the axes."""
+    last = float(df["Close"].iloc[-1])
+    ax.axhline(last, color=color, linewidth=0.8, linestyle=(0, (4, 3)), alpha=0.9, zorder=4)
+    ax.annotate(
+        f" {last:,.2f} ", xy=(1.0, last), xycoords=("axes fraction", "data"),
+        xytext=(2, 0), textcoords="offset points", va="center", ha="left",
+        fontsize=8, fontweight="bold", color=CHART_BG, zorder=6,
+        bbox=dict(boxstyle="round,pad=0.28", fc=color, ec="none"),
+        annotation_clip=False,
+    )
 
 
 def generate_trade_chart(
@@ -493,7 +507,7 @@ def generate_trade_chart(
         # every mplfinance-created panel that's already on the figure.
         try:
             fig.subplots_adjust(
-                hspace=0.55, top=0.91, bottom=0.05,
+                hspace=0.55, top=0.91, bottom=0.05, right=0.90,
                 left=VOLUME_PROFILE_PANEL_WIDTH_FRAC + VOLUME_PROFILE_PANEL_GAP_FRAC + 0.02,
             )
         except Exception:
@@ -815,6 +829,15 @@ def generate_trade_chart(
                 bbox=dict(boxstyle="round,pad=0.25", facecolor=color, edgecolor="none", alpha=0.9),
                        zorder=7,
             )
+
+        # Last-price line + right-edge price pill -- TradingView-style dashed
+        # ray at the most recent close plus a solid pill pinned to the right
+        # edge of the axes, drawn after the candles/addplots and the entry/
+        # stop/target level labels above so it renders on top of them.
+        try:
+            _draw_last_price_pill(ax, recent)
+        except Exception as _pe:
+            log.debug("Last-price pill failed: %s", _pe)
 
         ax.set_xlim(ax.get_xlim()[0], label_x + extra_width * 0.55)
 
