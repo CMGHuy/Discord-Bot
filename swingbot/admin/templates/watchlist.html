@@ -45,26 +45,26 @@
   {% if tickers %}
   <table>
     <tr>
-      <th>#</th>
+      <th class="num">#</th>
       <th>Ticker</th>
       <th>Company</th>
-      <th>Open trades</th>
-      <th>Closed trades</th>
+      <th class="num">Open trades</th>
+      <th class="num">Closed trades</th>
       <th></th>
     </tr>
     {% for ticker in tickers %}
     <tr>
-      <td class="muted" title="Row number">{{ loop.index }}</td>
-      <td title="{{ ticker }} -- ticker symbol"><strong>{{ ticker }}</strong></td>
+      <td class="num muted" title="Row number">{{ loop.index }}</td>
+      <td><span class="pill" title="{{ ticker }} -- ticker symbol">{{ ticker }}</span></td>
       <td class="muted" title="{{ company_names.get(ticker) or 'Company name not available' }}">{{ company_names.get(ticker) or '—' }}</td>
-      <td title="Number of currently open paper trades on this ticker">
+      <td class="num" title="Number of currently open paper trades on this ticker">
         {% if trade_counts[ticker].open > 0 %}
         <span style="color:#6dda9e; font-weight:600;">{{ trade_counts[ticker].open }}</span>
         {% else %}
         <span class="muted">--</span>
         {% endif %}
       </td>
-      <td class="muted" title="Total number of closed (win/loss/manually-closed) trades on this ticker, all-time">{{ trade_counts[ticker].closed or '--' }}</td>
+      <td class="num muted" title="Total number of closed (win/loss/manually-closed) trades on this ticker, all-time">{{ trade_counts[ticker].closed or '--' }}</td>
       <td>
         <form method="post" action="{{ url_for('watchlist_remove') }}" style="margin:0;"
               onsubmit="return confirm('Remove ' + '{{ ticker }}' + ' from watchlist?');">
