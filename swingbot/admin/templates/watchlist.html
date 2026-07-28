@@ -1,19 +1,20 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="row" style="margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+<div class="card" style="margin-bottom: 20px;">
+  <p class="card-title">Add ticker</p>
   <form method="post" action="{{ url_for('watchlist_add') }}" style="display:flex; gap:8px; align-items:center; margin:0;">
-    <div class="ticker-autocomplete">
+    <div class="ticker-autocomplete" style="flex: 1;">
       <input type="text" name="ticker" id="ticker-input" placeholder="Add ticker (e.g. NVDA)" required
-             autocomplete="off"
-             style="background:#0a0c10; color:#dde1ea; border:1px solid #252933; border-radius:7px;
-                    padding:8px 12px; font-size:13px; font-family:inherit; width:240px;">
+             autocomplete="off" style="width:100%;">
       <div id="ticker-suggestions" class="ticker-suggestions" style="display:none;"></div>
     </div>
     <button type="submit" class="small">+ Add</button>
   </form>
-  <button type="button" class="secondary small" onclick="document.getElementById('bulk-add-card').style.display='';this.style.display='none';">
-    📋 Bulk add / restore
-  </button>
+  <div style="margin-top: 12px;">
+    <button type="button" class="secondary small" onclick="document.getElementById('bulk-add-card').style.display='';this.style.display='none';">
+      📋 Bulk add / restore
+    </button>
+  </div>
 </div>
 
 <div class="card" id="bulk-add-card" style="display:none; margin-bottom:20px;">
@@ -25,8 +26,7 @@
   </p>
   <form method="post" action="{{ url_for('watchlist_bulk_add') }}">
     <textarea name="tickers" rows="4" placeholder="AAPL, MSFT, NVDA, TSLA&#10;or one per line"
-              style="width:100%; max-width:520px; background:#0a0c10; color:#dde1ea; border:1px solid #252933;
-                     border-radius:7px; padding:10px 12px; font-size:13px; font-family:inherit; resize:vertical;"></textarea>
+              style="width:100%; max-width:520px; resize:vertical;"></textarea>
     <div style="margin-top:8px;">
       <button type="submit" class="small">Add all</button>
     </div>
@@ -76,9 +76,7 @@
     {% endfor %}
   </table>
   {% else %}
-  <div style="padding: 28px 0; text-align: center; color: #5a6275;">
-    Watchlist is empty. Add tickers above.
-  </div>
+  <div class="empty-state"><span class="glyph">📄</span>No tickers yet — add one above.</div>
   {% endif %}
 </div>
 
