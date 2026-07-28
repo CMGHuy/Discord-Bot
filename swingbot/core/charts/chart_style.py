@@ -100,13 +100,13 @@ def _label_bbox(color: str, alpha: float = 0.88) -> dict:
 
 
 # mplfinance market colors: candle body/wick/edge match (a solid, modern
-# look rather than hollow candles), volume bars tinted the same up/down
-# colors as the candles so the two panels read as one coherent story.
+# look rather than hollow candles), volume bars tinted translucent variants
+# of the up/down colors so the volume panel doesn't compete with the price panel.
 _MARKET_COLORS = mpf.make_marketcolors(
     up=UP_COLOR, down=DOWN_COLOR,
     edge={"up": UP_COLOR, "down": DOWN_COLOR},
     wick={"up": UP_COLOR, "down": DOWN_COLOR},
-    volume={"up": UP_COLOR, "down": DOWN_COLOR},
+    volume={"up": "#26a69a55", "down": "#ef535055"},
     ohlc="inherit",
 )
 

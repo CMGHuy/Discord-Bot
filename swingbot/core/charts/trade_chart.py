@@ -69,6 +69,7 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 from matplotlib.offsetbox import AnnotationBbox, HPacker, TextArea
 import mplfinance as mpf
 import pandas as pd
@@ -1027,6 +1028,12 @@ def generate_trade_chart(
             _draw_volume_profile_panel(fig, ax, df, h.get("sr_lookback", 20), entry_price=entry, price_range=ylim)
         except Exception as exc:
             log.debug("Volume Profile panel skipped: %s", exc)
+
+        # Quieter axes: reduce tick density and mute label colors so the focus
+        # stays on price action and overlays, not on gridline scaffolding.
+        for ax_ in fig.axes:
+            ax_.tick_params(labelsize=7, colors=MUTED_TEXT_COLOR, length=0)
+            ax_.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6, prune="both"))
 
         # Legal/liability fine print -- deliberately the very last thing drawn,
         # below every panel (price, volume, MACD/RSI when present), in figure
