@@ -43,6 +43,7 @@
   </p>
 
   {% if tickers %}
+  <div class="table-scroll">
   <table>
     <tr>
       <th class="num">#</th>
@@ -75,6 +76,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
   {% else %}
   <div class="empty-state"><span class="glyph">📄</span>No tickers yet — add one above.</div>
   {% endif %}

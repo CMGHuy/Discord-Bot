@@ -26,6 +26,7 @@
 
 <div class="card" style="margin-bottom:20px;">
   <p class="card-title">Portfolio heat</p>
+  <div class="table-scroll">
   <table>
     <tr>
       <th>Metric</th><th>Value</th><th>Cap</th><th>Utilisation</th>
@@ -45,6 +46,7 @@
       </td>
     </tr>
   </table>
+  </div>
   <p class="muted" style="font-size:12.5px; margin-bottom:0;">
     Open heat is the summed risk of every open position as a percent of account
     balance. At or above the cap, new entries are blocked.
@@ -55,6 +57,7 @@
   <p class="card-title">Sector heat</p>
   {% set sectors = state.get('sector_heat') or {} %}
   {% if sectors %}
+  <div class="table-scroll">
   <table>
     <tr><th>Sector</th><th>Heat</th><th></th></tr>
     {% for sector, pct in sectors|dictsort(by='value', reverse=true) %}
@@ -71,6 +74,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
   {% else %}
   <p class="muted" style="margin-bottom:0;">No sector exposure -- no open positions, or no sector map for the active universe.</p>
   {% endif %}
