@@ -467,6 +467,12 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 }
 .explanation { white-space: pre-wrap; line-height: 1.6; font-size: 13.5px; }
 
+/* ---- Interactive chart (lightweight-charts) ---- */
+.chart-legend { position: absolute; top: 8px; left: 10px; z-index: 3;
+  font-size: var(--fs-xs); color: var(--text-2); pointer-events: none;
+  font-variant-numeric: tabular-nums; }
+.swing-chart { height: 460px; border: 1px solid var(--border-1); border-radius: var(--r-md); overflow: hidden; }
+
 /* ---- Settings ---- */
 .settings-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
