@@ -433,6 +433,7 @@ def generate_trade_chart(
             ax.get_legend().remove()
 
         # Subtle ticker + horizon watermark in the price panel background
+        # (ax is the price-panel axes object, what the brief called price_ax)
         ax.text(
             0.012, 0.985, f"{ticker}  ·  {horizon_label}",
             transform=ax.transAxes, ha="left", va="top",
