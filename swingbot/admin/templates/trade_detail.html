@@ -16,12 +16,15 @@
         <div class="chart-spinner"></div>
         <span>Generating chart for {{ t.ticker }}…</span>
       </div>
-      <img id="chart-img" class="chart-img"
-           src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
-           alt="Chart for {{ t.ticker }}"
-           style="display:none; width:100%; border-radius: var(--r-md); border: 1px solid var(--border-1);"
-           onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
-           onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
+      <div class="swing-chart" data-swing-chart data-ticker="{{ t.ticker }}" data-trade-id="{{ t.id }}"></div>
+      <details style="margin-top: var(--sp-3);"><summary class="muted">Static chart (Discord parity)</summary>
+        <img id="chart-img" class="chart-img"
+             src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
+             alt="Chart for {{ t.ticker }}"
+             style="display:none; width:100%; border-radius: var(--r-md); border: 1px solid var(--border-1);"
+             onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
+             onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
+      </details>
     </div>
   </div>
 
