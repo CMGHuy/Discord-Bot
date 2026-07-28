@@ -138,12 +138,14 @@
         return r.text();
       })
       .then(function(html) {
+        var refreshStatus = document.getElementById('refresh-status');
         if (html === undefined) {
-          document.getElementById('refresh-status').textContent = 'Up to date ' + new Date().toLocaleTimeString();
+          if (refreshStatus) refreshStatus.textContent = 'Up to date ' + new Date().toLocaleTimeString();
           return;
         }
         if (!html) return;
         var container = document.getElementById('dashboard-fragment');
+        if (!container) return;
         if (typeof morphdom !== 'undefined') {
           // Diff-patch: only updates DOM nodes that actually changed.
           // This prevents the full repaint / layout-thrash that innerHTML
@@ -175,7 +177,7 @@
           // morphdom not yet loaded (first render) -- fall back to innerHTML
           container.innerHTML = html;
         }
-        document.getElementById('refresh-status').textContent =
+        if (refreshStatus) refreshStatus.textContent =
           'Updated ' + new Date().toLocaleTimeString();
         if (typeof applyColumnOrder === 'function') { applyColumnOrder(); }
         // Re-scan the Trade History table + rebuild its ticker/strategy/
@@ -281,23 +283,26 @@
         var btn = document.getElementById('pause-resume-btn');
         var form = document.getElementById('pause-resume-form');
         var badge = document.getElementById('scan-pause-badge');
-        if (data.paused) {
-          btn.textContent = '▶ Resume scanning';
-          btn.title = 'Resume the automatic background scan loop';
-          form.action = '{{ url_for("resume_scan") }}';
-          badge.style.display = 'inline-block';
-          badge.textContent = '⏸ Paused';
-          badge.style.color = '#e2b25a';
-          badge.style.borderColor = '#e2b25a';
-        } else {
-          btn.textContent = '⏸ Pause scanning';
-          btn.title = 'Pause the automatic background scan loop (manual !check still works)';
-          form.action = '{{ url_for("pause_scan") }}';
-          badge.style.display = 'none';
+        if (btn && form && badge) {
+          if (data.paused) {
+            btn.textContent = '▶ Resume scanning';
+            btn.title = 'Resume the automatic background scan loop';
+            form.action = '{{ url_for("resume_scan") }}';
+            badge.style.display = 'inline-block';
+            badge.textContent = '⏸ Paused';
+            badge.style.color = '#e2b25a';
+            badge.style.borderColor = '#e2b25a';
+          } else {
+            btn.textContent = '⏸ Pause scanning';
+            btn.title = 'Pause the automatic background scan loop (manual !check still works)';
+            form.action = '{{ url_for("pause_scan") }}';
+            badge.style.display = 'none';
+          }
         }
         // "Stop scan" only makes sense -- and is only enabled -- while a
         // scan is actually in progress right now.
-        document.getElementById('stop-btn').disabled = !data.running;
+        var stopBtn = document.getElementById('stop-btn');
+        if (stopBtn) stopBtn.disabled = !data.running;
 
         // ---- Bot liveness indicator ----------------------------------------
         var dot   = document.getElementById('bot-status-dot');
