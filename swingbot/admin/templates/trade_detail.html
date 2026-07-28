@@ -12,12 +12,12 @@
       </span>
     </p>
     <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">
-      <div class="chart-loading" id="chart-loading">
-        <div class="chart-spinner"></div>
-        <span>Generating chart for {{ t.ticker }}…</span>
-      </div>
       <div class="swing-chart" data-swing-chart data-ticker="{{ t.ticker }}" data-trade-id="{{ t.id }}"></div>
       <details style="margin-top: var(--sp-3);"><summary class="muted">Static chart (Discord parity)</summary>
+        <div class="chart-loading" id="chart-loading">
+          <div class="chart-spinner"></div>
+          <span>Generating chart for {{ t.ticker }}…</span>
+        </div>
         <img id="chart-img" class="chart-img"
              src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
              alt="Chart for {{ t.ticker }}"
