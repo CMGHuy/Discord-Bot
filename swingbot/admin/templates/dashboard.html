@@ -331,4 +331,29 @@
   refreshScanStatus();
   setInterval(refreshScanStatus, 5000);
 </script>
+
+<div class="chart-modal" id="chart-modal" hidden>
+  <div class="chart-modal-panel">
+    <div class="toolbar"><b id="chart-modal-title"></b><span class="spacer"></span>
+      <button type="button" class="btn ghost small" id="chart-modal-close">✕</button></div>
+    <div class="swing-chart" id="chart-modal-chart" style="height:380px;"></div>
+  </div>
+</div>
+<script>
+(function () {
+  const modal = document.getElementById("chart-modal");
+  const host = document.getElementById("chart-modal-chart");
+  document.addEventListener("click", (e) => {
+    const row = e.target.closest("tr[data-ticker]");
+    if (row && !e.target.closest("a, button, form")) {
+      modal.hidden = false;
+      document.getElementById("chart-modal-title").textContent = row.dataset.ticker;
+      host.innerHTML = ""; host.dataset.ticker = row.dataset.ticker;
+      SwingChart.mount(host);
+    }
+    if (e.target === modal || e.target.id === "chart-modal-close") { modal.hidden = true; host.innerHTML = ""; }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { modal.hidden = true; host.innerHTML = ""; } });
+})();
+</script>
 {% endblock %}

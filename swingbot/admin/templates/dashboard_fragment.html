@@ -261,7 +261,7 @@
     {%- set sizing = sizing_map.get(t.id) -%}
     {%- set is_bull = t.direction == 'bullish' -%}
     {%- set conf_score = t.get('confidence_score') -%}
-    <tr class="clickable" data-ticker="{{ t.ticker }}" onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
+    <tr class="clickable" data-ticker="{{ t.ticker }}">
       <td class="muted" title="Row number, per the table's current sort order">{{ loop.index }}</td>
 
       {# ── Status cell: dot + bar + live SL/TP distances ─────────────────── #}
@@ -295,8 +295,8 @@
       </td>
 
       {# Ticker #}
-      <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
-        <strong>{{ t.ticker }}</strong>
+      <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
+        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong>
         {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
         {% if t.get('badge') %}<span class="pill {{ 'validated' if t.badge == 'VALIDATED' else 'weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ '✅ VALIDATED' if t.badge == 'VALIDATED' else '⚠️ WEAK' }}</span>{% endif %}
       </td>
@@ -748,16 +748,15 @@
         data-strategy="{{ c_strat }}"
         data-horizon="{{ t.horizon_key }}"
         data-dir="{{ t.direction }}"
-        data-conf="{{ t.confidence_level }}"
-        onclick="window.location='{{ url_for('trade_detail', trade_id=t.id) }}'">
+        data-conf="{{ t.confidence_level }}">
       <td class="muted" title="Row number, per the table's current sort order"><span class="row-num">{{ loop.index }}</span></td>
       <td title="{% if t.status == 'win' %}Closed profitably by hitting its take-profit target{% elif t.status == 'loss' %}Closed at a loss by hitting its stop-loss{% else %}Closed manually (e.g. via the ✕ button or the near-TP timeout), not by hitting stop or target{% endif %}">
         {% if t.status == 'win' %}<span class="outcome-win">W</span>
         {% elif t.status == 'loss' %}<span class="outcome-loss">L</span>
         {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
-      <td title="{{ t.ticker }} -- click this row to open the trade's detail page">
-        <strong>{{ t.ticker }}</strong>
+      <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
+        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong>
         {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
         {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ t.badge }}</span>{% endif %}
       </td>
