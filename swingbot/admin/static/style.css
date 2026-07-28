@@ -485,7 +485,23 @@ code { background: #0a0c10; padding: 1px 6px; border-radius: 4px; font-size: 12p
 }
 /* Task U14: the section wrapper itself is now the shared .card component
    (see settings.html); this header band still styles the icon/h3/desc/
-   badge-row nested inside each card. */
+   badge-row nested inside each card.
+
+   .card's own padding (var(--sp-4), all sides) would otherwise stack on
+   top of .settings-card-header's padding (13px 22px below) and
+   .field-grid's (20px 22px 22px, further down) -- both of which were
+   sized on the old .settings-card, which had NO padding of its own, so
+   they were the only inset. Left stacked, the header would sit indented
+   from the card's edge instead of flush against it (losing the
+   edge-to-edge title-bar look: distinct #0d1018 background, border-bottom,
+   square top corners meant to be clipped flush to the card's own rounded
+   corners) and the fields would end up roughly double-inset. Zeroing
+   .card's padding for section cards specifically (scoped via the
+   data-section-card marker already used by filterSettings() in
+   settings.html, so this doesn't touch .card everywhere else in the app)
+   restores that -- overflow: hidden brings back the corner-clipping the
+   old .settings-card rule had too. */
+.card[data-section-card] { padding: 0; overflow: hidden; }
 .settings-card-header {
   display: flex; align-items: center; gap: 12px; padding: 13px 22px;
   border-bottom: 1px solid #1f2330; background: #0d1018; cursor: pointer; user-select: none;
