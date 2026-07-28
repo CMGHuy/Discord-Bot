@@ -1107,6 +1107,68 @@ def close_trade(trade_id):
     return redirect(url_for("index", msg=f"Trade {t['ticker']} marked as closed.", ok=1))
 
 
+def _ohlcv_frame(ticker: str):
+    """Daily OHLCV for the interactive chart: live fetch first, falling back
+    to the backtest CSV cache so the chart still renders offline. Split out
+    of the route for testability (tests monkeypatch this)."""
+    try:
+        from swingbot.core.data import get_daily_data
+        df = get_daily_data(ticker)
+        if df is not None and len(df):
+            return df
+    except Exception:
+        pass
+    import pandas as pd
+    safe = ticker.replace("=", "_").replace("^", "_").replace("/", "_")
+    p = os.path.join(config.DATA_DIR, "backtest_cache", f"{safe}.csv")
+    if os.path.exists(p):
+        try:
+            return pd.read_csv(p, index_col="Date", parse_dates=True)
+        except Exception:
+            return None
+    return None
+
+
+@app.route("/api/ohlcv/<ticker>", methods=["GET"])
+def api_ohlcv(ticker):
+    """Daily OHLCV bars for the interactive chart (U29's JS). Read-only,
+    capped at 1000 bars, defaults to 260 (~1y of trading days).
+
+    Auth is checked inline here rather than via the module's `require_auth`
+    decorator: that one redirects an unauthenticated request to the HTML
+    /login page (302), which is the right UX for a browser hitting a page
+    but wrong for a JSON endpoint a fetch() call hits directly -- it needs
+    a bare 401 it can branch on, same contract as api.py's
+    `require_auth_json` (not reused directly: that module imports
+    ADMIN_USERNAME/ADMIN_PASSWORD by value at its own import time, so it
+    goes stale under this test module's ADMIN_USERNAME/PASSWORD
+    monkeypatching -- this route reads this module's own live globals
+    instead, the same ones `require_auth` and `login_submit` check)."""
+    if not _session_authenticated():
+        auth = request.authorization
+        if not auth or auth.username != ADMIN_USERNAME or auth.password != ADMIN_PASSWORD:
+            return Response(json.dumps({"error": "auth"}), status=401, mimetype="application/json")
+    ticker = ticker.upper()
+    try:
+        bars = max(1, min(int(request.args.get("bars", 260)), 1000))
+    except ValueError:
+        bars = 260
+    df = _ohlcv_frame(ticker)
+    if df is None or not len(df):
+        return Response(json.dumps({"error": "no data"}), status=404, mimetype="application/json")
+    df = df.tail(bars)
+    payload = {
+        "ticker": ticker,
+        "bars": [
+            {"time": idx.strftime("%Y-%m-%d"), "open": round(float(r["Open"]), 4),
+             "high": round(float(r["High"]), 4), "low": round(float(r["Low"]), 4),
+             "close": round(float(r["Close"]), 4), "volume": float(r["Volume"])}
+            for idx, r in df.iterrows()
+        ],
+    }
+    return Response(json.dumps(payload), mimetype="application/json")
+
+
 @app.route("/trades/export.csv", methods=["GET"])
 @require_auth
 def export_trades_csv():
