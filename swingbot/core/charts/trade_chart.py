@@ -161,12 +161,19 @@ def _draw_last_price_pill(ax, df, color=CURRENT_PRICE_COLOR):
     )
 
 
-def _draw_level_pill(ax, y, text, color):
+def _draw_level_pill(ax, y, text, color, y_offset: int = 0):
     """Right-edge pill for a plan level (entry/SL/TP). Replaces the old
-    mid-chart chip boxes, matching TradingView's price-scale labels."""
+    mid-chart chip boxes, matching TradingView's price-scale labels.
+
+    `y_offset` (screen-space offset points, not data units) lets the
+    overlap-avoidance branch in generate_trade_chart() nudge a pill
+    vertically without moving its real `xy` anchor (the actual price) --
+    used when two pills would otherwise land within 0.8% of the visible
+    y-range of each other. Defaults to 0 (no nudge) for the plain
+    per-level call sites."""
     ax.annotate(
         f" {text} ", xy=(1.0, y), xycoords=("axes fraction", "data"),
-        xytext=(2, 0), textcoords="offset points", va="center", ha="left",
+        xytext=(2, y_offset), textcoords="offset points", va="center", ha="left",
         fontsize=7.5, fontweight="bold", color=CHART_BG, zorder=5,
         bbox=dict(boxstyle="round,pad=0.25", fc=color, ec="none"),
         annotation_clip=False,
@@ -678,16 +685,17 @@ def generate_trade_chart(
         ax.set_ylim(lo - pad, hi + top_pad)
         ylim = ax.get_ylim()
 
-        # Off-candle label margin columns, computed here -- BEFORE the
+        # Off-candle label margin column, computed here -- BEFORE the
         # confirming-strategy/trendline overlays are drawn below -- so
         # their own labels can be placed in a dedicated column away from
-        # the candles too, not just the entry/stop/target labels further
-        # out (unchanged, still `label_x`). Two separate columns, nearer
-        # (strategy/trendline) and farther (entry/stop/target), so the two
-        # groups of labels don't end up colliding with EACH OTHER either.
+        # the candles. Entry/stop/target1/target2/current-price labels
+        # used to share a second, farther-out column here too (`label_x`),
+        # but U21 moved them to right-edge pills anchored in axes-fraction
+        # coordinates (see _draw_level_pill below) instead of a data-space
+        # column, so only this one column's width still needs reserving
+        # via set_xlim() further down.
         x_right = len(recent) - 1
         extra_width = max(6, len(recent) * 1.1)
-        label_x = x_right + extra_width * 0.45
         strategy_label_x = x_right + extra_width * 0.18
         _strategy_label_occupied = []
         _strategy_min_gap = (ylim[1] - ylim[0]) * MIN_LABEL_GAP_FRAC
@@ -850,16 +858,8 @@ def generate_trade_chart(
         _placed_pill_ys = [float(recent["Close"].iloc[-1])]
         for price, color, label in sorted(raw_labels, key=lambda item: item[0]):
             pill_text = f"{label} {price:,.2f}"
-            if any(abs(price - placed_y) < _pill_overlap_gap for placed_y in _placed_pill_ys):
-                ax.annotate(
-                    f" {pill_text} ", xy=(1.0, price), xycoords=("axes fraction", "data"),
-                    xytext=(2, 10), textcoords="offset points", va="center", ha="left",
-                    fontsize=7.5, fontweight="bold", color=CHART_BG, zorder=5,
-                    bbox=dict(boxstyle="round,pad=0.25", fc=color, ec="none"),
-                    annotation_clip=False,
-                )
-            else:
-                _draw_level_pill(ax, price, pill_text, color)
+            overlaps = any(abs(price - placed_y) < _pill_overlap_gap for placed_y in _placed_pill_ys)
+            _draw_level_pill(ax, price, pill_text, color, y_offset=10 if overlaps else 0)
             _placed_pill_ys.append(price)
 
         # Last-price line + right-edge price pill -- TradingView-style dashed
@@ -871,7 +871,11 @@ def generate_trade_chart(
         except Exception as _pe:
             log.debug("Last-price pill failed: %s", _pe)
 
-        ax.set_xlim(ax.get_xlim()[0], label_x + extra_width * 0.55)
+        # Widen just enough for the strategy/trendline label column
+        # (`strategy_label_x`) and its text to render without clipping --
+        # NOT the old `label_x` chip column's margin, which this chart no
+        # longer draws anything in (see comment above).
+        ax.set_xlim(ax.get_xlim()[0], strategy_label_x + extra_width * 0.55)
 
         # v2 plan overlays (Tasks 81-82): trigger line for stop-entry plans,
         # TP1/TP2 zones, and (once PARTIAL) the live runner trail.
