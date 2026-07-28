@@ -573,6 +573,22 @@ fields entirely (not just masked); import applies any recognized field it's
 handed, sensitive or not (pasting a real credential back in is the whole
 point of import), skipping only keys the schema doesn't recognize at all.
 
+## Admin UI
+
+The admin UI's look is driven by one design-token layer, not scattered
+per-page CSS: `static/tokens.css` is the single palette/spacing source of
+truth, `swingbot/admin/chart_style.THEME` mirrors those same colors for
+server-rendered PNG charts, and a test keeps the two in sync so they can
+never quietly drift apart. Fonts (Inter) and charting (`lightweight-charts`
+4.2.3) are both vendored under `static/vendor/` and self-hosted — no runtime
+CDN calls, so the admin UI keeps working fully offline.
+
+| Surface | What it does |
+|---|---|
+| `/api/ohlcv/<ticker>?bars=&trade_id=` | Auth-guarded, read-only OHLCV JSON for the interactive chart: `bars` defaults to 260, caps at 1000; falls back to the local CSV cache when a live fetch fails; an optional `trade_id` adds that trade's entry/stop/target levels to the response. |
+| Trade-detail chart | Every trade detail page renders an interactive `lightweight-charts` candlestick with entry/SL/TP price lines, replacing the old static PNG-only view. |
+| Dashboard quick-chart modal | Clicking a ticker anywhere on the dashboard opens the same interactive chart in a modal, without leaving the page. |
+
 ## The growth playbook
 
 Written for future-you, reading this in a drawdown, wondering if any of it
