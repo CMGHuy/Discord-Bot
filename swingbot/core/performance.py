@@ -679,7 +679,7 @@ class TradeLog:
             trades = [t for t in trades if t["ticker"] == ticker.upper()]
 
         if sort_by == "confidence":
-            trades.sort(key=lambda t: (t.get("confidence_level", 0), t.get("confidence_score", 0)), reverse=True)
+            trades.sort(key=lambda t: (t.get("confidence_level") or 0, t.get("confidence_score") or 0), reverse=True)
         else:
             trades.sort(key=lambda t: t["opened_at"], reverse=True)
 

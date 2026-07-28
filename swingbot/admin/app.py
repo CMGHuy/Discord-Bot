@@ -454,7 +454,7 @@ def _render_dashboard_fragment() -> str:
     if mode in ("today", "active"):
         open_trades = sorted(
             [t for t in scoped_trades if t["status"] == "open"],
-            key=lambda t: (t.get("confidence_level", 0), t.get("confidence_score", 0)),
+            key=lambda t: (t.get("confidence_level") or 0, t.get("confidence_score") or 0),
             reverse=True,
         )
     else:
