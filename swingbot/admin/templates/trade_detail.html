@@ -3,7 +3,7 @@
 <a href="{{ url_for('index') }}" class="back-link">&#8592; Back to dashboard</a>
 
 {%- set pnl_amt = t.get('realized_pnl_amount') -%}
-<div class="detail-grid" style="margin-top: 16px; margin-bottom: 18px;">
+<div style="margin-top: 16px; margin-bottom: 18px;">
   <div class="card" style="margin-top: 0;">
     <p class="card-title" style="display:flex; align-items:center; gap:8px;">
       Visualization
@@ -12,18 +12,18 @@
       </span>
     </p>
     <div class="chart-wrap" id="chart-wrap" style="cursor:zoom-in;" title="Tap to enlarge">
-      <div class="swing-chart" data-swing-chart data-ticker="{{ t.ticker }}" data-trade-id="{{ t.id }}"></div>
-      <details style="margin-top: var(--sp-3);"><summary class="muted">Static chart (Discord parity)</summary>
-        <div class="chart-loading" id="chart-loading">
-          <div class="chart-spinner"></div>
-          <span>Generating chart for {{ t.ticker }}…</span>
-        </div>
-        <img id="chart-img" class="chart-img"
-             src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
-             alt="Chart for {{ t.ticker }}"
-             style="display:none; width:100%; border-radius: var(--r-md); border: 1px solid var(--border-1);"
-             onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
-             onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
+      <div class="chart-loading" id="chart-loading">
+        <div class="chart-spinner"></div>
+        <span>Generating chart for {{ t.ticker }}…</span>
+      </div>
+      <img id="chart-img" class="chart-img"
+           src="{{ url_for('trade_chart_image', trade_id=t.id) }}"
+           alt="Chart for {{ t.ticker }}"
+           style="display:none; width:100%; border-radius: var(--r-md); border: 1px solid var(--border-1);"
+           onload="this.style.display=''; document.getElementById('chart-loading').style.display='none'; this.style.cursor='zoom-in';" onclick="openLightbox(this.src)"
+           onerror="document.getElementById('chart-loading').innerHTML='<span style=\'color:#da6d6d\'>&#9888; Could not load chart &mdash; price data may be temporarily unavailable. Try refreshing.</span>';">
+      <details style="margin-top: var(--sp-3);"><summary class="muted">Interactive chart</summary>
+        <div class="swing-chart" data-swing-chart data-ticker="{{ t.ticker }}" data-trade-id="{{ t.id }}"></div>
       </details>
     </div>
   </div>
