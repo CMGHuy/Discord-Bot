@@ -116,6 +116,30 @@ def test_update_cache_appends_only_new_bars(tmp_path):
     assert not merged.index.duplicated().any()
 
 
+def test_default_ranged_fetch_sends_date_only_start(monkeypatch):
+    """yf.download's start= only accepts a bare date -- a Timestamp with a
+    time/tz component (every intraday `last` index value has one, e.g.
+    "2026-07-24 19:30:00+00:00") stringifies to something yfinance's own
+    date parser rejects. It doesn't raise: it prints "1 Failed download"
+    and hands back an empty frame, which silently looked like "nothing new"
+    on every warm incremental refresh at an intraday interval."""
+    import pandas as pd
+    from swingbot.core import data_store
+
+    captured = {}
+
+    def fake_download(symbol, start=None, interval=None, **kwargs):
+        captured["start"] = start
+        return pd.DataFrame({"Close": [1.0]}, index=pd.DatetimeIndex(["2026-07-25"]))
+
+    monkeypatch.setattr(data_store.yf, "download", fake_download)
+    last = pd.Timestamp("2026-07-24 19:30:00+00:00")
+    df = data_store._default_ranged_fetch("TEST", last, "1h")
+
+    assert captured["start"] == "2026-07-24"
+    assert df is not None and not df.empty
+
+
 def test_update_cache_empty_delta_is_noop(tmp_path):
     import numpy as np
     from tests.conftest import make_ohlcv

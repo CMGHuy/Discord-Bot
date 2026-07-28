@@ -223,7 +223,18 @@ def download_and_cache(ticker: str, interval: str = "daily", base_dir: str = DAT
 
 def _default_ranged_fetch(symbol: str, start, interval: str = "1d") -> "pd.DataFrame | None":
     try:
-        df = yf.download(symbol, start=str(start), interval=yf_interval(interval),
+        # yfinance's start= only accepts a bare date -- str() on a Timestamp
+        # with a time/tz component (as every intraday `last` index value has,
+        # e.g. "2026-07-24 19:30:00+00:00") produces a string yfinance's own
+        # date parser can't consume. It doesn't raise: it prints "1 Failed
+        # download" and hands back an empty frame, which this function then
+        # (correctly, but silently) treats as "nothing new" -- so every warm
+        # incremental refresh at an intraday interval was a silent no-op.
+        # Normalizing to a date-only string here fetches from the start of
+        # that calendar day; any bars already cached get de-duped by the
+        # caller's index-based merge, so the coarser start costs nothing.
+        start_date = pd.Timestamp(start).strftime("%Y-%m-%d")
+        df = yf.download(symbol, start=start_date, interval=yf_interval(interval),
                          auto_adjust=True, progress=False)
         if df is None or df.empty:
             return None
