@@ -28,3 +28,18 @@ PAGES = ["/", "/performance", "/watchlist", "/settings", "/logs"]
 def test_page_renders(client, path):
     resp = client.get(path)
     assert resp.status_code == 200, f"{path} -> {resp.status_code}"
+
+
+def test_tokens_and_font_are_linked(client):
+    html = client.get("/").get_data(as_text=True)
+    assert "tokens.css" in html and "vendor/inter/inter.css" in html
+    assert "googleapis" not in html  # no-CDN constraint
+
+
+def test_stats_page_has_tiles(client):
+    html = client.get("/performance").get_data(as_text=True)
+    assert 'class="tile' in html or "tiles" in html
+
+
+def test_settings_page_has_cards(client):
+    assert 'class="card' in client.get("/settings").get_data(as_text=True)
