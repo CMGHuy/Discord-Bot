@@ -76,10 +76,19 @@
   })();
 
   // ---- Dashboard mode (Today + Open / Today only / All days) --------------
-  // Persisted in localStorage so it survives a full page reload, and
-  // reflected in the URL (?mode=...) so the choice is also shareable/
-  // bookmarkable and the initial server-side render matches the toggle.
-  // "active" (today's new trades + every still-open position) is the default.
+  // Reflected in the URL (?mode=...) so switching modes is visible in the
+  // address bar and the choice is shareable/bookmarkable -- reloading THIS
+  // URL keeps it. Deliberately NOT persisted in localStorage: that used to
+  // survive to every future page load even with no ?mode= in the URL at
+  // all, silently reapplying a forgotten "Today only"/"All days" choice
+  // from a past session the instant the page loaded -- "Today only" mode
+  // excludes any open trade not opened today by design (see
+  // _render_dashboard_fragment's docstring), so a single old click could
+  // make a live open position vanish from every future load and every
+  // auto-refresh tick after it, with nothing but a re-highlighted toggle
+  // button (easy to miss) to explain why. "active" (today's new trades +
+  // every still-open position) is the default and the only thing you get
+  // back from a plain reload now.
   var dashboardMode = {{ (dashboard_mode | default('active')) | tojson }};
   function updateDashboardModeButtons() {
     document.querySelectorAll('.dashboard-mode-btn').forEach(function(btn) {
@@ -92,35 +101,13 @@
   function setDashboardMode(mode) {
     if (mode === dashboardMode) return;
     dashboardMode = mode;
-    try { localStorage.setItem('dashboardMode', mode); } catch (e) {}
     var url = new URL(window.location.href);
     url.searchParams.set('mode', mode);
     window.history.replaceState(null, '', url);
     updateDashboardModeButtons();
     refreshDashboard();
   }
-  (function() {
-    // On first load, a saved localStorage preference wins over the
-    // server-rendered default (but the URL's own ?mode=, if present, was
-    // already used for the server-side render and takes precedence over
-    // both, since it's the most explicit signal).
-    var urlMode = new URL(window.location.href).searchParams.get('mode');
-    var switchedFromServerRender = false;
-    if (!urlMode) {
-      try {
-        var saved = localStorage.getItem('dashboardMode');
-        if ((saved === 'active' || saved === 'today' || saved === 'all') && saved !== dashboardMode) {
-          dashboardMode = saved;
-          switchedFromServerRender = true;
-        }
-      } catch (e) {}
-    }
-    updateDashboardModeButtons();
-    // The server-rendered fragment already on the page reflects the OLD
-    // mode in this case -- re-fetch immediately so it doesn't sit stale
-    // until the next auto-refresh tick.
-    if (switchedFromServerRender) { refreshDashboard(); }
-  })();
+  updateDashboardModeButtons();
 
   var _lastFragmentEtag = null;
   function refreshDashboard() {
