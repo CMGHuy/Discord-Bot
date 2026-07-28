@@ -54,9 +54,39 @@
     const last = data.bars[data.bars.length - 1];
     function renderLegend(b) {
       const dir = b.close >= b.open ? "pos" : "neg";
-      legend.innerHTML = `<b>${data.ticker}</b> · ` +
-        `O <span class="${dir}">${b.open}</span> H <span class="${dir}">${b.high}</span> ` +
-        `L <span class="${dir}">${b.low}</span> C <span class="${dir}">${b.close}</span>`;
+      legend.textContent = "";
+
+      const tickerB = document.createElement("b");
+      tickerB.textContent = data.ticker;
+      legend.appendChild(tickerB);
+
+      legend.appendChild(document.createTextNode(" · O "));
+
+      const oSpan = document.createElement("span");
+      oSpan.className = dir;
+      oSpan.textContent = b.open;
+      legend.appendChild(oSpan);
+
+      legend.appendChild(document.createTextNode(" H "));
+
+      const hSpan = document.createElement("span");
+      hSpan.className = dir;
+      hSpan.textContent = b.high;
+      legend.appendChild(hSpan);
+
+      legend.appendChild(document.createTextNode(" L "));
+
+      const lSpan = document.createElement("span");
+      lSpan.className = dir;
+      lSpan.textContent = b.low;
+      legend.appendChild(lSpan);
+
+      legend.appendChild(document.createTextNode(" C "));
+
+      const cSpan = document.createElement("span");
+      cSpan.className = dir;
+      cSpan.textContent = b.close;
+      legend.appendChild(cSpan);
     }
     renderLegend(last);
     chart.subscribeCrosshairMove(p => {
