@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import logging
+import os
+
+from swingbot import config
+from swingbot.core.jsonio import read_json
 
 log = logging.getLogger("swing-bot.macro.sectors")
 
@@ -92,3 +96,37 @@ def leaders(rs_rows: list[dict], n=3) -> list[dict]:
 
 def laggards(rs_rows: list[dict], n=3) -> list[dict]:
     return rs_rows[-n:]
+
+
+_GROWTH = ("XLK", "XLY", "XLC")
+_DEFENSIVE = ("XLP", "XLU", "XLV")
+
+# Seeded from the live watchlist via universe.sector_map("sp500+etfs"), with
+# GICS names normalized to the SECTOR_ETFS vocabulary. Unknown -> None, which
+# every consumer treats as "no sector context", never as a failure.
+TICKER_SECTORS_PATH = os.path.join(config.DATA_DIR, "macro", "ticker_sectors.json")
+_ticker_map_cache: dict | None = None
+
+
+def rotation_state(rs_rows: list[dict]) -> dict:
+    if not rs_rows:
+        return {"posture": "unknown", "note": "no sector data"}
+    top4 = [r["etf"] for r in rs_rows[:4]]
+    growth = sum(t in top4 for t in _GROWTH)
+    defensive = sum(t in top4 for t in _DEFENSIVE)
+    if growth >= 2:
+        posture = "risk_on"
+    elif defensive >= 2:
+        posture = "risk_off"
+    else:
+        posture = "mixed"
+    names = ", ".join(f"{r['etf']} ({r['sector']})" for r in rs_rows[:3])
+    return {"posture": posture, "note": f"leaders: {names}"}
+
+
+def sector_of(ticker: str) -> str | None:
+    global _ticker_map_cache
+    if _ticker_map_cache is None:
+        raw = read_json(TICKER_SECTORS_PATH, default={}) or {}
+        _ticker_map_cache = {k.upper(): v for k, v in raw.items()}
+    return _ticker_map_cache.get(ticker.upper())

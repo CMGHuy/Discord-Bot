@@ -59,3 +59,50 @@ def test_rs_short_history_skipped():
     bars["XLU"] = bars["XLU"].iloc[-50:]       # < max window + 1
     rows = sector_rs(bars)
     assert "XLU" not in [r["etf"] for r in rows]
+
+
+def _ranked(order):
+    """Build minimal rs_rows in the given etf order (rank 1 first)."""
+    return [{"etf": t, "sector": SECTOR_ETFS[t], "rank": i + 1,
+             "composite": float(len(order) - i)} for i, t in enumerate(order)]
+
+
+def test_rotation_postures():
+    from swingbot.core.macro.sectors import rotation_state
+    risk_on = _ranked(["XLK", "XLY", "XLE", "XLC", "XLF", "XLV", "XLI",
+                       "XLB", "XLP", "XLU", "XLRE"])
+    assert rotation_state(risk_on)["posture"] == "risk_on"     # XLK+XLY+XLC in top 4
+    risk_off = _ranked(["XLP", "XLU", "XLE", "XLV", "XLK", "XLY", "XLC",
+                        "XLF", "XLI", "XLB", "XLRE"])
+    assert rotation_state(risk_off)["posture"] == "risk_off"   # XLP+XLU+XLV in top 4
+    mixed = _ranked(["XLK", "XLP", "XLE", "XLF", "XLY", "XLU", "XLV",
+                     "XLC", "XLI", "XLB", "XLRE"])
+    assert rotation_state(mixed)["posture"] == "mixed"         # 1 of each camp
+    assert "XLK" in rotation_state(risk_on)["note"]            # note names leaders
+
+
+def test_rotation_no_data_is_unknown():
+    from swingbot.core.macro.sectors import rotation_state
+    assert rotation_state([])["posture"] == "unknown"
+
+
+def test_sector_of_static_map(tmp_path, monkeypatch):
+    import swingbot.core.macro.sectors as sectors_mod
+    from swingbot.core.jsonio import atomic_write_json
+    path = tmp_path / "ticker_sectors.json"
+    atomic_write_json(str(path), {"NVDA": "Technology", "XOM": "Energy"})
+    monkeypatch.setattr(sectors_mod, "TICKER_SECTORS_PATH", str(path))
+    sectors_mod._ticker_map_cache = None
+    assert sectors_mod.sector_of("NVDA") == "Technology"
+    assert sectors_mod.sector_of("nvda") == "Technology"       # case-insensitive
+    assert sectors_mod.sector_of("ZZZZ") is None
+
+
+def test_seed_map_uses_etf_sector_vocabulary():
+    """The shipped seed must speak the same sector names as SECTOR_ETFS, or
+    a ticker's sector can never be matched to its sector ETF."""
+    import swingbot.core.macro.sectors as sectors_mod
+    from swingbot.core.jsonio import read_json
+    seed = read_json(sectors_mod.TICKER_SECTORS_PATH, default={}) or {}
+    assert seed, "seed ticker_sectors.json is missing or empty"
+    assert set(seed.values()) <= set(SECTOR_ETFS.values())
