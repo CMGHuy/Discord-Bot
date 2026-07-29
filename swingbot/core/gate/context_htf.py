@@ -25,7 +25,7 @@ def _pivots(closes: pd.Series, span: int = 2) -> tuple[list, list]:
     return highs, lows
 
 
-def _trend(closes: pd.Series, fast: int, slow: int, df: pd.DataFrame = None) -> str:
+def _trend(closes: pd.Series, fast: int, slow: int) -> str:
     """SMA cross + pivot structure; SMAs within 0.5% of each other are
     treated as flat (keeps oscillating ranges deterministic)."""
     if len(closes) < slow + 5:
