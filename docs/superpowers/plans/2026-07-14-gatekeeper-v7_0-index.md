@@ -1,6 +1,6 @@
 # Gatekeeper v7 - Part index (post win-rate audit, 2026-07-29)
 
-> **Status: 0 of 89 tasks implemented (no code written).** Every checkbox across all 5 parts is
+> **Status: 2 of 90 tasks implemented** (G1, G3 — 2026-07-29). Every checkbox across all 5 parts is
 > unchecked, `swingbot/core/gate/` doesn't exist, no `tests/test_gate_*.py` exist, no
 > `feature/gatekeeper-v7` branch was ever created, and git log has zero implementation commits for
 > this plan - only planning commits. Treat this plan as not started, full stop.
@@ -8,7 +8,7 @@
 ## What this plan is now
 
 The plan was written as **219 tasks across 12 parts (~1 MB)**. Two audit passes (2026-07-28,
-2026-07-29) pruned it to **89 tasks across 5 parts (~460 KB)** and merged the survivors back
+2026-07-29) pruned it to **90 tasks across 5 parts (~470 KB)** and merged the survivors back
 together. The single admission test:
 
 > **Does this task change which setups get filtered, or prove that the filtering works?**
@@ -46,7 +46,7 @@ and never re-add a cut task to satisfy one.
 | Part | File | Tasks | Scope | Count | Status |
 |---|---|---|---|---|---|
 | 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | not started |
-| 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 16 | not started |
+| 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | not started |
 | 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | not started |
 | 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | not started |
 | 5 | [_5.md](2026-07-14-gatekeeper-v7_5.md) | G119-G219 | Scan + alert integration, E2E, 4-week forward gate, wrap-up (+ carried-over debt appendix) | 16 | not started |
@@ -61,7 +61,7 @@ Part 5 = Phase G4 + Phase G7 + the G217-G219 appendix.
 
 ---
 
-## Appendix - the 130 cut tasks
+## Appendix - the 129 cut tasks
 
 Kept here so a future session can see what was dropped and why, without resurrecting it. Reasons
 from the 2026-07-28 pass are quoted as written then; the rest are from the 2026-07-29 merge pass.
@@ -71,7 +71,6 @@ from the 2026-07-28 pass are quoted as written then; the rest are from the 2026-
 | G2 | Pure documentation/governance (freezing WR targets in a doc); doesn't change which setups get filtered. Cut. |
 | G10 | Provider health ledger — ops observability; a dead provider already degrades to `unknown` (G43). No effect on which setups pass. |
 | G11 | Quota meter — free-tier budget accounting; ops only. |
-| G12 | FRED client — every consumer (G13-G20: CPI/PPI/PCE, yields, curve) is cut, so nothing calls it. |
 | G13 | CPI series registered but never consumed by any scoring/composite function in this plan; display-only filler. Cut. |
 | G14 | PPI series, same issue as G13 — no consumer, display-only. Cut. |
 | G15 | PCE series not fed into risk_composite/fear_greed; context-only. Cut. |

@@ -336,6 +336,167 @@ git add swingbot/core/macro/ tests/test_macro_httpcache.py
 git commit -m "feat: macro http fetch with TTL disk cache + stale fallback"
 ```
 
+### Task G12: FRED client
+
+> **Audit note (2026-07-29):** this task was cut in the win-rate audit and **restored** on
+> 2026-07-29 during execution — the cut was wrong. Four surviving tasks import this module:
+> G21 pulls `VIXCLS`/`VXVCLS` through `fred_series`, G29/G30 build the economic event calendar
+> from `fred_release_dates`, and G41 backfills history through it. Only the *series registry*
+> (G13–G20: CPI/PPI/PCE/labor/yields/curve) stayed cut — build the client, not the series.
+
+**Files:**
+- Create: `swingbot/core/macro/fred.py`
+- Test: `tests/test_macro_fred.py`
+
+**Interfaces:**
+- Produces: `fred_series(series_id: str, *, start: str | None = None, ttl_s=6*3600) -> list[tuple[str, float]] | None` — GET `https://api.stlouisfed.org/fred/series/observations` with `api_key=config.FRED_API_KEY`, `file_type=json`, sorted ascending, `"."` observations skipped; empty key → None without network. `fred_release_dates(release_id: int, *, include_future=True) -> list[str]` (GET `/fred/releases/dates`). `latest(series_id) -> tuple[str, float] | None`; `yoy(series_id) -> float | None` (last vs value 12 monthly observations earlier).
+- Consumed by: G21 (VIX/VIX3M series), G29 + G30 (economic release dates), G41 (historical backfill).
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_macro_fred.py
+import pytest
+
+import swingbot.config as config
+import swingbot.core.macro.fred as fred
+
+FIXTURE = {"observations": [
+    {"date": "2025-05-01", "value": "310.5"},
+    {"date": "2025-06-01", "value": "."},          # FRED's "no data" marker
+    {"date": "2025-07-01", "value": "312.0"},
+    {"date": "2024-07-01", "value": "300.0"},      # out of order on purpose
+]}
+
+
+@pytest.fixture
+def with_key(monkeypatch):
+    monkeypatch.setattr(config, "FRED_API_KEY", "test-key", raising=False)
+
+
+def test_series_parses_sorted_and_skips_dots(with_key, monkeypatch):
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: FIXTURE)
+    assert fred.fred_series("CPIAUCSL") == [
+        ("2024-07-01", 300.0), ("2025-05-01", 310.5), ("2025-07-01", 312.0)]
+
+
+def test_latest(with_key, monkeypatch):
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: FIXTURE)
+    assert fred.latest("CPIAUCSL") == ("2025-07-01", 312.0)
+
+
+def test_yoy_golden(with_key, monkeypatch):
+    # 13 monthly observations: yoy = (last / value-12-obs-earlier - 1) * 100
+    obs = [{"date": f"2025-{m:02d}-01", "value": str(100 + m)} for m in range(1, 13)]
+    obs.append({"date": "2026-01-01", "value": "113.0"})
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: {"observations": obs})
+    assert fred.yoy("X") == pytest.approx((113.0 / 101.0 - 1) * 100)
+
+
+def test_release_dates(with_key, monkeypatch):
+    payload = {"release_dates": [{"release_id": 10, "date": "2026-07-15"},
+                                 {"release_id": 10, "date": "2026-08-12"}]}
+    monkeypatch.setattr(fred, "fetch_json", lambda *a, **k: payload)
+    assert fred.fred_release_dates(10) == ["2026-07-15", "2026-08-12"]
+
+
+def test_no_key_means_none_and_zero_network(monkeypatch):
+    monkeypatch.setattr(config, "FRED_API_KEY", "", raising=False)
+    def boom(*a, **k):
+        raise AssertionError("network path must not be reached without a key")
+    monkeypatch.setattr(fred, "fetch_json", boom)
+    assert fred.fred_series("CPIAUCSL") is None
+    assert fred.fred_release_dates(10) == []
+    assert fred.yoy("CPIAUCSL") is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/test_macro_fred.py -v`
+Expected: FAIL with `ImportError` (fred module missing)
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/macro/fred.py
+"""FRED REST client. Empty API key -> None/[] without touching the network."""
+from __future__ import annotations
+
+from swingbot import config
+from swingbot.core.macro.httpcache import fetch_json
+
+BASE = "https://api.stlouisfed.org/fred"
+
+
+def _key() -> str:
+    return (getattr(config, "FRED_API_KEY", "") or "").strip()
+
+
+def fred_series(series_id: str, *, start: str | None = None,
+                ttl_s: int = 6 * 3600) -> list[tuple[str, float]] | None:
+    if not _key():
+        return None
+    params = {"series_id": series_id, "api_key": _key(),
+              "file_type": "json", "sort_order": "asc"}
+    if start:
+        params["observation_start"] = start
+    data = fetch_json(f"{BASE}/series/observations", params=params,
+                      ttl_s=ttl_s, provider="fred")
+    if not data or "observations" not in data:
+        return None
+    out = []
+    for obs in data["observations"]:
+        if obs.get("value") in (".", "", None):
+            continue
+        try:
+            out.append((obs["date"], float(obs["value"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return sorted(out) or None
+
+
+def fred_release_dates(release_id: int, *, include_future: bool = True) -> list[str]:
+    if not _key():
+        return []
+    params = {"release_id": release_id, "api_key": _key(), "file_type": "json",
+              "sort_order": "asc",
+              "include_release_dates_with_no_data": "true" if include_future else "false"}
+    data = fetch_json(f"{BASE}/releases/dates", params=params,
+                      ttl_s=24 * 3600, provider="fred")
+    if not data:
+        return []
+    return [d["date"] for d in data.get("release_dates", []) if d.get("date")]
+
+
+def latest(series_id: str) -> tuple[str, float] | None:
+    series = fred_series(series_id)
+    return series[-1] if series else None
+
+
+def yoy(series_id: str) -> float | None:
+    """Last observation vs the one 12 monthly observations earlier."""
+    series = fred_series(series_id)
+    if not series or len(series) < 13:
+        return None
+    last, year_ago = series[-1][1], series[-13][1]
+    if year_ago == 0:
+        return None
+    return (last / year_ago - 1.0) * 100.0
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python -m pytest tests/test_macro_fred.py -v`
+Expected: 5 passed
+
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/macro/fred.py tests/test_macro_fred.py
+git commit -m "feat: FRED client (series, release dates, yoy)"
+```
+
 ### Task G21: VIX level + term structure
 
 **Files:**
@@ -2018,6 +2179,11 @@ git commit -m "feat: pre-scan macro snapshot refresh"
 
 > **Audit note (2026-07-29):** backfill only the surviving series (VIX, breadth, sector RS, events).
 > The publication-lag machinery still matters — it is what keeps the backtest honest.
+>
+> The body below imports `SERIES`/`KINDS` from `swingbot/core/macro/series.py`, which the audit cut
+> along with G13–G20. Define the trimmed registry **inline in `history.py`** instead: VIX is the only
+> FRED-backed series left, and its publication lag is zero (daily print, same-day). Keep the lag
+> machinery generic anyway — it is what a future series would plug into.
 
 **Files:**
 - Create: `scripts/backfill_macro.py`, `swingbot/core/macro/history.py`
@@ -2217,6 +2383,11 @@ git commit -m "feat: macro history backfill (publication-lag aware)"
 ```
 
 ### Task G43: Total-degradation proof
+
+> **Audit note (2026-07-29):** the body below monkeypatches `swingbot.core.macro.health`, the
+> provider health ledger the audit cut (G10). Drop that patch — assert the degradation contract
+> directly: every provider raising/timing out must still yield a complete scan with the affected
+> checks at `status="unknown"`, which `scoreable()` (G4) already excludes from the denominator.
 
 **Files:**
 - Test: `tests/test_macro_degradation.py`
