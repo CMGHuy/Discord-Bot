@@ -41,6 +41,15 @@ from swingbot.core.backtest_cache import CACHE_DIR, cache_path, normalize_ohlcv
 
 START, END = "2018-06-01", "2025-12-31"
 
+# Market-context tickers the gatekeeper's macro layer needs cached alongside
+# the watchlist: the 11 SPDR sectors + SPY (sector RS / rotation, G23-G25)
+# and ^VIX (fallback when FRED's VIXCLS is unavailable, G21). HYG/LQD are
+# deliberately absent -- the credit-stress task was cut by the win-rate audit.
+CONTEXT_TICKERS = [
+    "SPY", "^VIX",
+    "XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC",
+]
+
 
 def load_universe_symbols(name: str) -> list[str]:
     """Watchlist ticker + named universe (e.g. sp500), deduped, sorted.
@@ -117,7 +126,7 @@ def main():
     start, end = args.start, _resolve_end(args.end)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    tickers = load_watchlist()
+    tickers = sorted(set(load_watchlist()) | set(CONTEXT_TICKERS))
     print(f"Fetching {len(tickers)} tickers | {start} -> {end} | force={args.force}\n")
     ok, skipped, failed = 0, 0, []
     for t in sorted(tickers):
