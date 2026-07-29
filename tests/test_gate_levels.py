@@ -91,3 +91,31 @@ def test_majors():
 def test_nearest_round_with_atr_distance():
     level, dist = nearest_round(187.0, atr=2.0)
     assert level == 185.0 and dist == 1.0            # |185-187| / 2 (grid steps by 5)
+
+
+from swingbot.core.gate.levels import check_level_map
+from swingbot.core.gate.registry import CHECKS
+from tests.fixtures.gate.plans import make_plan
+
+
+def test_wall_before_tp1_fails():
+    df = _three_touch_resistance(level=110.0)        # resistance wall ~110
+    plan = make_plan(direction="bullish", trigger_price=110.0, entry_price=110.0,
+                     stop_loss=106.0, tp1=118.0)
+    result = check_level_map(df, plan, None)
+    assert result.status == "fail"
+    assert result.evidence["nearest_wall"] is not None
+    assert result.evidence["below"] and result.evidence["above"]
+
+
+def test_clear_path_passes():
+    df = _three_touch_resistance(level=110.0)
+    plan = make_plan(direction="bullish", trigger_price=111.5, entry_price=111.5,
+                     stop_loss=107.0, tp1=118.0)     # above the wall, majors clear
+    assert check_level_map(df, plan, None).status == "pass"
+
+
+def test_level_map_registered_with_thresholds():
+    spec = CHECKS["level_map"]
+    assert spec.weight == 8.0 and spec.section == "context"
+    assert spec.threshold("wall_atr_fail") == 1.0    # balanced default

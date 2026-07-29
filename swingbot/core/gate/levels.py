@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
 from swingbot.core.indicators import atr
 
 
@@ -92,3 +94,45 @@ def nearest_round(price: float, *, atr: float) -> tuple[float, float]:
     level = min(round_levels(price), key=lambda l: abs(l - price))
     dist = abs(level - price) / atr if atr > 0 else float("inf")
     return level, round(dist, 3)
+
+
+def check_level_map(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["level_map"]
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    swings = swing_levels(df_daily)
+    all_prices = sorted({l.price for l in swings} | set(round_levels(entry)))
+    below = [p for p in all_prices if p < entry][-3:]
+    above = [p for p in all_prices if p > entry][:3]
+    bullish = plan.direction == "bullish"
+    lo, hi = (entry, plan.tp1) if bullish else (plan.tp1, entry)
+    opposing = "resistance" if bullish else "support"
+    walls = [l.price for l in swings if l.kind == opposing and lo < l.price < hi]
+    walls += [m for m in major_levels(entry) if lo < m < hi]
+    nearest = min(walls, key=lambda w: abs(w - entry)) if walls else None
+    dist_atr = round(abs(nearest - entry) / atr_val, 2) if nearest is not None else None
+    if dist_atr is not None and dist_atr < spec.threshold("wall_atr_fail"):
+        status = "fail"
+        detail = f"{opposing} wall {nearest:.2f} only {dist_atr} ATR into the path to TP1"
+    elif dist_atr is not None and dist_atr < spec.threshold("wall_atr_warn"):
+        status = "warn"
+        detail = f"{opposing} {nearest:.2f} sits {dist_atr} ATR into the path to TP1"
+    else:
+        status, detail = "pass", "no significant wall before TP1"
+    return CheckResult("level_map", "context", status, 8.0, detail,
+                       {"below": below, "above": above, "walls": sorted(walls)[:5],
+                        "nearest_wall": nearest, "dist_atr": dist_atr,
+                        "atr": round(atr_val, 4)})
+
+
+register(check_id="level_map", section="context", weight=8.0, func=check_level_map,
+         thresholds={
+             "wall_atr_fail": ThresholdSpec(
+                 "wall_atr_fail", 1.0, 0.25, 3.0, 0.25,
+                 "lower to tolerate closer walls before TP1",
+                 presets={"strict": 1.5, "balanced": 1.0, "relaxed": 0.5}),
+             "wall_atr_warn": ThresholdSpec(
+                 "wall_atr_warn", 2.0, 0.5, 4.0, 0.25,
+                 "lower to warn about fewer walls",
+                 presets={"strict": 2.5, "balanced": 2.0, "relaxed": 1.0}),
+         })
