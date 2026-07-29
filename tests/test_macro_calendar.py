@@ -62,3 +62,36 @@ def test_shipped_fomc_history_is_sane():
     for year, n in per_year.items():
         if int(year) < current:
             assert 7 <= n <= 9, f"{year}: {n} FOMC days"
+
+
+import datetime as dt  # noqa: E402
+
+import swingbot.core.macro.calendar_events as cal  # noqa: E402
+import swingbot.core.macro.fred as fred  # noqa: E402
+
+
+def test_refresh_merge_idempotent(tmp_path, monkeypatch):
+    path = tmp_path / "event_history.json"
+    path.write_text(json.dumps([FIXTURE[0]]), encoding="utf-8")   # cpi 2026-07-14 known
+    monkeypatch.setattr(cal, "EVENTS_PATH", str(path))
+    monkeypatch.setattr(cal, "FUTURE_FOMC", ["2026-07-29"])
+    monkeypatch.setattr(fred, "fred_release_dates",
+                        lambda rid, include_future=True: ["2026-07-14", "2026-08-12"])
+    today = dt.date(2026, 7, 10)
+    # 4 kinds x 2 dates = 8 pairs, minus (cpi, 07-14) already present,
+    # plus the future FOMC = 8 rows added.
+    assert cal.refresh_future_events(days_ahead=45, today=today) == 8
+    assert cal.refresh_future_events(days_ahead=45, today=today) == 0   # idempotent
+    assert len(cal.load_events()) == 9
+
+
+def test_next_event_ordering_and_tz_math():
+    events = sorted(FIXTURE[:3], key=lambda e: (e["date"], e["kind"]))
+    now = dt.datetime(2026, 7, 14, 11, 0, tzinfo=dt.timezone.utc)   # 07:00 ET (EDT)
+    nxt = cal.next_event(now=now, events=events)
+    assert nxt["kind"] == "cpi"                       # today's 08:30 ET still ahead
+    # 08:30 ET on 2026-07-14 = 12:30 UTC -> 1.5 h away
+    assert cal.hours_until(nxt, now=now) == pytest.approx(1.5)
+    later = dt.datetime(2026, 7, 14, 13, 0, tzinfo=dt.timezone.utc)
+    assert cal.next_event(now=later, events=events)["kind"] == "fomc"
+    assert cal.next_event(kinds=("nfp",), now=later, events=events) is None
