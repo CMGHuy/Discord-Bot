@@ -159,6 +159,17 @@ _GOODBYE_MESSAGES = (
 )
 
 
+async def _refresh_macro_snapshot() -> None:
+    """Pre-scan macro refresh (G39). Failure is logged, never blocks a scan."""
+    if not config.MACRO_ENABLED:
+        return
+    try:
+        from swingbot.core.macro import snapshot as macro_snapshot
+        await asyncio.to_thread(macro_snapshot.ensure_fresh_snapshot)
+    except Exception:  # noqa: BLE001
+        log.warning("macro snapshot refresh failed", exc_info=True)
+
+
 def _write_heartbeat() -> None:
     """
     Stamps a small JSON file that the admin UI reads to show a blinking
@@ -583,6 +594,7 @@ async def _session_scan_tick():
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
+    await _refresh_macro_snapshot()
     alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
     await _send_alerts(channel, alerts, route_by_tier=True)
 
@@ -895,6 +907,7 @@ async def config_watcher():
 
             poller = asyncio.create_task(_ui_poll_progress())
             try:
+                await _refresh_macro_snapshot()
                 alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
             finally:
                 poller.cancel()
@@ -1110,6 +1123,7 @@ async def weekend_deep_scan() -> str:
     config.SIGNAL_CONFIRMATION_SCANS = 1
     config.MIN_ALERT_CONFIDENCE_LEVEL = max(1, old_min_conf - 1)
     try:
+        await _refresh_macro_snapshot()
         alerts = await scan_engine.run_scan(horizon_filter="all", require_confirmation=False, bot=bot)
     finally:
         config.SIGNAL_CONFIRMATION_SCANS = old_confirm
@@ -1480,6 +1494,7 @@ async def check_cmd(ctx, *args: str):
 
     poller = asyncio.create_task(_poll_progress())
     try:
+        await _refresh_macro_snapshot()
         alerts = await scan_engine.run_scan(
             horizon_filter=horizon, require_confirmation=False, bot=bot, progress=progress,
             min_confluence=min_confluence,

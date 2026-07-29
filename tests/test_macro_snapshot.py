@@ -118,3 +118,60 @@ def test_max_age_gate(paths, all_stubbed):
     snap_mod.save_snapshot(snap_mod.build_snapshot(loaders=all_stubbed, now=old))
     assert snap_mod.load_snapshot(max_age_min=30) is None
     assert snap_mod.load_snapshot(max_age_min=240) is not None
+
+
+def test_ttl_respected_no_rebuild(paths, all_stubbed, monkeypatch):
+    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(snap_mod.config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
+    snap_mod.save_snapshot(snap_mod.build_snapshot(loaders=all_stubbed))
+    calls = {"n": 0}
+    real_build = snap_mod.build_snapshot
+
+    def counting_build(**kw):
+        calls["n"] += 1
+        return real_build(**kw)
+    monkeypatch.setattr(snap_mod, "build_snapshot", counting_build)
+    assert snap_mod.ensure_fresh_snapshot() is not None
+    assert calls["n"] == 0                              # fresh -> no rebuild
+
+
+def test_rebuild_failure_serves_previous_as_stale(paths, all_stubbed, monkeypatch):
+    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(snap_mod, "_last_future_refresh_day", None)
+    monkeypatch.setattr(snap_mod.calendar_events, "refresh_future_events",
+                        lambda **k: 0)
+    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=120)
+    snap_mod.save_snapshot(snap_mod.build_snapshot(loaders=all_stubbed, now=old))
+
+    def boom(**kw):
+        raise RuntimeError("providers down")
+    monkeypatch.setattr(snap_mod, "build_snapshot", boom)
+    served = snap_mod.ensure_fresh_snapshot(ttl_min=30)
+    assert served is not None and served["stale"] is True
+
+
+def test_disabled_returns_none_and_zero_calls(paths, monkeypatch):
+    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", False, raising=False)
+
+    def boom(**kw):
+        raise AssertionError("no provider calls when MACRO_ENABLED is off")
+    monkeypatch.setattr(snap_mod, "build_snapshot", boom)
+    assert snap_mod.ensure_fresh_snapshot() is None
+
+
+def test_scan_path_calls_refresh_before_every_run_scan():
+    """Guards the wiring itself: every `alerts = await scan_engine.run_scan(`
+    site in commands/scanning.py must be preceded by the macro refresh.
+    The plan expected 3 call sites; there are 4 — hence a test, not a count
+    written down in a commit message."""
+    import re
+    from pathlib import Path
+
+    src = Path("swingbot/commands/scanning.py").read_text(encoding="utf-8")
+    lines = src.split("\n")
+    sites = [i for i, ln in enumerate(lines)
+             if "alerts = await scan_engine.run_scan(" in ln]
+    assert len(sites) >= 4
+    for i in sites:
+        assert "_refresh_macro_snapshot()" in lines[i - 1], f"line {i + 1} unguarded"
+    assert re.search(r"async def _refresh_macro_snapshot", src)

@@ -124,3 +124,42 @@ def load_snapshot(max_age_min: int | None = None) -> dict | None:
         built = built.replace(tzinfo=dt.timezone.utc)
     age_min = (dt.datetime.now(dt.timezone.utc) - built).total_seconds() / 60.0
     return snap if age_min <= max_age_min else None
+
+
+_last_future_refresh_day: str | None = None
+
+
+def ensure_fresh_snapshot(ttl_min: float | None = None, *,
+                          loaders: dict | None = None, now=None) -> dict | None:
+    """Return a snapshot no older than ttl_min (default:
+    config.MACRO_SNAPSHOT_TTL_MIN), rebuilding + saving when expired.
+    Never raises; a failed rebuild serves the previous snapshot marked
+    stale (never blocks the scan). MACRO_ENABLED off -> None and zero
+    provider calls. Once per day also refreshes the forward event
+    schedule (G30)."""
+    global _last_future_refresh_day
+    if not getattr(config, "MACRO_ENABLED", False):
+        return None
+    ttl = ttl_min if ttl_min is not None else float(
+        getattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30))
+    fresh = load_snapshot(max_age_min=ttl)
+    if fresh is not None:
+        return fresh
+    today = dt.date.today().isoformat()
+    if _last_future_refresh_day != today:
+        _last_future_refresh_day = today
+        try:
+            calendar_events.refresh_future_events()
+        except Exception:  # noqa: BLE001
+            log.warning("forward event refresh failed", exc_info=True)
+    try:
+        snap = build_snapshot(loaders=loaders, now=now)
+        save_snapshot(snap)
+        return snap
+    except Exception:  # noqa: BLE001
+        log.error("snapshot rebuild failed — serving previous as stale",
+                  exc_info=True)
+        prev = load_snapshot()
+        if prev is not None:
+            prev["stale"] = True
+        return prev
