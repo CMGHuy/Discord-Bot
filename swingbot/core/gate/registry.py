@@ -1,0 +1,85 @@
+"""Check registry + policy table.
+
+Check modules (Phase G2) register themselves at import time via
+register(); this module owns the invariants. Hard-block policy:
+hard_block=True checks force tier C on `fail` even at score 100
+(enforced by score.assign_tier via the hard_blocks list the
+orchestrator assembles in G75).
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Callable
+
+import swingbot.config as config
+
+SECTIONS = ("context", "setup", "redflag", "risk", "timing")
+PRESET_LEVELS = ("strict", "balanced", "relaxed")
+
+
+@dataclass(frozen=True)
+class ThresholdSpec:
+    name: str
+    default: float          # the *balanced* value
+    min: float
+    max: float
+    step: float
+    relax_direction: str    # help-text sentence, e.g. "raise to allow later entries"
+    presets: dict           # {"strict": x, "balanced": y, "relaxed": z}
+
+
+@dataclass(frozen=True)
+class CheckSpec:
+    check_id: str
+    section: str
+    weight: float
+    func: Callable          # (df_daily, plan, macro_snap, **ctx) -> CheckResult
+    hard_block: bool = False
+    applies_to: tuple | None = None   # exact ALL_STRATEGIES names; None = all
+    backtestable: bool = True         # finalized in G89
+    trigger_recheck: bool = False     # cheap re-check subset (G128)
+    config_flag: str = ""             # GATE_CHECK_<ID>, derived by register()
+    thresholds: dict = field(default_factory=dict)   # name -> ThresholdSpec
+
+    def threshold(self, name: str) -> float:
+        """Config-Field-backed threshold lookup. The Field
+        GATE_TH_{CHECK_ID}_{NAME} is generated in G79; until it exists
+        the spec's balanced default applies. Check functions must use
+        this — never module constants."""
+        spec = self.thresholds[name]
+        attr = f"GATE_TH_{self.check_id.upper()}_{name.upper()}"
+        return float(getattr(config, attr, spec.default))
+
+
+CHECKS: dict[str, CheckSpec] = {}
+
+
+def register(**kw) -> CheckSpec:
+    kw.setdefault("config_flag", f"GATE_CHECK_{kw['check_id'].upper()}")
+    spec = CheckSpec(**kw)
+    if spec.check_id in CHECKS:
+        raise ValueError(f"duplicate check id {spec.check_id!r}")
+    CHECKS[spec.check_id] = spec
+    return spec
+
+
+def validate_registry() -> None:
+    """Invariants asserted by tests after every registration task."""
+    for spec in CHECKS.values():
+        assert spec.section in SECTIONS, f"{spec.check_id}: bad section {spec.section}"
+        assert spec.weight >= 0, f"{spec.check_id}: negative weight"
+        assert spec.config_flag == f"GATE_CHECK_{spec.check_id.upper()}", spec.check_id
+        for th in spec.thresholds.values():
+            assert th.min <= th.default <= th.max, f"{spec.check_id}.{th.name}"
+            assert set(th.presets) == set(PRESET_LEVELS), f"{spec.check_id}.{th.name}"
+
+
+def enabled_checks(strategy: str) -> list[CheckSpec]:
+    out = []
+    for spec in CHECKS.values():
+        if spec.applies_to is not None and strategy not in spec.applies_to:
+            continue
+        if not getattr(config, spec.config_flag, True):   # Field generated in G79
+            continue
+        out.append(spec)
+    return out
