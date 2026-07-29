@@ -1,9 +1,22 @@
 # Gatekeeper v7 - Part index (post win-rate audit, 2026-07-29)
 
-> **Status: 2 of 90 tasks implemented** (G1, G3 — 2026-07-29). Every checkbox across all 5 parts is
-> unchecked, `swingbot/core/gate/` doesn't exist, no `tests/test_gate_*.py` exist, no
-> `feature/gatekeeper-v7` branch was ever created, and git log has zero implementation commits for
-> this plan - only planning commits. Treat this plan as not started, full stop.
+> **Status: 7 of 90 tasks implemented — Part 1 (Phase G0) complete** (2026-07-29).
+>
+> G1, G3, G4, G5, G6, G7, G8 are committed and green (G2 was cut by the audit). `swingbot/core/gate/`
+> now holds `wr_math.py`, `types.py`, `registry.py`, `score.py`; the Gatekeeper config section is in
+> `swingbot/config.py`; golden scenario fixtures are in `tests/fixtures/gate/`. Phase G0 checkpoint
+> passed at **1115 passed, 54 skipped, 1 failed** — that failure is the repo's documented
+> pre-existing `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`, not a regression.
+>
+> Work is happening **directly on `main`** (operator's choice 2026-07-29 — no feature branch), one
+> commit per task, subject-tagged `type(Gxx):`. Everything from G9 on is unchecked. Verify with
+> `git log --oneline --grep "^feat(G\|^test(G\|^chore(G"` before trusting this line.
+>
+> **Correction (2026-07-29):** G12 (FRED client) was cut by the audit and **restored** during
+> execution — the cut was wrong. G21 pulls VIX via `fred_series`, and G29/G30/G41 need
+> `fred_release_dates`. Only the G13-G20 series registry stays cut. Two smaller dangling references
+> (G41's `series.py` import, G43's `health.py` monkeypatch) are handled with inline audit notes in
+> Part 2 rather than restoring those tasks.
 
 ## What this plan is now
 
@@ -45,7 +58,7 @@ and never re-add a cut task to satisfy one.
 
 | Part | File | Tasks | Scope | Count | Status |
 |---|---|---|---|---|---|
-| 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | not started |
+| 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | **done 2026-07-29** |
 | 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | not started |
 | 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | not started |
 | 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | not started |

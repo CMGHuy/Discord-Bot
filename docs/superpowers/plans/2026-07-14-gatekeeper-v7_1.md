@@ -11,9 +11,14 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
-> - **Completed:** —
-> - **Next:** Task G1
+> - **Branch:** `main` (operator's choice 2026-07-29 — no feature branch for this plan)
+> - **Completed:** G1, G3, G4, G5, G6, G7, G8 — **Part 1 complete** (G2 was cut by the win-rate audit)
+> - **Next:** Task G9, in Part 2
+>
+> Phase G0 checkpoint (G8) passed 2026-07-29: full suite **1115 passed, 54 skipped, 1 failed** —
+> the failure is the documented pre-existing `test_trade_monitor_wiring.py::
+> test_flag_on_polls_open_plans`, not a regression from this phase. 20 new tests added by G4–G7.
+> Note the repo baseline in CLAUDE.md ("841 passed") is stale; the pre-existing suite is ~1095.
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
@@ -139,7 +144,7 @@ data/  macro/ (cache, snapshot, history), gate/ (blocked log, shadow log, tiers)
 - Produces: `breakeven_wr(rr: float) -> float` (WR where expectancy = 0 for a fixed R:R); `implied_expectancy(wr_pct: float, avg_win_r: float, avg_loss_r: float = 1.0) -> float`; `required_filter_precision(base_wr: float, target_wr: float) -> float` (fraction of losers a filter must remove, keeping winners, to lift base to target: `1 - (base*(100-target))/(target*(100-base))` on decimal odds); `wilson_lower_bound(wins: int, n: int, z: float = 1.96) -> float` (the WR a sample actually *proves*).
 - Consumed by: G2 (targets doc), G93–G95 (frontier/tiers), G114, G204.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_gate_wr_math.py
@@ -167,12 +172,12 @@ def test_wilson_needs_n_59_for_proven_90():
     assert wilson_lower_bound(35, 35) < 0.90
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_gate_wr_math.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'swingbot.core.gate'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/gate/__init__.py
@@ -230,12 +235,12 @@ def wilson_lower_bound(wins: int, n: int, z: float = 1.96) -> float:
     return max(0.0, num / (2 * (n + z * z)))
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_wr_math.py -v`
 Expected: 4 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -252,7 +257,7 @@ git commit -m "feat: gate win-rate arithmetic (breakeven, implied E, filter prec
 **Interfaces:**
 - Produces Fields (section `"Gatekeeper"`, all default off/neutral): `GATE_ENABLED` (checkbox, false — master switch), `GATE_MODE` (select `shadow`|`inform`|`enforce`, default `inform` — inform renders the checklist on every alert and never blocks; enforce is opt-in and guarded by G170), `GATE_MIN_TIER` (select `A+`|`A`|`B`|`C`, default `C`; **consulted only in enforce mode**), `GATE_STRICTNESS` (select `strict`|`balanced`|`relaxed`, default `balanced` — preset seeding for the G79 threshold fields), `MACRO_ENABLED` (checkbox, false), `FRED_API_KEY` (password, sensitive), `MACRO_SNAPSHOT_TTL_MIN` (int, 30, min 5), `GATE_BLACKOUT_ENABLED` (checkbox, false — annotate-only; holding entries additionally requires `GATE_BLACKOUT_ENFORCE`, G120). (`FINNHUB_API_KEY` already exists from llm-advisor L10; if that plan is unmerged, add it here with the same shape.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_gate_config.py
@@ -299,12 +304,12 @@ def test_finnhub_key_exists_somewhere():
     assert f is not None and f.sensitive is True
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_gate_config.py -v`
 Expected: FAIL — `assert f is not None` for `GATE_ENABLED`
 
-- [ ] **Step 3: Write the implementation** — append to `FIELDS` in `swingbot/config.py` (new section, after the last existing section):
+- [x] **Step 3: Write the implementation** — append to `FIELDS` in `swingbot/config.py` (new section, after the last existing section):
 
 ```python
     # --- Gatekeeper ---
@@ -351,12 +356,12 @@ Expected: FAIL — `assert f is not None` for `GATE_ENABLED`
                "calendar. Empty = those sections degrade to 'unknown'."),
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_config.py -v`
 Expected: 4 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -400,7 +405,7 @@ class GateResult:
 
 - `status="unknown"` (provider down / not computable) never counts against the score — it excludes the check's weight from the denominator. This rule is THE degradation contract; test it here.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gate_types.py
@@ -443,12 +448,12 @@ def test_scoreable_excludes_unknown():
     assert [c.status for c in scoreable(checks)] == ["pass", "warn", "fail"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_gate_types.py -v`
 Expected: FAIL with `ModuleNotFoundError` / `ImportError` (types module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/gate/types.py
@@ -507,12 +512,12 @@ class GateResult:
         )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_types.py -v`
 Expected: 3 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -532,7 +537,7 @@ git commit -m "feat: gate result types"
 
 **Registration convention used by every Phase-G2 check task:** checks call `register(check_id=..., section=..., weight=..., func=..., thresholds={...})` at module import time; `config_flag` is derived automatically as `GATE_CHECK_<ID>`. The per-check enable Fields and per-threshold Fields are *generated* in G79 — until then `enabled_checks` treats a missing flag attr as True, and the "every config_flag exists in config.FIELDS" invariant is asserted from G79's test onward (not here — the fields don't exist yet).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gate_registry.py
@@ -599,12 +604,12 @@ def test_threshold_resolves_config_field_then_spec_default(monkeypatch):
     assert spec.threshold("rr_min") == 1.8           # Field wins
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_gate_registry.py -v`
 Expected: FAIL with `ImportError` (registry module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/gate/registry.py
@@ -695,12 +700,12 @@ def enabled_checks(strategy: str) -> list[CheckSpec]:
     return out
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_registry.py -v`
 Expected: 4 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -710,6 +715,14 @@ git commit -m "feat: gate check registry + policy"
 
 ### Task G6: Checklist score + tier assignment
 
+> **Execution note (2026-07-29):** the golden test below is internally inconsistent — it lists
+> weights summing to 50 (`10+10+10+20`) while computing its denominator as 40, so its expected
+> `62.5` is unreachable. As written the weights give `25/50 = 50.0`, which also collides with the
+> neutral "nothing scoreable" value and would make the golden prove nothing. **Use weight 10 for
+> the `fail` check** (`25/40 = 62.5`), which is what the comment's arithmetic and the expected
+> value both require. Shipped that way, plus a second test pinning that a failing check keeps its
+> weight in the denominator (unlike `unknown`, which is excluded).
+
 **Files:**
 - Create: `swingbot/core/gate/score.py`
 - Test: `tests/test_gate_score.py`
@@ -717,7 +730,7 @@ git commit -m "feat: gate check registry + policy"
 **Interfaces:**
 - Produces: `score(checks: Sequence[CheckResult]) -> float` — weighted: pass=1.0, warn=0.5, fail=0.0, unknown excluded from denominator; empty/all-unknown → 50.0 (neutral) with `macro_stale` responsibility on the caller. `assign_tier(score: float, hard_blocks: Sequence[str], *, aplus_cut: float, a_cut: float, b_cut: float) -> str` — cuts come from config (G79); any hard block → "C". `TIER_ORDER = ("A+", "A", "B", "C")`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gate_score.py
@@ -759,12 +772,12 @@ def test_tier_cut_boundaries():
     assert assign_tier(54.9, [], **kw) == "C"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_gate_score.py -v`
 Expected: FAIL with `ImportError` (score module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/gate/score.py
@@ -806,12 +819,12 @@ def assign_tier(score: float, hard_blocks: Sequence[str], *,
     return "C"
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_score.py -v`
 Expected: 5 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -828,7 +841,7 @@ git commit -m "feat: checklist scoring + tier ladder"
 **Interfaces:**
 - Produces deterministic bar-series builders reused by every detector test (extends `tests/conftest.py`'s real `make_ohlcv(closes, spread_pct, ...)` — verify its actual signature before writing): `uptrend_daily(n=260)`, `downtrend_daily(n=260)`, `range_daily(lo, hi, n=120)`, `breakout_and_fail(level)` (closes back inside next bar, low volume), `sweep_wick(level)` (long lower wick through level, close back above), `dead_cat(n_down=40, bounce_pct=8)` (no higher-low structure), `climax_overbought()` (RSI>75 into resistance), `gap_spike(pct=12)` (news-gap bar, volume 5×), plus weekly resamples `to_weekly(df)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gate_fixtures.py
@@ -886,12 +899,12 @@ def test_to_weekly_shape():
     assert (wk["High"] >= wk["Low"]).all()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_gate_fixtures.py -v`
 Expected: FAIL with `ImportError` (fixtures package missing)
 
-- [ ] **Step 3: Write the implementation** (if `tests/fixtures/__init__.py` doesn't exist yet, create it empty)
+- [x] **Step 3: Write the implementation** (if `tests/fixtures/__init__.py` doesn't exist yet, create it empty)
 
 ```python
 # tests/fixtures/gate/scenarios.py
@@ -1003,12 +1016,12 @@ from tests.fixtures.gate.scenarios import (   # noqa: F401
 )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_fixtures.py -v`
 Expected: 7 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1018,7 +1031,7 @@ git commit -m "test: golden gate scenario fixtures"
 
 ### Task G8: Phase G0 checkpoint
 
-- [ ] **Step 1:** Full suite green: `python -m pytest tests/ -q` + `make check`.
-- [ ] **Step 2:** Update the Progress block (Completed: G1–G8, Next: G9). Commit — `chore: phase G0 checkpoint`
+- [x] **Step 1:** Full suite green: `python -m pytest tests/ -q` + `make check`.
+- [x] **Step 2:** Update the Progress block (Completed: G1–G8, Next: G9). Commit — `chore: phase G0 checkpoint`
 
 ---
