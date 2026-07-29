@@ -47,3 +47,48 @@ def sector_bars(loader=None) -> dict:
             continue
         bars[ticker] = df
     return bars
+
+
+def _window_return_pct(df, w) -> float:
+    c = df["Close"]
+    return float(c.iloc[-1] / c.iloc[-1 - w] - 1.0) * 100.0
+
+
+def sector_rs(bars: dict, windows=(21, 63, 126)) -> list[dict]:
+    """Per sector: return-over-window minus SPY's, composite = mean of
+    per-window z-scores, rank 1..11 (1 = strongest)."""
+    spy = bars.get(BENCHMARK)
+    need = max(windows) + 1
+    if spy is None or len(spy) < need:
+        return []
+    rows = []
+    for etf, name in SECTOR_ETFS.items():
+        df = bars.get(etf)
+        if df is None or len(df) < need:
+            continue
+        rows.append({"etf": etf, "sector": name,
+                     **{f"rs_{w}": round(_window_return_pct(df, w)
+                                         - _window_return_pct(spy, w), 2)
+                        for w in windows}})
+    if not rows:
+        return []
+    for w in windows:
+        vals = [r[f"rs_{w}"] for r in rows]
+        mu = sum(vals) / len(vals)
+        sd = (sum((v - mu) ** 2 for v in vals) / len(vals)) ** 0.5 or 1.0
+        for r in rows:
+            r[f"z_{w}"] = (r[f"rs_{w}"] - mu) / sd
+    for r in rows:
+        r["composite"] = sum(r[f"z_{w}"] for w in windows) / len(windows)
+    rows.sort(key=lambda r: r["composite"], reverse=True)
+    for i, r in enumerate(rows, start=1):
+        r["rank"] = i
+    return rows
+
+
+def leaders(rs_rows: list[dict], n=3) -> list[dict]:
+    return rs_rows[:n]
+
+
+def laggards(rs_rows: list[dict], n=3) -> list[dict]:
+    return rs_rows[-n:]
