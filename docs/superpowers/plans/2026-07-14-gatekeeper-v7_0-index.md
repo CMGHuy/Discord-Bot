@@ -1,12 +1,17 @@
 # Gatekeeper v7 - Part index (post win-rate audit, 2026-07-29)
 
-> **Status: 7 of 90 tasks implemented — Part 1 (Phase G0) complete** (2026-07-29).
+> **Status: 24 of 90 tasks implemented — Parts 1-2 (Phases G0-G1) complete** (2026-07-29).
 >
-> G1, G3, G4, G5, G6, G7, G8 are committed and green (G2 was cut by the audit). `swingbot/core/gate/`
-> now holds `wr_math.py`, `types.py`, `registry.py`, `score.py`; the Gatekeeper config section is in
-> `swingbot/config.py`; golden scenario fixtures are in `tests/fixtures/gate/`. Phase G0 checkpoint
-> passed at **1115 passed, 54 skipped, 1 failed** — that failure is the repo's documented
-> pre-existing `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`, not a regression.
+> Part 1 (G1-G8) and Part 2 (G9-G44) are committed and green. `swingbot/core/gate/` holds
+> `wr_math.py`, `types.py`, `registry.py`, `score.py`; `swingbot/core/macro/` holds `httpcache.py`,
+> `fred.py`, `vix.py`, `sectors.py`, `breadth.py`, `composite.py`, `calendar_events.py`,
+> `sessions.py`, `earnings.py`, `snapshot.py`, `history.py`; the pre-scan refresh is wired into all
+> four `run_scan` call sites. Phase G1 checkpoint passed at **1194 passed, 54 skipped, 1 failed** —
+> that failure is the repo's documented pre-existing
+> `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`, not a regression.
+>
+> **Partial data (needs a FRED key):** `event_history.json` is FOMC-only; `history/vix.json` is
+> ungenerated. See Part 2's Progress block for the two commands.
 >
 > Work is happening **directly on `main`** (operator's choice 2026-07-29 — no feature branch), one
 > commit per task, subject-tagged `type(Gxx):`. Everything from G9 on is unchecked. Verify with
@@ -59,7 +64,7 @@ and never re-add a cut task to satisfy one.
 | Part | File | Tasks | Scope | Count | Status |
 |---|---|---|---|---|---|
 | 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | **done 2026-07-29** |
-| 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | not started |
+| 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | **done 2026-07-29** |
 | 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | not started |
 | 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | not started |
 | 5 | [_5.md](2026-07-14-gatekeeper-v7_5.md) | G119-G219 | Scan + alert integration, E2E, 4-week forward gate, wrap-up (+ carried-over debt appendix) | 16 | not started |

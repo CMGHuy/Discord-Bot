@@ -11,9 +11,21 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
-> - **Completed:** —
-> - **Next:** Task G9
+> - **Branch:** `main` (operator's choice 2026-07-29 — no feature branch for this plan)
+> - **Completed:** G9, G12, G21, G23, G24, G25, G26, G27, G29, G30, G32, G33, G38, G39, G41, G43,
+>   G44 — **Part 2 complete** (17 tasks)
+> - **Next:** Task G45, in Part 3
+>
+> Phase G1 checkpoint (G44) passed 2026-07-29: full suite **1194 passed, 54 skipped, 1 failed** —
+> the failure is the documented pre-existing `test_trade_monitor_wiring.py::
+> test_flag_on_polls_open_plans`. Part 2 added 79 tests.
+>
+> **Two data artifacts are partial, both needing a FRED key:**
+> `data/macro/event_history.json` is FOMC-only (73 dates); re-run
+> `python scripts/build_event_history.py` without `--fomc-only` to add CPI/PPI/NFP/PCE release
+> dates. `data/macro/history/vix.json` was not generated; run
+> `python scripts/backfill_macro.py --only vix,vix_percentile`. Breadth history (2399 days) is
+> committed.
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
@@ -143,7 +155,7 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 - Produces: `fetch_json(url, *, params=None, ttl_s=3600, timeout_s=5.0, cache_key=None) -> dict | list | None` — key = sha1 of url+sorted params unless given; cache files `data/macro/cache/{key}.json` via `jsonio` storing `{fetched_at, payload}`; fresh cache → no network; expired cache + fetch failure → **stale payload returned** with module-level `LAST_SERVED_STALE` flag set (snapshot marks `macro_stale`); no cache + failure → None. `purge_cache(max_age_days=30) -> int`.
 - Consumed by: every provider below.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_httpcache.py
@@ -233,12 +245,12 @@ def test_purge_removes_only_old(cache_dir, monkeypatch):
     assert len(list(cache_dir.iterdir())) == 1
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_macro_httpcache.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'swingbot.core.macro'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/__init__.py
@@ -325,12 +337,12 @@ def purge_cache(max_age_days: int = 30) -> int:
     return removed
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_macro_httpcache.py -v`
 Expected: 6 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -354,7 +366,7 @@ git commit -m "feat: macro http fetch with TTL disk cache + stale fallback"
 - Produces: `fred_series(series_id: str, *, start: str | None = None, ttl_s=6*3600) -> list[tuple[str, float]] | None` — GET `https://api.stlouisfed.org/fred/series/observations` with `api_key=config.FRED_API_KEY`, `file_type=json`, sorted ascending, `"."` observations skipped; empty key → None without network. `fred_release_dates(release_id: int, *, include_future=True) -> list[str]` (GET `/fred/releases/dates`). `latest(series_id) -> tuple[str, float] | None`; `yoy(series_id) -> float | None` (last vs value 12 monthly observations earlier).
 - Consumed by: G21 (VIX/VIX3M series), G29 + G30 (economic release dates), G41 (historical backfill).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_fred.py
@@ -412,12 +424,12 @@ def test_no_key_means_none_and_zero_network(monkeypatch):
     assert fred.yoy("CPIAUCSL") is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_macro_fred.py -v`
 Expected: FAIL with `ImportError` (fred module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/fred.py
@@ -486,12 +498,12 @@ def yoy(series_id: str) -> float | None:
     return (last / year_ago - 1.0) * 100.0
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_macro_fred.py -v`
 Expected: 5 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -508,7 +520,7 @@ git commit -m "feat: FRED client (series, release dates, yoy)"
 **Interfaces:**
 - Produces: `vix_state() -> dict | None` — `{level, percentile_1y, regime, term_structure}`; level from FRED `VIXCLS` (fallback: cached `^VIX` bars via the existing fetch layer); `regime`: `<16 "calm"`, `16–24 "normal"`, `24–32 "elevated"`, `>32 "stress"`; `term_structure`: `"backwardation"` when VIX > VIX3M (`VXVCLS`) else `"contango"` (None if 3M unavailable). Percentile over trailing 252 obs.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_vix.py
@@ -563,12 +575,12 @@ def test_no_data_returns_none(monkeypatch):
     assert vix_mod.vix_state() is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_macro_vix.py -v`
 Expected: FAIL with `ImportError` (vix module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/vix.py
@@ -610,12 +622,12 @@ def vix_state(loader=None) -> dict | None:
             "regime": _regime(level), "term_structure": term}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_macro_vix.py -v`
 Expected: 11 passed (8 regime params + 3)
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -633,7 +645,7 @@ git commit -m "feat: VIX regime + term structure"
 **Interfaces:**
 - Produces: `SECTOR_ETFS = {"XLK": "Technology", "XLF": "Financials", "XLV": "Health Care", "XLY": "Cons. Discretionary", "XLP": "Cons. Staples", "XLE": "Energy", "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities", "XLRE": "Real Estate", "XLC": "Comm. Services"}`, benchmark `SPY`; `sector_bars(loader=None) -> dict[str, pd.DataFrame]` using the existing daily cache loader (injectable).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_sectors.py
@@ -662,12 +674,12 @@ def test_injectable_loader_and_missing_sector_skipped(caplog):
     assert len(bars) == 11                  # 10 sectors + SPY
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_macro_sectors.py -v`
 Expected: FAIL with `ImportError` (sectors module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/sectors.py
@@ -723,12 +735,12 @@ CONTEXT_TICKERS = [
 # execution), append: tickers = sorted(set(tickers) | set(CONTEXT_TICKERS))
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_macro_sectors.py -v`
 Expected: 2 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -741,7 +753,7 @@ git commit -m "feat: sector ETF data plumbing"
 **Files:** Modify `sectors.py`; test `tests/test_macro_sectors.py`
 
 **Interfaces:** `sector_rs(bars, windows=(21, 63, 126)) -> list[dict]` — per sector: return over each window minus SPY's, composite = mean of window z-scores, rank 1–11; `leaders(rs_rows, n=3)` / `laggards(rs_rows, n=3)`.
-- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sectors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_macro_sectors.py`)
 
 ```python
 def _rs_universe():
@@ -774,8 +786,8 @@ def test_rs_short_history_skipped():
     assert "XLU" not in [r["etf"] for r in rows]
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'sector_rs'`): `python -m pytest tests/test_macro_sectors.py -v`
-- [ ] **Step 3: Write the implementation** (append to `sectors.py`)
+- [x] **Step 2: Run — FAIL** (`ImportError: ... 'sector_rs'`): `python -m pytest tests/test_macro_sectors.py -v`
+- [x] **Step 3: Write the implementation** (append to `sectors.py`)
 
 ```python
 def _window_return_pct(df, w) -> float:
@@ -823,8 +835,8 @@ def laggards(rs_rows: list[dict], n=3) -> list[dict]:
     return rs_rows[-n:]
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sectors.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sectors.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -837,7 +849,7 @@ git commit -m "feat: sector RS ranks"
 **Files:** Modify `sectors.py`; create seed `data/macro/ticker_sectors.json`; test `tests/test_macro_sectors.py`
 
 **Interfaces:** `rotation_state(rs_rows) -> dict` — `{posture, note}`; `posture = "risk_on"` when ≥2 of {XLK, XLY, XLC} in top 4 composite ranks, `"risk_off"` when ≥2 of {XLP, XLU, XLV} in top 4, else `"mixed"`; note names the leaders. `sector_of(ticker) -> str | None` via the static map (seeded for the current scan universe; unknown → None).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sectors.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_macro_sectors.py`)
 
 ```python
 def _ranked(order):
@@ -872,8 +884,8 @@ def test_sector_of_static_map(tmp_path, monkeypatch):
     assert sectors_mod.sector_of("ZZZZ") is None
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rotation_state'`): `python -m pytest tests/test_macro_sectors.py -v`
-- [ ] **Step 3: Write the implementation** (append to `sectors.py`)
+- [x] **Step 2: Run — FAIL** (`ImportError: ... 'rotation_state'`): `python -m pytest tests/test_macro_sectors.py -v`
+- [x] **Step 3: Write the implementation** (append to `sectors.py`)
 
 ```python
 import os
@@ -919,8 +931,8 @@ def sector_of(ticker: str) -> str | None:
  "XOM": "Energy", "UNH": "Health Care", "AMZN": "Cons. Discretionary"}
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sectors.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sectors.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -937,7 +949,7 @@ git commit -m "feat: sector rotation posture"
 **Interfaces:**
 - Produces: `breadth(bars: dict[str, pd.DataFrame]) -> dict` — `{pct_above_50dma, pct_above_200dma, n}` over the scan universe's cached bars; `breadth_state(b) -> str` (`"healthy"` ≥60% above 50DMA, `"weak"` ≤40%, else `"mixed"`). (If edge-engine E28 landed, wrap it instead of recomputing — capability check `try: from swingbot.core.edge import factors`.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_macro_breadth.py
@@ -981,8 +993,8 @@ def test_empty_universe():
     assert b["n"] == 0 and b["pct_above_50dma"] is None
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_breadth.py -v`
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_breadth.py -v`
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/breadth.py
@@ -1021,8 +1033,8 @@ def breadth_state(b: dict) -> str:
     return "mixed"
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_breadth.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_breadth.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1044,7 +1056,7 @@ git commit -m "feat: breadth internals"
 **Interfaces:**
 - Produces: `risk_composite(vix, credit, rotation, breadth, curve) -> dict` — pure function over the five upstream dicts (any may be None): each contributes −1/0/+1 (vix calm=+1 stress=−1; credit risk_on=+1; rotation risk_on=+1; breadth healthy=+1; curve normal=+1 inverted=−1), score = mean of available × 100 → `{score: -100..100, label: "risk_on"|"neutral"|"risk_off"|"unknown", inputs_used: int, detail: [...]}` (label cuts at ±33; fewer than 2 inputs → `"unknown"`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_composite.py
@@ -1080,8 +1092,8 @@ def test_none_tolerance_everywhere():
     assert out == {"score": 0, "label": "unknown", "inputs_used": 0, "detail": []}
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_composite.py -v`
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_composite.py -v`
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/composite.py
@@ -1126,8 +1138,8 @@ def risk_composite(vix, credit, rotation, breadth, curve) -> dict:
             "inputs_used": len(votes), "detail": detail}
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_composite.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_composite.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1145,7 +1157,7 @@ git commit -m "feat: risk-on/off composite"
 - Produces: `Event = {date, time_et, kind, label, importance}` with `kind` in `{"fomc", "cpi", "ppi", "nfp", "pce", "opex", "holiday"}`, importance 1–3 (fomc/cpi/nfp = 3). The script builds history from: FOMC — the Fed's published meeting dates hardcoded 2018–2026 (public, finite, stable — a literal list in the script with a source-URL comment; decision days 14:00 ET); CPI/PPI/PCE/NFP — `fred_release_dates()` (release ids: CPI 10, PPI 46, Employment Situation 50, Personal Income & Outlays 54), 08:30 ET. `calendar_events.load_events() -> list[Event]`; `events_between(start, end)`; `events_on(date)`.
 - **This file is what makes the news-whipsaw red flag backtestable** — G90 joins it into the backtest frame.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_calendar.py
@@ -1190,7 +1202,7 @@ def test_events_on(events_file):
     assert events_on("2026-07-30", events) == []
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`), then **implement the loader**:
+- [x] **Step 2: Run — FAIL** (`ImportError`), then **implement the loader**:
 
 ```python
 # swingbot/core/macro/calendar_events.py
@@ -1300,8 +1312,8 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 3: Run tests — PASS** (`python -m pytest tests/test_macro_calendar.py -v`). **Then run the script once for real**; spot-check the JSON (CPI monthly ~mid-month 08:30 ET; 8 FOMC decision days/year; NFP first-Friday-ish). Commit the generated `data/macro/event_history.json`.
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run tests — PASS** (`python -m pytest tests/test_macro_calendar.py -v`). **Then run the script once for real**; spot-check the JSON (CPI monthly ~mid-month 08:30 ET; 8 FOMC decision days/year; NFP first-Friday-ish). Commit the generated `data/macro/event_history.json`.
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1314,7 +1326,7 @@ git commit -m "feat: historical econ event calendar 2018->present"
 **Files:** Modify `calendar_events.py`; test `tests/test_macro_calendar.py`
 
 **Interfaces:** `refresh_future_events(days_ahead=45) -> int` — re-pulls `fred_release_dates(include_future=True)` + the static future FOMC list, merges into `event_history.json` (idempotent by (date, kind)), returns rows added; called by the snapshot scheduler (G39) at most daily. `next_event(kinds=None, now=None) -> Event | None`; `hours_until(event, now) -> float` (ET-aware).
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_calendar.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_macro_calendar.py`)
 
 ```python
 import datetime as dt
@@ -1350,8 +1362,8 @@ def test_next_event_ordering_and_tz_math():
     assert cal.next_event(kinds=("nfp",), now=later, events=events) is None
 ```
 
-- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'refresh_future_events'`)
-- [ ] **Step 3: Write the implementation** (append to `calendar_events.py`)
+- [x] **Step 2: Run — FAIL** (`AttributeError: ... 'refresh_future_events'`)
+- [x] **Step 3: Write the implementation** (append to `calendar_events.py`)
 
 ```python
 import datetime as dt
@@ -1422,8 +1434,8 @@ def hours_until(event: dict, now: dt.datetime | None = None) -> float:
     return (_event_dt_utc(event) - now).total_seconds() / 3600.0
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_calendar.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_calendar.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1446,7 +1458,7 @@ git commit -m "feat: forward event schedule"
 
 **Design note:** instead of a hand-typed 10-year table (typo-prone, unverifiable), the calendar is *rule-generated*: nth-weekday math for the floating holidays, the anonymous-Gregorian computus for Good Friday, NYSE observance shifts (Sun→Mon; Sat→Fri except New Year's, which is simply not observed), Juneteenth from 2022, plus a literal `EXTRA_CLOSURES` set for the two mourning closures. Source: https://www.nyse.com/markets/hours-calendars. The interface is exactly as specified.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_sessions.py
@@ -1495,8 +1507,8 @@ def test_session_flag_shapes():
     assert session_flag("2026-07-14")["flag"] == "normal"
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sessions.py -v`
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sessions.py -v`
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/sessions.py
@@ -1635,8 +1647,8 @@ def _is_holiday(date: dt.date) -> bool:
 
 (delete `_FRIDAY_HOLIDAYS`; the G31 goldens must stay green.)
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sessions.py tests/test_macro_opex.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sessions.py tests/test_macro_opex.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1653,7 +1665,7 @@ git commit -m "feat: session liquidity calendar"
 **Interfaces:**
 - Produces: `days_to_earnings(ticker, now=None) -> int | None` — if llm-advisor's `market_context.py` exists, wrap it (one-implementation rule); else implement here: Finnhub `/calendar/earnings` window ±30d, 6h TTL via `fetch_json(provider="finnhub")`, empty key → None. `earnings_within(ticker, days) -> bool | None` (None when unknown — never a silent False).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_earnings.py
@@ -1697,8 +1709,8 @@ def test_no_key_none_and_no_network(monkeypatch):
     assert earnings.earnings_within("NVDA", 3, now=NOW) is None   # unknown, never False
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_earnings.py -v`
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_earnings.py -v`
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/earnings.py
@@ -1751,8 +1763,8 @@ def earnings_within(ticker: str, days: int, now: dt.date | None = None) -> bool 
     return None if d is None else d <= days    # None = unknown, never a silent False
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_earnings.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_earnings.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1774,7 +1786,7 @@ git commit -m "feat: earnings calendar provider"
 - Produces: `build_snapshot(*, loaders=None, now=None) -> dict` — assembles every upstream module into ONE dict (each section None-tolerant): `{built_at, stale: bool, inflation: {cpi_yoy, core_cpi_yoy, ppi_yoy, pce_yoy, core_pce_yoy, vs_target}, labor: {...}, rates: {fed_funds, y3m, y2, y10, y30, curve_state}, expectations: {breakeven_5y, breakeven_10y}, risk: {vix, credit, dollar, wti}, composite: {...G27}, fear_greed: {...G28}, sectors: {rs_rows, rotation}, breadth: {...}, events: {next_high_impact, within_24h: [...], today: [...]}, news: {headlines_top5, sentiment, rumor_ratio}, quality_warnings: [...]}`. `save_snapshot(snap)` → `data/macro/macro_snapshot.json` (jsonio) + one summary line appended to `data/macro/snapshot_history.jsonl` (admin trend charts); `load_snapshot(max_age_min=None) -> dict | None`.
 - **The single source every consumer reads** — scan gate, embeds, `!macro`, admin pages, advisor payloads. Nobody re-fetches providers at render time.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_snapshot.py
@@ -1868,12 +1880,12 @@ def test_max_age_gate(paths, all_stubbed):
     assert snap_mod.load_snapshot(max_age_min=240) is not None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_macro_snapshot.py -v`
 Expected: FAIL with `ImportError` (snapshot module missing)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # swingbot/core/macro/snapshot.py
@@ -2041,12 +2053,12 @@ def load_snapshot(max_age_min: float | None = None) -> dict | None:
     return snap
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_macro_snapshot.py -v`
 Expected: 4 passed
 
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -2063,7 +2075,7 @@ git commit -m "feat: macro snapshot (single source of context)"
 **Interfaces:**
 - Produces: `ensure_fresh_snapshot(ttl_min=None) -> dict | None` — returns the saved snapshot when younger than TTL (default `config.MACRO_SNAPSHOT_TTL_MIN`), else rebuilds (called via `asyncio.to_thread` from the scan path); **wired at the top of every scan run** when `MACRO_ENABLED`; once per day also calls `refresh_future_events()`. Rebuild failure → previous snapshot with `stale=True` (never blocks the scan). Flag off → None and zero provider calls.
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_snapshot.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_macro_snapshot.py`)
 
 ```python
 def test_ttl_respected_no_rebuild(paths, all_stubbed, monkeypatch):
@@ -2102,8 +2114,8 @@ def test_disabled_returns_none_and_zero_calls(paths, monkeypatch):
     assert snap_mod.ensure_fresh_snapshot() is None
 ```
 
-- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'ensure_fresh_snapshot'`)
-- [ ] **Step 3: Write the implementation** (append to `snapshot.py`)
+- [x] **Step 2: Run — FAIL** (`AttributeError: ... 'ensure_fresh_snapshot'`)
+- [x] **Step 3: Write the implementation** (append to `snapshot.py`)
 
 ```python
 _last_future_refresh_day: str | None = None
@@ -2168,8 +2180,8 @@ async def _refresh_macro_snapshot() -> None:
     alerts = await scan_engine.run_scan(...)
 ```
 
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_snapshot.py -v`
-- [ ] **Step 5: Full suite + commit**
+- [x] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_snapshot.py -v`
+- [x] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -2194,7 +2206,7 @@ git commit -m "feat: pre-scan macro snapshot refresh"
 **Interfaces:**
 - Produces: script writes `data/macro/history/{series_key}.json` full FRED history 2017-01→present for every registry series (2017 start gives yoy room for 2018 backtests) plus derived daily VIX-percentile and credit-state series from cached bars. `history.as_of_frame() -> pd.DataFrame` — date-indexed, one column per key, forward-filled **with publication lag**: monthly prints become visible on their release date (from G29's calendar), not their reference month — the no-lookahead rule G90 depends on.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_macro_history.py
@@ -2236,7 +2248,7 @@ def test_ffill_and_missing_series(env):
     assert frame["y10"].isna().all()                # missing file -> NaN column, no error
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`), then **write the frame implementation**:
+- [x] **Step 2: Run — FAIL** (`ImportError`), then **write the frame implementation**:
 
 ```python
 # swingbot/core/macro/history.py
@@ -2375,8 +2387,8 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 3: Run tests — PASS**: `python -m pytest tests/test_macro_history.py -v`
-- [ ] **Step 4: Run the backfill once for real; spot-check row counts; commit generated history files.**
+- [x] **Step 3: Run tests — PASS**: `python -m pytest tests/test_macro_history.py -v`
+- [x] **Step 4: Run the backfill once for real; spot-check row counts; commit generated history files.**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -2394,7 +2406,7 @@ git commit -m "feat: macro history backfill (publication-lag aware)"
 **Files:**
 - Test: `tests/test_macro_degradation.py`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```python
 # tests/test_macro_degradation.py
@@ -2439,8 +2451,8 @@ def test_total_darkness(darkness):
     assert served is not None and served["composite"]["label"] == "unknown"
 ```
 
-- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_macro_degradation.py -v`
-- [ ] **Step 3: Full suite + commit**
+- [x] **Step 2: Run — PASS**: `python -m pytest tests/test_macro_degradation.py -v`
+- [x] **Step 3: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -2450,7 +2462,7 @@ git commit -m "test: macro layer total-degradation proof"
 
 ### Task G44: Phase G1 checkpoint
 
-- [ ] **Step 1:** Full suite + `make check` green; `scripts/macro_smoke.py` evidence committed (G40).
-- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G1 checkpoint`
+- [x] **Step 1:** Full suite + `make check` green; `scripts/macro_smoke.py` evidence committed (G40).
+- [x] **Step 2:** Update Progress block. Commit — `chore: phase G1 checkpoint`
 
 ---
