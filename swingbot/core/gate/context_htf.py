@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import pandas as pd
 
+from swingbot.core.gate.registry import register
+from swingbot.core.gate.types import CheckResult
+
 
 def _resample_weekly(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
@@ -72,3 +75,21 @@ def htf_trend(df_daily: pd.DataFrame) -> dict:
     weekly = _trend(weekly_df["Close"], 10, 40)
     return {"weekly": weekly, "daily": daily,
             "detail": f"weekly {weekly} (10/40w SMA + pivots), daily {daily}"}
+
+
+def check_htf_alignment(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    trend = htf_trend(df_daily)
+    weekly = trend["weekly"]
+    with_trend = "up" if plan.direction == "bullish" else "down"
+    if weekly == with_trend:
+        status, detail = "pass", f"{plan.direction} plan with the weekly {weekly}trend"
+    elif weekly == "range":
+        status, detail = "warn", "weekly trend is range-bound"
+    else:
+        status, detail = "fail", f"{plan.direction} plan AGAINST the weekly {weekly}trend"
+    return CheckResult("htf_alignment", "context", status, 12.0, detail,
+                       {"weekly": weekly, "daily": trend["daily"]})
+
+
+register(check_id="htf_alignment", section="context", weight=12.0,
+         func=check_htf_alignment)
