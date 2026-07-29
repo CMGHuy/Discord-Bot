@@ -11,7 +11,7 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
+> - **Branch:** `main` (operator's choice 2026-07-29 — no feature branch for this plan)
 > - **Completed:** —
 > - **Next:** Task G45
 
