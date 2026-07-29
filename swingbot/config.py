@@ -561,6 +561,45 @@ FIELDS: list[Field] = [
                "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
                "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
                "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
+
+    # --- Gatekeeper ---
+    Field("GATE_ENABLED", "GATE_ENABLED", "Gatekeeper", "Gate enabled (master switch)",
+          type="checkbox", default="false",
+          help="Master switch for the pre-trade checklist engine. Off = no gate code runs anywhere."),
+    Field("GATE_MODE", "GATE_MODE", "Gatekeeper", "Gate mode",
+          type="select", default="inform", options=["shadow", "inform", "enforce"],
+          help="shadow: evaluate + log only, alerts unchanged. inform (default): the full checklist is "
+               "rendered on every alert and nothing is ever blocked. enforce: opt-in blocking below "
+               "'Min tier' -- guarded by fold + shadow evidence; never the default."),
+    Field("GATE_MIN_TIER", "GATE_MIN_TIER", "Gatekeeper", "Min tier (enforce mode only)",
+          type="select", default="C", options=["A+", "A", "B", "C"],
+          help="Consulted ONLY in enforce mode: candidates below this tier are held back. "
+               "At the default C nothing is ever blocked by tier."),
+    Field("GATE_STRICTNESS", "GATE_STRICTNESS", "Gatekeeper", "Strictness preset",
+          type="select", default="balanced", options=["strict", "balanced", "relaxed"],
+          help="One-click reseed of every checklist threshold. relaxed is deliberately generous so "
+               "plans always flow; strict is the A+-hunting profile. Thresholds you have "
+               "individually overridden survive a preset switch."),
+    Field("MACRO_ENABLED", "MACRO_ENABLED", "Gatekeeper", "Macro context enabled",
+          type="checkbox", default="false",
+          help="Refresh the market-context snapshot (VIX, breadth, sector rotation, economic event "
+               "and earnings calendars) before every scan and render the context field on alerts."),
+    Field("FRED_API_KEY", "FRED_API_KEY", "Gatekeeper", "FRED API key",
+          type="password", sensitive=True,
+          help="Free key: https://fred.stlouisfed.org/docs/api/api_key.html. Supplies VIX series and "
+               "economic release dates. Empty = FRED-backed data degrades to 'unknown'; scanning is "
+               "never affected."),
+    Field("MACRO_SNAPSHOT_TTL_MIN", "MACRO_SNAPSHOT_TTL_MIN", "Gatekeeper", "Snapshot TTL (minutes)",
+          type="number", default="30", min=5, step=5,
+          help="A macro snapshot younger than this is reused; older triggers a rebuild before the scan."),
+    Field("GATE_BLACKOUT_ENABLED", "GATE_BLACKOUT_ENABLED", "Gatekeeper", "Event blackout annotations",
+          type="checkbox", default="false",
+          help="Annotate alerts that fall inside a high-impact event window (CPI/NFP/FOMC). "
+               "Annotate-only: actually holding entries additionally requires GATE_BLACKOUT_ENFORCE."),
+    Field("FINNHUB_API_KEY", "FINNHUB_API_KEY", "Gatekeeper", "Finnhub API key",
+          type="password", sensitive=True,
+          help="Free key: https://finnhub.io/register. Powers the earnings calendar. "
+               "Empty = earnings proximity degrades to 'unknown'."),
 ]
 
 _CASTERS = {
