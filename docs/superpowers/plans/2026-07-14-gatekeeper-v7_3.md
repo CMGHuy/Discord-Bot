@@ -1,11 +1,11 @@
-# Gatekeeper v7 - Part 3/11: Macro data layer II: events, news, snapshot & degradation (Tasks G29-G44)
+# Gatekeeper v7 - Part 3/5: Checklist engine — HTF context, setup quality, red flags, risk & timing (Tasks G45–G88)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G29 -> G44).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G45 -> G88) — skipping the gaps left by cut tasks.
 >
-> **Split note:** this is part 3 of 11, extracted verbatim from the master plan `2026-07-14-gatekeeper-v6.md` (which stays as the reference copy; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
-> **Requires complete first:** Parts 1-2 complete (all their tasks checked off).
+> **Provenance:** this is part 3 of 5 after the 2026-07-29 win-rate audit merged the previous 12 parts down (see "Scope note" below). Parts execute in numeric order.
+> **Requires complete first:** Parts 1–2.
 >
-> Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts - those modules exist on the branch by the time this part runs.
+> Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts — those modules exist on the branch by the time this part runs.
 
 ## Progress
 
@@ -13,30 +13,55 @@
 >
 > - **Branch:** `feature/gatekeeper-v7`
 > - **Completed:** —
-> - **Next:** Task G29
+> - **Next:** Task G45
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ/earnings calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in the Discord alert embed. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, pytest ≥8. Data: Finnhub (key already a config Field from llm-advisor L10) for the earnings/event calendar, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
 This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
-- **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
+- **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (frozen below, before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
 - **WR is reported next to expectancy and N, always.** Any surface this plan builds that shows a win rate without its sample size and expectancy is a bug (same rule as cockpit-v3).
 - **The 2024–2025 validation window stays burned.** All tuning here runs on TRAIN folds (2018–2023, anchored, per edge-engine E39 rules). The single pre-registered validation shot belongs to edge-engine E92; this plan feeds it, never spends it.
-- **The path to 95% runs through the operator, not through suppression.** In inform mode the bot's raw WR doesn't change — what changes is that every alert carries its tier and its red flags, so the operator can choose to act only on A+/A setups. The tier ladder measures what following the checklist *would have* earned (`!tierwr`, shadow reports); the human applies it. Enforcement is available later if the operator wants the bot to apply it mechanically.
+- **The path to 95% runs through the operator, not through suppression.** In inform mode the bot's raw WR doesn't change — what changes is that every alert carries its tier and its red flags, so the operator can choose to act only on A+/A setups. The tier ladder measures what following the checklist *would have* earned (fold + shadow reports); the human applies it. Enforcement is available later if the operator wants the bot to apply it mechanically.
+
+## Scope note — win-rate audit (2026-07-28 / 2026-07-29)
+
+This plan was pruned from **219 tasks across 12 parts (~1 MB)** to **85 tasks
+across 5 parts**, then re-merged. The single admission test was: *does this task
+change which setups get filtered, or prove that the filtering works?* Everything
+that only reported, rendered, sized, or administered was cut — the full cut list
+with per-task reasons lives in `2026-07-14-gatekeeper-v7_0-index.md`.
+
+Consequences an executing agent must know:
+
+- **No FRED/inflation/curve/credit layer.** The macro snapshot is VIX + breadth +
+  sector RS + the event/earnings calendar. `composite.py` composites those three
+  market-internal inputs only.
+- **No news or sentiment layer.** Event *timing* (earnings, FOMC/CPI prints,
+  thin sessions) is kept because it is calendar-driven and testable; headline
+  *interpretation* is gone, and with it the rumor red flags.
+- **No Discord command suite and no admin frontend.** Config Fields still render
+  on the existing Settings page for free; every analysis surface is a report
+  artifact under `docs/superpowers/results/` instead of a page.
+- **No sizing tasks.** Sizing moves expectancy and risk of ruin, not win rate.
+- Task IDs are **unchanged** (G1…G219, with gaps) so older notes and
+  cross-references still resolve. Gaps are cut tasks, not missing work.
+- Prose inside surviving tasks may still mention a cut task, command or page.
+  Treat those mentions as no-ops — never re-add a cut task to satisfy one.
 
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch (G134).
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -44,11 +69,11 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 - **Optimization target for every tuned threshold:** maximize WR **subject to** pooled fold expectancy_r ≥ baseline − 0.02R and N ≥ 30 per fold. WR alone never picks a parameter.
 - **Pre-registered fold gate (identical to edge-engine):** anchored expanding folds, train 2018→fold-start, test years 2021/2022/2023; a check/threshold is promoted only if it improves the target in ≥ 2 of 3 folds and no fold degrades expectancy by > 0.05R. Failures are documented in `docs/superpowers/results/` and dropped — no second grid on the same hypothesis.
 - **Inform-first, always.** The checklist never prevents a plan from being created or alerted unless the operator has explicitly opted into `enforce` mode. Negative signals are rendered on the alert; the human decides. Any task that drops/holds/blocks anything applies **only** in enforce mode (or behind its own dedicated opt-in flag) — every such task carries an inform-mode regression test proving the alert still ships annotated.
-- **Every strict constraint is tunable from the settings page.** Each check's thresholds are config Fields (registry-driven, G79) with min/max/step and a help text naming the relax direction; `GATE_STRICTNESS` presets (strict/balanced/relaxed) reseed them in one click. Defaults ship at **balanced**, chosen so the G97 baseline census shows a healthy tier mix — never a wall of C.
-- **Every new flag is a config Field, default off** (master switches; per-check toggles default on but do nothing user-visible until `MACRO_ENABLED`/`GATE_ENABLED`). Nothing is suppressed silently in any mode: annotated/held/blocked candidates are always visible somewhere (`!blocked`, admin log, retrospective line).
+- **Every strict constraint is tunable from the settings page.** Each check's thresholds are config Fields (registry-driven, G79) with min/max/step and a help text naming the relax direction (they render on the existing admin Settings page for free); `GATE_STRICTNESS` presets (strict/balanced/relaxed) reseed them in one edit. Defaults ship at **balanced**, chosen so the G97 baseline census shows a healthy tier mix — never a wall of C.
+- **Every new flag is a config Field, default off** (master switches; per-check toggles default on but do nothing user-visible until `MACRO_ENABLED`/`GATE_ENABLED`). Nothing is suppressed silently in any mode: annotated/held/blocked candidates are always visible somewhere (the blocked log written by G81, the alert embed itself).
 - **No network in the test suite.** All providers are tested via monkeypatched `requests`/stub clients and fixture payloads; real calls live only in `scripts/*_smoke*.py` and backfill scripts.
 - **Provider failure never degrades scanning.** Every fetch has a timeout (default 5s), on-disk TTL cache fallback, and a "stale/unknown" degradation path; a scan with zero working data providers must still complete (G43 is the proof).
-- **API keys are config Fields (sensitive), never logged, never committed.** Free-tier quotas are budgeted and metered (G200).
+- **API keys are config Fields (sensitive), never logged, never committed.** Free-tier quotas are respected by the TTL cache; there is no metering task.
 - **Validation-window hygiene:** nothing in this plan reads 2024–2025 bars for tuning; `assert_train_only` (cockpit C31 pattern) guards every tuning entry point.
 - **One definition per stat** (cockpit rule): WR/expectancy_r come from `analytics.metrics`; the gate never re-derives them.
 - **Timezone:** all calendars/sessions use US/Eastern for market events, Europe/Berlin for user-facing day buckets (matches `performance.get_detailed_stats`).
@@ -60,22 +85,15 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 swingbot/core/macro/
   __init__.py        public API re-exports
   httpcache.py       fetch_json() with TTL disk cache under data/macro/cache/
-  health.py          provider health ledger + quota meter
-  fred.py            FRED series client + release-dates client
-  series.py          named macro series registry (CPI, PPI, PCE, yields, ...)
   vix.py             VIX level + term structure from cached bars
-  credit.py          HYG/LQD credit-stress ratio
   sectors.py         11 SPDR sector ETFs: data, RS ranks, rotation table
   breadth.py         % of universe above 50/200 DMA
-  composite.py       risk-on/off composite + fear-greed-style gauge
+  composite.py       risk-on/off composite (VIX + breadth + sector RS)
   calendar_events.py econ event calendar (historical static + future fetch)
-  opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
   earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,13 +104,12 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
-  risk_def.py        structural stop, size-formula check, realistic RR
+  redflags.py       the 8 surviving red-flag detectors (one function each)
+  risk_def.py       structural stop placement + realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
   persistence.py     attach results to plans, journal tags, blocked log
   render.py          embed field / red-flag table / macro-line string builders
-  gutcheck.py        gut-check ritual state (buttons + why-wrong journal)
   backtest_ctx.py    historical macro snapshots (no lookahead)
   frontier.py        WR-by-decile, frontier, tier-cut proposals
   folds.py           fold runner (delegates to edge E39 when present)
@@ -102,1932 +119,3110 @@ swingbot/core/charts/
 swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
-swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
-  gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
-swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
-                     checklist config, red-flag analytics, frontier pages
 scripts/
   backfill_macro.py, macro_smoke.py, gate_fold_run.py, gate_frontier.py,
   gate_shadow_report.py, build_event_history.py
-tests/ test_macro_*.py, test_gate_*.py, tests/admin/test_macro_api.py, ...
+tests/ test_macro_*.py, test_gate_*.py, ...
 data/  macro/ (cache, snapshot, history), gate/ (blocked log, shadow log, tiers)
 ```
 
 ---
+# Phase G2 — The checklist engine: every box becomes a check (G45–G88)
 
-# Phase G1 — Macro data layer: news, sentiment, rotation, CPI/PPI, treasury (G9–G44)
+One module per checklist section; one task per check. Every check task follows the same contract: pure function `(df_daily, plan, macro_snap, **ctx) -> CheckResult`, registered in `registry.CHECKS` with its weight/policy row, tested against the G7 golden scenarios, and given a config Field `GATE_CHECK_<ID>` (checkbox, default on — the master `GATE_ENABLED`/`GATE_MODE` still governs visibility, and nothing blocks outside opt-in enforce). **Every numeric cutoff named in these tasks (volume multiples, ATR bands, percentiles, wick ratios, RSI/ADX bounds, distances, day counts) is a `ThresholdSpec`** (G5) with strict/balanced/relaxed preset values — the numbers written below are the *balanced* defaults, tunable from the settings page (G79/G180), never hardcoded. Weights in parentheses are initial values; G78 calibrates, G96+ validates. Statuses are information: `fail` renders as ⛔ on the alert; it stops nothing by itself.
 
-Everything here is read-only market context. Each provider: 5s timeout, TTL disk cache, `None`-on-failure, no network in tests.
+## Section 1 — Higher-timeframe context
 
-
-> *(Phase intro above repeated from the part where this phase begins - this part continues it with tasks G29-G44.)*
-
-### Task G29: Historical econ event dataset (2018→present)
+### Task G45: HTF trend detector
 
 **Files:**
-- Create: `scripts/build_event_history.py`, `data/macro/event_history.json` (generated, committed), `swingbot/core/macro/calendar_events.py`
-- Test: `tests/test_macro_calendar.py`
+- Create: `swingbot/core/gate/context_htf.py`
+- Test: `tests/test_gate_context_htf.py`
 
 **Interfaces:**
-- Produces: `Event = {date, time_et, kind, label, importance}` with `kind` in `{"fomc", "cpi", "ppi", "nfp", "pce", "opex", "holiday"}`, importance 1–3 (fomc/cpi/nfp = 3). The script builds history from: FOMC — the Fed's published meeting dates hardcoded 2018–2026 (public, finite, stable — a literal list in the script with a source-URL comment; decision days 14:00 ET); CPI/PPI/PCE/NFP — `fred_release_dates()` (release ids: CPI 10, PPI 46, Employment Situation 50, Personal Income & Outlays 54), 08:30 ET. `calendar_events.load_events() -> list[Event]`; `events_between(start, end)`; `events_on(date)`.
-- **This file is what makes the news-whipsaw red flag backtestable** — G90 joins it into the backtest frame.
+- Produces: `htf_trend(df_daily) -> dict` — weekly resample; trend from 10w vs 40w SMA + last-pivot structure: `"up"` (10w > 40w and higher highs/lows over last 8 pivots), `"down"` (mirror), `"range"` otherwise; returns `{weekly, daily, detail}` (daily uses 20/50 SMA same logic). If edge-engine E27 (MTF alignment) is merged, consume its primitives instead of duplicating resample logic.
+
+**Shared test factory (created here, reused by every check task):**
+
+```python
+# tests/fixtures/gate/plans.py
+"""Minimal TradePlanV2 factory for gate tests. Verify the horizon_key
+values against HORIZONS at execution."""
+from swingbot.core.plan_engine import TradePlanV2
+
+
+def make_plan(**overrides) -> TradePlanV2:
+    base = dict(
+        plan_id="p_test_0001", ticker="TEST", created_at="2026-07-14",
+        source="strategy", strategy="Break & Retest", horizon_key="swing",
+        direction="bullish", entry_type="stop_entry", trigger_price=101.0,
+        entry_price=None, expiry_bars=5, stop_loss=97.0, tp1=107.0,
+        tp1_fraction=0.5, tp2=112.0, breakeven_trigger_fraction=0.5,
+        trail_atr_mult=1.5, quality_score=70, quality_breakdown=[],
+        tier="B", badge="VALIDATED", badge_stats={}, status="pending",
+    )
+    base.update(overrides)
+    return TradePlanV2(**base)
+```
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-# tests/test_macro_calendar.py
-import json
-
-import pytest
-
-from swingbot.core.macro.calendar_events import events_between, events_on, load_events
-
-FIXTURE = [
-    {"date": "2026-07-14", "time_et": "08:30", "kind": "cpi", "label": "CPI release", "importance": 3},
-    {"date": "2026-07-29", "time_et": "14:00", "kind": "fomc", "label": "FOMC decision", "importance": 3},
-    {"date": "2026-07-02", "time_et": "08:30", "kind": "nfp", "label": "NFP release", "importance": 3},
-    {"date": "2026-07-17", "time_et": "", "kind": "opex", "label": "OPEX", "importance": 1},
-    {"date": "2026-07-20", "time_et": "08:30", "kind": "bogus", "label": "bad kind", "importance": 3},
-    {"date": "2026-07-21", "time_et": "08:30", "kind": "cpi", "label": "bad importance", "importance": 9},
-]
+# tests/test_gate_context_htf.py
+from swingbot.core.gate.context_htf import htf_trend
+from tests.fixtures.gate import downtrend_daily, range_daily, uptrend_daily
 
 
-@pytest.fixture
-def events_file(tmp_path):
-    path = tmp_path / "event_history.json"
-    path.write_text(json.dumps(FIXTURE), encoding="utf-8")
-    return str(path)
+def test_htf_trend_three_states():
+    assert htf_trend(uptrend_daily())["weekly"] == "up"
+    assert htf_trend(downtrend_daily())["weekly"] == "down"
+    assert htf_trend(range_daily(90, 110, n=300))["weekly"] == "range"
 
 
-def test_loader_validates_and_sorts(events_file):
-    events = load_events(events_file)
-    # invalid kind + invalid importance dropped; remainder date-sorted
-    assert [e["kind"] for e in events] == ["nfp", "cpi", "opex", "fomc"]
+def test_short_history_is_range_with_detail():
+    result = htf_trend(uptrend_daily(n=100))     # ~20 weekly bars
+    assert result["weekly"] == "range"
+    assert "insufficient" in result["detail"]
 
 
-def test_events_between_inclusive_bounds(events_file):
-    events = load_events(events_file)
-    window = events_between("2026-07-14", "2026-07-17", events)
-    assert [e["kind"] for e in window] == ["cpi", "opex"]
-
-
-def test_events_on(events_file):
-    events = load_events(events_file)
-    assert events_on("2026-07-29", events)[0]["kind"] == "fomc"
-    assert events_on("2026-07-30", events) == []
+def test_daily_state_present():
+    assert htf_trend(uptrend_daily())["daily"] == "up"
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`), then **implement the loader**:
-
-```python
-# swingbot/core/macro/calendar_events.py
-"""Econ event calendar. Event = {date, time_et, kind, label, importance}.
-History is generated by scripts/build_event_history.py; the future edge
-is kept fresh by refresh_future_events (G30)."""
-from __future__ import annotations
-
-import os
-
-from swingbot import config
-from swingbot.core.jsonio import read_json
-
-KINDS = ("fomc", "cpi", "ppi", "nfp", "pce", "opex", "holiday")
-IMPORTANCE = {"fomc": 3, "cpi": 3, "nfp": 3, "ppi": 2, "pce": 2, "opex": 1, "holiday": 1}
-EVENTS_PATH = os.path.join(config.DATA_DIR, "macro", "event_history.json")
-
-
-def load_events(path: str | None = None) -> list[dict]:
-    rows = read_json(path or EVENTS_PATH, default=[]) or []
-    out = []
-    for e in rows:
-        if (e.get("kind") in KINDS and e.get("date")
-                and 1 <= int(e.get("importance", 0)) <= 3):
-            out.append(e)
-    return sorted(out, key=lambda e: (e["date"], e["kind"]))
-
-
-def events_between(start: str, end: str, events: list[dict] | None = None) -> list[dict]:
-    events = load_events() if events is None else events
-    return [e for e in events if start <= e["date"] <= end]   # both bounds inclusive
-
-
-def events_on(date: str, events: list[dict] | None = None) -> list[dict]:
-    return events_between(date, date, events)
-```
-
-**And the generator script** (hits the network — excluded from the test suite; usage in header):
-
-```python
-# scripts/build_event_history.py
-"""Build data/macro/event_history.json (2018 -> currently published future).
-
-USAGE (network; NEVER imported by tests):
-    FRED_API_KEY=... python scripts/build_event_history.py
-
-Sources:
-- FOMC decision days: the Fed's published calendars —
-  https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
-  (+ the "historical materials" pages for 2018-2020). Paste the SECOND
-  day of each two-day meeting into FOMC_DECISION_DAYS below (decision at
-  14:00 ET); the validation block rejects a bad paste (the Fed holds 8
-  scheduled meetings/year — 7-9 allowed for unscheduled cuts/additions).
-- CPI/PPI/NFP/PCE: fred_release_dates() — release ids CPI=10, PPI=46,
-  Employment Situation=50, Personal Income & Outlays=54; prints 08:30 ET.
-"""
-import datetime as dt
-import sys
-
-sys.path.insert(0, ".")
-
-from swingbot.core.jsonio import atomic_write_json
-from swingbot.core.macro.calendar_events import EVENTS_PATH, IMPORTANCE
-from swingbot.core.macro.fred import fred_release_dates
-
-# Paste from the Fed's calendar pages (source URLs in the header) —
-# every scheduled decision day 2018-01-31 through the last published
-# future meeting, one ISO date per entry:
-FOMC_DECISION_DAYS: list[str] = [
-    # "2018-01-31", "2018-03-21", "2018-05-02", "2018-06-13", ...
-]
-
-RELEASES = {"cpi": 10, "ppi": 46, "nfp": 50, "pce": 54}
-
-
-def _validate_fomc(days: list[str]) -> None:
-    per_year: dict[str, int] = {}
-    for d in days:
-        dt.date.fromisoformat(d)                      # raises on a bad paste
-        per_year[d[:4]] = per_year.get(d[:4], 0) + 1
-    for year, n in sorted(per_year.items()):
-        current = dt.date.today().year
-        if int(year) < current:                        # future years may be partial
-            assert 7 <= n <= 9, f"{year}: {n} FOMC days — check the paste"
-
-
-def main() -> int:
-    assert FOMC_DECISION_DAYS, "paste the FOMC decision days first (see header)"
-    _validate_fomc(FOMC_DECISION_DAYS)
-    events = [{"date": d, "time_et": "14:00", "kind": "fomc",
-               "label": "FOMC decision", "importance": 3}
-              for d in FOMC_DECISION_DAYS]
-    for kind, release_id in RELEASES.items():
-        dates = fred_release_dates(release_id, include_future=True)
-        assert dates, f"no release dates for {kind} — check FRED_API_KEY"
-        events += [{"date": d, "time_et": "08:30", "kind": kind,
-                    "label": f"{kind.upper()} release",
-                    "importance": IMPORTANCE[kind]}
-                   for d in dates if d >= "2018-01-01"]
-    events.sort(key=lambda e: (e["date"], e["kind"]))
-    atomic_write_json(EVENTS_PATH, events)
-    print(f"wrote {len(events)} events -> {EVENTS_PATH}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-```
-
-- [ ] **Step 3: Run tests — PASS** (`python -m pytest tests/test_macro_calendar.py -v`). **Then run the script once for real**; spot-check the JSON (CPI monthly ~mid-month 08:30 ET; 8 FOMC decision days/year; NFP first-Friday-ish). Commit the generated `data/macro/event_history.json`.
-- [ ] **Step 4: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/calendar_events.py scripts/build_event_history.py data/macro/event_history.json tests/test_macro_calendar.py
-git commit -m "feat: historical econ event calendar 2018->present"
-```
-
-### Task G30: Forward event schedule refresh
-
-**Files:** Modify `calendar_events.py`; test `tests/test_macro_calendar.py`
-
-**Interfaces:** `refresh_future_events(days_ahead=45) -> int` — re-pulls `fred_release_dates(include_future=True)` + the static future FOMC list, merges into `event_history.json` (idempotent by (date, kind)), returns rows added; called by the snapshot scheduler (G39) at most daily. `next_event(kinds=None, now=None) -> Event | None`; `hours_until(event, now) -> float` (ET-aware).
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_calendar.py`)
-
-```python
-import datetime as dt
-
-import swingbot.core.macro.calendar_events as cal
-import swingbot.core.macro.fred as fred
-
-
-def test_refresh_merge_idempotent(tmp_path, monkeypatch):
-    path = tmp_path / "event_history.json"
-    path.write_text(json.dumps([FIXTURE[0]]), encoding="utf-8")   # cpi 2026-07-14 known
-    monkeypatch.setattr(cal, "EVENTS_PATH", str(path))
-    monkeypatch.setattr(cal, "FUTURE_FOMC", ["2026-07-29"])
-    monkeypatch.setattr(fred, "fred_release_dates",
-                        lambda rid, include_future=True: ["2026-07-14", "2026-08-12"])
-    today = dt.date(2026, 7, 10)
-    # 4 kinds x 2 dates = 8 pairs, minus (cpi, 07-14) already present,
-    # plus the future FOMC = 8 rows added.
-    assert cal.refresh_future_events(days_ahead=45, today=today) == 8
-    assert cal.refresh_future_events(days_ahead=45, today=today) == 0   # idempotent
-    assert len(cal.load_events()) == 9
-
-
-def test_next_event_ordering_and_tz_math():
-    events = sorted(FIXTURE[:3], key=lambda e: (e["date"], e["kind"]))
-    now = dt.datetime(2026, 7, 14, 11, 0, tzinfo=dt.timezone.utc)   # 07:00 ET (EDT)
-    nxt = cal.next_event(now=now, events=events)
-    assert nxt["kind"] == "cpi"                       # today's 08:30 ET still ahead
-    # 08:30 ET on 2026-07-14 = 12:30 UTC -> 1.5 h away
-    assert cal.hours_until(nxt, now=now) == pytest.approx(1.5)
-    later = dt.datetime(2026, 7, 14, 13, 0, tzinfo=dt.timezone.utc)
-    assert cal.next_event(now=later, events=events)["kind"] == "fomc"
-    assert cal.next_event(kinds=("nfp",), now=later, events=events) is None
-```
-
-- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'refresh_future_events'`)
-- [ ] **Step 3: Write the implementation** (append to `calendar_events.py`)
-
-```python
-import datetime as dt
-from zoneinfo import ZoneInfo
-
-from swingbot.core.jsonio import atomic_write_json
-
-ET = ZoneInfo("America/New_York")
-
-# Future FOMC decision days beyond what's in event_history.json — update
-# when the Fed publishes next year's calendar (same source URL as
-# scripts/build_event_history.py).
-FUTURE_FOMC: list[str] = []
-
-_RELEASES = {"cpi": 10, "ppi": 46, "nfp": 50, "pce": 54}
-
-
-def refresh_future_events(days_ahead: int = 45, today: dt.date | None = None) -> int:
-    """Merge newly published release dates + FUTURE_FOMC into the events
-    file. Idempotent by (date, kind). Returns rows added. Called by the
-    snapshot scheduler (G39) at most daily."""
-    from swingbot.core.macro import fred as fred_mod
-
-    today = today or dt.date.today()
-    horizon = (today + dt.timedelta(days=days_ahead)).isoformat()
-    start = today.isoformat()
-    existing = load_events()
-    seen = {(e["date"], e["kind"]) for e in existing}
-    added = []
-
-    def _add(date, kind, time_et, label):
-        if start <= date <= horizon and (date, kind) not in seen:
-            added.append({"date": date, "time_et": time_et, "kind": kind,
-                          "label": label, "importance": IMPORTANCE[kind]})
-            seen.add((date, kind))
-
-    for kind, release_id in _RELEASES.items():
-        for date in fred_mod.fred_release_dates(release_id, include_future=True):
-            _add(date, kind, "08:30", f"{kind.upper()} release")
-    for date in FUTURE_FOMC:
-        _add(date, "fomc", "14:00", "FOMC decision")
-    if added:
-        merged = sorted(existing + added, key=lambda e: (e["date"], e["kind"]))
-        atomic_write_json(EVENTS_PATH, merged)
-    return len(added)
-
-
-def _event_dt_utc(event: dict) -> dt.datetime:
-    hh, mm = (int(x) for x in (event.get("time_et") or "09:30").split(":"))
-    d = dt.date.fromisoformat(event["date"])
-    return dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=ET) \
-             .astimezone(dt.timezone.utc)
-
-
-def next_event(kinds=None, now: dt.datetime | None = None,
-               events: list[dict] | None = None) -> dict | None:
-    now = now or dt.datetime.now(dt.timezone.utc)
-    for e in (load_events() if events is None else events):
-        if kinds and e["kind"] not in kinds:
-            continue
-        if _event_dt_utc(e) >= now:
-            return e
-    return None
-
-
-def hours_until(event: dict, now: dt.datetime | None = None) -> float:
-    now = now or dt.datetime.now(dt.timezone.utc)
-    return (_event_dt_utc(event) - now).total_seconds() / 3600.0
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_calendar.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/calendar_events.py tests/test_macro_calendar.py
-git commit -m "feat: forward event schedule"
-```
-
-### Task G31: Options-expiry calendar
-
-**Files:**
-- Create: `swingbot/core/macro/opex.py`
-- Test: `tests/test_macro_opex.py`
-
-**Interfaces:**
-- Produces: `opex_dates(year) -> list[str]` (3rd Fridays, shifted to Thursday when Friday is a market holiday); `is_opex(date) -> bool`; `is_quad_witching(date) -> bool` (3rd Friday of Mar/Jun/Sep/Dec); pure calendar math, no network.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_opex.py
-from swingbot.core.macro.opex import is_opex, is_quad_witching, opex_dates
-
-
-def test_2026_quad_witching_golden():
-    dates = opex_dates(2026)
-    assert dates[2] == "2026-03-20"
-    assert dates[5] == "2026-06-18"     # Jun 19 is Juneteenth -> Thursday
-    assert dates[8] == "2026-09-18"
-    assert dates[11] == "2026-12-18"
-
-
-def test_is_opex_pairs():
-    assert is_opex("2026-06-18") is True
-    assert is_opex("2026-06-19") is False
-    assert is_opex("2026-01-16") is True
-    assert is_opex("2026-01-15") is False
-
-
-def test_quad_witching_only_mar_jun_sep_dec():
-    assert is_quad_witching("2026-03-20") and is_quad_witching("2026-12-18")
-    assert not is_quad_witching("2026-01-16")
-    assert not is_quad_witching("2026-06-19")
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_opex.py -v`
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_context_htf.py -v`
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# swingbot/core/macro/opex.py
-"""Options-expiry / quad-witching calendar. Pure date math, no network.
-
-Expiry = 3rd Friday, shifted to Thursday when that Friday is a market
-holiday. Until G32 lands, _is_holiday covers the fixed-date holidays
-that can land on a Friday; G32 swaps it to sessions.is_holiday (one
-calendar authority)."""
-import datetime as dt
-
-# (month, day) fixed-date market holidays that can fall on a 3rd Friday.
-_FRIDAY_HOLIDAYS = {(1, 1), (6, 19), (7, 4), (12, 25)}
-
-
-def _is_holiday(date: dt.date) -> bool:
-    return (date.month, date.day) in _FRIDAY_HOLIDAYS
-
-
-def _third_friday(year: int, month: int) -> dt.date:
-    first = dt.date(year, month, 1)
-    offset = (4 - first.weekday()) % 7          # days to the first Friday
-    return first + dt.timedelta(days=offset + 14)
-
-
-def opex_dates(year: int) -> list[str]:
-    out = []
-    for month in range(1, 13):
-        day = _third_friday(year, month)
-        if _is_holiday(day):
-            day -= dt.timedelta(days=1)
-        out.append(day.isoformat())
-    return out
-
-
-def is_opex(date: str) -> bool:
-    return date in opex_dates(int(date[:4]))
-
-
-def is_quad_witching(date: str) -> bool:
-    return is_opex(date) and int(date[5:7]) in (3, 6, 9, 12)
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_opex.py -v` (3 passed)
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/opex.py tests/test_macro_opex.py
-git commit -m "feat: opex + quad-witching calendar"
-```
-
-### Task G32: Market sessions — holidays, half-days, thin windows
-
-**Files:**
-- Create: `swingbot/core/macro/sessions.py`
-- Test: `tests/test_macro_sessions.py`
-
-**Interfaces:**
-- Produces: NYSE holiday/half-day table 2018–2027 (static literal, source comment); `is_holiday(date)`, `is_half_day(date)`, `is_thin_window(dt_et) -> tuple[bool, str]` — true for first 30 min after open, last 10 min before close, half-day afternoons, and the week between Christmas and New Year (reason string for the embed); `session_flag(date, time_et=None) -> dict` (CheckResult-ready).
-
-**Design note:** instead of a hand-typed 10-year table (typo-prone, unverifiable), the calendar is *rule-generated*: nth-weekday math for the floating holidays, the anonymous-Gregorian computus for Good Friday, NYSE observance shifts (Sun→Mon; Sat→Fri except New Year's, which is simply not observed), Juneteenth from 2022, plus a literal `EXTRA_CLOSURES` set for the two mourning closures. Source: https://www.nyse.com/markets/hours-calendars. The interface is exactly as specified.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_sessions.py
-import datetime as dt
-
-from swingbot.core.macro.sessions import (
-    holidays, is_half_day, is_holiday, is_thin_window, session_flag,
-)
-
-
-def test_holiday_rules_2026():
-    h = holidays(2026)
-    assert "2026-01-01" in h                       # New Year's (Thursday)
-    assert "2026-01-19" in h                       # MLK: 3rd Monday
-    assert h["2026-04-03"] == "Good Friday"        # Easter 2026 = Apr 5
-    assert "2026-06-19" in h                       # Juneteenth (Friday)
-    assert "2026-07-03" in h                       # Jul 4 = Saturday -> observed Fri
-    assert "2026-11-26" in h                       # Thanksgiving: 4th Thursday
-    assert "2026-12-25" in h
-
-
-def test_mourning_closures():
-    assert is_holiday("2018-12-05")                # G.H.W. Bush
-    assert is_holiday("2025-01-09")                # J. Carter
-
-
-def test_half_days_2025():
-    assert is_half_day("2025-07-03")               # Jul 4 2025 is a Friday
-    assert is_half_day("2025-11-28")               # day after Thanksgiving
-    assert is_half_day("2025-12-24")               # Christmas Eve (Wednesday)
-    assert not is_half_day("2025-07-04")
-
-
-def test_thin_windows():
-    assert is_thin_window(dt.datetime(2026, 7, 14, 9, 45))[0]      # first 30 min
-    assert not is_thin_window(dt.datetime(2026, 7, 14, 11, 0))[0]  # mid-session
-    assert is_thin_window(dt.datetime(2026, 7, 14, 15, 55))[0]     # last 10 min
-    thin, reason = is_thin_window(dt.datetime(2026, 12, 29, 11, 0))
-    assert thin and "holiday week" in reason
-
-
-def test_session_flag_shapes():
-    assert session_flag("2026-06-19")["flag"] == "holiday"
-    assert session_flag("2025-11-28")["flag"] == "half_day"
-    assert session_flag("2026-07-14", dt.time(9, 45))["flag"] == "thin"
-    assert session_flag("2026-07-14")["flag"] == "normal"
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sessions.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/sessions.py
-"""NYSE session calendar: holidays, half-days (13:00 close), thin windows.
-Rule-generated per https://www.nyse.com/markets/hours-calendars ."""
+# swingbot/core/gate/context_htf.py
+"""HTF trend detection. If edge-engine E27 MTF primitives are merged,
+consume them instead of this resample logic (capability-check at
+execution: `from swingbot.core.edge import mtf`)."""
 from __future__ import annotations
 
-import datetime as dt
-
-EXTRA_CLOSURES = {
-    "2018-12-05": "National day of mourning (G.H.W. Bush)",
-    "2025-01-09": "National day of mourning (J. Carter)",
-}
+import pandas as pd
 
 
-def _easter(year: int) -> dt.date:
-    """Anonymous Gregorian computus."""
-    a = year % 19
-    b, c = divmod(year, 100)
-    d, e = divmod(b, 4)
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i, k = divmod(c, 4)
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = (h + l - 7 * m + 114) % 31 + 1
-    return dt.date(year, month, day)
+def _resample_weekly(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame({
+        "Open": df["Open"].resample("W-FRI").first(),
+        "High": df["High"].resample("W-FRI").max(),
+        "Low": df["Low"].resample("W-FRI").min(),
+        "Close": df["Close"].resample("W-FRI").last(),
+    }).dropna()
 
 
-def _nth_weekday(year: int, month: int, weekday: int, n: int) -> dt.date:
-    first = dt.date(year, month, 1)
-    return first + dt.timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+def _pivots(closes: pd.Series, span: int = 2) -> tuple[list, list]:
+    highs, lows = [], []
+    vals = closes.values
+    for i in range(span, len(vals) - span):
+        window = vals[i - span:i + span + 1]
+        if vals[i] == window.max():
+            highs.append(float(vals[i]))
+        elif vals[i] == window.min():
+            lows.append(float(vals[i]))
+    return highs, lows
 
 
-def _last_weekday(year: int, month: int, weekday: int) -> dt.date:
-    last = (dt.date(year, month + 1, 1) if month < 12
-            else dt.date(year + 1, 1, 1)) - dt.timedelta(days=1)
-    return last - dt.timedelta(days=(last.weekday() - weekday) % 7)
+def _trend(closes: pd.Series, fast: int, slow: int) -> str:
+    """SMA cross + pivot structure; SMAs within 0.5% of each other are
+    treated as flat (keeps oscillating ranges deterministic)."""
+    if len(closes) < slow + 5:
+        return "range"
+    sma_fast = float(closes.rolling(fast).mean().iloc[-1])
+    sma_slow = float(closes.rolling(slow).mean().iloc[-1])
+    if abs(sma_fast / sma_slow - 1.0) < 0.005:
+        return "range"
+    highs, lows = _pivots(closes.iloc[-min(len(closes), 8 * fast):])
+    up_structure = ((len(highs) >= 2 and highs[-1] > highs[0])
+                    or (len(lows) >= 2 and lows[-1] > lows[0]))
+    down_structure = ((len(highs) >= 2 and highs[-1] < highs[0])
+                      or (len(lows) >= 2 and lows[-1] < lows[0]))
+    if sma_fast > sma_slow and up_structure:
+        return "up"
+    if sma_fast < sma_slow and down_structure:
+        return "down"
+    return "range"
 
 
-def _observed(d: dt.date) -> dt.date:
-    if d.weekday() == 6:                # Sunday -> Monday
-        return d + dt.timedelta(days=1)
-    if d.weekday() == 5:                # Saturday -> Friday
-        return d - dt.timedelta(days=1)
-    return d
-
-
-def holidays(year: int) -> dict[str, str]:
-    out: dict[str, str] = {}
-    ny = dt.date(year, 1, 1)
-    if ny.weekday() == 6:
-        out[(ny + dt.timedelta(days=1)).isoformat()] = "New Year's Day (observed)"
-    elif ny.weekday() != 5:             # on a Saturday it is NOT observed
-        out[ny.isoformat()] = "New Year's Day"
-    out[_nth_weekday(year, 1, 0, 3).isoformat()] = "MLK Day"
-    out[_nth_weekday(year, 2, 0, 3).isoformat()] = "Washington's Birthday"
-    out[(_easter(year) - dt.timedelta(days=2)).isoformat()] = "Good Friday"
-    out[_last_weekday(year, 5, 0).isoformat()] = "Memorial Day"
-    if year >= 2022:
-        out[_observed(dt.date(year, 6, 19)).isoformat()] = "Juneteenth"
-    out[_observed(dt.date(year, 7, 4)).isoformat()] = "Independence Day"
-    out[_nth_weekday(year, 9, 0, 1).isoformat()] = "Labor Day"
-    out[_nth_weekday(year, 11, 3, 4).isoformat()] = "Thanksgiving"
-    out[_observed(dt.date(year, 12, 25)).isoformat()] = "Christmas"
-    for date, label in EXTRA_CLOSURES.items():
-        if date.startswith(str(year)):
-            out[date] = label
-    return out
-
-
-def half_days(year: int) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if dt.date(year, 7, 4).weekday() in (1, 2, 3, 4):   # Jul 4 Tue-Fri -> Jul 3 Mon-Thu
-        out[dt.date(year, 7, 3).isoformat()] = "July 3rd early close"
-    after_tg = _nth_weekday(year, 11, 3, 4) + dt.timedelta(days=1)
-    out[after_tg.isoformat()] = "Day after Thanksgiving"
-    dec24 = dt.date(year, 12, 24)
-    if dec24.weekday() < 5 and dt.date(year, 12, 25).weekday() != 5:
-        out[dec24.isoformat()] = "Christmas Eve early close"
-    return out
-
-
-def is_holiday(date: str) -> bool:
-    return date in holidays(int(date[:4])) 
-
-
-def is_half_day(date: str) -> bool:
-    return date in half_days(int(date[:4]))
-
-
-def is_thin_window(dt_et: dt.datetime) -> tuple[bool, str]:
-    date = dt_et.date().isoformat()
-    if is_holiday(date):
-        return True, "market holiday"
-    t = dt_et.time()
-    if dt.time(9, 30) <= t < dt.time(10, 0):
-        return True, "first 30 min after open"
-    close = dt.time(13, 0) if is_half_day(date) else dt.time(16, 0)
-    last10 = (dt.datetime.combine(dt_et.date(), close)
-              - dt.timedelta(minutes=10)).time()
-    if last10 <= t < close:
-        return True, "last 10 min before close"
-    if is_half_day(date) and t >= dt.time(12, 0):
-        return True, "half-day session"
-    if date[5:7] == "12" and "26" <= date[8:10] <= "31":
-        return True, "holiday week (Christmas -> New Year)"
-    return False, ""
-
-
-def session_flag(date: str, time_et: dt.time | None = None) -> dict:
-    """CheckResult-ready summary used by rf_thin_session (G65)."""
-    year = int(date[:4])
-    if is_holiday(date):
-        return {"flag": "holiday", "detail": holidays(year)[date]}
-    if is_half_day(date):
-        return {"flag": "half_day", "detail": half_days(year)[date]}
-    if time_et is not None:
-        thin, reason = is_thin_window(
-            dt.datetime.combine(dt.date.fromisoformat(date), time_et))
-        if thin:
-            return {"flag": "thin", "detail": reason}
-    return {"flag": "normal", "detail": ""}
+def htf_trend(df_daily: pd.DataFrame) -> dict:
+    weekly_df = _resample_weekly(df_daily)
+    daily = _trend(df_daily["Close"], 20, 50)
+    if len(weekly_df) < 45:                      # 40w SMA + margin
+        return {"weekly": "range", "daily": daily,
+                "detail": "insufficient weekly history"}
+    weekly = _trend(weekly_df["Close"], 10, 40)
+    return {"weekly": weekly, "daily": daily,
+            "detail": f"weekly {weekly} (10/40w SMA + pivots), daily {daily}"}
 ```
 
-**And make sessions the one calendar authority** — replace the interim shim in `opex.py`:
-
-```python
-# swingbot/core/macro/opex.py — _is_holiday becomes:
-def _is_holiday(date: dt.date) -> bool:
-    from swingbot.core.macro.sessions import is_holiday
-    return is_holiday(date.isoformat())
-```
-
-(delete `_FRIDAY_HOLIDAYS`; the G31 goldens must stay green.)
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sessions.py tests/test_macro_opex.py -v`
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_context_htf.py -v`
 - [ ] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
-git add swingbot/core/macro/sessions.py swingbot/core/macro/opex.py tests/test_macro_sessions.py
-git commit -m "feat: session liquidity calendar"
+git add swingbot/core/gate/context_htf.py tests/fixtures/gate/plans.py tests/test_gate_context_htf.py
+git commit -m "feat: HTF trend detector"
 ```
 
-### Task G33: Earnings calendar provider
+### Task G46: Check `htf_alignment` (weight 12, checklist §1 "I know the HTF trend and I'm not against it")
+
+**Files:** Modify `context_htf.py`, `registry.py`; test `tests/test_gate_context_htf.py`
+
+**Interfaces:** `check_htf_alignment(df_daily, plan, macro_snap) -> CheckResult` — bullish plan + weekly "up" → pass; weekly "range" → warn; bullish into weekly "down" (or mirror) → **fail**; evidence carries both timeframe states.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_context_htf.py`)
+
+```python
+from swingbot.core.gate.context_htf import check_htf_alignment
+from swingbot.core.gate.registry import CHECKS
+from tests.fixtures.gate.plans import make_plan
+
+
+def test_htf_alignment_four_outcomes():
+    up, down = uptrend_daily(), downtrend_daily()
+    bull, bear = make_plan(direction="bullish"), make_plan(direction="bearish")
+    assert check_htf_alignment(up, bull, None).status == "pass"
+    assert check_htf_alignment(down, bear, None).status == "pass"     # mirror
+    assert check_htf_alignment(down, bull, None).status == "fail"     # against trend
+    assert check_htf_alignment(uptrend_daily(n=100), bull, None).status == "warn"  # range
+    result = check_htf_alignment(down, bull, None)
+    assert result.evidence["weekly"] == "down" and "daily" in result.evidence
+
+
+def test_htf_alignment_registered():
+    spec = CHECKS["htf_alignment"]
+    assert spec.section == "context" and spec.weight == 12.0
+    assert spec.hard_block is False and spec.applies_to is None
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_htf_alignment'`)
+- [ ] **Step 3: Write the implementation** (append to `context_htf.py`)
+
+```python
+from swingbot.core.gate.registry import register
+from swingbot.core.gate.types import CheckResult
+
+
+def check_htf_alignment(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    trend = htf_trend(df_daily)
+    weekly = trend["weekly"]
+    with_trend = "up" if plan.direction == "bullish" else "down"
+    if weekly == with_trend:
+        status, detail = "pass", f"{plan.direction} plan with the weekly {weekly}trend"
+    elif weekly == "range":
+        status, detail = "warn", "weekly trend is range-bound"
+    else:
+        status, detail = "fail", f"{plan.direction} plan AGAINST the weekly {weekly}trend"
+    return CheckResult("htf_alignment", "context", status, 12.0, detail,
+                       {"weekly": weekly, "daily": trend["daily"]})
+
+
+register(check_id="htf_alignment", section="context", weight=12.0,
+         func=check_htf_alignment)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_context_htf.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/context_htf.py tests/test_gate_context_htf.py
+git commit -m "feat: htf_alignment check"
+```
+
+### Task G47: Swing S/R level extraction
 
 **Files:**
-- Create: `swingbot/core/macro/earnings.py`
-- Test: `tests/test_macro_earnings.py`
+- Create: `swingbot/core/gate/levels.py`
+- Test: `tests/test_gate_levels.py`
 
 **Interfaces:**
-- Produces: `days_to_earnings(ticker, now=None) -> int | None` — if llm-advisor's `market_context.py` exists, wrap it (one-implementation rule); else implement here: Finnhub `/calendar/earnings` window ±30d, 6h TTL via `fetch_json(provider="finnhub")`, empty key → None. `earnings_within(ticker, days) -> bool | None` (None when unknown — never a silent False).
+- Produces: `swing_levels(df_daily, lookback=250, pivot_span=5) -> list[Level]` — `Level(price, kind: "support"|"resistance", touches, last_touch)`; pivots = local extrema over ±`pivot_span` bars, clustered within 0.5×ATR, touch-counted; sorted by touches desc. Reuse the existing scanning support/resistance helpers if `swingbot/core/scanning/` already exposes them (verify at execution; wrap, don't fork).
+
+**Reuse decision (verified):** `swingbot/core/levels.py` exists but its `collect_candidate_levels`/`build_level_map` are horizon-config-coupled (`h` dict) and vote 10+ indicator sources for scenario building; its `Level` is `(price, sources)`. The gate needs plain touch-counted price structure, so `swingbot/core/gate/levels.py` keeps its own lean extractor with a distinct `SwingLevel` dataclass — a documented decision, not a fork of the same concern.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-# tests/test_macro_earnings.py
-import datetime as dt
-
-import swingbot.config as config
-import swingbot.core.macro.earnings as earnings
-
-PAYLOAD = {"earningsCalendar": [
-    {"date": "2026-07-01", "symbol": "NVDA"},      # past
-    {"date": "2026-07-22", "symbol": "NVDA"},      # next
-    {"date": "2026-10-21", "symbol": "NVDA"},
-]}
-
-NOW = dt.date(2026, 7, 14)
-
-
-def _with_key(monkeypatch, payload=PAYLOAD):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
-    monkeypatch.setattr(earnings, "fetch_json", lambda *a, **k: payload)
-
-
-def test_day_math(monkeypatch):
-    _with_key(monkeypatch)
-    assert earnings.days_to_earnings("NVDA", now=NOW) == 8
-    assert earnings.earnings_within("NVDA", 10, now=NOW) is True
-    assert earnings.earnings_within("NVDA", 3, now=NOW) is False
-
-
-def test_no_future_earnings_is_none(monkeypatch):
-    _with_key(monkeypatch, {"earningsCalendar": [{"date": "2026-07-01"}]})
-    assert earnings.days_to_earnings("NVDA", now=NOW) is None
-
-
-def test_no_key_none_and_no_network(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
-    def boom(*a, **k):
-        raise AssertionError("no network without a key")
-    monkeypatch.setattr(earnings, "fetch_json", boom)
-    assert earnings.days_to_earnings("NVDA", now=NOW) is None
-    assert earnings.earnings_within("NVDA", 3, now=NOW) is None   # unknown, never False
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_earnings.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/earnings.py
-"""Earnings calendar provider. One-implementation rule: when llm-advisor's
-market_context (v5 L-phase) is merged, wrap it; else Finnhub directly."""
-from __future__ import annotations
-
-import datetime as dt
-
-from swingbot import config
-from swingbot.core.macro.httpcache import fetch_json
-
-_UNAVAILABLE = object()
-
-
-def _via_advisor(ticker: str, now: dt.date):
-    try:
-        from swingbot.core.advisor import market_context   # capability check
-    except ImportError:
-        return _UNAVAILABLE
-    fn = getattr(market_context, "days_to_earnings", None)
-    return fn(ticker, now=now) if fn else _UNAVAILABLE
-
-
-def days_to_earnings(ticker: str, now: dt.date | None = None) -> int | None:
-    now = now or dt.date.today()
-    advisor = _via_advisor(ticker, now)
-    if advisor is not _UNAVAILABLE:
-        return advisor
-    key = (getattr(config, "FINNHUB_API_KEY", "") or "").strip()
-    if not key:
-        return None
-    params = {"symbol": ticker, "token": key,
-              "from": (now - dt.timedelta(days=30)).isoformat(),
-              "to": (now + dt.timedelta(days=30)).isoformat()}
-    data = fetch_json("https://finnhub.io/api/v1/calendar/earnings",
-                      params=params, ttl_s=6 * 3600, provider="finnhub")
-    if not data:
-        return None
-    dates = sorted(e["date"] for e in data.get("earningsCalendar", [])
-                   if e.get("date"))
-    future = [d for d in dates if d >= now.isoformat()]
-    if not future:
-        return None
-    return (dt.date.fromisoformat(future[0]) - now).days
-
-
-def earnings_within(ticker: str, days: int, now: dt.date | None = None) -> bool | None:
-    d = days_to_earnings(ticker, now=now)
-    return None if d is None else d <= days    # None = unknown, never a silent False
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_earnings.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/earnings.py tests/test_macro_earnings.py
-git commit -m "feat: earnings calendar provider"
-```
-
-### Task G34: Market news headlines
-
-**Files:**
-- Create: `swingbot/core/macro/news.py`
-- Test: `tests/test_macro_news.py`
-
-**Interfaces:**
-- Produces: `market_headlines(n=15) -> list[dict]` — Finnhub `/news?category=general`, headline dict `{ts, source, title, url, related}`; 30-min TTL; de-dup by lowercase title prefix (first 60 chars); empty key → `[]`.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_news.py
-import swingbot.config as config
-import swingbot.core.macro.news as news
-
-RAW = [
-    {"datetime": 300, "source": "A", "headline": "Fed holds rates steady", "url": "u1", "related": ""},
-    {"datetime": 200, "source": "B", "headline": "FED HOLDS RATES STEADY", "url": "u2", "related": ""},  # dup by prefix
-    {"datetime": 100, "source": "C", "headline": "Oil surges on supply fears", "url": "u3", "related": ""},
-    {"datetime": 50, "source": "D", "headline": "", "url": "u4", "related": ""},                          # empty dropped
-]
-
-
-def test_parse_dedup_cap(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
-    monkeypatch.setattr(news, "fetch_json", lambda *a, **k: RAW)
-    rows = news.market_headlines(n=15)
-    assert [r["title"] for r in rows] == ["Fed holds rates steady",
-                                          "Oil surges on supply fears"]
-    assert rows[0] == {"ts": 300, "source": "A", "title": "Fed holds rates steady",
-                       "url": "u1", "related": ""}
-    assert news.market_headlines(n=1) == rows[:1]           # cap respected
-
-
-def test_no_key_returns_empty(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
-    def boom(*a, **k):
-        raise AssertionError("no network without a key")
-    monkeypatch.setattr(news, "fetch_json", boom)
-    assert news.market_headlines() == []
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_news.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/news.py
-"""Finnhub market headlines (company headlines arrive in G35)."""
-from __future__ import annotations
-
-import datetime as dt
-
-from swingbot import config
-from swingbot.core.macro.httpcache import fetch_json
-
-BASE = "https://finnhub.io/api/v1"
-
-
-def _key() -> str:
-    return (getattr(config, "FINNHUB_API_KEY", "") or "").strip()
-
-
-def _norm(item: dict) -> dict:
-    return {"ts": item.get("datetime", 0), "source": item.get("source", ""),
-            "title": (item.get("headline") or "").strip(),
-            "url": item.get("url", ""), "related": item.get("related", "")}
-
-
-def _dedup(rows: list[dict], n: int) -> list[dict]:
-    """Newest first, de-duplicated by lowercase 60-char title prefix."""
-    seen, out = set(), []
-    for row in sorted(rows, key=lambda r: r["ts"], reverse=True):
-        prefix = row["title"].lower()[:60]
-        if not row["title"] or prefix in seen:
-            continue
-        seen.add(prefix)
-        out.append(row)
-        if len(out) == n:
-            break
-    return out
-
-
-def market_headlines(n: int = 15) -> list[dict]:
-    if not _key():
-        return []
-    data = fetch_json(f"{BASE}/news", params={"category": "general", "token": _key()},
-                      ttl_s=30 * 60, provider="finnhub")
-    return _dedup([_norm(i) for i in data], n) if isinstance(data, list) else []
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_news.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/news.py tests/test_macro_news.py
-git commit -m "feat: market news provider"
-```
-
-### Task G35: Company news
-
-**Files:** Modify `news.py`; test `tests/test_macro_news.py`
-
-**Interfaces:** `company_headlines(ticker, days=5, n=10) -> list[dict]` — Finnhub `/company-news`, 2h TTL, same dict shape.
-
-- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_news.py`)
-
-```python
-def test_company_headlines(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
-    captured = {}
-    def fake_fetch(url, *, params=None, **kw):
-        captured["url"], captured["params"] = url, params
-        return RAW
-    monkeypatch.setattr(news, "fetch_json", fake_fetch)
-    rows = news.company_headlines("NVDA", days=5, n=10)
-    assert captured["url"].endswith("/company-news")
-    assert captured["params"]["symbol"] == "NVDA"
-    assert len(rows) == 2                                   # dedup applies here too
-
-
-def test_company_headlines_no_key(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
-    assert news.company_headlines("NVDA") == []
-```
-
-- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'company_headlines'`)
-- [ ] **Step 3: Write the implementation** (append to `news.py`)
-
-```python
-def company_headlines(ticker: str, days: int = 5, n: int = 10) -> list[dict]:
-    if not _key():
-        return []
-    today = dt.date.today()
-    params = {"symbol": ticker, "token": _key(),
-              "from": (today - dt.timedelta(days=days)).isoformat(),
-              "to": today.isoformat()}
-    data = fetch_json(f"{BASE}/company-news", params=params,
-                      ttl_s=2 * 3600, provider="finnhub")
-    return _dedup([_norm(i) for i in data], n) if isinstance(data, list) else []
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_news.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/news.py tests/test_macro_news.py
-git commit -m "feat: company news provider"
-```
-
-### Task G36: Headline sentiment scorer (lexicon)
-
-**Files:**
-- Create: `swingbot/core/macro/sentiment.py`
-- Test: `tests/test_macro_sentiment.py`
-
-**Interfaces:**
-- Produces: `score_headline(title) -> float` in [-1, 1] — transparent finance lexicon (two literal frozensets, ~60 words each: POSITIVE beats/raises/surges/upgrade/record/approval/…, NEGATIVE misses/cuts/plunges/downgrade/probe/recall/bankruptcy/…), hit-count normalized, negation flip for not/no/fails-to within 3 tokens; `aggregate_sentiment(headlines) -> dict` `{score, n, label}` (label cuts ±0.15). Deliberately simple and auditable; the LLM advisor (G132) adds nuance separately and advisorily.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_sentiment.py
-from swingbot.core.macro.sentiment import aggregate_sentiment, score_headline
-
-
-def test_golden_directions():
-    assert score_headline("NVDA beats estimates, raises guidance") > 0
-    assert score_headline("Regulator opens probe; shares plunge on recall") < 0
-    assert score_headline("Company holds annual meeting") == 0.0
-
-
-def test_negation_flip():
-    assert score_headline("Company fails to beat estimates") < 0
-    assert score_headline("No probe after review") > 0
-
-
-def test_score_bounds():
-    assert -1.0 <= score_headline("plunges plunges plunges") <= 1.0
-
-
-def test_aggregate():
-    heads = [{"title": "NVDA beats estimates"}, {"title": "Sector rally continues"},
-             {"title": "Weather is mild"}]
-    agg = aggregate_sentiment(heads)
-    assert agg["n"] == 3 and agg["score"] > 0.15 and agg["label"] == "positive"
-    empty = aggregate_sentiment([])
-    assert empty == {"score": 0.0, "n": 0, "label": "neutral"}
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sentiment.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/sentiment.py
-"""Transparent finance-lexicon headline scorer. Deliberately simple and
-auditable; the LLM advisor (G132) adds nuance separately, advisorily."""
-from __future__ import annotations
-
-POSITIVE = frozenset("""
-beats beat raises raised surges surged soars soared upgrade upgraded upgrades
-record rally rallies jumps jumped gains gained wins won win approval approved
-strong tops topped exceeds exceeded outperform outperforms outperformed
-bullish accelerates expands expansion growth profitable breakthrough buyback
-dividend hike hikes partnership secures secured awarded milestone robust
-momentum upbeat optimistic rebound rebounds recovers recovery booming
-""".split())
-
-NEGATIVE = frozenset("""
-misses missed cuts plunges plunged sinks sank tumbles tumbled downgrade
-downgraded downgrades probe probes investigation lawsuit sues sued recall
-recalls bankruptcy default warns warning weak slump slumps layoffs fraud
-halted halt delays delayed loss losses declines declined bearish shortfall
-crash crashes selloff scandal fine fined penalty breach outage disappointing
-downbeat pessimistic slowdown plunge tumble miss falls fell
-""".split())
-
-NEGATIONS = frozenset(("not", "no", "never", "fails", "failed", "without"))
-
-
-def _tokens(title: str) -> list[str]:
-    return [t.strip(".,!?:;()'\"").lower() for t in title.split()]
-
-
-def score_headline(title: str) -> float:
-    """[-1, 1]; hit-count normalized; negation within 3 tokens flips."""
-    tokens = _tokens(title)
-    total = hits = 0
-    for i, tok in enumerate(tokens):
-        val = 1 if tok in POSITIVE else -1 if tok in NEGATIVE else 0
-        if val == 0:
-            continue
-        if any(w in NEGATIONS for w in tokens[max(0, i - 3):i]):
-            val = -val
-        total += val
-        hits += 1
-    if hits == 0:
-        return 0.0
-    return max(-1.0, min(1.0, total / hits))
-
-
-def aggregate_sentiment(headlines: list[dict]) -> dict:
-    """label cuts at +/-0.15."""
-    scores = [score_headline(h.get("title", "")) for h in headlines]
-    if not scores:
-        return {"score": 0.0, "n": 0, "label": "neutral"}
-    score = round(sum(scores) / len(scores), 3)
-    label = "positive" if score > 0.15 else "negative" if score < -0.15 else "neutral"
-    return {"score": score, "n": len(scores), "label": label}
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sentiment.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/sentiment.py tests/test_macro_sentiment.py
-git commit -m "feat: lexicon headline sentiment"
-```
-
-### Task G37: Rumor vs. confirmed classifier
-
-**Files:** Modify `sentiment.py`; test `tests/test_macro_sentiment.py`
-
-**Interfaces:** `classify_confirmation(headline_title) -> str` — `"rumor"` (matches report(edly)|sources say|rumor|in talks|considering|mulls|according to people familiar), `"confirmed"` (announces|files|reports Q|8-K|SEC filing|earnings|guidance|completes), else `"unclear"`; `rumor_ratio(headlines) -> float`. Feeds rf_rumor_spike (G63) and rf_buy_rumor (G64).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sentiment.py`)
-
-```python
-from swingbot.core.macro.sentiment import classify_confirmation, rumor_ratio
-
-
-def test_three_way_classification():
-    assert classify_confirmation("Apple reportedly in talks to acquire startup") == "rumor"
-    assert classify_confirmation("Sources say merger being considered") == "rumor"
-    assert classify_confirmation("NVDA announces record Q2 earnings") == "confirmed"
-    assert classify_confirmation("Company files 8-K with SEC") == "confirmed"
-    assert classify_confirmation("Shares move higher in afternoon trade") == "unclear"
-    # rumor phrasing wins even when confirmation words also appear
-    assert classify_confirmation("Reportedly set to announce acquisition") == "rumor"
-
-
-def test_rumor_ratio():
-    heads = [{"title": "reportedly in talks"}, {"title": "announces earnings"},
-             {"title": "sources say deal near"}, {"title": "plain headline"}]
-    assert rumor_ratio(heads) == 0.5
-    assert rumor_ratio([]) == 0.0
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'classify_confirmation'`)
-- [ ] **Step 3: Write the implementation** (append to `sentiment.py`)
-
-```python
-import re
-
-_RUMOR = re.compile(
-    r"reportedly|report(s|ed)? that|sources? say|rumou?r|in talks|considering|"
-    r"mulls?|mulling|according to people familiar|weighs?|weighing|exploring|"
-    r"could be|said to be|poised to|set to announce", re.I)
-_CONFIRMED = re.compile(
-    r"announce[sd]?|files?|filed|reports? q[1-4]|8-k|10-[kq]|sec filing|"
-    r"earnings|guidance|completes?|completed|acquires?|acquired|confirms?|"
-    r"confirmed|declares?|launches?|launched|signs?|signed", re.I)
-
-
-def classify_confirmation(headline_title: str) -> str:
-    if _RUMOR.search(headline_title):
-        return "rumor"                 # rumor phrasing outranks confirmation verbs
-    if _CONFIRMED.search(headline_title):
-        return "confirmed"
-    return "unclear"
-
-
-def rumor_ratio(headlines: list[dict]) -> float:
-    if not headlines:
-        return 0.0
-    rumors = sum(classify_confirmation(h.get("title", "")) == "rumor"
-                 for h in headlines)
-    return rumors / len(headlines)
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sentiment.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/sentiment.py tests/test_macro_sentiment.py
-git commit -m "feat: rumor/confirmed headline classifier"
-```
-
-### Task G38: Macro snapshot builder
-
-**Files:**
-- Create: `swingbot/core/macro/snapshot.py`
-- Test: `tests/test_macro_snapshot.py`
-
-**Interfaces:**
-- Produces: `build_snapshot(*, loaders=None, now=None) -> dict` — assembles every upstream module into ONE dict (each section None-tolerant): `{built_at, stale: bool, inflation: {cpi_yoy, core_cpi_yoy, ppi_yoy, pce_yoy, core_pce_yoy, vs_target}, labor: {...}, rates: {fed_funds, y3m, y2, y10, y30, curve_state}, expectations: {breakeven_5y, breakeven_10y}, risk: {vix, credit, dollar, wti}, composite: {...G27}, fear_greed: {...G28}, sectors: {rs_rows, rotation}, breadth: {...}, events: {next_high_impact, within_24h: [...], today: [...]}, news: {headlines_top5, sentiment, rumor_ratio}, quality_warnings: [...]}`. `save_snapshot(snap)` → `data/macro/macro_snapshot.json` (jsonio) + one summary line appended to `data/macro/snapshot_history.jsonl` (admin trend charts); `load_snapshot(max_age_min=None) -> dict | None`.
-- **The single source every consumer reads** — scan gate, embeds, `!macro`, admin pages, advisor payloads. Nobody re-fetches providers at render time.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_snapshot.py
-import datetime as dt
-
+# tests/test_gate_levels.py
 import numpy as np
-import pytest
 
-import swingbot.core.macro.snapshot as snap_mod
+from swingbot.core.gate.levels import SwingLevel, swing_levels
 from tests.conftest import make_ohlcv
 
 
-@pytest.fixture
-def paths(tmp_path, monkeypatch):
-    monkeypatch.setattr(snap_mod, "SNAPSHOT_PATH", str(tmp_path / "macro_snapshot.json"))
-    monkeypatch.setattr(snap_mod, "HISTORY_PATH", str(tmp_path / "snapshot_history.jsonl"))
-    return tmp_path
+def _three_touch_resistance(level=110.0, base=100.0, n=120):
+    closes = []
+    for _ in range(3):
+        # [1:] drops the duplicated peak/valley joints so every extremum
+        # is unique (the pivot rule rejects ties)
+        closes += list(np.linspace(base, level, 15)) + list(np.linspace(level, base, 15))[1:]
+    closes += list(np.linspace(base, base * 1.01, n - len(closes)))
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
 
 
-@pytest.fixture
-def all_stubbed(monkeypatch):
-    """Every provider returns healthy fixture data — no network anywhere."""
-    monkeypatch.setattr(snap_mod.httpcache, "LAST_SERVED_STALE", False)
-    monkeypatch.setattr(snap_mod.series, "get_value",
-                        lambda key: snap_mod.series.MacroValue(key, 2.5, "2026-07-01", key, 1))
-    monkeypatch.setattr(snap_mod.series, "curve_state", lambda: "normal")
-    monkeypatch.setattr(snap_mod.vix, "vix_state",
-                        lambda loader=None: {"level": 14.0, "percentile_1y": 30.0,
-                                             "regime": "calm", "term_structure": "contango"})
-    monkeypatch.setattr(snap_mod.credit, "credit_state",
-                        lambda bars=None: {"ratio": 0.8, "sma20_slope": 0.001,
-                                           "state": "risk_on"})
-    bars = {t: make_ohlcv(100.0 * (1 + 0.002) ** np.arange(220))
-            for t in list(snap_mod.sectors.SECTOR_ETFS) + ["SPY"]}
-    monkeypatch.setattr(snap_mod.sectors, "sector_bars", lambda loader=None: bars)
-    monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [
-        {"date": "2026-07-15", "time_et": "08:30", "kind": "cpi",
-         "label": "CPI release", "importance": 3}])
-    monkeypatch.setattr(snap_mod.news, "market_headlines",
-                        lambda n=15: [{"ts": 1, "source": "A",
-                                       "title": "Stocks rally on strong earnings",
-                                       "url": "", "related": ""}])
+def test_three_touch_level_clustered_and_counted():
+    levels = swing_levels(_three_touch_resistance(), pivot_span=5)
+    res = [l for l in levels if l.kind == "resistance"]
+    assert res, "no resistance found"
+    assert res[0].touches == 3                       # strongest first
+    assert abs(res[0].price - 110.0) / 110.0 < 0.01
+    assert res[0].last_touch >= "2019-01-01"
 
 
-def test_full_shape(paths, all_stubbed):
-    now = dt.datetime(2026, 7, 14, 12, 0, tzinfo=dt.timezone.utc)
-    snap = snap_mod.build_snapshot(now=now)
-    for section in ("inflation", "labor", "rates", "expectations", "risk",
-                    "composite", "fear_greed", "sectors", "breadth", "events",
-                    "news", "quality_warnings"):
-        assert section in snap, section
-    assert snap["stale"] is False
-    assert snap["rates"]["curve_state"] == "normal"
-    assert snap["inflation"]["cpi_yoy"]["value"] == 2.5
-    assert snap["events"]["next_high_impact"]["kind"] == "cpi"
-    assert snap["news"]["sentiment"]["label"] == "positive"
-    assert snap["composite"]["label"] == "risk_on"     # calm+credit+rotation+curve
-
-
-def test_total_darkness_skeleton(paths, monkeypatch):
-    monkeypatch.setattr(snap_mod.httpcache, "LAST_SERVED_STALE", False)
-    monkeypatch.setattr(snap_mod.series, "get_value", lambda key: None)
-    monkeypatch.setattr(snap_mod.series, "curve_state", lambda: "unknown")
-    monkeypatch.setattr(snap_mod.vix, "vix_state", lambda loader=None: None)
-    monkeypatch.setattr(snap_mod.credit, "credit_state", lambda bars=None: None)
-    monkeypatch.setattr(snap_mod.sectors, "sector_bars", lambda loader=None: {})
-    monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [])
-    monkeypatch.setattr(snap_mod.news, "market_headlines", lambda n=15: [])
-    snap = snap_mod.build_snapshot()
-    assert snap["stale"] is True                       # the G43 contract starts here
-    assert snap["composite"]["label"] == "unknown"
-    assert snap["inflation"]["cpi_yoy"] is None
-    assert snap["fear_greed"] is None
-    assert snap["events"]["next_high_impact"] is None
-    assert snap["news"]["sentiment"] == {"score": 0.0, "n": 0, "label": "neutral"}
-
-
-def test_save_load_round_trip_and_history_line(paths, all_stubbed):
-    snap = snap_mod.build_snapshot()
-    snap_mod.save_snapshot(snap)
-    assert snap_mod.load_snapshot() == snap
-    with open(snap_mod.HISTORY_PATH, encoding="utf-8") as fh:
-        lines = fh.readlines()
-    assert len(lines) == 1 and '"composite"' in lines[0]
-
-
-def test_max_age_gate(paths, all_stubbed):
-    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=90)
-    snap_mod.save_snapshot(snap_mod.build_snapshot(now=old))
-    assert snap_mod.load_snapshot(max_age_min=30) is None
-    assert snap_mod.load_snapshot(max_age_min=240) is not None
+def test_flat_series_has_no_levels():
+    assert swing_levels(make_ohlcv(np.full(120, 100.0))) == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `python -m pytest tests/test_macro_snapshot.py -v`
-Expected: FAIL with `ImportError` (snapshot module missing)
-
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_levels.py -v`
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# swingbot/core/macro/snapshot.py
-"""Build/save/load the ONE macro snapshot every consumer reads (scan gate,
-embeds, !macro, admin pages, advisor payloads). Nobody re-fetches
-providers at render time."""
+# swingbot/core/gate/levels.py
+"""Swing S/R extraction + round numbers (G48) + level_map check (G49)."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import pandas as pd
+
+from swingbot.core.indicators import atr
+
+
+@dataclass(frozen=True)
+class SwingLevel:
+    price: float
+    kind: str          # "support" | "resistance"
+    touches: int
+    last_touch: str    # ISO date
+
+
+def _safe_atr(df: pd.DataFrame, fallback_price: float) -> float:
+    val = float(atr(df).iloc[-1])
+    return val if val == val and val > 0 else fallback_price * 0.02
+
+
+def swing_levels(df_daily: pd.DataFrame, lookback: int = 250,
+                 pivot_span: int = 5) -> list[SwingLevel]:
+    """Pivots = UNIQUE local extrema over +/-pivot_span bars (ties are not
+    pivots — a flat series yields nothing), clustered within 0.5*ATR,
+    touch-counted, sorted by touches desc."""
+    df = df_daily.iloc[-lookback:]
+    if len(df) < 2 * pivot_span + 1:
+        return []
+    highs, lows, idx = df["High"].values, df["Low"].values, df.index
+    atr_val = _safe_atr(df, float(df["Close"].iloc[-1]))
+    raw = []   # (price, kind, date)
+    for i in range(pivot_span, len(df) - pivot_span):
+        hi_win = highs[i - pivot_span:i + pivot_span + 1]
+        lo_win = lows[i - pivot_span:i + pivot_span + 1]
+        if highs[i] == hi_win.max() and (hi_win == highs[i]).sum() == 1:
+            raw.append((float(highs[i]), "resistance", str(idx[i].date())))
+        if lows[i] == lo_win.min() and (lo_win == lows[i]).sum() == 1:
+            raw.append((float(lows[i]), "support", str(idx[i].date())))
+    levels: list[SwingLevel] = []
+    for kind in ("support", "resistance"):
+        bucket: list[tuple[float, str]] = []
+        for price, _, date in sorted((r for r in raw if r[1] == kind),
+                                     key=lambda r: r[0]):
+            if bucket and price - sum(p for p, _ in bucket) / len(bucket) > 0.5 * atr_val:
+                levels.append(_close_bucket(bucket, kind))
+                bucket = []
+            bucket.append((price, date))
+        if bucket:
+            levels.append(_close_bucket(bucket, kind))
+    return sorted(levels, key=lambda l: l.touches, reverse=True)
+
+
+def _close_bucket(bucket: list[tuple[float, str]], kind: str) -> SwingLevel:
+    prices = [p for p, _ in bucket]
+    return SwingLevel(round(sum(prices) / len(prices), 4), kind,
+                      len(bucket), max(d for _, d in bucket))
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/levels.py tests/test_gate_levels.py
+git commit -m "feat: swing S/R extraction"
+```
+
+### Task G48: Round-number levels
+
+**Files:** Modify `levels.py`; test `tests/test_gate_levels.py`
+
+**Interfaces:** `round_levels(price) -> list[float]` — the psychological grid near price: multiples of 1/5/10/50/100 chosen by price magnitude (e.g. price 187 → 180, 185, 190, 195, 200 and the majors 150/200); `nearest_round(price) -> tuple[float, float]` (level, distance in ATRs given atr kwarg).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_levels.py`)
+
+```python
+from swingbot.core.gate.levels import major_levels, nearest_round, round_levels
+
+
+def test_round_grid_goldens():
+    assert 8.0 in round_levels(8.0)                  # step 0.25 at single digits
+    assert 87.5 in round_levels(87.0)                # step 2.5 in the tens
+    assert 430.0 in round_levels(432.0)              # step 10 in the hundreds
+    assert 4300.0 in round_levels(4300.0)            # step 100 in the thousands
+    assert all(p > 0 for p in round_levels(0.8))
+
+
+def test_majors():
+    assert 200.0 in major_levels(187.0) and 150.0 in major_levels(187.0)
+    assert 4000.0 in major_levels(4300.0)
+
+
+def test_nearest_round_with_atr_distance():
+    level, dist = nearest_round(187.0, atr=2.0)
+    assert level == 185.0 and dist == 1.0            # |185-187| / 2 (grid steps by 5)
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'round_levels'`)
+- [ ] **Step 3: Write the implementation** (append to `levels.py`)
+
+```python
+_STEPS = (0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0)
+
+
+def _step_for(price: float) -> float:
+    target = price / 50.0
+    for step in _STEPS:
+        if step >= target:
+            return step
+    return _STEPS[-1]
+
+
+def round_levels(price: float) -> list[float]:
+    """The minor psychological grid near price (5 multiples of the
+    magnitude-appropriate step) plus the majors around it."""
+    step = _step_for(price)
+    center = round(price / step) * step
+    grid = {round(center + k * step, 2) for k in range(-2, 3)}
+    grid |= set(major_levels(price))
+    return sorted(p for p in grid if p > 0)
+
+
+def major_levels(price: float) -> list[float]:
+    """Only these count as 'walls' — a 10x-step grid (e.g. 150/200 for a
+    $187 stock). The minor grid is context, not obstruction."""
+    major = _step_for(price) * 10
+    center = round(price / major) * major
+    return sorted({round(center + k * major, 2) for k in (-1, 0, 1)} - {0.0})
+
+
+def nearest_round(price: float, *, atr: float) -> tuple[float, float]:
+    level = min(round_levels(price), key=lambda l: abs(l - price))
+    dist = abs(level - price) / atr if atr > 0 else float("inf")
+    return level, round(dist, 3)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/levels.py tests/test_gate_levels.py
+git commit -m "feat: round-number levels"
+```
+
+### Task G49: Check `level_map` (weight 8, §1 "nearest major S/R, prior swings, round numbers marked")
+
+**Files:** Modify `levels.py`, `registry.py`; test `tests/test_gate_levels.py`
+
+**Interfaces:** `check_level_map(df_daily, plan, macro_snap) -> CheckResult` — computes the three nearest levels above/below entry (swing + round merged); **fail** when a resistance (for longs; support for shorts) sits closer than 1×ATR to entry *before* TP1 (the trade runs straight into a wall); warn when between 1–2×ATR; pass otherwise. Evidence lists the levels — this is also what the embed renders (G123).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_levels.py`)
+
+```python
+from swingbot.core.gate.levels import check_level_map
+from swingbot.core.gate.registry import CHECKS
+from tests.fixtures.gate.plans import make_plan
+
+
+def test_wall_before_tp1_fails():
+    df = _three_touch_resistance(level=110.0)        # resistance wall ~110
+    plan = make_plan(direction="bullish", trigger_price=110.0, entry_price=110.0,
+                     stop_loss=106.0, tp1=118.0)
+    result = check_level_map(df, plan, None)
+    assert result.status == "fail"
+    assert result.evidence["nearest_wall"] is not None
+    assert result.evidence["below"] and result.evidence["above"]
+
+
+def test_clear_path_passes():
+    df = _three_touch_resistance(level=110.0)
+    plan = make_plan(direction="bullish", trigger_price=111.5, entry_price=111.5,
+                     stop_loss=107.0, tp1=118.0)     # above the wall, majors clear
+    assert check_level_map(df, plan, None).status == "pass"
+
+
+def test_level_map_registered_with_thresholds():
+    spec = CHECKS["level_map"]
+    assert spec.weight == 8.0 and spec.section == "context"
+    assert spec.threshold("wall_atr_fail") == 1.0    # balanced default
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_level_map'`)
+- [ ] **Step 3: Write the implementation** (append to `levels.py`)
+
+```python
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+
+
+def check_level_map(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["level_map"]
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    swings = swing_levels(df_daily)
+    all_prices = sorted({l.price for l in swings} | set(round_levels(entry)))
+    below = [p for p in all_prices if p < entry][-3:]
+    above = [p for p in all_prices if p > entry][:3]
+    bullish = plan.direction == "bullish"
+    lo, hi = (entry, plan.tp1) if bullish else (plan.tp1, entry)
+    opposing = "resistance" if bullish else "support"
+    walls = [l.price for l in swings if l.kind == opposing and lo < l.price < hi]
+    walls += [m for m in major_levels(entry) if lo < m < hi]
+    nearest = min(walls, key=lambda w: abs(w - entry)) if walls else None
+    dist_atr = round(abs(nearest - entry) / atr_val, 2) if nearest is not None else None
+    if dist_atr is not None and dist_atr < spec.threshold("wall_atr_fail"):
+        status = "fail"
+        detail = f"{opposing} wall {nearest:.2f} only {dist_atr} ATR into the path to TP1"
+    elif dist_atr is not None and dist_atr < spec.threshold("wall_atr_warn"):
+        status = "warn"
+        detail = f"{opposing} {nearest:.2f} sits {dist_atr} ATR into the path to TP1"
+    else:
+        status, detail = "pass", "no significant wall before TP1"
+    return CheckResult("level_map", "context", status, 8.0, detail,
+                       {"below": below, "above": above, "walls": sorted(walls)[:5],
+                        "nearest_wall": nearest, "dist_atr": dist_atr,
+                        "atr": round(atr_val, 4)})
+
+
+register(check_id="level_map", section="context", weight=8.0, func=check_level_map,
+         thresholds={
+             "wall_atr_fail": ThresholdSpec(
+                 "wall_atr_fail", 1.0, 0.25, 3.0, 0.25,
+                 "lower to tolerate closer walls before TP1",
+                 presets={"strict": 1.5, "balanced": 1.0, "relaxed": 0.5}),
+             "wall_atr_warn": ThresholdSpec(
+                 "wall_atr_warn", 2.0, 0.5, 4.0, 0.25,
+                 "lower to warn about fewer walls",
+                 presets={"strict": 2.5, "balanced": 2.0, "relaxed": 1.0}),
+         })
+```
+
+(This evidence block — `below`/`above`/`walls` — is exactly what the embed renders in G123.)
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_levels.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/levels.py tests/test_gate_levels.py
+git commit -m "feat: level_map check"
+```
+
+### Task G50: Check `atr_normal` (weight 6, §1 "volatility normal — not compressed or spiked")
+
+**Files:**
+- Create: `swingbot/core/gate/atr_regime.py`; modify `registry.py`
+- Test: `tests/test_gate_atr.py`
+
+**Interfaces:** `check_atr_normal(df_daily, plan, macro_snap) -> CheckResult` — ATR(14)/close percentile over trailing 252 bars; pass in [20th, 80th]; warn <20th (compression — breakout fuel but whipsaw risk) or 80–95th; **fail** >95th (spiked — stop math unreliable). Evidence: percentile + raw ATR%.
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_atr.py
+import numpy as np
+
+from swingbot.core.gate.atr_regime import check_atr_normal
+from swingbot.core.gate.registry import CHECKS
+from tests.conftest import make_ohlcv
+from tests.fixtures.gate.plans import make_plan
+
+
+def _vol_path(early_move, late_move, n=300, late=25):
+    """Alternating +/- daily moves: early_move for n-late bars, late_move after."""
+    closes = [100.0]
+    for i in range(n):
+        m = early_move if i < n - late else late_move
+        closes.append(closes[-1] * (1 + (m if i % 2 == 0 else -m)))
+    return make_ohlcv(np.asarray(closes[1:]), spread_pct=0.2)
+
+
+PLAN = make_plan()
+
+
+def test_normal_band_passes():
+    result = check_atr_normal(_vol_path(0.01, 0.01), PLAN, None)
+    assert result.status == "pass"
+    assert 20 <= result.evidence["percentile"] <= 80
+
+
+def test_compression_warns():
+    assert check_atr_normal(_vol_path(0.02, 0.002), PLAN, None).status == "warn"
+
+
+def test_spike_fails():
+    result = check_atr_normal(_vol_path(0.004, 0.05), PLAN, None)
+    assert result.status == "fail"
+    assert result.evidence["percentile"] > 95
+
+
+def test_short_history_unknown():
+    df = _vol_path(0.01, 0.01, n=40, late=5)
+    assert check_atr_normal(df, PLAN, None).status == "unknown"
+
+
+def test_registered():
+    assert CHECKS["atr_normal"].threshold("pct_spike") == 95.0
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_atr.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/atr_regime.py
+"""ATR-percentile regime checks. Percentile uses MIDRANK so a
+constant-volatility series sits at ~50, not 100."""
+from __future__ import annotations
+
+import pandas as pd
+
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+from swingbot.core.indicators import atr
+
+
+def _atr_percentile(df_daily) -> tuple[float | None, float | None]:
+    atr_pct = (atr(df_daily) / df_daily["Close"]).dropna()
+    if len(atr_pct) < 60:
+        return None, None
+    window = atr_pct.iloc[-252:]
+    last = float(atr_pct.iloc[-1])
+    midrank = 100.0 * (float((window < last).mean())
+                       + float((window <= last).mean())) / 2.0
+    return midrank, last * 100.0
+
+
+def check_atr_normal(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["atr_normal"]
+    pctile, atr_pct = _atr_percentile(df_daily)
+    if pctile is None:
+        return CheckResult("atr_normal", "context", "unknown", 6.0,
+                           "insufficient history for ATR percentile", {})
+    evidence = {"percentile": round(pctile, 1), "atr_pct": round(atr_pct, 2)}
+    if pctile > spec.threshold("pct_spike"):
+        return CheckResult("atr_normal", "context", "fail", 6.0,
+                           f"ATR spiked ({pctile:.0f}th pct) — stop math unreliable",
+                           evidence)
+    if pctile < spec.threshold("pct_low"):
+        return CheckResult("atr_normal", "context", "warn", 6.0,
+                           f"volatility compressed ({pctile:.0f}th pct) — "
+                           f"breakout fuel but whipsaw risk", evidence)
+    if pctile > spec.threshold("pct_high"):
+        return CheckResult("atr_normal", "context", "warn", 6.0,
+                           f"volatility elevated ({pctile:.0f}th pct)", evidence)
+    return CheckResult("atr_normal", "context", "pass", 6.0,
+                       f"volatility normal ({pctile:.0f}th pct)", evidence)
+
+
+register(check_id="atr_normal", section="context", weight=6.0, func=check_atr_normal,
+         thresholds={
+             "pct_low": ThresholdSpec("pct_low", 20.0, 0.0, 40.0, 5.0,
+                 "lower to accept more compression without a warn",
+                 presets={"strict": 25.0, "balanced": 20.0, "relaxed": 10.0}),
+             "pct_high": ThresholdSpec("pct_high", 80.0, 60.0, 100.0, 5.0,
+                 "raise to accept more elevated volatility",
+                 presets={"strict": 75.0, "balanced": 80.0, "relaxed": 90.0}),
+             "pct_spike": ThresholdSpec("pct_spike", 95.0, 80.0, 100.0, 1.0,
+                 "raise to fail only on the most extreme spikes",
+                 presets={"strict": 90.0, "balanced": 95.0, "relaxed": 99.0}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_atr.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/atr_regime.py tests/test_gate_atr.py
+git commit -m "feat: atr_normal check"
+```
+
+## Section 2 — Setup quality
+
+### Task G52: Check `signal_confirmed` (weight 10, **hard block**, §2 "pattern fully closed/confirmed")
+
+**Files:**
+- Create: `swingbot/core/gate/setup_quality.py`; modify `registry.py`
+- Test: `tests/test_gate_setup.py`
+
+**Interfaces:** `check_signal_confirmed(df_daily, plan, macro_snap) -> CheckResult` — asserts the signal bar the plan was built from is a **closed** bar (plan.as_of < today's session date, or session closed) and, for breakout-family strategies, that the trigger candle closed beyond the level (not intrabar poke). Evaluating mid-session on the forming bar → **fail** (hard block: never alert on an unclosed pattern). Uses plan metadata (`entry_type`, signal date) from TradePlanV2.
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_setup.py
+import datetime as dt
+from zoneinfo import ZoneInfo
+
+import numpy as np
+
+from swingbot.core.gate.registry import CHECKS
+from swingbot.core.gate.setup_quality import check_signal_confirmed
+from tests.conftest import make_ohlcv
+from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+ET = ZoneInfo("America/New_York")
+
+
+def test_closed_bar_passes():
+    plan = make_plan(created_at="2026-07-13")            # yesterday's bar
+    now = dt.datetime(2026, 7, 14, 15, 0, tzinfo=ET)     # mid-session today
+    assert check_signal_confirmed(uptrend_daily(), plan, None, now=now).status == "pass"
+
+
+def test_same_day_forming_bar_fails_hard():
+    plan = make_plan(created_at="2026-07-14")
+    now = dt.datetime(2026, 7, 14, 15, 0, tzinfo=ET)     # Tuesday, session open
+    assert check_signal_confirmed(uptrend_daily(), plan, None, now=now).status == "fail"
+    # after the close the same plan is fine
+    evening = dt.datetime(2026, 7, 14, 17, 30, tzinfo=ET)
+    assert check_signal_confirmed(uptrend_daily(), plan, None, now=evening).status == "pass"
+
+
+def test_breakout_close_back_inside_fails():
+    # market-entry breakout plan whose signal bar poked above the level
+    # intrabar (high 100.5) but closed back inside (99.5)
+    df = make_ohlcv(np.concatenate([np.full(59, 97.0), [99.5]]), spread_pct=2.0)
+    plan = make_plan(strategy="Break & Retest", entry_type="market",
+                     trigger_price=100.0, created_at="2026-07-13")
+    now = dt.datetime(2026, 7, 14, 17, 30, tzinfo=ET)
+    result = check_signal_confirmed(df, plan, None, now=now)
+    assert result.status == "fail" and "inside" in result.detail
+
+
+def test_registered_as_hard_block():
+    assert CHECKS["signal_confirmed"].hard_block is True
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_setup.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/setup_quality.py
+"""Section-2 setup-quality checks. Raw helpers (volume_ratio,
+momentum_with_plan) are shared by the confluence counter (G53)."""
 from __future__ import annotations
 
 import datetime as dt
-import json
-import logging
-import os
+from zoneinfo import ZoneInfo
 
-from swingbot import config
-from swingbot.core.jsonio import atomic_write_json, read_json
-from swingbot.core.macro import (breadth as breadth_mod, calendar_events,
-                                 composite, credit, httpcache, news,
-                                 sectors, sentiment, series, vix)
+import pandas as pd
 
-log = logging.getLogger("swing-bot.macro.snapshot")
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+from swingbot.core.indicators import macd, rsi
 
-SNAPSHOT_PATH = os.path.join(config.DATA_DIR, "macro", "macro_snapshot.json")
-HISTORY_PATH = os.path.join(config.DATA_DIR, "macro", "snapshot_history.jsonl")
+ET = ZoneInfo("America/New_York")
 
-_SERIES_KEYS = {
-    "inflation": ("cpi_yoy", "core_cpi_yoy", "ppi_yoy", "pce_yoy",
-                  "core_pce_yoy", "inflation_vs_target"),
-    "labor": ("unemployment", "payrolls_change_k", "jobless_claims"),
-    "rates": ("fed_funds", "y3m", "y2", "y10", "y30",
-              "curve_10y2y", "curve_10y3m"),
-    "expectations": ("breakeven_5y", "breakeven_10y"),
-}
+# Strategies whose entry IS a level break — cross-checked against the real
+# ALL_STRATEGIES names (backtest.py:392); revisited deliberately in G80.
+BREAKOUT_FAMILY = ("Break & Retest", "Support/Resistance", "Volume Profile")
+MEANREV_FAMILY = ("RSI", "RSI Divergence")
 
 
-def _safe(fn, *args, **kw):
-    """A broken provider never breaks the build — None + one log line."""
-    try:
-        return fn(*args, **kw)
-    except Exception:  # noqa: BLE001
-        log.warning("snapshot: %s failed", getattr(fn, "__name__", fn), exc_info=True)
-        return None
+def check_signal_confirmed(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
+    """HARD BLOCK: never alert on an unclosed pattern."""
+    now_et = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ET)
+    session_open = (now_et.weekday() < 5
+                    and dt.time(9, 30) <= now_et.time() < dt.time(16, 0))
+    if plan.created_at == now_et.date().isoformat() and session_open:
+        return CheckResult("signal_confirmed", "setup", "fail", 10.0,
+                           "signal bar is still forming — pattern not closed",
+                           {"created_at": plan.created_at,
+                            "now_et": now_et.isoformat()})
+    if plan.strategy in BREAKOUT_FAMILY and plan.entry_type == "market":
+        level = plan.trigger_price
+        bullish = plan.direction == "bullish"
+        close = float(df_daily["Close"].iloc[-1])
+        hi, lo = float(df_daily["High"].iloc[-1]), float(df_daily["Low"].iloc[-1])
+        beyond = close > level if bullish else close < level
+        poked = hi >= level if bullish else lo <= level
+        if poked and not beyond:
+            return CheckResult("signal_confirmed", "setup", "fail", 10.0,
+                               "breakout bar closed back inside the level — "
+                               "intrabar poke, not a confirmed close",
+                               {"level": level, "close": close})
+    return CheckResult("signal_confirmed", "setup", "pass", 10.0,
+                       "signal bar closed / pattern confirmed",
+                       {"created_at": plan.created_at})
 
 
-def _mv_dict(keys) -> dict:
-    out = {}
-    for key in keys:
-        mv = _safe(series.get_value, key)
-        out[key] = None if mv is None else {"value": mv.value, "as_of": mv.as_of,
-                                            "direction": mv.direction}
-    return out
-
-
-def _percentile(values, last) -> float | None:
-    if not len(values):
-        return None
-    return round(100.0 * sum(v <= last for v in values) / len(values), 1)
-
-
-def build_snapshot(*, loaders: dict | None = None, now=None) -> dict:
-    """loaders (optional, injectable for tests / decoupling):
-      "bars": ticker -> daily OHLCV frame (cache loader)
-      "universe": () -> {ticker: df} for breadth over the scan universe
-    Every section is None-tolerant; total provider failure still returns
-    the full skeleton with unknowns and stale=True (proven in G43)."""
-    loaders = loaders or {}
-    bars_loader = loaders.get("bars")
-    universe = loaders.get("universe")
-    httpcache.LAST_SERVED_STALE = False
-    now = now or dt.datetime.now(dt.timezone.utc)
-    today = now.date().isoformat()
-
-    snap: dict = {"built_at": now.isoformat(), "stale": False}
-    for section, keys in _SERIES_KEYS.items():
-        snap[section] = _mv_dict(keys)
-    snap["rates"]["curve_state"] = _safe(series.curve_state) or "unknown"
-
-    vix_state = _safe(vix.vix_state, bars_loader)
-    credit_bars = None
-    if bars_loader is not None:
-        credit_bars = {t: _safe(bars_loader, t) for t in ("HYG", "LQD")}
-    credit_state = _safe(credit.credit_state, credit_bars)
-
-    sector_bars = _safe(sectors.sector_bars, bars_loader) or {}
-    rs_rows = _safe(sectors.sector_rs, sector_bars) or []
-    rotation = (_safe(sectors.rotation_state, rs_rows)
-                or {"posture": "unknown", "note": ""})
-
-    breadth_dict = (_safe(breadth_mod.breadth, universe() if universe else {})
-                    or {"pct_above_50dma": None, "pct_above_200dma": None, "n": 0})
-
-    comp = composite.risk_composite(vix_state, credit_state, rotation,
-                                    breadth_dict, snap["rates"]["curve_state"])
-
-    # fear/greed percentile inputs — only computable with cached bars
-    credit_pctile = spy_mom_pctile = None
-    if credit_bars and credit_bars.get("HYG") is not None \
-            and credit_bars.get("LQD") is not None:
-        ratio = (credit_bars["HYG"]["Close"] / credit_bars["LQD"]["Close"]).dropna()
-        if len(ratio) >= 60:
-            credit_pctile = _percentile(list(ratio.iloc[-252:]), float(ratio.iloc[-1]))
-    if bars_loader is not None:
-        spy = _safe(bars_loader, "SPY")
-        if spy is not None and len(spy) > 380:
-            mom = spy["Close"].pct_change(125).dropna()
-            spy_mom_pctile = _percentile(list(mom.iloc[-252:]), float(mom.iloc[-1]))
-    fg = _safe(composite.fear_greed, vix_state, breadth_dict,
-               credit_pctile, spy_mom_pctile)
-
-    events = _safe(calendar_events.load_events) or []
-    horizon = (now + dt.timedelta(days=30)).date().isoformat()
-    upcoming = [e for e in events if today <= e["date"] <= horizon]
-    heads = _safe(news.market_headlines) or []
-
-    snap["risk"] = {"vix": vix_state, "credit": credit_state,
-                    **_mv_dict(("dollar_index", "wti"))}
-    snap["composite"] = comp
-    snap["fear_greed"] = fg
-    snap["sectors"] = {"rs_rows": rs_rows, "rotation": rotation}
-    snap["breadth"] = breadth_dict
-    snap["events"] = {
-        "next_high_impact": next((e for e in upcoming if e["importance"] == 3), None),
-        "within_24h": [e for e in upcoming
-                       if 0 <= calendar_events.hours_until(e, now) <= 24],
-        "today": [e for e in upcoming if e["date"] == today],
-    }
-    snap["news"] = {"headlines_top5": heads[:5],
-                    "sentiment": sentiment.aggregate_sentiment(heads),
-                    "rumor_ratio": sentiment.rumor_ratio(heads)}
-    # Stale when a stale cache was served OR too little arrived to say
-    # anything (composite needs >= 2 inputs).
-    snap["stale"] = bool(httpcache.LAST_SERVED_STALE or comp["inputs_used"] < 2)
-    snap["quality_warnings"] = []          # G42's validator fills this in
-    return snap
-
-
-def save_snapshot(snap: dict) -> None:
-    os.makedirs(os.path.dirname(SNAPSHOT_PATH), exist_ok=True)
-    atomic_write_json(SNAPSHOT_PATH, snap)
-    line = {
-        "ts": snap["built_at"],
-        "composite": snap["composite"]["score"],
-        "label": snap["composite"]["label"],
-        "vix": (snap["risk"]["vix"] or {}).get("level"),
-        "curve_10y2y": (snap["rates"].get("curve_10y2y") or {}).get("value"),
-        "curve_10y3m": (snap["rates"].get("curve_10y3m") or {}).get("value"),
-        "fear_greed": (snap["fear_greed"] or {}).get("value"),
-        "sentiment": snap["news"]["sentiment"]["score"],
-    }
-    with open(HISTORY_PATH, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(line) + "\n")
-
-
-def load_snapshot(max_age_min: float | None = None) -> dict | None:
-    snap = read_json(SNAPSHOT_PATH, default=None)
-    if snap is None:
-        return None
-    if max_age_min is not None:
-        try:
-            built = dt.datetime.fromisoformat(snap["built_at"])
-        except (KeyError, TypeError, ValueError):
-            return None
-        age_min = (dt.datetime.now(dt.timezone.utc) - built).total_seconds() / 60.0
-        if age_min > max_age_min:
-            return None
-    return snap
+register(check_id="signal_confirmed", section="setup", weight=10.0,
+         func=check_signal_confirmed, hard_block=True)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `python -m pytest tests/test_macro_snapshot.py -v`
-Expected: 4 passed
-
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_setup.py -v`
 - [ ] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
-git add swingbot/core/macro/snapshot.py tests/test_macro_snapshot.py
-git commit -m "feat: macro snapshot (single source of context)"
+git add swingbot/core/gate/setup_quality.py tests/test_gate_setup.py
+git commit -m "feat: signal_confirmed hard-block check"
 ```
 
-### Task G39: Snapshot scheduler — refresh before every scan
+### Task G53: Confluence counter (weight 10, §2 "≥ 2 independent signals agree")
 
-**Files:**
-- Modify: `swingbot/core/macro/snapshot.py`, `swingbot/commands/scanning.py` (scan entry point)
-- Test: `tests/test_macro_snapshot.py`
+> **Audit note (2026-07-28):** 4 of this check's 6 confluence factors (volume, momentum, HTF alignment, swing-level proximity) re-derive booleans already scored independently by G46/G49/G54/G55 — the same evidence gets counted once as an individual check and again in this aggregate, double-weighting it in the final score. Resolve this (e.g. drop the overlapping factors from the confluence count, or reduce weight) before G78 calibration locks in weights.
 
-**Interfaces:**
-- Produces: `ensure_fresh_snapshot(ttl_min=None) -> dict | None` — returns the saved snapshot when younger than TTL (default `config.MACRO_SNAPSHOT_TTL_MIN`), else rebuilds (called via `asyncio.to_thread` from the scan path); **wired at the top of every scan run** when `MACRO_ENABLED`; once per day also calls `refresh_future_events()`. Rebuild failure → previous snapshot with `stale=True` (never blocks the scan). Flag off → None and zero provider calls.
+**Files:** Modify `setup_quality.py`, `registry.py`; test `tests/test_gate_setup.py`
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_snapshot.py`)
+**Interfaces:** `check_confluence(df_daily, plan, macro_snap) -> CheckResult` — counts independent agreeing factors at the entry zone: (a) at a G47 swing level, (b) at/near a round number, (c) 20/50/200 SMA within 0.5 ATR and pointing with-plan, (d) volume confirmation (G54's raw bool), (e) momentum agreement (G55's raw bool), (f) with-trend HTF (G46). Pass ≥ 3, warn = 2, fail < 2. Evidence lists which factors fired — reused verbatim by the embed and by `!whycheck`.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_setup.py`)
 
 ```python
-def test_ttl_respected_no_rebuild(paths, all_stubbed, monkeypatch):
-    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", True, raising=False)
-    monkeypatch.setattr(snap_mod.config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
-    snap_mod.save_snapshot(snap_mod.build_snapshot())
-    calls = {"n": 0}
-    real_build = snap_mod.build_snapshot
-    def counting_build(**kw):
-        calls["n"] += 1
-        return real_build(**kw)
-    monkeypatch.setattr(snap_mod, "build_snapshot", counting_build)
-    assert snap_mod.ensure_fresh_snapshot() is not None
-    assert calls["n"] == 0                              # fresh -> no rebuild
+from swingbot.core.gate.setup_quality import check_confluence
 
 
-def test_rebuild_failure_serves_previous_as_stale(paths, all_stubbed, monkeypatch):
-    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", True, raising=False)
-    monkeypatch.setattr(snap_mod, "_last_future_refresh_day", None)
-    monkeypatch.setattr(snap_mod.calendar_events, "refresh_future_events",
-                        lambda **k: 0)
-    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=120)
-    snap_mod.save_snapshot(snap_mod.build_snapshot(now=old))
-    def boom(**kw):
-        raise RuntimeError("providers down")
-    monkeypatch.setattr(snap_mod, "build_snapshot", boom)
-    served = snap_mod.ensure_fresh_snapshot(ttl_min=30)
-    assert served is not None and served["stale"] is True
+def test_confluence_bands(monkeypatch):
+    import swingbot.core.gate.setup_quality as sq
+    df, plan = uptrend_daily(), make_plan()
+    # deterministic factor control: patch the factor probes directly
+    def factors(n):
+        return {"at_swing_level": n >= 1, "near_round": n >= 2,
+                "sma_support": n >= 3, "volume": n >= 4,
+                "momentum": n >= 5, "with_htf": n >= 6}
+    monkeypatch.setattr(sq, "_confluence_factors", lambda d, p, m, **c: factors(4))
+    assert check_confluence(df, plan, None).status == "pass"      # >= 3
+    monkeypatch.setattr(sq, "_confluence_factors", lambda d, p, m, **c: factors(2))
+    assert check_confluence(df, plan, None).status == "warn"      # exactly 2
+    monkeypatch.setattr(sq, "_confluence_factors", lambda d, p, m, **c: factors(0))
+    assert check_confluence(df, plan, None).status == "fail"      # < 2
+    monkeypatch.setattr(sq, "_confluence_factors", lambda d, p, m, **c: factors(4))
+    fired = check_confluence(df, plan, None).evidence["factors"]
+    assert fired == ["at_swing_level", "near_round", "sma_support", "volume"]
 
 
-def test_disabled_returns_none_and_zero_calls(paths, monkeypatch):
-    monkeypatch.setattr(snap_mod.config, "MACRO_ENABLED", False, raising=False)
-    def boom(**kw):
-        raise AssertionError("no provider calls when MACRO_ENABLED is off")
-    monkeypatch.setattr(snap_mod, "build_snapshot", boom)
-    assert snap_mod.ensure_fresh_snapshot() is None
+def test_confluence_factors_run_on_real_frame():
+    # smoke: the real factor probe runs end-to-end without raising
+    result = check_confluence(uptrend_daily(), make_plan(), None)
+    assert result.status in ("pass", "warn", "fail")
 ```
 
-- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'ensure_fresh_snapshot'`)
-- [ ] **Step 3: Write the implementation** (append to `snapshot.py`)
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_confluence'`)
+- [ ] **Step 3: Write the implementation** (append to `setup_quality.py`)
 
 ```python
-_last_future_refresh_day: str | None = None
-
-
-def ensure_fresh_snapshot(ttl_min: float | None = None, *,
-                          loaders: dict | None = None, now=None) -> dict | None:
-    """Return a snapshot no older than ttl_min (default:
-    config.MACRO_SNAPSHOT_TTL_MIN), rebuilding + saving when expired.
-    Never raises; a failed rebuild serves the previous snapshot marked
-    stale (never blocks the scan). MACRO_ENABLED off -> None and zero
-    provider calls. Once per day also refreshes the forward event
-    schedule (G30)."""
-    global _last_future_refresh_day
-    if not getattr(config, "MACRO_ENABLED", False):
+def volume_ratio(df_daily) -> float | None:
+    """Signal-bar volume vs 20d average — shared with G54."""
+    vol = df_daily["Volume"]
+    if len(vol) < 21:
         return None
-    ttl = ttl_min if ttl_min is not None else float(
-        getattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30))
-    fresh = load_snapshot(max_age_min=ttl)
-    if fresh is not None:
-        return fresh
-    today = dt.date.today().isoformat()
-    if _last_future_refresh_day != today:
-        _last_future_refresh_day = today
-        try:
-            calendar_events.refresh_future_events()
-        except Exception:  # noqa: BLE001
-            log.warning("forward event refresh failed", exc_info=True)
-    try:
-        snap = build_snapshot(loaders=loaders, now=now)
-        save_snapshot(snap)
-        return snap
-    except Exception:  # noqa: BLE001
-        log.error("snapshot rebuild failed — serving previous as stale",
-                  exc_info=True)
-        prev = load_snapshot()
-        if prev is not None:
-            prev["stale"] = True
-        return prev
-```
-
-**And wire it into the scan path** — `swingbot/commands/scanning.py` has three `scan_engine.run_scan(...)` call sites (`_session_scan_tick` ~line 416, the UI-poll path ~line 723, `check_cmd` ~line 1103 — verify at execution). Add one helper and await it immediately before each:
-
-```python
-# swingbot/commands/scanning.py
-from swingbot.core.macro import snapshot as macro_snapshot
-
-
-async def _refresh_macro_snapshot() -> None:
-    """Pre-scan macro refresh (G39). Failure is logged, never blocks a scan."""
-    if not config.MACRO_ENABLED:
-        return
-    try:
-        await asyncio.to_thread(macro_snapshot.ensure_fresh_snapshot)
-    except Exception:
-        log.warning("macro snapshot refresh failed", exc_info=True)
-```
-
-```python
-    # at each run_scan call site:
-    await _refresh_macro_snapshot()
-    alerts = await scan_engine.run_scan(...)
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_snapshot.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/snapshot.py swingbot/commands/scanning.py tests/test_macro_snapshot.py
-git commit -m "feat: pre-scan macro snapshot refresh"
-```
-
-### Task G40: Live smoke script
-
-**Files:**
-- Create: `scripts/macro_smoke.py`
-
-- [ ] **Step 1: Write it**
-
-```python
-# scripts/macro_smoke.py
-"""Live macro smoke test (NETWORK — never imported by the test suite).
-
-Usage:
-    FRED_API_KEY=... FINNHUB_API_KEY=... python scripts/macro_smoke.py
-
-Exit codes: 0 healthy, 1 degraded (> 3 sections missing), 2 config error.
-"""
-import json
-import sys
-import time
-
-sys.path.insert(0, ".")
-
-from swingbot import config
-from swingbot.core.macro import fred, health
-from swingbot.core.macro.snapshot import build_snapshot
-
-SECTIONS = ("inflation", "labor", "rates", "expectations", "risk",
-            "composite", "fear_greed", "sectors", "breadth", "events", "news")
-
-
-def _section_missing(snap, name) -> bool:
-    val = snap.get(name)
-    if val in (None, {}, []):
-        return True
-    if isinstance(val, dict):
-        return all(v in (None, [], {}) for v in val.values())
-    return False
-
-
-def main() -> int:
-    if not (getattr(config, "FRED_API_KEY", "") or "").strip():
-        print("FRED_API_KEY not set — nothing to smoke-test")
-        return 2
-    for series_id in ("PPIFIS", "PPIFES"):        # G14's ids must resolve live
-        if fred.fred_series(series_id) is None:
-            print(f"!!! WARNING: PPI series {series_id} returned nothing — "
-                  f"re-check the FRED id chosen in G14 !!!")
-    t0 = time.time()
-    snap = build_snapshot()
-    missing = [s for s in SECTIONS if _section_missing(snap, s)]
-    for name in SECTIONS:
-        status = "MISSING" if name in missing else "ok"
-        print(f"{name:14s} {status:8s} "
-              f"{json.dumps(snap.get(name), default=str)[:110]}")
-    print(f"\nbuild took {time.time() - t0:.1f}s   stale={snap['stale']}")
-    print("provider health:")
-    for provider, s in health.provider_status().items():
-        print(f"  {provider}: ok_rate={s['ok_rate_24h']:.2f} "
-              f"calls_today={s['calls_today']} cache_hit={s['cache_hit_rate']:.2f}")
-    print(f"missing sections: {missing or 'none'}")
-    return 1 if len(missing) > 3 else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-```
-
-- [ ] **Step 2: Run once for real** (`FRED_API_KEY=... FINNHUB_API_KEY=... python scripts/macro_smoke.py`); paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict (which sections are live, which providers degraded, build time). Commit both:
-
-```bash
-git add scripts/macro_smoke.py docs/superpowers/results/2026-07-macro-smoke.md
-git commit -m "feat: macro live smoke script + first snapshot evidence"
-```
-
-### Task G41: Historical macro backfill (publication-lag aware)
-
-**Files:**
-- Create: `scripts/backfill_macro.py`, `swingbot/core/macro/history.py`
-- Test: `tests/test_macro_history.py`
-
-**Interfaces:**
-- Produces: script writes `data/macro/history/{series_key}.json` full FRED history 2017-01→present for every registry series (2017 start gives yoy room for 2018 backtests) plus derived daily VIX-percentile and credit-state series from cached bars. `history.as_of_frame() -> pd.DataFrame` — date-indexed, one column per key, forward-filled **with publication lag**: monthly prints become visible on their release date (from G29's calendar), not their reference month — the no-lookahead rule G90 depends on.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_history.py
-import os
-
-import pandas as pd
-import pytest
-
-import swingbot.core.macro.history as hist
-from swingbot.core.jsonio import atomic_write_json
-
-
-@pytest.fixture
-def env(tmp_path, monkeypatch):
-    monkeypatch.setattr(hist, "HISTORY_DIR", str(tmp_path))
-    events = [
-        {"date": "2020-05-12", "time_et": "08:30", "kind": "cpi", "label": "CPI", "importance": 3},
-        {"date": "2020-06-10", "time_et": "08:30", "kind": "cpi", "label": "CPI", "importance": 3},
-    ]
-    monkeypatch.setattr(hist.calendar_events, "load_events", lambda: events)
-    return tmp_path
-
-
-def test_publication_lag_golden(env):
-    # April CPI (ref 2020-04-01) released May 12; May CPI released Jun 10.
-    atomic_write_json(os.path.join(str(env), "cpi_yoy.json"),
-                      [["2020-04-01", 0.3], ["2020-05-01", 0.1]])
-    frame = hist.as_of_frame(start="2020-05-01", end="2020-06-30")
-    assert frame.loc["2020-05-29", "cpi_yoy"] == 0.3   # May 29: only April's print is out
-    assert frame.loc["2020-06-09", "cpi_yoy"] == 0.3   # still April's the day before release
-    assert frame.loc["2020-06-10", "cpi_yoy"] == 0.1   # May's print appears ON release day
-    assert pd.isna(frame.loc["2020-05-01", "cpi_yoy"]) # nothing published yet in-window
-
-
-def test_ffill_and_missing_series(env):
-    atomic_write_json(os.path.join(str(env), "cpi_yoy.json"), [["2020-04-01", 0.3]])
-    frame = hist.as_of_frame(start="2020-05-01", end="2020-06-30")
-    assert (frame.loc["2020-05-12":, "cpi_yoy"] == 0.3).all()   # forward-filled
-    assert frame["y10"].isna().all()                # missing file -> NaN column, no error
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`), then **write the frame implementation**:
-
-```python
-# swingbot/core/macro/history.py
-"""Publication-lag-aware historical macro frame — the no-lookahead
-foundation G90's backtest snapshots stand on. Monthly prints become
-visible on their RELEASE date (from the G29 calendar), not their
-reference month."""
-from __future__ import annotations
-
-import os
-
-import pandas as pd
-
-from swingbot import config
-from swingbot.core.jsonio import read_json
-from swingbot.core.macro import calendar_events
-from swingbot.core.macro.series import SERIES
-
-HISTORY_DIR = os.path.join(config.DATA_DIR, "macro", "history")
-
-# series key -> release kind gating its visibility. Unlisted keys are
-# daily prints (yields, VIX, dollar, oil, weekly claims ~5d lag treated
-# as same-day — a conservative simplification noted here deliberately).
-_RELEASE_KIND = {
-    "cpi_yoy": "cpi", "core_cpi_yoy": "cpi", "cpi_mom": "cpi",
-    "ppi_yoy": "ppi", "ppi_mom": "ppi", "core_ppi_yoy": "ppi",
-    "pce_yoy": "pce", "core_pce_yoy": "pce",
-    "unemployment": "nfp", "payrolls_change_k": "nfp",
-}
-
-
-def _visible_from(obs_date: str, key: str, release_dates: dict) -> str:
-    """A monthly print for reference month M becomes visible on the first
-    release date AFTER M's month-end; daily series are same-day."""
-    kind = _RELEASE_KIND.get(key)
-    if kind is None:
-        return obs_date
-    month_end = (pd.Timestamp(obs_date) + pd.offsets.MonthEnd(0)).strftime("%Y-%m-%d")
-    for release in release_dates.get(kind, ()):
-        if release > month_end:
-            return release
-    return month_end        # no known release: month-end (still conservative)
-
-
-def as_of_frame(start: str = "2018-01-01", end: str | None = None) -> pd.DataFrame:
-    end = end or pd.Timestamp.today().strftime("%Y-%m-%d")
-    idx = pd.bdate_range(start, end)
-    release_dates: dict[str, list[str]] = {}
-    for e in calendar_events.load_events():
-        release_dates.setdefault(e["kind"], []).append(e["date"])
-    for dates in release_dates.values():
-        dates.sort()
-    frame = pd.DataFrame(index=idx)
-    for key, spec in SERIES.items():
-        if spec.kind == "derived":
-            continue
-        col = pd.Series(index=idx, dtype=float)
-        raw = read_json(os.path.join(HISTORY_DIR, f"{key}.json"), default=None)
-        for obs_date, value in raw or []:
-            ts = pd.Timestamp(_visible_from(obs_date, key, release_dates))
-            pos = idx.searchsorted(ts)
-            if pos < len(idx):
-                col.iloc[pos] = value          # later prints overwrite on same day
-        frame[key] = col.ffill()
-    return frame
-```
-
-**And the backfill script:**
-
-```python
-# scripts/backfill_macro.py
-"""Backfill data/macro/history/{key}.json for every registry series
-(2017-01 -> present — 2017 gives yoy headroom for 2018 backtests), plus
-derived daily vix_percentile.json and credit_state.json from cached bars.
-
-Usage (NETWORK): FRED_API_KEY=... python scripts/backfill_macro.py
-(--dry-run / --only / resume discipline are hardened in G202.)
-"""
-import os
-import sys
-
-sys.path.insert(0, ".")
-
-from swingbot.core.jsonio import atomic_write_json
-from swingbot.core.macro import fred
-from swingbot.core.macro.history import HISTORY_DIR
-from swingbot.core.macro.series import KINDS, SERIES
-
-
-def build_transformed(key: str) -> list[list]:
-    spec = SERIES[key]
-    raw = fred.fred_series(spec.fred_id, start="2016-01-01", ttl_s=0)
-    if not raw:
-        return []
-    calc = KINDS[spec.kind]
-    out = []
-    for i, (date, _) in enumerate(raw):
-        value = calc(raw, i)
-        if value is not None and date >= "2017-01-01":
-            out.append([date, round(value, 4)])
-    return out
-
-
-def main() -> int:
-    os.makedirs(HISTORY_DIR, exist_ok=True)
-    written = 0
-    for key, spec in SERIES.items():
-        if spec.kind == "derived":
-            continue
-        rows = build_transformed(key)
-        if not rows:
-            print(f"  {key}: NO DATA (check FRED id {spec.fred_id})")
-            continue
-        atomic_write_json(os.path.join(HISTORY_DIR, f"{key}.json"), rows)
-        print(f"  {key}: {len(rows)} rows ({rows[0][0]} .. {rows[-1][0]})")
-        written += 1
-    # Derived daily series from cached bars (verify loader name at execution):
-    try:
-        from swingbot.core.data import load_cached_daily
-        vix_bars = load_cached_daily("^VIX")
-        if vix_bars is not None and len(vix_bars) > 260:
-            closes = vix_bars["Close"]
-            pct = closes.rolling(252).apply(
-                lambda w: 100.0 * (w <= w.iloc[-1]).mean()).dropna()
-            atomic_write_json(os.path.join(HISTORY_DIR, "vix_percentile.json"),
-                              [[str(d.date()), round(float(v), 1)]
-                               for d, v in pct.items()])
-            written += 1
-    except Exception as exc:  # noqa: BLE001
-        print(f"  vix_percentile: skipped ({exc})")
-    print(f"wrote {written} history files -> {HISTORY_DIR}")
-    return 0 if written else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-```
-
-- [ ] **Step 3: Run tests — PASS**: `python -m pytest tests/test_macro_history.py -v`
-- [ ] **Step 4: Run the backfill once for real; spot-check row counts; commit generated history files.**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/history.py scripts/backfill_macro.py data/macro/history/
-git commit -m "feat: macro history backfill (publication-lag aware)"
-```
-
-### Task G42: Macro data-quality validator
-
-**Files:**
-- Create: `swingbot/core/macro/quality.py` (wired into `build_snapshot`)
-- Test: `tests/test_macro_quality.py`
-
-**Interfaces:**
-- Produces: `validate_snapshot(snap) -> list[str]` — WARN strings for: yields outside [0, 20], VIX outside [5, 100], CPI yoy outside [-5, 25], sector count < 8, missing sections, empty event calendar within 30d ahead. Warnings land in `snap["quality_warnings"]` and surface in admin (G187); never raise.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_quality.py
-from swingbot.core.macro.quality import validate_snapshot
-
-
-def _healthy():
+    avg20 = float(vol.iloc[-21:-1].mean())
+    return float(vol.iloc[-1]) / avg20 if avg20 > 0 else None
+
+
+def momentum_with_plan(df_daily, plan) -> bool | None:
+    """True unless RSI slope AND MACD histogram both point against the
+    plan — shared with G55."""
+    closes = df_daily["Close"]
+    if len(closes) < 40:
+        return None
+    rsi_slope = float(rsi(closes).iloc[-1] - rsi(closes).iloc[-6])
+    hist = float(macd(closes)["histogram"].iloc[-1])
+    bullish = plan.direction == "bullish"
+    rsi_against = rsi_slope < 0 if bullish else rsi_slope > 0
+    macd_against = hist < 0 if bullish else hist > 0
+    return not (rsi_against and macd_against)
+
+
+def _confluence_factors(df_daily, plan, macro_snap, **ctx) -> dict[str, bool]:
+    from swingbot.core.gate.context_htf import htf_trend
+    from swingbot.core.gate.levels import (_safe_atr, nearest_round,
+                                           swing_levels)
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    bullish = plan.direction == "bullish"
+    swings = swing_levels(df_daily)
+    at_level = any(abs(l.price - entry) <= 0.5 * atr_val for l in swings)
+    _, round_dist = nearest_round(entry, atr=atr_val)
+    closes = df_daily["Close"]
+    sma_support = False
+    if len(closes) >= 200:
+        for period in (20, 50, 200):
+            sma = closes.rolling(period).mean()
+            near = abs(float(sma.iloc[-1]) - entry) <= 0.5 * atr_val
+            pointing = (float(sma.iloc[-1] - sma.iloc[-6]) > 0) == bullish
+            if near and pointing:
+                sma_support = True
+                break
+    ratio = volume_ratio(df_daily)
+    trend = htf_trend(df_daily)
+    with_htf = trend["weekly"] == ("up" if bullish else "down")
     return {
-        "inflation": {"cpi_yoy": {"value": 3.1, "as_of": "2026-06-01", "direction": 1}},
-        "rates": {"y10": {"value": 4.2, "as_of": "2026-07-13", "direction": 0}},
-        "risk": {"vix": {"level": 15.0}},
-        "sectors": {"rs_rows": [{"etf": f"X{i}"} for i in range(11)]},
-        "events": {"next_high_impact": {"kind": "cpi", "date": "2026-07-15"}},
-        "news": {"headlines_top5": []},
+        "at_swing_level": at_level,
+        "near_round": round_dist <= 0.5,
+        "sma_support": sma_support,
+        "volume": bool(ratio and ratio >= 1.3),
+        "momentum": bool(momentum_with_plan(df_daily, plan)),
+        "with_htf": with_htf,
     }
 
 
-def test_healthy_snapshot_no_warnings():
-    assert validate_snapshot(_healthy()) == []
+def check_confluence(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    factors = _confluence_factors(df_daily, plan, macro_snap, **ctx)
+    fired = [name for name, on in factors.items() if on]
+    n = len(fired)
+    status = "pass" if n >= 3 else "warn" if n == 2 else "fail"
+    return CheckResult("confluence", "setup", status, 10.0,
+                       f"{n} independent factors agree: {', '.join(fired) or 'none'}",
+                       {"factors": fired, "count": n})
 
 
-def test_each_rule_trips():
-    snap = _healthy()
-    snap["rates"]["y10"]["value"] = 35.0
-    assert any("yield" in w for w in validate_snapshot(snap))
-    snap = _healthy()
-    snap["risk"]["vix"]["level"] = 2.0
-    assert any("VIX" in w for w in validate_snapshot(snap))
-    snap = _healthy()
-    snap["inflation"]["cpi_yoy"]["value"] = 40.0
-    assert any("CPI" in w for w in validate_snapshot(snap))
-    snap = _healthy()
-    snap["sectors"]["rs_rows"] = snap["sectors"]["rs_rows"][:5]
-    assert any("sectors" in w for w in validate_snapshot(snap))
-    snap = _healthy()
-    snap["events"]["next_high_impact"] = None
-    assert any("calendar" in w for w in validate_snapshot(snap))
-    snap = _healthy()
-    del snap["rates"]
-    assert any("section rates missing" in w for w in validate_snapshot(snap))
-
-
-def test_never_raises_on_garbage():
-    assert isinstance(validate_snapshot({}), list)
-    assert isinstance(validate_snapshot({"rates": None, "risk": {"vix": None}}), list)
+register(check_id="confluence", section="setup", weight=10.0, func=check_confluence)
 ```
 
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_quality.py -v`
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_setup.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/setup_quality.py tests/test_gate_setup.py
+git commit -m "feat: confluence counter"
+```
+
+### Task G54: Check `volume_confirms` (weight 8, §2 + golden rule)
+
+**Files:** Modify `setup_quality.py`, `registry.py`; test `tests/test_gate_setup.py`
+
+**Interfaces:** `check_volume(df_daily, plan, macro_snap) -> CheckResult` — signal-bar volume vs 20d average: pass ≥ 1.3×; warn 0.8–1.3×; **fail** < 0.8× for breakout-family entries (a breakout on dead volume is the #1 trap per the golden rule), warn-only for mean-reversion strategies (registry `applies_to` handles the split).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_setup.py`)
+
+```python
+from swingbot.core.gate.setup_quality import check_volume
+
+
+def _vol_df(last_ratio):
+    vols = np.full(60, 1_000_000.0)
+    vols[-1] = 1_000_000.0 * last_ratio
+    return make_ohlcv(np.linspace(95, 100, 60), volumes=vols)
+
+
+def test_volume_bands_for_breakout_family():
+    breakout = make_plan(strategy="Break & Retest")
+    assert check_volume(_vol_df(1.5), breakout, None).status == "pass"   # >= 1.3x
+    assert check_volume(_vol_df(1.0), breakout, None).status == "warn"   # 0.8-1.3x
+    assert check_volume(_vol_df(0.5), breakout, None).status == "fail"   # < 0.8x: the #1 trap
+
+
+def test_dead_volume_is_warn_only_for_meanrev():
+    meanrev = make_plan(strategy="RSI Divergence")
+    assert check_volume(_vol_df(0.5), meanrev, None).status == "warn"
+
+
+def test_no_volume_history_unknown():
+    df = make_ohlcv(np.linspace(95, 100, 10))
+    assert check_volume(df, make_plan(), None).status == "unknown"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_volume'`)
+- [ ] **Step 3: Write the implementation** (append to `setup_quality.py`)
+
+```python
+def check_volume(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["volume_confirms"]
+    ratio = volume_ratio(df_daily)
+    if ratio is None:
+        return CheckResult("volume_confirms", "setup", "unknown", 8.0,
+                           "insufficient volume history", {})
+    evidence = {"ratio": round(ratio, 2)}
+    if ratio >= spec.threshold("pass_mult"):
+        return CheckResult("volume_confirms", "setup", "pass", 8.0,
+                           f"signal volume {ratio:.1f}x the 20d average", evidence)
+    if ratio >= spec.threshold("warn_mult"):
+        return CheckResult("volume_confirms", "setup", "warn", 8.0,
+                           f"signal volume only {ratio:.1f}x average", evidence)
+    # dead volume: fail-grade for breakout entries, warn-only for mean reversion
+    if plan.strategy in BREAKOUT_FAMILY:
+        return CheckResult("volume_confirms", "setup", "fail", 8.0,
+                           f"breakout on dead volume ({ratio:.1f}x) — the #1 trap",
+                           evidence)
+    return CheckResult("volume_confirms", "setup", "warn", 8.0,
+                       f"dead volume ({ratio:.1f}x)", evidence)
+
+
+register(check_id="volume_confirms", section="setup", weight=8.0, func=check_volume,
+         thresholds={
+             "pass_mult": ThresholdSpec("pass_mult", 1.3, 1.0, 3.0, 0.1,
+                 "lower to accept quieter signal bars",
+                 presets={"strict": 1.5, "balanced": 1.3, "relaxed": 1.1}),
+             "warn_mult": ThresholdSpec("warn_mult", 0.8, 0.3, 1.2, 0.1,
+                 "lower to fail only on truly dead volume",
+                 presets={"strict": 0.9, "balanced": 0.8, "relaxed": 0.6}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_setup.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/setup_quality.py tests/test_gate_setup.py
+git commit -m "feat: volume confirmation check"
+```
+
+### Task G55: Check `momentum_agrees` (weight 6)
+
+**Files:** Modify `setup_quality.py`, `registry.py`; test `tests/test_gate_setup.py`
+
+**Interfaces:** `check_momentum(df_daily, plan, macro_snap) -> CheckResult` — RSI(14) slope over 5 bars and MACD histogram sign must not *both* point against the plan; both against → fail; one against → warn; else pass.
+
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_setup.py`)
+
+```python
+from swingbot.core.gate.setup_quality import check_momentum
+from tests.fixtures.gate import downtrend_daily
+
+
+def test_momentum_three_outcomes():
+    import pandas as pd
+    bull = make_plan(direction="bullish")
+    # steady uptrend: RSI slope up, MACD hist > 0 -> pass
+    assert check_momentum(uptrend_daily(), bull, None).status == "pass"
+    # steady downtrend against a bullish plan: both against -> fail
+    assert check_momentum(downtrend_daily(), bull, None).status == "fail"
+    # downtrend with a fresh 3-bar pop: RSI slope turns up while the MACD
+    # histogram is still negative -> exactly one against -> warn
+    df = downtrend_daily()
+    pop = df["Close"].iloc[-1] * np.array([1.02, 1.04, 1.06])
+    extra = make_ohlcv(pop, start=str((df.index[-1]
+                                       + pd.tseries.offsets.BDay(1)).date()))
+    mixed = pd.concat([df, extra])
+    assert check_momentum(mixed, bull, None).status == "warn"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_momentum'`)
+- [ ] **Step 3: Write the implementation** (append to `setup_quality.py`)
+
+```python
+def check_momentum(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    closes = df_daily["Close"]
+    if len(closes) < 40:
+        return CheckResult("momentum_agrees", "setup", "unknown", 6.0,
+                           "insufficient history", {})
+    rsi_series = rsi(closes)
+    rsi_slope = float(rsi_series.iloc[-1] - rsi_series.iloc[-6])
+    hist = float(macd(closes)["histogram"].iloc[-1])
+    bullish = plan.direction == "bullish"
+    rsi_against = rsi_slope < 0 if bullish else rsi_slope > 0
+    macd_against = hist < 0 if bullish else hist > 0
+    evidence = {"rsi_slope5": round(rsi_slope, 2), "macd_hist": round(hist, 4)}
+    if rsi_against and macd_against:
+        return CheckResult("momentum_agrees", "setup", "fail", 6.0,
+                           "RSI slope AND MACD histogram both point against the plan",
+                           evidence)
+    if rsi_against or macd_against:
+        which = "RSI slope" if rsi_against else "MACD histogram"
+        return CheckResult("momentum_agrees", "setup", "warn", 6.0,
+                           f"{which} points against the plan", evidence)
+    return CheckResult("momentum_agrees", "setup", "pass", 6.0,
+                       "momentum agrees with the plan", evidence)
+
+
+register(check_id="momentum_agrees", section="setup", weight=6.0, func=check_momentum)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_setup.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/setup_quality.py tests/test_gate_setup.py
+git commit -m "feat: momentum agreement check"
+```
+
+### Task G56: Check `no_bearish_divergence_at_entry` (weight 6, §2 "not diverging against the move")
+
+**Files:** Modify `setup_quality.py`, `registry.py`; test `tests/test_gate_setup.py`
+
+**Interfaces:** `check_divergence_against(df_daily, plan, macro_snap) -> CheckResult` — for longs: price higher high in last 20 bars while RSI lower high → warn (fail if the plan's own strategy is *not* divergence-based and the divergence is 2-swing confirmed). Mirror for shorts. Distinct from G60 (which polices divergence-*entry* strategies).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_setup.py`)
+
+```python
+from swingbot.core.gate.setup_quality import check_divergence_against
+
+
+def _hh_price_lh_rsi():
+    """Three higher price highs on successively weaker legs -> RSI lower
+    highs. Trailing pullback makes the last peak a detectable pivot."""
+    closes = list(np.linspace(95, 100, 60))
+    closes += list(np.linspace(100, 110, 5))          # sharp leg, RSI hot
+    closes += list(np.linspace(110, 104, 4))[1:]
+    closes += list(np.linspace(104, 112, 12))         # slower leg, RSI cooler
+    closes += list(np.linspace(112, 106, 4))[1:]
+    closes += list(np.linspace(106, 113, 18))         # crawl, RSI cooler still
+    closes += list(np.linspace(113, 109, 4))[1:]
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+def test_divergence_against_move():
+    df = _hh_price_lh_rsi()
+    momentum_plan = make_plan(strategy="MACD", direction="bullish")
+    result = check_divergence_against(df, momentum_plan, None)
+    assert result.status == "fail"        # 2-swing confirmed + non-divergence strategy
+    assert result.evidence["divergent_pairs"] >= 2
+    div_plan = make_plan(strategy="RSI Divergence", direction="bullish")
+    assert check_divergence_against(df, div_plan, None).status == "warn"
+    assert check_divergence_against(uptrend_daily(), momentum_plan, None).status == "pass"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_divergence_against'`)
+- [ ] **Step 3: Write the implementation** (append to `setup_quality.py`; registry id `divergence_against`)
+
+```python
+def _pivot_high_positions(series, span=3) -> list[int]:
+    vals = series.values
+    out = []
+    for i in range(span, len(vals) - span):
+        win = vals[i - span:i + span + 1]
+        if vals[i] == win.max() and (win == vals[i]).sum() == 1:
+            out.append(i)
+    return out
+
+
+def check_divergence_against(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Momentum diverging AGAINST the move at entry. Distinct from G60,
+    which polices divergence-ENTRY strategies for missing confirmation."""
+    closes_full = df_daily["Close"]
+    if len(closes_full) < 60:
+        return CheckResult("divergence_against", "setup", "unknown", 6.0,
+                           "insufficient history", {})
+    window = closes_full.iloc[-60:]
+    rsi_window = rsi(closes_full).iloc[-60:]
+    bullish = plan.direction == "bullish"
+    price_probe = window if bullish else -window       # shorts: mirror via negation
+    rsi_probe = rsi_window if bullish else -rsi_window
+    pivots = _pivot_high_positions(price_probe, span=3)[-3:]
+    divergent_pairs = 0
+    for a, b in zip(pivots, pivots[1:]):
+        if price_probe.iloc[b] > price_probe.iloc[a] \
+                and rsi_probe.iloc[b] < rsi_probe.iloc[a]:
+            divergent_pairs += 1
+    evidence = {"divergent_pairs": divergent_pairs, "pivots_found": len(pivots)}
+    if divergent_pairs == 0:
+        return CheckResult("divergence_against", "setup", "pass", 6.0,
+                           "no momentum divergence against the move", evidence)
+    if divergent_pairs >= 2 and plan.strategy != "RSI Divergence":
+        return CheckResult("divergence_against", "setup", "fail", 6.0,
+                           "2-swing momentum divergence against the move", evidence)
+    return CheckResult("divergence_against", "setup", "warn", 6.0,
+                       "momentum divergence forming against the move", evidence)
+
+
+register(check_id="divergence_against", section="setup", weight=6.0,
+         func=check_divergence_against)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_setup.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/setup_quality.py tests/test_gate_setup.py
+git commit -m "feat: divergence-against-move check"
+```
+
+## Section 3 — The 8 surviving red flags (checklist §3, one task each)
+
+Red-flag checks live in `swingbot/core/gate/redflags.py`, ids prefixed `rf_`, section `"redflag"`. Policy: a red flag that fires = `fail`; flags marked **HB** are hard blocks. Each returns evidence sufficient for the embed's red-flag table row.
+
+### Task G57: `rf_fake_breakout` (weight 10)
+
+> **Audit note (2026-07-28):** Overlaps significantly with G58 (`rf_stop_sweep`) — both detect "price pierced/crossed a level and got rejected" via wick/close-position + volume/follow-through evidence, sharing most of the underlying math (levels, ATR, volume ratio). Kept distinct by `applies_to` scoping, but there's real risk of double-counting the same false-break event on a signal bar that qualifies for both. Revisit whether these should collapse into one detector with two sub-conditions before finalizing weights.
+
+**Files:** Create `swingbot/core/gate/redflags.py`; modify `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_fake_breakout(df_daily, plan, macro_snap) -> CheckResult` — for breakout-family plans: fires when the breakout bar closed back inside the range (close < level for longs) OR broke out on < 0.8× avg volume; also fires when the *prior* 10 bars contain ≥ 2 failed pokes through the same level (serial-liar level). Non-breakout strategies → pass with detail "n/a" (registry `applies_to` limits it, but the function stays total).
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_redflags.py
+import datetime as dt
+
+import numpy as np
+
+from swingbot.core.gate.redflags import rf_fake_breakout
+from tests.conftest import make_ohlcv
+from tests.fixtures.gate import breakout_and_fail, uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+BREAKOUT_PLAN = make_plan(strategy="Break & Retest", direction="bullish",
+                          trigger_price=100.0)
+
+
+def test_breakout_and_fail_fires():
+    result = rf_fake_breakout(breakout_and_fail(level=100.0), BREAKOUT_PLAN, None)
+    assert result.status == "fail"
+
+
+def test_clean_high_volume_breakout_passes():
+    vols = np.full(60, 1_000_000.0)
+    vols[-1] = 2_500_000.0
+    closes = np.concatenate([np.linspace(92, 99, 59), [102.0]])
+    df = make_ohlcv(closes, volumes=vols)
+    assert rf_fake_breakout(df, BREAKOUT_PLAN, None).status == "pass"
+
+
+def test_serial_poker_fires():
+    df = make_ohlcv(np.full(60, 97.0), spread_pct=1.0)
+    for pos in (-5, -3):                       # two failed pokes through 100
+        df.loc[df.index[pos], "High"] = 101.0
+    df.loc[df.index[-1], "Close"] = 99.0
+    assert rf_fake_breakout(df, BREAKOUT_PLAN, None).status == "fail"
+
+
+def test_non_breakout_strategy_na_pass():
+    result = rf_fake_breakout(breakout_and_fail(), make_plan(strategy="RSI"), None)
+    assert result.status == "pass" and "n/a" in result.detail
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_redflags.py -v`
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# swingbot/core/macro/quality.py
-"""Snapshot sanity validator — WARN strings, never raises, never blocks."""
+# swingbot/core/gate/redflags.py
+"""The 11 red-flag detectors, ids rf_*. A fired flag = status "fail"
+(warn-grade flags are noted per check); functions stay total — a
+strategy the flag doesn't police returns pass with detail "n/a"."""
 from __future__ import annotations
 
+import datetime as dt
+from zoneinfo import ZoneInfo
 
-def _val(section, key):
-    entry = (section or {}).get(key)
-    return None if not isinstance(entry, dict) else entry.get("value")
+import numpy as np
+import pandas as pd
+
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.setup_quality import BREAKOUT_FAMILY, volume_ratio
+from swingbot.core.gate.types import CheckResult
+from swingbot.core.indicators import adx, rsi
+
+ET = ZoneInfo("America/New_York")
 
 
-def validate_snapshot(snap: dict) -> list[str]:
-    warnings: list[str] = []
-    rates = snap.get("rates") or {}
-    for key in ("y3m", "y2", "y10", "y30"):
-        v = _val(rates, key)
-        if v is not None and not (0 <= v <= 20):
-            warnings.append(f"yield {key}={v} outside [0, 20]")
-    vix_level = ((snap.get("risk") or {}).get("vix") or {}).get("level")
-    if vix_level is not None and not (5 <= vix_level <= 100):
-        warnings.append(f"VIX {vix_level} outside [5, 100]")
-    cpi = _val(snap.get("inflation") or {}, "cpi_yoy")
-    if cpi is not None and not (-5 <= cpi <= 25):
-        warnings.append(f"CPI yoy {cpi} outside [-5, 25]")
-    rs_rows = ((snap.get("sectors") or {}).get("rs_rows")) or []
-    if len(rs_rows) < 8:
-        warnings.append(f"only {len(rs_rows)} sectors with data (< 8)")
-    for section in ("inflation", "rates", "risk", "events", "news"):
-        if not snap.get(section):
-            warnings.append(f"section {section} missing")
-    events = snap.get("events") or {}
-    if snap.get("events") is not None and events.get("next_high_impact") is None:
-        warnings.append("no high-impact event within 30d — calendar may be stale")
-    return warnings
+def _rf(check_id, status, detail, evidence, weight) -> CheckResult:
+    return CheckResult(check_id, "redflag", status, weight, detail, evidence)
+
+
+def rf_fake_breakout(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["rf_fake_breakout"]
+    if plan.strategy not in BREAKOUT_FAMILY:
+        return _rf("rf_fake_breakout", "pass", "n/a (not a breakout strategy)", {}, 10.0)
+    level = plan.trigger_price
+    bullish = plan.direction == "bullish"
+    last_close = float(df_daily["Close"].iloc[-1])
+    ratio = volume_ratio(df_daily)
+    recent = df_daily.iloc[-3:]
+    if bullish:
+        broke_out = bool((recent["Close"] > level).any() or (recent["High"] > level).any())
+        back_inside = last_close < level
+        beyond_now = last_close > level
+    else:
+        broke_out = bool((recent["Close"] < level).any() or (recent["Low"] < level).any())
+        back_inside = last_close > level
+        beyond_now = last_close < level
+    evidence = {"level": level, "close": last_close, "vol_ratio": ratio}
+    if broke_out and back_inside:
+        return _rf("rf_fake_breakout", "fail",
+                   f"breakout closed back inside on {ratio or 0:.1f}x volume",
+                   evidence, 10.0)
+    if beyond_now and ratio is not None and ratio < spec.threshold("vol_mult"):
+        return _rf("rf_fake_breakout", "fail",
+                   f"breakout on dead volume ({ratio:.1f}x)", evidence, 10.0)
+    prior = df_daily.iloc[-11:-1]
+    if bullish:
+        pokes = int(((prior["High"] >= level) & (prior["Close"] < level)).sum())
+    else:
+        pokes = int(((prior["Low"] <= level) & (prior["Close"] > level)).sum())
+    if pokes >= int(spec.threshold("serial_pokes")):
+        evidence["failed_pokes"] = pokes
+        return _rf("rf_fake_breakout", "fail",
+                   f"{pokes} failed pokes through {level:.2f} in the prior 10 bars "
+                   f"— serial-liar level", evidence, 10.0)
+    return _rf("rf_fake_breakout", "pass", "no fake-breakout signature", evidence, 10.0)
+
+
+register(check_id="rf_fake_breakout", section="redflag", weight=10.0,
+         func=rf_fake_breakout, applies_to=BREAKOUT_FAMILY,
+         thresholds={
+             "vol_mult": ThresholdSpec("vol_mult", 0.8, 0.3, 1.5, 0.1,
+                 "lower to tolerate quieter breakouts",
+                 presets={"strict": 1.0, "balanced": 0.8, "relaxed": 0.5}),
+             "serial_pokes": ThresholdSpec("serial_pokes", 2, 1, 5, 1,
+                 "raise to tolerate more failed pokes",
+                 presets={"strict": 1, "balanced": 2, "relaxed": 3}),
+         })
 ```
 
-**And wire it into the builder** — in `snapshot.build_snapshot`, replace the final `snap["quality_warnings"] = []` with:
-
-```python
-    from swingbot.core.macro.quality import validate_snapshot
-    snap["quality_warnings"] = validate_snapshot(snap)
-```
-
-(The G38 tests keep passing: the healthy stubbed build produces zero warnings; the darkness build now carries warnings, which its assertions don't forbid.)
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_quality.py tests/test_macro_snapshot.py -v`
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
 - [ ] **Step 5: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
-git add swingbot/core/macro/quality.py swingbot/core/macro/snapshot.py tests/test_macro_quality.py
-git commit -m "feat: macro snapshot sanity validator"
+git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
+git commit -m "feat: rf_fake_breakout"
 ```
 
-### Task G43: Total-degradation proof
+### Task G58: `rf_stop_sweep` (weight 8)
 
-**Files:**
-- Test: `tests/test_macro_degradation.py`
+> **Audit note (2026-07-28):** See the note on G57 (`rf_fake_breakout`) — same overlap concern, not a full duplicate but a double-counting risk worth resolving before weight calibration.
 
-- [ ] **Step 1: Write the test**
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_stop_sweep(df_daily, plan, macro_snap) -> CheckResult` — fires when the signal bar (or prior bar) printed a wick through an obvious level (G47 level or round number) of ≥ 1.5× body length with close back on the far side, **and** the next bar shows no follow-through (for continuation plans this is the trap; for sweep-reclaim strategies the registry marks it n/a). Evidence: wick/body ratio, level touched.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
 
 ```python
-# tests/test_macro_degradation.py
-"""THE proof: entire internet down + cold caches -> the bot still gets a
-full snapshot skeleton (every section None/unknown, stale=True) and
-scanning proceeds. G121 extends this proof through the gate."""
-import pytest
-
-import swingbot.config as config_mod
-import swingbot.core.macro.health as health
-import swingbot.core.macro.httpcache as httpcache
-import swingbot.core.macro.snapshot as snap_mod
+from swingbot.core.gate.redflags import rf_stop_sweep
+from tests.fixtures.gate import sweep_wick
 
 
-@pytest.fixture
-def darkness(tmp_path, monkeypatch):
-    def boom(*a, **k):
-        raise OSError("internet down")
-    monkeypatch.setattr(httpcache.requests, "get", boom)
-    monkeypatch.setattr(httpcache, "CACHE_DIR", str(tmp_path / "cache"))   # cold
-    monkeypatch.setattr(httpcache, "LAST_SERVED_STALE", False)
-    monkeypatch.setattr(health, "LEDGER_PATH", str(tmp_path / "health.jsonl"))
-    monkeypatch.setattr(snap_mod, "SNAPSHOT_PATH", str(tmp_path / "snap.json"))
-    monkeypatch.setattr(snap_mod, "HISTORY_PATH", str(tmp_path / "hist.jsonl"))
-    monkeypatch.setattr(snap_mod, "_last_future_refresh_day", None)
-    monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [])
-    monkeypatch.setattr(config_mod, "MACRO_ENABLED", True, raising=False)
-    monkeypatch.setattr(config_mod, "FRED_API_KEY", "key-set-net-down", raising=False)
-    monkeypatch.setattr(config_mod, "FINNHUB_API_KEY", "key-set-net-down", raising=False)
+def test_sweep_wick_fires():
+    plan = make_plan(trigger_price=101.0)
+    result = rf_stop_sweep(sweep_wick(level=100.0), plan, None)
+    assert result.status == "fail"
+    assert result.evidence["wick_body"] >= 1.5
 
 
-def test_total_darkness(darkness):
-    snap = snap_mod.build_snapshot()
-    assert snap["stale"] is True
-    assert snap["composite"]["label"] == "unknown"
-    assert snap["inflation"]["cpi_yoy"] is None
-    assert snap["rates"]["curve_state"] == "unknown"
-    assert snap["risk"]["vix"] is None
-    assert snap["news"]["headlines_top5"] == []
-    # the scheduler still serves it — a scan would proceed normally
-    served = snap_mod.ensure_fresh_snapshot()
-    assert served is not None and served["composite"]["label"] == "unknown"
+def test_normal_trend_passes():
+    assert rf_stop_sweep(uptrend_daily(), make_plan(), None).status == "pass"
 ```
 
-- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_macro_degradation.py -v`
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_stop_sweep'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`)
+
+```python
+def rf_stop_sweep(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Wick >= wick_body_mult x body through an obvious level with a close
+    back on the far side, and no follow-through on the next bar. For
+    sweep-reclaim strategies the registry applies_to marks this n/a."""
+    spec = CHECKS["rf_stop_sweep"]
+    from swingbot.core.gate.levels import _safe_atr, round_levels, swing_levels
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    levels = [l.price for l in swing_levels(df_daily)] + round_levels(entry)
+    wick_mult = spec.threshold("wick_body_mult")
+    for pos in (-2, -3):                        # signal bar or the bar before
+        if len(df_daily) + pos < 0:
+            continue
+        bar, nxt = df_daily.iloc[pos], df_daily.iloc[pos + 1]
+        body = abs(float(bar["Close"]) - float(bar["Open"])) or 1e-9
+        lower_wick = min(float(bar["Close"]), float(bar["Open"])) - float(bar["Low"])
+        upper_wick = float(bar["High"]) - max(float(bar["Close"]), float(bar["Open"]))
+        for level in levels:
+            swept_down = (float(bar["Low"]) < level < min(float(bar["Close"]), float(bar["Open"]))
+                          and lower_wick >= wick_mult * body)
+            swept_up = (float(bar["High"]) > level > max(float(bar["Close"]), float(bar["Open"]))
+                        and upper_wick >= wick_mult * body)
+            if not (swept_down or swept_up):
+                continue
+            follow_atr = abs(float(nxt["Close"]) - float(bar["Close"])) / atr_val
+            if follow_atr < spec.threshold("follow_atr"):
+                wick_body = round(max(lower_wick, upper_wick) / body, 2)
+                return _rf("rf_stop_sweep", "fail",
+                           f"stop-sweep wick through {level:.2f} "
+                           f"({wick_body}x body), no follow-through",
+                           {"level": level, "wick_body": wick_body,
+                            "follow_atr": round(follow_atr, 2)}, 8.0)
+    return _rf("rf_stop_sweep", "pass", "no sweep signature", {}, 8.0)
+
+
+register(check_id="rf_stop_sweep", section="redflag", weight=8.0,
+         func=rf_stop_sweep,
+         thresholds={
+             "wick_body_mult": ThresholdSpec("wick_body_mult", 1.5, 1.0, 4.0, 0.25,
+                 "raise to ignore smaller wicks",
+                 presets={"strict": 1.25, "balanced": 1.5, "relaxed": 2.5}),
+             "follow_atr": ThresholdSpec("follow_atr", 0.5, 0.1, 1.5, 0.1,
+                 "lower to require less follow-through before clearing",
+                 presets={"strict": 0.8, "balanced": 0.5, "relaxed": 0.25}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
+git commit -m "feat: rf_stop_sweep"
+```
+
+### Task G59: `rf_dead_cat` (weight 10)
+
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_dead_cat(df_daily, plan, macro_snap) -> CheckResult` — for bullish plans only: fires when price is in a G45 daily downtrend, has bounced ≥ 5% off a ≤ 20-day low, **and** structure shows no confirmed higher low + higher high pair since that low ("no structure shift yet"). Evidence: days since low, bounce %, structure verdict.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
+
+```python
+from swingbot.core.gate.redflags import rf_dead_cat
+from tests.fixtures.gate import dead_cat
+
+
+def _reversal_with_structure():
+    """Downtrend, then bounce -> higher low -> higher high: a real shift."""
+    lead = np.full(200, 150.0)
+    down = 150.0 * (1 - 0.01) ** np.arange(40)
+    low = down[-1]
+    leg1 = np.linspace(low, low * 1.06, 5)[1:]
+    dip = np.linspace(low * 1.06, low * 1.03, 4)[1:]      # higher low
+    leg2 = np.linspace(low * 1.03, low * 1.09, 6)[1:]     # higher high
+    return make_ohlcv(np.concatenate([lead, down, leg1, dip, leg2]), spread_pct=2.0)
+
+
+def test_dead_cat_fires_on_v_bounce():
+    result = rf_dead_cat(dead_cat(bounce_pct=8.0), make_plan(direction="bullish"), None)
+    assert result.status == "fail"
+    assert result.evidence["bounce_pct"] >= 5
+
+
+def test_structure_shift_passes():
+    assert rf_dead_cat(_reversal_with_structure(),
+                       make_plan(direction="bullish"), None).status == "pass"
+
+
+def test_bearish_plan_na():
+    result = rf_dead_cat(dead_cat(), make_plan(direction="bearish"), None)
+    assert result.status == "pass" and "n/a" in result.detail
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_dead_cat'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`)
+
+```python
+def rf_dead_cat(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["rf_dead_cat"]
+    if plan.direction != "bullish":
+        return _rf("rf_dead_cat", "pass", "n/a (bearish plan)", {}, 10.0)
+    from swingbot.core.gate.context_htf import htf_trend
+    closes = df_daily["Close"]
+    if len(closes) < 60:
+        return _rf("rf_dead_cat", "unknown", "insufficient history", {}, 10.0)
+    if htf_trend(df_daily)["daily"] != "down":
+        return _rf("rf_dead_cat", "pass", "not in a daily downtrend", {}, 10.0)
+    tail = closes.iloc[-20:]
+    low_pos = int(np.argmin(tail.values))
+    low_val = float(tail.iloc[low_pos])
+    bounce_pct = (float(tail.iloc[-1]) / low_val - 1.0) * 100.0
+    evidence = {"bounce_pct": round(bounce_pct, 1),
+                "days_since_low": len(tail) - 1 - low_pos}
+    if bounce_pct < spec.threshold("bounce_pct"):
+        return _rf("rf_dead_cat", "pass", "no meaningful bounce yet", evidence, 10.0)
+    # structure shift = a pullback low ABOVE the low, then a new bounce high
+    vals = tail.values[low_pos:]
+    structure = False
+    for i in range(1, len(vals) - 1):
+        is_local_low = vals[i] < vals[i - 1] and vals[i] < vals[i + 1]
+        if is_local_low and vals[i] > low_val and float(max(vals[i + 1:])) > float(max(vals[:i])):
+            structure = True
+            break
+    evidence["structure_shift"] = structure
+    if structure:
+        return _rf("rf_dead_cat", "pass",
+                   "higher-low + higher-high printed since the low", evidence, 10.0)
+    return _rf("rf_dead_cat", "fail",
+               f"dead-cat risk: +{bounce_pct:.1f}% V-bounce in a downtrend, "
+               f"no structure shift yet", evidence, 10.0)
+
+
+register(check_id="rf_dead_cat", section="redflag", weight=10.0, func=rf_dead_cat,
+         thresholds={
+             "bounce_pct": ThresholdSpec("bounce_pct", 5.0, 2.0, 15.0, 0.5,
+                 "raise to flag only larger bounces",
+                 presets={"strict": 4.0, "balanced": 5.0, "relaxed": 8.0}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
+git commit -m "feat: rf_dead_cat"
+```
+
+### Task G60: `rf_divergence_trap` (weight 8)
+
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_divergence_trap(df_daily, plan, macro_snap) -> CheckResult` — for divergence-entry strategies: fires when the divergence exists but price has NOT yet confirmed (no close above the divergence swing's high for longs / below the low for shorts) — "divergence alone, without price confirmation". Pass once the confirmation close printed.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
+
+```python
+from swingbot.core.gate.redflags import rf_divergence_trap
+
+
+def _bullish_divergence(confirmed: bool):
+    """Steep decline (RSI cold) -> bounce to 108 -> gentle grind to a LOWER
+    low (RSI warmer = bullish divergence). Confirmation = close above 108."""
+    closes = list(np.full(40, 130.0))
+    closes += list(np.linspace(130, 100, 20))[1:]
+    closes += list(np.linspace(100, 108, 6))[1:]
+    closes += list(np.linspace(108, 98, 16))[1:]
+    if confirmed:
+        closes += list(np.linspace(98, 110, 8))[1:]     # closes above 108
+    else:
+        closes += list(np.linspace(98, 103, 5))[1:]     # bounce, still below 108
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+DIV_PLAN = make_plan(strategy="RSI Divergence", direction="bullish")
+
+
+def test_unconfirmed_divergence_fires():
+    result = rf_divergence_trap(_bullish_divergence(confirmed=False), DIV_PLAN, None)
+    assert result.status == "fail" and "confirmation" in result.detail
+
+
+def test_confirmed_divergence_passes():
+    assert rf_divergence_trap(_bullish_divergence(confirmed=True),
+                              DIV_PLAN, None).status == "pass"
+
+
+def test_non_divergence_strategy_na():
+    result = rf_divergence_trap(_bullish_divergence(False),
+                                make_plan(strategy="VWAP"), None)
+    assert result.status == "pass" and "n/a" in result.detail
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_divergence_trap'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`)
+
+```python
+def rf_divergence_trap(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """For divergence-ENTRY strategies: divergence exists but price has
+    not confirmed it (no close beyond the intervening swing)."""
+    if plan.strategy != "RSI Divergence":
+        return _rf("rf_divergence_trap", "pass", "n/a (not a divergence entry)", {}, 8.0)
+    from swingbot.core.gate.setup_quality import _pivot_high_positions
+    closes_full = df_daily["Close"]
+    if len(closes_full) < 60:
+        return _rf("rf_divergence_trap", "unknown", "insufficient history", {}, 8.0)
+    window = closes_full.iloc[-60:]
+    rsi_window = rsi(closes_full).iloc[-60:]
+    bullish = plan.direction == "bullish"
+    price_probe = -window if bullish else window       # pivot LOWS via negation
+    rsi_probe = -rsi_window if bullish else rsi_window
+    pivots = _pivot_high_positions(price_probe, span=3)[-2:]
+    if len(pivots) < 2:
+        return _rf("rf_divergence_trap", "pass", "no divergence structure found", {}, 8.0)
+    a, b = pivots
+    # bullish: price lower low (probe higher) with RSI higher low (probe lower)
+    divergent = (price_probe.iloc[b] > price_probe.iloc[a]
+                 and rsi_probe.iloc[b] < rsi_probe.iloc[a])
+    if not divergent:
+        return _rf("rf_divergence_trap", "pass", "no active divergence", {}, 8.0)
+    swing = float(window.iloc[a:b + 1].max()) if bullish else float(window.iloc[a:b + 1].min())
+    last = float(window.iloc[-1])
+    confirmed = last > swing if bullish else last < swing
+    evidence = {"swing_level": round(swing, 2), "last_close": round(last, 2)}
+    if confirmed:
+        return _rf("rf_divergence_trap", "pass",
+                   f"divergence confirmed by close beyond {swing:.2f}", evidence, 8.0)
+    return _rf("rf_divergence_trap", "fail",
+               "divergence without price confirmation — wait for the "
+               "confirmation close", evidence, 8.0)
+
+
+register(check_id="rf_divergence_trap", section="redflag", weight=8.0,
+         func=rf_divergence_trap, applies_to=("RSI Divergence",))
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
+git commit -m "feat: rf_divergence_trap"
+```
+
+### Task G61: `rf_extreme_fade` (weight 8)
+
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_extreme_fade(df_daily, plan, macro_snap) -> CheckResult` — fires when the plan fades a strong trend on overbought/oversold alone: counter-trend plan (vs G45 daily trend) + RSI beyond 75/25 + ADX(14) > 30 (strong trend — "overbought can stay overbought"). Counter-trend with ADX < 20 → warn only.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
+
+```python
+from swingbot.core.gate.redflags import rf_extreme_fade
+from tests.fixtures.gate import climax_overbought, range_daily
+
+
+def test_fading_strong_trend_fires():
+    short_fade = make_plan(direction="bearish", strategy="RSI")
+    result = rf_extreme_fade(climax_overbought(), short_fade, None)
+    assert result.status == "fail"
+    assert result.evidence["rsi"] > 75 and result.evidence["adx"] > 30
+
+
+def test_range_fade_passes():
+    short_fade = make_plan(direction="bearish", strategy="RSI")
+    assert rf_extreme_fade(range_daily(90, 110, n=300), short_fade, None).status == "pass"
+
+
+def test_with_trend_plan_passes():
+    long_with = make_plan(direction="bullish")
+    assert rf_extreme_fade(climax_overbought(), long_with, None).status == "pass"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_extreme_fade'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`)
+
+```python
+def rf_extreme_fade(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Fading a STRONG trend on overbought/oversold alone — "overbought
+    can stay overbought". Weak-trend counter plays warn only (mean
+    reversion's own edge IS fading; G80 relaxes applies_to accordingly)."""
+    spec = CHECKS["rf_extreme_fade"]
+    from swingbot.core.gate.context_htf import htf_trend
+    trend = htf_trend(df_daily)["daily"]
+    bullish = plan.direction == "bullish"
+    counter = (trend == "down" and bullish) or (trend == "up" and not bullish)
+    if not counter:
+        return _rf("rf_extreme_fade", "pass", "not a counter-trend plan",
+                   {"trend": trend}, 8.0)
+    rsi_val = float(rsi(df_daily["Close"]).iloc[-1])
+    adx_val = float(adx(df_daily).iloc[-1])
+    extreme = (rsi_val <= spec.threshold("rsi_lo") if bullish
+               else rsi_val >= spec.threshold("rsi_hi"))
+    evidence = {"rsi": round(rsi_val, 1), "adx": round(adx_val, 1), "trend": trend}
+    if not extreme:
+        return _rf("rf_extreme_fade", "pass",
+                   "counter-trend but not at an RSI extreme", evidence, 8.0)
+    if adx_val > spec.threshold("adx_strong"):
+        return _rf("rf_extreme_fade", "fail",
+                   f"fading a strong trend (ADX {adx_val:.0f}) on RSI "
+                   f"{rsi_val:.0f} alone", evidence, 8.0)
+    return _rf("rf_extreme_fade", "warn",
+               f"counter-trend fade (ADX {adx_val:.0f} — trend not strong)",
+               evidence, 8.0)
+
+
+register(check_id="rf_extreme_fade", section="redflag", weight=8.0,
+         func=rf_extreme_fade,
+         thresholds={
+             "rsi_hi": ThresholdSpec("rsi_hi", 75.0, 60.0, 90.0, 1.0,
+                 "raise to flag only more extreme overbought fades",
+                 presets={"strict": 70.0, "balanced": 75.0, "relaxed": 85.0}),
+             "rsi_lo": ThresholdSpec("rsi_lo", 25.0, 10.0, 40.0, 1.0,
+                 "lower to flag only more extreme oversold fades",
+                 presets={"strict": 30.0, "balanced": 25.0, "relaxed": 15.0}),
+             "adx_strong": ThresholdSpec("adx_strong", 30.0, 20.0, 50.0, 1.0,
+                 "raise to fail only against the very strongest trends",
+                 presets={"strict": 25.0, "balanced": 30.0, "relaxed": 40.0}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
+git commit -m "feat: rf_extreme_fade"
+```
+
+### Task G62: `rf_news_whipsaw` (weight 10, **HB** inside the blackout window)
+
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_news_whipsaw(df_daily, plan, macro_snap) -> CheckResult` — from `macro_snap["events"]`: importance-3 event (CPI/NFP/FOMC) within the blackout window (config `GATE_BLACKOUT_HOURS_BEFORE` default 18, `_AFTER` default 2, added to config here) → **fail/HB**; importance-2 within window → warn; earnings within `GATE_EARNINGS_BLACKOUT_DAYS` (default 3, reuses G33; defers to edge-engine E18 gate if merged) → fail. Snapshot missing → `unknown`.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
+
+```python
+import swingbot.config as config
+import swingbot.core.gate.redflags as redflags
+from swingbot.core.gate.redflags import rf_news_whipsaw
+
+NOW = dt.datetime(2026, 7, 14, 16, 0, tzinfo=dt.timezone.utc)
+
+
+def _snap_with(events_24h):
+    return {"events": {"next_high_impact": events_24h[0] if events_24h else None,
+                       "within_24h": events_24h, "today": []}}
+
+
+def test_cpi_tomorrow_fires_hard(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within",
+                        lambda *a, **k: None)
+    cpi = {"date": "2026-07-15", "time_et": "08:30", "kind": "cpi",
+           "label": "CPI release", "importance": 3}
+    result = rf_news_whipsaw(uptrend_daily(), make_plan(), _snap_with([cpi]), now=NOW)
+    assert result.status == "fail"                    # ~16.5h ahead, inside 18h window
+    from swingbot.core.gate.registry import CHECKS
+    assert CHECKS["rf_news_whipsaw"].hard_block is True
+
+
+def test_importance_2_warns(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: None)
+    ppi = {"date": "2026-07-15", "time_et": "08:30", "kind": "ppi",
+           "label": "PPI release", "importance": 2}
+    assert rf_news_whipsaw(uptrend_daily(), make_plan(),
+                           _snap_with([ppi]), now=NOW).status == "warn"
+
+
+def test_quiet_week_passes(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: False)
+    assert rf_news_whipsaw(uptrend_daily(), make_plan(),
+                           _snap_with([]), now=NOW).status == "pass"
+
+
+def test_earnings_inside_blackout_fires(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: True)
+    result = rf_news_whipsaw(uptrend_daily(), make_plan(), _snap_with([]), now=NOW)
+    assert result.status == "fail" and "earnings" in result.detail
+
+
+def test_no_snapshot_unknown():
+    assert rf_news_whipsaw(uptrend_daily(), make_plan(), None, now=NOW).status == "unknown"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_news_whipsaw'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`; plus config Fields)
+
+```python
+import swingbot.config as config
+from swingbot.core.macro import calendar_events, earnings
+
+
+def rf_news_whipsaw(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
+    """HB inside the blackout window. Statuses are information — actually
+    holding an entry additionally requires GATE_BLACKOUT_ENFORCE (G120)."""
+    if not macro_snap or not macro_snap.get("events"):
+        return _rf("rf_news_whipsaw", "unknown", "no event calendar available", {}, 10.0)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    before = float(getattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 18))
+    after = float(getattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2))
+    seen = {}
+    ev_section = macro_snap["events"]
+    for e in (ev_section.get("within_24h") or []) + \
+             ([ev_section["next_high_impact"]] if ev_section.get("next_high_impact") else []):
+        seen[(e["date"], e["kind"])] = e
+    for event in seen.values():
+        hours = calendar_events.hours_until(event, now)
+        if -after <= hours <= before:
+            detail = f"{event['label']} in {hours:.0f}h — inside the blackout window"
+            if event["importance"] >= 3:
+                return _rf("rf_news_whipsaw", "fail", detail,
+                           {"event": event, "hours": round(hours, 1)}, 10.0)
+            return _rf("rf_news_whipsaw", "warn", detail,
+                       {"event": event, "hours": round(hours, 1)}, 10.0)
+    # Earnings blackout (reuses G33; defers to edge E18's gate if merged)
+    days = int(getattr(config, "GATE_EARNINGS_BLACKOUT_DAYS", 3))
+    within = earnings.earnings_within(plan.ticker, days, now=now.date())
+    if within:
+        return _rf("rf_news_whipsaw", "fail",
+                   f"earnings within {days} days", {"earnings_within_days": days}, 10.0)
+    return _rf("rf_news_whipsaw", "pass", "no high-impact event in the window", {}, 10.0)
+
+
+register(check_id="rf_news_whipsaw", section="redflag", weight=10.0,
+         func=rf_news_whipsaw, hard_block=True)
+```
+
+```python
+# swingbot/config.py — append to the Gatekeeper section:
+    Field("GATE_BLACKOUT_HOURS_BEFORE", "GATE_BLACKOUT_HOURS_BEFORE", "Gatekeeper",
+          "Blackout hours before event", type="float", default="18", min=0, max=72, step=1,
+          help="High-impact events (CPI/NFP/FOMC) within this many hours ahead flag the "
+               "checklist. Lower to shrink the annotation window."),
+    Field("GATE_BLACKOUT_HOURS_AFTER", "GATE_BLACKOUT_HOURS_AFTER", "Gatekeeper",
+          "Blackout hours after event", type="float", default="2", min=0, max=24, step=0.5,
+          help="The window stays flagged this long after the print."),
+    Field("GATE_EARNINGS_BLACKOUT_DAYS", "GATE_EARNINGS_BLACKOUT_DAYS", "Gatekeeper",
+          "Earnings blackout days", type="number", default="3", min=0, max=15, step=1,
+          help="Flag plans whose ticker reports earnings within this many days. "
+               "Lower to allow entries closer to earnings."),
+```
+
+(Extend `tests/test_gate_config.py`'s expected-keys map with these three.)
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py tests/test_gate_config.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py swingbot/config.py tests/test_gate_redflags.py tests/test_gate_config.py
+git commit -m "feat: rf_news_whipsaw + blackout config"
+```
+
+### Task G65: `rf_thin_session` (weight 6)
+
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_thin_session(df_daily, plan, macro_snap, now=None) -> CheckResult` — from G32: fires (warn-grade fail→warn mapping: this one is `warn`, never `fail` — EOD swing entries mostly dodge it) when *now* is a half-day, holiday-adjacent thin week, or intraday thin window and the plan's entry could trigger in it; plus fires when the ticker's own 20d median dollar-volume < config floor `GATE_MIN_DOLLAR_VOL` (float field, default 2_000_000).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
+
+```python
+from swingbot.core.gate.redflags import rf_thin_session
+
+
+def _liquid_df():
+    return make_ohlcv(np.full(60, 50.0), volumes=np.full(60, 1_000_000.0))
+
+
+def test_holiday_week_warns():
+    holiday_week = dt.datetime(2026, 12, 29, 16, 0, tzinfo=dt.timezone.utc)  # 11:00 ET
+    result = rf_thin_session(_liquid_df(), make_plan(), None, now=holiday_week)
+    assert result.status == "warn" and "holiday week" in result.detail
+
+
+def test_liquid_normal_day_passes():
+    normal = dt.datetime(2026, 7, 14, 16, 0, tzinfo=dt.timezone.utc)         # 12:00 ET Tue
+    assert rf_thin_session(_liquid_df(), make_plan(), None, now=normal).status == "pass"
+
+
+def test_illiquid_ticker_warns():
+    normal = dt.datetime(2026, 7, 14, 16, 0, tzinfo=dt.timezone.utc)
+    thin = make_ohlcv(np.full(60, 2.0), volumes=np.full(60, 100_000.0))      # $200k/day
+    result = rf_thin_session(thin, make_plan(), None, now=normal)
+    assert result.status == "warn" and "dollar volume" in result.detail
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_thin_session'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`; plus one config Field)
+
+```python
+def rf_thin_session(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
+    """warn-grade only — EOD swing entries mostly dodge intraday windows,
+    but illiquid tickers and dead weeks still deserve the label."""
+    from swingbot.core.macro.sessions import is_thin_window
+    dollar_vol = float((df_daily["Close"] * df_daily["Volume"]).iloc[-20:].median())
+    floor = float(getattr(config, "GATE_MIN_DOLLAR_VOL", 2_000_000))
+    if dollar_vol < floor:
+        return _rf("rf_thin_session", "warn",
+                   f"median dollar volume ${dollar_vol:,.0f} below the "
+                   f"${floor:,.0f} floor",
+                   {"dollar_vol": round(dollar_vol)}, 6.0)
+    now_et = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ET)
+    thin, reason = is_thin_window(now_et)
+    if thin:
+        return _rf("rf_thin_session", "warn", f"thin session: {reason}",
+                   {"reason": reason}, 6.0)
+    return _rf("rf_thin_session", "pass", "normal liquidity conditions",
+               {"dollar_vol": round(dollar_vol)}, 6.0)
+
+
+register(check_id="rf_thin_session", section="redflag", weight=6.0,
+         func=rf_thin_session, trigger_recheck=True)
+```
+
+```python
+# swingbot/config.py — append to the Gatekeeper section:
+    Field("GATE_MIN_DOLLAR_VOL", "GATE_MIN_DOLLAR_VOL", "Gatekeeper",
+          "Min median dollar volume", type="float", default="2000000", min=0, step=100000,
+          help="Tickers whose 20d median dollar volume sits below this get a "
+               "thin-liquidity warning on the checklist. Lower to silence it "
+               "for small caps."),
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py swingbot/config.py tests/test_gate_redflags.py
+git commit -m "feat: rf_thin_session"
+```
+
+### Task G67: `rf_beta_move` (weight 6, "is this really my instrument's move?")
+
+**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
+
+**Interfaces:** `rf_beta_move(df_daily, plan, macro_snap, spy_df=None) -> CheckResult` — regress ticker daily returns on SPY (60d) → beta + residual; fires when the signal move's residual (move minus beta×SPY move over the signal window) is < 35% of the raw move — the "signal" is just index beta, and it evaporates when the index mean-reverts. Evidence: beta, raw vs idiosyncratic move %. SPY bars missing → unknown.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
+
+```python
+from swingbot.core.gate.redflags import rf_beta_move
+
+
+def _spy_and_clone(pure_beta: bool):
+    """SPY with alternating returns; ticker either 1.2x SPY exactly
+    (pure beta) or flat-then-idiosyncratic-gap."""
+    spy_closes, tick_closes = [100.0], [50.0]
+    for i in range(120):
+        r = 0.01 if i % 2 == 0 else -0.008
+        spy_closes.append(spy_closes[-1] * (1 + r))
+        tick_closes.append(tick_closes[-1] * (1 + (1.2 * r if pure_beta else 0.0)))
+    if not pure_beta:
+        tick_closes[-1] = tick_closes[-2] * 1.10        # +10% on flat SPY
+    return (make_ohlcv(np.asarray(spy_closes)),
+            make_ohlcv(np.asarray(tick_closes)))
+
+
+def test_pure_beta_move_fires():
+    spy, tick = _spy_and_clone(pure_beta=True)
+    result = rf_beta_move(tick, make_plan(), None, spy_df=spy)
+    assert result.status == "fail"
+    assert result.evidence["idio_frac"] < 0.35
+
+
+def test_idiosyncratic_gap_passes():
+    spy, tick = _spy_and_clone(pure_beta=False)
+    assert rf_beta_move(tick, make_plan(), None, spy_df=spy).status == "pass"
+
+
+def test_missing_spy_unknown():
+    _, tick = _spy_and_clone(True)
+    assert rf_beta_move(tick, make_plan(), None, spy_df=None).status == "unknown"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_beta_move'`)
+- [ ] **Step 3: Write the implementation** (append to `redflags.py`)
+
+```python
+def rf_beta_move(df_daily, plan, macro_snap, *, spy_df=None, **ctx) -> CheckResult:
+    """Is this really MY instrument's move? Regress 60d daily returns on
+    SPY; if the signal-window move is mostly beta x index, it evaporates
+    when the index mean-reverts."""
+    spec = CHECKS["rf_beta_move"]
+    if spy_df is None or len(spy_df) < 70 or len(df_daily) < 70:
+        return _rf("rf_beta_move", "unknown", "SPY bars unavailable", {}, 6.0)
+    t_ret = df_daily["Close"].pct_change().dropna().iloc[-60:]
+    s_ret = spy_df["Close"].pct_change().dropna().iloc[-60:]
+    joined = pd.concat([t_ret.rename("t"), s_ret.rename("s")], axis=1).dropna()
+    if len(joined) < 40:
+        return _rf("rf_beta_move", "unknown", "insufficient overlapping bars", {}, 6.0)
+    var_s = float(np.var(joined["s"]))
+    beta = float(np.cov(joined["t"], joined["s"])[0, 1] / (var_s or 1e-12))
+    window = int(spec.threshold("signal_window"))
+    t_move = float(df_daily["Close"].iloc[-1] / df_daily["Close"].iloc[-1 - window] - 1)
+    s_move = float(spy_df["Close"].iloc[-1] / spy_df["Close"].iloc[-1 - window] - 1)
+    if abs(t_move) < 1e-6:
+        return _rf("rf_beta_move", "pass", "no signal move to attribute",
+                   {"beta": round(beta, 2)}, 6.0)
+    residual = t_move - beta * s_move
+    idio_frac = abs(residual) / abs(t_move)
+    evidence = {"beta": round(beta, 2), "move_pct": round(t_move * 100, 1),
+                "idio_frac": round(idio_frac, 2)}
+    if idio_frac < spec.threshold("idio_frac"):
+        return _rf("rf_beta_move", "fail",
+                   f"move is ~{(1 - idio_frac) * 100:.0f}% index beta "
+                   f"(beta {beta:.1f}) — not this instrument's own move",
+                   evidence, 6.0)
+    return _rf("rf_beta_move", "pass",
+               f"{idio_frac * 100:.0f}% of the move is idiosyncratic", evidence, 6.0)
+
+
+register(check_id="rf_beta_move", section="redflag", weight=6.0, func=rf_beta_move,
+         thresholds={
+             "idio_frac": ThresholdSpec("idio_frac", 0.35, 0.1, 0.8, 0.05,
+                 "lower to tolerate more index-driven moves",
+                 presets={"strict": 0.5, "balanced": 0.35, "relaxed": 0.2}),
+             "signal_window": ThresholdSpec("signal_window", 5, 2, 15, 1,
+                 "bars defining 'the signal move'",
+                 presets={"strict": 5, "balanced": 5, "relaxed": 5}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
+git commit -m "feat: rf_beta_move idiosyncrasy check"
+```
+
+## Section 4 — Risk definition
+
+Stop placement and target realism only. The sizing checks that used to live here
+(`size_formula` G69, `portfolio_room` G71) were cut in the win-rate audit: position
+size moves expectancy and risk of ruin, never win rate.
+
+### Task G68: Check `stop_structural` (weight 10, §4 "stop beyond structure, widened ~1 ATR")
+
+**Files:**
+- Create: `swingbot/core/gate/risk_def.py`; modify `registry.py`
+- Test: `tests/test_gate_risk.py`
+
+**Interfaces:** `check_stop_structural(df_daily, plan, macro_snap) -> CheckResult` — the plan's stop must sit beyond the nearest protective structure level (G47 support for longs) by ≥ 0.5 ATR and not *exactly at* an obvious level/round number (within 0.15 ATR of one → warn "sweep bait"). Stop inside the structure → **fail**. Advisory-only against the v2 exit model: this check flags, it never mutates the plan's stop (Global Constraints — exit geometry is v2-validated).
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_risk.py
+import numpy as np
+
+from swingbot.core.gate.risk_def import check_stop_structural
+from tests.conftest import make_ohlcv
+from tests.fixtures.gate.plans import make_plan
+
+
+def _support_touches(support=100.0, top=110.0, n=120):
+    """Three clean touches of a support at ~100 (valleys unique)."""
+    closes = []
+    for _ in range(3):
+        closes += list(np.linspace(top, support, 15)) + list(np.linspace(support, top, 15))[1:]
+    closes += list(np.linspace(top, top * 1.01, n - len(closes)))
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+def test_beyond_and_wide_passes():
+    # support (with spread) ~99.75; stop 98.4 is >0.5 ATR beyond, off-level
+    plan = make_plan(direction="bullish", trigger_price=104.0, entry_price=104.0,
+                     stop_loss=98.4, tp1=112.0)
+    result = check_stop_structural(_support_touches(), plan, None)
+    assert result.status == "pass"
+    assert result.evidence["margin_atr"] >= 0.5
+
+
+def test_at_level_or_too_tight_warns():
+    plan = make_plan(direction="bullish", trigger_price=104.0, entry_price=104.0,
+                     stop_loss=99.7, tp1=112.0)      # a hair beyond the structure
+    assert check_stop_structural(_support_touches(), plan, None).status == "warn"
+
+
+def test_inside_structure_fails():
+    plan = make_plan(direction="bullish", trigger_price=104.0, entry_price=104.0,
+                     stop_loss=101.0, tp1=112.0)     # above the support = inside
+    assert check_stop_structural(_support_touches(), plan, None).status == "fail"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_risk.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/risk_def.py
+"""Section-4 risk-definition checks. Advisory-only: these flag, they
+never mutate the plan's v2-validated exit geometry."""
+from __future__ import annotations
+
+from swingbot.core.gate.levels import (_safe_atr, round_levels, swing_levels)
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+
+
+def check_stop_structural(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["stop_structural"]
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    bullish = plan.direction == "bullish"
+    swings = swing_levels(df_daily)
+    if bullish:
+        protective = [l.price for l in swings if l.kind == "support" and l.price < entry]
+        nearest = max(protective) if protective else None
+        margin = (nearest - plan.stop_loss) / atr_val if nearest is not None else None
+        inside = nearest is not None and plan.stop_loss > nearest
+    else:
+        protective = [l.price for l in swings if l.kind == "resistance" and l.price > entry]
+        nearest = min(protective) if protective else None
+        margin = (plan.stop_loss - nearest) / atr_val if nearest is not None else None
+        inside = nearest is not None and plan.stop_loss < nearest
+    if nearest is None:
+        return CheckResult("stop_structural", "risk", "warn", 10.0,
+                           "no structure found to anchor the stop", {"atr": round(atr_val, 4)})
+    on_level = next((lvl for lvl in [l.price for l in swings] + round_levels(entry)
+                     if abs(plan.stop_loss - lvl) <= spec.threshold("at_level_atr") * atr_val),
+                    None)
+    evidence = {"nearest_structure": round(nearest, 4), "stop": plan.stop_loss,
+                "margin_atr": round(margin, 2), "on_level": on_level}
+    if inside:
+        return CheckResult("stop_structural", "risk", "fail", 10.0,
+                           f"stop {plan.stop_loss:.2f} sits INSIDE the protective "
+                           f"structure ({nearest:.2f})", evidence)
+    if margin < spec.threshold("beyond_atr"):
+        return CheckResult("stop_structural", "risk", "warn", 10.0,
+                           f"stop only {margin:.1f} ATR beyond structure — "
+                           f"checklist wants ~1 ATR of air", evidence)
+    if on_level is not None:
+        return CheckResult("stop_structural", "risk", "warn", 10.0,
+                           f"stop parked exactly at {on_level:.2f} — sweep bait",
+                           evidence)
+    return CheckResult("stop_structural", "risk", "pass", 10.0,
+                       f"stop {margin:.1f} ATR beyond structure", evidence)
+
+
+register(check_id="stop_structural", section="risk", weight=10.0,
+         func=check_stop_structural,
+         thresholds={
+             "beyond_atr": ThresholdSpec("beyond_atr", 0.5, 0.1, 2.0, 0.1,
+                 "lower to accept tighter stops behind structure",
+                 presets={"strict": 0.8, "balanced": 0.5, "relaxed": 0.25}),
+             "at_level_atr": ThresholdSpec("at_level_atr", 0.15, 0.05, 0.5, 0.05,
+                 "lower to only flag stops sitting dead on a level",
+                 presets={"strict": 0.25, "balanced": 0.15, "relaxed": 0.05}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_risk.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/risk_def.py tests/test_gate_risk.py
+git commit -m "feat: stop_structural check"
+```
+
+### Task G70: Check `rr_realistic` (weight 10, §4 "R:R ≥ 1.5–2 to a realistic target")
+
+**Files:** Modify `risk_def.py`, `registry.py`; test `tests/test_gate_risk.py`
+
+**Interfaces:** `check_rr_realistic(df_daily, plan, macro_snap) -> CheckResult` — R:R computed to the *structure-capped* target: min(plan TP1, nearest opposing G47/G48 level). Capped R:R ≥ `GATE_MIN_RR` (float field, default 1.5) → pass; 1.2–1.5 → warn; < 1.2 → **fail**. Evidence shows both the plan's nominal R:R and the structure-capped one (the honest number).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_risk.py`)
+
+```python
+from swingbot.core.gate.risk_def import check_rr_realistic
+
+
+def _resistance_touches(level=110.0, base=100.0, n=120):
+    closes = []
+    for _ in range(3):
+        closes += list(np.linspace(base, level, 15)) + list(np.linspace(level, base, 15))[1:]
+    closes += list(np.linspace(base, base * 1.04, n - len(closes)))
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+def test_wall_capped_rr_fails_despite_nominal_2to1():
+    # nominal RR = (115-104)/5.5 = 2.0, but the ~110 wall caps it at ~1.15
+    plan = make_plan(direction="bullish", trigger_price=104.0, entry_price=104.0,
+                     stop_loss=98.5, tp1=115.0)
+    result = check_rr_realistic(_resistance_touches(), plan, None)
+    assert result.status == "fail"
+    assert result.evidence["nominal_rr"] >= 1.9
+    assert result.evidence["capped_rr"] < 1.2
+
+
+def test_clear_sky_passes():
+    # entry above the wall: nothing caps TP1
+    plan = make_plan(direction="bullish", trigger_price=111.0, entry_price=111.0,
+                     stop_loss=107.0, tp1=119.0)
+    result = check_rr_realistic(_resistance_touches(), plan, None)
+    assert result.status == "pass" and result.evidence["capped_rr"] >= 1.5
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_rr_realistic'`)
+- [ ] **Step 3: Write the implementation** (append to `risk_def.py`)
+
+```python
+def check_rr_realistic(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """R:R to the STRUCTURE-CAPPED target — min(TP1, nearest opposing
+    wall) — the honest number, shown next to the nominal one."""
+    spec = CHECKS["rr_realistic"]
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    risk = abs(entry - plan.stop_loss)
+    if risk <= 0:
+        return CheckResult("rr_realistic", "risk", "fail", 10.0,
+                           "zero stop distance", {})
+    bullish = plan.direction == "bullish"
+    swings = swing_levels(df_daily)
+    if bullish:
+        opposing = [l.price for l in swings if l.kind == "resistance" and l.price > entry]
+        capped_target = min([plan.tp1] + opposing)
+        capped_rr = (capped_target - entry) / risk
+    else:
+        opposing = [l.price for l in swings if l.kind == "support" and l.price < entry]
+        capped_target = max([plan.tp1] + opposing)
+        capped_rr = (entry - capped_target) / risk
+    nominal_rr = abs(plan.tp1 - entry) / risk
+    evidence = {"nominal_rr": round(nominal_rr, 2), "capped_rr": round(capped_rr, 2),
+                "capped_target": round(capped_target, 2)}
+    if capped_rr >= spec.threshold("min_rr"):
+        return CheckResult("rr_realistic", "risk", "pass", 10.0,
+                           f"structure-capped R:R {capped_rr:.1f}", evidence)
+    if capped_rr >= spec.threshold("warn_rr"):
+        return CheckResult("rr_realistic", "risk", "warn", 10.0,
+                           f"capped R:R only {capped_rr:.1f} "
+                           f"(nominal {nominal_rr:.1f})", evidence)
+    return CheckResult("rr_realistic", "risk", "fail", 10.0,
+                       f"capped R:R {capped_rr:.1f} — the wall eats the trade "
+                       f"(nominal {nominal_rr:.1f} is not the honest number)",
+                       evidence)
+
+
+register(check_id="rr_realistic", section="risk", weight=10.0,
+         func=check_rr_realistic,
+         thresholds={
+             "min_rr": ThresholdSpec("min_rr", 1.5, 1.0, 3.0, 0.1,
+                 "lower to accept slimmer capped targets (this is GATE_MIN_RR)",
+                 presets={"strict": 2.0, "balanced": 1.5, "relaxed": 1.2}),
+             "warn_rr": ThresholdSpec("warn_rr", 1.2, 0.8, 2.0, 0.1,
+                 "lower to fail less often",
+                 presets={"strict": 1.4, "balanced": 1.2, "relaxed": 1.0}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_risk.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/risk_def.py tests/test_gate_risk.py
+git commit -m "feat: rr_realistic (structure-capped) check"
+```
+
+## Section 5 — Timing & trigger
+
+### Task G72: Check `trigger_objective` (weight 6, **HB**, §5 "entry trigger is objective, not a feel")
+
+**Files:**
+- Create: `swingbot/core/gate/timing.py`; modify `registry.py`
+- Test: `tests/test_gate_timing.py`
+
+**Interfaces:** `check_trigger_objective(df_daily, plan, macro_snap) -> CheckResult` — asserts the plan carries a machine-readable trigger: `entry_type` in the TradePlanV2 vocabulary (limit/stop/close-confirm...) with a concrete price. Missing/None entry price or unknown entry_type → **fail/HB** (a plan the bot can't state objectively is a feel). This is a plan-integrity invariant — it should never fire in production, and firing = engine bug surfaced loudly.
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_timing.py
+from swingbot.core.gate.registry import CHECKS
+from swingbot.core.gate.timing import check_trigger_objective
+from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+
+def test_well_formed_plan_passes():
+    assert check_trigger_objective(uptrend_daily(), make_plan(), None).status == "pass"
+
+
+def test_priceless_plan_fails_hard():
+    broken = make_plan(trigger_price=None)
+    result = check_trigger_objective(uptrend_daily(), broken, None)
+    assert result.status == "fail"
+    assert CHECKS["trigger_objective"].hard_block is True
+
+
+def test_unknown_entry_type_fails():
+    weird = make_plan(entry_type="vibes")
+    assert check_trigger_objective(uptrend_daily(), weird, None).status == "fail"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_gate_timing.py -v`
+- [ ] **Step 3: Write the implementation**
+
+```python
+# swingbot/core/gate/timing.py
+"""Section-5 timing & trigger checks."""
+from __future__ import annotations
+
+from swingbot.core.gate.levels import _safe_atr
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
+from swingbot.core.gate.types import CheckResult
+
+# TradePlanV2's machine-readable entry vocabulary (plan_engine.py) —
+# extend here if the engine grows new entry types.
+ENTRY_TYPES = ("stop_entry", "market")
+
+
+def check_trigger_objective(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Plan-integrity invariant (HB). Firing in production = engine bug
+    surfaced loudly, not a market condition."""
+    problems = []
+    if plan.entry_type not in ENTRY_TYPES:
+        problems.append(f"unknown entry_type {plan.entry_type!r}")
+    if plan.trigger_price is None or not isinstance(plan.trigger_price, (int, float)) \
+            or plan.trigger_price <= 0:
+        problems.append("no concrete trigger price")
+    if problems:
+        return CheckResult("trigger_objective", "timing", "fail", 6.0,
+                           "plan has no objective trigger: " + "; ".join(problems),
+                           {"entry_type": str(plan.entry_type),
+                            "trigger_price": plan.trigger_price})
+    return CheckResult("trigger_objective", "timing", "pass", 6.0,
+                       f"objective trigger: {plan.entry_type} @ {plan.trigger_price:.2f}",
+                       {"entry_type": plan.entry_type})
+
+
+register(check_id="trigger_objective", section="timing", weight=6.0,
+         func=check_trigger_objective, hard_block=True, backtestable=False)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_timing.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/timing.py tests/test_gate_timing.py
+git commit -m "feat: trigger_objective invariant check"
+```
+
+### Task G73: Check `not_chasing` (weight 8, §5 "price hasn't already run far past")
+
+**Files:** Modify `timing.py`, `registry.py`; test `tests/test_gate_timing.py`
+
+**Interfaces:** `check_not_chasing(df_daily, plan, macro_snap) -> CheckResult` — distance from signal level to current price: pass ≤ 0.5 ATR, warn 0.5–1.0, **fail** > `GATE_CHASE_ATR_MAX` (float field, default 1.0) ATR past the trigger (late entry wrecks the R:R that was validated).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_timing.py`)
+
+```python
+import numpy as np
+
+from swingbot.core.gate.timing import check_not_chasing
+from tests.conftest import make_ohlcv
+
+
+def _df_at(price):
+    return make_ohlcv(np.concatenate([np.full(59, price * 0.97), [price]]),
+                      spread_pct=2.0)
+
+
+def test_fresh_entry_passes():
+    # price at 100.2, trigger 100, ATR ~2 -> 0.1 ATR past: fresh
+    plan = make_plan(direction="bullish", trigger_price=100.0)
+    assert check_not_chasing(_df_at(100.2), plan, None).status == "pass"
+
+
+def test_late_entry_fails():
+    # price at 103.5 with ATR ~2 -> ~1.75 ATR past the trigger
+    plan = make_plan(direction="bullish", trigger_price=100.0)
+    result = check_not_chasing(_df_at(103.5), plan, None)
+    assert result.status == "fail"
+    assert result.evidence["dist_atr"] > 1.0
+
+
+def test_not_yet_triggered_passes():
+    plan = make_plan(direction="bullish", trigger_price=100.0)
+    assert check_not_chasing(_df_at(99.0), plan, None).status == "pass"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_not_chasing'`)
+- [ ] **Step 3: Write the implementation** (append to `timing.py`)
+
+```python
+def check_not_chasing(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Distance current price has already run PAST the trigger, in ATRs.
+    Late entry wrecks the R:R the plan was validated with."""
+    spec = CHECKS["not_chasing"]
+    price = float(df_daily["Close"].iloc[-1])
+    atr_val = _safe_atr(df_daily, price)
+    bullish = plan.direction == "bullish"
+    past = (price - plan.trigger_price) if bullish else (plan.trigger_price - price)
+    dist_atr = round(past / atr_val, 2)
+    evidence = {"dist_atr": dist_atr, "price": price, "trigger": plan.trigger_price}
+    if dist_atr <= spec.threshold("pass_atr"):
+        return CheckResult("not_chasing", "timing", "pass", 8.0,
+                           "entry is fresh", evidence)
+    if dist_atr <= spec.threshold("chase_atr_max"):
+        return CheckResult("not_chasing", "timing", "warn", 8.0,
+                           f"price already {dist_atr} ATR past the trigger", evidence)
+    return CheckResult("not_chasing", "timing", "fail", 8.0,
+                       f"chasing: {dist_atr} ATR past the trigger", evidence)
+
+
+register(check_id="not_chasing", section="timing", weight=8.0,
+         func=check_not_chasing, trigger_recheck=True,
+         thresholds={
+             "pass_atr": ThresholdSpec("pass_atr", 0.5, 0.1, 1.5, 0.1,
+                 "raise to call later entries still fresh",
+                 presets={"strict": 0.3, "balanced": 0.5, "relaxed": 0.8}),
+             "chase_atr_max": ThresholdSpec("chase_atr_max", 1.0, 0.5, 3.0, 0.1,
+                 "raise to allow later entries (this is GATE_CHASE_ATR_MAX)",
+                 presets={"strict": 0.8, "balanced": 1.0, "relaxed": 1.5}),
+         })
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_timing.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/timing.py tests/test_gate_timing.py
+git commit -m "feat: not_chasing check"
+```
+
+### Task G74: Check `calendar_checked` (weight 4, §5 "I've checked the economic calendar")
+
+**Files:** Modify `timing.py`, `registry.py`; test `tests/test_gate_timing.py`
+
+**Interfaces:** `check_calendar(df_daily, plan, macro_snap) -> CheckResult` — pass when the macro snapshot is fresh (< TTL) and its events section is populated (the bot literally checked the calendar this session); warn when stale; unknown when `MACRO_ENABLED` off. Complements rf_news_whipsaw: this checks that we *looked*; G62 checks what we *saw*.
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_timing.py`)
+
+```python
+import datetime as dt
+
+import swingbot.config as config
+from swingbot.core.gate.timing import check_calendar
+
+
+def _snap(age_min, with_events=True):
+    built = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=age_min)
+    events = {"next_high_impact": {"kind": "cpi"}, "within_24h": [], "today": []}
+    return {"built_at": built.isoformat(), "stale": False,
+            "events": events if with_events else {}}
+
+
+def test_fresh_snapshot_with_events_passes(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
+    assert check_calendar(None, make_plan(), _snap(5)).status == "pass"
+
+
+def test_stale_snapshot_warns(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
+    assert check_calendar(None, make_plan(), _snap(90)).status == "warn"
+
+
+def test_macro_disabled_unknown(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", False, raising=False)
+    assert check_calendar(None, make_plan(), None).status == "unknown"
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'check_calendar'`)
+- [ ] **Step 3: Write the implementation** (append to `timing.py`)
+
+```python
+import datetime as dt
+
+import swingbot.config as config
+
+
+def check_calendar(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Did the bot literally check the calendar this session? Complements
+    rf_news_whipsaw: this checks that we LOOKED; G62 checks what we SAW."""
+    if not getattr(config, "MACRO_ENABLED", False) or macro_snap is None:
+        return CheckResult("calendar_checked", "timing", "unknown", 4.0,
+                           "macro layer off — calendar not machine-checked", {})
+    try:
+        built = dt.datetime.fromisoformat(macro_snap["built_at"])
+        age_min = (dt.datetime.now(dt.timezone.utc) - built).total_seconds() / 60.0
+    except (KeyError, TypeError, ValueError):
+        return CheckResult("calendar_checked", "timing", "unknown", 4.0,
+                           "snapshot has no readable timestamp", {})
+    ttl = float(getattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30))
+    populated = bool(macro_snap.get("events"))
+    evidence = {"age_min": round(age_min, 1), "events_populated": populated}
+    if age_min <= ttl and populated:
+        return CheckResult("calendar_checked", "timing", "pass", 4.0,
+                           "calendar checked this session", evidence)
+    return CheckResult("calendar_checked", "timing", "warn", 4.0,
+                       "macro snapshot stale or event section empty", evidence)
+
+
+register(check_id="calendar_checked", section="timing", weight=4.0,
+         func=check_calendar, backtestable=False)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_timing.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/timing.py tests/test_gate_timing.py
+git commit -m "feat: calendar_checked freshness check"
+```
+
+## Assembly
+
+### Task G75: `run_checklist()` orchestrator
+
+> **Audit note (2026-07-29):** the registry holds **21** checks — 13 checklist checks
+> (G46, G49, G50, G52, G53, G54, G55, G56, G68, G70, G72, G73, G74) plus 8 red flags
+> (G57–G62, G65, G67). G51, G63, G64, G66, G69, G71 were cut. The orchestrator must derive its
+> check list from `registry.CHECKS` rather than any hardcoded count, and the score denominator is
+> the sum of *registered* weights — never a constant copied from an older draft of this plan.
+
+**Files:**
+- Modify: `swingbot/core/gate/__init__.py`
+- Test: `tests/test_gate_run.py`
+
+**Interfaces:**
+- Produces: `run_checklist(ticker, strategy, plan, df_daily, *, macro_snap=None, open_plans=None, account=None, headlines=None, spy_df=None, now=None) -> GateResult` — resolves `enabled_checks(strategy)`, calls each check inside try/except (an exception in any check → that check `unknown` + log, **never** a scan crash), assembles score (G6), tier (cuts from config, G79), hard_blocks, `macro_stale`. Deterministic given inputs. `__init__.py` re-exports `run_checklist`, `GateResult`, `CheckResult`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_run.py
+import dataclasses
+import datetime as dt
+
+import pytest
+
+from swingbot.core.gate import run_checklist
+from swingbot.core.gate import registry
+from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+EVENING = dt.datetime(2026, 7, 14, 23, 0, tzinfo=dt.timezone.utc)
+QUIET_SNAP = {"built_at": "2026-07-14T22:00:00+00:00", "stale": False,
+              "events": {"next_high_impact": None, "within_24h": [], "today": []}}
+
+
+def _clean_run(strategy="Break & Retest"):
+    df = uptrend_daily()
+    plan = make_plan(strategy=strategy, created_at="2026-07-13",
+                     trigger_price=float(df["Close"].iloc[-1]),
+                     entry_price=None,
+                     stop_loss=float(df["Close"].iloc[-1]) * 0.95,
+                     tp1=float(df["Close"].iloc[-1]) * 1.10)
+    return run_checklist(plan.ticker, strategy, plan, df,
+                         macro_snap=QUIET_SNAP, now=EVENING)
+
+
+def test_full_run_shape():
+    result = _clean_run()
+    assert {c.section for c in result.checks} == {"context", "setup", "redflag",
+                                                  "risk", "timing"}
+    assert 0 <= result.score <= 100
+    assert result.hard_blocks == ()
+    assert result.tier in ("A+", "A", "B", "C")
+    assert result.as_of == str(uptrend_daily().index[-1].date())
+    assert result.macro_stale is False
+
+
+def test_raising_check_becomes_unknown(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("detector bug")
+    spec = registry.CHECKS["atr_normal"]
+    monkeypatch.setitem(registry.CHECKS, "atr_normal",
+                        dataclasses.replace(spec, func=boom))
+    result = _clean_run()
+    by_id = {c.check_id: c for c in result.checks}
+    assert by_id["atr_normal"].status == "unknown"        # never a scan crash
+    assert by_id["htf_alignment"].status != "unknown"     # others unaffected
+
+
+def test_strategy_filtering():
+    breakout_ids = {c.check_id for c in _clean_run("Break & Retest").checks}
+    vwap_ids = {c.check_id for c in _clean_run("VWAP").checks}
+    assert "rf_fake_breakout" in breakout_ids
+    assert "rf_fake_breakout" not in vwap_ids
+
+
+def test_deterministic():
+    a, b = _clean_run(), _clean_run()
+    assert a.score == b.score and a.tier == b.tier
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: cannot import name 'run_checklist'`)
+- [ ] **Step 3: Write the implementation** (replaces `swingbot/core/gate/__init__.py`)
+
+```python
+# swingbot/core/gate/__init__.py
+"""Gatekeeper public API: run_checklist(), GateResult, CheckResult."""
+from __future__ import annotations
+
+import logging
+
+import swingbot.config as config
+
+log = logging.getLogger("swing-bot.gate")
+
+# Importing the check modules runs their register() side effects.
+from swingbot.core.gate import (atr_regime, context_htf, levels,      # noqa: F401,E402
+                                redflags, risk_def, setup_quality, timing)
+from swingbot.core.gate.registry import CHECKS, enabled_checks        # noqa: E402
+from swingbot.core.gate.score import assign_tier, score               # noqa: E402
+from swingbot.core.gate.types import CheckResult, GateResult          # noqa: E402
+
+
+def run_checklist(ticker, strategy, plan, df_daily, *, macro_snap=None,
+                  open_plans=None, account=None, headlines=None,
+                  spy_df=None, now=None, subset: str | None = None) -> GateResult:
+    """Deterministic given inputs. An exception inside any check makes THAT
+    check unknown (+log) — never a scan crash. subset="trigger" runs only
+    the cheap trigger_recheck checks (G128)."""
+    ctx = {"open_plans": open_plans, "account": account,
+           "headlines": headlines, "spy_df": spy_df, "now": now}
+    checks: list[CheckResult] = []
+    for spec in enabled_checks(strategy):
+        if subset == "trigger" and not spec.trigger_recheck:
+            continue
+        try:
+            result = spec.func(df_daily, plan, macro_snap, **ctx)
+        except Exception:  # noqa: BLE001
+            log.warning("check %s raised — recorded as unknown",
+                        spec.check_id, exc_info=True)
+            result = CheckResult(spec.check_id, spec.section, "unknown",
+                                 spec.weight, "check errored — treated as unknown", {})
+        checks.append(result)
+    hard_blocks = tuple(c.check_id for c in checks
+                        if c.status == "fail" and CHECKS[c.check_id].hard_block)
+    total = score(checks)
+    tier = assign_tier(
+        total, hard_blocks,
+        aplus_cut=float(getattr(config, "GATE_TIER_APLUS_CUT", 90.0)),
+        a_cut=float(getattr(config, "GATE_TIER_A_CUT", 75.0)),
+        b_cut=float(getattr(config, "GATE_TIER_B_CUT", 55.0)))
+    return GateResult(
+        ticker=ticker, strategy=strategy,
+        as_of=str(df_daily.index[-1].date()),
+        checks=tuple(checks), score=total, tier=tier,
+        hard_blocks=hard_blocks,
+        macro_stale=bool(macro_snap.get("stale")) if macro_snap else True)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_run.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/__init__.py tests/test_gate_run.py
+git commit -m "feat: run_checklist orchestrator"
+```
+
+### Task G76: Hard-block policy wiring + `GATE_MODE` semantics
+
+**Files:** Modify `swingbot/core/gate/registry.py`, `score.py`; test `tests/test_gate_run.py`
+
+**Interfaces:** `decide(result: GateResult, mode: str, min_tier: str) -> str` — returns `"pass"` | `"downgrade"` | `"block"`: **shadow and inform modes always return `"pass"`** (the would-be enforce decision is recorded on the result as `advisory_decision` — inform mode renders it as information, e.g. "⛔ enforce would block this: 2 red flags"); only enforce mode may return `"downgrade"`/`"block"` (below `GATE_MIN_TIER` or on a hard block; downgrade = WEAK-style de-emphasis, cockpit rule 6, one tier above the block line).
+- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_run.py`)
+
+```python
+import itertools
+import random
+
+from swingbot.core.gate.score import TIER_ORDER, decide, with_advisory
+from swingbot.core.gate.types import GateResult
+
+
+def _result(tier, hard_blocks=()):
+    return GateResult(ticker="T", strategy="VWAP", as_of="2026-07-14",
+                      checks=(), score=70.0, tier=tier,
+                      hard_blocks=tuple(hard_blocks), macro_stale=False)
+
+
+def test_shadow_and_inform_NEVER_block_property():
+    rng = random.Random(42)
+    for _ in range(200):
+        tier = rng.choice(TIER_ORDER)
+        hbs = ("signal_confirmed",) if rng.random() < 0.5 else ()
+        for mode in ("shadow", "inform"):
+            assert decide(_result(tier, hbs), mode, "A+") == "pass"
+
+
+def test_enforce_matrix():
+    for tier, min_tier in itertools.product(TIER_ORDER, TIER_ORDER):
+        decision = decide(_result(tier), "enforce", min_tier)
+        t, m = TIER_ORDER.index(tier), TIER_ORDER.index(min_tier)
+        if t > m:
+            assert decision == "block", (tier, min_tier)
+        elif t == m and min_tier != "A+":
+            assert decision == "downgrade", (tier, min_tier)
+        else:
+            assert decision == "pass", (tier, min_tier)
+    # a hard block outranks any tier
+    assert decide(_result("A+", ("signal_confirmed",)), "enforce", "C") == "block"
+
+
+def test_advisory_always_populated():
+    decision, result = with_advisory(_result("C"), "inform", "A")
+    assert decision == "pass"                       # inform ships everything
+    assert result.advisory_decision == "block"      # ...but says what enforce would do
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'decide'`)
+- [ ] **Step 3: Write the implementation** (append to `swingbot/core/gate/score.py`)
+
+```python
+import dataclasses
+
+
+def _enforce_verdict(result, min_tier: str) -> str:
+    """What enforce WOULD do: hard block or below-min-tier -> block; the
+    min tier itself -> WEAK-style downgrade (cockpit rule 6) unless the
+    bar is already A+."""
+    if result.hard_blocks:
+        return "block"
+    tier_rank = TIER_ORDER.index(result.tier)
+    min_rank = TIER_ORDER.index(min_tier)
+    if tier_rank > min_rank:
+        return "block"
+    if tier_rank == min_rank and min_tier != "A+":
+        return "downgrade"
+    return "pass"
+
+
+def decide(result, mode: str, min_tier: str) -> str:
+    """Shadow and inform ALWAYS return "pass" — only opt-in enforce may
+    block or downgrade. The would-be verdict is exposed via with_advisory."""
+    return _enforce_verdict(result, min_tier) if mode == "enforce" else "pass"
+
+
+def with_advisory(result, mode: str, min_tier: str):
+    """(decision, result) where result.advisory_decision carries the
+    enforce verdict regardless of mode — inform renders it as information
+    ("enforce would block this"), G123."""
+    advisory = _enforce_verdict(result, min_tier)
+    decision = advisory if mode == "enforce" else "pass"
+    return decision, dataclasses.replace(result, advisory_decision=advisory)
+```
+
+- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_run.py -v`
+- [ ] **Step 5: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/score.py tests/test_gate_run.py
+git commit -m "feat: gate decision policy (shadow/inform/enforce)"
+```
+
+### Task G78: Weight & neutrality calibration over fixtures
+
+> **Audit note (2026-07-29):** calibrate over the surviving checks only (see the G75 note). If a
+> weight table in the body below lists a cut check, drop that row rather than reinstating the check.
+
+> **Audit note (2026-07-28):** Before locking in weights here, resolve the G53 confluence-counter double-counting issue flagged in part 4 (`2026-07-14-gatekeeper-v7_4.md`) — 4 of its 6 factors re-score evidence already counted by G46/G49/G54/G55.
+
+**Files:**
+- Test: `tests/test_gate_calibration_fixtures.py`
+
+- [ ] **Step 1: Write the test battery**
+
+```python
+# tests/test_gate_calibration_fixtures.py
+"""ORDERING invariants over the golden scenarios — not absolute scores.
+If these fail, adjust registry WEIGHTS (the free variable; detectors are
+not) and record the final weights in the table comment below.
+
+Weight table (initial):
+  context: htf_alignment 12, level_map 8, atr_normal 6, vol_expansion 4
+  setup:   signal_confirmed 10(HB), confluence 10, volume 8, momentum 6,
+           divergence_against 6
+  redflag: fake_breakout 10, dead_cat 10, news_whipsaw 10(HB), stop_sweep 8,
+           divergence_trap 8, extreme_fade 8, rumor_spike 6, buy_rumor 6,
+           beta_move 6, thin_session 6, opex_pin 4
+  risk:    stop_structural 10, rr_realistic 10, size_formula 8, portfolio_room 6
+  timing:  not_chasing 8, trigger_objective 6(HB), calendar_checked 4
+"""
+import datetime as dt
+
+from swingbot.core.gate import run_checklist
+from swingbot.core.gate.score import TIER_ORDER
+from tests.fixtures.gate import (breakout_and_fail, dead_cat, downtrend_daily,
+                                 range_daily, uptrend_daily)
+from tests.fixtures.gate.plans import make_plan
+
+EVENING = dt.datetime(2026, 7, 14, 23, 0, tzinfo=dt.timezone.utc)
+QUIET_SNAP = {"built_at": "2026-07-14T22:00:00+00:00", "stale": False,
+              "events": {"next_high_impact": None, "within_24h": [], "today": []}}
+
+
+def _run(df, direction="bullish", strategy="Break & Retest", trigger=None):
+    last = float(df["Close"].iloc[-1])
+    trigger = trigger if trigger is not None else last
+    stop = trigger * (0.95 if direction == "bullish" else 1.05)
+    tp1 = trigger * (1.10 if direction == "bullish" else 0.90)
+    plan = make_plan(strategy=strategy, direction=direction, created_at="2026-07-13",
+                     trigger_price=trigger, entry_price=None,
+                     stop_loss=stop, tp1=tp1, tp2=None)
+    return run_checklist("TEST", strategy, plan, df,
+                         macro_snap=QUIET_SNAP, now=EVENING)
+
+
+def test_ordering_invariants():
+    clean = _run(uptrend_daily())                                  # with-trend
+    range_bounce = _run(range_daily(90, 110, n=300), trigger=110.0)
+    counter = _run(downtrend_daily())                              # long into downtrend
+    trap = _run(breakout_and_fail(level=100.0), trigger=100.0)
+    dead = _run(dead_cat())
+    assert clean.score > range_bounce.score > counter.score
+    assert counter.score > min(trap.score, dead.score) or \
+        counter.score >= max(trap.score, dead.score) - 5           # traps land at the bottom
+    assert clean.score > trap.score and clean.score > dead.score
+
+
+def test_red_flag_scenarios_capped_at_B():
+    for result in (_run(breakout_and_fail(100.0), trigger=100.0), _run(dead_cat())):
+        assert TIER_ORDER.index(result.tier) >= TIER_ORDER.index("B"), result.tier
+
+
+def test_clean_setup_reaches_A():
+    clean = _run(uptrend_daily())
+    assert TIER_ORDER.index(clean.tier) <= TIER_ORDER.index("A"), \
+        f"clean uptrend landed {clean.tier} ({clean.score}) — rebalance weights"
+```
+
+- [ ] **Step 2: Run — if orderings fail, adjust registry weights only, rerun until green**: `python -m pytest tests/test_gate_calibration_fixtures.py -v`
 - [ ] **Step 3: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
-git add tests/test_macro_degradation.py
-git commit -m "test: macro layer total-degradation proof"
+git add tests/test_gate_calibration_fixtures.py swingbot/core/gate/
+git commit -m "test: checklist ordering calibration over golden scenarios"
 ```
 
-### Task G44: Phase G1 checkpoint
+### Task G79: Tier-cut, threshold & strictness-preset config fields
 
-- [ ] **Step 1:** Full suite + `make check` green; `scripts/macro_smoke.py` evidence committed (G40).
-- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G1 checkpoint`
+**Files:** Modify `swingbot/config.py`, `swingbot/core/gate/registry.py`; test `tests/test_gate_config.py`
+
+**Interfaces:**
+- Fields `GATE_TIER_APLUS_CUT` (float, 90.0), `GATE_TIER_A_CUT` (75.0), `GATE_TIER_B_CUT` (55.0) + per-check `GATE_CHECK_*` checkboxes for every registered check id (generated from the registry — one loop, asserted complete by test), all in the Gatekeeper section.
+- **Per-check threshold Fields**, generated from every `ThresholdSpec` in the registry (G5): key pattern `GATE_TH_{CHECK_ID}_{NAME}` (float/int, with the spec's min/max/step and the relax-direction sentence as help text). This is the "loosen it from the settings page" surface: every strict number in Phase G2 — volume multiples, ATR bands and percentile cuts, confluence minimum, chase distance, RR floor, wick ratios, bounce/gap percentages, blackout hours, RSI/ADX bounds — lives here, none are hardcoded. `spec.threshold(name)` resolves Field value → preset default.
+- `apply_strictness_preset(level: str) -> dict[str, float]` — returns (and `config` setter applies) every threshold's `presets[level]` value; **relaxed** is deliberately generous (roughly: warn where balanced fails, pass where balanced warns) so a relaxed profile always lets plans through; **strict** is the A+-hunting profile. Changing `GATE_STRICTNESS` reseeds only thresholds the operator hasn't individually overridden (override tracking = value ≠ any preset value, noted in help text).
+- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_config.py`)
+
+```python
+def test_tier_cut_fields_ordered():
+    aplus, a, b = (field(k) for k in
+                   ("GATE_TIER_APLUS_CUT", "GATE_TIER_A_CUT", "GATE_TIER_B_CUT"))
+    assert aplus and a and b
+    assert float(aplus.default) > float(a.default) > float(b.default)
+
+
+def test_every_check_has_enable_field():
+    import swingbot.core.gate  # noqa: F401 — triggers registration + field injection
+    from swingbot.core.gate.registry import CHECKS
+    keys = {f.key for f in config.FIELDS}
+    for spec in CHECKS.values():
+        assert spec.config_flag in keys, spec.check_id
+
+
+def test_every_threshold_has_field_with_bounds():
+    import swingbot.core.gate  # noqa: F401
+    from swingbot.core.gate.registry import CHECKS
+    by_key = {f.key: f for f in config.FIELDS}
+    for spec in CHECKS.values():
+        for th in spec.thresholds.values():
+            key = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            f = by_key.get(key)
+            assert f is not None, key
+            assert f.min == th.min and f.max == th.max and f.step == th.step
+            assert float(f.default) == th.presets["balanced"]
+
+
+def test_preset_application_and_override_survival(monkeypatch):
+    import swingbot.core.gate  # noqa: F401
+    from swingbot.core.gate.registry import CHECKS, apply_strictness_preset
+    seed = apply_strictness_preset("relaxed")
+    assert seed, "no thresholds found"
+    spec = CHECKS["rr_realistic"]
+    key = "GATE_TH_RR_REALISTIC_MIN_RR"
+    assert seed[key] == spec.thresholds["min_rr"].presets["relaxed"]
+    # an individually-overridden threshold (value matching NO preset)
+    # survives a preset switch
+    monkeypatch.setattr(config, key, 1.37, raising=False)
+    assert key not in apply_strictness_preset("strict")
+```
+
+- [ ] **Step 2: Run — FAIL**, then **implement**:
+
+**(a) Tier-cut Fields** in `swingbot/config.py` (Gatekeeper section):
+
+```python
+    Field("GATE_TIER_APLUS_CUT", "GATE_TIER_APLUS_CUT", "Gatekeeper",
+          "A+ tier score cut", type="float", default="90.0", min=50, max=100, step=1,
+          help="Checklist score at or above this = tier A+. Fold evidence (G95/G102) "
+               "proposes changes; edits are audited (G170)."),
+    Field("GATE_TIER_A_CUT", "GATE_TIER_A_CUT", "Gatekeeper",
+          "A tier score cut", type="float", default="75.0", min=40, max=100, step=1),
+    Field("GATE_TIER_B_CUT", "GATE_TIER_B_CUT", "Gatekeeper",
+          "B tier score cut", type="float", default="55.0", min=20, max=100, step=1),
+```
+
+**(b) Late-registration hook** in `swingbot/config.py` (after `_apply_env()` is defined):
+
+```python
+def register_fields(new_fields: list["Field"]) -> None:
+    """Late registration for package-generated Fields (per-check enables,
+    per-threshold values). Called by swingbot.core.gate at import time —
+    config can't import the gate package itself (it's the other way
+    around), so the gate pushes its Fields here. Idempotent by key."""
+    known = {f.key for f in FIELDS}
+    added = [f for f in new_fields if f.key not in known]
+    if added:
+        FIELDS.extend(added)
+        _apply_env()
+```
+
+**(c) Field generation + presets** in `swingbot/core/gate/registry.py`:
+
+```python
+def config_fields() -> list:
+    from swingbot.config import Field
+    fields = []
+    for spec in CHECKS.values():
+        fields.append(Field(
+            spec.config_flag, spec.config_flag, "Gatekeeper",
+            f"Check: {spec.check_id}", type="checkbox", default="true",
+            help=f"Disable to remove {spec.check_id} from the checklist "
+                 f"(visible only with GATE_ENABLED)."))
+        for th in spec.thresholds.values():
+            key = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            fields.append(Field(
+                key, key, "Gatekeeper", f"{spec.check_id}: {th.name}",
+                type="float", default=str(th.presets["balanced"]),
+                min=th.min, max=th.max, step=th.step,
+                help=f"{th.relax_direction}. Presets — strict "
+                     f"{th.presets['strict']}, balanced {th.presets['balanced']}, "
+                     f"relaxed {th.presets['relaxed']}."))
+    return fields
+
+
+def apply_strictness_preset(level: str) -> dict[str, float]:
+    """{field_key: preset value} for every threshold the operator has NOT
+    individually overridden (override = current value matches no preset).
+    The caller (settings machinery / G180) writes the returned values."""
+    import swingbot.config as config
+    out = {}
+    for spec in CHECKS.values():
+        for th in spec.thresholds.values():
+            key = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            current = float(getattr(config, key, th.presets["balanced"]))
+            if any(abs(current - v) < 1e-9 for v in th.presets.values()):
+                out[key] = th.presets[level]
+    return out
+```
+
+**(d) Push registration** at the bottom of `swingbot/core/gate/__init__.py` (after the check-module imports):
+
+```python
+from swingbot.core.gate.registry import config_fields  # noqa: E402
+
+config.register_fields(config_fields())
+```
+
+**(e)** `GATE_STRICTNESS` changes are applied by the settings machinery calling `apply_strictness_preset` and persisting the returned values through the same path the settings page uses (wired on `/gate`, G180).
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_config.py tests/test_gate_registry.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/config.py swingbot/core/gate/registry.py swingbot/core/gate/__init__.py tests/test_gate_config.py
+git commit -m "feat: tier cuts + registry-driven thresholds + strictness presets"
+```
+
+### Task G80: Per-strategy applicability matrix finalized
+
+**Files:** Modify `registry.py`; test `tests/test_gate_registry.py`
+
+- [ ] **Step 1: Enumerate the actual strategy names** — the live list is `swingbot/core/backtest.py:392` `ALL_STRATEGIES = ("EMA Crossover", "VWAP", "Fibonacci", "Support/Resistance", "RSI", "MACD", "Elliott Wave", "MA Ribbon", "Break & Retest", "RSI Divergence", "Volume Profile")` (re-read it at execution — do not trust this plan). Fill every CheckSpec's `applies_to` deliberately and document the matrix in the `registry.py` module docstring:
+
+```python
+# swingbot/core/gate/registry.py — extend the module docstring:
+"""...
+Applicability matrix (strategies from backtest.ALL_STRATEGIES):
+  rf_fake_breakout    -> Break & Retest, Support/Resistance, Volume Profile
+  rf_divergence_trap  -> RSI Divergence
+  rf_extreme_fade     -> all (its own logic already relaxes weak-ADX fades,
+                          which is what mean-reversion entries are)
+  everything else     -> all strategies (applies_to=None)
+"""
+```
+
+- [ ] **Step 2: Write the failing test** (append to `tests/test_gate_registry.py` — note: this test must NOT use the `_clean_registry` fixture; put it in a separate class or module scope without autouse, e.g. guard with `registry_module = importlib.import_module("swingbot.core.gate")` first):
+
+```python
+def test_applicability_matrix_uses_real_strategy_names():
+    import swingbot.core.gate  # noqa: F401 — ensure all checks registered
+    from swingbot.core.backtest import ALL_STRATEGIES
+    from swingbot.core.gate import registry as live_registry
+    for spec in live_registry.CHECKS.values():
+        if spec.applies_to is not None:
+            unknown = set(spec.applies_to) - set(ALL_STRATEGIES)
+            assert not unknown, f"{spec.check_id}: unknown strategies {unknown}"
+    assert set(live_registry.CHECKS["rf_fake_breakout"].applies_to) == {
+        "Break & Retest", "Support/Resistance", "Volume Profile"}
+    assert live_registry.CHECKS["rf_divergence_trap"].applies_to == ("RSI Divergence",)
+    assert live_registry.CHECKS["rf_extreme_fade"].applies_to is None
+    # every strategy gets a non-empty checklist
+    for strategy in ALL_STRATEGIES:
+        assert len(live_registry.enabled_checks(strategy)) >= 20, strategy
+```
+
+- [ ] **Step 3: Implement** — adjust any `applies_to` that the test exposes as stale (the values were set in G57/G60; this task is the deliberate sign-off), add the docstring table, PASS, then commit:
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/registry.py tests/test_gate_registry.py
+git commit -m "feat: per-strategy check applicability"
+```
+
+### Task G81: Gate result persistence on plans
+
+**Files:**
+- Create: `swingbot/core/gate/persistence.py`
+- Test: `tests/test_gate_persistence.py`
+
+**Interfaces:** `attach_to_plan(plan_id, result: GateResult)` — stores `result.to_dict()` on the plan record via `plan_store` (new optional `gate` key — additive, old plans unaffected); `blocked_log(result, decision, reason)` → append `data/gate/blocked.jsonl`; `shadow_log(result)` → `data/gate/shadow.jsonl` (one line per evaluated candidate in shadow mode: score, tier, would-be decision, plan outcome joined later by G104).
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gate_persistence.py
+import json
+
+import pytest
+
+import swingbot.core.gate.persistence as persistence
+from swingbot.core.gate.persistence import attach_to_plan, blocked_log, shadow_log
+from swingbot.core.gate.types import CheckResult, GateResult
+from swingbot.core.plan_store import PlanStore
+from tests.fixtures.gate.plans import make_plan
+
+
+def _result(tier="B"):
+    checks = (CheckResult("rf_fake_breakout", "redflag", "fail", 10.0, "trap", {}),)
+    return GateResult(ticker="TEST", strategy="Break & Retest", as_of="2026-07-14",
+                      checks=checks, score=48.0, tier=tier,
+                      hard_blocks=(), macro_stale=False, advisory_decision="block")
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setattr(persistence, "BLOCKED_PATH", str(tmp_path / "blocked.jsonl"))
+    monkeypatch.setattr(persistence, "SHADOW_PATH", str(tmp_path / "shadow.jsonl"))
+    store = PlanStore(path=str(tmp_path / "plans.json"))
+    store.add(make_plan())
+    return store
+
+
+def test_attach_round_trip(env):
+    assert attach_to_plan(env, "p_test_0001", _result()) is True
+    stored = env.get_extra("p_test_0001", "gate")
+    assert stored["tier"] == "B" and stored["checks"][0]["check_id"] == "rf_fake_breakout"
+    assert env.get("p_test_0001") is not None          # legacy load path unbroken
+    assert attach_to_plan(env, "p_missing", _result()) is False
+
+
+def test_logs_append_valid_jsonl(env):
+    blocked_log(_result("C"), "block", "rf_fake_breakout")
+    shadow_log(_result(), plan_id="p_test_0001")
+    for path in (persistence.BLOCKED_PATH, persistence.SHADOW_PATH):
+        with open(path, encoding="utf-8") as fh:
+            rows = [json.loads(line) for line in fh]
+        assert len(rows) == 1 and rows[0]["ticker"] == "TEST"
+    with open(persistence.SHADOW_PATH, encoding="utf-8") as fh:
+        row = json.loads(fh.readline())
+    assert row["advisory_decision"] == "block"
+    assert row["fired_flags"] == ["rf_fake_breakout"]
+```
+
+- [ ] **Step 2: Run — FAIL** (`ImportError`), then **implement**:
+
+```python
+# swingbot/core/gate/persistence.py
+"""Attach gate results to plan records + blocked/shadow JSONL logs.
+The shadow log is the evidence stream regardless of mode (G103)."""
+from __future__ import annotations
+
+import json
+import os
+import time
+
+import swingbot.config as config
+from swingbot.core.gate.types import GateResult
+
+BLOCKED_PATH = os.path.join(config.DATA_DIR, "gate", "blocked.jsonl")
+SHADOW_PATH = os.path.join(config.DATA_DIR, "gate", "shadow.jsonl")
+
+
+def _append_jsonl(path: str, row: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
+def attach_to_plan(store, plan_id: str, result: GateResult) -> bool:
+    """store = PlanStore (plan-engine-v2). Uses the additive set_extra hook
+    added below — plan_from_dict must ignore unknown record keys (verify;
+    if it doesn't, filter to dataclass fields there — one-line fix)."""
+    return store.set_extra(plan_id, "gate", result.to_dict())
+
+
+def blocked_log(result: GateResult, decision: str, reason: str) -> None:
+    _append_jsonl(BLOCKED_PATH, {
+        "ts": time.time(), "ticker": result.ticker, "strategy": result.strategy,
+        "as_of": result.as_of, "tier": result.tier, "score": result.score,
+        "decision": decision, "reason": reason,
+        "hard_blocks": list(result.hard_blocks)})
+
+
+def shadow_log(result: GateResult, plan_id: str | None = None) -> None:
+    _append_jsonl(SHADOW_PATH, {
+        "ts": time.time(), "plan_id": plan_id, "ticker": result.ticker,
+        "strategy": result.strategy, "tier": result.tier, "score": result.score,
+        "advisory_decision": result.advisory_decision,
+        "fired_flags": [c.check_id for c in result.checks
+                        if c.section == "redflag" and c.status == "fail"]})
+```
+
+**And the additive PlanStore hook** (`swingbot/core/plan_store.py`):
+
+```python
+    # PlanStore gains two methods — additive; old plans are unaffected:
+    def set_extra(self, plan_id: str, key: str, value) -> bool:
+        """Store an auxiliary key (e.g. 'gate', 'macro_at_entry',
+        'gutcheck') on the raw record dict."""
+        with _LOCK:
+            record = self._plans.get(plan_id)
+            if record is None:
+                return False
+            record[key] = value
+            self._save()
+            return True
+
+    def get_extra(self, plan_id: str, key: str, default=None):
+        record = self._plans.get(plan_id)
+        return default if record is None else record.get(key, default)
+```
+
+- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_persistence.py -v`
+- [ ] **Step 4: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add swingbot/core/gate/persistence.py swingbot/core/plan_store.py tests/test_gate_persistence.py
+git commit -m "feat: gate persistence (plan attach + blocked/shadow logs)"
+```
+
+### Task G87: Performance guard
+
+**Files:**
+- Test: `tests/test_gate_perf.py`
+
+- [ ] **Step 1: Write the test**
+
+```python
+# tests/test_gate_perf.py
+import datetime as dt
+import statistics
+import time
+
+import pytest
+
+from swingbot.core.gate import run_checklist
+from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate.plans import make_plan
+
+EVENING = dt.datetime(2026, 7, 14, 23, 0, tzinfo=dt.timezone.utc)
+QUIET_SNAP = {"built_at": "2026-07-14T22:00:00+00:00", "stale": False,
+              "events": {"next_high_impact": None, "within_24h": [], "today": []}}
+
+
+@pytest.mark.perf   # match the repo's existing perf marker name — verify at execution
+def test_run_checklist_median_under_50ms():
+    df = uptrend_daily(n=500)
+    plan = make_plan(created_at="2026-07-13",
+                     trigger_price=float(df["Close"].iloc[-1]))
+    run_checklist("TEST", plan.strategy, plan, df,
+                  macro_snap=QUIET_SNAP, now=EVENING)          # warm-up
+    times = []
+    for _ in range(20):
+        t0 = time.perf_counter()
+        run_checklist("TEST", plan.strategy, plan, df,
+                      macro_snap=QUIET_SNAP, now=EVENING)
+        times.append(time.perf_counter() - t0)
+    median = statistics.median(times)
+    # 50 ms pure-compute budget/ticker -> a 60-ticker scan adds < 3 s.
+    assert median < 0.050, f"median {median * 1000:.1f} ms — cache the swing_levels/" \
+                           f"htf_trend calls per frame (they run in 4+ checks)"
+```
+
+- [ ] **Step 2: Run — if over budget, memoize per-frame** (the expected fix: several checks recompute `swing_levels`/`htf_trend`/`atr` on the same frame — add a tiny `functools.lru_cache` keyed on `id(df)`-safe wrapper or compute-once context passed via `ctx` from `run_checklist`), then PASS.
+- [ ] **Step 3: Full suite + commit**
+
+```bash
+python -m pytest tests/ -q && make check
+git add tests/test_gate_perf.py swingbot/core/gate/
+git commit -m "test: gate evaluation perf budget"
+```
+
+### Task G88: Phase G2 checkpoint
+
+- [ ] **Step 1:** Full suite + `make check` green. Registry invariant test passes with **all** checks registered (context 3, setup 5, red flags 11, risk 4, timing 3 = 26 checks). (count reduced from 27 to 26: G51 `check_vol_expansion_direction` was cut in the 2026-07-28 win-rate audit)
+- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G2 checkpoint (26 checks live)`
 
 ---

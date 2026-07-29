@@ -24,8 +24,10 @@ entry that feeds both the env parser and the admin UI's Settings page).
 - **NEVER read a plan file whole** — `cockpit-v3.md` is 662 KB, `edge-engine-v4.md`
   358 KB. Pull one task instead: `/task-brief E53` or
   `grep -n "^### Task E53" -A 120 <plan>`. `gatekeeper-v7` exists only as
-  `_0-index.md` + `_1..._11` parts (the 822 KB monolith was deleted; recover it
-  from git history if needed). `grep -c "^### Task"` / `grep -n "^# Phase"` to orient.
+  `_0-index.md` + `_1..._5` parts (89 tasks; the 822 KB monolith and the 12-part
+  split it became were both deleted — recover from git history if needed, and read
+  the index's cut appendix before re-adding anything). `grep -c "^### Task"` /
+  `grep -n "^# Phase"` to orient.
 - **Grep respects the root `.ignore` file (hides `.claude/worktrees/`,
   `market_data/`, `data/`, `logs/`); Glob does not.** Always scope Glob by hand
   (`Glob("swingbot/**/*.py")`, never `**/*.py`) or it returns hundreds of

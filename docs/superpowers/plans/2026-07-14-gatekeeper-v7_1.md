@@ -1,11 +1,11 @@
-# Gatekeeper v7 - Part 1/11: Honest math, contracts & scaffolding (Tasks G1-G8)
+# Gatekeeper v7 - Part 1/5: Foundations — honest math, contracts & scaffolding (Tasks G1–G8)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G1 -> G8).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G1 -> G8) — skipping the gaps left by cut tasks.
 >
-> **Split note:** this is part 1 of 11, extracted verbatim from the master plan `2026-07-14-gatekeeper-v6.md` (which stays as the reference copy; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
-> **Requires complete first:** none within this plan - only the master Prerequisites below.
+> **Provenance:** this is part 1 of 5 after the 2026-07-29 win-rate audit merged the previous 12 parts down (see "Scope note" below). Parts execute in numeric order.
+> **Requires complete first:** nothing — this is the first part.
 >
-> Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts - those modules exist on the branch by the time this part runs.
+> Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts — those modules exist on the branch by the time this part runs.
 
 ## Progress
 
@@ -15,28 +15,53 @@
 > - **Completed:** —
 > - **Next:** Task G1
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ/earnings calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in the Discord alert embed. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, pytest ≥8. Data: Finnhub (key already a config Field from llm-advisor L10) for the earnings/event calendar, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
 This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
-- **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
+- **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (frozen below, before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
 - **WR is reported next to expectancy and N, always.** Any surface this plan builds that shows a win rate without its sample size and expectancy is a bug (same rule as cockpit-v3).
 - **The 2024–2025 validation window stays burned.** All tuning here runs on TRAIN folds (2018–2023, anchored, per edge-engine E39 rules). The single pre-registered validation shot belongs to edge-engine E92; this plan feeds it, never spends it.
-- **The path to 95% runs through the operator, not through suppression.** In inform mode the bot's raw WR doesn't change — what changes is that every alert carries its tier and its red flags, so the operator can choose to act only on A+/A setups. The tier ladder measures what following the checklist *would have* earned (`!tierwr`, shadow reports); the human applies it. Enforcement is available later if the operator wants the bot to apply it mechanically.
+- **The path to 95% runs through the operator, not through suppression.** In inform mode the bot's raw WR doesn't change — what changes is that every alert carries its tier and its red flags, so the operator can choose to act only on A+/A setups. The tier ladder measures what following the checklist *would have* earned (fold + shadow reports); the human applies it. Enforcement is available later if the operator wants the bot to apply it mechanically.
+
+## Scope note — win-rate audit (2026-07-28 / 2026-07-29)
+
+This plan was pruned from **219 tasks across 12 parts (~1 MB)** to **85 tasks
+across 5 parts**, then re-merged. The single admission test was: *does this task
+change which setups get filtered, or prove that the filtering works?* Everything
+that only reported, rendered, sized, or administered was cut — the full cut list
+with per-task reasons lives in `2026-07-14-gatekeeper-v7_0-index.md`.
+
+Consequences an executing agent must know:
+
+- **No FRED/inflation/curve/credit layer.** The macro snapshot is VIX + breadth +
+  sector RS + the event/earnings calendar. `composite.py` composites those three
+  market-internal inputs only.
+- **No news or sentiment layer.** Event *timing* (earnings, FOMC/CPI prints,
+  thin sessions) is kept because it is calendar-driven and testable; headline
+  *interpretation* is gone, and with it the rumor red flags.
+- **No Discord command suite and no admin frontend.** Config Fields still render
+  on the existing Settings page for free; every analysis surface is a report
+  artifact under `docs/superpowers/results/` instead of a page.
+- **No sizing tasks.** Sizing moves expectancy and risk of ruin, not win rate.
+- Task IDs are **unchanged** (G1…G219, with gaps) so older notes and
+  cross-references still resolve. Gaps are cut tasks, not missing work.
+- Prose inside surviving tasks may still mention a cut task, command or page.
+  Treat those mentions as no-ops — never re-add a cut task to satisfy one.
 
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch (G134).
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -44,11 +69,11 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 - **Optimization target for every tuned threshold:** maximize WR **subject to** pooled fold expectancy_r ≥ baseline − 0.02R and N ≥ 30 per fold. WR alone never picks a parameter.
 - **Pre-registered fold gate (identical to edge-engine):** anchored expanding folds, train 2018→fold-start, test years 2021/2022/2023; a check/threshold is promoted only if it improves the target in ≥ 2 of 3 folds and no fold degrades expectancy by > 0.05R. Failures are documented in `docs/superpowers/results/` and dropped — no second grid on the same hypothesis.
 - **Inform-first, always.** The checklist never prevents a plan from being created or alerted unless the operator has explicitly opted into `enforce` mode. Negative signals are rendered on the alert; the human decides. Any task that drops/holds/blocks anything applies **only** in enforce mode (or behind its own dedicated opt-in flag) — every such task carries an inform-mode regression test proving the alert still ships annotated.
-- **Every strict constraint is tunable from the settings page.** Each check's thresholds are config Fields (registry-driven, G79) with min/max/step and a help text naming the relax direction; `GATE_STRICTNESS` presets (strict/balanced/relaxed) reseed them in one click. Defaults ship at **balanced**, chosen so the G97 baseline census shows a healthy tier mix — never a wall of C.
-- **Every new flag is a config Field, default off** (master switches; per-check toggles default on but do nothing user-visible until `MACRO_ENABLED`/`GATE_ENABLED`). Nothing is suppressed silently in any mode: annotated/held/blocked candidates are always visible somewhere (`!blocked`, admin log, retrospective line).
+- **Every strict constraint is tunable from the settings page.** Each check's thresholds are config Fields (registry-driven, G79) with min/max/step and a help text naming the relax direction (they render on the existing admin Settings page for free); `GATE_STRICTNESS` presets (strict/balanced/relaxed) reseed them in one edit. Defaults ship at **balanced**, chosen so the G97 baseline census shows a healthy tier mix — never a wall of C.
+- **Every new flag is a config Field, default off** (master switches; per-check toggles default on but do nothing user-visible until `MACRO_ENABLED`/`GATE_ENABLED`). Nothing is suppressed silently in any mode: annotated/held/blocked candidates are always visible somewhere (the blocked log written by G81, the alert embed itself).
 - **No network in the test suite.** All providers are tested via monkeypatched `requests`/stub clients and fixture payloads; real calls live only in `scripts/*_smoke*.py` and backfill scripts.
 - **Provider failure never degrades scanning.** Every fetch has a timeout (default 5s), on-disk TTL cache fallback, and a "stale/unknown" degradation path; a scan with zero working data providers must still complete (G43 is the proof).
-- **API keys are config Fields (sensitive), never logged, never committed.** Free-tier quotas are budgeted and metered (G200).
+- **API keys are config Fields (sensitive), never logged, never committed.** Free-tier quotas are respected by the TTL cache; there is no metering task.
 - **Validation-window hygiene:** nothing in this plan reads 2024–2025 bars for tuning; `assert_train_only` (cockpit C31 pattern) guards every tuning entry point.
 - **One definition per stat** (cockpit rule): WR/expectancy_r come from `analytics.metrics`; the gate never re-derives them.
 - **Timezone:** all calendars/sessions use US/Eastern for market events, Europe/Berlin for user-facing day buckets (matches `performance.get_detailed_stats`).
@@ -60,22 +85,15 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 swingbot/core/macro/
   __init__.py        public API re-exports
   httpcache.py       fetch_json() with TTL disk cache under data/macro/cache/
-  health.py          provider health ledger + quota meter
-  fred.py            FRED series client + release-dates client
-  series.py          named macro series registry (CPI, PPI, PCE, yields, ...)
   vix.py             VIX level + term structure from cached bars
-  credit.py          HYG/LQD credit-stress ratio
   sectors.py         11 SPDR sector ETFs: data, RS ranks, rotation table
   breadth.py         % of universe above 50/200 DMA
-  composite.py       risk-on/off composite + fear-greed-style gauge
+  composite.py       risk-on/off composite (VIX + breadth + sector RS)
   calendar_events.py econ event calendar (historical static + future fetch)
-  opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
   earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,13 +104,12 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
-  risk_def.py        structural stop, size-formula check, realistic RR
+  redflags.py       the 8 surviving red-flag detectors (one function each)
+  risk_def.py       structural stop placement + realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
   persistence.py     attach results to plans, journal tags, blocked log
   render.py          embed field / red-flag table / macro-line string builders
-  gutcheck.py        gut-check ritual state (buttons + why-wrong journal)
   backtest_ctx.py    historical macro snapshots (no lookahead)
   frontier.py        WR-by-decile, frontier, tier-cut proposals
   folds.py           fold runner (delegates to edge E39 when present)
@@ -102,20 +119,14 @@ swingbot/core/charts/
 swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
-swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
-  gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
-swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
-                     checklist config, red-flag analytics, frontier pages
 scripts/
   backfill_macro.py, macro_smoke.py, gate_fold_run.py, gate_frontier.py,
   gate_shadow_report.py, build_event_history.py
-tests/ test_macro_*.py, test_gate_*.py, tests/admin/test_macro_api.py, ...
+tests/ test_macro_*.py, test_gate_*.py, ...
 data/  macro/ (cache, snapshot, history), gate/ (blocked log, shadow log, tiers)
 ```
 
 ---
-
 # Phase G0 — Honest math, contracts & scaffolding (G1–G8)
 
 ### Task G1: `wr_math.py` — the win-rate arithmetic everyone must share
@@ -230,85 +241,6 @@ Expected: 4 passed
 python -m pytest tests/ -q && make check
 git add swingbot/core/gate/ tests/test_gate_wr_math.py
 git commit -m "feat: gate win-rate arithmetic (breakeven, implied E, filter precision, Wilson)"
-```
-
-### Task G2: Pre-registered targets & promotion gates document
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md`
-
-- [ ] **Step 1: Write the frozen targets doc** — this exact content:
-
-```markdown
-# Gatekeeper v7 — Pre-registered targets & promotion gates
-
-**Frozen 2026-07-14, before any data contact.** After the first baseline
-census (Task G97) runs, evidence may be appended (dated) but targets may
-never be moved.
-
-## The non-promise
-
-> **"95% is a label a tier can earn from N ≥ 59 proven samples
-> (Wilson LB > 90%) — never a setting."**
-
-Win rate is trivially inflated by shrinking targets and widening stops;
-that destroys expectancy and the account with it. Every WR gain must come
-from *not taking bad trades*. The exit geometry validated in
-plan-engine-v2 is untouchable.
-
-## Tier ladder
-
-| Tier | Meaning | Pre-registered target (pooled TRAIN folds) |
-|---|---|---|
-| A+ | Every box checked, zero red flags | WR ≥ 90% with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline. **"95-class" label** may be applied only when the continuity-corrected Wilson lower bound (z=1.96) exceeds 0.90 — at ~95% observed WR that takes N ≥ 59. |
-| A | Score ≥ A-cut, no hard blocks | WR ≥ baseline + 5 pts, expectancy_r ≥ baseline − 0.02R |
-| B | Score ≥ B-cut | ≈ baseline (the unfiltered strategy) |
-| C | Below B-cut, or any hard block | Skip-in-live candidate. Measured and always visible — never silently hidden. |
-
-## Fold gate (identical to edge-engine-v4)
-
-Anchored expanding folds — train 2018→fold-start, test years 2021 / 2022 / 2023.
-A check or threshold is promoted only if:
-
-- it improves the optimization target in ≥ 2 of 3 folds, and
-- no fold degrades expectancy_r by > 0.05R, and
-- N ≥ 30 per fold behind every quoted WR.
-
-Optimization target: maximize WR **subject to** pooled fold expectancy_r
-≥ baseline − 0.02R. WR alone never picks a parameter. Failures are
-documented in `docs/superpowers/results/` and dropped — no second grid on
-the same hypothesis.
-
-## All-strategies aggregate target
-
-**+3 to +8 WR points vs. the v2 baseline at ≤ 40% signal loss**, pooled
-TRAIN folds, all strategies together.
-
-## Shadow gate (prerequisite for ever leaving inform mode)
-
-Enforce mode may be considered only after all of:
-
-- ≥ 14 calendar days of live shadow/inform logging,
-- ≥ 15 would-have-blocked decisions on record,
-- the would-have-blocked cohort's realized WR is *lower* than the passed
-  cohort's (the gate is directionally right live),
-- zero live crashes or scan timeouts attributable to the gate.
-
-Operationalized as a dated sign-off checklist in Task G105. Enforce is
-optional forever; plan completion does not depend on it.
-
-## Traceability
-
-Every checklist line maps to its implementing task in
-"Appendix — Checklist-to-task traceability" at the end of
-`docs/superpowers/plans/2026-07-14-gatekeeper-v7_11.md`.
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md
-git commit -m "docs: gatekeeper v7 pre-registered targets (frozen before data contact)"
 ```
 
 ### Task G3: Config section "Gatekeeper" — base flags
