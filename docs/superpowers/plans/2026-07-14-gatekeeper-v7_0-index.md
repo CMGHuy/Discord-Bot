@@ -14,7 +14,7 @@
 > ungenerated. See Part 2's Progress block for the two commands.
 >
 > Work is happening **directly on `main`** (operator's choice 2026-07-29 — no feature branch), one
-> commit per task, subject-tagged `type(Gxx):`. Everything from G9 on is unchecked. Verify with
+> commit per task, subject-tagged `type(Gxx):`. Everything from G45 on is unchecked. Verify with
 > `git log --oneline --grep "^feat(G\|^test(G\|^chore(G"` before trusting this line.
 >
 > **Correction (2026-07-29):** G12 (FRED client) was cut by the audit and **restored** during
@@ -42,9 +42,10 @@ and never re-add a cut task to satisfy one.
 
 **Structural consequences** (also stated in each part's "Scope note"):
 
-- No FRED / inflation / curve / credit layer. The macro snapshot is VIX + breadth + sector RS +
-  the event/earnings/session calendars, and `composite.py` composites those three market-internal
-  inputs only.
+- No inflation / curve / credit series. The macro snapshot is VIX + breadth + sector RS + the
+  event/earnings/session calendars, and `composite.py` composites those three market-internal
+  inputs only. The FRED *client* (G12) survives — it fetches VIX and the economic release dates —
+  but the G13-G20 series registry is cut.
 - No news or sentiment layer. Event *timing* is kept (calendar-driven, testable); headline
   *interpretation* is gone, and with it the two rumor red flags.
 - No Discord command suite (G147-G165) and no admin frontend (G167-G196). Config Fields still
