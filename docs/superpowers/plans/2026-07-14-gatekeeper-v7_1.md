@@ -40,7 +40,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 
 ## Scope note — win-rate audit (2026-07-28 / 2026-07-29)
 
-This plan was pruned from **219 tasks across 12 parts (~1 MB)** to **85 tasks
+This plan was pruned from **219 tasks across 12 parts (~1 MB)** to **90 tasks
 across 5 parts**, then re-merged. The single admission test was: *does this task
 change which setups get filtered, or prove that the filtering works?* Everything
 that only reported, rendered, sized, or administered was cut — the full cut list
@@ -48,9 +48,11 @@ with per-task reasons lives in `2026-07-14-gatekeeper-v7_0-index.md`.
 
 Consequences an executing agent must know:
 
-- **No FRED/inflation/curve/credit layer.** The macro snapshot is VIX + breadth +
-  sector RS + the event/earnings calendar. `composite.py` composites those three
-  market-internal inputs only.
+- **No inflation/curve/credit series.** The macro snapshot is VIX + breadth +
+  sector RS + the event/earnings calendar, and `composite.py` composites those
+  three market-internal inputs only. The FRED *client* (G12) survives — it is how
+  VIX and the economic release dates are fetched — but the G13–G20 series
+  registry (CPI/PPI/PCE, labor, yields, curve, breakevens) is cut.
 - **No news or sentiment layer.** Event *timing* (earnings, FOMC/CPI prints,
   thin sessions) is kept because it is calendar-driven and testable; headline
   *interpretation* is gone, and with it the rumor red flags.
