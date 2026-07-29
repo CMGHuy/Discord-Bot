@@ -1,20 +1,56 @@
 """ATR-percentile regime checks. Percentile uses MIDRANK so a
-constant-volatility series sits at ~50, not 100."""
+constant-volatility series sits mid-band, not at 100.
+
+Two deliberate departures from the obvious implementation, both needed to
+make that true:
+
+1. The ranking series is a FINITE-MEMORY TR mean (rolling 14), not the
+   Wilder ewm that `indicators.atr` provides. Wilder's ewm approaches its
+   steady state asymptotically: with alpha=1/14 the residual needs ~130
+   bars to fall to 1e-6, so on a steady tape the whole 252-bar window is
+   one monotonically rising transient and the newest bar is the maximum by
+   construction — a flat 1%-a-day series ranks at the 100th percentile and
+   the check reports "ATR spiked, stop math unreliable" on the calmest
+   possible tape. A rolling mean forgets after 14 bars, so steady
+   volatility gives genuinely repeated values for midrank to tie.
+   `indicators.atr` stays Wilder's everywhere else — stop sizing wants the
+   smooth estimator; only *ranking* needs the finite window.
+2. Ties are compared within a relative tolerance, mopping up the float
+   noise that would otherwise order values that are equal in every
+   meaningful sense."""
 from __future__ import annotations
+
+import pandas as pd
 
 from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
 from swingbot.core.gate.types import CheckResult
-from swingbot.core.indicators import atr
+
+_TIE_TOL = 1e-6        # relative; float noise only, orders of magnitude
+                       # below any real volatility difference
+_RANK_PERIOD = 14      # TR-mean window; matches indicators.atr's period
+
+
+def _tr_mean(df: pd.DataFrame, period: int = _RANK_PERIOD) -> pd.Series:
+    """True range averaged over a FIXED window — see module docstring for
+    why ranking cannot use Wilder's ewm."""
+    prev_close = df["Close"].shift(1)
+    tr = pd.concat([
+        df["High"] - df["Low"],
+        (df["High"] - prev_close).abs(),
+        (df["Low"] - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
 
 
 def _atr_percentile(df_daily) -> tuple[float | None, float | None]:
-    atr_pct = (atr(df_daily) / df_daily["Close"]).dropna()
+    atr_pct = (_tr_mean(df_daily) / df_daily["Close"]).dropna()
     if len(atr_pct) < 60:
         return None, None
     window = atr_pct.iloc[-252:]
     last = float(atr_pct.iloc[-1])
-    midrank = 100.0 * (float((window < last).mean())
-                       + float((window <= last).mean())) / 2.0
+    tol = abs(last) * _TIE_TOL
+    midrank = 100.0 * (float((window < last - tol).mean())
+                       + float((window <= last + tol).mean())) / 2.0
     return midrank, last * 100.0
 
 
