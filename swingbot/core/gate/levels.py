@@ -57,3 +57,38 @@ def _close_bucket(bucket: list[tuple[float, str]], kind: str) -> SwingLevel:
     prices = [p for p, _ in bucket]
     return SwingLevel(round(sum(prices) / len(prices), 4), kind,
                       len(bucket), max(d for _, d in bucket))
+
+
+_STEPS = (0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0)
+
+
+def _step_for(price: float) -> float:
+    target = price / 50.0
+    for step in _STEPS:
+        if step >= target:
+            return step
+    return _STEPS[-1]
+
+
+def round_levels(price: float) -> list[float]:
+    """The minor psychological grid near price (5 multiples of the
+    magnitude-appropriate step) plus the majors around it."""
+    step = _step_for(price)
+    center = round(price / step) * step
+    grid = {round(center + k * step, 2) for k in range(-2, 3)}
+    grid |= set(major_levels(price))
+    return sorted(p for p in grid if p > 0)
+
+
+def major_levels(price: float) -> list[float]:
+    """Only these count as 'walls' — a 10x-step grid (e.g. 150/200 for a
+    $187 stock). The minor grid is context, not obstruction."""
+    major = _step_for(price) * 10
+    center = round(price / major) * major
+    return sorted({round(center + k * major, 2) for k in (-1, 0, 1)} - {0.0})
+
+
+def nearest_round(price: float, *, atr: float) -> tuple[float, float]:
+    level = min(round_levels(price), key=lambda l: abs(l - price))
+    dist = abs(level - price) / atr if atr > 0 else float("inf")
+    return level, round(dist, 3)

@@ -70,3 +70,24 @@ def test_ascending_staircase_keeps_each_level_within_half_atr_span():
             f"level at {level.price} spans {span:.4f}, exceeds 0.5*ATR="
             f"{threshold:.4f} -- clustering is chaining/smearing"
         )
+
+
+from swingbot.core.gate.levels import major_levels, nearest_round, round_levels
+
+
+def test_round_grid_goldens():
+    assert 8.0 in round_levels(8.0)                  # step 0.25 at single digits
+    assert 87.5 in round_levels(87.0)                # step 2.5 in the tens
+    assert 430.0 in round_levels(432.0)              # step 10 in the hundreds
+    assert 4300.0 in round_levels(4300.0)            # step 100 in the thousands
+    assert all(p > 0 for p in round_levels(0.8))
+
+
+def test_majors():
+    assert 200.0 in major_levels(187.0) and 150.0 in major_levels(187.0)
+    assert 4000.0 in major_levels(4300.0)
+
+
+def test_nearest_round_with_atr_distance():
+    level, dist = nearest_round(187.0, atr=2.0)
+    assert level == 185.0 and dist == 1.0            # |185-187| / 2 (grid steps by 5)
