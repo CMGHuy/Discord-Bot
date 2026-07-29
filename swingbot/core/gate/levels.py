@@ -44,7 +44,7 @@ def swing_levels(df_daily: pd.DataFrame, lookback: int = 250,
         bucket: list[tuple[float, str]] = []
         for price, _, date in sorted((r for r in raw if r[1] == kind),
                                      key=lambda r: r[0]):
-            if bucket and price - sum(p for p, _ in bucket) / len(bucket) > 0.5 * atr_val:
+            if bucket and price - bucket[0][0] > 0.5 * atr_val:
                 levels.append(_close_bucket(bucket, kind))
                 bucket = []
             bucket.append((price, date))
