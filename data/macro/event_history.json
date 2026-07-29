@@ -1,0 +1,513 @@
+[
+  {
+    "date": "2018-01-31",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-03-21",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-05-02",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-06-13",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-08-01",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-09-26",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-11-08",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2018-12-19",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-01-30",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-03-20",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-05-01",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-06-19",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-07-31",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-09-18",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-10-30",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2019-12-11",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-01-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-03-03",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-03-15",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-04-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-06-10",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-07-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-09-16",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-11-05",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2020-12-16",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-01-27",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-03-17",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-04-28",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-06-16",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-07-28",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-09-22",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-11-03",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2021-12-15",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-01-26",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-03-16",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-05-04",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-06-15",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-07-27",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-09-21",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-11-02",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2022-12-14",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-02-01",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-03-22",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-05-03",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-06-14",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-07-26",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-09-20",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-11-01",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2023-12-13",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-01-31",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-03-20",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-05-01",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-06-12",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-07-31",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-09-18",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-11-07",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2024-12-18",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-01-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-03-19",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-05-07",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-06-18",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-07-30",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-09-17",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-10-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2025-12-10",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-01-28",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-03-18",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-04-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-06-17",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-07-29",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-09-16",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-10-28",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  },
+  {
+    "date": "2026-12-09",
+    "time_et": "14:00",
+    "kind": "fomc",
+    "label": "FOMC decision",
+    "importance": 3
+  }
+]
