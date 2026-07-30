@@ -83,3 +83,42 @@ def enabled_checks(strategy: str) -> list[CheckSpec]:
             continue
         out.append(spec)
     return out
+
+
+def config_fields() -> list:
+    """Every per-check enable + per-threshold Field, generated from the
+    live registry so no strict number in the checklist is hardcoded —
+    it's all reachable from the Settings page. Pushed to config via
+    config.register_fields() at swingbot.core.gate import time."""
+    from swingbot.config import Field
+    fields = []
+    for spec in CHECKS.values():
+        fields.append(Field(
+            spec.config_flag, spec.config_flag, "Gatekeeper",
+            f"Check: {spec.check_id}", type="checkbox", default="true",
+            help=f"Disable to remove {spec.check_id} from the checklist "
+                 f"(visible only with GATE_ENABLED)."))
+        for th in spec.thresholds.values():
+            key = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            fields.append(Field(
+                key, key, "Gatekeeper", f"{spec.check_id}: {th.name}",
+                type="float", default=str(th.presets["balanced"]),
+                min=th.min, max=th.max, step=th.step,
+                help=f"{th.relax_direction}. Presets — strict "
+                     f"{th.presets['strict']}, balanced {th.presets['balanced']}, "
+                     f"relaxed {th.presets['relaxed']}."))
+    return fields
+
+
+def apply_strictness_preset(level: str) -> dict[str, float]:
+    """{field_key: preset value} for every threshold the operator has NOT
+    individually overridden (override = current value matches no preset).
+    The caller (settings machinery / G180) writes the returned values."""
+    out = {}
+    for spec in CHECKS.values():
+        for th in spec.thresholds.values():
+            key = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            current = float(getattr(config, key, th.presets["balanced"]))
+            if any(abs(current - v) < 1e-9 for v in th.presets.values()):
+                out[key] = th.presets[level]
+    return out

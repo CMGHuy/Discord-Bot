@@ -616,6 +616,14 @@ FIELDS: list[Field] = [
           help="Tickers whose 20d median dollar volume sits below this get a "
                "thin-liquidity warning on the checklist. Lower to silence it "
                "for small caps."),
+    Field("GATE_TIER_APLUS_CUT", "GATE_TIER_APLUS_CUT", "Gatekeeper",
+          "A+ tier score cut", type="float", default="90.0", min=50, max=100, step=1,
+          help="Checklist score at or above this = tier A+. Fold evidence (G95/G102) "
+               "proposes changes; edits are audited (G170)."),
+    Field("GATE_TIER_A_CUT", "GATE_TIER_A_CUT", "Gatekeeper",
+          "A tier score cut", type="float", default="75.0", min=40, max=100, step=1),
+    Field("GATE_TIER_B_CUT", "GATE_TIER_B_CUT", "Gatekeeper",
+          "B tier score cut", type="float", default="55.0", min=20, max=100, step=1),
 ]
 
 _CASTERS = {
@@ -678,6 +686,18 @@ def _apply_env() -> dict:
         if old_value != new_value:
             changed[f.attr] = (old_value, new_value)
     return changed
+
+
+def register_fields(new_fields: list["Field"]) -> None:
+    """Late registration for package-generated Fields (per-check enables,
+    per-threshold values). Called by swingbot.core.gate at import time —
+    config can't import the gate package itself (it's the other way
+    around), so the gate pushes its Fields here. Idempotent by key."""
+    known = {f.key for f in FIELDS}
+    added = [f for f in new_fields if f.key not in known]
+    if added:
+        FIELDS.extend(added)
+        _apply_env()
 
 
 def _load_dotenv_file() -> tuple:

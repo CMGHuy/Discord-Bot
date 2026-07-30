@@ -43,3 +43,45 @@ def test_finnhub_key_exists_somewhere():
     # From llm-advisor L10 when merged; added here otherwise — either way it must exist.
     f = field("FINNHUB_API_KEY")
     assert f is not None and f.sensitive is True
+
+
+def test_tier_cut_fields_ordered():
+    aplus, a, b = (field(k) for k in
+                   ("GATE_TIER_APLUS_CUT", "GATE_TIER_A_CUT", "GATE_TIER_B_CUT"))
+    assert aplus and a and b
+    assert float(aplus.default) > float(a.default) > float(b.default)
+
+
+def test_every_check_has_enable_field():
+    import swingbot.core.gate  # noqa: F401 — triggers registration + field injection
+    from swingbot.core.gate.registry import CHECKS
+    keys = {f.key for f in config.FIELDS}
+    for spec in CHECKS.values():
+        assert spec.config_flag in keys, spec.check_id
+
+
+def test_every_threshold_has_field_with_bounds():
+    import swingbot.core.gate  # noqa: F401
+    from swingbot.core.gate.registry import CHECKS
+    by_key = {f.key: f for f in config.FIELDS}
+    for spec in CHECKS.values():
+        for th in spec.thresholds.values():
+            key = f"GATE_TH_{spec.check_id.upper()}_{th.name.upper()}"
+            f = by_key.get(key)
+            assert f is not None, key
+            assert f.min == th.min and f.max == th.max and f.step == th.step
+            assert float(f.default) == th.presets["balanced"]
+
+
+def test_preset_application_and_override_survival(monkeypatch):
+    import swingbot.core.gate  # noqa: F401
+    from swingbot.core.gate.registry import CHECKS, apply_strictness_preset
+    seed = apply_strictness_preset("relaxed")
+    assert seed, "no thresholds found"
+    spec = CHECKS["rr_realistic"]
+    key = "GATE_TH_RR_REALISTIC_MIN_RR"
+    assert seed[key] == spec.thresholds["min_rr"].presets["relaxed"]
+    # an individually-overridden threshold (value matching NO preset)
+    # survives a preset switch
+    monkeypatch.setattr(config, key, 1.37, raising=False)
+    assert key not in apply_strictness_preset("strict")
