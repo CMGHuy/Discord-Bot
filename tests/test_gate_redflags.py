@@ -2,7 +2,7 @@ import datetime as dt
 
 import numpy as np
 
-from swingbot.core.gate.redflags import rf_dead_cat, rf_fake_breakout, rf_stop_sweep
+from swingbot.core.gate.redflags import rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_stop_sweep
 from tests.conftest import make_ohlcv
 from tests.fixtures.gate import breakout_and_fail, sweep_wick, uptrend_daily
 from tests.fixtures.gate.plans import make_plan
@@ -108,4 +108,37 @@ def test_structure_shift_passes():
 
 def test_bearish_plan_na():
     result = rf_dead_cat(_dead_cat_v_bounce(), make_plan(direction="bearish"), None)
+    assert result.status == "pass" and "n/a" in result.detail
+
+
+def _bullish_divergence(confirmed: bool):
+    """Steep decline (RSI cold) -> bounce to 108 -> gentle grind to a LOWER
+    low (RSI warmer = bullish divergence). Confirmation = close above 108."""
+    closes = list(np.full(40, 130.0))
+    closes += list(np.linspace(130, 100, 20))[1:]
+    closes += list(np.linspace(100, 108, 6))[1:]
+    closes += list(np.linspace(108, 98, 16))[1:]
+    if confirmed:
+        closes += list(np.linspace(98, 110, 8))[1:]     # closes above 108
+    else:
+        closes += list(np.linspace(98, 103, 5))[1:]     # bounce, still below 108
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+DIV_PLAN = make_plan(strategy="RSI Divergence", direction="bullish")
+
+
+def test_unconfirmed_divergence_fires():
+    result = rf_divergence_trap(_bullish_divergence(confirmed=False), DIV_PLAN, None)
+    assert result.status == "fail" and "confirmation" in result.detail
+
+
+def test_confirmed_divergence_passes():
+    assert rf_divergence_trap(_bullish_divergence(confirmed=True),
+                              DIV_PLAN, None).status == "pass"
+
+
+def test_non_divergence_strategy_na():
+    result = rf_divergence_trap(_bullish_divergence(False),
+                                make_plan(strategy="VWAP"), None)
     assert result.status == "pass" and "n/a" in result.detail

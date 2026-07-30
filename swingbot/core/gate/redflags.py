@@ -159,3 +159,42 @@ register(check_id="rf_dead_cat", section="redflag", weight=10.0, func=rf_dead_ca
                  "raise to flag only larger bounces",
                  presets={"strict": 4.0, "balanced": 5.0, "relaxed": 8.0}),
          })
+
+
+def rf_divergence_trap(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """For divergence-ENTRY strategies: divergence exists but price has
+    not confirmed it (no close beyond the intervening swing)."""
+    if plan.strategy != "RSI Divergence":
+        return _rf("rf_divergence_trap", "pass", "n/a (not a divergence entry)", {}, 8.0)
+    from swingbot.core.gate.setup_quality import _pivot_high_positions
+    closes_full = df_daily["Close"]
+    if len(closes_full) < 60:
+        return _rf("rf_divergence_trap", "unknown", "insufficient history", {}, 8.0)
+    window = closes_full.iloc[-60:]
+    rsi_window = rsi(closes_full).iloc[-60:]
+    bullish = plan.direction == "bullish"
+    price_probe = -window if bullish else window       # pivot LOWS via negation
+    rsi_probe = -rsi_window if bullish else rsi_window
+    pivots = _pivot_high_positions(price_probe, span=3)[-2:]
+    if len(pivots) < 2:
+        return _rf("rf_divergence_trap", "pass", "no divergence structure found", {}, 8.0)
+    a, b = pivots
+    # bullish: price lower low (probe higher) with RSI higher low (probe lower)
+    divergent = (price_probe.iloc[b] > price_probe.iloc[a]
+                 and rsi_probe.iloc[b] < rsi_probe.iloc[a])
+    if not divergent:
+        return _rf("rf_divergence_trap", "pass", "no active divergence", {}, 8.0)
+    swing = float(window.iloc[a:b + 1].max()) if bullish else float(window.iloc[a:b + 1].min())
+    last = float(window.iloc[-1])
+    confirmed = last > swing if bullish else last < swing
+    evidence = {"swing_level": round(swing, 2), "last_close": round(last, 2)}
+    if confirmed:
+        return _rf("rf_divergence_trap", "pass",
+                   f"divergence confirmed by close beyond {swing:.2f}", evidence, 8.0)
+    return _rf("rf_divergence_trap", "fail",
+               "divergence without price confirmation — wait for the "
+               "confirmation close", evidence, 8.0)
+
+
+register(check_id="rf_divergence_trap", section="redflag", weight=8.0,
+         func=rf_divergence_trap, applies_to=("RSI Divergence",))
