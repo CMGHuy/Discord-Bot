@@ -4,7 +4,7 @@ import numpy as np
 
 from swingbot.core.gate.redflags import rf_dead_cat, rf_fake_breakout, rf_stop_sweep
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate import breakout_and_fail, dead_cat, sweep_wick, uptrend_daily
+from tests.fixtures.gate import breakout_and_fail, sweep_wick, uptrend_daily
 from tests.fixtures.gate.plans import make_plan
 
 BREAKOUT_PLAN = make_plan(strategy="Break & Retest", direction="bullish",
@@ -82,15 +82,14 @@ def _dead_cat_v_bounce():
 
 
 def _reversal_with_structure():
-    """Downtrend, then bounce -> higher low -> higher high: a real shift.
-    Pure downtrend + multi-bar bounce (5+ bars causes trend to shift to 'range',
-    but the structure detection should still catch the higher low/high pattern)."""
-    down = 150.0 * (1 - 0.01) ** np.arange(250)
+    """Downtrend, then bounce -> higher low -> higher high: a real shift."""
+    lead = np.full(200, 150.0)
+    down = 150.0 * (1 - 0.01) ** np.arange(40)
     low = down[-1]
-    leg1 = np.linspace(low, low * 1.06, 5)[1:]             # Bounce up
+    leg1 = np.linspace(low, low * 1.06, 5)[1:]
     dip = np.linspace(low * 1.06, low * 1.03, 4)[1:]      # higher low
     leg2 = np.linspace(low * 1.03, low * 1.09, 6)[1:]     # higher high
-    return make_ohlcv(np.concatenate([down, leg1, dip, leg2]), spread_pct=2.0)
+    return make_ohlcv(np.concatenate([lead, down, leg1, dip, leg2]), spread_pct=2.0)
 
 
 def test_dead_cat_fires_on_v_bounce():
@@ -101,8 +100,10 @@ def test_dead_cat_fires_on_v_bounce():
 
 
 def test_structure_shift_passes():
-    assert rf_dead_cat(_reversal_with_structure(),
-                       make_plan(direction="bullish"), None).status == "pass"
+    result = rf_dead_cat(_reversal_with_structure(),
+                         make_plan(direction="bullish"), None)
+    assert result.status == "pass"
+    assert result.evidence["structure_shift"] is True
 
 
 def test_bearish_plan_na():
