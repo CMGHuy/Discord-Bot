@@ -62,3 +62,20 @@ class PlanStore:
 
     def all(self) -> list[TradePlanV2]:
         return [plan_from_dict(d) for d in self._plans.values()]
+
+    def set_extra(self, plan_id: str, key: str, value) -> bool:
+        """Store an auxiliary key (e.g. 'gate', 'macro_at_entry',
+        'gutcheck') on the raw record dict. Additive -- plan_from_dict
+        filters to known TradePlanV2 fields, so old plans without this
+        key are unaffected and the legacy load path stays intact."""
+        with _LOCK:
+            record = self._plans.get(plan_id)
+            if record is None:
+                return False
+            record[key] = value
+            self._save()
+            return True
+
+    def get_extra(self, plan_id: str, key: str, default=None):
+        record = self._plans.get(plan_id)
+        return default if record is None else record.get(key, default)
