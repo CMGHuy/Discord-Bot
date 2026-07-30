@@ -600,6 +600,17 @@ FIELDS: list[Field] = [
           type="password", sensitive=True,
           help="Free key: https://finnhub.io/register. Powers the earnings calendar. "
                "Empty = earnings proximity degrades to 'unknown'."),
+    Field("GATE_BLACKOUT_HOURS_BEFORE", "GATE_BLACKOUT_HOURS_BEFORE", "Gatekeeper",
+          "Blackout hours before event", type="float", default="18", min=0, max=72, step=1,
+          help="High-impact events (CPI/NFP/FOMC) within this many hours ahead flag the "
+               "checklist. Lower to shrink the annotation window."),
+    Field("GATE_BLACKOUT_HOURS_AFTER", "GATE_BLACKOUT_HOURS_AFTER", "Gatekeeper",
+          "Blackout hours after event", type="float", default="2", min=0, max=24, step=0.5,
+          help="The window stays flagged this long after the print."),
+    Field("GATE_EARNINGS_BLACKOUT_DAYS", "GATE_EARNINGS_BLACKOUT_DAYS", "Gatekeeper",
+          "Earnings blackout days", type="number", default="3", min=0, max=15, step=1,
+          help="Flag plans whose ticker reports earnings within this many days. "
+               "Lower to allow entries closer to earnings."),
 ]
 
 _CASTERS = {

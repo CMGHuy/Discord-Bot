@@ -2,7 +2,11 @@ import datetime as dt
 
 import numpy as np
 
-from swingbot.core.gate.redflags import rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_stop_sweep
+import swingbot.config as config
+import swingbot.core.gate.redflags as redflags
+from swingbot.core.gate.redflags import (
+    rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_news_whipsaw, rf_stop_sweep,
+)
 from tests.conftest import make_ohlcv
 from tests.fixtures.gate import breakout_and_fail, climax_overbought, range_daily, sweep_wick, uptrend_daily
 from tests.fixtures.gate.plans import make_plan
@@ -162,3 +166,46 @@ def test_with_trend_plan_passes():
     from swingbot.core.gate.redflags import rf_extreme_fade
     long_with = make_plan(direction="bullish")
     assert rf_extreme_fade(climax_overbought(), long_with, None).status == "pass"
+
+
+NOW = dt.datetime(2026, 7, 14, 20, 0, tzinfo=dt.timezone.utc)
+
+
+def _snap_with(events_24h):
+    return {"events": {"next_high_impact": events_24h[0] if events_24h else None,
+                       "within_24h": events_24h, "today": []}}
+
+
+def test_cpi_tomorrow_fires_hard(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within",
+                        lambda *a, **k: None)
+    cpi = {"date": "2026-07-15", "time_et": "08:30", "kind": "cpi",
+           "label": "CPI release", "importance": 3}
+    result = rf_news_whipsaw(uptrend_daily(), make_plan(), _snap_with([cpi]), now=NOW)
+    assert result.status == "fail"                    # ~16.5h ahead, inside 18h window
+    from swingbot.core.gate.registry import CHECKS
+    assert CHECKS["rf_news_whipsaw"].hard_block is True
+
+
+def test_importance_2_warns(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: None)
+    ppi = {"date": "2026-07-15", "time_et": "08:30", "kind": "ppi",
+           "label": "PPI release", "importance": 2}
+    assert rf_news_whipsaw(uptrend_daily(), make_plan(),
+                           _snap_with([ppi]), now=NOW).status == "warn"
+
+
+def test_quiet_week_passes(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: False)
+    assert rf_news_whipsaw(uptrend_daily(), make_plan(),
+                           _snap_with([]), now=NOW).status == "pass"
+
+
+def test_earnings_inside_blackout_fires(monkeypatch):
+    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: True)
+    result = rf_news_whipsaw(uptrend_daily(), make_plan(), _snap_with([]), now=NOW)
+    assert result.status == "fail" and "earnings" in result.detail
+
+
+def test_no_snapshot_unknown():
+    assert rf_news_whipsaw(uptrend_daily(), make_plan(), None, now=NOW).status == "unknown"

@@ -15,6 +15,9 @@ def test_gatekeeper_fields_present_with_defaults():
         "FRED_API_KEY": ("password", ""),
         "MACRO_SNAPSHOT_TTL_MIN": ("number", "30"),
         "GATE_BLACKOUT_ENABLED": ("checkbox", "false"),
+        "GATE_BLACKOUT_HOURS_BEFORE": ("float", "18"),
+        "GATE_BLACKOUT_HOURS_AFTER": ("float", "2"),
+        "GATE_EARNINGS_BLACKOUT_DAYS": ("number", "3"),
     }
     for key, (ftype, default) in expected.items():
         f = field(key)

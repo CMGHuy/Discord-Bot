@@ -9,10 +9,12 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+import swingbot.config as config
 from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
 from swingbot.core.gate.setup_quality import BREAKOUT_FAMILY, volume_ratio
 from swingbot.core.gate.types import CheckResult
 from swingbot.core.indicators import adx, rsi
+from swingbot.core.macro import calendar_events, earnings
 
 ET = ZoneInfo("America/New_York")
 
@@ -242,3 +244,38 @@ register(check_id="rf_extreme_fade", section="redflag", weight=8.0,
                  "raise to fail only against the very strongest trends",
                  presets={"strict": 25.0, "balanced": 30.0, "relaxed": 40.0}),
          })
+
+
+def rf_news_whipsaw(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
+    """HB inside the blackout window. Statuses are information — actually
+    holding an entry additionally requires GATE_BLACKOUT_ENFORCE (G120)."""
+    if not macro_snap or not macro_snap.get("events"):
+        return _rf("rf_news_whipsaw", "unknown", "no event calendar available", {}, 10.0)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    before = float(getattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 18))
+    after = float(getattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2))
+    seen = {}
+    ev_section = macro_snap["events"]
+    for e in (ev_section.get("within_24h") or []) + \
+             ([ev_section["next_high_impact"]] if ev_section.get("next_high_impact") else []):
+        seen[(e["date"], e["kind"])] = e
+    for event in seen.values():
+        hours = calendar_events.hours_until(event, now)
+        if -after <= hours <= before:
+            detail = f"{event['label']} in {hours:.0f}h — inside the blackout window"
+            if event["importance"] >= 3:
+                return _rf("rf_news_whipsaw", "fail", detail,
+                           {"event": event, "hours": round(hours, 1)}, 10.0)
+            return _rf("rf_news_whipsaw", "warn", detail,
+                       {"event": event, "hours": round(hours, 1)}, 10.0)
+    # Earnings blackout (reuses G33; defers to edge E18's gate if merged)
+    days = int(getattr(config, "GATE_EARNINGS_BLACKOUT_DAYS", 3))
+    within = earnings.earnings_within(plan.ticker, days, now=now.date())
+    if within:
+        return _rf("rf_news_whipsaw", "fail",
+                   f"earnings within {days} days", {"earnings_within_days": days}, 10.0)
+    return _rf("rf_news_whipsaw", "pass", "no high-impact event in the window", {}, 10.0)
+
+
+register(check_id="rf_news_whipsaw", section="redflag", weight=10.0,
+         func=rf_news_whipsaw, hard_block=True)
