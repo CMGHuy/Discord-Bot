@@ -69,3 +69,50 @@ register(check_id="rf_fake_breakout", section="redflag", weight=10.0,
                  "raise to tolerate more failed pokes",
                  presets={"strict": 1, "balanced": 2, "relaxed": 3}),
          })
+
+
+def rf_stop_sweep(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Wick >= wick_body_mult x body through an obvious level with a close
+    back on the far side, and no follow-through on the next bar. For
+    sweep-reclaim strategies the registry applies_to marks this n/a."""
+    spec = CHECKS["rf_stop_sweep"]
+    from swingbot.core.gate.levels import _safe_atr, round_levels, swing_levels
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    atr_val = _safe_atr(df_daily, entry)
+    levels = [l.price for l in swing_levels(df_daily)] + round_levels(entry)
+    wick_mult = spec.threshold("wick_body_mult")
+    for pos in (-2, -3):                        # signal bar or the bar before
+        if len(df_daily) + pos < 0:
+            continue
+        bar, nxt = df_daily.iloc[pos], df_daily.iloc[pos + 1]
+        body = abs(float(bar["Close"]) - float(bar["Open"])) or 1e-9
+        lower_wick = min(float(bar["Close"]), float(bar["Open"])) - float(bar["Low"])
+        upper_wick = float(bar["High"]) - max(float(bar["Close"]), float(bar["Open"]))
+        for level in levels:
+            swept_down = (float(bar["Low"]) < level < min(float(bar["Close"]), float(bar["Open"]))
+                          and lower_wick >= wick_mult * body)
+            swept_up = (float(bar["High"]) > level > max(float(bar["Close"]), float(bar["Open"]))
+                        and upper_wick >= wick_mult * body)
+            if not (swept_down or swept_up):
+                continue
+            follow_atr = abs(float(nxt["Close"]) - float(bar["Close"])) / atr_val
+            if follow_atr < spec.threshold("follow_atr"):
+                wick_body = round(max(lower_wick, upper_wick) / body, 2)
+                return _rf("rf_stop_sweep", "fail",
+                           f"stop-sweep wick through {level:.2f} "
+                           f"({wick_body}x body), no follow-through",
+                           {"level": level, "wick_body": wick_body,
+                            "follow_atr": round(follow_atr, 2)}, 8.0)
+    return _rf("rf_stop_sweep", "pass", "no sweep signature", {}, 8.0)
+
+
+register(check_id="rf_stop_sweep", section="redflag", weight=8.0,
+         func=rf_stop_sweep,
+         thresholds={
+             "wick_body_mult": ThresholdSpec("wick_body_mult", 1.5, 1.0, 4.0, 0.25,
+                 "raise to ignore smaller wicks",
+                 presets={"strict": 1.25, "balanced": 1.5, "relaxed": 2.5}),
+             "follow_atr": ThresholdSpec("follow_atr", 0.5, 0.1, 1.5, 0.1,
+                 "lower to require less follow-through before clearing",
+                 presets={"strict": 0.8, "balanced": 0.5, "relaxed": 0.25}),
+         })

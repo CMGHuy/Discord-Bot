@@ -2,9 +2,9 @@ import datetime as dt
 
 import numpy as np
 
-from swingbot.core.gate.redflags import rf_fake_breakout
+from swingbot.core.gate.redflags import rf_fake_breakout, rf_stop_sweep
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate import breakout_and_fail, uptrend_daily
+from tests.fixtures.gate import breakout_and_fail, sweep_wick, uptrend_daily
 from tests.fixtures.gate.plans import make_plan
 
 BREAKOUT_PLAN = make_plan(strategy="Break & Retest", direction="bullish",
@@ -35,3 +35,14 @@ def test_serial_poker_fires():
 def test_non_breakout_strategy_na_pass():
     result = rf_fake_breakout(breakout_and_fail(), make_plan(strategy="RSI"), None)
     assert result.status == "pass" and "n/a" in result.detail
+
+
+def test_sweep_wick_fires():
+    plan = make_plan(trigger_price=101.0)
+    result = rf_stop_sweep(sweep_wick(level=100.0), plan, None)
+    assert result.status == "fail"
+    assert result.evidence["wick_body"] >= 1.5
+
+
+def test_normal_trend_passes():
+    assert rf_stop_sweep(uptrend_daily(), make_plan(), None).status == "pass"
