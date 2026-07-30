@@ -6,7 +6,7 @@ import numpy as np
 from swingbot.core.gate.registry import CHECKS
 from swingbot.core.gate.setup_quality import check_signal_confirmed, check_confluence
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate import uptrend_daily, downtrend_daily
+from tests.fixtures.gate import uptrend_daily
 from tests.fixtures.gate.plans import make_plan
 
 ET = ZoneInfo("America/New_York")
@@ -93,17 +93,31 @@ def test_no_volume_history_unknown():
     assert check_volume(df, make_plan(), None).status == "unknown"
 
 
+def _choppy_downtrend(n=260, start_price=100.0):
+    """Local downtrend helper with oscillations to prevent RSI slope convergence.
+
+    Used only by test_momentum_three_outcomes to generate sufficient momentum
+    indicator divergence for pass/warn/fail assertions. Intentionally separate
+    from the shared downtrend_daily() fixture to avoid changing its smooth
+    geometric-decay character that other tests depend on.
+    """
+    base_trend = np.linspace(start_price, start_price * 0.35, n)
+    oscillations = np.sin(np.arange(n) * 0.5) * (start_price * 0.03)
+    closes = base_trend + oscillations
+    return make_ohlcv(closes, spread_pct=2.0)
+
+
 def test_momentum_three_outcomes():
     from swingbot.core.gate.setup_quality import check_momentum
     import pandas as pd
     bull = make_plan(direction="bullish")
     # steady uptrend: RSI slope up, MACD hist > 0 -> pass
     assert check_momentum(uptrend_daily(), bull, None).status == "pass"
-    # steady downtrend against a bullish plan: both against -> fail
-    assert check_momentum(downtrend_daily(), bull, None).status == "fail"
-    # downtrend with a fresh 3-bar pop: RSI slope turns up while the MACD
+    # choppy downtrend against a bullish plan: both momentum indicators against -> fail
+    assert check_momentum(_choppy_downtrend(), bull, None).status == "fail"
+    # choppy downtrend with a fresh 3-bar pop: RSI slope turns up while the MACD
     # histogram is still negative -> exactly one against -> warn
-    df = downtrend_daily()
+    df = _choppy_downtrend()
     pop = df["Close"].iloc[-1] * np.array([1.02, 1.04, 1.06])
     extra = make_ohlcv(pop, start=str((df.index[-1]
                                        + pd.tseries.offsets.BDay(1)).date()))

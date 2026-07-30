@@ -21,12 +21,7 @@ def uptrend_daily(n=260, start_price=100.0, daily_pct=0.4):
 
 
 def downtrend_daily(n=260, start_price=100.0, daily_pct=0.4):
-    # Create downtrend with oscillations to ensure RSI slope < 0 at endpoint
-    # (smooth converged trends would give slope = 0, missing downtrend signal).
-    # Higher frequency oscillations create reversals that generate negative MACD.
-    base_trend = np.linspace(start_price, start_price * 0.35, n)
-    oscillations = np.sin(np.arange(n) * 0.5) * (start_price * 0.03)
-    closes = base_trend + oscillations
+    closes = start_price * (1 - daily_pct / 100) ** np.arange(n)
     return make_ohlcv(closes, spread_pct=2.0)
 
 
