@@ -4,7 +4,7 @@ import numpy as np
 
 from swingbot.core.gate.redflags import rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_stop_sweep
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate import breakout_and_fail, sweep_wick, uptrend_daily
+from tests.fixtures.gate import breakout_and_fail, climax_overbought, range_daily, sweep_wick, uptrend_daily
 from tests.fixtures.gate.plans import make_plan
 
 BREAKOUT_PLAN = make_plan(strategy="Break & Retest", direction="bullish",
@@ -142,3 +142,23 @@ def test_non_divergence_strategy_na():
     result = rf_divergence_trap(_bullish_divergence(False),
                                 make_plan(strategy="VWAP"), None)
     assert result.status == "pass" and "n/a" in result.detail
+
+
+def test_fading_strong_trend_fires():
+    from swingbot.core.gate.redflags import rf_extreme_fade
+    short_fade = make_plan(direction="bearish", strategy="RSI")
+    result = rf_extreme_fade(climax_overbought(), short_fade, None)
+    assert result.status == "fail"
+    assert result.evidence["rsi"] > 75 and result.evidence["adx"] > 30
+
+
+def test_range_fade_passes():
+    from swingbot.core.gate.redflags import rf_extreme_fade
+    short_fade = make_plan(direction="bearish", strategy="RSI")
+    assert rf_extreme_fade(range_daily(90, 110, n=300), short_fade, None).status == "pass"
+
+
+def test_with_trend_plan_passes():
+    from swingbot.core.gate.redflags import rf_extreme_fade
+    long_with = make_plan(direction="bullish")
+    assert rf_extreme_fade(climax_overbought(), long_with, None).status == "pass"

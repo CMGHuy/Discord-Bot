@@ -198,3 +198,47 @@ def rf_divergence_trap(df_daily, plan, macro_snap, **ctx) -> CheckResult:
 
 register(check_id="rf_divergence_trap", section="redflag", weight=8.0,
          func=rf_divergence_trap, applies_to=("RSI Divergence",))
+
+
+def rf_extreme_fade(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Fading a STRONG trend on overbought/oversold alone — "overbought
+    can stay overbought". Weak-trend counter plays warn only (mean
+    reversion's own edge IS fading; G80 relaxes applies_to accordingly)."""
+    spec = CHECKS["rf_extreme_fade"]
+    from swingbot.core.gate.context_htf import htf_trend
+    trend = htf_trend(df_daily)["daily"]
+    bullish = plan.direction == "bullish"
+    counter = (trend == "down" and bullish) or (trend == "up" and not bullish)
+    if not counter:
+        return _rf("rf_extreme_fade", "pass", "not a counter-trend plan",
+                   {"trend": trend}, 8.0)
+    rsi_val = float(rsi(df_daily["Close"]).iloc[-1])
+    adx_val = float(adx(df_daily).iloc[-1])
+    extreme = (rsi_val <= spec.threshold("rsi_lo") if bullish
+               else rsi_val >= spec.threshold("rsi_hi"))
+    evidence = {"rsi": round(rsi_val, 1), "adx": round(adx_val, 1), "trend": trend}
+    if not extreme:
+        return _rf("rf_extreme_fade", "pass",
+                   "counter-trend but not at an RSI extreme", evidence, 8.0)
+    if adx_val > spec.threshold("adx_strong"):
+        return _rf("rf_extreme_fade", "fail",
+                   f"fading a strong trend (ADX {adx_val:.0f}) on RSI "
+                   f"{rsi_val:.0f} alone", evidence, 8.0)
+    return _rf("rf_extreme_fade", "warn",
+               f"counter-trend fade (ADX {adx_val:.0f} — trend not strong)",
+               evidence, 8.0)
+
+
+register(check_id="rf_extreme_fade", section="redflag", weight=8.0,
+         func=rf_extreme_fade,
+         thresholds={
+             "rsi_hi": ThresholdSpec("rsi_hi", 75.0, 60.0, 90.0, 1.0,
+                 "raise to flag only more extreme overbought fades",
+                 presets={"strict": 70.0, "balanced": 75.0, "relaxed": 85.0}),
+             "rsi_lo": ThresholdSpec("rsi_lo", 25.0, 10.0, 40.0, 1.0,
+                 "lower to flag only more extreme oversold fades",
+                 presets={"strict": 30.0, "balanced": 25.0, "relaxed": 15.0}),
+             "adx_strong": ThresholdSpec("adx_strong", 30.0, 20.0, 50.0, 1.0,
+                 "raise to fail only against the very strongest trends",
+                 presets={"strict": 25.0, "balanced": 30.0, "relaxed": 40.0}),
+         })
