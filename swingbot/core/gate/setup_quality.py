@@ -175,3 +175,46 @@ def check_momentum(df_daily, plan, macro_snap, **ctx) -> CheckResult:
 
 
 register(check_id="momentum_agrees", section="setup", weight=6.0, func=check_momentum)
+
+
+def _pivot_high_positions(series, span=3) -> list[int]:
+    vals = series.values
+    out = []
+    for i in range(span, len(vals) - span):
+        win = vals[i - span:i + span + 1]
+        if vals[i] == win.max() and (win == vals[i]).sum() == 1:
+            out.append(i)
+    return out
+
+
+def check_divergence_against(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Momentum diverging AGAINST the move at entry. Distinct from G60,
+    which polices divergence-ENTRY strategies for missing confirmation."""
+    closes_full = df_daily["Close"]
+    if len(closes_full) < 60:
+        return CheckResult("divergence_against", "setup", "unknown", 6.0,
+                           "insufficient history", {})
+    window = closes_full.iloc[-60:]
+    rsi_window = rsi(closes_full).iloc[-60:]
+    bullish = plan.direction == "bullish"
+    price_probe = window if bullish else -window       # shorts: mirror via negation
+    rsi_probe = rsi_window if bullish else -rsi_window
+    pivots = _pivot_high_positions(price_probe, span=3)[-3:]
+    divergent_pairs = 0
+    for a, b in zip(pivots, pivots[1:]):
+        if price_probe.iloc[b] > price_probe.iloc[a] \
+                and rsi_probe.iloc[b] < rsi_probe.iloc[a]:
+            divergent_pairs += 1
+    evidence = {"divergent_pairs": divergent_pairs, "pivots_found": len(pivots)}
+    if divergent_pairs == 0:
+        return CheckResult("divergence_against", "setup", "pass", 6.0,
+                           "no momentum divergence against the move", evidence)
+    if divergent_pairs >= 2 and plan.strategy != "RSI Divergence":
+        return CheckResult("divergence_against", "setup", "fail", 6.0,
+                           "2-swing momentum divergence against the move", evidence)
+    return CheckResult("divergence_against", "setup", "warn", 6.0,
+                       "momentum divergence forming against the move", evidence)
+
+
+register(check_id="divergence_against", section="setup", weight=6.0,
+         func=check_divergence_against)

@@ -123,3 +123,30 @@ def test_momentum_three_outcomes():
                                        + pd.tseries.offsets.BDay(1)).date()))
     mixed = pd.concat([df, extra])
     assert check_momentum(mixed, bull, None).status == "warn"
+
+
+from swingbot.core.gate.setup_quality import check_divergence_against
+
+
+def _hh_price_lh_rsi():
+    """Three higher price highs on successively weaker legs -> RSI lower
+    highs. Trailing pullback makes the last peak a detectable pivot."""
+    closes = list(np.linspace(95, 100, 60))
+    closes += list(np.linspace(100, 110, 5))          # sharp leg, RSI hot
+    closes += list(np.linspace(110, 104, 4))[1:]
+    closes += list(np.linspace(104, 112, 12))         # slower leg, RSI cooler
+    closes += list(np.linspace(112, 106, 4))[1:]
+    closes += list(np.linspace(106, 113, 18))         # crawl, RSI cooler still
+    closes += list(np.linspace(113, 109, 4))[1:]
+    return make_ohlcv(np.asarray(closes), spread_pct=0.5)
+
+
+def test_divergence_against_move():
+    df = _hh_price_lh_rsi()
+    momentum_plan = make_plan(strategy="MACD", direction="bullish")
+    result = check_divergence_against(df, momentum_plan, None)
+    assert result.status == "fail"        # 2-swing confirmed + non-divergence strategy
+    assert result.evidence["divergent_pairs"] >= 2
+    div_plan = make_plan(strategy="RSI Divergence", direction="bullish")
+    assert check_divergence_against(df, div_plan, None).status == "warn"
+    assert check_divergence_against(uptrend_daily(), momentum_plan, None).status == "pass"
