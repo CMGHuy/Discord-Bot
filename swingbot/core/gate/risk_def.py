@@ -24,7 +24,7 @@ def check_stop_structural(df_daily, plan, macro_snap, **ctx) -> CheckResult:
         margin = (plan.stop_loss - nearest) / atr_val if nearest is not None else None
         inside = nearest is not None and plan.stop_loss < nearest
     if nearest is None:
-        return CheckResult("stop_structural", "risk", "warn", 10.0,
+        return CheckResult("stop_structural", "risk", "warn", 20.0,
                            "no structure found to anchor the stop", {"atr": round(atr_val, 4)})
     on_level = next((lvl for lvl in [l.price for l in swings] + round_levels(entry)
                      if abs(plan.stop_loss - lvl) <= spec.threshold("at_level_atr") * atr_val),
@@ -32,22 +32,22 @@ def check_stop_structural(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     evidence = {"nearest_structure": round(nearest, 4), "stop": plan.stop_loss,
                 "margin_atr": round(margin, 2), "on_level": on_level}
     if inside:
-        return CheckResult("stop_structural", "risk", "fail", 10.0,
+        return CheckResult("stop_structural", "risk", "fail", 20.0,
                            f"stop {plan.stop_loss:.2f} sits INSIDE the protective "
                            f"structure ({nearest:.2f})", evidence)
     if margin < spec.threshold("beyond_atr"):
-        return CheckResult("stop_structural", "risk", "warn", 10.0,
+        return CheckResult("stop_structural", "risk", "warn", 20.0,
                            f"stop only {margin:.1f} ATR beyond structure — "
                            f"checklist wants ~1 ATR of air", evidence)
     if on_level is not None:
-        return CheckResult("stop_structural", "risk", "warn", 10.0,
+        return CheckResult("stop_structural", "risk", "warn", 20.0,
                            f"stop parked exactly at {on_level:.2f} — sweep bait",
                            evidence)
-    return CheckResult("stop_structural", "risk", "pass", 10.0,
+    return CheckResult("stop_structural", "risk", "pass", 20.0,
                        f"stop {margin:.1f} ATR beyond structure", evidence)
 
 
-register(check_id="stop_structural", section="risk", weight=10.0,
+register(check_id="stop_structural", section="risk", weight=20.0,
          func=check_stop_structural,
          thresholds={
              "beyond_atr": ThresholdSpec("beyond_atr", 0.5, 0.1, 2.0, 0.1,
@@ -66,7 +66,7 @@ def check_rr_realistic(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
     risk = abs(entry - plan.stop_loss)
     if risk <= 0:
-        return CheckResult("rr_realistic", "risk", "fail", 10.0,
+        return CheckResult("rr_realistic", "risk", "fail", 4.0,
                            "zero stop distance", {})
     bullish = plan.direction == "bullish"
     swings = swing_levels(df_daily)
@@ -82,19 +82,19 @@ def check_rr_realistic(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     evidence = {"nominal_rr": round(nominal_rr, 2), "capped_rr": round(capped_rr, 2),
                 "capped_target": round(capped_target, 2)}
     if capped_rr >= spec.threshold("min_rr"):
-        return CheckResult("rr_realistic", "risk", "pass", 10.0,
+        return CheckResult("rr_realistic", "risk", "pass", 4.0,
                            f"structure-capped R:R {capped_rr:.1f}", evidence)
     if capped_rr >= spec.threshold("warn_rr"):
-        return CheckResult("rr_realistic", "risk", "warn", 10.0,
+        return CheckResult("rr_realistic", "risk", "warn", 4.0,
                            f"capped R:R only {capped_rr:.1f} "
                            f"(nominal {nominal_rr:.1f})", evidence)
-    return CheckResult("rr_realistic", "risk", "fail", 10.0,
+    return CheckResult("rr_realistic", "risk", "fail", 4.0,
                        f"capped R:R {capped_rr:.1f} — the wall eats the trade "
                        f"(nominal {nominal_rr:.1f} is not the honest number)",
                        evidence)
 
 
-register(check_id="rr_realistic", section="risk", weight=10.0,
+register(check_id="rr_realistic", section="risk", weight=4.0,
          func=check_rr_realistic,
          thresholds={
              "min_rr": ThresholdSpec("min_rr", 1.5, 1.0, 3.0, 0.1,

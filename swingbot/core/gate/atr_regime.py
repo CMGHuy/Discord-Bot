@@ -58,25 +58,25 @@ def check_atr_normal(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     spec = CHECKS["atr_normal"]
     pctile, atr_pct = _atr_percentile(df_daily)
     if pctile is None:
-        return CheckResult("atr_normal", "context", "unknown", 6.0,
+        return CheckResult("atr_normal", "context", "unknown", 22.0,
                            "insufficient history for ATR percentile", {})
     evidence = {"percentile": round(pctile, 1), "atr_pct": round(atr_pct, 2)}
     if pctile > spec.threshold("pct_spike"):
-        return CheckResult("atr_normal", "context", "fail", 6.0,
+        return CheckResult("atr_normal", "context", "fail", 22.0,
                            f"ATR spiked ({pctile:.0f}th pct) — stop math unreliable",
                            evidence)
     if pctile < spec.threshold("pct_low"):
-        return CheckResult("atr_normal", "context", "warn", 6.0,
+        return CheckResult("atr_normal", "context", "warn", 22.0,
                            f"volatility compressed ({pctile:.0f}th pct) — "
                            f"breakout fuel but whipsaw risk", evidence)
     if pctile > spec.threshold("pct_high"):
-        return CheckResult("atr_normal", "context", "warn", 6.0,
+        return CheckResult("atr_normal", "context", "warn", 22.0,
                            f"volatility elevated ({pctile:.0f}th pct)", evidence)
-    return CheckResult("atr_normal", "context", "pass", 6.0,
+    return CheckResult("atr_normal", "context", "pass", 22.0,
                        f"volatility normal ({pctile:.0f}th pct)", evidence)
 
 
-register(check_id="atr_normal", section="context", weight=6.0, func=check_atr_normal,
+register(check_id="atr_normal", section="context", weight=22.0, func=check_atr_normal,
          thresholds={
              "pct_low": ThresholdSpec("pct_low", 20.0, 0.0, 40.0, 5.0,
                  "lower to accept more compression without a warn",

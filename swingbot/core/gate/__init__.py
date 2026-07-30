@@ -10,9 +10,11 @@ log = logging.getLogger("swing-bot.gate")
 # Importing the check modules runs their register() side effects.
 from swingbot.core.gate import (atr_regime, context_htf, levels,      # noqa: F401,E402
                                 redflags, risk_def, setup_quality, timing)
-from swingbot.core.gate.registry import CHECKS, enabled_checks        # noqa: E402
+from swingbot.core.gate.registry import CHECKS, config_fields, enabled_checks  # noqa: E402
 from swingbot.core.gate.score import assign_tier, score               # noqa: E402
 from swingbot.core.gate.types import CheckResult, GateResult          # noqa: E402
+
+config.register_fields(config_fields())
 
 
 def run_checklist(ticker, strategy, plan, df_daily, *, macro_snap=None,
