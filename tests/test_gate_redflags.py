@@ -25,11 +25,33 @@ def test_clean_high_volume_breakout_passes():
 
 
 def test_serial_poker_fires():
-    df = make_ohlcv(np.full(60, 97.0), spread_pct=1.0)
-    for pos in (-5, -3):                       # two failed pokes through 100
-        df.loc[df.index[pos], "High"] = 101.0
-    df.loc[df.index[-1], "Close"] = 99.0
-    assert rf_fake_breakout(df, BREAKOUT_PLAN, None).status == "fail"
+    # Two failed pokes in prior-10 window, OUTSIDE the recent-3 window,
+    # to isolate and test the serial-poke branch specifically.
+    # df_daily.iloc[-11:-1] covers indices -11 to -2; df_daily.iloc[-3:] covers indices -3,-2,-1
+    # So pokes at -11 and -9 are ONLY in the prior window, not in recent.
+    closes = np.full(60, 97.0)
+    df = make_ohlcv(closes, spread_pct=1.0)
+    # Add failed pokes at -11 and -9 (outside recent window)
+    df.loc[df.index[-11], "High"] = 101.0
+    df.loc[df.index[-9], "High"] = 101.0
+    # All closes stay below level, so broke_out doesn't trigger
+    result = rf_fake_breakout(df, BREAKOUT_PLAN, None)
+    assert result.status == "fail"
+    assert "serial-liar" in result.detail
+    assert result.evidence.get("failed_pokes") == 2
+
+
+def test_breakout_on_dead_volume_fails():
+    # Bar breaks out above level and stays there, but on low volume.
+    # This isolates the beyond_now + low-volume branch.
+    closes = np.concatenate([np.full(59, 99.0), [102.0]])
+    volumes = np.full(60, 1_000_000.0)
+    volumes[-1] = 500_000.0  # 0.5x average, below 0.8 threshold
+    df = make_ohlcv(closes, volumes=volumes)
+    result = rf_fake_breakout(df, BREAKOUT_PLAN, None)
+    assert result.status == "fail"
+    assert "dead volume" in result.detail
+    assert result.evidence["vol_ratio"] < 0.8
 
 
 def test_non_breakout_strategy_na_pass():
