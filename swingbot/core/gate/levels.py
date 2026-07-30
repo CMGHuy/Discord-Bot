@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
@@ -18,29 +19,57 @@ class SwingLevel:
     last_touch: str    # ISO date
 
 
-def _safe_atr(df: pd.DataFrame, fallback_price: float) -> float:
-    val = float(atr(df).iloc[-1])
+def _safe_atr(df: pd.DataFrame, fallback_price: float, *,
+             cache: dict | None = None) -> float:
+    """cache = the per-run_checklist-call dict threaded through ctx (G87) —
+    several checks recompute this on the same frame; a compute-once cache
+    scoped to a single call avoids the id()-reuse risk a global cache would
+    have across tickers. Keyed on (id(df), len(df)) so a differently-sliced
+    frame (e.g. swing_levels' lookback window) never hits another frame's
+    cached value."""
+    if cache is not None:
+        key = ("atr_last", id(df), len(df))
+        if key in cache:
+            val = cache[key]
+        else:
+            val = float(atr(df).iloc[-1])
+            cache[key] = val
+    else:
+        val = float(atr(df).iloc[-1])
     return val if val == val and val > 0 else fallback_price * 0.02
 
 
-def swing_levels(df_daily: pd.DataFrame, lookback: int = 250,
-                 pivot_span: int = 5) -> list[SwingLevel]:
-    """Pivots = UNIQUE local extrema over +/-pivot_span bars (ties are not
-    pivots — a flat series yields nothing), clustered within 0.5*ATR,
-    touch-counted, sorted by touches desc."""
+def _compute_swing_levels(df_daily: pd.DataFrame, lookback: int,
+                          pivot_span: int, *,
+                          cache: dict | None = None) -> list[SwingLevel]:
     df = df_daily.iloc[-lookback:]
     if len(df) < 2 * pivot_span + 1:
         return []
     highs, lows, idx = df["High"].values, df["Low"].values, df.index
-    atr_val = _safe_atr(df, float(df["Close"].iloc[-1]))
+    atr_val = _safe_atr(df, float(df["Close"].iloc[-1]), cache=cache)
+    # Vectorized pivot scan (G87 perf guard): mathematically identical to
+    # the per-i loop it replaces (same window, same max/min + uniqueness
+    # check) -- max/min are order-independent so this is bit-exact, just
+    # computed as a handful of numpy C calls instead of ~n Python-level
+    # slice+reduce calls, which profiling showed as a real (non-redundant)
+    # hot loop even after the cross-check memoization above.
     raw = []   # (price, kind, date)
-    for i in range(pivot_span, len(df) - pivot_span):
-        hi_win = highs[i - pivot_span:i + pivot_span + 1]
-        lo_win = lows[i - pivot_span:i + pivot_span + 1]
-        if highs[i] == hi_win.max() and (hi_win == highs[i]).sum() == 1:
-            raw.append((float(highs[i]), "resistance", str(idx[i].date())))
-        if lows[i] == lo_win.min() and (lo_win == lows[i]).sum() == 1:
-            raw.append((float(lows[i]), "support", str(idx[i].date())))
+    window = 2 * pivot_span + 1
+    n = len(df)
+    if n >= window:
+        hi_windows = np.lib.stride_tricks.sliding_window_view(highs, window)
+        lo_windows = np.lib.stride_tricks.sliding_window_view(lows, window)
+        hi_center = highs[pivot_span:n - pivot_span]
+        lo_center = lows[pivot_span:n - pivot_span]
+        hi_pivot = ((hi_center == hi_windows.max(axis=1))
+                   & ((hi_windows == hi_center[:, None]).sum(axis=1) == 1))
+        lo_pivot = ((lo_center == lo_windows.min(axis=1))
+                   & ((lo_windows == lo_center[:, None]).sum(axis=1) == 1))
+        for offset, i in enumerate(range(pivot_span, n - pivot_span)):
+            if hi_pivot[offset]:
+                raw.append((float(highs[i]), "resistance", str(idx[i].date())))
+            if lo_pivot[offset]:
+                raw.append((float(lows[i]), "support", str(idx[i].date())))
     levels: list[SwingLevel] = []
     for kind in ("support", "resistance"):
         bucket: list[tuple[float, str]] = []
@@ -53,6 +82,28 @@ def swing_levels(df_daily: pd.DataFrame, lookback: int = 250,
         if bucket:
             levels.append(_close_bucket(bucket, kind))
     return sorted(levels, key=lambda l: l.touches, reverse=True)
+
+
+def swing_levels(df_daily: pd.DataFrame, lookback: int = 250,
+                 pivot_span: int = 5, *,
+                 cache: dict | None = None) -> list[SwingLevel]:
+    """Pivots = UNIQUE local extrema over +/-pivot_span bars (ties are not
+    pivots — a flat series yields nothing), clustered within 0.5*ATR,
+    touch-counted, sorted by touches desc.
+
+    `cache` (G87 perf guard): the per-run_checklist-call dict threaded
+    through ctx — several checks call this on the identical df_daily, and
+    the pivot scan is the expensive part of the ~50ms/check budget. Keyed
+    on (id(df_daily), len, lookback, pivot_span) so it is only ever a hit
+    for the exact same frame + args within one run_checklist call."""
+    if cache is None:
+        return _compute_swing_levels(df_daily, lookback, pivot_span)
+    key = ("swing_levels", id(df_daily), len(df_daily), lookback, pivot_span)
+    if key in cache:
+        return cache[key]
+    result = _compute_swing_levels(df_daily, lookback, pivot_span, cache=cache)
+    cache[key] = result
+    return result
 
 
 def _close_bucket(bucket: list[tuple[float, str]], kind: str) -> SwingLevel:
@@ -98,9 +149,10 @@ def nearest_round(price: float, *, atr: float) -> tuple[float, float]:
 
 def check_level_map(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     spec = CHECKS["level_map"]
+    cache = ctx.get("_gate_cache")
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
-    atr_val = _safe_atr(df_daily, entry)
-    swings = swing_levels(df_daily)
+    atr_val = _safe_atr(df_daily, entry, cache=cache)
+    swings = swing_levels(df_daily, cache=cache)
     all_prices = sorted({l.price for l in swings} | set(round_levels(entry)))
     below = [p for p in all_prices if p < entry][-3:]
     above = [p for p in all_prices if p > entry][:3]

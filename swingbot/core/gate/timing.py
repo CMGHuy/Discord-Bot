@@ -44,7 +44,7 @@ def check_not_chasing(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     Late entry wrecks the R:R the plan was validated with."""
     spec = CHECKS["not_chasing"]
     price = float(df_daily["Close"].iloc[-1])
-    atr_val = _safe_atr(df_daily, price)
+    atr_val = _safe_atr(df_daily, price, cache=ctx.get("_gate_cache"))
     bullish = plan.direction == "bullish"
     past = (price - plan.trigger_price) if bullish else (plan.trigger_price - price)
     dist_atr = round(past / atr_val, 2)

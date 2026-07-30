@@ -23,8 +23,14 @@ def run_checklist(ticker, strategy, plan, df_daily, *, macro_snap=None,
     """Deterministic given inputs. An exception inside any check makes THAT
     check unknown (+log) — never a scan crash. subset="trigger" runs only
     the cheap trigger_recheck checks (G128)."""
+    # _gate_cache (G87 perf guard): a fresh dict per run_checklist call —
+    # swing_levels/htf_trend/atr get recomputed by 4+ checks on the same
+    # df_daily; memoizing them here keyed on id(df_daily) cuts the median
+    # eval time under the 50ms budget. Scoped to this single call only (not
+    # a module-level cache) so nothing can leak across tickers/calls.
     ctx = {"open_plans": open_plans, "account": account,
-           "headlines": headlines, "spy_df": spy_df, "now": now}
+           "headlines": headlines, "spy_df": spy_df, "now": now,
+           "_gate_cache": {}}
     checks: list[CheckResult] = []
     for spec in enabled_checks(strategy):
         if subset == "trigger" and not spec.trigger_recheck:

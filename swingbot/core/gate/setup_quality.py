@@ -57,14 +57,41 @@ def volume_ratio(df_daily) -> float | None:
     return float(vol.iloc[-1]) / avg20 if avg20 > 0 else None
 
 
-def momentum_with_plan(df_daily, plan) -> bool | None:
+def _cached_rsi(closes, *, cache: dict | None = None):
+    """Same compute-once-per-run_checklist-call pattern as swing_levels/
+    htf_trend/atr (G87 perf guard) — rsi(closes) on the full Close series
+    is computed identically by momentum_with_plan, check_momentum and
+    check_divergence_against (and, conditionally, two redflags checks)."""
+    if cache is None:
+        return rsi(closes)
+    key = ("rsi", id(closes), len(closes))
+    if key in cache:
+        return cache[key]
+    result = rsi(closes)
+    cache[key] = result
+    return result
+
+
+def _cached_macd(closes, *, cache: dict | None = None):
+    if cache is None:
+        return macd(closes)
+    key = ("macd", id(closes), len(closes))
+    if key in cache:
+        return cache[key]
+    result = macd(closes)
+    cache[key] = result
+    return result
+
+
+def momentum_with_plan(df_daily, plan, *, cache: dict | None = None) -> bool | None:
     """True unless RSI slope AND MACD histogram both point against the
     plan — shared with G55."""
     closes = df_daily["Close"]
     if len(closes) < 40:
         return None
-    rsi_slope = float(rsi(closes).iloc[-1] - rsi(closes).iloc[-6])
-    hist = float(macd(closes)["histogram"].iloc[-1])
+    rsi_series = _cached_rsi(closes, cache=cache)
+    rsi_slope = float(rsi_series.iloc[-1] - rsi_series.iloc[-6])
+    hist = float(_cached_macd(closes, cache=cache)["histogram"].iloc[-1])
     bullish = plan.direction == "bullish"
     rsi_against = rsi_slope < 0 if bullish else rsi_slope > 0
     macd_against = hist < 0 if bullish else hist > 0
@@ -75,10 +102,11 @@ def _confluence_factors(df_daily, plan, macro_snap, **ctx) -> dict[str, bool]:
     from swingbot.core.gate.context_htf import htf_trend
     from swingbot.core.gate.levels import (_safe_atr, nearest_round,
                                            swing_levels)
+    cache = ctx.get("_gate_cache")
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
-    atr_val = _safe_atr(df_daily, entry)
+    atr_val = _safe_atr(df_daily, entry, cache=cache)
     bullish = plan.direction == "bullish"
-    swings = swing_levels(df_daily)
+    swings = swing_levels(df_daily, cache=cache)
     at_level = any(abs(l.price - entry) <= 0.5 * atr_val for l in swings)
     _, round_dist = nearest_round(entry, atr=atr_val)
     closes = df_daily["Close"]
@@ -92,14 +120,14 @@ def _confluence_factors(df_daily, plan, macro_snap, **ctx) -> dict[str, bool]:
                 sma_support = True
                 break
     ratio = volume_ratio(df_daily)
-    trend = htf_trend(df_daily)
+    trend = htf_trend(df_daily, cache=cache)
     with_htf = trend["weekly"] == ("up" if bullish else "down")
     return {
         "at_swing_level": at_level,
         "near_round": round_dist <= 0.5,
         "sma_support": sma_support,
         "volume": bool(ratio and ratio >= 1.3),
-        "momentum": bool(momentum_with_plan(df_daily, plan)),
+        "momentum": bool(momentum_with_plan(df_daily, plan, cache=cache)),
         "with_htf": with_htf,
     }
 
@@ -155,9 +183,10 @@ def check_momentum(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     if len(closes) < 40:
         return CheckResult("momentum_agrees", "setup", "unknown", 6.0,
                            "insufficient history", {})
-    rsi_series = rsi(closes)
+    cache = ctx.get("_gate_cache")
+    rsi_series = _cached_rsi(closes, cache=cache)
     rsi_slope = float(rsi_series.iloc[-1] - rsi_series.iloc[-6])
-    hist = float(macd(closes)["histogram"].iloc[-1])
+    hist = float(_cached_macd(closes, cache=cache)["histogram"].iloc[-1])
     bullish = plan.direction == "bullish"
     rsi_against = rsi_slope < 0 if bullish else rsi_slope > 0
     macd_against = hist < 0 if bullish else hist > 0
@@ -195,7 +224,7 @@ def check_divergence_against(df_daily, plan, macro_snap, **ctx) -> CheckResult:
         return CheckResult("divergence_against", "setup", "unknown", 6.0,
                            "insufficient history", {})
     window = closes_full.iloc[-60:]
-    rsi_window = rsi(closes_full).iloc[-60:]
+    rsi_window = _cached_rsi(closes_full, cache=ctx.get("_gate_cache")).iloc[-60:]
     bullish = plan.direction == "bullish"
     price_probe = window if bullish else -window       # shorts: mirror via negation
     rsi_probe = rsi_window if bullish else -rsi_window
