@@ -75,13 +75,14 @@ python scripts/shadow_parity_report.py     # v2-vs-legacy comparison from data/s
 make up / make logs / make restart         # docker compose lifecycle
 ```
 
-**Known-good baseline** (commit `a7d23ab`): `841 passed, 54 skipped, 1 failed`
-in ~3m13s. The one failure,
+**Known-good baseline** (commit `e5ef5cb`, 2026-07-30): `1223 passed, 54
+skipped, 1 failed`. The passed count drifts upward as the suite grows —
+a higher count than this is not a regression signal. The one failure,
 `tests/test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`
 (`cancelled_expired` != `filled`), is pre-existing and expiry/wall-clock
 dependent — don't treat it as your regression or "fix" it as a side quest.
-"Green" means your diff adds no *new* failure; a different count or a second
-failure is yours to fix.
+"Green" means your diff adds no *new* failure and no *different* failure —
+the absence of new failures is the invariant, not the exact count.
 
 Long backtest/grid runs: a full 75-ticker × 10-horizon sweep takes tens of
 minutes (`replay_scenarios` is ~30s per ticker-horizon — hours for a full
