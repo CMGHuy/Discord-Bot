@@ -1,6 +1,8 @@
 """Section-5 timing & trigger checks."""
 from __future__ import annotations
 
+import math
+
 from swingbot.core.gate.levels import _safe_atr
 from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
 from swingbot.core.gate.types import CheckResult
@@ -16,8 +18,10 @@ def check_trigger_objective(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     problems = []
     if plan.entry_type not in ENTRY_TYPES:
         problems.append(f"unknown entry_type {plan.entry_type!r}")
-    if plan.trigger_price is None or not isinstance(plan.trigger_price, (int, float)) \
-            or plan.trigger_price <= 0:
+    if (plan.trigger_price is None or
+        not isinstance(plan.trigger_price, (int, float)) or
+        (isinstance(plan.trigger_price, float) and math.isnan(plan.trigger_price)) or
+        plan.trigger_price <= 0):
         problems.append("no concrete trigger price")
     if problems:
         return CheckResult("trigger_objective", "timing", "fail", 6.0,

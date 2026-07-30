@@ -1,3 +1,5 @@
+import math
+
 from swingbot.core.gate.registry import CHECKS
 from swingbot.core.gate.timing import check_trigger_objective
 from tests.fixtures.gate import uptrend_daily
@@ -18,3 +20,10 @@ def test_priceless_plan_fails_hard():
 def test_unknown_entry_type_fails():
     weird = make_plan(entry_type="vibes")
     assert check_trigger_objective(uptrend_daily(), weird, None).status == "fail"
+
+
+def test_nan_trigger_price_fails():
+    broken = make_plan(trigger_price=float('nan'))
+    result = check_trigger_objective(uptrend_daily(), broken, None)
+    assert result.status == "fail"
+    assert CHECKS["trigger_objective"].hard_block is True
