@@ -109,12 +109,12 @@ def check_confluence(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     fired = [name for name, on in factors.items() if on]
     n = len(fired)
     status = "pass" if n >= 3 else "warn" if n == 2 else "fail"
-    return CheckResult("confluence", "setup", status, 10.0,
+    return CheckResult("confluence", "setup", status, 16.0,
                        f"{n} independent factors agree: {', '.join(fired) or 'none'}",
                        {"factors": fired, "count": n})
 
 
-register(check_id="confluence", section="setup", weight=10.0, func=check_confluence)
+register(check_id="confluence", section="setup", weight=16.0, func=check_confluence)
 
 
 def check_volume(df_daily, plan, macro_snap, **ctx) -> CheckResult:
