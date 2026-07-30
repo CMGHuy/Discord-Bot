@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from zoneinfo import ZoneInfo
 
-from swingbot.core.gate.registry import register
+from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
 from swingbot.core.gate.types import CheckResult
 from swingbot.core.indicators import rsi, macd
 
@@ -115,3 +115,36 @@ def check_confluence(df_daily, plan, macro_snap, **ctx) -> CheckResult:
 
 
 register(check_id="confluence", section="setup", weight=10.0, func=check_confluence)
+
+
+def check_volume(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["volume_confirms"]
+    ratio = volume_ratio(df_daily)
+    if ratio is None:
+        return CheckResult("volume_confirms", "setup", "unknown", 8.0,
+                           "insufficient volume history", {})
+    evidence = {"ratio": round(ratio, 2)}
+    if ratio >= spec.threshold("pass_mult"):
+        return CheckResult("volume_confirms", "setup", "pass", 8.0,
+                           f"signal volume {ratio:.1f}x the 20d average", evidence)
+    if ratio >= spec.threshold("warn_mult"):
+        return CheckResult("volume_confirms", "setup", "warn", 8.0,
+                           f"signal volume only {ratio:.1f}x average", evidence)
+    # dead volume: fail-grade for breakout entries, warn-only for mean reversion
+    if plan.strategy in BREAKOUT_FAMILY:
+        return CheckResult("volume_confirms", "setup", "fail", 8.0,
+                           f"breakout on dead volume ({ratio:.1f}x) — the #1 trap",
+                           evidence)
+    return CheckResult("volume_confirms", "setup", "warn", 8.0,
+                       f"dead volume ({ratio:.1f}x)", evidence)
+
+
+register(check_id="volume_confirms", section="setup", weight=8.0, func=check_volume,
+         thresholds={
+             "pass_mult": ThresholdSpec("pass_mult", 1.3, 1.0, 3.0, 0.1,
+                 "lower to accept quieter signal bars",
+                 presets={"strict": 1.5, "balanced": 1.3, "relaxed": 1.1}),
+             "warn_mult": ThresholdSpec("warn_mult", 0.8, 0.3, 1.2, 0.1,
+                 "lower to fail only on truly dead volume",
+                 presets={"strict": 0.9, "balanced": 0.8, "relaxed": 0.6}),
+         })

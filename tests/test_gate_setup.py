@@ -65,3 +65,29 @@ def test_confluence_factors_run_on_real_frame():
     # smoke: the real factor probe runs end-to-end without raising
     result = check_confluence(uptrend_daily(), make_plan(), None)
     assert result.status in ("pass", "warn", "fail")
+
+
+def _vol_df(last_ratio):
+    vols = np.full(60, 1_000_000.0)
+    vols[-1] = 1_000_000.0 * last_ratio
+    return make_ohlcv(np.linspace(95, 100, 60), volumes=vols)
+
+
+def test_volume_bands_for_breakout_family():
+    from swingbot.core.gate.setup_quality import check_volume
+    breakout = make_plan(strategy="Break & Retest")
+    assert check_volume(_vol_df(1.5), breakout, None).status == "pass"   # >= 1.3x
+    assert check_volume(_vol_df(1.0), breakout, None).status == "warn"   # 0.8-1.3x
+    assert check_volume(_vol_df(0.5), breakout, None).status == "fail"   # < 0.8x: the #1 trap
+
+
+def test_dead_volume_is_warn_only_for_meanrev():
+    from swingbot.core.gate.setup_quality import check_volume
+    meanrev = make_plan(strategy="RSI Divergence")
+    assert check_volume(_vol_df(0.5), meanrev, None).status == "warn"
+
+
+def test_no_volume_history_unknown():
+    from swingbot.core.gate.setup_quality import check_volume
+    df = make_ohlcv(np.linspace(95, 100, 10))
+    assert check_volume(df, make_plan(), None).status == "unknown"
