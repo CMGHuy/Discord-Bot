@@ -11,9 +11,10 @@ import pandas as pd
 
 import swingbot.config as config
 from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
-from swingbot.core.gate.setup_quality import BREAKOUT_FAMILY, volume_ratio
+from swingbot.core.gate.setup_quality import (BREAKOUT_FAMILY, _cached_rsi,
+                                               volume_ratio)
 from swingbot.core.gate.types import CheckResult
-from swingbot.core.indicators import adx, rsi
+from swingbot.core.indicators import adx
 from swingbot.core.macro import calendar_events, earnings
 
 ET = ZoneInfo("America/New_York")
@@ -79,9 +80,10 @@ def rf_stop_sweep(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     sweep-reclaim strategies the registry applies_to marks this n/a."""
     spec = CHECKS["rf_stop_sweep"]
     from swingbot.core.gate.levels import _safe_atr, round_levels, swing_levels
+    cache = ctx.get("_gate_cache")
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
-    atr_val = _safe_atr(df_daily, entry)
-    levels = [l.price for l in swing_levels(df_daily)] + round_levels(entry)
+    atr_val = _safe_atr(df_daily, entry, cache=cache)
+    levels = [l.price for l in swing_levels(df_daily, cache=cache)] + round_levels(entry)
     wick_mult = spec.threshold("wick_body_mult")
     for pos in (-2, -3):                        # signal bar or the bar before
         if len(df_daily) + pos < 0:
@@ -128,7 +130,7 @@ def rf_dead_cat(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     closes = df_daily["Close"]
     if len(closes) < 60:
         return _rf("rf_dead_cat", "unknown", "insufficient history", {}, 10.0)
-    if htf_trend(df_daily)["daily"] != "down":
+    if htf_trend(df_daily, cache=ctx.get("_gate_cache"))["daily"] != "down":
         return _rf("rf_dead_cat", "pass", "not in a daily downtrend", {}, 10.0)
     tail = closes.iloc[-20:]
     low_pos = int(np.argmin(tail.values))
@@ -173,7 +175,7 @@ def rf_divergence_trap(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     if len(closes_full) < 60:
         return _rf("rf_divergence_trap", "unknown", "insufficient history", {}, 8.0)
     window = closes_full.iloc[-60:]
-    rsi_window = rsi(closes_full).iloc[-60:]
+    rsi_window = _cached_rsi(closes_full, cache=ctx.get("_gate_cache")).iloc[-60:]
     bullish = plan.direction == "bullish"
     price_probe = -window if bullish else window       # pivot LOWS via negation
     rsi_probe = -rsi_window if bullish else rsi_window
@@ -208,13 +210,13 @@ def rf_extreme_fade(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     reversion's own edge IS fading; G80 relaxes applies_to accordingly)."""
     spec = CHECKS["rf_extreme_fade"]
     from swingbot.core.gate.context_htf import htf_trend
-    trend = htf_trend(df_daily)["daily"]
+    trend = htf_trend(df_daily, cache=ctx.get("_gate_cache"))["daily"]
     bullish = plan.direction == "bullish"
     counter = (trend == "down" and bullish) or (trend == "up" and not bullish)
     if not counter:
         return _rf("rf_extreme_fade", "pass", "not a counter-trend plan",
                    {"trend": trend}, 8.0)
-    rsi_val = float(rsi(df_daily["Close"]).iloc[-1])
+    rsi_val = float(_cached_rsi(df_daily["Close"], cache=ctx.get("_gate_cache")).iloc[-1])
     adx_val = float(adx(df_daily).iloc[-1])
     extreme = (rsi_val <= spec.threshold("rsi_lo") if bullish
                else rsi_val >= spec.threshold("rsi_hi"))

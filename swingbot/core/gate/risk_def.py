@@ -9,10 +9,11 @@ from swingbot.core.gate.types import CheckResult
 
 def check_stop_structural(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     spec = CHECKS["stop_structural"]
+    cache = ctx.get("_gate_cache")
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
-    atr_val = _safe_atr(df_daily, entry)
+    atr_val = _safe_atr(df_daily, entry, cache=cache)
     bullish = plan.direction == "bullish"
-    swings = swing_levels(df_daily)
+    swings = swing_levels(df_daily, cache=cache)
     if bullish:
         protective = [l.price for l in swings if l.kind == "support" and l.price < entry]
         nearest = max(protective) if protective else None
@@ -69,7 +70,7 @@ def check_rr_realistic(df_daily, plan, macro_snap, **ctx) -> CheckResult:
         return CheckResult("rr_realistic", "risk", "fail", 10.0,
                            "zero stop distance", {})
     bullish = plan.direction == "bullish"
-    swings = swing_levels(df_daily)
+    swings = swing_levels(df_daily, cache=ctx.get("_gate_cache"))
     if bullish:
         opposing = [l.price for l in swings if l.kind == "resistance" and l.price > entry]
         capped_target = min([plan.tp1] + opposing)
