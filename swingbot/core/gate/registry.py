@@ -5,6 +5,16 @@ register(); this module owns the invariants. Hard-block policy:
 hard_block=True checks force tier C on `fail` even at score 100
 (enforced by score.assign_tier via the hard_blocks list the
 orchestrator assembles in G75).
+
+Applicability matrix (strategies from backtest.ALL_STRATEGIES, G80 sign-off):
+  rf_fake_breakout    -> Break & Retest, Support/Resistance, Volume Profile
+                         (BREAKOUT_FAMILY — the only strategies with a level
+                         to fake a break of)
+  rf_divergence_trap  -> RSI Divergence (the only strategy the trap logic
+                         detects against)
+  rf_extreme_fade     -> all (its own logic already relaxes weak-ADX fades,
+                         which is what mean-reversion entries are)
+  everything else     -> all strategies (applies_to=None)
 """
 from __future__ import annotations
 

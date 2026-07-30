@@ -59,3 +59,36 @@ def test_threshold_resolves_config_field_then_spec_default(monkeypatch):
     assert spec.threshold("rr_min") == 1.5           # no Field yet -> spec default
     monkeypatch.setattr(config, "GATE_TH_TH_RR_MIN", 1.8, raising=False)
     assert spec.threshold("rr_min") == 1.8           # Field wins
+
+
+class TestApplicabilityMatrix:
+    """Runs against the REAL registry (populated by importing swingbot.core.gate),
+    not the wiped-per-test one — override the module's autouse fixture with a
+    no-op of the same name so it doesn't clear CHECKS out from under us."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_registry(self):
+        yield
+
+    def test_applicability_matrix_uses_real_strategy_names(self):
+        import swingbot.core.gate  # noqa: F401 — ensure all checks registered
+        from swingbot.core.backtest import ALL_STRATEGIES
+        from swingbot.core.gate import registry as live_registry
+        for spec in live_registry.CHECKS.values():
+            if spec.applies_to is not None:
+                unknown = set(spec.applies_to) - set(ALL_STRATEGIES)
+                assert not unknown, f"{spec.check_id}: unknown strategies {unknown}"
+        assert set(live_registry.CHECKS["rf_fake_breakout"].applies_to) == {
+            "Break & Retest", "Support/Resistance", "Volume Profile"}
+        assert live_registry.CHECKS["rf_divergence_trap"].applies_to == ("RSI Divergence",)
+        assert live_registry.CHECKS["rf_extreme_fade"].applies_to is None
+        # The plan's original ">= 20" floor assumed the pre-audit 26/27-check
+        # registry (2026-07-28/29 win-rate audit cut it to 21 — see the plan
+        # index). With exactly 2 checks intentionally strategy-restricted
+        # (rf_fake_breakout, rf_divergence_trap) and everything else
+        # universal, the honest floor for a strategy with neither restricted
+        # check applicable is total - 2, not the stale absolute number.
+        restricted = sum(1 for s in live_registry.CHECKS.values() if s.applies_to is not None)
+        floor = len(live_registry.CHECKS) - restricted
+        for strategy in ALL_STRATEGIES:
+            assert len(live_registry.enabled_checks(strategy)) >= floor, strategy
