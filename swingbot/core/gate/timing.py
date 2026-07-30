@@ -1,8 +1,10 @@
 """Section-5 timing & trigger checks."""
 from __future__ import annotations
 
+import datetime as dt
 import math
 
+import swingbot.config as config
 from swingbot.core.gate.levels import _safe_atr
 from swingbot.core.gate.registry import CHECKS, ThresholdSpec, register
 from swingbot.core.gate.types import CheckResult
@@ -67,3 +69,29 @@ register(check_id="not_chasing", section="timing", weight=8.0,
                  "raise to allow later entries (this is GATE_CHASE_ATR_MAX)",
                  presets={"strict": 0.8, "balanced": 1.0, "relaxed": 1.5}),
          })
+
+
+def check_calendar(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """Did the bot literally check the calendar this session? Complements
+    rf_news_whipsaw: this checks that we LOOKED; G62 checks what we SAW."""
+    if not getattr(config, "MACRO_ENABLED", False) or macro_snap is None:
+        return CheckResult("calendar_checked", "timing", "unknown", 4.0,
+                           "macro layer off — calendar not machine-checked", {})
+    try:
+        built = dt.datetime.fromisoformat(macro_snap["built_at"])
+        age_min = (dt.datetime.now(dt.timezone.utc) - built).total_seconds() / 60.0
+    except (KeyError, TypeError, ValueError):
+        return CheckResult("calendar_checked", "timing", "unknown", 4.0,
+                           "snapshot has no readable timestamp", {})
+    ttl = float(getattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30))
+    populated = bool(macro_snap.get("events"))
+    evidence = {"age_min": round(age_min, 1), "events_populated": populated}
+    if age_min <= ttl and populated:
+        return CheckResult("calendar_checked", "timing", "pass", 4.0,
+                           "calendar checked this session", evidence)
+    return CheckResult("calendar_checked", "timing", "warn", 4.0,
+                       "macro snapshot stale or event section empty", evidence)
+
+
+register(check_id="calendar_checked", section="timing", weight=4.0,
+         func=check_calendar, backtestable=False)

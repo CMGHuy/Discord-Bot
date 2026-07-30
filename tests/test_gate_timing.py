@@ -1,9 +1,11 @@
+import datetime as dt
 import math
 
 import numpy as np
 
+import swingbot.config as config
 from swingbot.core.gate.registry import CHECKS
-from swingbot.core.gate.timing import check_trigger_objective, check_not_chasing
+from swingbot.core.gate.timing import check_trigger_objective, check_not_chasing, check_calendar
 from tests.conftest import make_ohlcv
 from tests.fixtures.gate import uptrend_daily
 from tests.fixtures.gate.plans import make_plan
@@ -54,3 +56,27 @@ def test_late_entry_fails():
 def test_not_yet_triggered_passes():
     plan = make_plan(direction="bullish", trigger_price=100.0)
     assert check_not_chasing(_df_at(99.0), plan, None).status == "pass"
+
+
+def _snap(age_min, with_events=True):
+    built = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=age_min)
+    events = {"next_high_impact": {"kind": "cpi"}, "within_24h": [], "today": []}
+    return {"built_at": built.isoformat(), "stale": False,
+            "events": events if with_events else {}}
+
+
+def test_fresh_snapshot_with_events_passes(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
+    assert check_calendar(None, make_plan(), _snap(5)).status == "pass"
+
+
+def test_stale_snapshot_warns(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "MACRO_SNAPSHOT_TTL_MIN", 30, raising=False)
+    assert check_calendar(None, make_plan(), _snap(90)).status == "warn"
+
+
+def test_macro_disabled_unknown(monkeypatch):
+    monkeypatch.setattr(config, "MACRO_ENABLED", False, raising=False)
+    assert check_calendar(None, make_plan(), None).status == "unknown"
