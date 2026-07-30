@@ -57,3 +57,50 @@ register(check_id="stop_structural", section="risk", weight=10.0,
                  "lower to only flag stops sitting dead on a level",
                  presets={"strict": 0.25, "balanced": 0.15, "relaxed": 0.05}),
          })
+
+
+def check_rr_realistic(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    """R:R to the STRUCTURE-CAPPED target — min(TP1, nearest opposing
+    wall) — the honest number, shown next to the nominal one."""
+    spec = CHECKS["rr_realistic"]
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    risk = abs(entry - plan.stop_loss)
+    if risk <= 0:
+        return CheckResult("rr_realistic", "risk", "fail", 10.0,
+                           "zero stop distance", {})
+    bullish = plan.direction == "bullish"
+    swings = swing_levels(df_daily)
+    if bullish:
+        opposing = [l.price for l in swings if l.kind == "resistance" and l.price > entry]
+        capped_target = min([plan.tp1] + opposing)
+        capped_rr = (capped_target - entry) / risk
+    else:
+        opposing = [l.price for l in swings if l.kind == "support" and l.price < entry]
+        capped_target = max([plan.tp1] + opposing)
+        capped_rr = (entry - capped_target) / risk
+    nominal_rr = abs(plan.tp1 - entry) / risk
+    evidence = {"nominal_rr": round(nominal_rr, 2), "capped_rr": round(capped_rr, 2),
+                "capped_target": round(capped_target, 2)}
+    if capped_rr >= spec.threshold("min_rr"):
+        return CheckResult("rr_realistic", "risk", "pass", 10.0,
+                           f"structure-capped R:R {capped_rr:.1f}", evidence)
+    if capped_rr >= spec.threshold("warn_rr"):
+        return CheckResult("rr_realistic", "risk", "warn", 10.0,
+                           f"capped R:R only {capped_rr:.1f} "
+                           f"(nominal {nominal_rr:.1f})", evidence)
+    return CheckResult("rr_realistic", "risk", "fail", 10.0,
+                       f"capped R:R {capped_rr:.1f} — the wall eats the trade "
+                       f"(nominal {nominal_rr:.1f} is not the honest number)",
+                       evidence)
+
+
+register(check_id="rr_realistic", section="risk", weight=10.0,
+         func=check_rr_realistic,
+         thresholds={
+             "min_rr": ThresholdSpec("min_rr", 1.5, 1.0, 3.0, 0.1,
+                 "lower to accept slimmer capped targets (this is GATE_MIN_RR)",
+                 presets={"strict": 2.0, "balanced": 1.5, "relaxed": 1.2}),
+             "warn_rr": ThresholdSpec("warn_rr", 1.2, 0.8, 2.0, 0.1,
+                 "lower to fail less often",
+                 presets={"strict": 1.4, "balanced": 1.2, "relaxed": 1.0}),
+         })
