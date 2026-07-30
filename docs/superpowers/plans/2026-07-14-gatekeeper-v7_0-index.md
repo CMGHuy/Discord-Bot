@@ -1,14 +1,19 @@
 # Gatekeeper v7 - Part index (post win-rate audit, 2026-07-29)
 
-> **Status: 24 of 90 tasks implemented — Parts 1-2 (Phases G0-G1) complete** (2026-07-29).
+> **Status: 44 of 90 tasks implemented — Parts 1-3 (Phases G0-G2) complete** (2026-07-30).
 >
-> Part 1 (G1-G8) and Part 2 (G9-G44) are committed and green. `swingbot/core/gate/` holds
-> `wr_math.py`, `types.py`, `registry.py`, `score.py`; `swingbot/core/macro/` holds `httpcache.py`,
-> `fred.py`, `vix.py`, `sectors.py`, `breadth.py`, `composite.py`, `calendar_events.py`,
-> `sessions.py`, `earnings.py`, `snapshot.py`, `history.py`; the pre-scan refresh is wired into all
-> four `run_scan` call sites. Phase G1 checkpoint passed at **1194 passed, 54 skipped, 1 failed** —
-> that failure is the repo's documented pre-existing
-> `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`, not a regression.
+> Part 1 (G1-G8), Part 2 (G9-G44) and Part 3 (G45-G88) are committed and green. `swingbot/core/gate/`
+> holds `wr_math.py`, `types.py`, `registry.py`, `score.py`, `atr_regime.py`, `context_htf.py`,
+> `levels.py`, `redflags.py`, `risk_def.py`, `setup_quality.py`, `timing.py`, `persistence.py`;
+> `swingbot/core/macro/` holds `httpcache.py`, `fred.py`, `vix.py`, `sectors.py`, `breadth.py`,
+> `composite.py`, `calendar_events.py`, `sessions.py`, `earnings.py`, `snapshot.py`, `history.py`;
+> the pre-scan refresh is wired into all four `run_scan` call sites. The checklist registry holds
+> **21 checks** (context 3, setup 5, redflag 8, risk 2, timing 3) — Part 3's `chore(G88)` checkpoint
+> verified this against `registry.CHECKS`/`validate_registry()` directly; don't trust the "26" or
+> "27" counts still written in a couple of Part 3 task bodies, they predate the full audit. Phase G1
+> checkpoint passed at **1194 passed, 54 skipped, 1 failed**; that failure is the repo's documented
+> pre-existing `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`, not a regression — it's
+> still the only failure after Part 3.
 >
 > **Partial data (needs a FRED key):** `event_history.json` is FOMC-only; `history/vix.json` is
 > ungenerated. See Part 2's Progress block for the two commands.
@@ -66,7 +71,7 @@ and never re-add a cut task to satisfy one.
 |---|---|---|---|---|---|
 | 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | **done 2026-07-29** |
 | 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | **done 2026-07-29** |
-| 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | not started |
+| 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | **done 2026-07-30** |
 | 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | not started |
 | 5 | [_5.md](2026-07-14-gatekeeper-v7_5.md) | G119-G219 | Scan + alert integration, E2E, 4-week forward gate, wrap-up (+ carried-over debt appendix) | 16 | not started |
 

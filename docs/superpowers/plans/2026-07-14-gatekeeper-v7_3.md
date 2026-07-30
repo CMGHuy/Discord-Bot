@@ -12,8 +12,13 @@
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (operator's choice 2026-07-29 — no feature branch for this plan)
-> - **Completed:** —
-> - **Next:** Task G45
+> - **Completed:** G45-G88 (all of Part 3). Registry holds **21 checks** (context 3,
+>   setup 5, redflag 8, risk 2, timing 3) — the plan body below still says "26
+>   checks (... risk 4 ...)" in a couple of places (written before the
+>   2026-07-29 audit cut G69/G71/G63/G64/G66); the index's 21 is the correct,
+>   current number, verified via `registry.CHECKS` + `validate_registry()`
+>   2026-07-30.
+> - **Next:** Part 4 (`2026-07-14-gatekeeper-v7_4.md`), Task G89
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
@@ -3224,7 +3229,7 @@ git commit -m "test: gate evaluation perf budget"
 
 ### Task G88: Phase G2 checkpoint
 
-- [ ] **Step 1:** Full suite + `make check` green. Registry invariant test passes with **all** checks registered (context 3, setup 5, red flags 11, risk 4, timing 3 = 26 checks). (count reduced from 27 to 26: G51 `check_vol_expansion_direction` was cut in the 2026-07-28 win-rate audit)
-- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G2 checkpoint (26 checks live)`
+- [x] **Step 1:** Full suite + syntax check green (2026-07-30). Registry invariant test passes with **all** checks registered — **21 checks** (context 3, setup 5, redflag 8, risk 2, timing 3), not the "26" this line originally said: that count predates the 2026-07-29 merge pass which additionally cut G63/G64/G66 (redflag 11→8) and G69/G71 (risk 4→2) on top of G51's earlier cut. 21 matches the plan index's stated total.
+- [x] **Step 2:** Progress block updated above. Commit — `chore(G88): phase G2 checkpoint (21 checks live)`
 
 ---
