@@ -5,7 +5,7 @@ import numpy as np
 import swingbot.config as config
 import swingbot.core.gate.redflags as redflags
 from swingbot.core.gate.redflags import (
-    rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_news_whipsaw, rf_stop_sweep,
+    rf_beta_move, rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_news_whipsaw, rf_stop_sweep,
     rf_thin_session,
 )
 from tests.conftest import make_ohlcv
@@ -232,3 +232,34 @@ def test_illiquid_ticker_warns():
     thin = make_ohlcv(np.full(60, 2.0), volumes=np.full(60, 100_000.0))      # $200k/day
     result = rf_thin_session(thin, make_plan(), None, now=normal)
     assert result.status == "warn" and "dollar volume" in result.detail
+
+
+def _spy_and_clone(pure_beta: bool):
+    """SPY with alternating returns; ticker either 1.2x SPY exactly
+    (pure beta) or flat-then-idiosyncratic-gap."""
+    spy_closes, tick_closes = [100.0], [50.0]
+    for i in range(120):
+        r = 0.01 if i % 2 == 0 else -0.008
+        spy_closes.append(spy_closes[-1] * (1 + r))
+        tick_closes.append(tick_closes[-1] * (1 + (1.2 * r if pure_beta else 0.0)))
+    if not pure_beta:
+        tick_closes[-1] = tick_closes[-2] * 1.10        # +10% on flat SPY
+    return (make_ohlcv(np.asarray(spy_closes)),
+            make_ohlcv(np.asarray(tick_closes)))
+
+
+def test_pure_beta_move_fires():
+    spy, tick = _spy_and_clone(pure_beta=True)
+    result = rf_beta_move(tick, make_plan(), None, spy_df=spy)
+    assert result.status == "fail"
+    assert result.evidence["idio_frac"] < 0.35
+
+
+def test_idiosyncratic_gap_passes():
+    spy, tick = _spy_and_clone(pure_beta=False)
+    assert rf_beta_move(tick, make_plan(), None, spy_df=spy).status == "pass"
+
+
+def test_missing_spy_unknown():
+    _, tick = _spy_and_clone(True)
+    assert rf_beta_move(tick, make_plan(), None, spy_df=None).status == "unknown"

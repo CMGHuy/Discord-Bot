@@ -303,3 +303,47 @@ def rf_thin_session(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResu
 
 register(check_id="rf_thin_session", section="redflag", weight=6.0,
          func=rf_thin_session, trigger_recheck=True)
+
+
+def rf_beta_move(df_daily, plan, macro_snap, *, spy_df=None, **ctx) -> CheckResult:
+    """Is this really MY instrument's move? Regress 60d daily returns on
+    SPY; if the signal-window move is mostly beta x index, it evaporates
+    when the index mean-reverts."""
+    spec = CHECKS["rf_beta_move"]
+    if spy_df is None or len(spy_df) < 70 or len(df_daily) < 70:
+        return _rf("rf_beta_move", "unknown", "SPY bars unavailable", {}, 6.0)
+    t_ret = df_daily["Close"].pct_change().dropna().iloc[-60:]
+    s_ret = spy_df["Close"].pct_change().dropna().iloc[-60:]
+    joined = pd.concat([t_ret.rename("t"), s_ret.rename("s")], axis=1).dropna()
+    if len(joined) < 40:
+        return _rf("rf_beta_move", "unknown", "insufficient overlapping bars", {}, 6.0)
+    var_s = float(np.var(joined["s"]))
+    beta = float(np.cov(joined["t"], joined["s"])[0, 1] / (var_s or 1e-12))
+    window = int(spec.threshold("signal_window"))
+    t_move = float(df_daily["Close"].iloc[-1] / df_daily["Close"].iloc[-1 - window] - 1)
+    s_move = float(spy_df["Close"].iloc[-1] / spy_df["Close"].iloc[-1 - window] - 1)
+    if abs(t_move) < 1e-6:
+        return _rf("rf_beta_move", "pass", "no signal move to attribute",
+                   {"beta": round(beta, 2)}, 6.0)
+    residual = t_move - beta * s_move
+    idio_frac = abs(residual) / abs(t_move)
+    evidence = {"beta": round(beta, 2), "move_pct": round(t_move * 100, 1),
+                "idio_frac": round(idio_frac, 2)}
+    if idio_frac < spec.threshold("idio_frac"):
+        return _rf("rf_beta_move", "fail",
+                   f"move is ~{(1 - idio_frac) * 100:.0f}% index beta "
+                   f"(beta {beta:.1f}) — not this instrument's own move",
+                   evidence, 6.0)
+    return _rf("rf_beta_move", "pass",
+               f"{idio_frac * 100:.0f}% of the move is idiosyncratic", evidence, 6.0)
+
+
+register(check_id="rf_beta_move", section="redflag", weight=6.0, func=rf_beta_move,
+         thresholds={
+             "idio_frac": ThresholdSpec("idio_frac", 0.35, 0.1, 0.8, 0.05,
+                 "lower to tolerate more index-driven moves",
+                 presets={"strict": 0.5, "balanced": 0.35, "relaxed": 0.2}),
+             "signal_window": ThresholdSpec("signal_window", 5, 2, 15, 1,
+                 "bars defining 'the signal move'",
+                 presets={"strict": 5, "balanced": 5, "relaxed": 5}),
+         })
