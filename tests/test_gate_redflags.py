@@ -2,9 +2,9 @@ import datetime as dt
 
 import numpy as np
 
-from swingbot.core.gate.redflags import rf_fake_breakout, rf_stop_sweep
+from swingbot.core.gate.redflags import rf_dead_cat, rf_fake_breakout, rf_stop_sweep
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate import breakout_and_fail, sweep_wick, uptrend_daily
+from tests.fixtures.gate import breakout_and_fail, dead_cat, sweep_wick, uptrend_daily
 from tests.fixtures.gate.plans import make_plan
 
 BREAKOUT_PLAN = make_plan(strategy="Break & Retest", direction="bullish",
@@ -68,3 +68,43 @@ def test_sweep_wick_fires():
 
 def test_normal_trend_passes():
     assert rf_stop_sweep(uptrend_daily(), make_plan(), None).status == "pass"
+
+
+def _dead_cat_v_bounce():
+    """Downtrend followed by V-bounce with no structure shift.
+    250-bar pure downtrend + 1-bar bounce. The 1-bar bounce keeps trend as "down"
+    while still providing a bounce to test against."""
+    down = 150.0 * (1 - 0.01) ** np.arange(250)
+    low = down[-1]
+    # Single bounce bar of +8%
+    bounce = np.array([low * 1.08])
+    return make_ohlcv(np.concatenate([down, bounce]), spread_pct=2.0)
+
+
+def _reversal_with_structure():
+    """Downtrend, then bounce -> higher low -> higher high: a real shift.
+    Pure downtrend + multi-bar bounce (5+ bars causes trend to shift to 'range',
+    but the structure detection should still catch the higher low/high pattern)."""
+    down = 150.0 * (1 - 0.01) ** np.arange(250)
+    low = down[-1]
+    leg1 = np.linspace(low, low * 1.06, 5)[1:]             # Bounce up
+    dip = np.linspace(low * 1.06, low * 1.03, 4)[1:]      # higher low
+    leg2 = np.linspace(low * 1.03, low * 1.09, 6)[1:]     # higher high
+    return make_ohlcv(np.concatenate([down, leg1, dip, leg2]), spread_pct=2.0)
+
+
+def test_dead_cat_fires_on_v_bounce():
+    result = rf_dead_cat(_dead_cat_v_bounce(), make_plan(direction="bullish"), None)
+    assert result.status == "fail"
+    assert result.evidence["bounce_pct"] >= 5
+    assert result.evidence["structure_shift"] is False
+
+
+def test_structure_shift_passes():
+    assert rf_dead_cat(_reversal_with_structure(),
+                       make_plan(direction="bullish"), None).status == "pass"
+
+
+def test_bearish_plan_na():
+    result = rf_dead_cat(_dead_cat_v_bounce(), make_plan(direction="bearish"), None)
+    assert result.status == "pass" and "n/a" in result.detail

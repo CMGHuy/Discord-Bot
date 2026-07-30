@@ -116,3 +116,46 @@ register(check_id="rf_stop_sweep", section="redflag", weight=8.0,
                  "lower to require less follow-through before clearing",
                  presets={"strict": 0.8, "balanced": 0.5, "relaxed": 0.25}),
          })
+
+
+def rf_dead_cat(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    spec = CHECKS["rf_dead_cat"]
+    if plan.direction != "bullish":
+        return _rf("rf_dead_cat", "pass", "n/a (bearish plan)", {}, 10.0)
+    from swingbot.core.gate.context_htf import htf_trend
+    closes = df_daily["Close"]
+    if len(closes) < 60:
+        return _rf("rf_dead_cat", "unknown", "insufficient history", {}, 10.0)
+    if htf_trend(df_daily)["daily"] != "down":
+        return _rf("rf_dead_cat", "pass", "not in a daily downtrend", {}, 10.0)
+    tail = closes.iloc[-20:]
+    low_pos = int(np.argmin(tail.values))
+    low_val = float(tail.iloc[low_pos])
+    bounce_pct = (float(tail.iloc[-1]) / low_val - 1.0) * 100.0
+    evidence = {"bounce_pct": round(bounce_pct, 1),
+                "days_since_low": len(tail) - 1 - low_pos}
+    if bounce_pct < spec.threshold("bounce_pct"):
+        return _rf("rf_dead_cat", "pass", "no meaningful bounce yet", evidence, 10.0)
+    # structure shift = a pullback low ABOVE the low, then a new bounce high
+    vals = tail.values[low_pos:]
+    structure = False
+    for i in range(1, len(vals) - 1):
+        is_local_low = vals[i] < vals[i - 1] and vals[i] < vals[i + 1]
+        if is_local_low and vals[i] > low_val and float(max(vals[i + 1:])) > float(max(vals[:i])):
+            structure = True
+            break
+    evidence["structure_shift"] = structure
+    if structure:
+        return _rf("rf_dead_cat", "pass",
+                   "higher-low + higher-high printed since the low", evidence, 10.0)
+    return _rf("rf_dead_cat", "fail",
+               f"dead-cat risk: +{bounce_pct:.1f}% V-bounce in a downtrend, "
+               f"no structure shift yet", evidence, 10.0)
+
+
+register(check_id="rf_dead_cat", section="redflag", weight=10.0, func=rf_dead_cat,
+         thresholds={
+             "bounce_pct": ThresholdSpec("bounce_pct", 5.0, 2.0, 15.0, 0.5,
+                 "raise to flag only larger bounces",
+                 presets={"strict": 4.0, "balanced": 5.0, "relaxed": 8.0}),
+         })
