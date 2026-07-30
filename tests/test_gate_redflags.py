@@ -6,6 +6,7 @@ import swingbot.config as config
 import swingbot.core.gate.redflags as redflags
 from swingbot.core.gate.redflags import (
     rf_dead_cat, rf_divergence_trap, rf_fake_breakout, rf_news_whipsaw, rf_stop_sweep,
+    rf_thin_session,
 )
 from tests.conftest import make_ohlcv
 from tests.fixtures.gate import breakout_and_fail, climax_overbought, range_daily, sweep_wick, uptrend_daily
@@ -209,3 +210,25 @@ def test_earnings_inside_blackout_fires(monkeypatch):
 
 def test_no_snapshot_unknown():
     assert rf_news_whipsaw(uptrend_daily(), make_plan(), None, now=NOW).status == "unknown"
+
+
+def _liquid_df():
+    return make_ohlcv(np.full(60, 50.0), volumes=np.full(60, 1_000_000.0))
+
+
+def test_holiday_week_warns():
+    holiday_week = dt.datetime(2026, 12, 29, 16, 0, tzinfo=dt.timezone.utc)  # 11:00 ET
+    result = rf_thin_session(_liquid_df(), make_plan(), None, now=holiday_week)
+    assert result.status == "warn" and "holiday week" in result.detail
+
+
+def test_liquid_normal_day_passes():
+    normal = dt.datetime(2026, 7, 14, 16, 0, tzinfo=dt.timezone.utc)         # 12:00 ET Tue
+    assert rf_thin_session(_liquid_df(), make_plan(), None, now=normal).status == "pass"
+
+
+def test_illiquid_ticker_warns():
+    normal = dt.datetime(2026, 7, 14, 16, 0, tzinfo=dt.timezone.utc)
+    thin = make_ohlcv(np.full(60, 2.0), volumes=np.full(60, 100_000.0))      # $200k/day
+    result = rf_thin_session(thin, make_plan(), None, now=normal)
+    assert result.status == "warn" and "dollar volume" in result.detail

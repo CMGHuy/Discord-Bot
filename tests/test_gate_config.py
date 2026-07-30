@@ -18,6 +18,7 @@ def test_gatekeeper_fields_present_with_defaults():
         "GATE_BLACKOUT_HOURS_BEFORE": ("float", "18"),
         "GATE_BLACKOUT_HOURS_AFTER": ("float", "2"),
         "GATE_EARNINGS_BLACKOUT_DAYS": ("number", "3"),
+        "GATE_MIN_DOLLAR_VOL": ("float", "2000000"),
     }
     for key, (ftype, default) in expected.items():
         f = field(key)

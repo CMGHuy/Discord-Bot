@@ -611,6 +611,11 @@ FIELDS: list[Field] = [
           "Earnings blackout days", type="number", default="3", min=0, max=15, step=1,
           help="Flag plans whose ticker reports earnings within this many days. "
                "Lower to allow entries closer to earnings."),
+    Field("GATE_MIN_DOLLAR_VOL", "GATE_MIN_DOLLAR_VOL", "Gatekeeper",
+          "Min median dollar volume", type="float", default="2000000", min=0, step=100000,
+          help="Tickers whose 20d median dollar volume sits below this get a "
+               "thin-liquidity warning on the checklist. Lower to silence it "
+               "for small caps."),
 ]
 
 _CASTERS = {

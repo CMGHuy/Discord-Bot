@@ -279,3 +279,27 @@ def rf_news_whipsaw(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResu
 
 register(check_id="rf_news_whipsaw", section="redflag", weight=10.0,
          func=rf_news_whipsaw, hard_block=True)
+
+
+def rf_thin_session(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
+    """warn-grade only — EOD swing entries mostly dodge intraday windows,
+    but illiquid tickers and dead weeks still deserve the label."""
+    from swingbot.core.macro.sessions import is_thin_window
+    dollar_vol = float((df_daily["Close"] * df_daily["Volume"]).iloc[-20:].median())
+    floor = float(getattr(config, "GATE_MIN_DOLLAR_VOL", 2_000_000))
+    if dollar_vol < floor:
+        return _rf("rf_thin_session", "warn",
+                   f"median dollar volume ${dollar_vol:,.0f} below the "
+                   f"${floor:,.0f} floor",
+                   {"dollar_vol": round(dollar_vol)}, 6.0)
+    now_et = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ET)
+    thin, reason = is_thin_window(now_et)
+    if thin:
+        return _rf("rf_thin_session", "warn", f"thin session: {reason}",
+                   {"reason": reason}, 6.0)
+    return _rf("rf_thin_session", "pass", "normal liquidity conditions",
+               {"dollar_vol": round(dollar_vol)}, 6.0)
+
+
+register(check_id="rf_thin_session", section="redflag", weight=6.0,
+         func=rf_thin_session, trigger_recheck=True)
