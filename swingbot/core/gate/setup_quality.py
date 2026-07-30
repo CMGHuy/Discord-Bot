@@ -148,3 +148,30 @@ register(check_id="volume_confirms", section="setup", weight=8.0, func=check_vol
                  "lower to fail only on truly dead volume",
                  presets={"strict": 0.9, "balanced": 0.8, "relaxed": 0.6}),
          })
+
+
+def check_momentum(df_daily, plan, macro_snap, **ctx) -> CheckResult:
+    closes = df_daily["Close"]
+    if len(closes) < 40:
+        return CheckResult("momentum_agrees", "setup", "unknown", 6.0,
+                           "insufficient history", {})
+    rsi_series = rsi(closes)
+    rsi_slope = float(rsi_series.iloc[-1] - rsi_series.iloc[-6])
+    hist = float(macd(closes)["histogram"].iloc[-1])
+    bullish = plan.direction == "bullish"
+    rsi_against = rsi_slope < 0 if bullish else rsi_slope > 0
+    macd_against = hist < 0 if bullish else hist > 0
+    evidence = {"rsi_slope5": round(rsi_slope, 2), "macd_hist": round(hist, 4)}
+    if rsi_against and macd_against:
+        return CheckResult("momentum_agrees", "setup", "fail", 6.0,
+                           "RSI slope AND MACD histogram both point against the plan",
+                           evidence)
+    if rsi_against or macd_against:
+        which = "RSI slope" if rsi_against else "MACD histogram"
+        return CheckResult("momentum_agrees", "setup", "warn", 6.0,
+                           f"{which} points against the plan", evidence)
+    return CheckResult("momentum_agrees", "setup", "pass", 6.0,
+                       "momentum agrees with the plan", evidence)
+
+
+register(check_id="momentum_agrees", section="setup", weight=6.0, func=check_momentum)

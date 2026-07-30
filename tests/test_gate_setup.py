@@ -6,7 +6,7 @@ import numpy as np
 from swingbot.core.gate.registry import CHECKS
 from swingbot.core.gate.setup_quality import check_signal_confirmed, check_confluence
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate import uptrend_daily
+from tests.fixtures.gate import uptrend_daily, downtrend_daily
 from tests.fixtures.gate.plans import make_plan
 
 ET = ZoneInfo("America/New_York")
@@ -91,3 +91,21 @@ def test_no_volume_history_unknown():
     from swingbot.core.gate.setup_quality import check_volume
     df = make_ohlcv(np.linspace(95, 100, 10))
     assert check_volume(df, make_plan(), None).status == "unknown"
+
+
+def test_momentum_three_outcomes():
+    from swingbot.core.gate.setup_quality import check_momentum
+    import pandas as pd
+    bull = make_plan(direction="bullish")
+    # steady uptrend: RSI slope up, MACD hist > 0 -> pass
+    assert check_momentum(uptrend_daily(), bull, None).status == "pass"
+    # steady downtrend against a bullish plan: both against -> fail
+    assert check_momentum(downtrend_daily(), bull, None).status == "fail"
+    # downtrend with a fresh 3-bar pop: RSI slope turns up while the MACD
+    # histogram is still negative -> exactly one against -> warn
+    df = downtrend_daily()
+    pop = df["Close"].iloc[-1] * np.array([1.02, 1.04, 1.06])
+    extra = make_ohlcv(pop, start=str((df.index[-1]
+                                       + pd.tseries.offsets.BDay(1)).date()))
+    mixed = pd.concat([df, extra])
+    assert check_momentum(mixed, bull, None).status == "warn"
