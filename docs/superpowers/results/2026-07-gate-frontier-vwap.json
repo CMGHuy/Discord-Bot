@@ -1,0 +1,7 @@
+{
+  "strategy": "VWAP",
+  "frontier": [],
+  "deciles": [],
+  "best_cut": null,
+  "proposal": null
+}

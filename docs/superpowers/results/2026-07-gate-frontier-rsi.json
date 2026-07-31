@@ -1,0 +1,268 @@
+{
+  "strategy": "RSI",
+  "frontier": [
+    {
+      "cut": 0,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 5,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 10,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 15,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 20,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 25,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 30,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 35,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 40,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 45,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 50,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 55,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 60,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 65,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 70,
+      "n_kept": 5,
+      "pct_kept": 100.0,
+      "wr": 100.0,
+      "wilson_lb": 0.4629,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 75,
+      "n_kept": 4,
+      "pct_kept": 80.0,
+      "wr": 100.0,
+      "wilson_lb": 0.3958,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 80,
+      "n_kept": 4,
+      "pct_kept": 80.0,
+      "wr": 100.0,
+      "wilson_lb": 0.3958,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.2
+    },
+    {
+      "cut": 85,
+      "n_kept": 1,
+      "pct_kept": 20.0,
+      "wr": 100.0,
+      "wilson_lb": 0.0546,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.0
+    },
+    {
+      "cut": 90,
+      "n_kept": 1,
+      "pct_kept": 20.0,
+      "wr": 100.0,
+      "wilson_lb": 0.0546,
+      "expectancy_r": 0.34,
+      "trades_per_month": 0.0
+    },
+    {
+      "cut": 95,
+      "n_kept": 0,
+      "pct_kept": 0.0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null,
+      "trades_per_month": 0.0
+    },
+    {
+      "cut": 100,
+      "n_kept": 0,
+      "pct_kept": 0.0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null,
+      "trades_per_month": 0.0
+    }
+  ],
+  "deciles": [
+    {
+      "decile": 0,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 1,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 2,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 3,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 4,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 5,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 6,
+      "n": 0,
+      "wr": null,
+      "wilson_lb": 0.0,
+      "expectancy_r": null
+    },
+    {
+      "decile": 7,
+      "n": 1,
+      "wr": 100.0,
+      "wilson_lb": 0.0546,
+      "expectancy_r": 0.34
+    },
+    {
+      "decile": 8,
+      "n": 3,
+      "wr": 100.0,
+      "wilson_lb": 0.31,
+      "expectancy_r": 0.34
+    },
+    {
+      "decile": 9,
+      "n": 1,
+      "wr": 100.0,
+      "wilson_lb": 0.0546,
+      "expectancy_r": 0.34
+    }
+  ],
+  "best_cut": null,
+  "proposal": null
+}
