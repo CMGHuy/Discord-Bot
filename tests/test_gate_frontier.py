@@ -57,3 +57,36 @@ def test_best_cut_constraints():
     assert chosen["cut"] == 40                         # highest WR within loss budget
     # impossible constraints -> None is an allowed, reportable outcome
     assert best_cut(rows, min_n=500, max_signal_loss_pct=10.0) is None
+
+
+import json
+import os
+
+from swingbot.core.gate.frontier import propose_tier_cuts, write_proposal
+
+
+def test_proposal_from_golden_frontier():
+    rows = frontier(synth_trades(), cuts=range(0, 101, 20))
+    proposal = propose_tier_cuts(rows)
+    # A+: lowest cut with wilson_lb >= 0.80 and n >= 59 -> cut 40 (120/120)
+    assert proposal["aplus_cut"] == 40
+    # A: lowest cut with wr >= baseline(60) + 5 and n >= 30 -> cut 20 (wr 75)
+    assert proposal["a_cut"] == 20
+    assert proposal["baseline_wr"] == 60.0
+    assert "b stays at the configured default" in proposal["note"]
+
+
+def test_insufficient_data_returns_none():
+    assert propose_tier_cuts([]) is None
+    thin = frontier(synth_trades(n=20), cuts=range(0, 101, 20))
+    assert propose_tier_cuts(thin) is None            # nothing clears N floors
+
+
+def test_write_proposal_file(tmp_path, monkeypatch):
+    import swingbot.config as config
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    path = write_proposal({"aplus_cut": 90}, kind="gate-tiers")
+    with open(path, encoding="utf-8") as fh:
+        saved = json.load(fh)
+    assert saved["kind"] == "gate-tiers" and saved["payload"]["aplus_cut"] == 90
+    assert os.path.dirname(path).endswith("tuning_proposals")

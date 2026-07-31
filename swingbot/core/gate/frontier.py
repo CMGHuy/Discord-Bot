@@ -79,3 +79,43 @@ def best_cut(frontier_rows, min_n: int, max_signal_loss_pct: float) -> dict | No
     if not eligible:
         return None
     return max(eligible, key=lambda r: (r["wr"], r["cut"]))
+
+
+def propose_tier_cuts(frontier_rows) -> dict | None:
+    """Mechanical, pre-registered: A+ = lowest cut whose wilson_lb >= 0.80
+    with n >= 59 (the G1 math: where ~95% observed WR PROVES > 90% is
+    N >= 59); A = lowest cut with wr >= baseline + 5 pts and n >= 30;
+    B stays at the configured default (baseline behavior). Returns a
+    PROPOSAL -- never applied to config by code."""
+    if not frontier_rows:
+        return None
+    baseline = next((r for r in frontier_rows if r["cut"] == 0), frontier_rows[0])
+    if baseline["wr"] is None:
+        return None
+    aplus = next((r for r in frontier_rows
+                  if r["wilson_lb"] >= 0.80 and r["n_kept"] >= 59), None)
+    a_row = next((r for r in frontier_rows
+                  if r["wr"] is not None and r["wr"] >= baseline["wr"] + 5.0
+                  and r["n_kept"] >= 30), None)
+    if aplus is None and a_row is None:
+        return None
+    return {"aplus_cut": aplus["cut"] if aplus else None,
+            "a_cut": a_row["cut"] if a_row else None,
+            "baseline_wr": baseline["wr"],
+            "evidence": {"aplus": aplus, "a": a_row},
+            "note": "b stays at the configured default (baseline tier); "
+                    "cuts are proposals — apply via the settings page only"}
+
+
+def write_proposal(proposal: dict, kind: str = "gate-tiers") -> str:
+    """data/tuning_proposals/{ts}-{kind}.json (cockpit C36 shape)."""
+    import os
+    import time
+
+    import swingbot.config as config
+    from swingbot.core.jsonio import atomic_write_json
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    path = os.path.join(config.DATA_DIR, "tuning_proposals", f"{ts}-{kind}.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    atomic_write_json(path, {"kind": kind, "created_at": ts, "payload": proposal})
+    return path
