@@ -1,0 +1,32 @@
+{
+  "strategy": "Support/Resistance",
+  "baseline": {
+    "strategy": "Support/Resistance",
+    "min_tier": null,
+    "folds": [
+      {
+        "year": 2021,
+        "n": 0,
+        "wr": null,
+        "expectancy_r": null
+      },
+      {
+        "year": 2022,
+        "n": 0,
+        "wr": null,
+        "expectancy_r": null
+      },
+      {
+        "year": 2023,
+        "n": 0,
+        "wr": null,
+        "expectancy_r": null
+      }
+    ],
+    "pooled": {
+      "n": 0,
+      "wr": null,
+      "expectancy_r": null
+    }
+  }
+}

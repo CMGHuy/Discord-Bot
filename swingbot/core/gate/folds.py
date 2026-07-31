@@ -94,7 +94,7 @@ def _default_replay(strategy, ticker, test_start, test_end, gate_min_tier):
 
 
 def run_folds(strategy: str, *, gate_min_tier: str | None = None,
-              tickers=None, replay=None) -> dict:
+              tickers=None, replay=None, verbose: bool = False) -> dict:
     try:
         backtest_wf = importlib.import_module("swingbot.core.backtest_wf")
     except ImportError:
@@ -109,12 +109,104 @@ def run_folds(strategy: str, *, gate_min_tier: str | None = None,
     folds, all_trades = [], []
     for window in FOLDS:
         trades = []
-        for ticker in tickers:
+        for idx, ticker in enumerate(tickers, 1):
+            if verbose:
+                print(f"    [{strategy}] fold {window['year']} "
+                      f"ticker {idx}/{len(tickers)} {ticker}", flush=True)
             trades += replay(strategy, ticker, window["test_start"],
                              window["test_end"], gate_min_tier)
         stats = _fold_stats(trades)
         folds.append({"year": window["year"], **stats})
+        if verbose:
+            print(f"  [{strategy}] fold {window['year']} done: {stats}", flush=True)
         all_trades += [t for t in trades if t.get("outcome") in ("win", "loss")]
     return {"strategy": strategy, "min_tier": gate_min_tier,
             "folds": folds, "pooled": _fold_stats(all_trades),
             "trades": all_trades}
+
+
+def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dict]:
+    """Each flag alone as a filter: what does removing ITS trades do to
+    WR/expectancy? Flags that HURT expectancy get demoted to weight 0 by
+    the follow-up commit this task documents."""
+    closed = [t for t in trades if t.get("outcome") in ("win", "loss")]
+    if not closed:
+        return []
+    if flags is None:
+        flags = sorted({f for t in closed for f in t.get("fired_flags", [])})
+    base = _fold_stats(closed)
+    out = []
+    for flag in flags:
+        kept = [t for t in closed if flag not in t.get("fired_flags", [])]
+        stats = _fold_stats(kept)
+        out.append({
+            "flag": flag,
+            "signals_removed_pct": round(100.0 * (len(closed) - len(kept))
+                                         / len(closed), 1),
+            "wr_delta": (round(stats["wr"] - base["wr"], 1)
+                         if None not in (stats["wr"], base["wr"]) else None),
+            "expectancy_delta": (round(stats["expectancy_r"] - base["expectancy_r"], 3)
+                                 if None not in (stats["expectancy_r"],
+                                                 base["expectancy_r"]) else None),
+            "n_kept": stats["n"],
+        })
+    return out
+
+
+def _spearman_score_outcome(trades) -> float:
+    """Rank correlation between gate_score and win/loss — the monotonicity
+    statistic the permutation test defends."""
+    closed = [t for t in trades if t.get("outcome") in ("win", "loss")
+              and t.get("gate_score") is not None]
+    n = len(closed)
+    if n < 10:
+        return 0.0
+    scores = [t["gate_score"] for t in closed]
+    wins = [1.0 if t["outcome"] == "win" else 0.0 for t in closed]
+    rank = {v: i for i, v in enumerate(sorted(scores))}
+    mean_rank = (n - 1) / 2.0
+    mean_win = sum(wins) / n
+    cov = sum((rank[s] - mean_rank) * (w - mean_win) for s, w in zip(scores, wins))
+    var_r = sum((rank[s] - mean_rank) ** 2 for s in scores) ** 0.5
+    var_w = sum((w - mean_win) ** 2 for w in wins) ** 0.5
+    return cov / (var_r * var_w) if var_r and var_w else 0.0
+
+
+def permutation_test(trades, n: int = 1000, seed: int = 0) -> dict:
+    """Shuffle gate scores across trades n times: p = fraction of shuffles
+    whose monotonicity beats the observed one. Pre-registered stopping
+    rule: p >= 0.05 -> the score is noise -> STOP the phase and say so in
+    the results doc."""
+    import random as _random
+    rng = _random.Random(seed)
+    observed = _spearman_score_outcome(trades)
+    closed = [dict(t) for t in trades if t.get("outcome") in ("win", "loss")]
+    scores = [t["gate_score"] for t in closed]
+    beat = 0
+    for _ in range(n):
+        rng.shuffle(scores)
+        for t, s in zip(closed, scores):
+            t["gate_score"] = s
+        if _spearman_score_outcome(closed) >= observed:
+            beat += 1
+    return {"observed_rho": round(observed, 4),
+            "p_value": round(beat / n, 4), "n_shuffles": n}
+
+
+def overfit_sentinel(fold_result: dict, train_wr: float | None = None,
+                     pct_kept: float | None = None) -> list[str]:
+    """WARNs on three overfit smells: train/test WR gap > 12pts, a chosen
+    cut over-filtering to < 15% of signals, or pooled N < 90 (thin
+    evidence). Printed by the fold CLI and landed in the results docs."""
+    warnings = []
+    pooled = fold_result.get("pooled") or {}
+    if (train_wr is not None and pooled.get("wr") is not None
+            and train_wr - pooled["wr"] > 12):
+        warnings.append(f"train WR {train_wr}% vs test {pooled['wr']}% — "
+                        f"gap > 12 pts, overfit smell")
+    if pct_kept is not None and pct_kept < 15:
+        warnings.append(f"chosen cut keeps only {pct_kept}% of signals — "
+                        f"over-filtered to anecdotes")
+    if (pooled.get("n") or 0) < 90:
+        warnings.append(f"pooled N={pooled.get('n')} < 90 — thin evidence")
+    return warnings

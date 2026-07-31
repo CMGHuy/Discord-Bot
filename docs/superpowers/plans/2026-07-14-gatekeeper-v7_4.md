@@ -19,9 +19,20 @@
 >   Skipped ahead of numeric order deliberately: G103/G104 only depend on already-merged
 >   G76/G81, not on G97-G102's evidence-generation chain, so they were parallelized alongside
 >   G89-G96 rather than left to wait.
-> - **Next:** G97 (baseline annotation run — needs an actual multi-strategy backtest run, route
->   through the `backtest-runner` subagent per CLAUDE.md, not a plain code-writing session), then
->   G98-G102, G110, and the G118 Phase G3 checkpoint.
+> - **Completed 2026-07-31 (this session):** G97 (baseline census, commit `8752faa`), G98
+>   (frontier CLI + evidence, `19b73a7`), G99 (per-flag ablation; demoted `rf_stop_sweep` to
+>   weight 0 after it hurt expectancy in 9/11 non-trivial fold observations, `8f8f17f`), G101
+>   (plateau check, `c0c5b10` — done ahead of G100 in-session since its code was already staged;
+>   task-ID order in the doc/commit trail is otherwise preserved), G100 (permutation test,
+>   `67b300c` — **every strategy's p >= 0.05**, the pre-registered stopping rule triggered across
+>   the board), G102 (TRAIN decision memo, `dc6befd` — no strategy earned an A/A+ tier proposal;
+>   config `GATE_TIER_*_CUT` defaults left untouched, no surviving cut to promote), G110 (overfit
+>   sentinel, `e6c505f`). **Phase G3 (G89-G118) is now fully closed** — see
+>   `docs/superpowers/results/2026-07-gate-decision.md` for the honest bottom line: the checklist
+>   score does not yet statistically prove it separates winners from losers at today's TRAIN
+>   sample sizes, so no tier-cut config changed; `GATE_MODE` stays `inform`.
+> - **Next:** Part 5 (`2026-07-14-gatekeeper-v7_5.md`) — not started in this session per operator
+>   instruction (stop after the G118 checkpoint).
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
@@ -1061,11 +1072,11 @@ git add docs/superpowers/results/2026-07-gate-baseline.md docs/superpowers/resul
 git commit -m "docs: gate baseline census on TRAIN folds"
 ```
 
-### Task G98: Frontier run — all strategies
+### Task G98: Frontier run — all strategies ✅ (commit `19b73a7`)
 
 **Files:** Create `scripts/gate_frontier.py`; evidence `docs/superpowers/results/2026-07-gate-frontier.md`
 
-- [ ] **Step 1: Write the CLI**
+- [x] **Step 1: Write the CLI**
 
 ```python
 # scripts/gate_frontier.py
@@ -1132,20 +1143,26 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 2: Run for real on TRAIN**; write `docs/superpowers/results/2026-07-gate-frontier.md` with the honest headline numbers per strategy — one table row each: `WR @ chosen cut`, `wilson_lb`, `% signals kept`, `expectancy_r`, plus "no cut qualifies" rows stated plainly. Commit:
+- [x] **Step 2: Run for real on TRAIN**; write `docs/superpowers/results/2026-07-gate-frontier.md` with the honest headline numbers per strategy — one table row each: `WR @ chosen cut`, `wilson_lb`, `% signals kept`, `expectancy_r`, plus "no cut qualifies" rows stated plainly. Commit:
 
 ```bash
 git add scripts/gate_frontier.py docs/superpowers/results/2026-07-gate-frontier*.json docs/superpowers/results/2026-07-gate-frontier.md
 git commit -m "feat: frontier CLI + TRAIN evidence"
 ```
 
-### Task G99: Red-flag ablation — each flag earns its keep
+### Task G99: Red-flag ablation — each flag earns its keep ✅ (commit `8f8f17f`)
 
 **Files:** Modify `scripts/gate_fold_run.py` (`--ablate` mode); evidence doc `docs/superpowers/results/2026-07-gate-ablation.md`
 - Test: `tests/test_gate_folds.py`
 
 **Interfaces:** `--ablate` runs folds once per red flag with only that flag active as a filter: reports each flag's standalone `{signals_removed_pct, wr_delta, expectancy_delta}` pooled + per fold. Flags that *hurt* expectancy in ≥ 2 folds get their registry weight set to 0 (info-only) in a follow-up commit, documented.
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
+
+**Result:** `rf_stop_sweep` demoted to weight 0.0 in `redflags.py` — negative
+`expectancy_delta` in 9 of 11 non-trivial fold observations across 5
+strategies. `rf_fake_breakout`/`rf_divergence_trap` evidence stayed thin/
+one-sided; no demotion for either. See
+`docs/superpowers/results/2026-07-gate-ablation.md`.
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
 
 ```python
 from swingbot.core.gate.folds import ablate_flags
@@ -1165,7 +1182,7 @@ def test_ablation_loop_mechanics():
     assert opex["signals_removed_pct"] == 0.0 and opex["wr_delta"] == 0.0
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`):
 
 ```python
 def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dict]:
@@ -1198,8 +1215,10 @@ def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dic
 
 **And the CLI mode** — `scripts/gate_fold_run.py` gains `--ablate`: per strategy, run annotate-only folds, call `ablate_flags` per fold and pooled, print + include in the JSON artifact.
 
-- [ ] **Step 3: Run tests — PASS.** Then **run for real** on TRAIN; write `docs/superpowers/results/2026-07-gate-ablation.md` (per flag: pooled + per-fold `{signals_removed_pct, wr_delta, expectancy_delta}` table). **Demotions:** any flag whose `expectancy_delta` is negative in ≥ 2 folds gets its registry weight set to 0 (info-only) in a follow-up commit, named in the doc.
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Run tests — PASS.** Then **run for real** on TRAIN; write `docs/superpowers/results/2026-07-gate-ablation.md` (per flag: pooled + per-fold `{signals_removed_pct, wr_delta, expectancy_delta}` table). **Demotions:** any flag whose `expectancy_delta` is negative in ≥ 2 folds gets its registry weight set to 0 (info-only) in a follow-up commit, named in the doc.
+- [x] **Step 4: Commit** (demotion folded into the same G99 commit rather than a
+  separate follow-up — `redflags.py`'s `rf_stop_sweep` weight change plus the
+  doc landed together in `8f8f17f`)
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1207,12 +1226,18 @@ git add swingbot/core/gate/folds.py scripts/gate_fold_run.py docs/superpowers/re
 git commit -m "feat: per-flag ablation + evidence"
 ```
 
-### Task G100: Permutation reality check on the score
+### Task G100: Permutation reality check on the score ✅ (commit `67b300c`)
 
 **Files:** Modify `folds.py` (`permutation_test(trades, n=1000)`); test `tests/test_gate_folds.py`; evidence in the G98 doc
 
 **Interfaces:** shuffles gate scores across the annotated trades 1000× → p-value that the observed WR-by-decile monotonicity is luck (reuses edge E41 machinery when present). p ≥ 0.05 → the score is noise → **stop the phase and say so** in the results doc (pre-registered stopping rule).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
+
+**Result: every strategy's p-value >= 0.05 (0.346-1.0) — the stopping rule
+triggers for all 11 strategies.** No strategy's gate score statistically
+proves it separates winners from losers better than chance at today's
+TRAIN sample sizes. Documented in
+`docs/superpowers/results/2026-07-gate-frontier.md`.
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
 
 ```python
 import random
@@ -1241,7 +1266,7 @@ def test_noise_large_p():
     assert permutation_test(_noise(), n=500, seed=1)["p_value"] >= 0.05
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; reuses edge E41 machinery when present — capability check documented):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; reuses edge E41 machinery when present — capability check documented):
 
 ```python
 def _spearman_score_outcome(trades) -> float:
@@ -1284,8 +1309,8 @@ def permutation_test(trades, n: int = 1000, seed: int = 0) -> dict:
             "p_value": round(beat / n, 4), "n_shuffles": n}
 ```
 
-- [ ] **Step 3: Run tests — PASS.** Then **run for real** over the G97 annotated trades (add a `--permutation` flag to `scripts/gate_frontier.py` that appends the result to each strategy's artifact); append the p-values to the G98 evidence doc. **If p ≥ 0.05 pooled: stop the phase and write that.**
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Run tests — PASS.** Then **run for real** over the G97 annotated trades (add a `--permutation` flag to `scripts/gate_frontier.py` that appends the result to each strategy's artifact); append the p-values to the G98 evidence doc. **If p ≥ 0.05 pooled: stop the phase and write that.** (p >= 0.05 for all 11 strategies — stop written up in the doc.)
+- [x] **Step 4: Commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1293,12 +1318,12 @@ git add swingbot/core/gate/folds.py scripts/gate_frontier.py docs/superpowers/re
 git commit -m "feat: gate score permutation test"
 ```
 
-### Task G101: Threshold plateau check
+### Task G101: Threshold plateau check ✅ (commit `c0c5b10`)
 
 **Files:** Modify `frontier.py` (`plateau_report(frontier_rows, chosen_cut)`); test `tests/test_gate_frontier.py`
 
 **Interfaces:** asserts the chosen cut sits on a plateau (WR within 2 pts and expectancy within 0.03R for cut ± 10) not a spike; spiky choice → report recommends the plateau center instead (edge E42 pattern).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_frontier.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_frontier.py`)
 
 ```python
 from swingbot.core.gate.frontier import plateau_report
@@ -1323,7 +1348,7 @@ def test_spike_redirected_to_plateau_center():
     assert report["recommend"] != 50            # the spike is not trustworthy
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `frontier.py`; edge E42 pattern):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `frontier.py`; edge E42 pattern):
 
 ```python
 def plateau_report(frontier_rows, chosen_cut: int,
@@ -1358,8 +1383,8 @@ def plateau_report(frontier_rows, chosen_cut: int,
             "reason": f"cut {chosen_cut} is a spike; widest plateau centers at {recommend}"}
 ```
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_frontier.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_frontier.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1367,11 +1392,16 @@ git add swingbot/core/gate/frontier.py tests/test_gate_frontier.py
 git commit -m "feat: plateau check for tier cuts"
 ```
 
-### Task G102: TRAIN decision memo — the honest 95% answer
+### Task G102: TRAIN decision memo — the honest 95% answer ✅ (commit `dc6befd`)
 
 **Files:** Create `docs/superpowers/results/2026-07-gate-decision.md`
 
-- [ ] **Step 1: Write the memo from G97–G101 evidence** — `docs/superpowers/results/2026-07-gate-decision.md`, this exact structure per strategy:
+**Result:** no strategy earns a G95 A/A+ proposal; G100 permutation p >= 0.05
+for all 11; G101 plateau check flags all three G94 best cuts as spikes.
+Config defaults left unchanged (no surviving cut to promote); balanced
+B-cut sanity check passes on its own terms.
+
+- [x] **Step 1: Write the memo from G97–G101 evidence** — `docs/superpowers/results/2026-07-gate-decision.md`, this exact structure per strategy:
 
 ```markdown
 # Gatekeeper v7 — TRAIN decision memo
@@ -1401,8 +1431,8 @@ signals kept — target band was +3..+8 pts at <= 40% loss: {met / not met}.
 new checks — never looser math.>
 ```
 
-- [ ] **Step 2: Apply the surviving cuts to the config Field *defaults*** (`GATE_TIER_*_CUT` defaults in `config.py`; `GATE_MODE` stays `inform` — cuts only label tiers on alerts; nothing starts blocking). **Balanced-preset sanity check:** if balanced thresholds put < 30% of TRAIN signals at tier ≥ B in the census, loosen the balanced preset values in the affected `ThresholdSpec`s (G79) and note which in the memo — defaults must never starve the alert flow.
-- [ ] **Step 3: Commit**
+- [x] **Step 2: Apply the surviving cuts to the config Field *defaults*** (`GATE_TIER_*_CUT` defaults in `config.py`; `GATE_MODE` stays `inform` — cuts only label tiers on alerts; nothing starts blocking). **Balanced-preset sanity check:** if balanced thresholds put < 30% of TRAIN signals at tier ≥ B in the census, loosen the balanced preset values in the affected `ThresholdSpec`s (G79) and note which in the memo — defaults must never starve the alert flow. (No cuts survived to apply — defaults untouched. Sanity check passed: 97.6%-100% of signals clear the B cut for every strategy with trades, well above 30%.)
+- [x] **Step 3: Commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1657,12 +1687,12 @@ git add swingbot/core/gate/persistence.py scripts/gate_shadow_report.py tests/te
 git commit -m "feat: shadow comparison report"
 ```
 
-### Task G110: Overfit sentinel
+### Task G110: Overfit sentinel ✅ (commit `e6c505f`)
 
 **Files:** Modify `folds.py`; test `tests/test_gate_folds.py`
 
 **Interfaces:** `overfit_sentinel(fold_result) -> list[str]` — WARNs when train-fold WR exceeds test-fold WR by > 12 pts, when a strategy's chosen cut keeps < 15% of signals (over-filtered to anecdotes), or when pooled N < 90. Warnings print in fold CLI output and land in the results docs automatically.
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
 
 ```python
 from swingbot.core.gate.folds import overfit_sentinel
@@ -1683,7 +1713,7 @@ def test_overfit_sentinel_rules():
     assert any("N=50" in w for w in warns)
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; the fold CLI prints these and they land in the results docs automatically):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; the fold CLI prints these and they land in the results docs automatically):
 
 ```python
 def overfit_sentinel(fold_result: dict, train_wr: float | None = None,
@@ -1704,8 +1734,8 @@ def overfit_sentinel(fold_result: dict, train_wr: float | None = None,
 
 (In `scripts/gate_fold_run.py`, print `overfit_sentinel(...)` output after each run and include it in the JSON artifact.)
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_folds.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_folds.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -1713,9 +1743,9 @@ git add swingbot/core/gate/folds.py scripts/gate_fold_run.py tests/test_gate_fol
 git commit -m "feat: overfit sentinel"
 ```
 
-### Task G118: Phase G3 checkpoint
+### Task G118: Phase G3 checkpoint ✅
 
-- [ ] **Step 1:** Full suite + `make check` green; evidence docs (baseline, frontier, ablation, decision memo) committed; permutation p < 0.05 on record — or the documented stop.
-- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G3 checkpoint (fold evidence on record)`
+- [x] **Step 1:** Full suite + `make check` green; evidence docs (baseline, frontier, ablation, decision memo) committed; permutation p < 0.05 on record — or the documented stop. (1223+ passed / 1 known pre-existing failure only, `py_compile` clean. Evidence docs: `2026-07-gate-baseline.md`, `2026-07-gate-frontier.md`, `2026-07-gate-ablation.md`, `2026-07-gate-decision.md`, all committed. Permutation: documented stop — every strategy p >= 0.05.)
+- [x] **Step 2:** Update Progress block. Commit — `chore: phase G3 checkpoint (fold evidence on record)`
 
 ---

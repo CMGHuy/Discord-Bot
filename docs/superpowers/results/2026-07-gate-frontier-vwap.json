@@ -1,0 +1,12 @@
+{
+  "strategy": "VWAP",
+  "frontier": [],
+  "deciles": [],
+  "best_cut": null,
+  "proposal": null,
+  "permutation": {
+    "observed_rho": 0.0,
+    "p_value": 1.0,
+    "n_shuffles": 1000
+  }
+}

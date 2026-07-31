@@ -1,0 +1,32 @@
+{
+  "strategy": "Fibonacci",
+  "baseline": {
+    "strategy": "Fibonacci",
+    "min_tier": null,
+    "folds": [
+      {
+        "year": 2021,
+        "n": 22,
+        "wr": 72.7,
+        "expectancy_r": -0.036
+      },
+      {
+        "year": 2022,
+        "n": 4,
+        "wr": 25.0,
+        "expectancy_r": -0.692
+      },
+      {
+        "year": 2023,
+        "n": 15,
+        "wr": 73.3,
+        "expectancy_r": -0.027
+      }
+    ],
+    "pooled": {
+      "n": 41,
+      "wr": 68.3,
+      "expectancy_r": -0.097
+    }
+  }
+}

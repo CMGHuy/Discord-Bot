@@ -51,6 +51,22 @@ def test_delegates_to_edge_engine_when_present(monkeypatch):
     assert folds.run_folds("VWAP")["delegated"] == "VWAP"
 
 
+def test_ablation_loop_mechanics():
+    from swingbot.core.gate.folds import ablate_flags
+
+    trades = ([{"outcome": "loss", "r_multiple": -1.0, "fired_flags": ["rf_dead_cat"]}] * 10
+              + [{"outcome": "win", "r_multiple": 1.5, "fired_flags": []}] * 30
+              + [{"outcome": "loss", "r_multiple": -1.0, "fired_flags": []}] * 10)
+    rows = ablate_flags(trades, flags=["rf_dead_cat", "rf_opex_pin"])
+    dead_cat = next(r for r in rows if r["flag"] == "rf_dead_cat")
+    # removing rf_dead_cat trades: 50 -> 40 signals (20% removed), WR 60 -> 75
+    assert dead_cat["signals_removed_pct"] == 20.0
+    assert dead_cat["wr_delta"] == 15.0
+    assert dead_cat["expectancy_delta"] > 0
+    opex = next(r for r in rows if r["flag"] == "rf_opex_pin")
+    assert opex["signals_removed_pct"] == 0.0 and opex["wr_delta"] == 0.0
+
+
 def test_no_delegation_against_the_real_backtest_wf_module():
     """swingbot/core/backtest_wf.py (edge-engine E39) already exists in this
     repo, but it exposes its own differently-shaped run_folds(overrides, ...)
@@ -62,3 +78,47 @@ def test_no_delegation_against_the_real_backtest_wf_module():
     is actually there and not just satisfied by the stub test above."""
     import swingbot.core.backtest_wf as real_wf
     assert not hasattr(real_wf, "run_walk_forward")
+
+
+import random
+
+from swingbot.core.gate.folds import permutation_test
+
+
+def _rigged(n=200):
+    return [{"gate_score": i / 2.0,
+             "outcome": "win" if i >= 80 else "loss",
+             "r_multiple": 1.5 if i >= 80 else -1.0} for i in range(n)]
+
+
+def _noise(n=200, seed=7):
+    rng = random.Random(seed)
+    return [{"gate_score": rng.uniform(0, 100),
+             "outcome": rng.choice(["win", "loss"]),
+             "r_multiple": rng.choice([1.5, -1.0])} for _ in range(n)]
+
+
+def test_rigged_monotone_tiny_p():
+    assert permutation_test(_rigged(), n=500, seed=1)["p_value"] < 0.01
+
+
+def test_noise_large_p():
+    assert permutation_test(_noise(), n=500, seed=1)["p_value"] >= 0.05
+
+
+from swingbot.core.gate.folds import overfit_sentinel
+
+
+def test_overfit_sentinel_rules():
+    healthy = {"pooled": {"n": 120, "wr": 68.0, "expectancy_r": 0.3}}
+    assert overfit_sentinel(healthy, train_wr=72.0, pct_kept=55.0) == []
+    # train-test gap > 12 pts
+    warns = overfit_sentinel(healthy, train_wr=85.0, pct_kept=55.0)
+    assert any("overfit" in w for w in warns)
+    # over-filtered to anecdotes
+    warns = overfit_sentinel(healthy, train_wr=72.0, pct_kept=10.0)
+    assert any("anecdotes" in w for w in warns)
+    # thin pooled evidence
+    warns = overfit_sentinel({"pooled": {"n": 50, "wr": 68.0}}, train_wr=None,
+                             pct_kept=None)
+    assert any("N=50" in w for w in warns)

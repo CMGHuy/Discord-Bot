@@ -82,6 +82,28 @@ def test_insufficient_data_returns_none():
     assert propose_tier_cuts(thin) is None            # nothing clears N floors
 
 
+from swingbot.core.gate.frontier import plateau_report
+
+
+def _rows(wr_by_cut):
+    return [{"cut": c, "n_kept": 100, "pct_kept": 50.0, "wr": wr,
+             "wilson_lb": 0.5, "expectancy_r": 0.3, "trades_per_month": 5}
+            for c, wr in wr_by_cut.items()]
+
+
+def test_plateau_accepted():
+    rows = _rows({40: 70.0, 45: 71.0, 50: 71.5, 55: 70.5, 60: 70.0})
+    report = plateau_report(rows, chosen_cut=50)
+    assert report["on_plateau"] is True and report["recommend"] == 50
+
+
+def test_spike_redirected_to_plateau_center():
+    rows = _rows({40: 60.0, 45: 61.0, 50: 78.0, 55: 60.5, 60: 60.0})
+    report = plateau_report(rows, chosen_cut=50)
+    assert report["on_plateau"] is False
+    assert report["recommend"] != 50            # the spike is not trustworthy
+
+
 def test_write_proposal_file(tmp_path, monkeypatch):
     import swingbot.config as config
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))

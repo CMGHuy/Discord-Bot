@@ -1,0 +1,32 @@
+{
+  "strategy": "MA Ribbon",
+  "baseline": {
+    "strategy": "MA Ribbon",
+    "min_tier": null,
+    "folds": [
+      {
+        "year": 2021,
+        "n": 38,
+        "wr": 78.9,
+        "expectancy_r": 0.012
+      },
+      {
+        "year": 2022,
+        "n": 4,
+        "wr": 25.0,
+        "expectancy_r": -0.704
+      },
+      {
+        "year": 2023,
+        "n": 27,
+        "wr": 77.8,
+        "expectancy_r": -0.004
+      }
+    ],
+    "pooled": {
+      "n": 69,
+      "wr": 75.4,
+      "expectancy_r": -0.036
+    }
+  }
+}

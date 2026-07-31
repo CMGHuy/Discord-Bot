@@ -1,0 +1,33 @@
+{
+  "strategy": "MA Ribbon",
+  "pooled": [
+    {
+      "flag": "rf_stop_sweep",
+      "signals_removed_pct": 14.5,
+      "wr_delta": -2.5,
+      "expectancy_delta": -0.033,
+      "n_kept": 59
+    }
+  ],
+  "per_fold": {
+    "2021": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 15.8,
+        "wr_delta": -0.8,
+        "expectancy_delta": -0.011,
+        "n_kept": 32
+      }
+    ],
+    "2022": [],
+    "2023": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 14.8,
+        "wr_delta": -3.9,
+        "expectancy_delta": -0.051,
+        "n_kept": 23
+      }
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "strategy": "EMA Crossover",
+  "baseline": {
+    "strategy": "EMA Crossover",
+    "min_tier": null,
+    "folds": [
+      {
+        "year": 2021,
+        "n": 8,
+        "wr": 100.0,
+        "expectancy_r": 0.291
+      },
+      {
+        "year": 2022,
+        "n": 5,
+        "wr": 100.0,
+        "expectancy_r": 0.292
+      },
+      {
+        "year": 2023,
+        "n": 4,
+        "wr": 75.0,
+        "expectancy_r": -0.041
+      }
+    ],
+    "pooled": {
+      "n": 17,
+      "wr": 94.1,
+      "expectancy_r": 0.213
+    }
+  }
+}

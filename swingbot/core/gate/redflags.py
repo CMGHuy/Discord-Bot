@@ -77,7 +77,16 @@ register(check_id="rf_fake_breakout", section="redflag", weight=10.0,
 def rf_stop_sweep(df_daily, plan, macro_snap, **ctx) -> CheckResult:
     """Wick >= wick_body_mult x body through an obvious level with a close
     back on the far side, and no follow-through on the next bar. For
-    sweep-reclaim strategies the registry applies_to marks this n/a."""
+    sweep-reclaim strategies the registry applies_to marks this n/a.
+
+    Weight demoted to 0.0 (info-only) by G99: the TRAIN-fold ablation
+    (docs/superpowers/results/2026-07-gate-ablation.md) found negative
+    expectancy_delta -- removing this flag's trades made expectancy WORSE,
+    i.e. it disproportionately fires on trades that go on to win -- in 9 of
+    11 non-trivial fold observations across 5 strategies (EMA Crossover,
+    Fibonacci, MA Ribbon, RSI Divergence pooled and per-fold; Break & Retest
+    mixed). The check still runs and still reports on the checklist for
+    operator visibility; it simply no longer moves the 0-100 score or tier."""
     spec = CHECKS["rf_stop_sweep"]
     from swingbot.core.gate.levels import _safe_atr, round_levels, swing_levels
     cache = ctx.get("_gate_cache")
@@ -106,11 +115,11 @@ def rf_stop_sweep(df_daily, plan, macro_snap, **ctx) -> CheckResult:
                            f"stop-sweep wick through {level:.2f} "
                            f"({wick_body}x body), no follow-through",
                            {"level": level, "wick_body": wick_body,
-                            "follow_atr": round(follow_atr, 2)}, 8.0)
-    return _rf("rf_stop_sweep", "pass", "no sweep signature", {}, 8.0)
+                            "follow_atr": round(follow_atr, 2)}, 0.0)
+    return _rf("rf_stop_sweep", "pass", "no sweep signature", {}, 0.0)
 
 
-register(check_id="rf_stop_sweep", section="redflag", weight=8.0,
+register(check_id="rf_stop_sweep", section="redflag", weight=0.0,
          func=rf_stop_sweep,
          thresholds={
              "wick_body_mult": ThresholdSpec("wick_body_mult", 1.5, 1.0, 4.0, 0.25,
