@@ -65,3 +65,70 @@ def test_gate_eval_off_is_byte_identical(monkeypatch):
     baseline_json = json.dumps(baseline.to_dict(), sort_keys=True, default=str)
     again_json = json.dumps(again.to_dict(), sort_keys=True, default=str)
     assert baseline_json == again_json
+
+
+# ---------------------------------------------------------------------------
+# G92: gate-filtered replay mode.
+#
+# NOTE on adapting the plan's illustrative test: the plan's version drove the
+# tier split off a single `_run(gate_eval=True)` call's REAL gate scores and
+# asserted keep/skip via dict-subscript trade["gate_tier"]/trade["entry_date"].
+# BacktestTrade is a dataclass (see the G91 note above), so this uses
+# attribute access. More importantly, this repo has no simple synthetic
+# fixture that reliably produces signals landing across all four tiers (A+
+# through C) from the real checklist -- that would require reverse-engineering
+# which checks pass/warn/fail against a hand-built OHLCV frame, which is a
+# calibration exercise, not what G92 is testing. G92's own deliverable is the
+# *filtering plumbing* (kept iff tier clears the bar, hard-blocks always
+# excluded) -- so this monkeypatches backtest._gate_annotation directly to
+# return a controlled, per-signal tier and asserts the plumbing routes each
+# signal to `trades` or `skipped_by_gate` correctly. G91's own test already
+# covers that real gate scores flow into the annotation.
+# ---------------------------------------------------------------------------
+
+from swingbot.core.backtest import assert_train_only
+
+
+def test_filtered_run_drops_exactly_subtier(monkeypatch):
+    import swingbot.core.backtest as bt
+
+    df = _fixture_df()
+    entry_bars = (20, 25, 30, 35)
+    tier_by_bar = {20: "A+", 25: "A", 30: "B", 35: "C"}
+    bull = pd.Series(False, index=df.index)
+    for b in entry_bars:
+        bull.iloc[b] = True
+    bear = pd.Series(False, index=df.index)
+    monkeypatch.setattr(bt, "_vectorized_entries", lambda *a, **k: (bull, bear))
+
+    def _fake_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
+                         entry, stop_loss, take_profit, spy_df=None):
+        if not gate_eval:
+            return None, None, [], False
+        return 80.0, tier_by_bar[i], [], False
+    monkeypatch.setattr(bt, "_gate_annotation", _fake_annotation)
+
+    summary = bt.run_backtest("TEST", df, "Break & Retest", "2w",
+                              one_at_a_time=False, gate_eval=True, gate_min_tier="A")
+
+    assert len(summary.trades) + len(summary.skipped_by_gate) == len(entry_bars)
+    for t in summary.trades:
+        assert t.gate_tier in ("A+", "A")
+        assert t.skipped_by_gate is False
+    for t in summary.skipped_by_gate:
+        assert t.gate_tier in ("B", "C")
+        assert t.skipped_by_gate is True
+
+
+def test_gate_min_tier_requires_gate_eval():
+    import swingbot.core.backtest as bt
+    df = _fixture_df()
+    with pytest.raises(ValueError, match="gate_eval"):
+        bt.run_backtest("TEST", df, "Break & Retest", "2w", gate_min_tier="A")
+
+
+def test_validation_window_raises():
+    df_2024 = make_ohlcv(np.full(60, 100.0), start="2024-03-01")
+    with pytest.raises(ValueError, match="validation"):
+        assert_train_only(df_2024)
+    assert_train_only(make_ohlcv(np.full(60, 100.0), start="2022-01-03"))  # no raise

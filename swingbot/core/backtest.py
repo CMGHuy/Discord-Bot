@@ -91,6 +91,11 @@ class BacktestTrade:
     gate_score: float | None = None
     gate_tier: str | None = None
     fired_flags: list = field(default_factory=list)
+    # G92: set on the record whichever list it lands in (trades or
+    # summary.skipped_by_gate) -- lets a caller holding just the record
+    # tell which bucket it came from.
+    fired_hard_block: bool = False
+    skipped_by_gate: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -119,6 +124,10 @@ class BacktestSummary:
     runner_be: int = 0
     runner_timeout: int = 0
     avg_win_r: float | None = None
+    # G92: signals the gate filtered out (gate_min_tier), kept here for the
+    # frontier math -- excluded from every equity/WR/expectancy figure above,
+    # which are all computed from `trades` only.
+    skipped_by_gate: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -167,12 +176,13 @@ def _gate_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
                      entry, stop_loss, take_profit, spy_df=None):
     """G91: run the gatekeeper checklist against exactly what was knowable at
     the signal bar's close (df sliced to i+1, macro reconstructed via
-    backtest_ctx.historical_macro_snap) and return the annotation triple for
-    the trade record. Annotation only -- callers must not use this to alter
-    entry/exit decisions. When gate_eval is False this never imports the
-    gate package at all."""
+    backtest_ctx.historical_macro_snap) and return the annotation for the
+    trade record: (score, tier, fired_redflag_ids, fired_hard_block).
+    Annotation only -- callers must not use this to alter entry/exit
+    decisions. When gate_eval is False this never imports the gate package
+    at all."""
     if not gate_eval:
-        return None, None, []
+        return None, None, [], False
 
     from swingbot.core.gate import run_checklist
     from swingbot.core.gate.backtest_ctx import historical_macro_snap
@@ -194,7 +204,27 @@ def _gate_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
         macro_snap=historical_macro_snap(signal_date), spy_df=spy_df)
     fired_flags = [c.check_id for c in gate_result.checks
                   if c.section == "redflag" and c.status == "fail"]
-    return gate_result.score, gate_result.tier, fired_flags
+    return gate_result.score, gate_result.tier, fired_flags, bool(gate_result.hard_blocks)
+
+
+def assert_train_only(df) -> None:
+    """Validation-window hygiene (cockpit C31 pattern): gate tuning never
+    reads 2024-2025 bars. The single pre-registered validation shot belongs
+    to edge-engine E92 -- this plan feeds it, never spends it."""
+    last = df.index.max()
+    if str(last)[:10] > "2023-12-31":
+        raise ValueError(
+            "gate replay touched the 2024-2025 validation window — "
+            "TRAIN folds end 2023; see the gatekeeper-v7 targets doc")
+
+
+def _gate_blocked(gate_min_tier: str, gate_tier: str | None, fired_hard_block: bool) -> bool:
+    """True if a signal's own gate result fails to clear gate_min_tier (or
+    hard-blocked outright, regardless of tier -- G92)."""
+    if gate_tier is None or fired_hard_block:
+        return True
+    from swingbot.core.gate.score import TIER_ORDER
+    return TIER_ORDER.index(gate_tier) > TIER_ORDER.index(gate_min_tier)
 
 
 def run_backtest(
@@ -208,6 +238,7 @@ def run_backtest(
     tp2_mode: str = "none",
     frictions: bool = True,
     gate_eval: bool = False,
+    gate_min_tier: str | None = None,
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -237,7 +268,20 @@ def run_backtest(
     Zero behavior change: trades are still taken/classified identically:
     the gate only annotates the record. Default False, and False never
     imports the gate package.
+
+    gate_min_tier: (G92) requires gate_eval=True. Signals whose gate_tier
+    fails to clear this bar (or that hard-blocked outright) are recorded in
+    `skipped_by_gate` instead of `trades` -- kept for the frontier math,
+    excluded from every equity/WR/expectancy figure. Train-only hygiene:
+    using either gate kwarg asserts the replay never touches the 2024-2025
+    validation window (assert_train_only) -- the single pre-registered
+    validation shot belongs to edge-engine E92, not this plan.
     """
+    if gate_eval or gate_min_tier is not None:
+        assert_train_only(df)
+    if gate_min_tier is not None and not gate_eval:
+        raise ValueError("gate_min_tier requires gate_eval=True")
+
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
         return BacktestSummary(
@@ -274,6 +318,7 @@ def run_backtest(
     n = len(df)
 
     trades: list[BacktestTrade] = []
+    skipped_by_gate: list[BacktestTrade] = []
     total_signals = 0
     runner_counts: dict[str, int] = {}
     _lm_cache_key = None
@@ -352,11 +397,11 @@ def run_backtest(
             # price can't represent.
             return_pct = r_multiple * (risk_per_share / entry) * 100
             holding_days = exit_i - i
-            gate_score, gate_tier, fired_flags = _gate_annotation(
+            gate_score, gate_tier, fired_flags, fired_hard_block = _gate_annotation(
                 gate_eval, ticker, strategy, horizon_key, df, i, direction,
                 entry, stop_loss, take_profit)
 
-            trades.append(BacktestTrade(
+            record = BacktestTrade(
                 entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
                 direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
                 take_profit=round(take_profit, 4), outcome=outcome,
@@ -364,7 +409,13 @@ def run_backtest(
                 r_multiple=round(r_multiple, 3), holding_days=holding_days,
                 runner_outcome=res.runner_outcome,
                 gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
-            ))
+                fired_hard_block=fired_hard_block,
+            )
+            if gate_min_tier is not None and _gate_blocked(gate_min_tier, gate_tier, fired_hard_block):
+                record.skipped_by_gate = True
+                skipped_by_gate.append(record)
+            else:
+                trades.append(record)
             continue
 
         # ---- v1 walk-forward loop ----
@@ -432,18 +483,24 @@ def run_backtest(
         if frictions:
             r_multiple -= commission_r()
         holding_days = exit_i - i
-        gate_score, gate_tier, fired_flags = _gate_annotation(
+        gate_score, gate_tier, fired_flags, fired_hard_block = _gate_annotation(
             gate_eval, ticker, strategy, horizon_key, df, i, direction,
             entry, stop_loss, take_profit)
 
-        trades.append(BacktestTrade(
+        record = BacktestTrade(
             entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
             direction=direction, entry=round(entry_fill, 4), stop_loss=round(stop_loss, 4),
             take_profit=round(take_profit, 4), outcome=outcome,
             exit_price=round(exit_fill, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
             gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
-        ))
+            fired_hard_block=fired_hard_block,
+        )
+        if gate_min_tier is not None and _gate_blocked(gate_min_tier, gate_tier, fired_hard_block):
+            record.skipped_by_gate = True
+            skipped_by_gate.append(record)
+        else:
+            trades.append(record)
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
     wins      = [t for t in evaluated_trades if t.outcome == "win"]
@@ -483,6 +540,7 @@ def run_backtest(
         runner_be=runner_counts.get("runner_be", 0),
         runner_timeout=runner_counts.get("runner_timeout", 0),
         avg_win_r=float(np.mean([t.r_multiple for t in wins])) if wins else None,
+        skipped_by_gate=skipped_by_gate,
     )
 
 
