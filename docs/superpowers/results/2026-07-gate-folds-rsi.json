@@ -1,0 +1,32 @@
+{
+  "strategy": "RSI",
+  "baseline": {
+    "strategy": "RSI",
+    "min_tier": null,
+    "folds": [
+      {
+        "year": 2021,
+        "n": 2,
+        "wr": 100.0,
+        "expectancy_r": 0.34
+      },
+      {
+        "year": 2022,
+        "n": 1,
+        "wr": 100.0,
+        "expectancy_r": 0.34
+      },
+      {
+        "year": 2023,
+        "n": 2,
+        "wr": 100.0,
+        "expectancy_r": 0.34
+      }
+    ],
+    "pooled": {
+      "n": 5,
+      "wr": 100.0,
+      "expectancy_r": 0.34
+    }
+  }
+}

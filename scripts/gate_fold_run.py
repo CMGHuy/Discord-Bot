@@ -24,10 +24,12 @@ def _slug(name: str) -> str:
 
 
 def run_one(strategy: str, min_tier: str | None) -> dict:
-    baseline = run_folds(strategy, gate_min_tier=None)
+    print(f"\n=== {strategy}: baseline run ===", flush=True)
+    baseline = run_folds(strategy, gate_min_tier=None, verbose=True)
     result = {"strategy": strategy, "baseline": baseline}
     if min_tier:
-        filtered = run_folds(strategy, gate_min_tier=min_tier)
+        print(f"=== {strategy}: filtered run (min_tier={min_tier}) ===", flush=True)
+        filtered = run_folds(strategy, gate_min_tier=min_tier, verbose=True)
         result["filtered"] = filtered
         result["gate"] = apply_fold_gate(filtered["folds"], baseline["folds"])
     for label in ("baseline", "filtered"):
@@ -50,7 +52,9 @@ def main() -> int:
     if not strategies[0]:
         parser.error("--strategy or --all required")
     os.makedirs(OUT_DIR, exist_ok=True)
-    for strategy in strategies:
+    for si, strategy in enumerate(strategies, 1):
+        print(f"\n########## strategy {si}/{len(strategies)}: {strategy} ##########",
+              flush=True)
         result = run_one(strategy, args.min_tier)
         result_slim = {k: v for k, v in result.items()}
         for label in ("baseline", "filtered"):

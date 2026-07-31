@@ -94,7 +94,7 @@ def _default_replay(strategy, ticker, test_start, test_end, gate_min_tier):
 
 
 def run_folds(strategy: str, *, gate_min_tier: str | None = None,
-              tickers=None, replay=None) -> dict:
+              tickers=None, replay=None, verbose: bool = False) -> dict:
     try:
         backtest_wf = importlib.import_module("swingbot.core.backtest_wf")
     except ImportError:
@@ -109,11 +109,16 @@ def run_folds(strategy: str, *, gate_min_tier: str | None = None,
     folds, all_trades = [], []
     for window in FOLDS:
         trades = []
-        for ticker in tickers:
+        for idx, ticker in enumerate(tickers, 1):
+            if verbose:
+                print(f"    [{strategy}] fold {window['year']} "
+                      f"ticker {idx}/{len(tickers)} {ticker}", flush=True)
             trades += replay(strategy, ticker, window["test_start"],
                              window["test_end"], gate_min_tier)
         stats = _fold_stats(trades)
         folds.append({"year": window["year"], **stats})
+        if verbose:
+            print(f"  [{strategy}] fold {window['year']} done: {stats}", flush=True)
         all_trades += [t for t in trades if t.get("outcome") in ("win", "loss")]
     return {"strategy": strategy, "min_tier": gate_min_tier,
             "folds": folds, "pooled": _fold_stats(all_trades),
