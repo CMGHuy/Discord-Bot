@@ -908,6 +908,12 @@ async def config_watcher():
                     f"⚙️ **Min R:R ratio** updated: {old} → {new}"
                 )
             ),
+            "MIN_TARGET_PCT": (
+                lambda old, new: (
+                    f"⚙️ **Minimum target %** updated: {old}% → {new}%  "
+                    f"(floor under TP1 on every new plan)"
+                )
+            ),
         }
         if config.DISCORD_CHANNEL_TRADES_ID:
             channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))

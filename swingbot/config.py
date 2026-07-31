@@ -382,6 +382,19 @@ FIELDS: list[Field] = [
           type="checkbox", default="true",
           help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "
                "moves, TP1 partials, runner trail, invalidation - with a Discord alert per transition."),
+    Field("MIN_TARGET_PCT", "MIN_TARGET_PCT", "Plan Engine v2", "Minimum target %",
+          type="float", default="2.5", min=0, max=20, step=0.1,
+          help="Floor under TP1: no plan may aim for a win smaller than this % of entry, whichever "
+               "way the reward:risk math comes out. The live book's problem is structural -- TP1 was "
+               "computed as entry +/- risk_distance x rr with every rr override at 0.30-0.40, so a "
+               "win banked ~0.35R while a loss cost ~1R by construction (median designed target "
+               "0.85% against a 2.19% stop). This floor sets the win side; the stop side is retuned "
+               "separately so the two effects stay attributable."),
+    Field("TARGET_FLOOR_ENABLED", "TARGET_FLOOR_ENABLED", "Plan Engine v2", "Target floor enforced",
+          type="checkbox", default="true",
+          help="Off = MIN_TARGET_PCT is computed and logged but NOT applied, so a week of scans can "
+               "measure how many setups would survive the floor before it starts changing live "
+               "targets. On = the floor is enforced on every emitted plan."),
 
     # --- Data sources (optional external market-data APIs) ---
     Field("FMP_API_KEY", "FMP_API_KEY", "Data Sources", "Financial Modeling Prep API key",
