@@ -35,3 +35,25 @@ def test_deciles_monotone_and_golden():
 
 def test_empty_trades():
     assert wr_by_decile([]) == []
+
+
+from swingbot.core.gate.frontier import best_cut, frontier
+
+
+def test_frontier_golden():
+    rows = frontier(synth_trades(), cuts=range(0, 101, 20))
+    by_cut = {r["cut"]: r for r in rows}
+    assert by_cut[0]["n_kept"] == 200 and by_cut[0]["pct_kept"] == 100.0
+    assert by_cut[0]["wr"] == 60.0                    # 120 of 200 win
+    assert by_cut[40]["wr"] == 100.0                  # only winners survive
+    assert by_cut[40]["pct_kept"] == 60.0
+    assert by_cut[100]["n_kept"] == 0 and by_cut[100]["wr"] is None
+    assert all("trades_per_month" in r and "wilson_lb" in r for r in rows)
+
+
+def test_best_cut_constraints():
+    rows = frontier(synth_trades(), cuts=range(0, 101, 20))
+    chosen = best_cut(rows, min_n=30, max_signal_loss_pct=50.0)
+    assert chosen["cut"] == 40                         # highest WR within loss budget
+    # impossible constraints -> None is an allowed, reportable outcome
+    assert best_cut(rows, min_n=500, max_signal_loss_pct=10.0) is None
