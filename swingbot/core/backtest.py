@@ -59,7 +59,7 @@ Important limitations (stated plainly, not buried):
     that "passes on cached history" is not a promise of future performance.
 This is a directional sanity check, not a guarantee of future performance.
 """
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -85,6 +85,15 @@ class BacktestTrade:
     r_multiple: float | None
     holding_days: int | None
     runner_outcome: str | None = None
+    # G91: gatekeeper annotation, populated only when run_backtest(gate_eval=True).
+    # Zero behavior change -- these stay at their defaults (and serialize
+    # identically) whenever gate_eval is off.
+    gate_score: float | None = None
+    gate_tier: str | None = None
+    fired_flags: list = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 @dataclass
@@ -110,6 +119,9 @@ class BacktestSummary:
     runner_be: int = 0
     runner_timeout: int = 0
     avg_win_r: float | None = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
@@ -151,6 +163,40 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     return entry, stop_loss, take_profit
 
 
+def _gate_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
+                     entry, stop_loss, take_profit, spy_df=None):
+    """G91: run the gatekeeper checklist against exactly what was knowable at
+    the signal bar's close (df sliced to i+1, macro reconstructed via
+    backtest_ctx.historical_macro_snap) and return the annotation triple for
+    the trade record. Annotation only -- callers must not use this to alter
+    entry/exit decisions. When gate_eval is False this never imports the
+    gate package at all."""
+    if not gate_eval:
+        return None, None, []
+
+    from swingbot.core.gate import run_checklist
+    from swingbot.core.gate.backtest_ctx import historical_macro_snap
+    from swingbot.core.plan_engine import PlanStatus, TradePlanV2
+
+    signal_date = df.index[i].date()
+    plan = TradePlanV2(
+        plan_id="bt", ticker=ticker, created_at=str(signal_date),
+        source="strategy", strategy=strategy, horizon_key=horizon_key,
+        direction=direction, entry_type="market", trigger_price=entry,
+        entry_price=entry, expiry_bars=5, stop_loss=stop_loss,
+        tp1=take_profit, tp1_fraction=0.5, tp2=None,
+        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
+        trail_atr_mult=2.5, quality_score=0, quality_breakdown=[],
+        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+    )
+    gate_result = run_checklist(
+        ticker, strategy, plan, df.iloc[:i + 1],
+        macro_snap=historical_macro_snap(signal_date), spy_df=spy_df)
+    fired_flags = [c.check_id for c in gate_result.checks
+                  if c.section == "redflag" and c.status == "fail"]
+    return gate_result.score, gate_result.tier, fired_flags
+
+
 def run_backtest(
     ticker: str,
     df: pd.DataFrame,
@@ -161,6 +207,7 @@ def run_backtest(
     scale_out: bool = False,
     tp2_mode: str = "none",
     frictions: bool = True,
+    gate_eval: bool = False,
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -182,6 +229,14 @@ def run_backtest(
     round-trip COMMISSION_PER_TRADE expressed against COMMISSION_RISK_BASIS.
     Set False to reproduce the old frictionless arithmetic (e.g. tests
     asserting exact entry/exit/r_multiple logic rather than economics).
+
+    gate_eval: (G91) if True, each simulated trade is additionally annotated
+    with `gate_score`/`gate_tier`/`fired_flags` from the gatekeeper checklist
+    evaluated against exactly what was knowable at the signal bar's close
+    (swingbot.core.gate.backtest_ctx.historical_macro_snap -- no lookahead).
+    Zero behavior change: trades are still taken/classified identically:
+    the gate only annotates the record. Default False, and False never
+    imports the gate package.
     """
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
@@ -297,6 +352,9 @@ def run_backtest(
             # price can't represent.
             return_pct = r_multiple * (risk_per_share / entry) * 100
             holding_days = exit_i - i
+            gate_score, gate_tier, fired_flags = _gate_annotation(
+                gate_eval, ticker, strategy, horizon_key, df, i, direction,
+                entry, stop_loss, take_profit)
 
             trades.append(BacktestTrade(
                 entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
@@ -305,6 +363,7 @@ def run_backtest(
                 exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
                 r_multiple=round(r_multiple, 3), holding_days=holding_days,
                 runner_outcome=res.runner_outcome,
+                gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
             ))
             continue
 
@@ -373,6 +432,9 @@ def run_backtest(
         if frictions:
             r_multiple -= commission_r()
         holding_days = exit_i - i
+        gate_score, gate_tier, fired_flags = _gate_annotation(
+            gate_eval, ticker, strategy, horizon_key, df, i, direction,
+            entry, stop_loss, take_profit)
 
         trades.append(BacktestTrade(
             entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
@@ -380,6 +442,7 @@ def run_backtest(
             take_profit=round(take_profit, 4), outcome=outcome,
             exit_price=round(exit_fill, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
+            gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
         ))
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
