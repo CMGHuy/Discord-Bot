@@ -92,3 +92,43 @@ class TestApplicabilityMatrix:
         floor = len(live_registry.CHECKS) - restricted
         for strategy in ALL_STRATEGIES:
             assert len(live_registry.enabled_checks(strategy)) >= floor, strategy
+
+
+class TestBacktestableSubset:
+    """Runs against the REAL registry, same override pattern as
+    TestApplicabilityMatrix above.
+
+    NOTE: the G89 plan text's example sets name rf_rumor_spike,
+    portfolio_room, size_formula, rf_buy_rumor_sell_fact, and rf_opex_pin
+    as live-only/backtestable examples. All five are cut tasks from the
+    2026-07-29 win-rate audit (G63, G64, G66, G69, G71 per the plan index's
+    cut appendix) and were never registered — asserting on them would just
+    be resurrecting dead scope. This test only asserts on check_ids that
+    actually exist in the live registry."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_registry(self):
+        yield
+
+    def test_backtestable_subset_membership(self):
+        import swingbot.core.gate  # noqa: F401
+        from swingbot.core.gate import registry as live
+
+        live_only = {"calendar_checked", "trigger_objective"}
+        for check_id in live_only:
+            assert live.CHECKS[check_id].backtestable is False, check_id
+
+        backtestable = {
+            "htf_alignment", "level_map", "atr_normal", "confluence",
+            "volume_confirms", "momentum_agrees", "signal_confirmed",
+            "rf_fake_breakout", "rf_stop_sweep", "rf_dead_cat",
+            "rf_divergence_trap", "rf_extreme_fade", "rf_news_whipsaw",
+            "rf_thin_session", "rf_beta_move", "stop_structural",
+            "rr_realistic", "not_chasing",
+        }
+        for check_id in backtestable:
+            assert live.CHECKS[check_id].backtestable is True, check_id
+
+        ids = {s.check_id for s in live.backtest_checks("Break & Retest")}
+        assert "rf_fake_breakout" in ids
+        assert "calendar_checked" not in ids
