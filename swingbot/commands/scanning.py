@@ -1,5 +1,6 @@
 """!check, !session, !status, and the automatic background session-scan loop."""
 import asyncio
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -19,6 +20,17 @@ from swingbot.core.data import get_current_price
 from swingbot.core.performance import TradeLog
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.watchlist import load_watchlist
+# Gate scan-path integration (gatekeeper-v7 Part 5, G119-G134): the pure
+# decision functions live in core.gate.scan_integration (no Discord
+# dependency) so core.scanning.engine / core.plan_manager can wire the REAL
+# alert/monitor loops directly, without importing this Discord-layer
+# module -- see docs/claude/architecture.md's core/commands split and
+# docs/claude/known-traps.md's "sizing/embeds happen in engine.py" trap.
+# Re-exported here so tests can call scanning.gate_candidate(...) etc.
+from swingbot.core.gate.scan_integration import (  # noqa: F401
+    blackout_decision, compose_size_multipliers, entry_allowed_with_killswitch,
+    gate_candidate, recheck_delta,
+)
 
 _TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
 # Queue file written by the admin UI when a trade is manually closed.
@@ -168,6 +180,59 @@ async def _refresh_macro_snapshot() -> None:
         await asyncio.to_thread(macro_snapshot.ensure_fresh_snapshot)
     except Exception:  # noqa: BLE001
         log.warning("macro snapshot refresh failed", exc_info=True)
+
+
+@dataclasses.dataclass
+class GateContext:
+    """One per scan RUN, never per ticker (G119). macro_snap alone is built
+    when MACRO_ENABLED (the embed's context needs it); open_plans/spy_df
+    (gate-only inputs) are additionally fetched when GATE_ENABLED. Company
+    headlines are NOT here -- fetched lazily per candidate inside the
+    run_checklist caller (quota-metered)."""
+    macro_snap: dict | None
+    open_plans: list
+    spy_df: object | None          # cached SPY daily bars (rf_beta_move)
+    now: dt.datetime
+
+
+def _load_macro_snapshot():
+    """Seam for tests -- reads the saved snapshot only; G39's
+    ensure_fresh_snapshot already refreshed it at scan entry (called just
+    before this in _session_scan_tick)."""
+    from swingbot.core.macro.snapshot import load_snapshot
+    return load_snapshot()
+
+
+def build_gate_context(now=None) -> "GateContext | None":
+    """One per scan RUN, never per ticker (G119). Cheap by construction:
+    saved snapshot + open plans + cached SPY bars. Built when MACRO_ENABLED
+    alone (the embed macro line needs it); gate inputs are fetched only
+    when GATE_ENABLED. Every input degrades to None/[] -- assembly never
+    raises."""
+    if not (getattr(config, "MACRO_ENABLED", False)
+            or getattr(config, "GATE_ENABLED", False)):
+        return None
+    now = now or dt.datetime.now()
+    macro_snap = None
+    if getattr(config, "MACRO_ENABLED", False):
+        try:
+            macro_snap = _load_macro_snapshot()
+        except Exception:  # noqa: BLE001
+            log.warning("macro snapshot unreadable — gate context degrades", exc_info=True)
+    open_plans, spy_df = [], None
+    if getattr(config, "GATE_ENABLED", False):
+        try:
+            from swingbot.core.plan_store import PlanStore
+            open_plans = PlanStore().open_plans()
+        except Exception:  # noqa: BLE001
+            open_plans = []
+        try:
+            from swingbot.core.data import get_daily_data
+            spy_df = get_daily_data("SPY")
+        except Exception:  # noqa: BLE001
+            spy_df = None
+    return GateContext(macro_snap=macro_snap, open_plans=open_plans,
+                       spy_df=spy_df, now=now)
 
 
 def _write_heartbeat() -> None:
@@ -595,7 +660,9 @@ async def _session_scan_tick():
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
     await _refresh_macro_snapshot()
-    alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
+    gate_ctx = build_gate_context()
+    alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress,
+                                        gate_ctx=gate_ctx)
     await _send_alerts(channel, alerts, route_by_tier=True)
 
     from swingbot.core.charts.cache import purge
@@ -908,7 +975,9 @@ async def config_watcher():
             poller = asyncio.create_task(_ui_poll_progress())
             try:
                 await _refresh_macro_snapshot()
-                alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress)
+                gate_ctx = build_gate_context()
+                alerts = await scan_engine.run_scan(require_confirmation=False, bot=bot, progress=progress,
+                                                    gate_ctx=gate_ctx)
             finally:
                 poller.cancel()
 
@@ -1124,7 +1193,9 @@ async def weekend_deep_scan() -> str:
     config.MIN_ALERT_CONFIDENCE_LEVEL = max(1, old_min_conf - 1)
     try:
         await _refresh_macro_snapshot()
-        alerts = await scan_engine.run_scan(horizon_filter="all", require_confirmation=False, bot=bot)
+        gate_ctx = build_gate_context()
+        alerts = await scan_engine.run_scan(horizon_filter="all", require_confirmation=False, bot=bot,
+                                            gate_ctx=gate_ctx)
     finally:
         config.SIGNAL_CONFIRMATION_SCANS = old_confirm
         config.MIN_ALERT_CONFIDENCE_LEVEL = old_min_conf
@@ -1495,9 +1566,10 @@ async def check_cmd(ctx, *args: str):
     poller = asyncio.create_task(_poll_progress())
     try:
         await _refresh_macro_snapshot()
+        gate_ctx = build_gate_context()
         alerts = await scan_engine.run_scan(
             horizon_filter=horizon, require_confirmation=False, bot=bot, progress=progress,
-            min_confluence=min_confluence,
+            min_confluence=min_confluence, gate_ctx=gate_ctx,
         )
     finally:
         poller.cancel()

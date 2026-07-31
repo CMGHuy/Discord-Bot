@@ -65,6 +65,11 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
+from swingbot.core.gate import run_checklist
+from swingbot.core.gate import persistence as gate_persistence
+from swingbot.core.gate import telemetry as gate_telemetry
+from swingbot.core.gate.scan_integration import (blackout_decision, entry_allowed_with_killswitch,
+                                                 gate_candidate)
 from swingbot.core.jsonio import read_json
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
@@ -167,6 +172,8 @@ class ScanItem:
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
     intraday: bool | None = None      # 1h close vs today's VWAP on this plan's side; None = no reading = neutral, never blocks (Task E29)
+    gate_result: object = None        # GateResult | None -- set by the G121 checklist evaluation, rendered by G123
+    blackout: dict | None = None      # G120 blackout_decision() verdict for this scan run, or None
 
     @property
     def all_requirements_met(self) -> bool:
@@ -1013,7 +1020,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
 
 
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
-                    min_confluence: int = None) -> tuple:
+                    min_confluence: int = None, gate_ctx=None) -> tuple:
     """
     All the heavy synchronous work -- network fetches, pandas computation,
     matplotlib chart rendering -- lives here with NO async/await, so it can
@@ -1025,6 +1032,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     `min_confluence` overrides config.MIN_TARGET_CONFLUENCE_COUNT for this
     run only (used by `!check`'s optional argument); pass None (the
     default) to just use whatever's currently configured.
+
+    `gate_ctx` (gatekeeper-v7 G119): the per-RUN GateContext built once by
+    commands/scanning.py's build_gate_context() -- carries the macro
+    snapshot + open plans + SPY bars every candidate's gate evaluation
+    reads from (G121). None when MACRO_ENABLED and GATE_ENABLED are both
+    off, in which case the alert loop below is a byte-identical no-op.
     """
     _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
 
@@ -1289,6 +1302,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "breadth": breadth,  # % of universe above its own 50-EMA at scan time (Task E28)
         }
 
+    # Event blackout (G120): a pure decision computed ONCE per scan run off
+    # the shared macro snapshot, not per candidate -- every alert this pass
+    # carries the same market-wide verdict (or None). Never raises: a
+    # blackout bug must never cost the whole scan.
+    blackout_verdict = None
+    if gate_ctx is not None:
+        try:
+            blackout_verdict = blackout_decision(gate_ctx.macro_snap, gate_ctx.now)
+        except Exception:  # noqa: BLE001
+            log.warning("blackout_decision failed -- scan continues unannotated", exc_info=True)
+
     alerts = []
     skipped_already_open = 0
     log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
@@ -1513,6 +1537,61 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if kill_st.get("on"):
             item.kill_switch_blocked = kill_st
 
+        # Event blackout annotation/hold (G120) -- same verdict for every
+        # alert this scan pass (computed once, above the loop, off the
+        # shared macro snapshot). "hold" additionally stamps a
+        # held_for_event extra on the plan record (release_at) for
+        # plan_manager's trigger-time re-check (G128) to honor; the alert
+        # itself still ships either way (inform-first).
+        if blackout_verdict is not None:
+            item.blackout = blackout_verdict
+            if blackout_verdict["action"] == "hold" and item.plan_v2 is not None:
+                try:
+                    PlanStore().set_extra(item.plan_v2.plan_id, "held_for_event",
+                                          {"release_at": blackout_verdict["release_at"],
+                                           "event": blackout_verdict.get("event")})
+                    gate_telemetry.count("held_for_event")
+                except Exception:  # noqa: BLE001
+                    log.warning("failed to persist held_for_event extra for %s",
+                                item.plan_v2.plan_id, exc_info=True)
+
+        # Per-candidate checklist evaluation (G121/G134): background-thread
+        # work, same seam as the heat/cluster/kill-switch checks above.
+        # inform mode (the default) NEVER drops the alert -- gate_candidate
+        # itself guarantees that, and never blocks on unknown-dominated
+        # evidence even in enforce. Only in enforce mode does an active
+        # kill switch additionally outrank a would-be pass (G134). A gate
+        # bug must never cost an alert -- caught broadly, same pattern as
+        # the intraday annotation below.
+        if gate_ctx is not None and getattr(config, "GATE_ENABLED", False) and item.plan_v2 is not None:
+            try:
+                gate_telemetry.count("evaluated")
+                result_g = run_checklist(
+                    result.ticker, result.strategy, item.plan_v2, df,
+                    macro_snap=gate_ctx.macro_snap, open_plans=gate_ctx.open_plans,
+                    spy_df=gate_ctx.spy_df, now=gate_ctx.now,
+                )
+                mode = getattr(config, "GATE_MODE", "inform")
+                min_tier = getattr(config, "GATE_MIN_TIER", "C")
+                decision, result_g = gate_candidate(result_g, mode, min_tier)
+                if mode == "enforce" and not entry_allowed_with_killswitch(
+                        bool(kill_st.get("on")), decision):
+                    decision = "block"
+                gate_persistence.attach_to_plan(PlanStore(), item.plan_v2.plan_id, result_g)
+                if mode == "shadow":
+                    gate_persistence.shadow_log(result_g, item.plan_v2.plan_id)
+                if decision == "block":
+                    reason = ", ".join(result_g.hard_blocks) or f"tier {result_g.tier} < {min_tier}"
+                    gate_persistence.blocked_log(result_g, decision, reason)
+                    gate_telemetry.count("blocked", reason=reason)
+                    continue        # enforce mode only -- alert suppressed, plan record survives
+                if result_g.advisory_decision == "downgrade":
+                    gate_telemetry.count("downgraded")
+                item.gate_result = result_g        # rendered by build_embed (G123)
+            except Exception:  # noqa: BLE001 -- a gate bug must never cost an alert
+                log.warning("gate evaluation failed for %s -- alert ships ungated",
+                            result.ticker, exc_info=True)
+
         # Intraday entry-timing annotation (Edge plan E29). Live-only and
         # advisory: it never gates, resizes, or reprices anything -- the
         # plan's daily stop-entry trigger is untouched. Computed here, in
@@ -1583,7 +1662,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
 
 async def run_scan(horizon_filter: str = "all", require_confirmation: bool = True, bot=None, progress: "ScanProgress" = None,
-                    min_confluence: int = None) -> list:
+                    min_confluence: int = None, gate_ctx=None) -> list:
     """
     Thin async wrapper: runs the entire synchronous scan pipeline in a
     background thread (so it never blocks the gateway heartbeat), then
@@ -1606,7 +1685,7 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
         _mark_running(True)
         try:
             alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
-                _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
+                _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence, gate_ctx
             )
         finally:
             _mark_running(False)
