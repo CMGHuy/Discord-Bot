@@ -104,3 +104,21 @@ def test_rigged_monotone_tiny_p():
 
 def test_noise_large_p():
     assert permutation_test(_noise(), n=500, seed=1)["p_value"] >= 0.05
+
+
+from swingbot.core.gate.folds import overfit_sentinel
+
+
+def test_overfit_sentinel_rules():
+    healthy = {"pooled": {"n": 120, "wr": 68.0, "expectancy_r": 0.3}}
+    assert overfit_sentinel(healthy, train_wr=72.0, pct_kept=55.0) == []
+    # train-test gap > 12 pts
+    warns = overfit_sentinel(healthy, train_wr=85.0, pct_kept=55.0)
+    assert any("overfit" in w for w in warns)
+    # over-filtered to anecdotes
+    warns = overfit_sentinel(healthy, train_wr=72.0, pct_kept=10.0)
+    assert any("anecdotes" in w for w in warns)
+    # thin pooled evidence
+    warns = overfit_sentinel({"pooled": {"n": 50, "wr": 68.0}}, train_wr=None,
+                             pct_kept=None)
+    assert any("N=50" in w for w in warns)

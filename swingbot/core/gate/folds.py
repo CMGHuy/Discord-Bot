@@ -191,3 +191,22 @@ def permutation_test(trades, n: int = 1000, seed: int = 0) -> dict:
             beat += 1
     return {"observed_rho": round(observed, 4),
             "p_value": round(beat / n, 4), "n_shuffles": n}
+
+
+def overfit_sentinel(fold_result: dict, train_wr: float | None = None,
+                     pct_kept: float | None = None) -> list[str]:
+    """WARNs on three overfit smells: train/test WR gap > 12pts, a chosen
+    cut over-filtering to < 15% of signals, or pooled N < 90 (thin
+    evidence). Printed by the fold CLI and landed in the results docs."""
+    warnings = []
+    pooled = fold_result.get("pooled") or {}
+    if (train_wr is not None and pooled.get("wr") is not None
+            and train_wr - pooled["wr"] > 12):
+        warnings.append(f"train WR {train_wr}% vs test {pooled['wr']}% — "
+                        f"gap > 12 pts, overfit smell")
+    if pct_kept is not None and pct_kept < 15:
+        warnings.append(f"chosen cut keeps only {pct_kept}% of signals — "
+                        f"over-filtered to anecdotes")
+    if (pooled.get("n") or 0) < 90:
+        warnings.append(f"pooled N={pooled.get('n')} < 90 — thin evidence")
+    return warnings

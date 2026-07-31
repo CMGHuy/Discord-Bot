@@ -15,7 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from swingbot.core.backtest import ALL_STRATEGIES  # noqa: E402
 from swingbot.core.gate.folds import (ablate_flags, apply_fold_gate,  # noqa: E402
-                                      fold_windows, run_folds)
+                                      fold_windows, overfit_sentinel,
+                                      run_folds)
 
 OUT_DIR = "docs/superpowers/results"
 
@@ -54,11 +55,23 @@ def run_one(strategy: str, min_tier: str | None) -> dict:
     print(f"\n=== {strategy}: baseline run ===", flush=True)
     baseline = run_folds(strategy, gate_min_tier=None, verbose=True)
     result = {"strategy": strategy, "baseline": baseline}
+    pct_kept = None
+    sentinel_target = baseline
     if min_tier:
         print(f"=== {strategy}: filtered run (min_tier={min_tier}) ===", flush=True)
         filtered = run_folds(strategy, gate_min_tier=min_tier, verbose=True)
         result["filtered"] = filtered
         result["gate"] = apply_fold_gate(filtered["folds"], baseline["folds"])
+        base_n = baseline["pooled"]["n"]
+        filt_n = filtered["pooled"]["n"]
+        pct_kept = round(100.0 * filt_n / base_n, 1) if base_n else None
+        sentinel_target = filtered
+    # G110: no separate TRAIN-period score exists in this fold runner (each
+    # fold IS the test window; there is no distinct train_wr to compare
+    # against here) -- train_wr stays None, so only the pct_kept/pooled-N
+    # rules are live in this CLI's wiring.
+    result["overfit_warnings"] = overfit_sentinel(sentinel_target, train_wr=None,
+                                                  pct_kept=pct_kept)
     for label in ("baseline", "filtered"):
         if label in result:
             print(f"\n{strategy} [{label}]")
@@ -66,6 +79,8 @@ def run_one(strategy: str, min_tier: str | None) -> dict:
                 print(f"  {f['year']}: n={f['n']} wr={f['wr']} exp={f['expectancy_r']}")
             print(f"  pooled: {result[label]['pooled']}")
     result.get("gate") and print(f"  fold gate: {result['gate']}")
+    for w in result["overfit_warnings"]:
+        print(f"  OVERFIT SENTINEL: {w}")
     return result
 
 
