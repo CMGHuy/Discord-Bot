@@ -97,3 +97,46 @@ def test_entry_day_bar_contains_price_extreme():
     assert m["mfe_r"] == 0.25  # (101-100)/4
     # Min low across bars is 99, entry is 100, risk is 4
     assert m["mae_r"] == 0.25  # (100-99)/4
+
+
+def test_mfe_r_clamped_nonnegative_same_day_loss(monkeypatch=None):
+    """Plan v8 Task V3 regression: a bullish same-day loss where the day's
+    High never reached entry must return mfe_r=0, not a negative number.
+    mae_r already had this clamp (max(0.0, ...)); mfe_r did not -- that
+    asymmetry is exactly what produced the negative mfe_r values found in
+    the live journal (e.g. AMD/SNOW/NOW, all same-day single-bar windows)."""
+    # Single day bar: High=99, Low=97, entry=100 -- the whole day's range
+    # sits below entry, so a bullish trade never observed a favorable move.
+    df = make_ohlcv([98], spread_pct=2.0, start="2026-03-02")  # High=98.98, Low=97.02
+    t = {
+        "direction": "bullish",
+        "entry": 100.0,
+        "stop_loss": 96.0,
+        "exit_price": 97.5,
+        "opened_at": "2026-03-02T14:00:00+00:00",
+        "closed_at": "2026-03-02T15:00:00+00:00",
+        "status": "loss",
+    }
+    m = compute_mfe_mae(t, df)
+    assert m is not None
+    assert m["mfe_r"] == 0.0  # clamped: raw (98.98-100)/4 would be negative
+    assert m["mae_r"] > 0.0  # entry (100) - Low (97.02) is a real adverse move
+
+
+def test_mae_r_clamped_nonnegative_bearish_mirror():
+    """Mirror of the above for a bearish trade: a day whose Low never
+    reached entry must give mfe_r=0 (bearish mfe uses entry - Low.min())."""
+    df = make_ohlcv([102], spread_pct=2.0, start="2026-03-02")  # High=103.02, Low=100.98
+    t = {
+        "direction": "bearish",
+        "entry": 100.0,
+        "stop_loss": 104.0,
+        "exit_price": 102.5,
+        "opened_at": "2026-03-02T14:00:00+00:00",
+        "closed_at": "2026-03-02T15:00:00+00:00",
+        "status": "loss",
+    }
+    m = compute_mfe_mae(t, df)
+    assert m is not None
+    assert m["mfe_r"] == 0.0  # raw (100-100.98)/4 would be negative
+    assert m["mae_r"] > 0.0

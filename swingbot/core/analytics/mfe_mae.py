@@ -68,12 +68,19 @@ def compute_mfe_mae(trade: dict, df) -> dict | None:
     if sliced.empty:
         return None
 
+    # MFE (favorable excursion) cannot be negative by definition: the worst
+    # case is that price never moved in the trade's favor at all, i.e. 0.
+    # A raw negative value here means the covered bars never actually
+    # reached entry -- most commonly a same-day trade where daily-bar
+    # granularity can't confirm intraday movement back through the entry
+    # price. mae_r already had this clamp; mfe_r did not, which is exactly
+    # the asymmetry that produced the negative mfe_r values found live.
     is_bull = trade.get("direction") == "bullish"
     if is_bull:
-        mfe_r = (float(sliced["High"].max()) - entry) / risk
+        mfe_r = max(0.0, (float(sliced["High"].max()) - entry) / risk)
         mae_r = max(0.0, (entry - float(sliced["Low"].min())) / risk)
     else:
-        mfe_r = (entry - float(sliced["Low"].min())) / risk
+        mfe_r = max(0.0, (entry - float(sliced["Low"].min())) / risk)
         mae_r = max(0.0, (float(sliced["High"].max()) - entry) / risk)
 
     r_real = r_multiple(trade)
