@@ -1139,13 +1139,19 @@ git add scripts/gate_frontier.py docs/superpowers/results/2026-07-gate-frontier*
 git commit -m "feat: frontier CLI + TRAIN evidence"
 ```
 
-### Task G99: Red-flag ablation — each flag earns its keep
+### Task G99: Red-flag ablation — each flag earns its keep ✅ (commit `8f8f17f`)
 
 **Files:** Modify `scripts/gate_fold_run.py` (`--ablate` mode); evidence doc `docs/superpowers/results/2026-07-gate-ablation.md`
 - Test: `tests/test_gate_folds.py`
 
 **Interfaces:** `--ablate` runs folds once per red flag with only that flag active as a filter: reports each flag's standalone `{signals_removed_pct, wr_delta, expectancy_delta}` pooled + per fold. Flags that *hurt* expectancy in ≥ 2 folds get their registry weight set to 0 (info-only) in a follow-up commit, documented.
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
+
+**Result:** `rf_stop_sweep` demoted to weight 0.0 in `redflags.py` — negative
+`expectancy_delta` in 9 of 11 non-trivial fold observations across 5
+strategies. `rf_fake_breakout`/`rf_divergence_trap` evidence stayed thin/
+one-sided; no demotion for either. See
+`docs/superpowers/results/2026-07-gate-ablation.md`.
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
 
 ```python
 from swingbot.core.gate.folds import ablate_flags
@@ -1165,7 +1171,7 @@ def test_ablation_loop_mechanics():
     assert opex["signals_removed_pct"] == 0.0 and opex["wr_delta"] == 0.0
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`):
 
 ```python
 def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dict]:
@@ -1198,8 +1204,10 @@ def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dic
 
 **And the CLI mode** — `scripts/gate_fold_run.py` gains `--ablate`: per strategy, run annotate-only folds, call `ablate_flags` per fold and pooled, print + include in the JSON artifact.
 
-- [ ] **Step 3: Run tests — PASS.** Then **run for real** on TRAIN; write `docs/superpowers/results/2026-07-gate-ablation.md` (per flag: pooled + per-fold `{signals_removed_pct, wr_delta, expectancy_delta}` table). **Demotions:** any flag whose `expectancy_delta` is negative in ≥ 2 folds gets its registry weight set to 0 (info-only) in a follow-up commit, named in the doc.
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Run tests — PASS.** Then **run for real** on TRAIN; write `docs/superpowers/results/2026-07-gate-ablation.md` (per flag: pooled + per-fold `{signals_removed_pct, wr_delta, expectancy_delta}` table). **Demotions:** any flag whose `expectancy_delta` is negative in ≥ 2 folds gets its registry weight set to 0 (info-only) in a follow-up commit, named in the doc.
+- [x] **Step 4: Commit** (demotion folded into the same G99 commit rather than a
+  separate follow-up — `redflags.py`'s `rf_stop_sweep` weight change plus the
+  doc landed together in `8f8f17f`)
 
 ```bash
 python -m pytest tests/ -q && make check
