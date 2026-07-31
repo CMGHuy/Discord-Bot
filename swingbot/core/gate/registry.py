@@ -95,6 +95,13 @@ def enabled_checks(strategy: str) -> list[CheckSpec]:
     return out
 
 
+def backtest_checks(strategy: str) -> list[CheckSpec]:
+    """The subset a historical replay can honestly evaluate. The backtest
+    tier is computed from these only — G103's shadow comparison quantifies
+    what the live-only checks add."""
+    return [spec for spec in enabled_checks(strategy) if spec.backtestable]
+
+
 def config_fields() -> list:
     """Every per-check enable + per-threshold Field, generated from the
     live registry so no strict number in the checklist is hardcoded —
