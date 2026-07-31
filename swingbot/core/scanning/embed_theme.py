@@ -32,7 +32,7 @@ DISCLAIMER = "Technical signal only, based on today's still-developing daily can
 # code below happened to compute them in.
 SECTION_ORDER = (
     "headline", "plan", "quality", "confluence",
-    "changes", "branches", "track_record", "warnings",
+    "changes", "branches", "track_record", "warnings", "gate",
 )
 
 

@@ -521,6 +521,29 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
+    blackout = getattr(item, "blackout", None)
+    if blackout is not None:
+        # Event blackout (G120): inform-first -- "annotate" is the default
+        # and the plan/alert are unaffected; "hold" (opt-in via
+        # GATE_BLACKOUT_ENFORCE) additionally says so, but still ships the
+        # alert -- the actual entry hold is enforced by plan_manager (G128).
+        if blackout["action"] == "hold":
+            sections["headline"].append((
+                "⏸ Held — event blackout",
+                f"{blackout['line']}\nReleases after the print (`{blackout.get('release_at', '')}`).",
+                False,
+            ))
+        else:
+            sections["headline"].append(("⚠️ Event", blackout["line"], False))
+
+    gate_result = getattr(item, "gate_result", None)
+    if gate_result is not None:
+        from swingbot.core.gate.render import gate_embed_fields
+        for name, value in gate_embed_fields(
+                gate_result, getattr(config, "GATE_MODE", "inform"),
+                getattr(config, "GATE_SHOW_IN_SHADOW", False)):
+            sections["gate"].append((name, value, False))
+
     intraday = getattr(item, "intraday", None)
     if intraday is not None:
         # Edge plan E29: a LIVE-ONLY annotation. The stop-entry trigger is
