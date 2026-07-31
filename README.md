@@ -442,21 +442,27 @@ to every command that fetches data or renders a chart: `!check`,
 Every trade plan the bot emits can be produced by one shared engine
 (`swingbot/core/plan_engine.py`) whose exit behavior was backtested under a
 train/validation split — so live behavior equals backtested behavior by
-construction. Rollout is gated by three flags (all in `.env` / the admin
+construction. Rollout is gated by two flags (both in `.env` / the admin
 UI's "Plan Engine v2" section, hot-reloadable):
 
 | Flag | Values | Meaning |
 |---|---|---|
 | `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
-| `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 with a chandelier ATR trail. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
 | `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
 
-**Defaults ship fully live** (`PLAN_ENGINE_V2=on`, `SCALE_OUT_ENABLED=true`,
-`INTRADAY_MANAGER_V2=true`) so a fresh deployment runs the validated engine
-immediately with no staged rollout required. If you'd rather stage it
-yourself: `shadow` for ≥5 scan sessions (compare against legacy numbers via
+Scale-out itself (at TP1, close 50% and move the stop to break-even; the
+runner rides toward TP2 with a chandelier ATR trail) is **hardcoded on** in
+`plan_manager.py` whenever the intraday manager is enabled — there used to
+be a `SCALE_OUT_ENABLED` flag advertising it as separately switchable, but
+`plan_manager.py` never actually read it, so it was deleted (plan v8 Task V4)
+rather than left as a config surface that looked controllable but wasn't.
+
+**Defaults ship fully live** (`PLAN_ENGINE_V2=on`, `INTRADAY_MANAGER_V2=true`)
+so a fresh deployment runs the validated engine immediately with no staged
+rollout required. If you'd rather stage it yourself: `shadow` for ≥5 scan
+sessions (compare against legacy numbers via
 `python scripts/shadow_parity_report.py`) → `on` for ≥5 clean sessions →
-enable scale-out + manager.
+enable the intraday manager.
 
 **Badges: what they legally claim.** Every v2 plan is stamped from
 `swingbot/core/validation_registry.json`:

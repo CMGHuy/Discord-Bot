@@ -35,15 +35,17 @@ docker compose up -d --build
 
 ### Plan Engine v2 rollout flags
 
-Three hot-reloadable `.env` flags stage the v2 plan engine rollout
-(details in the README's "Plan Engine v2" section): `PLAN_ENGINE_V2`
-(`off`/`shadow`/`on`), `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`. All
-three **default to fully live** (`on`/`true`/`true`) so a fresh deployment
-runs the validated engine immediately — flipping them requires no
+Two hot-reloadable `.env` flags stage the v2 plan engine rollout (details in
+the README's "Plan Engine v2" section): `PLAN_ENGINE_V2` (`off`/`shadow`/`on`),
+`INTRADAY_MANAGER_V2`. Both **default to fully live** (`on`/`true`) so a fresh
+deployment runs the validated engine immediately — flipping them requires no
 container restart (hot reload picks them up). If you'd rather stage the
 rollout yourself: run `shadow` for ≥5 scan sessions and check
 `python scripts/shadow_parity_report.py` before flipping `on`, then enable
-scale-out + manager only after ≥5 clean `on` sessions.
+the intraday manager only after ≥5 clean `on` sessions. (A third flag,
+`SCALE_OUT_ENABLED`, used to appear here; it was deleted in plan v8 Task V4
+because `plan_manager.py` never actually read it — scale-out is hardcoded on
+whenever the intraday manager runs.)
 
 ## Admin UI
 

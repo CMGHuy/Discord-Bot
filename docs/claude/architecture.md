@@ -45,8 +45,15 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   `plan_numbers_for_display()` in embeds.py is THE cutover switch deciding
   whether alerts show legacy scenario numbers or v2 plan numbers — route any
   new consumer of plan prices through it. Rollout flags (`PLAN_ENGINE_V2`
-  off/shadow/on, `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`) are documented in
-  the README; `shadow` mode logs to `data/shadow_plans.jsonl` via `shadow_log.py`.
+  off/shadow/on, `INTRADAY_MANAGER_V2`) are documented in the README;
+  `shadow` mode logs to `data/shadow_plans.jsonl` via `shadow_log.py`. Scale-out
+  itself is hardcoded on in `plan_manager.py` whenever the intraday manager
+  runs — `SCALE_OUT_ENABLED` used to advertise it as separately switchable but
+  was never actually read, so it was deleted (plan v8 Task V4). With the
+  manager on, `plan_manager` — not the legacy SL/TP loops in `performance.py`
+  — owns the **target** side of a plan-linked trade
+  (`performance.manager_owns_target()`); the stop side stays with them as a
+  backstop. See `known-traps.md`: any new close path must consult it.
 - Tests build OHLCV frames with `tests/conftest.py:make_ohlcv` /
   `make_trend_df` (columns `Open,High,Low,Close,Volume`, business-day
   DatetimeIndex) and `tests/helpers.py`. Read conftest before writing new

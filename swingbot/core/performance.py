@@ -213,6 +213,34 @@ def append_leg(t: dict, leg: dict) -> None:
     t.setdefault("legs", []).append(leg)
 
 
+def manager_owns_target(t: dict) -> bool:
+    """True when plan_manager -- not these legacy full-close loops -- owns
+    this trade's TARGET side (plan v8 Task V4 Step 2).
+
+    A v2 trade is logged with `take_profit = plan.tp1`, so the legacy SL/TP
+    loops below used to close 100% of it the first time price touched TP1,
+    as a plain `win` with no legs. They run BEFORE plan_manager's tick in the
+    same 60s `trade_monitor` pass (commands/scanning.py) and inside the scan
+    itself, so they always won the race: the manager then banked its
+    `tp1_fraction` leg on the PLAN, but `append_leg_by_plan` requires a
+    still-open trade and silently no-opped. Net effect -- scale-out was dead
+    in the live log (only 24 of 475 trades ever recorded a leg), no runner
+    ever rode to TP2, and every v2 win settled at exactly TP1.
+
+    Only the target side is handed over. The stop side stays live as a
+    backstop: the plan's own `working_stop` only ever ratchets to BE or
+    tighter, so the original `stop_loss` can only fire if the manager
+    somehow didn't -- a strictly-worse-or-equal safety net, not double
+    management. Same reasoning as `check_near_tp_timeout`'s existing
+    plan_id skip, which handed the "stalled near target" call over first.
+
+    Gated on INTRADAY_MANAGER_V2: with the manager off nothing else is
+    watching TP1, so the legacy loops must keep closing these trades or
+    they'd never close at all.
+    """
+    return bool(t.get("plan_id")) and bool(config.INTRADAY_MANAGER_V2)
+
+
 class TradeLog:
     def __init__(self, path: str = None):
         self.path = path or os.path.join(config.DATA_DIR, "trades.json")
@@ -465,15 +493,19 @@ class TradeLog:
             )
 
             is_bull = trade["direction"] == "bullish"
+            # v2 manager-owned trade: TP1 is the plan manager's to act on
+            # (partial + runner), not ours to full-close. See
+            # manager_owns_target(); the stop side below stays live.
+            skip_target = manager_owns_target(trade)
             hit = False
             for _, bar in bars_since.iterrows():
                 hi, lo, op = float(bar["High"]), float(bar["Low"]), float(bar["Open"])
                 if is_bull:
                     hit_stop   = lo <= trade["stop_loss"]
-                    hit_target = hi >= trade["take_profit"]
+                    hit_target = hi >= trade["take_profit"] and not skip_target
                 else:
                     hit_stop   = hi >= trade["stop_loss"]
-                    hit_target = lo <= trade["take_profit"]
+                    hit_target = lo <= trade["take_profit"] and not skip_target
 
                 if hit_stop:
                     # Same gap-fill convention as plan_manager.gap_stop_fill /
@@ -517,12 +549,12 @@ class TradeLog:
                 if is_bull:
                     if live_price <= trade["stop_loss"]:
                         updates.append((trade["id"], "loss", live_price))
-                    elif live_price >= trade["take_profit"]:
+                    elif live_price >= trade["take_profit"] and not skip_target:
                         updates.append((trade["id"], "win", live_price))
                 else:
                     if live_price >= trade["stop_loss"]:
                         updates.append((trade["id"], "loss", live_price))
-                    elif live_price <= trade["take_profit"]:
+                    elif live_price <= trade["take_profit"] and not skip_target:
                         updates.append((trade["id"], "win", live_price))
 
         if not updates:
@@ -825,15 +857,18 @@ class TradeLog:
         updates = []
         for trade in open_trades:
             is_bull = trade["direction"] == "bullish"
+            # Target side handed to plan_manager for v2 trades; stop side
+            # stays as a backstop. See manager_owns_target().
+            skip_target = manager_owns_target(trade)
             if is_bull:
                 if live_price <= trade["stop_loss"]:
                     updates.append((trade["id"], "loss", trade["stop_loss"]))
-                elif live_price >= trade["take_profit"]:
+                elif live_price >= trade["take_profit"] and not skip_target:
                     updates.append((trade["id"], "win", trade["take_profit"]))
             else:
                 if live_price >= trade["stop_loss"]:
                     updates.append((trade["id"], "loss", trade["stop_loss"]))
-                elif live_price <= trade["take_profit"]:
+                elif live_price <= trade["take_profit"] and not skip_target:
                     updates.append((trade["id"], "win", trade["take_profit"]))
 
         if not updates:

@@ -61,6 +61,20 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   go *after* `update_open_trades`/`_check_near_close` and *before* the
   new-signal horizon loop, so an already-open paper trade keeps being
   monitored for SL/TP even on a day its ticker fails the screen.
+- **Two independent things close a trade, and the legacy one runs first.**
+  A v2 plan-linked trade is logged with `take_profit = plan.tp1`, but the
+  legacy loops in `performance.py` (`close_if_live_price_hit`,
+  `update_open_trades`) iterate *every* open trade and run **before**
+  `plan_manager.run_manager_tick()` in the same 60s `trade_monitor` pass —
+  and again inside the scan. Until v8 Task V4 they full-closed v2 trades at
+  TP1, and the manager's `tp1_partial` then no-opped in
+  `append_leg_by_plan` (it requires a still-open trade), so scale-out never
+  reached the trade log at all. Guard is `performance.manager_owns_target()`
+  — plan-linked + `INTRADAY_MANAGER_V2` on hands over the **target** side
+  only, keeping the stop as a backstop. **Any new "close an open trade"
+  path must consult it**, or it silently steals the runner back. The
+  failure mode is invisible: no error, no log line, just a leg that never
+  gets written.
 - **Function names that don't exist** (plans and briefs guess wrong at these
   constantly — verify before use): there is no `market_events.days_to_earnings`
   (use `events.get_next_earnings_date` / `earnings_within_window`), no
