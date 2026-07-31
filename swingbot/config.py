@@ -596,6 +596,15 @@ FIELDS: list[Field] = [
           type="checkbox", default="false",
           help="Annotate alerts that fall inside a high-impact event window (CPI/NFP/FOMC). "
                "Annotate-only: actually holding entries additionally requires GATE_BLACKOUT_ENFORCE."),
+    Field("GATE_BLACKOUT_ENFORCE", "GATE_BLACKOUT_ENFORCE", "Gatekeeper", "Event blackout holds entries",
+          type="checkbox", default="false",
+          help="Opt-in: on top of GATE_BLACKOUT_ENABLED, actually hold new entries through a "
+               "high-impact event window instead of only annotating them. Auto-disables (with a "
+               "WARN) when the event calendar hasn't refreshed in over 7 days."),
+    Field("GATE_SHOW_IN_SHADOW", "GATE_SHOW_IN_SHADOW", "Gatekeeper", "Show checklist in shadow mode",
+          type="checkbox", default="false",
+          help="Render the checklist field on alerts while GATE_MODE is still 'shadow' -- for "
+               "previewing the field before promoting to inform."),
     Field("FINNHUB_API_KEY", "FINNHUB_API_KEY", "Gatekeeper", "Finnhub API key",
           type="password", sensitive=True,
           help="Free key: https://finnhub.io/register. Powers the earnings calendar. "

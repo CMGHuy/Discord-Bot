@@ -94,4 +94,4 @@ def check_calendar(df_daily, plan, macro_snap, **ctx) -> CheckResult:
 
 
 register(check_id="calendar_checked", section="timing", weight=4.0,
-         func=check_calendar, backtestable=False)
+         func=check_calendar, backtestable=False, trigger_recheck=True)

@@ -289,7 +289,7 @@ def rf_news_whipsaw(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResu
 
 
 register(check_id="rf_news_whipsaw", section="redflag", weight=10.0,
-         func=rf_news_whipsaw, hard_block=True)
+         func=rf_news_whipsaw, hard_block=True, trigger_recheck=True)
 
 
 def rf_thin_session(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:

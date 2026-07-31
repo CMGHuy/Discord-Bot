@@ -35,5 +35,5 @@ def test_fmt_price():
 def test_section_order_is_the_documented_tuple():
     assert th.SECTION_ORDER == (
         "headline", "plan", "quality", "confluence",
-        "changes", "branches", "track_record", "warnings",
+        "changes", "branches", "track_record", "warnings", "gate",
     )
