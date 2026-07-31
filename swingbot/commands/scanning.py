@@ -16,6 +16,9 @@ from swingbot.core.analytics.rank import rank_plans
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.account import load_account_config
 from swingbot.core.data import get_current_price
+from swingbot.core.gate import run_checklist
+from swingbot.core.gate.persistence import attach_to_plan, shadow_log
+from swingbot.core.gate.score import with_advisory
 from swingbot.core.performance import TradeLog
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.watchlist import load_watchlist
@@ -209,6 +212,37 @@ def set_scan_paused(paused: bool) -> None:
             os.remove(_PAUSE_FILE)
         except OSError:
             pass  # already resumed by a parallel caller
+
+def _gate_evaluate(candidate, plan_store, macro_snap):
+    """Evaluate one scan candidate. Runs in ALL modes when GATE_ENABLED —
+    the shadow log is the evidence stream regardless of mode (G103). Never
+    raises; a failure means the alert ships ungated. Returns (decision, result)."""
+    if not config.GATE_ENABLED:
+        return "pass", None
+    try:
+        result = run_checklist(
+            candidate.ticker, candidate.strategy, candidate.plan,
+            candidate.df_daily, macro_snap=macro_snap,
+            open_plans=[{"ticker": p.ticker} for p in plan_store.open_plans()])
+        decision, result = with_advisory(result, config.GATE_MODE,
+                                         config.GATE_MIN_TIER)
+        attach_to_plan(plan_store, candidate.plan.plan_id, result)
+        shadow_log(result, plan_id=candidate.plan.plan_id)
+        return decision, result
+    except Exception:
+        log.warning("gate evaluation failed — alert ships ungated", exc_info=True)
+        return "pass", None
+
+
+def _gate_render_payload(result):
+    """The render matrix's first gate (full matrix in G123): shadow mode
+    renders nothing unless GATE_SHOW_IN_SHADOW."""
+    if result is None:
+        return None
+    if config.GATE_MODE == "shadow" and not getattr(config, "GATE_SHOW_IN_SHADOW", False):
+        return None
+    return result.to_dict()
+
 
 trade_log = scan_engine.trade_log
 
