@@ -29,6 +29,23 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   1m ~30 days. "Since IPO" hourly data does not exist from this source at any
   tier — only daily and coarser reach the listing date. Do not write a task
   that assumes otherwise.
+- **`download_and_cache()` overwrites destructively; only `update_cache()`
+  merges.** `download_and_cache` → `save_to_disk` → `df.to_csv(path)`, full
+  replace, no merge. Because the on-disk hourly cache accumulates
+  incrementally past Yahoo's rolling ~730-day window (the bot's own refresh
+  loop keeps appending), calling `download_and_cache(t, "hourly")` on an
+  *existing* cache silently **deletes** whatever history predates what Yahoo
+  will serve today — and that history can never be re-fetched, since Yahoo
+  has already aged it out. Measured 2026-07-31: `GC=F` hourly cache held
+  13,758 bars from 2024-03-08, but Yahoo would only serve 11,488 from
+  2024-07-31 that same day — a naive re-fetch would have destroyed ~5 months.
+  Equities are exposed the same way (`NVDA` hourly cache reaches back to
+  2023-08-25, well past the 730-day line). **Rule: never call
+  `download_and_cache` on a timeframe that already has a cache file; use
+  `update_cache` (incremental, merges, atomic replace), or merge-then-write
+  with a guard that refuses to shrink row count.** Daily/weekly/monthly are
+  not at risk — full history is always re-servable, so an overwrite there
+  loses nothing.
 - **Legacy shims that are not the real module.** `core/scan_engine.py` and
   `core/scan_embeds.py` are `import *` shims over `core/scanning/engine.py`
   and `core/scanning/embeds.py`. `core/trade_plan.py` is a deprecated adapter
