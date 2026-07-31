@@ -339,6 +339,40 @@ def select_tp2(levels_above: list, levels_below: list, direction: str,
     return candidate
 
 
+def target_is_reachable(levels_above: list, levels_below: list, direction: str,
+                        entry: float) -> tuple[bool, str]:
+    """Can structure actually support a `MIN_TARGET_PCT` move from here?
+    Returns `(reachable, reason)` -- the reason string is for telemetry and
+    for the requirement row the operator reads, never for control flow.
+
+    Plan v8 Task V11. Without this the floor just points targets into a
+    wall: raising TP1 to 2.5% does nothing if the first resistance sits at
+    +0.8% and price stalls there. Takes the same already-clustered
+    `Level.price` floats `select_tp2` does -- callers extract `.price` from
+    `levels.build_level_map`; this must not re-cluster anything.
+
+    **The rule: the NEAREST clustered level in the trade direction must sit
+    at or beyond the floor price.** A nearer one is the wall.
+
+    **Judgment call, recorded because the plan's wording admits two
+    readings** ("no structural level supports a >=MIN_TARGET_PCT move"
+    vs "the floor points targets into a wall"): when there is *no* level at
+    all in the trade direction, this returns reachable. Nothing is capping
+    the move -- that is the blue-sky case, not an unsupported one. It is
+    reported as its own reason (`no_levels`) so V12's telemetry can measure
+    how often it fires before V28 enforces anything.
+    """
+    floor = target_floor_price(entry, direction)
+    candidates = levels_above if direction == "bullish" else levels_below
+    ahead = [p for p in candidates
+             if (p > entry if direction == "bullish" else p < entry)]
+    if not ahead:
+        return True, "no_levels"
+    nearest = min(ahead) if direction == "bullish" else max(ahead)
+    clear = nearest >= floor if direction == "bullish" else nearest <= floor
+    return (True, "level_beyond_floor") if clear else (False, "wall")
+
+
 def _journal_entries() -> list:
     """Every journal entry, for the MAE-informed stop lookup (edge E31).
     Split out as a module-level seam so the lookup can be stubbed in tests

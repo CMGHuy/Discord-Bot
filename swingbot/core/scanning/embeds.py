@@ -171,7 +171,42 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
-def _build_requirement_checks(scenario, target_confluence: tuple, conf, effective_min_confluence: int) -> list:
+def _reachability_check(scenario, level_map):
+    """Plan v8 Task V11: does structure support a `MIN_TARGET_PCT` move?
+
+    Returns None when there is no level map to judge against (the caller
+    simply doesn't add the row) -- absence of data is never a failure.
+
+    While `TARGET_FLOOR_ENABLED` is off the check still runs and still
+    reports what it found, but always passes: that is V12 Step 2's log-only
+    week, which measures how many setups the screen *would* remove before
+    V28 lets it remove any.
+    """
+    from swingbot.core.plan_engine import target_floor_price, target_is_reachable
+
+    if not level_map:
+        return None
+    supports, resistances = level_map
+    entry = scenario.entry
+    reachable, reason = target_is_reachable(
+        [lv.price for lv in resistances], [lv.price for lv in supports],
+        scenario.direction, entry)
+    floor = target_floor_price(entry, scenario.direction)
+    detail = {
+        "no_levels": f"no level ahead — clear run to {floor:.2f}",
+        "level_beyond_floor": f"structure supports {config.MIN_TARGET_PCT:.1f}% ({floor:.2f})",
+        "wall": f"nearest level is inside {config.MIN_TARGET_PCT:.1f}% ({floor:.2f})",
+    }[reason]
+    if not config.TARGET_FLOOR_ENABLED:
+        detail += " [log-only: floor disabled]"
+    return RequirementCheck(
+        key="target_reachable", label="Target reachable",
+        passed=reachable or not config.TARGET_FLOOR_ENABLED, detail=detail,
+    )
+
+
+def _build_requirement_checks(scenario, target_confluence: tuple, conf,
+                              effective_min_confluence: int, level_map=None) -> list:
     """
     Evaluates EVERY configured requirement against one scenario --
     always all of them, never stopping at the first failure -- and
@@ -215,6 +250,9 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf, effectiv
             detail=f"Lv{conf.level} {conf.label} (needs Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}+)",
         ),
     ]
+    reachable = _reachability_check(scenario, level_map)
+    if reachable is not None:
+        checks.append(reachable)
     return checks
 
 
