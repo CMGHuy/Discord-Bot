@@ -1381,11 +1381,16 @@ git add swingbot/core/gate/frontier.py tests/test_gate_frontier.py
 git commit -m "feat: plateau check for tier cuts"
 ```
 
-### Task G102: TRAIN decision memo — the honest 95% answer
+### Task G102: TRAIN decision memo — the honest 95% answer ✅ (commit `dc6befd`)
 
 **Files:** Create `docs/superpowers/results/2026-07-gate-decision.md`
 
-- [ ] **Step 1: Write the memo from G97–G101 evidence** — `docs/superpowers/results/2026-07-gate-decision.md`, this exact structure per strategy:
+**Result:** no strategy earns a G95 A/A+ proposal; G100 permutation p >= 0.05
+for all 11; G101 plateau check flags all three G94 best cuts as spikes.
+Config defaults left unchanged (no surviving cut to promote); balanced
+B-cut sanity check passes on its own terms.
+
+- [x] **Step 1: Write the memo from G97–G101 evidence** — `docs/superpowers/results/2026-07-gate-decision.md`, this exact structure per strategy:
 
 ```markdown
 # Gatekeeper v7 — TRAIN decision memo
@@ -1415,8 +1420,8 @@ signals kept — target band was +3..+8 pts at <= 40% loss: {met / not met}.
 new checks — never looser math.>
 ```
 
-- [ ] **Step 2: Apply the surviving cuts to the config Field *defaults*** (`GATE_TIER_*_CUT` defaults in `config.py`; `GATE_MODE` stays `inform` — cuts only label tiers on alerts; nothing starts blocking). **Balanced-preset sanity check:** if balanced thresholds put < 30% of TRAIN signals at tier ≥ B in the census, loosen the balanced preset values in the affected `ThresholdSpec`s (G79) and note which in the memo — defaults must never starve the alert flow.
-- [ ] **Step 3: Commit**
+- [x] **Step 2: Apply the surviving cuts to the config Field *defaults*** (`GATE_TIER_*_CUT` defaults in `config.py`; `GATE_MODE` stays `inform` — cuts only label tiers on alerts; nothing starts blocking). **Balanced-preset sanity check:** if balanced thresholds put < 30% of TRAIN signals at tier ≥ B in the census, loosen the balanced preset values in the affected `ThresholdSpec`s (G79) and note which in the memo — defaults must never starve the alert flow. (No cuts survived to apply — defaults untouched. Sanity check passed: 97.6%-100% of signals clear the B cut for every strategy with trades, well above 30%.)
+- [x] **Step 3: Commit**
 
 ```bash
 python -m pytest tests/ -q && make check
