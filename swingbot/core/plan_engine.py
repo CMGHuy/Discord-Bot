@@ -167,6 +167,41 @@ def _rr_for(strategy: str, horizon_key: str) -> float:
     return max(rr, RR_FLOOR)
 
 
+def target_floor_price(entry: float, direction: str) -> float:
+    """The nearest TP1 `MIN_TARGET_PCT` allows for this entry, signed by
+    direction. Read from config on every call (never captured at import)
+    so a SIGHUP reload takes effect on the next plan built."""
+    pct = config.MIN_TARGET_PCT / 100.0
+    return entry * (1 + pct) if direction == "bullish" else entry * (1 - pct)
+
+
+def apply_target_floor(entry: float, tp1: float, direction: str) -> float:
+    """Push TP1 out to `MIN_TARGET_PCT` of entry when the R:R math priced it
+    closer (plan v8 Task V10). Never pulls a target IN -- a structurally
+    larger target is left exactly where it was.
+
+    This is the fix for the live book's structural defect: `TP1 = entry ±
+    risk_distance × rr` with every rr override at 0.30-0.40 banked ~0.35R on
+    a win while a loss cost the full 1R, so the median designed target was
+    0.85% against a 2.19% stop and the median winner could not arithmetically
+    reach 2%.
+
+    **The stop is deliberately untouched here** (Task V10 Step 2). A 2.5%
+    target against the 2.19% median stop lifts R:R to ~1.14 from ~0.35; stop
+    retuning is V19's, and keeping them separate keeps the two effects
+    attributable.
+
+    `TARGET_FLOOR_ENABLED=false` returns TP1 unchanged -- the log-only
+    position V12 Step 2 measures survival from. Callers that need to know
+    what the floor *would* have done in that mode call `target_floor_price`
+    directly rather than inferring it from the returned value.
+    """
+    if not config.TARGET_FLOOR_ENABLED:
+        return tp1
+    floor = target_floor_price(entry, direction)
+    return max(tp1, floor) if direction == "bullish" else min(tp1, floor)
+
+
 def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     """Default volatility sizing: ATR-multiple stop, R:R-override target.
 
@@ -193,8 +228,10 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     if risk_distance > max_risk_amount:
         risk_distance = max_risk_amount
     if is_bull:
-        return entry - risk_distance, entry + risk_distance * rr
-    return entry + risk_distance, entry - risk_distance * rr
+        stop_loss, take_profit = entry - risk_distance, entry + risk_distance * rr
+    else:
+        stop_loss, take_profit = entry + risk_distance, entry - risk_distance * rr
+    return stop_loss, apply_target_floor(entry, take_profit, direction)
 
 
 def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key):
@@ -222,7 +259,7 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
         target_rr = max(min_rr, min(max_rr, target_rr))
         bounded_reward = risk_now * target_rr
         take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
-    return stop_loss, take_profit
+    return stop_loss, apply_target_floor(entry, take_profit, direction)
 
 
 def _sr_plan(entry, volume_ratio, direction, horizon_key):
@@ -246,7 +283,7 @@ def _sr_plan(entry, volume_ratio, direction, horizon_key):
         take_profit = entry + risk * override if is_bull else entry - risk * override
     else:
         take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
-    return stop_loss, take_profit
+    return stop_loss, apply_target_floor(entry, take_profit, direction)
 
 
 def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
@@ -263,7 +300,7 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
     risk_now = abs(entry - stop_loss)
     rr = _rr_for("Elliott Wave", horizon_key)
     take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
-    return stop_loss, take_profit
+    return stop_loss, apply_target_floor(entry, take_profit, direction)
 
 
 # ---------------------------------------------------------------------------
@@ -540,6 +577,11 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     risk = abs(entry - scenario.stop_loss)
     rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)
     tp1 = entry + risk * rr if is_bull else entry - risk * rr
+    # Floor applied BEFORE the tp2 decision below (Task V10 Step 3): the
+    # scenario's own, larger target only survives as TP2 while it still lies
+    # beyond the new TP1. A floor that lifted TP1 past it would otherwise
+    # leave a TP2 the runner is already through the moment TP1 fills.
+    tp1 = apply_target_floor(entry, tp1, scenario.direction)
 
     tp2 = None
     if scenario.take_profit is not None:

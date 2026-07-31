@@ -17,6 +17,21 @@ DEFAULT_RR_STRATEGY = "S/R Confluence"
 OVERRIDE_RR_STRATEGY = "Fibonacci"
 
 
+@pytest.fixture(autouse=True)
+def _pre_floor_geometry(monkeypatch):
+    """This module pins the confluence path's R:R RECOMPUTATION -- TP1 from
+    the strategy's rr override, the scenario's own target demoted to TP2 --
+    against hand-computed prices. The v8 minimum-target floor (Task V10)
+    would raise most of those TP1s to 2.5% of entry and the assertions would
+    then be measuring the floor rather than the recomputation, so it is
+    switched off for the whole module. The floor's interaction with this
+    exact path (including that a scenario target the floored TP1 has already
+    passed must not survive as TP2) is covered by tests/test_target_floor.py.
+    """
+    from swingbot import config
+    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
+
+
 def _make_scenario(**overrides):
     base = dict(
         direction="bullish",
