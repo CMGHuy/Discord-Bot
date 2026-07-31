@@ -1183,11 +1183,11 @@ git commit -m "docs: run cockpit-v3's previously-skipped live-mutation smoke"
 
 **Files:** Read-only. Write: a status note at the top of `llm-advisor-v5.md`'s Progress block, and (if warranted) an update to CLAUDE.md's "on disk but not current focus" line.
 
-- [ ] **Step 1:** `grep -c "- \[x\]"` across `llm-advisor-v5.md` — if 0, the plan's own tracking says nothing is done.
-- [ ] **Step 2:** Check whether the code the plan describes exists: an Ollama integration module, an Anthropic-provider module, `scripts/eval_advisor.py`, `run_worker.ps1`, an `/advisor` admin page. Absence of all of them corroborates "not started."
-- [ ] **Step 3:** `git log --all --grep "advisor"` and check for a `feature/llm-advisor` branch — planning-only commits (write/split/edit the plan doc) don't count as implementation.
-- [ ] **Step 4:** Write the honest verdict into `llm-advisor-v5.md`'s Progress block. If it's 0% like gatekeeper was, say so in the same direct terms — don't soften it. Update CLAUDE.md only if its current wording is actually misleading (it currently just lists the plan as "on disk but not current focus," which is compatible with either partial or zero progress — no change needed unless this step finds something that contradicts even that).
-- [ ] **Step 5: Commit** (docs-only; no code changes expected from this task)
+- [x] **Step 1:** `grep -c "- \[x\]"` across `llm-advisor-v5.md` — if 0, the plan's own tracking says nothing is done. (Returned 0.)
+- [x] **Step 2:** Check whether the code the plan describes exists: an Ollama integration module, an Anthropic-provider module, `scripts/eval_advisor.py`, `run_worker.ps1`, an `/advisor` admin page. Absence of all of them corroborates "not started." (Confirmed absent — no `swingbot/core/advisor/`, no `llm_worker/`, no `scripts/eval_advisor.py`, no `run_worker.ps1`, no `/advisor` admin page.)
+- [x] **Step 3:** `git log --all --grep "advisor"` and check for a `feature/llm-advisor` branch — planning-only commits (write/split/edit the plan doc) don't count as implementation. (5 planning/spec commits only, no `feature/llm-advisor` branch exists.)
+- [x] **Step 4:** Write the honest verdict into `llm-advisor-v5.md`'s Progress block. If it's 0% like gatekeeper was, say so in the same direct terms — don't soften it. Update CLAUDE.md only if its current wording is actually misleading (it currently just lists the plan as "on disk but not current focus," which is compatible with either partial or zero progress — no change needed unless this step finds something that contradicts even that). (Verdict recorded. CLAUDE.md's line *was* misleading for gatekeeper-v7 specifically — Parts 1-5 merged since that line was written — so updated it to reflect current status for all three plans, not just llm-advisor-v5.)
+- [x] **Step 5: Commit** (docs-only; no code changes expected from this task)
 
 ```bash
 git add docs/superpowers/plans/2026-07-11-llm-advisor-v5.md

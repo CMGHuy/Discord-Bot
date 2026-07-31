@@ -50,7 +50,12 @@ hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
 in-progress multi-hour backtest. Completed plans: unified-plan-engine-v2,
 strategy-winrate-redesign, admin-ui-tradingview-redesign-v6 (task IDs
 `U1`-`U36`; manual browser QA left for a future pass). On disk but not
-current focus: cockpit-v3, gatekeeper-v7, llm-advisor-v5.
+current focus: cockpit-v3, llm-advisor-v5 (confirmed 0% implemented,
+2026-07-31 — no code, no branch, no commits beyond plan-authoring).
+gatekeeper-v7 is mostly done: G1-G146 (Parts 1-5) merged to `main`; G206's
+forward-gate template is written; G217/G218 (verification-debt audits of
+other plans) are open; G215/G216 need a real bot with real Discord
+keys/live data and can't be run by an agent.
 
 **Don't trust the hook's "NEXT" task ID blind** — it can name IDs (e.g. `E89`)
 that don't exist in the plan file it labels as active (which may use a

@@ -20,6 +20,18 @@
 > - **Completed:** —
 > - **Next:** Task L1
 
+> **Independent verification (2026-07-31, gatekeeper-v7 G219):** Confirmed
+> **0% implemented** — same category of finding as gatekeeper-v6/v7 itself
+> pre-2026-07-27, not "mostly done." Checked: `grep -c "- \[x\]"` across this
+> file returns 0; no `swingbot/core/advisor/` or `llm_worker/` directory
+> exists; no `scripts/eval_advisor.py` or `run_worker.ps1`; no `/advisor`
+> admin page in `admin_ui.py` or `swingbot/admin`; `git log --all --grep
+> "advisor" -i` and `git branch -a` show only 5 planning/spec-authoring
+> commits (`8912142`, `5d5d315`, `236e447`, `0f33576`, `2c31bc5`) and no
+> `feature/llm-advisor` branch. The plan's own Progress block above was
+> already accurate — this note exists to record that it was independently
+> checked, not assumed from a stale memory.
+
 > **Authoring note (2026-07-19, enrichment pass):** Phase L1–L2's contract core
 > (Tasks L4–L9) now carries complete, runnable code — full JSON Schemas, the
 > whole queue/budget/cloud implementations, enriched payload assembly — verified
