@@ -151,3 +151,43 @@ def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dic
             "n_kept": stats["n"],
         })
     return out
+
+
+def _spearman_score_outcome(trades) -> float:
+    """Rank correlation between gate_score and win/loss — the monotonicity
+    statistic the permutation test defends."""
+    closed = [t for t in trades if t.get("outcome") in ("win", "loss")
+              and t.get("gate_score") is not None]
+    n = len(closed)
+    if n < 10:
+        return 0.0
+    scores = [t["gate_score"] for t in closed]
+    wins = [1.0 if t["outcome"] == "win" else 0.0 for t in closed]
+    rank = {v: i for i, v in enumerate(sorted(scores))}
+    mean_rank = (n - 1) / 2.0
+    mean_win = sum(wins) / n
+    cov = sum((rank[s] - mean_rank) * (w - mean_win) for s, w in zip(scores, wins))
+    var_r = sum((rank[s] - mean_rank) ** 2 for s in scores) ** 0.5
+    var_w = sum((w - mean_win) ** 2 for w in wins) ** 0.5
+    return cov / (var_r * var_w) if var_r and var_w else 0.0
+
+
+def permutation_test(trades, n: int = 1000, seed: int = 0) -> dict:
+    """Shuffle gate scores across trades n times: p = fraction of shuffles
+    whose monotonicity beats the observed one. Pre-registered stopping
+    rule: p >= 0.05 -> the score is noise -> STOP the phase and say so in
+    the results doc."""
+    import random as _random
+    rng = _random.Random(seed)
+    observed = _spearman_score_outcome(trades)
+    closed = [dict(t) for t in trades if t.get("outcome") in ("win", "loss")]
+    scores = [t["gate_score"] for t in closed]
+    beat = 0
+    for _ in range(n):
+        rng.shuffle(scores)
+        for t, s in zip(closed, scores):
+            t["gate_score"] = s
+        if _spearman_score_outcome(closed) >= observed:
+            beat += 1
+    return {"observed_rho": round(observed, 4),
+            "p_value": round(beat / n, 4), "n_shuffles": n}

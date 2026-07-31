@@ -111,30 +111,30 @@
     },
     {
       "cut": 60,
-      "n_kept": 17,
-      "pct_kept": 89.5,
-      "wr": 82.4,
-      "wilson_lb": 0.558,
-      "expectancy_r": 0.055,
+      "n_kept": 18,
+      "pct_kept": 94.7,
+      "wr": 77.8,
+      "wilson_lb": 0.5192,
+      "expectancy_r": -0.006,
       "trades_per_month": 0.6
     },
     {
       "cut": 65,
-      "n_kept": 14,
-      "pct_kept": 73.7,
-      "wr": 78.6,
-      "wilson_lb": 0.4882,
-      "expectancy_r": 0.006,
+      "n_kept": 13,
+      "pct_kept": 68.4,
+      "wr": 84.6,
+      "wilson_lb": 0.5366,
+      "expectancy_r": 0.085,
       "trades_per_month": 0.5
     },
     {
       "cut": 70,
-      "n_kept": 8,
-      "pct_kept": 42.1,
-      "wr": 75.0,
-      "wilson_lb": 0.3558,
-      "expectancy_r": -0.042,
-      "trades_per_month": 0.3
+      "n_kept": 6,
+      "pct_kept": 31.6,
+      "wr": 83.3,
+      "wilson_lb": 0.3648,
+      "expectancy_r": 0.069,
+      "trades_per_month": 0.2
     },
     {
       "cut": 75,
@@ -229,24 +229,24 @@
     },
     {
       "decile": 5,
-      "n": 2,
-      "wr": 50.0,
-      "wilson_lb": 0.0267,
-      "expectancy_r": -0.376
+      "n": 1,
+      "wr": 100.0,
+      "wilson_lb": 0.0546,
+      "expectancy_r": 0.291
     },
     {
       "decile": 6,
-      "n": 9,
-      "wr": 88.9,
-      "wilson_lb": 0.5067,
-      "expectancy_r": 0.142
+      "n": 12,
+      "wr": 75.0,
+      "wilson_lb": 0.4284,
+      "expectancy_r": -0.043
     },
     {
       "decile": 7,
-      "n": 8,
-      "wr": 75.0,
-      "wilson_lb": 0.3558,
-      "expectancy_r": -0.042
+      "n": 6,
+      "wr": 83.3,
+      "wilson_lb": 0.3648,
+      "expectancy_r": 0.069
     },
     {
       "decile": 8,
@@ -264,5 +264,10 @@
     }
   ],
   "best_cut": null,
-  "proposal": null
+  "proposal": null,
+  "permutation": {
+    "observed_rho": 0.0809,
+    "p_value": 0.346,
+    "n_shuffles": 1000
+  }
 }

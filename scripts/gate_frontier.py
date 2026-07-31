@@ -1,9 +1,11 @@
 """Frontier CLI over annotated TRAIN trades.
 
-Usage: python scripts/gate_frontier.py [--strategy "Break & Retest"]
+Usage: python scripts/gate_frontier.py [--strategy "Break & Retest"] [--permutation]
 Reruns run_folds (annotate-only), prints per-strategy frontier tables,
 writes docs/superpowers/results/2026-07-gate-frontier-{slug}.json and a
-G95 tier-cut proposal file when one is supported.
+G95 tier-cut proposal file when one is supported. --permutation (G100)
+appends a permutation_test verdict {observed_rho, p_value, n_shuffles} to
+each strategy's artifact and printed output.
 """
 import argparse
 import json
@@ -13,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from swingbot.core.backtest import ALL_STRATEGIES  # noqa: E402
-from swingbot.core.gate.folds import run_folds  # noqa: E402
+from swingbot.core.gate.folds import permutation_test, run_folds  # noqa: E402
 from swingbot.core.gate.frontier import (best_cut, frontier,  # noqa: E402
                                          propose_tier_cuts, write_proposal,
                                          wr_by_decile)
@@ -28,6 +30,8 @@ def _slug(name):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", default=None)
+    parser.add_argument("--permutation", action="store_true",
+                        help="append a permutation_test verdict to each artifact")
     args = parser.parse_args()
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -50,6 +54,12 @@ def main() -> int:
         artifact = {"strategy": strategy, "frontier": rows,
                     "deciles": wr_by_decile(trades),
                     "best_cut": chosen, "proposal": proposal}
+        if args.permutation:
+            perm = permutation_test(trades, n=1000, seed=0)
+            artifact["permutation"] = perm
+            flag = " *** p >= 0.05: SCORE IS NOISE ***" if perm["p_value"] >= 0.05 else ""
+            print(f"permutation: rho={perm['observed_rho']} "
+                  f"p={perm['p_value']} (n_shuffles={perm['n_shuffles']}){flag}")
         path = os.path.join(OUT_DIR, f"2026-07-gate-frontier-{_slug(strategy)}.json")
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(artifact, fh, indent=2)

@@ -156,12 +156,12 @@
     },
     {
       "cut": 85,
-      "n_kept": 1,
-      "pct_kept": 20.0,
+      "n_kept": 2,
+      "pct_kept": 40.0,
       "wr": 100.0,
-      "wilson_lb": 0.0546,
+      "wilson_lb": 0.1979,
       "expectancy_r": 0.34,
-      "trades_per_month": 0.0
+      "trades_per_month": 0.1
     },
     {
       "cut": 90,
@@ -264,5 +264,10 @@
     }
   ],
   "best_cut": null,
-  "proposal": null
+  "proposal": null,
+  "permutation": {
+    "observed_rho": 0.0,
+    "p_value": 1.0,
+    "n_shuffles": 1000
+  }
 }

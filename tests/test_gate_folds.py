@@ -78,3 +78,29 @@ def test_no_delegation_against_the_real_backtest_wf_module():
     is actually there and not just satisfied by the stub test above."""
     import swingbot.core.backtest_wf as real_wf
     assert not hasattr(real_wf, "run_walk_forward")
+
+
+import random
+
+from swingbot.core.gate.folds import permutation_test
+
+
+def _rigged(n=200):
+    return [{"gate_score": i / 2.0,
+             "outcome": "win" if i >= 80 else "loss",
+             "r_multiple": 1.5 if i >= 80 else -1.0} for i in range(n)]
+
+
+def _noise(n=200, seed=7):
+    rng = random.Random(seed)
+    return [{"gate_score": rng.uniform(0, 100),
+             "outcome": rng.choice(["win", "loss"]),
+             "r_multiple": rng.choice([1.5, -1.0])} for _ in range(n)]
+
+
+def test_rigged_monotone_tiny_p():
+    assert permutation_test(_rigged(), n=500, seed=1)["p_value"] < 0.01
+
+
+def test_noise_large_p():
+    assert permutation_test(_noise(), n=500, seed=1)["p_value"] >= 0.05
