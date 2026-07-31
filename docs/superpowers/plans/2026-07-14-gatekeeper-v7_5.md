@@ -1086,7 +1086,7 @@ live-forward proof (G206) and the two closing checkpoints.
 
 **Files:** Create `docs/superpowers/results/2026-08-gate-forward-test.md` (template now, filled during the gate)
 
-- [ ] **Step 1: Write the template + procedure** — this exact content (filled-in cells stay blank until the gate actually runs):
+- [x] **Step 1: Write the template + procedure** — this exact content (filled-in cells stay blank until the gate actually runs):
 
 ```markdown
 # A+ Forward Gate — 4-week paper test (pre-registered)
@@ -1119,7 +1119,7 @@ Tier cuts revert to proposal state; gate stays enforce at min-tier B;
 next attempt requires a fresh G98 frontier run and a new 4-week window.
 ```
 
-- [ ] **Step 2: Commit** — `git add docs/superpowers/results/2026-08-gate-forward-test.md && git commit -m "docs: A+ forward-gate template (pre-registered)"`
+- [x] **Step 2: Commit** — `git add docs/superpowers/results/2026-08-gate-forward-test.md && git commit -m "docs: A+ forward-gate template (pre-registered)"`
 
 ### Task G215: Live smoke — the full ritual, end to end
 
