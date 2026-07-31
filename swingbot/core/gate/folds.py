@@ -123,3 +123,31 @@ def run_folds(strategy: str, *, gate_min_tier: str | None = None,
     return {"strategy": strategy, "min_tier": gate_min_tier,
             "folds": folds, "pooled": _fold_stats(all_trades),
             "trades": all_trades}
+
+
+def ablate_flags(trades: list[dict], flags: list[str] | None = None) -> list[dict]:
+    """Each flag alone as a filter: what does removing ITS trades do to
+    WR/expectancy? Flags that HURT expectancy get demoted to weight 0 by
+    the follow-up commit this task documents."""
+    closed = [t for t in trades if t.get("outcome") in ("win", "loss")]
+    if not closed:
+        return []
+    if flags is None:
+        flags = sorted({f for t in closed for f in t.get("fired_flags", [])})
+    base = _fold_stats(closed)
+    out = []
+    for flag in flags:
+        kept = [t for t in closed if flag not in t.get("fired_flags", [])]
+        stats = _fold_stats(kept)
+        out.append({
+            "flag": flag,
+            "signals_removed_pct": round(100.0 * (len(closed) - len(kept))
+                                         / len(closed), 1),
+            "wr_delta": (round(stats["wr"] - base["wr"], 1)
+                         if None not in (stats["wr"], base["wr"]) else None),
+            "expectancy_delta": (round(stats["expectancy_r"] - base["expectancy_r"], 3)
+                                 if None not in (stats["expectancy_r"],
+                                                 base["expectancy_r"]) else None),
+            "n_kept": stats["n"],
+        })
+    return out

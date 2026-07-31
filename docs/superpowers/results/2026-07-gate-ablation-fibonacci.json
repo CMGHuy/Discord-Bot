@@ -1,0 +1,33 @@
+{
+  "strategy": "Fibonacci",
+  "pooled": [
+    {
+      "flag": "rf_stop_sweep",
+      "signals_removed_pct": 14.6,
+      "wr_delta": -2.6,
+      "expectancy_delta": -0.035,
+      "n_kept": 35
+    }
+  ],
+  "per_fold": {
+    "2021": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 18.2,
+        "wr_delta": -0.5,
+        "expectancy_delta": -0.007,
+        "n_kept": 18
+      }
+    ],
+    "2022": [],
+    "2023": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 13.3,
+        "wr_delta": -4.1,
+        "expectancy_delta": -0.056,
+        "n_kept": 13
+      }
+    ]
+  }
+}

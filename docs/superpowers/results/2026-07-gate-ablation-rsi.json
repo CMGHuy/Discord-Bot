@@ -1,0 +1,33 @@
+{
+  "strategy": "RSI",
+  "pooled": [
+    {
+      "flag": "rf_stop_sweep",
+      "signals_removed_pct": 40.0,
+      "wr_delta": 0.0,
+      "expectancy_delta": 0.0,
+      "n_kept": 3
+    }
+  ],
+  "per_fold": {
+    "2021": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 50.0,
+        "wr_delta": 0.0,
+        "expectancy_delta": 0.0,
+        "n_kept": 1
+      }
+    ],
+    "2022": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 100.0,
+        "wr_delta": null,
+        "expectancy_delta": null,
+        "n_kept": 0
+      }
+    ],
+    "2023": []
+  }
+}

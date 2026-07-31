@@ -1,0 +1,62 @@
+{
+  "strategy": "Break & Retest",
+  "pooled": [
+    {
+      "flag": "rf_fake_breakout",
+      "signals_removed_pct": 26.3,
+      "wr_delta": -0.3,
+      "expectancy_delta": -0.005,
+      "n_kept": 14
+    },
+    {
+      "flag": "rf_stop_sweep",
+      "signals_removed_pct": 21.1,
+      "wr_delta": 1.1,
+      "expectancy_delta": 0.015,
+      "n_kept": 15
+    }
+  ],
+  "per_fold": {
+    "2021": [
+      {
+        "flag": "rf_fake_breakout",
+        "signals_removed_pct": 16.7,
+        "wr_delta": -3.3,
+        "expectancy_delta": -0.044,
+        "n_kept": 10
+      },
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 16.7,
+        "wr_delta": -3.3,
+        "expectancy_delta": -0.044,
+        "n_kept": 10
+      }
+    ],
+    "2022": [
+      {
+        "flag": "rf_fake_breakout",
+        "signals_removed_pct": 100.0,
+        "wr_delta": null,
+        "expectancy_delta": null,
+        "n_kept": 0
+      }
+    ],
+    "2023": [
+      {
+        "flag": "rf_fake_breakout",
+        "signals_removed_pct": 33.3,
+        "wr_delta": 8.3,
+        "expectancy_delta": 0.11,
+        "n_kept": 4
+      },
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 33.3,
+        "wr_delta": 8.3,
+        "expectancy_delta": 0.111,
+        "n_kept": 4
+      }
+    ]
+  }
+}

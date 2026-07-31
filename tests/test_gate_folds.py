@@ -51,6 +51,22 @@ def test_delegates_to_edge_engine_when_present(monkeypatch):
     assert folds.run_folds("VWAP")["delegated"] == "VWAP"
 
 
+def test_ablation_loop_mechanics():
+    from swingbot.core.gate.folds import ablate_flags
+
+    trades = ([{"outcome": "loss", "r_multiple": -1.0, "fired_flags": ["rf_dead_cat"]}] * 10
+              + [{"outcome": "win", "r_multiple": 1.5, "fired_flags": []}] * 30
+              + [{"outcome": "loss", "r_multiple": -1.0, "fired_flags": []}] * 10)
+    rows = ablate_flags(trades, flags=["rf_dead_cat", "rf_opex_pin"])
+    dead_cat = next(r for r in rows if r["flag"] == "rf_dead_cat")
+    # removing rf_dead_cat trades: 50 -> 40 signals (20% removed), WR 60 -> 75
+    assert dead_cat["signals_removed_pct"] == 20.0
+    assert dead_cat["wr_delta"] == 15.0
+    assert dead_cat["expectancy_delta"] > 0
+    opex = next(r for r in rows if r["flag"] == "rf_opex_pin")
+    assert opex["signals_removed_pct"] == 0.0 and opex["wr_delta"] == 0.0
+
+
 def test_no_delegation_against_the_real_backtest_wf_module():
     """swingbot/core/backtest_wf.py (edge-engine E39) already exists in this
     repo, but it exposes its own differently-shaped run_folds(overrides, ...)

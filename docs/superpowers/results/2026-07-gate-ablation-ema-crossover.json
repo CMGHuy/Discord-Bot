@@ -1,0 +1,25 @@
+{
+  "strategy": "EMA Crossover",
+  "pooled": [
+    {
+      "flag": "rf_stop_sweep",
+      "signals_removed_pct": 5.9,
+      "wr_delta": -0.3,
+      "expectancy_delta": -0.005,
+      "n_kept": 16
+    }
+  ],
+  "per_fold": {
+    "2021": [],
+    "2022": [],
+    "2023": [
+      {
+        "flag": "rf_stop_sweep",
+        "signals_removed_pct": 25.0,
+        "wr_delta": -8.3,
+        "expectancy_delta": -0.11,
+        "n_kept": 3
+      }
+    ]
+  }
+}
