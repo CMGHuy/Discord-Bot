@@ -1676,12 +1676,12 @@ git add swingbot/core/gate/persistence.py scripts/gate_shadow_report.py tests/te
 git commit -m "feat: shadow comparison report"
 ```
 
-### Task G110: Overfit sentinel
+### Task G110: Overfit sentinel ✅ (commit `e6c505f`)
 
 **Files:** Modify `folds.py`; test `tests/test_gate_folds.py`
 
 **Interfaces:** `overfit_sentinel(fold_result) -> list[str]` — WARNs when train-fold WR exceeds test-fold WR by > 12 pts, when a strategy's chosen cut keeps < 15% of signals (over-filtered to anecdotes), or when pooled N < 90. Warnings print in fold CLI output and land in the results docs automatically.
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
 
 ```python
 from swingbot.core.gate.folds import overfit_sentinel
@@ -1702,7 +1702,7 @@ def test_overfit_sentinel_rules():
     assert any("N=50" in w for w in warns)
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; the fold CLI prints these and they land in the results docs automatically):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; the fold CLI prints these and they land in the results docs automatically):
 
 ```python
 def overfit_sentinel(fold_result: dict, train_wr: float | None = None,
@@ -1723,8 +1723,8 @@ def overfit_sentinel(fold_result: dict, train_wr: float | None = None,
 
 (In `scripts/gate_fold_run.py`, print `overfit_sentinel(...)` output after each run and include it in the JSON artifact.)
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_folds.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_folds.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
