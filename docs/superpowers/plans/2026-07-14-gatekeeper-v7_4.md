@@ -1061,11 +1061,11 @@ git add docs/superpowers/results/2026-07-gate-baseline.md docs/superpowers/resul
 git commit -m "docs: gate baseline census on TRAIN folds"
 ```
 
-### Task G98: Frontier run — all strategies
+### Task G98: Frontier run — all strategies ✅ (commit `19b73a7`)
 
 **Files:** Create `scripts/gate_frontier.py`; evidence `docs/superpowers/results/2026-07-gate-frontier.md`
 
-- [ ] **Step 1: Write the CLI**
+- [x] **Step 1: Write the CLI**
 
 ```python
 # scripts/gate_frontier.py
@@ -1132,7 +1132,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 2: Run for real on TRAIN**; write `docs/superpowers/results/2026-07-gate-frontier.md` with the honest headline numbers per strategy — one table row each: `WR @ chosen cut`, `wilson_lb`, `% signals kept`, `expectancy_r`, plus "no cut qualifies" rows stated plainly. Commit:
+- [x] **Step 2: Run for real on TRAIN**; write `docs/superpowers/results/2026-07-gate-frontier.md` with the honest headline numbers per strategy — one table row each: `WR @ chosen cut`, `wilson_lb`, `% signals kept`, `expectancy_r`, plus "no cut qualifies" rows stated plainly. Commit:
 
 ```bash
 git add scripts/gate_frontier.py docs/superpowers/results/2026-07-gate-frontier*.json docs/superpowers/results/2026-07-gate-frontier.md
