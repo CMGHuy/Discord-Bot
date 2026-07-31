@@ -63,8 +63,10 @@ python -m pytest            # serial, matches the recorded baseline conditions
 python -m pytest -n auto    # faster; only when the box is otherwise idle
 ```
 
-Iterating on one file? `python -m pytest tests/test_edge_gates.py -q`. Do not
-re-run the full suite to check a local change.
+Iterating on one file? `python -m pytest tests/test_edge_gates.py`. Do not
+re-run the full suite to check a local change. Don't add `-q` — `pytest.ini`'s
+`addopts` already sets it, and a second `-q` on the command line stacks to
+quiet-level 2, which suppresses the final "N passed" summary line entirely.
 
 ## Step 5 — Compare and report honestly
 

@@ -37,8 +37,10 @@ entry that feeds both the env parser and the admin UI's Settings page).
 - **README.md is 645 lines** — grep its `^## ` headers and read the one section
   you need. Same for `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
 - **Don't re-run the full suite to check a local change** (~3 min) — run the
-  touched file (`pytest tests/test_edge_gates.py -q`) and save the full suite
-  for the pre-commit gate.
+  touched file (`pytest tests/test_edge_gates.py`) and save the full suite
+  for the pre-commit gate. Don't add `-q`: `pytest.ini`'s `addopts` already
+  sets it, and a second `-q` stacks to quiet-level 2, which suppresses the
+  final "N passed" summary line entirely.
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
 
@@ -65,7 +67,7 @@ names). `.mcp.json` provides context7 for yfinance/pandas-ta/discord.py docs.
 ## Commands
 
 ```bash
-python -m pytest tests/ -q                 # full suite, ~3min — pre-commit gate (see known failure below)
+python -m pytest tests/                    # full suite, ~3min — pre-commit gate (see known failure below)
 python -m pytest tests/test_foo.py::test_bar -v   # single test — use this while iterating
 make check                                 # py_compile syntax pass (no make on Windows: run python -m py_compile over bot.py admin_ui.py swingbot/**/*.py)
 python scripts/fetch_backtest_data.py      # populate the CSV cache (once, network) — required by every backtest/grid script
@@ -83,6 +85,11 @@ a higher count than this is not a regression signal. The one failure,
 dependent — don't treat it as your regression or "fix" it as a side quest.
 "Green" means your diff adds no *new* failure and no *different* failure —
 the absence of new failures is the invariant, not the exact count.
+
+Don't add `-q` to any pytest invocation above — `pytest.ini`'s `addopts`
+already sets it, and a second `-q` on the command line stacks to
+quiet-level 2, which silently suppresses the final "N passed" summary line
+you need to compare against the baseline.
 
 Long backtest/grid runs: a full 75-ticker × 10-horizon sweep takes tens of
 minutes (`replay_scenarios` is ~30s per ticker-horizon — hours for a full
