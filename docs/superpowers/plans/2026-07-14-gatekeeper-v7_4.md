@@ -11,9 +11,17 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
-> - **Completed:** —
-> - **Next:** Task G89
+> - **Branch:** `main` (operator's choice 2026-07-29 — no feature branch for this plan; this line
+>   was stale, carried over from the pre-merge 12-part split)
+> - **Completed:** G89-G96 (backtestable subset, no-lookahead historical context joins, backtest
+>   hook, gate-filtered replay, decile report, frontier report, tier-cut proposal, fold runner) and
+>   G103-G104 (shadow-mode live wiring, shadow comparison report) — done and merged 2026-07-31.
+>   Skipped ahead of numeric order deliberately: G103/G104 only depend on already-merged
+>   G76/G81, not on G97-G102's evidence-generation chain, so they were parallelized alongside
+>   G89-G96 rather than left to wait.
+> - **Next:** G97 (baseline annotation run — needs an actual multi-strategy backtest run, route
+>   through the `backtest-runner` subagent per CLAUDE.md, not a plain code-writing session), then
+>   G98-G102, G110, and the G118 Phase G3 checkpoint.
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 

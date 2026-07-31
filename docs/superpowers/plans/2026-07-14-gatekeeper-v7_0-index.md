@@ -72,7 +72,7 @@ and never re-add a cut task to satisfy one.
 | 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | **done 2026-07-29** |
 | 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | **done 2026-07-29** |
 | 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | **done 2026-07-30** |
-| 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | not started |
+| 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | **partial 2026-07-31** — G89-G96, G103-G104 done; G97-G102, G110, G118 remain |
 | 5 | [_5.md](2026-07-14-gatekeeper-v7_5.md) | G119-G219 | Scan + alert integration, E2E, 4-week forward gate, wrap-up (+ carried-over debt appendix) | 16 | not started |
 
 Phase map: Part 1 = Phase G0 - Part 2 = Phase G1 - Part 3 = Phase G2 - Part 4 = Phase G3 -
