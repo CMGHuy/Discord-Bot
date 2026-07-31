@@ -1301,12 +1301,12 @@ git add swingbot/core/gate/folds.py scripts/gate_frontier.py docs/superpowers/re
 git commit -m "feat: gate score permutation test"
 ```
 
-### Task G101: Threshold plateau check
+### Task G101: Threshold plateau check ✅ (commit `c0c5b10`)
 
 **Files:** Modify `frontier.py` (`plateau_report(frontier_rows, chosen_cut)`); test `tests/test_gate_frontier.py`
 
 **Interfaces:** asserts the chosen cut sits on a plateau (WR within 2 pts and expectancy within 0.03R for cut ± 10) not a spike; spiky choice → report recommends the plateau center instead (edge E42 pattern).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_frontier.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_frontier.py`)
 
 ```python
 from swingbot.core.gate.frontier import plateau_report
@@ -1331,7 +1331,7 @@ def test_spike_redirected_to_plateau_center():
     assert report["recommend"] != 50            # the spike is not trustworthy
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `frontier.py`; edge E42 pattern):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `frontier.py`; edge E42 pattern):
 
 ```python
 def plateau_report(frontier_rows, chosen_cut: int,
@@ -1366,8 +1366,8 @@ def plateau_report(frontier_rows, chosen_cut: int,
             "reason": f"cut {chosen_cut} is a spike; widest plateau centers at {recommend}"}
 ```
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_frontier.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_frontier.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
