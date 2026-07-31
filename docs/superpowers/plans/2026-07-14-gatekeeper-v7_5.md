@@ -11,9 +11,26 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
-> - **Completed:** —
-> - **Next:** Task G119
+> - **Branch:** `main`
+> - **Completed:** G119-G146 (all of Phase G4). Scan-path gate context (G119),
+>   event blackout annotate-first/hold-opt-in (G120), per-candidate gate
+>   evaluation with the inform-never-drops + unknowns-never-block invariants
+>   (G121), kill-switch/throttle interop (G134), checklist embed field
+>   (G123), trigger-time re-check (G128), telemetry counters (G135), and all
+>   four e2e paths (clean-pass / flagged-ships-inform / blocked-enforce from
+>   G140-G141, plus total-darkness reused from G43) are green. G122,
+>   G124-G133 (except G134/G135), G136-G139 and G142-G145 are cut per the
+>   index appendix — verified 2026-07-31 that none were skipped by mistake.
+>   Full suite 2026-07-31: 1245 passed, 136 skipped, 1 failed (0 errors) —
+>   the one failure is the documented pre-existing
+>   `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`. Skip count
+>   is above the CLAUDE.md-documented 54 baseline because this worktree has
+>   no OHLCV CSV cache populated (`scripts/fetch_backtest_data.py` not run
+>   here) — all extra skips are "no OHLCV cache present" in
+>   `test_exit_parity.py`/`test_backtest_engine.py`, not gate-related.
+> - **Next:** Task G206 (4-week paper forward-gate — blocked until the live
+>   window elapses; not started by this checkpoint) — see the Phase G7
+>   header note on prerequisites before picking it up.
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
@@ -1038,8 +1055,22 @@ git commit -m "test: gate e2e flagged-ships (inform) + blocked (enforce)"
 
 ### Task G146: Phase G4 checkpoint
 
-- [ ] **Step 1:** Full suite + `make check` green; all four e2e paths green; flags-off byte-identity regressions green.
-- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G4 checkpoint`
+- [x] **Step 1:** Full suite green (2026-07-31): 1245 passed, 136 skipped, 1
+  failed (0 errors) — the one failure is the documented pre-existing
+  `test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`; extra skips
+  vs. the CLAUDE.md 54-baseline are all "no OHLCV cache present" in this
+  worktree, unrelated to the gate. `py_compile` sweep over
+  `bot.py admin_ui.py swingbot/**/*.py` (136 files) clean. All four e2e paths
+  green: `test_gate_e2e.py::test_clean_pass_inform`,
+  `test_flagged_candidate_still_ships_in_inform`,
+  `test_same_candidate_blocks_only_after_enforce_opt_in` (G140/G141), plus
+  the total-darkness proof reused from G43 (`test_macro_degradation.py`).
+  Flags-off byte-identity regressions green:
+  `test_context_none_when_everything_off` (`test_scan_gate_wiring.py`),
+  `test_none_result_renders_nothing` +
+  `test_build_embed_no_gate_fields_when_result_is_none`
+  (`test_embeds_gate.py`).
+- [x] **Step 2:** Progress block updated above. Commit — `chore(G146): phase G4 checkpoint`
 
 ---
 
