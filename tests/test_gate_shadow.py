@@ -51,3 +51,31 @@ def test_gate_disabled_is_noop(env, monkeypatch):
     store, candidate = env
     monkeypatch.setattr(config, "GATE_ENABLED", False, raising=False)
     assert scanning._gate_evaluate(candidate, store, macro_snap=None) == ("pass", None)
+
+
+from swingbot.core.gate.persistence import join_shadow_outcomes, shadow_cohorts
+
+SHADOW_ROWS = [
+    {"plan_id": "p1", "tier": "C", "advisory_decision": "block",
+     "fired_flags": ["rf_dead_cat"], "ts": 1},
+    {"plan_id": "p2", "tier": "A", "advisory_decision": "pass", "fired_flags": [], "ts": 2},
+    {"plan_id": "p3", "tier": "A", "advisory_decision": "pass", "fired_flags": [], "ts": 3},
+    {"plan_id": "p4", "tier": "B", "advisory_decision": "pass", "fired_flags": [], "ts": 4},
+    {"plan_id": "p9", "tier": "A", "advisory_decision": "pass", "fired_flags": [], "ts": 5},
+]
+TRADES = [
+    {"plan_id": "p1", "outcome": "loss", "r_multiple": -1.0},
+    {"plan_id": "p2", "outcome": "win", "r_multiple": 1.5},
+    {"plan_id": "p3", "outcome": "win", "r_multiple": 1.5},
+    {"plan_id": "p4", "outcome": "loss", "r_multiple": -1.0},
+    # p9 never closed -> excluded from the join
+]
+
+
+def test_join_and_cohort_goldens():
+    joined = join_shadow_outcomes(shadow_rows=SHADOW_ROWS, trades=TRADES)
+    assert len(joined) == 4
+    cohorts = shadow_cohorts(joined)
+    assert cohorts["would_block"] == {"n": 1, "wr": 0.0, "expectancy_r": -1.0}
+    assert cohorts["passed"]["n"] == 3
+    assert cohorts["passed"]["wr"] == pytest.approx(66.7, abs=0.1)
