@@ -107,6 +107,38 @@ def propose_tier_cuts(frontier_rows) -> dict | None:
                     "cuts are proposals — apply via the settings page only"}
 
 
+def plateau_report(frontier_rows, chosen_cut: int,
+                   wr_tol: float = 2.0, exp_tol: float = 0.03,
+                   span: int = 10) -> dict:
+    """A trustworthy cut sits on a plateau: neighbors within +/-span score
+    points hold WR within wr_tol pts and expectancy within exp_tol R.
+    A spiky choice gets redirected to the widest plateau's center."""
+    by_cut = {r["cut"]: r for r in frontier_rows if r["wr"] is not None}
+    chosen = by_cut.get(chosen_cut)
+    if chosen is None:
+        return {"on_plateau": False, "recommend": None, "reason": "cut has no data"}
+    neighbors = [r for c, r in by_cut.items()
+                 if c != chosen_cut and abs(c - chosen_cut) <= span]
+    stable = [r for r in neighbors
+              if abs(r["wr"] - chosen["wr"]) <= wr_tol
+              and abs((r["expectancy_r"] or 0) - (chosen["expectancy_r"] or 0)) <= exp_tol]
+    on_plateau = neighbors and len(stable) == len(neighbors)
+    if on_plateau:
+        return {"on_plateau": True, "recommend": chosen_cut, "reason": None}
+    # widest run of mutually-stable consecutive cuts -> its center
+    cuts = sorted(by_cut)
+    best_run, run = [], []
+    for cut in cuts:
+        if run and not (abs(by_cut[cut]["wr"] - by_cut[run[0]]["wr"]) <= wr_tol):
+            run = []
+        run = run + [cut]
+        if len(run) > len(best_run):
+            best_run = run
+    recommend = best_run[len(best_run) // 2] if best_run else None
+    return {"on_plateau": False, "recommend": recommend,
+            "reason": f"cut {chosen_cut} is a spike; widest plateau centers at {recommend}"}
+
+
 def write_proposal(proposal: dict, kind: str = "gate-tiers") -> str:
     """data/tuning_proposals/{ts}-{kind}.json (cockpit C36 shape)."""
     import os
