@@ -167,6 +167,7 @@ class ScanItem:
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
     intraday: bool | None = None      # 1h close vs today's VWAP on this plan's side; None = no reading = neutral, never blocks (Task E29)
+    gate: object = None                # GateResult | None from _gate_evaluate; None when GATE_ENABLED=false or no v2 plan (G103)
 
     @property
     def all_requirements_met(self) -> bool:
@@ -1526,6 +1527,36 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         except Exception as e:
             log.debug("Intraday confirmation unavailable for %s: %s", result.ticker, e)
             item.intraday = None
+
+        # Gatekeeper live wiring (G103): evaluated in ALL modes when
+        # GATE_ENABLED -- the shadow log is the evidence stream regardless
+        # of mode. Only meaningful for a v2 plan: the checklist reads
+        # TradePlanV2's own field names (trigger_price/tp1/tp2/direction),
+        # which the legacy `plan` object here does not share (same
+        # constraint as the decision chart above). _gate_evaluate lives in
+        # swingbot.commands.scanning (imported lazily -- that module
+        # imports swingbot.core.scan_engine at load time, so a top-level
+        # import here would cycle). item.gate carries the raw GateResult
+        # (or None); build_embed does not accept it yet -- the render
+        # matrix and its `gate=` kwarg land in G123, so until then this is
+        # evaluated + logged (shadow_log) + attached to the plan, but never
+        # rendered, which is exactly shadow behavior -- alert embeds stay
+        # byte-for-byte unchanged in every mode today.
+        if item.plan_v2 is not None:
+            import types as _types
+            from swingbot.commands.scanning import _gate_evaluate
+
+            macro_snap = None
+            if config.MACRO_ENABLED:
+                try:
+                    from swingbot.core.macro import snapshot as macro_snapshot
+                    macro_snap = macro_snapshot.load_snapshot()
+                except Exception:
+                    log.debug("macro snapshot unavailable for gate eval on %s", result.ticker)
+            gate_candidate = _types.SimpleNamespace(
+                ticker=result.ticker, strategy=result.strategy,
+                plan=item.plan_v2, df_daily=df)
+            _gate_decision, item.gate = _gate_evaluate(gate_candidate, PlanStore(), macro_snap)
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
