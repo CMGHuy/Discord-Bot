@@ -56,6 +56,7 @@ _HISTORY_PATH = os.path.join(app_config.DATA_DIR, "retrospective_history.json")
 _TUNABLE_KEYS = [
     "MIN_ALERT_CONFIDENCE_LEVEL", "MAX_STOP_LOSS_PCT", "MIN_RISK_REWARD_RATIO",
     "HTF_COUNTER_TREND_PENALTY", "NEAR_TP_TIMEOUT_MINUTES", "NEAR_TP_TIMEOUT_THRESHOLD_PCT",
+    "MIN_TARGET_PCT",
 ]
 
 
@@ -883,8 +884,16 @@ def _analyse(closed: list, opened_today: list, still_open: list,
                 _escalate(
                     "low_rr",
                     f"Actual RR {rr:.2f}:1 is below 1.2",
-                    "Raise `MIN_RISK_REWARD_RATIO` to filter out low-reward setups.",
-                    config_key="MIN_RISK_REWARD_RATIO",
+                    # Plan v8 Task V5: this used to say MIN_RISK_REWARD_RATIO,
+                    # which does not govern v2 TP1 at all -- it only gates the
+                    # legacy scenario path (scanning/engine.py). Under
+                    # PLAN_ENGINE_V2=on the bot was correctly diagnosing a real
+                    # structural problem every single day and then recommending
+                    # a knob that could not fix it. MIN_TARGET_PCT is the one
+                    # that actually moves TP1.
+                    "Raise `MIN_TARGET_PCT` — the floor under TP1 — so wins are "
+                    "sized against the stop instead of the reward:risk override.",
+                    config_key="MIN_TARGET_PCT",
                 )
 
     # --- Horizon analysis ---
