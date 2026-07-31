@@ -1215,12 +1215,18 @@ git add swingbot/core/gate/folds.py scripts/gate_fold_run.py docs/superpowers/re
 git commit -m "feat: per-flag ablation + evidence"
 ```
 
-### Task G100: Permutation reality check on the score
+### Task G100: Permutation reality check on the score ✅ (commit `67b300c`)
 
 **Files:** Modify `folds.py` (`permutation_test(trades, n=1000)`); test `tests/test_gate_folds.py`; evidence in the G98 doc
 
 **Interfaces:** shuffles gate scores across the annotated trades 1000× → p-value that the observed WR-by-decile monotonicity is luck (reuses edge E41 machinery when present). p ≥ 0.05 → the score is noise → **stop the phase and say so** in the results doc (pre-registered stopping rule).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
+
+**Result: every strategy's p-value >= 0.05 (0.346-1.0) — the stopping rule
+triggers for all 11 strategies.** No strategy's gate score statistically
+proves it separates winners from losers better than chance at today's
+TRAIN sample sizes. Documented in
+`docs/superpowers/results/2026-07-gate-frontier.md`.
+- [x] **Step 1: Write the failing test** (append to `tests/test_gate_folds.py`)
 
 ```python
 import random
@@ -1249,7 +1255,7 @@ def test_noise_large_p():
     assert permutation_test(_noise(), n=500, seed=1)["p_value"] >= 0.05
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; reuses edge E41 machinery when present — capability check documented):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `folds.py`; reuses edge E41 machinery when present — capability check documented):
 
 ```python
 def _spearman_score_outcome(trades) -> float:
@@ -1292,8 +1298,8 @@ def permutation_test(trades, n: int = 1000, seed: int = 0) -> dict:
             "p_value": round(beat / n, 4), "n_shuffles": n}
 ```
 
-- [ ] **Step 3: Run tests — PASS.** Then **run for real** over the G97 annotated trades (add a `--permutation` flag to `scripts/gate_frontier.py` that appends the result to each strategy's artifact); append the p-values to the G98 evidence doc. **If p ≥ 0.05 pooled: stop the phase and write that.**
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Run tests — PASS.** Then **run for real** over the G97 annotated trades (add a `--permutation` flag to `scripts/gate_frontier.py` that appends the result to each strategy's artifact); append the p-values to the G98 evidence doc. **If p ≥ 0.05 pooled: stop the phase and write that.** (p >= 0.05 for all 11 strategies — stop written up in the doc.)
+- [x] **Step 4: Commit**
 
 ```bash
 python -m pytest tests/ -q && make check
