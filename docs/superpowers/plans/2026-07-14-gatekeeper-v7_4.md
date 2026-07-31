@@ -19,9 +19,20 @@
 >   Skipped ahead of numeric order deliberately: G103/G104 only depend on already-merged
 >   G76/G81, not on G97-G102's evidence-generation chain, so they were parallelized alongside
 >   G89-G96 rather than left to wait.
-> - **Next:** G97 (baseline annotation run — needs an actual multi-strategy backtest run, route
->   through the `backtest-runner` subagent per CLAUDE.md, not a plain code-writing session), then
->   G98-G102, G110, and the G118 Phase G3 checkpoint.
+> - **Completed 2026-07-31 (this session):** G97 (baseline census, commit `8752faa`), G98
+>   (frontier CLI + evidence, `19b73a7`), G99 (per-flag ablation; demoted `rf_stop_sweep` to
+>   weight 0 after it hurt expectancy in 9/11 non-trivial fold observations, `8f8f17f`), G101
+>   (plateau check, `c0c5b10` — done ahead of G100 in-session since its code was already staged;
+>   task-ID order in the doc/commit trail is otherwise preserved), G100 (permutation test,
+>   `67b300c` — **every strategy's p >= 0.05**, the pre-registered stopping rule triggered across
+>   the board), G102 (TRAIN decision memo, `dc6befd` — no strategy earned an A/A+ tier proposal;
+>   config `GATE_TIER_*_CUT` defaults left untouched, no surviving cut to promote), G110 (overfit
+>   sentinel, `e6c505f`). **Phase G3 (G89-G118) is now fully closed** — see
+>   `docs/superpowers/results/2026-07-gate-decision.md` for the honest bottom line: the checklist
+>   score does not yet statistically prove it separates winners from losers at today's TRAIN
+>   sample sizes, so no tier-cut config changed; `GATE_MODE` stays `inform`.
+> - **Next:** Part 5 (`2026-07-14-gatekeeper-v7_5.md`) — not started in this session per operator
+>   instruction (stop after the G118 checkpoint).
 
 **Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 8 red-flag detectors, risk definition, entry timing) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, VIX, breadth, event calendar) before every scan — wired into the scan pipeline and the alert embed.
 
@@ -1732,9 +1743,9 @@ git add swingbot/core/gate/folds.py scripts/gate_fold_run.py tests/test_gate_fol
 git commit -m "feat: overfit sentinel"
 ```
 
-### Task G118: Phase G3 checkpoint
+### Task G118: Phase G3 checkpoint ✅
 
-- [ ] **Step 1:** Full suite + `make check` green; evidence docs (baseline, frontier, ablation, decision memo) committed; permutation p < 0.05 on record — or the documented stop.
-- [ ] **Step 2:** Update Progress block. Commit — `chore: phase G3 checkpoint (fold evidence on record)`
+- [x] **Step 1:** Full suite + `make check` green; evidence docs (baseline, frontier, ablation, decision memo) committed; permutation p < 0.05 on record — or the documented stop. (1223+ passed / 1 known pre-existing failure only, `py_compile` clean. Evidence docs: `2026-07-gate-baseline.md`, `2026-07-gate-frontier.md`, `2026-07-gate-ablation.md`, `2026-07-gate-decision.md`, all committed. Permutation: documented stop — every strategy p >= 0.05.)
+- [x] **Step 2:** Update Progress block. Commit — `chore: phase G3 checkpoint (fold evidence on record)`
 
 ---
