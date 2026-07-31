@@ -138,7 +138,7 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
 **Interfaces:** one `GateContext` assembled per scan run (not per ticker): `{macro_snap (G39), open_plans, spy_df, now}`; per-candidate additions (company headlines) fetched lazily inside `run_checklist` callers with the quota meter respected. `GateContext` built even when only `MACRO_ENABLED` (for embeds) — gate checks additionally need `GATE_ENABLED`.
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_scan_gate_wiring.py
@@ -196,7 +196,7 @@ def test_context_degrades_when_snapshot_unreadable(monkeypatch):
     assert ctx is not None and ctx.macro_snap is None  # degrade, never crash
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (add to `swingbot/commands/scanning.py`, near the scan-tick helpers):
+- [x] **Step 2: Run — FAIL**, then **implement** (add to `swingbot/commands/scanning.py`, near the scan-tick helpers):
 
 ```python
 @dataclasses.dataclass
@@ -249,8 +249,8 @@ def build_gate_context(now=None) -> GateContext | None:
 
 **Wiring** (`_session_scan_tick`, directly after the G39 `ensure_fresh_snapshot` call, before `run_scan`): `gate_ctx = build_gate_context()`, passed through to the alert path (`run_scan(..., gate_ctx=gate_ctx)` — add the pass-through kwarg to `scan_engine.run_scan`, default `None`, unused until G121/G122 consume it; `!check` builds its own context the same way).
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -263,7 +263,7 @@ git commit -m "feat: per-scan gate context"
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
 **Interfaces:** when `GATE_BLACKOUT_ENABLED` and an importance-3 event falls within the blackout window at scan time: **default behavior is annotation** — the plan is created and alerted normally with a prominent warning line ("⚠️ CPI 08:30 ET tomorrow — historically whipsaw-prone; consider waiting for the print"). Only when `GATE_BLACKOUT_ENFORCE` (new checkbox Field, default false) is *also* on are new entries marked `held_for_event` (plan created, alert says "⏸ held — releases after the print") and auto-released by the monitor loop once `hours_until(event) < -GATE_BLACKOUT_HOURS_AFTER`. Stale event calendar (> 7 days unrefreshed) auto-disables holding with a WARN — annotation continues. One pure decision function owns the whole rule: `blackout_decision(macro_snap, now) -> dict | None`.
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
 
 ```python
 NOW = dt.datetime(2026, 7, 14, 18, 0)
@@ -316,7 +316,7 @@ def test_blackout_flag_off_is_none(monkeypatch):
     assert scanning.blackout_decision(_snap(), NOW) is None
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`):
 
 ```python
 def blackout_decision(macro_snap: dict | None, now: dt.datetime) -> dict | None:
@@ -367,8 +367,8 @@ def blackout_decision(macro_snap: dict | None, now: dt.datetime) -> dict | None:
 
 **Wiring** (alert path, once per scan run using `gate_ctx.macro_snap`): `annotate` → the line is prepended to each alert embed's description (or a dedicated `⚠️ Event` field — match the embed style at execution) and the plan is created normally; `hold` → plan stored with `status="held_for_event"` + `release_at`, alert ships saying `"⏸ held — releases after the print"`, and `trade_monitor` releases it (normal pending flow + a release note on the alert) once `now >= release_at`. The monitor-release path is exercised in the G143 e2e.
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -381,7 +381,7 @@ git commit -m "feat: event blackout annotate-first, hold opt-in"
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
 **Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread, same place llm-advisor L14 hooks), applies `with_advisory()` per mode (G76/G103/G106 semantics unified here — shadow/inform always pass), attaches results (G81). Two hard invariants tested here: (1) **inform mode never drops an alert** — property test over arbitrary GateResults including all-fail/hard-block ones; (2) extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** even in enforce mode. The unifying function is pure and owns every invariant: `gate_candidate(result, mode, min_tier) -> (decision, result)`.
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
 
 ```python
 from swingbot.core.gate.types import CheckResult, GateResult
@@ -433,7 +433,7 @@ def test_shadow_passes_and_records_would_block():
     assert decision == "pass" and out.advisory_decision == "block"
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `scanning.py`):
 
 ```python
 def _unknown_dominated(result, max_unknown_weight_pct: float = 50.0) -> bool:
@@ -487,8 +487,8 @@ def gate_candidate(result, mode: str, min_tier: str):
 
 Add a test for that last guarantee: monkeypatch `run_checklist` to raise → the candidate still reaches the send path with no `gate_result` (exception in gate → alert ships ungated + one log line).
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -501,7 +501,7 @@ git commit -m "feat: gate evaluation in scan path (inform never drops, unknown n
 **Files:** Modify `embeds.py`; test `tests/test_embeds_gate.py`
 
 **Interfaces:** `build_embed(..., gate: dict | None = None)` — renders G82's `checklist_field` + (when any flag fired) `redflag_table` as a second field, plus the `advisory_decision` line when enforce-would-have-blocked ("⛔ 2 red flags — plan ships anyway; your call"). Render matrix: `inform` and `enforce` modes render always (**inform is the default — this field is the product**); `shadow` renders only with `GATE_SHOW_IN_SHADOW` (new checkbox field, default false). None → byte-identical. One pure function owns the matrix: `gate_embed_fields(result, mode, show_in_shadow) -> list[tuple[str, str]]` in `gate/render.py`.
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_embeds_gate.py`; reuse the `_result()` fixture shape from `tests/test_gate_render.py` — import it or lift it into `tests/fixtures/gate/`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_embeds_gate.py`; reuse the `_result()` fixture shape from `tests/test_gate_render.py` — import it or lift it into `tests/fixtures/gate/`)
 
 ```python
 from swingbot.core.gate.render import gate_embed_fields
@@ -535,7 +535,7 @@ def test_none_result_renders_nothing():
     assert gate_embed_fields(None, "inform", show_in_shadow=False) == []
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gate/render.py`):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `gate/render.py`):
 
 ```python
 def gate_embed_fields(result, mode: str,
@@ -574,8 +574,8 @@ def gate_embed_fields(result, mode: str,
 
 Caller passes `gate=getattr(item, "gate_result", None)` (set by G121). Config field `GATE_SHOW_IN_SHADOW` (checkbox, default false, help: "Render the checklist on alerts while still in shadow mode — for previewing the field before promoting to inform.") added to the Gatekeeper section.
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_embeds_gate.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_embeds_gate.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -588,7 +588,7 @@ git commit -m "feat: checklist field on alerts (inform-first)"
 **Files:** Modify the plan-trigger path in the monitor loop; test `tests/test_scan_gate_wiring.py`
 
 **Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_news_whipsaw, rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column — default `False`, set `True` on exactly those checks; `run_checklist` already honors it since G75). A newly-fired flag at trigger time → **the alert message is updated with the new warning and a ping** ("⚠️ since this alert: CPI now within 18h") — the entry still fires normally; it is held per G120 semantics only when `GATE_BLACKOUT_ENFORCE`/enforce mode says so. Pure core: `recheck_delta(stored_gate: dict | None, new_result) -> list[str]`.
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
 
 ```python
 from swingbot.commands.scanning import recheck_delta
@@ -621,7 +621,7 @@ def test_registry_trigger_subset_is_cheap():
                       "not_chasing", "calendar_checked"}
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement**. Registry: add `trigger_recheck: bool = False` to the check spec dataclass and set it on the four checks above. Then in `scanning.py`:
+- [x] **Step 2: Run — FAIL**, then **implement**. Registry: add `trigger_recheck: bool = False` to the check spec dataclass and set it on the four checks above. Then in `scanning.py`:
 
 ```python
 def recheck_delta(stored_gate: dict | None, new_result) -> list[str]:
@@ -636,8 +636,8 @@ def recheck_delta(stored_gate: dict | None, new_result) -> list[str]:
 
 **Wiring** (`trade_monitor`, at the pending-plan trigger point, only when `GATE_ENABLED`): build the cheap context (saved snapshot only — never a fetch inside the monitor loop), `new = run_checklist(..., subset="trigger")`, `delta = recheck_delta(store.get_extra(plan_id, "gate"), new)`. Non-empty delta → edit the original alert message appending `"⚠️ since this alert: " + render.redflag_table(new)`-style lines + one ping message referencing the plan; **the entry still fires** (inform-first) unless `blackout_decision(...)` says `hold` under its own enforce flag (G120 path reused verbatim). Exception anywhere → entry fires as before + one log line (same never-costs-a-trade guard as G121). Monitor tests use a fake channel/message capture; the three paths (updated+fires / held / clean+silent) are asserted there and re-proven end-to-end in G143.
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -653,7 +653,7 @@ git commit -m "feat: trigger-time re-check (inform-first)"
 
 > **Execution note:** as of 2026-07-17 no kill-switch or throttle code exists in the repo (edge-engine v4 is a separate round). The pure functions below carry the whole contract; the wiring block activates by itself when `swingbot.core.edge.killswitch` appears (verify the module/attr names against the merged edge-engine code — E45–E47).
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
 
 ```python
 def test_size_multipliers_compose_multiplicatively():
@@ -673,7 +673,7 @@ def test_killswitch_outranks_any_tier():
     assert scanning.entry_allowed_with_killswitch(False, "block") is False
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/commands/scanning.py`):
+- [x] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/commands/scanning.py`):
 
 ```python
 def compose_size_multipliers(*mults) -> float:
@@ -699,8 +699,8 @@ def entry_allowed_with_killswitch(kill_active: bool, gate_decision: str) -> bool
 
 **Wiring** (capability-checked, two places): (1) where G117 applies the tier multiplier, replace the bare multiplier with `compose_size_multipliers(_throttle_multiplier(), tier_mult)` where `_throttle_multiplier()` is `try: from swingbot.core.edge import throttle; return throttle.size_multiplier() / except ImportError: return None`; (2) at the entry-decision point in the enforce path, route through `entry_allowed_with_killswitch(_killswitch_active(), decision)` with the same try/except import pattern (`_killswitch_active()` returns False when edge is absent). Both helper names verified against edge E45–E47 at execution.
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_scan_gate_wiring.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -714,7 +714,7 @@ git commit -m "feat: gate interop with kill switch + throttle"
 
 **Interfaces:** `count(event: str, at=None, **labels)` → appends `data/gate/telemetry.jsonl` (events: `evaluated`, `blocked` with `reason=`, `downgraded`, `held_for_event`, `recheck_held`, `provider_answer` with `provider=`/`unknown=`); `summary(since: str | None) -> dict` with keys **matching G130's retrospective counts by design** (`evaluated, blocked, blocked_reasons, downgraded, held_for_event, recheck_held, unknown_rate`) — consumed by the retrospective line (G130), admin (G185), and the health page.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gate_telemetry.py
@@ -779,7 +779,7 @@ def test_summary_skips_corrupt_lines(tmp_path, monkeypatch):
     assert telemetry.summary()["evaluated"] == 1
 ```
 
-- [ ] **Step 2: Run — FAIL**, then **implement**
+- [x] **Step 2: Run — FAIL**, then **implement**
 
 ```python
 # swingbot/core/gate/telemetry.py
@@ -844,8 +844,8 @@ def summary(since: str | None = None) -> dict:
 
 **Wiring** (three one-liners, all inside existing try/except so telemetry can never break the caller): G121's per-candidate block gains `telemetry.count("evaluated")` after `run_checklist`, `telemetry.count("blocked", reason=...)` next to `blocked_log`, `telemetry.count("downgraded")` on the downgrade branch; G120's hold path gains `telemetry.count("held_for_event")`; G128's re-check hold gains `telemetry.count("recheck_held")`. **G130's counts builder switches to `telemetry.summary(since=today.isoformat())`** for evaluated/blocked/downgraded (shadow divergence stays a `shadow.jsonl` line count) — its own test keeps passing because the keys match.
 
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_telemetry.py -v`
-- [ ] **Step 4: Full suite + commit**
+- [x] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_telemetry.py -v`
+- [x] **Step 4: Full suite + commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -857,7 +857,7 @@ git commit -m "feat: gate telemetry"
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: Write the harness + the test** — tmp data dir, stubbed providers: a G7 clean-uptrend candidate in **inform mode (the default)** + fresh fake snapshot → embed carries 🌍 and 📋 fields (A-tier, no flags), plan stored with gate+macro stamps, telemetry `evaluated=1 blocked=0`. The harness drives the REAL pipeline pieces in the exact order the scan wires them (G119→G121→G81→G122/G123) — only data dirs and the snapshot are faked; if the wiring order in `scanning.py` changes, this file is the canary.
+- [x] **Step 1: Write the harness + the test** — tmp data dir, stubbed providers: a G7 clean-uptrend candidate in **inform mode (the default)** + fresh fake snapshot → embed carries 🌍 and 📋 fields (A-tier, no flags), plan stored with gate+macro stamps, telemetry `evaluated=1 blocked=0`. The harness drives the REAL pipeline pieces in the exact order the scan wires them (G119→G121→G81→G122/G123) — only data dirs and the snapshot are faked; if the wiring order in `scanning.py` changes, this file is the canary.
 
 ```python
 # tests/test_gate_e2e.py
@@ -965,8 +965,8 @@ def test_clean_pass_inform(city):
     assert s["evaluated"] == 1 and s["blocked"] == 0
 ```
 
-- [ ] **Step 2: Run — PASS**: `python -m pytest tests/test_gate_e2e.py -v` (fix any drift between the harness and the actual wiring — the harness must keep mirroring `scanning.py`, never diverge to make the test pass).
-- [ ] **Step 3: Commit**
+- [x] **Step 2: Run — PASS**: `python -m pytest tests/test_gate_e2e.py -v` (fix any drift between the harness and the actual wiring — the harness must keep mirroring `scanning.py`, never diverge to make the test pass).
+- [x] **Step 3: Commit**
 
 ```bash
 python -m pytest tests/ -q && make check
@@ -978,7 +978,7 @@ git commit -m "test: gate e2e clean-pass path (inform)"
 
 **Files:** Test `tests/test_gate_e2e.py`
 
-- [ ] **Step 1: Write the inform test (the product's main path)** — a `breakout_and_fail` candidate in **inform mode** → alert SHIPS with a low tier, the ⛔ rf_fake_breakout row in the red-flag table, and the advisory line ("plan ships anyway; your call") when the would-be verdict is block; plan stored normally (not blocked); telemetry counts `evaluated=1 blocked=0`. (Append to `tests/test_gate_e2e.py`, reusing the G140 harness.)
+- [x] **Step 1: Write the inform test (the product's main path)** — a `breakout_and_fail` candidate in **inform mode** → alert SHIPS with a low tier, the ⛔ rf_fake_breakout row in the red-flag table, and the advisory line ("plan ships anyway; your call") when the would-be verdict is block; plan stored normally (not blocked); telemetry counts `evaluated=1 blocked=0`. (Append to `tests/test_gate_e2e.py`, reusing the G140 harness.)
 
 ```python
 def _failing_candidate(city):
@@ -1004,7 +1004,7 @@ def test_flagged_candidate_still_ships_in_inform(city):
     assert s["evaluated"] == 1 and s["blocked"] == 0     # the inform invariant
 ```
 
-- [ ] **Step 2: Write the enforce test** — the same candidate after opting into enforce + min-tier A → no embed fields (alert suppressed), blocked_log line with the reason, plan marked blocked, telemetry counts the block.
+- [x] **Step 2: Write the enforce test** — the same candidate after opting into enforce + min-tier A → no embed fields (alert suppressed), blocked_log line with the reason, plan marked blocked, telemetry counts the block.
 
 ```python
 def test_same_candidate_blocks_only_after_enforce_opt_in(city, monkeypatch):
@@ -1027,8 +1027,8 @@ def test_same_candidate_blocks_only_after_enforce_opt_in(city, monkeypatch):
 
 The "plan stored status `blocked`" assertion belongs to G106's own tests (the enforce path sets it there); here the e2e pins the *observable* contract: no alert, a blocked_log receipt, the record preserved. `!blocked` listing it is asserted in G155's tests over the same `blocked.jsonl` shape.
 
-- [ ] **Step 3: Run — PASS both**: `python -m pytest tests/test_gate_e2e.py -v`
-- [ ] **Step 4: Commit**
+- [x] **Step 3: Run — PASS both**: `python -m pytest tests/test_gate_e2e.py -v`
+- [x] **Step 4: Commit**
 
 ```bash
 python -m pytest tests/ -q && make check
