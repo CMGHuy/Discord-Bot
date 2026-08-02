@@ -98,6 +98,27 @@ turns over instead of sitting in scratches.
 It repairs the structural defect; the 80% bar is a separate bet on an edge no
 measurement in this repository supports.
 
+> ### Correction 2026-08-02 (V51 Step 2): the table above assumes no scale-out
+>
+> The "+2.2 pts / makes money" row is right for a book that exits a win entirely
+> at TP1. **Production does not.** `TP1_FRACTION = 0.5` is frozen by spec §5, so
+> half the position exits at 2.5% and half becomes a trailing runner. A win
+> therefore realises `0.5 × 1.4286 + 0.5 × r_runner`, and break-even moves with
+> the runner:
+>
+> | runner outcome | blended R per win | break-even WR | vs 43.4% no-skill |
+> |---|---|---|---|
+> | stopped at breakeven (`r=0`) | 0.714R | **58.3%** | **−14.9 pts, loses** |
+> | matches TP1 (`r=1.43`) | 1.4286R | **41.2%** | +2.2 pts, makes money |
+> | rides to 3R | 2.214R | **31.1%** | +12.3 pts |
+>
+> **That straddles the no-skill rate**, so "a coin flip is now profitable" is
+> true only without scale-out. Under production settings it needs runners
+> averaging ≳1.43R, which is unmeasured. The caveat list below flagged this;
+> V51 Step 2 quantified it. **V52 Step 1 must report the runner-leg R
+> distribution as a first-class output** — a blended ExpR cannot tell these
+> three worlds apart, and they disagree about whether the system makes money.
+
 ## Caveats, stated rather than buried
 
 - **Longs only.** Shorts are not measured and nothing here claims symmetry.
