@@ -5,7 +5,6 @@ docs/superpowers/results/_quarterly_wf_result.json
 data/admin_session_secret
 __pycache__/
 exports/
-market_data/
 .vscode/
 .claude/settings.local.json
 .claude/worktrees/
