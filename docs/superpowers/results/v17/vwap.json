@@ -1,0 +1,1785 @@
+{
+  "strategy": "VWAP",
+  "train_window": [
+    "1999-01-01",
+    "2023-12-31"
+  ],
+  "exit_model": "v2",
+  "scale_out": true,
+  "tp2_mode": "levels",
+  "adopted_exit_params": {
+    "trail_atr_mult": 2.5,
+    "tp2": false
+  },
+  "n_tickers": 77,
+  "grid": {
+    "min_target_pct": [
+      2.5,
+      3.5,
+      5.0
+    ],
+    "rr": [
+      0.35,
+      0.75,
+      1.25,
+      2.0
+    ],
+    "atr_stop_multiple": [
+      1.5,
+      2.0,
+      2.5
+    ],
+    "trail_atr_mult": [
+      2.0,
+      2.5,
+      3.0
+    ]
+  },
+  "rows": [
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 750,
+      "n_independent": 750,
+      "n_distinct_signals": 971,
+      "horizon_overcount": 1.09,
+      "win_rate": 61.199999999999996,
+      "wilson_lb": 57.59641976488745,
+      "expectancy_r": 0.19307765151515152,
+      "excluded_share": 0.2897727272727273
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 749,
+      "n_independent": 749,
+      "n_distinct_signals": 970,
+      "horizon_overcount": 1.09,
+      "win_rate": 61.28170894526035,
+      "wilson_lb": 57.676566453787196,
+      "expectancy_r": 0.20030236966824647,
+      "excluded_share": 0.2900473933649289
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 749,
+      "n_independent": 749,
+      "n_distinct_signals": 970,
+      "horizon_overcount": 1.09,
+      "win_rate": 61.28170894526035,
+      "wilson_lb": 57.676566453787196,
+      "expectancy_r": 0.21101800947867297,
+      "excluded_share": 0.2900473933649289
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 717,
+      "n_independent": 717,
+      "n_distinct_signals": 961,
+      "horizon_overcount": 1.09,
+      "win_rate": 66.94560669456067,
+      "wilson_lb": 63.348837283609896,
+      "expectancy_r": 0.1462978927203065,
+      "excluded_share": 0.3132183908045977
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 716,
+      "n_independent": 716,
+      "n_distinct_signals": 960,
+      "horizon_overcount": 1.09,
+      "win_rate": 67.0391061452514,
+      "wilson_lb": 63.44166798403016,
+      "expectancy_r": 0.15154458293384465,
+      "excluded_share": 0.31351869606903165
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 716,
+      "n_independent": 716,
+      "n_distinct_signals": 960,
+      "horizon_overcount": 1.09,
+      "win_rate": 67.0391061452514,
+      "wilson_lb": 63.44166798403016,
+      "expectancy_r": 0.16226749760306808,
+      "excluded_share": 0.31351869606903165
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 702,
+      "n_independent": 702,
+      "n_distinct_signals": 960,
+      "horizon_overcount": 1.09,
+      "win_rate": 70.51282051282051,
+      "wilson_lb": 66.96216590735837,
+      "expectancy_r": 0.11240939597315436,
+      "excluded_share": 0.32694151486097794
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 701,
+      "n_independent": 701,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 70.61340941512125,
+      "wilson_lb": 67.06286981693692,
+      "expectancy_r": 0.11837523992322457,
+      "excluded_share": 0.3272552783109405
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 701,
+      "n_independent": 701,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 70.61340941512125,
+      "wilson_lb": 67.06286981693692,
+      "expectancy_r": 0.1264846449136276,
+      "excluded_share": 0.3272552783109405
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 750,
+      "n_independent": 750,
+      "n_distinct_signals": 970,
+      "horizon_overcount": 1.09,
+      "win_rate": 59.73333333333334,
+      "wilson_lb": 56.11507611013137,
+      "expectancy_r": 0.20038009478672983,
+      "excluded_share": 0.2890995260663507
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 749,
+      "n_independent": 749,
+      "n_distinct_signals": 969,
+      "horizon_overcount": 1.09,
+      "win_rate": 59.813084112149525,
+      "wilson_lb": 56.19306045943693,
+      "expectancy_r": 0.20675901328273247,
+      "excluded_share": 0.2893738140417457
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 749,
+      "n_independent": 749,
+      "n_distinct_signals": 969,
+      "horizon_overcount": 1.09,
+      "win_rate": 59.813084112149525,
+      "wilson_lb": 56.19306045943693,
+      "expectancy_r": 0.2185256166982922,
+      "excluded_share": 0.2893738140417457
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 722,
+      "n_independent": 722,
+      "n_distinct_signals": 958,
+      "horizon_overcount": 1.08,
+      "win_rate": 62.880886426592795,
+      "wilson_lb": 59.22709362868228,
+      "expectancy_r": 0.1576342637151107,
+      "excluded_share": 0.30510105871029836
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 721,
+      "n_independent": 721,
+      "n_distinct_signals": 957,
+      "horizon_overcount": 1.08,
+      "win_rate": 62.96809986130375,
+      "wilson_lb": 59.312907887810226,
+      "expectancy_r": 0.1631685934489403,
+      "excluded_share": 0.30539499036608864
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 721,
+      "n_independent": 721,
+      "n_distinct_signals": 957,
+      "horizon_overcount": 1.08,
+      "win_rate": 62.96809986130375,
+      "wilson_lb": 59.312907887810226,
+      "expectancy_r": 0.18321194605009633,
+      "excluded_share": 0.30539499036608864
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 716,
+      "n_independent": 716,
+      "n_distinct_signals": 949,
+      "horizon_overcount": 1.08,
+      "win_rate": 62.849162011173185,
+      "wilson_lb": 59.17914347989982,
+      "expectancy_r": 0.11641302235179787,
+      "excluded_share": 0.304178814382896
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 715,
+      "n_independent": 715,
+      "n_distinct_signals": 948,
+      "horizon_overcount": 1.08,
+      "win_rate": 62.93706293706294,
+      "wilson_lb": 59.26561957095879,
+      "expectancy_r": 0.12624027237354085,
+      "excluded_share": 0.3044747081712062
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 715,
+      "n_independent": 715,
+      "n_distinct_signals": 948,
+      "horizon_overcount": 1.08,
+      "win_rate": 62.93706293706294,
+      "wilson_lb": 59.26561957095879,
+      "expectancy_r": 0.14188813229571984,
+      "excluded_share": 0.3044747081712062
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 780,
+      "n_independent": 780,
+      "n_distinct_signals": 964,
+      "horizon_overcount": 1.09,
+      "win_rate": 52.05128205128206,
+      "wilson_lb": 48.479838744948445,
+      "expectancy_r": 0.20750238777459407,
+      "excluded_share": 0.25501432664756446
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 779,
+      "n_independent": 779,
+      "n_distinct_signals": 963,
+      "horizon_overcount": 1.09,
+      "win_rate": 52.118100128369704,
+      "wilson_lb": 48.544189530853785,
+      "expectancy_r": 0.22041395793499047,
+      "excluded_share": 0.2552581261950287
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 779,
+      "n_independent": 779,
+      "n_distinct_signals": 963,
+      "horizon_overcount": 1.09,
+      "win_rate": 52.118100128369704,
+      "wilson_lb": 48.544189530853785,
+      "expectancy_r": 0.2428432122370937,
+      "excluded_share": 0.2552581261950287
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 731,
+      "n_independent": 731,
+      "n_distinct_signals": 949,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.02599179206566,
+      "wilson_lb": 47.33807181832013,
+      "expectancy_r": 0.1625840621963071,
+      "excluded_share": 0.28960155490767736
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 730,
+      "n_independent": 730,
+      "n_distinct_signals": 948,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.0958904109589,
+      "wilson_lb": 47.405142341694344,
+      "expectancy_r": 0.1694464980544747,
+      "excluded_share": 0.2898832684824903
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 730,
+      "n_independent": 730,
+      "n_distinct_signals": 948,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.0958904109589,
+      "wilson_lb": 47.405142341694344,
+      "expectancy_r": 0.18818579766536964,
+      "excluded_share": 0.2898832684824903
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 711,
+      "n_independent": 711,
+      "n_distinct_signals": 929,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.33614627285513,
+      "wilson_lb": 47.594790436138545,
+      "expectancy_r": 0.14719085487077535,
+      "excluded_share": 0.2932405566600398
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 711,
+      "n_independent": 711,
+      "n_distinct_signals": 929,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.33614627285513,
+      "wilson_lb": 47.594790436138545,
+      "expectancy_r": 0.15345029821073558,
+      "excluded_share": 0.2932405566600398
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 711,
+      "n_independent": 711,
+      "n_distinct_signals": 929,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.33614627285513,
+      "wilson_lb": 47.594790436138545,
+      "expectancy_r": 0.1668697813121272,
+      "excluded_share": 0.2932405566600398
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 794,
+      "n_independent": 794,
+      "n_distinct_signals": 952,
+      "horizon_overcount": 1.09,
+      "win_rate": 40.55415617128463,
+      "wilson_lb": 37.13047295749385,
+      "expectancy_r": 0.22159903381642512,
+      "excluded_share": 0.23285024154589373
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 793,
+      "n_independent": 793,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 40.605296343001264,
+      "wilson_lb": 37.178526299635664,
+      "expectancy_r": 0.23094003868471952,
+      "excluded_share": 0.2330754352030948
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 793,
+      "n_independent": 793,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 40.605296343001264,
+      "wilson_lb": 37.178526299635664,
+      "expectancy_r": 0.24970212765957447,
+      "excluded_share": 0.2330754352030948
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 925,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.5114401076716,
+      "wilson_lb": 36.97304290809135,
+      "expectancy_r": 0.22062637362637363,
+      "excluded_share": 0.25774225774225773
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 925,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.5114401076716,
+      "wilson_lb": 36.97304290809135,
+      "expectancy_r": 0.22564735264735264,
+      "excluded_share": 0.25774225774225773
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 742,
+      "n_independent": 742,
+      "n_distinct_signals": 924,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.56603773584906,
+      "wilson_lb": 37.024219979509034,
+      "expectancy_r": 0.242445,
+      "excluded_share": 0.258
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 675,
+      "n_independent": 675,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.370370370370374,
+      "wilson_lb": 34.705089334665985,
+      "expectancy_r": 0.19955316973415135,
+      "excluded_share": 0.3098159509202454
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 675,
+      "n_independent": 675,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.370370370370374,
+      "wilson_lb": 34.705089334665985,
+      "expectancy_r": 0.20630061349693252,
+      "excluded_share": 0.3098159509202454
+    },
+    {
+      "params": {
+        "min_target_pct": 2.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 675,
+      "n_independent": 675,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.370370370370374,
+      "wilson_lb": 34.705089334665985,
+      "expectancy_r": 0.22209611451942737,
+      "excluded_share": 0.3098159509202454
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 762,
+      "n_independent": 762,
+      "n_distinct_signals": 960,
+      "horizon_overcount": 1.09,
+      "win_rate": 54.06824146981627,
+      "wilson_lb": 50.45260470148354,
+      "expectancy_r": 0.21224640460210928,
+      "excluded_share": 0.2694151486097795
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 761,
+      "n_independent": 761,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 54.13929040735874,
+      "wilson_lb": 50.52128323408021,
+      "expectancy_r": 0.22480518234165064,
+      "excluded_share": 0.2696737044145873
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 761,
+      "n_independent": 761,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 54.13929040735874,
+      "wilson_lb": 50.52128323408021,
+      "expectancy_r": 0.24717178502879078,
+      "excluded_share": 0.2696737044145873
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 728,
+      "n_independent": 728,
+      "n_distinct_signals": 948,
+      "horizon_overcount": 1.08,
+      "win_rate": 60.027472527472526,
+      "wilson_lb": 56.35613698153365,
+      "expectancy_r": 0.1575359922178988,
+      "excluded_share": 0.2918287937743191
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 727,
+      "n_independent": 727,
+      "n_distinct_signals": 947,
+      "horizon_overcount": 1.08,
+      "win_rate": 60.11004126547456,
+      "wilson_lb": 56.43689154854452,
+      "expectancy_r": 0.16682083739045764,
+      "excluded_share": 0.2921129503407984
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 727,
+      "n_independent": 727,
+      "n_distinct_signals": 947,
+      "horizon_overcount": 1.08,
+      "win_rate": 60.11004126547456,
+      "wilson_lb": 56.43689154854452,
+      "expectancy_r": 0.18646835443037973,
+      "excluded_share": 0.2921129503407984
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 706,
+      "n_independent": 706,
+      "n_distinct_signals": 945,
+      "horizon_overcount": 1.08,
+      "win_rate": 64.44759206798867,
+      "wilson_lb": 60.77515478804042,
+      "expectancy_r": 0.1240517578125,
+      "excluded_share": 0.310546875
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 705,
+      "n_independent": 705,
+      "n_distinct_signals": 944,
+      "horizon_overcount": 1.08,
+      "win_rate": 64.53900709219859,
+      "wilson_lb": 60.86539242158129,
+      "expectancy_r": 0.13321212121212123,
+      "excluded_share": 0.31085043988269795
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 705,
+      "n_independent": 705,
+      "n_distinct_signals": 944,
+      "horizon_overcount": 1.08,
+      "win_rate": 64.53900709219859,
+      "wilson_lb": 60.86539242158129,
+      "expectancy_r": 0.1484633431085044,
+      "excluded_share": 0.31085043988269795
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 762,
+      "n_independent": 762,
+      "n_distinct_signals": 960,
+      "horizon_overcount": 1.09,
+      "win_rate": 53.674540682414694,
+      "wilson_lb": 50.05876091173842,
+      "expectancy_r": 0.21437296260786196,
+      "excluded_share": 0.2694151486097795
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 761,
+      "n_independent": 761,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 53.74507227332457,
+      "wilson_lb": 50.126883465015815,
+      "expectancy_r": 0.2266535508637236,
+      "excluded_share": 0.2696737044145873
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 761,
+      "n_independent": 761,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 53.74507227332457,
+      "wilson_lb": 50.126883465015815,
+      "expectancy_r": 0.250390595009597,
+      "excluded_share": 0.2696737044145873
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 725,
+      "n_independent": 725,
+      "n_distinct_signals": 947,
+      "horizon_overcount": 1.08,
+      "win_rate": 58.20689655172414,
+      "wilson_lb": 54.51315956474387,
+      "expectancy_r": 0.15893086660175265,
+      "excluded_share": 0.2940603700097371
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 724,
+      "n_independent": 724,
+      "n_distinct_signals": 946,
+      "horizon_overcount": 1.08,
+      "win_rate": 58.28729281767956,
+      "wilson_lb": 54.591479734929216,
+      "expectancy_r": 0.1679775828460039,
+      "excluded_share": 0.29434697855750486
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 724,
+      "n_independent": 724,
+      "n_distinct_signals": 946,
+      "horizon_overcount": 1.08,
+      "win_rate": 58.28729281767956,
+      "wilson_lb": 54.591479734929216,
+      "expectancy_r": 0.19236062378167643,
+      "excluded_share": 0.29434697855750486
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 707,
+      "n_independent": 707,
+      "n_distinct_signals": 943,
+      "horizon_overcount": 1.08,
+      "win_rate": 60.53748231966054,
+      "wilson_lb": 56.81549273858549,
+      "expectancy_r": 0.11869667318982387,
+      "excluded_share": 0.3082191780821918
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 706,
+      "n_independent": 706,
+      "n_distinct_signals": 942,
+      "horizon_overcount": 1.08,
+      "win_rate": 60.62322946175638,
+      "wilson_lb": 56.89941183863512,
+      "expectancy_r": 0.12752987267384916,
+      "excluded_share": 0.30852105778648387
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 706,
+      "n_independent": 706,
+      "n_distinct_signals": 942,
+      "horizon_overcount": 1.08,
+      "win_rate": 60.62322946175638,
+      "wilson_lb": 56.89941183863512,
+      "expectancy_r": 0.14702350636630754,
+      "excluded_share": 0.30852105778648387
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 775,
+      "n_independent": 775,
+      "n_distinct_signals": 959,
+      "horizon_overcount": 1.09,
+      "win_rate": 49.41935483870968,
+      "wilson_lb": 45.84674041583444,
+      "expectancy_r": 0.20966890595009596,
+      "excluded_share": 0.2562380038387716
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 774,
+      "n_independent": 774,
+      "n_distinct_signals": 958,
+      "horizon_overcount": 1.09,
+      "win_rate": 49.48320413436693,
+      "wilson_lb": 45.90788448034843,
+      "expectancy_r": 0.22107877041306437,
+      "excluded_share": 0.2564841498559078
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 774,
+      "n_independent": 774,
+      "n_distinct_signals": 958,
+      "horizon_overcount": 1.09,
+      "win_rate": 49.48320413436693,
+      "wilson_lb": 45.90788448034843,
+      "expectancy_r": 0.24988184438040348,
+      "excluded_share": 0.2564841498559078
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 733,
+      "n_independent": 733,
+      "n_distinct_signals": 944,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.34106412005457,
+      "wilson_lb": 46.66121784684932,
+      "expectancy_r": 0.1633330078125,
+      "excluded_share": 0.2841796875
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 732,
+      "n_independent": 732,
+      "n_distinct_signals": 943,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.409836065573764,
+      "wilson_lb": 46.72711416650549,
+      "expectancy_r": 0.16888074291300095,
+      "excluded_share": 0.2844574780058651
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 732,
+      "n_independent": 732,
+      "n_distinct_signals": 943,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.409836065573764,
+      "wilson_lb": 46.72711416650549,
+      "expectancy_r": 0.19248582600195505,
+      "excluded_share": 0.2844574780058651
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 712,
+      "n_independent": 712,
+      "n_distinct_signals": 929,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.26404494382022,
+      "wilson_lb": 47.525614992745794,
+      "expectancy_r": 0.14733101391650097,
+      "excluded_share": 0.2922465208747515
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 712,
+      "n_independent": 712,
+      "n_distinct_signals": 929,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.26404494382022,
+      "wilson_lb": 47.525614992745794,
+      "expectancy_r": 0.1535427435387674,
+      "excluded_share": 0.2922465208747515
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 712,
+      "n_independent": 712,
+      "n_distinct_signals": 929,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.26404494382022,
+      "wilson_lb": 47.525614992745794,
+      "expectancy_r": 0.17155268389662026,
+      "excluded_share": 0.2922465208747515
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 795,
+      "n_independent": 795,
+      "n_distinct_signals": 950,
+      "horizon_overcount": 1.09,
+      "win_rate": 40.503144654088054,
+      "wilson_lb": 37.0825441949798,
+      "expectancy_r": 0.22351694094869312,
+      "excluded_share": 0.23039690222652467
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 794,
+      "n_independent": 794,
+      "n_distinct_signals": 949,
+      "horizon_overcount": 1.09,
+      "win_rate": 40.55415617128463,
+      "wilson_lb": 37.13047295749385,
+      "expectancy_r": 0.23280232558139535,
+      "excluded_share": 0.23062015503875968
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 794,
+      "n_independent": 794,
+      "n_distinct_signals": 949,
+      "horizon_overcount": 1.09,
+      "win_rate": 40.55415617128463,
+      "wilson_lb": 37.13047295749385,
+      "expectancy_r": 0.259062984496124,
+      "excluded_share": 0.23062015503875968
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 925,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.5114401076716,
+      "wilson_lb": 36.97304290809135,
+      "expectancy_r": 0.22099100899100899,
+      "excluded_share": 0.25774225774225773
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 925,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.5114401076716,
+      "wilson_lb": 36.97304290809135,
+      "expectancy_r": 0.22601098901098904,
+      "excluded_share": 0.25774225774225773
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 742,
+      "n_independent": 742,
+      "n_distinct_signals": 924,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.56603773584906,
+      "wilson_lb": 37.024219979509034,
+      "expectancy_r": 0.24281,
+      "excluded_share": 0.258
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 675,
+      "n_independent": 675,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.370370370370374,
+      "wilson_lb": 34.705089334665985,
+      "expectancy_r": 0.19955316973415135,
+      "excluded_share": 0.3098159509202454
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 675,
+      "n_independent": 675,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.370370370370374,
+      "wilson_lb": 34.705089334665985,
+      "expectancy_r": 0.20630061349693252,
+      "excluded_share": 0.3098159509202454
+    },
+    {
+      "params": {
+        "min_target_pct": 3.5,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 675,
+      "n_independent": 675,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.370370370370374,
+      "wilson_lb": 34.705089334665985,
+      "expectancy_r": 0.22209611451942737,
+      "excluded_share": 0.3098159509202454
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 787,
+      "n_independent": 787,
+      "n_distinct_signals": 952,
+      "horizon_overcount": 1.09,
+      "win_rate": 44.98094027954257,
+      "wilson_lb": 41.475232699092714,
+      "expectancy_r": 0.22542028985507245,
+      "excluded_share": 0.2396135265700483
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 786,
+      "n_independent": 786,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 45.038167938931295,
+      "wilson_lb": 41.52953581730138,
+      "expectancy_r": 0.23245744680851063,
+      "excluded_share": 0.23984526112185686
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 786,
+      "n_independent": 786,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 45.038167938931295,
+      "wilson_lb": 41.52953581730138,
+      "expectancy_r": 0.26032688588007735,
+      "excluded_share": 0.23984526112185686
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 740,
+      "n_independent": 740,
+      "n_distinct_signals": 938,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.94594594594595,
+      "wilson_lb": 47.28115676361803,
+      "expectancy_r": 0.1678946850393701,
+      "excluded_share": 0.27165354330708663
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 739,
+      "n_independent": 739,
+      "n_distinct_signals": 937,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.0148849797023,
+      "wilson_lb": 47.34731475387608,
+      "expectancy_r": 0.1737369458128079,
+      "excluded_share": 0.27192118226600986
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 739,
+      "n_independent": 739,
+      "n_distinct_signals": 937,
+      "horizon_overcount": 1.08,
+      "win_rate": 51.0148849797023,
+      "wilson_lb": 47.34731475387608,
+      "expectancy_r": 0.19783842364532017,
+      "excluded_share": 0.27192118226600986
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 707,
+      "n_independent": 707,
+      "n_distinct_signals": 933,
+      "horizon_overcount": 1.08,
+      "win_rate": 55.44554455445545,
+      "wilson_lb": 51.69126294512869,
+      "expectancy_r": 0.130090099009901,
+      "excluded_share": 0.3
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 706,
+      "n_independent": 706,
+      "n_distinct_signals": 932,
+      "horizon_overcount": 1.08,
+      "win_rate": 55.524079320113316,
+      "wilson_lb": 51.76728377005932,
+      "expectancy_r": 0.13629831516352822,
+      "excluded_share": 0.3002973240832507
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.35,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 706,
+      "n_independent": 706,
+      "n_distinct_signals": 932,
+      "horizon_overcount": 1.08,
+      "win_rate": 55.524079320113316,
+      "wilson_lb": 51.76728377005932,
+      "expectancy_r": 0.1553538156590684,
+      "excluded_share": 0.3002973240832507
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 787,
+      "n_independent": 787,
+      "n_distinct_signals": 952,
+      "horizon_overcount": 1.09,
+      "win_rate": 44.98094027954257,
+      "wilson_lb": 41.475232699092714,
+      "expectancy_r": 0.22595845410628018,
+      "excluded_share": 0.2396135265700483
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 786,
+      "n_independent": 786,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 45.038167938931295,
+      "wilson_lb": 41.52953581730138,
+      "expectancy_r": 0.23299709864603482,
+      "excluded_share": 0.23984526112185686
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 786,
+      "n_independent": 786,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 45.038167938931295,
+      "wilson_lb": 41.52953581730138,
+      "expectancy_r": 0.26086653771760154,
+      "excluded_share": 0.23984526112185686
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 738,
+      "n_independent": 738,
+      "n_distinct_signals": 938,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.5420054200542,
+      "wilson_lb": 46.87388259576938,
+      "expectancy_r": 0.16653641732283467,
+      "excluded_share": 0.2736220472440945
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 737,
+      "n_independent": 737,
+      "n_distinct_signals": 937,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.61058344640435,
+      "wilson_lb": 46.93963270042332,
+      "expectancy_r": 0.17238029556650247,
+      "excluded_share": 0.2738916256157635
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 737,
+      "n_independent": 737,
+      "n_distinct_signals": 937,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.61058344640435,
+      "wilson_lb": 46.93963270042332,
+      "expectancy_r": 0.1964807881773399,
+      "excluded_share": 0.2738916256157635
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 702,
+      "n_independent": 702,
+      "n_distinct_signals": 933,
+      "horizon_overcount": 1.08,
+      "win_rate": 54.55840455840456,
+      "wilson_lb": 50.78886822975724,
+      "expectancy_r": 0.12817821782178215,
+      "excluded_share": 0.30495049504950494
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 701,
+      "n_independent": 701,
+      "n_distinct_signals": 932,
+      "horizon_overcount": 1.08,
+      "win_rate": 54.63623395149786,
+      "wilson_lb": 50.864051083785746,
+      "expectancy_r": 0.13438751238850344,
+      "excluded_share": 0.30525272547076315
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 0.75,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 701,
+      "n_independent": 701,
+      "n_distinct_signals": 932,
+      "horizon_overcount": 1.08,
+      "win_rate": 54.63623395149786,
+      "wilson_lb": 50.864051083785746,
+      "expectancy_r": 0.15343211100099108,
+      "excluded_share": 0.30525272547076315
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 784,
+      "n_independent": 784,
+      "n_distinct_signals": 952,
+      "horizon_overcount": 1.09,
+      "win_rate": 43.23979591836735,
+      "wilson_lb": 39.75034839443713,
+      "expectancy_r": 0.221231884057971,
+      "excluded_share": 0.242512077294686
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 783,
+      "n_independent": 783,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 43.29501915708812,
+      "wilson_lb": 39.802539727151945,
+      "expectancy_r": 0.22771856866537715,
+      "excluded_share": 0.24274661508704062
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 783,
+      "n_independent": 783,
+      "n_distinct_signals": 951,
+      "horizon_overcount": 1.09,
+      "win_rate": 43.29501915708812,
+      "wilson_lb": 39.802539727151945,
+      "expectancy_r": 0.2560241779497099,
+      "excluded_share": 0.24274661508704062
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 744,
+      "n_independent": 744,
+      "n_distinct_signals": 935,
+      "horizon_overcount": 1.08,
+      "win_rate": 47.446236559139784,
+      "wilson_lb": 43.81378317925324,
+      "expectancy_r": 0.17806021717670287,
+      "excluded_share": 0.26554787759131293
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 934,
+      "horizon_overcount": 1.08,
+      "win_rate": 47.51009421265142,
+      "wilson_lb": 43.87460935922049,
+      "expectancy_r": 0.18311956521739128,
+      "excluded_share": 0.2658102766798419
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 934,
+      "horizon_overcount": 1.08,
+      "win_rate": 47.51009421265142,
+      "wilson_lb": 43.87460935922049,
+      "expectancy_r": 0.20647430830039526,
+      "excluded_share": 0.2658102766798419
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 709,
+      "n_independent": 709,
+      "n_distinct_signals": 924,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.21156558533145,
+      "wilson_lb": 46.46976155659428,
+      "expectancy_r": 0.156954,
+      "excluded_share": 0.291
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 709,
+      "n_independent": 709,
+      "n_distinct_signals": 924,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.21156558533145,
+      "wilson_lb": 46.46976155659428,
+      "expectancy_r": 0.163284,
+      "excluded_share": 0.291
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 1.25,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 709,
+      "n_independent": 709,
+      "n_distinct_signals": 924,
+      "horizon_overcount": 1.08,
+      "win_rate": 50.21156558533145,
+      "wilson_lb": 46.46976155659428,
+      "expectancy_r": 0.181096,
+      "excluded_share": 0.291
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 800,
+      "n_independent": 800,
+      "n_distinct_signals": 946,
+      "horizon_overcount": 1.09,
+      "win_rate": 39.0,
+      "wilson_lb": 35.61908251608325,
+      "expectancy_r": 0.23364820213799803,
+      "excluded_share": 0.22254616132167152
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 799,
+      "n_independent": 799,
+      "n_distinct_signals": 945,
+      "horizon_overcount": 1.09,
+      "win_rate": 39.04881101376721,
+      "wilson_lb": 35.6647892339493,
+      "expectancy_r": 0.2428832684824903,
+      "excluded_share": 0.2227626459143969
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 1.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 799,
+      "n_independent": 799,
+      "n_distinct_signals": 945,
+      "horizon_overcount": 1.09,
+      "win_rate": 39.04881101376721,
+      "wilson_lb": 35.6647892339493,
+      "expectancy_r": 0.26942898832684825,
+      "excluded_share": 0.2227626459143969
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 925,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.242261103633915,
+      "wilson_lb": 36.70904243017104,
+      "expectancy_r": 0.2254965034965035,
+      "excluded_share": 0.25774225774225773
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 743,
+      "n_independent": 743,
+      "n_distinct_signals": 925,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.242261103633915,
+      "wilson_lb": 36.70904243017104,
+      "expectancy_r": 0.23053646353646354,
+      "excluded_share": 0.25774225774225773
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.0,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 742,
+      "n_independent": 742,
+      "n_distinct_signals": 924,
+      "horizon_overcount": 1.08,
+      "win_rate": 40.296495956873315,
+      "wilson_lb": 36.75984595186541,
+      "expectancy_r": 0.246923,
+      "excluded_share": 0.258
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.0
+      },
+      "n_eval": 676,
+      "n_independent": 676,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.31360946745562,
+      "wilson_lb": 34.65237444952257,
+      "expectancy_r": 0.20291002044989778,
+      "excluded_share": 0.30879345603271985
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 2.5
+      },
+      "n_eval": 676,
+      "n_independent": 676,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.31360946745562,
+      "wilson_lb": 34.65237444952257,
+      "expectancy_r": 0.2095756646216769,
+      "excluded_share": 0.30879345603271985
+    },
+    {
+      "params": {
+        "min_target_pct": 5.0,
+        "rr": 2.0,
+        "atr_stop_multiple": 2.5,
+        "trail_atr_mult": 3.0
+      },
+      "n_eval": 676,
+      "n_independent": 676,
+      "n_distinct_signals": 904,
+      "horizon_overcount": 1.08,
+      "win_rate": 38.31360946745562,
+      "wilson_lb": 34.65237444952257,
+      "expectancy_r": 0.2252883435582822,
+      "excluded_share": 0.30879345603271985
+    }
+  ],
+  "qualifying": 108,
+  "best": {
+    "params": {
+      "min_target_pct": 2.5,
+      "rr": 0.35,
+      "atr_stop_multiple": 2.5,
+      "trail_atr_mult": 2.5
+    },
+    "n_eval": 701,
+    "n_independent": 701,
+    "n_distinct_signals": 959,
+    "horizon_overcount": 1.09,
+    "win_rate": 70.61340941512125,
+    "wilson_lb": 67.06286981693692,
+    "expectancy_r": 0.11837523992322457,
+    "excluded_share": 0.3272552783109405
+  }
+}
