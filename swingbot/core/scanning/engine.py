@@ -176,6 +176,7 @@ class ScanItem:
     gate: object = None                # GateResult | None from _gate_evaluate; None when GATE_ENABLED=false or no v2 plan (G103)
     gate_result: object = None        # GateResult | None -- set by the G121 checklist evaluation, rendered by G123
     blackout: dict | None = None      # G120 blackout_decision() verdict for this scan run, or None
+    gate_blocked: dict | None = None  # V15: enforce refused this candidate; alert still posts, book takes nothing
 
     @property
     def all_requirements_met(self) -> bool:
@@ -1717,10 +1718,25 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     # The block arrives AFTER this candidate's trade and plan
                     # were already written -- see _rollback_blocked_candidate
                     # for why suppressing the alert alone left the gate unable
-                    # to change the book it exists to protect.
+                    # to change the book it exists to protect. This half runs
+                    # under BOTH block actions: whatever happens to the alert,
+                    # a blocked candidate never keeps its place in the book.
                     _rollback_blocked_candidate(item, trade_id, reason)
+                    trade_id = None
                     skipped_gate_blocked += 1
-                    continue        # enforce mode only
+                    # V15's ruling: what happens to the ALERT is a separate
+                    # question from what happens to the BOOK. The standing
+                    # requirement is that WEAK plans are never suppressed, and
+                    # the -49.5%/308-trade damage is entirely in the book --
+                    # so the default flags the alert (same E7/E8/E47
+                    # flagged-not-hidden pattern, suggested size 0) instead of
+                    # hiding it. "suppress" is the opt-in that also drops it.
+                    if getattr(config, "GATE_BLOCK_ACTION", "flag") == "suppress":
+                        continue
+                    item.gate_blocked = {"tier": result_g.tier, "min_tier": min_tier,
+                                         "reason": reason,
+                                         "hard_blocks": list(result_g.hard_blocks)}
+                    item.gate_result = result_g       # checklist still renders (G123)
                 if result_g.advisory_decision == "downgrade":
                     gate_telemetry.count("downgraded")
                 item.gate_result = result_g        # rendered by build_embed (G123)

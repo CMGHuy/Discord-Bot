@@ -35,10 +35,15 @@ from tests.test_engine_v2_plans import _structured_df
 
 
 def _run(monkeypatch, tmp_path, *, mode, tier="C", min_tier="A", hard_blocks=(),
-         progress=None):
+         progress=None, block_action="suppress", embed=None):
     """One real scan pass with the gate enabled and every candidate scored
-    at `tier`. Returns (alerts, trade_log, plan_store)."""
+    at `tier`. Returns (alerts, trade_log, plan_store).
+
+    `block_action` defaults to "suppress" here (NOT the shipped default) so
+    the V14 tests below can assert on the alert list directly; V15's shipped
+    "flag" behavior has its own tests at the bottom of this file."""
     df = _structured_df()
+    monkeypatch.setattr(config, "GATE_BLOCK_ACTION", block_action)
 
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
@@ -74,7 +79,19 @@ def _run(monkeypatch, tmp_path, *, mode, tier="C", min_tier="A", hard_blocks=(),
     monkeypatch.setattr(engine, "get_market_events", lambda d: [])
     monkeypatch.setattr(engine, "generate_trade_chart", lambda *a, **k: str(tmp_path / "c.png"))
     monkeypatch.setattr(engine, "notify_secondary", lambda *a, **k: None)
-    monkeypatch.setattr(engine, "build_embed", lambda *a, **k: SimpleNamespace(fields=[]))
+    # embed: None -> cheap stub; "real" -> leave the actual builder in place
+    # (the only way to test what an alert really renders); callable -> capture.
+    if embed is None:
+        monkeypatch.setattr(engine, "build_embed", lambda *a, **k: SimpleNamespace(fields=[]))
+    elif embed == "real":
+        # Same import-time path problem as the gate files above: the real
+        # builder writes its scan snapshots to a module constant resolved from
+        # config.DATA_DIR at import.
+        from swingbot.core.scanning import embeds as embeds_mod
+        monkeypatch.setattr(embeds_mod, "_SNAPSHOT_PATH",
+                            str(tmp_path / "scan_snapshots.json"))
+    else:
+        monkeypatch.setattr(engine, "build_embed", embed)
 
     monkeypatch.setattr(
         engine, "run_checklist",
@@ -164,3 +181,72 @@ def test_blocks_are_counted_into_the_funnel(monkeypatch, tmp_path):
     _run(monkeypatch, tmp_path, mode="enforce", tier="C", min_tier="A",
          progress=progress)
     assert progress.funnel["skipped_gate_blocked"] > 0
+
+
+# --- V15: what a block does to the ALERT vs to the BOOK ---------------------
+# The human ruling (2026-08-02): the standing "WEAK plans are never
+# suppressed" requirement wins for the alert, and the tier floor wins for the
+# book. WEAK is -49.5% over 308 live trades and that damage is entirely in the
+# book -- nobody was hurt by SEEING a weak setup.
+
+def test_the_shipped_default_is_flag_not_suppress():
+    field = next(f for f in config.FIELDS if f.attr == "GATE_BLOCK_ACTION")
+    assert field.default == "flag"
+
+
+def test_flag_mode_still_posts_the_alert(monkeypatch, tmp_path):
+    """Nothing is suppressed -- the standing requirement, honored."""
+    alerts, _, _ = _run(monkeypatch, tmp_path, mode="enforce", tier="C",
+                        min_tier="A", block_action="flag")
+    assert alerts, "flag mode must never hide a candidate"
+
+
+def test_flag_mode_still_keeps_the_trade_out_of_the_book(monkeypatch, tmp_path):
+    """...and the tier floor still wins where the damage actually is. This is
+    the whole point of the ruling: seeing a weak setup costs nothing, holding
+    one cost -49.5% over 308 trades."""
+    alerts, trade_log, store = _run(monkeypatch, tmp_path, mode="enforce",
+                                    tier="C", min_tier="A", block_action="flag")
+    assert alerts
+    assert trade_log.get_trades(status="open", limit=None) == []
+    assert store.open_plans() == []
+
+
+def test_flag_mode_labels_the_alert_so_it_is_not_mistaken_for_a_normal_one(monkeypatch, tmp_path):
+    """An unlabeled blocked alert is worse than a hidden one -- it reads as a
+    live trade idea the bot is not taking, with no way to tell."""
+    captured = []
+    _run(monkeypatch, tmp_path, mode="enforce", tier="C", min_tier="A",
+         block_action="flag",
+         embed=lambda item, *a, **k: captured.append(item) or SimpleNamespace(fields=[]))
+    assert captured
+    for item in captured:
+        assert item.gate_blocked is not None
+        assert item.gate_blocked["tier"] == "C"
+        assert item.gate_blocked["min_tier"] == "A"
+        # The checklist that judged it must render too, or the operator is
+        # told "blocked" with no way to see why.
+        assert item.gate_result is not None
+
+
+def test_the_real_embed_carries_the_blocked_headline(monkeypatch, tmp_path):
+    """End-to-end through the ACTUAL build_embed, not a stub: an operator
+    scrolling the channel has to be able to tell a blocked alert from a live
+    one, and that only holds if the field survives the real builder."""
+    alerts, _, _ = _run(monkeypatch, tmp_path, mode="enforce", tier="C",
+                        min_tier="A", block_action="flag", embed="real")
+    assert alerts
+    embed_obj = alerts[0][0]
+    names = " ".join(f.name for f in embed_obj.fields)
+    assert "ENTRY BLOCKED" in names
+    values = " ".join(f.value for f in embed_obj.fields)
+    assert "0 shares" in values
+
+
+def test_a_passing_candidate_is_never_labelled_blocked(monkeypatch, tmp_path):
+    captured = []
+    _run(monkeypatch, tmp_path, mode="enforce", tier="A+", min_tier="C",
+         block_action="flag",
+         embed=lambda item, *a, **k: captured.append(item) or SimpleNamespace(fields=[]))
+    assert captured
+    assert all(item.gate_blocked is None for item in captured)

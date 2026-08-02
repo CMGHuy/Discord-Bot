@@ -559,6 +559,21 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
+    gate_blocked = getattr(item, "gate_blocked", None)
+    if gate_blocked is not None:
+        # V15: the gatekeeper refused this candidate in enforce mode. Same
+        # flagged-not-hidden pattern as E7/E8/E47 above, and for the same
+        # reason the standing "WEAK plans are never suppressed" requirement
+        # exists -- the operator still sees the setup and the checklist that
+        # judged it; what the block actually removes is the paper trade.
+        sections["headline"].append((
+            f"⛔ ENTRY BLOCKED — gate ({gate_blocked['reason']})",
+            (f"Tier {gate_blocked['tier']} against a {gate_blocked['min_tier']} floor — "
+             f"suggested size **0 shares**. No paper trade was logged for this one; "
+             f"it is shown so you can judge it yourself."),
+            False,
+        ))
+
     blackout = getattr(item, "blackout", None)
     if blackout is not None:
         # Event blackout (G120): inform-first -- "annotate" is the default

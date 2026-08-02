@@ -593,6 +593,16 @@ FIELDS: list[Field] = [
           type="select", default="C", options=["A+", "A", "B", "C"],
           help="Consulted ONLY in enforce mode: candidates below this tier are held back. "
                "At the default C nothing is ever blocked by tier."),
+    Field("GATE_BLOCK_ACTION", "GATE_BLOCK_ACTION", "Gatekeeper", "What a block does",
+          type="select", default="flag", options=["flag", "suppress"],
+          help="Consulted ONLY in enforce mode, when a candidate is below 'Min tier' or trips a "
+               "hard block. flag (default): the alert still posts, headlined ENTRY BLOCKED with "
+               "suggested size 0, but NO paper trade is logged and the plan is closed out so the "
+               "intraday manager can't fill it -- the operator sees everything, the book takes "
+               "nothing. This is the plan-v8 V15 ruling: it honors the standing 'WEAK plans are "
+               "never suppressed' requirement while still cutting the -49.5%/308-trade WEAK cohort "
+               "out of the book, since the damage is in the book and not in the alert. suppress: "
+               "drop the alert entirely as well."),
     Field("GATE_STRICTNESS", "GATE_STRICTNESS", "Gatekeeper", "Strictness preset",
           type="select", default="balanced", options=["strict", "balanced", "relaxed"],
           help="One-click reseed of every checklist threshold. relaxed is deliberately generous so "
