@@ -1,6 +1,24 @@
 # Gatekeeper v7 - Part index (post win-rate audit, 2026-07-29)
 
-> **Status: 44 of 90 tasks implemented — Parts 1-3 (Phases G0-G2) complete** (2026-07-30).
+> **Status: 86 of 90 tasks implemented — Parts 1-5 committed and green** (corrected
+> 2026-08-02 by plan v8 Task V41; this block previously read "44 of 90 — Parts 1-3
+> complete", which was stale by two whole parts).
+>
+> **Genuinely open — four tasks, none of them code:** `G215`/`G216` (live smoke + final
+> checkpoint: need a real bot with real Discord keys and live data), `G218` (cockpit-v3's
+> live-mutation smoke — its carry-over doc `2026-07-gate-carryover-cockpit.md` does not
+> exist yet), and `G206` (the forward-gate template at
+> `docs/superpowers/results/2026-08-gate-forward-test.md` is written but its window has
+> not been run). `G219` Step 6 also stays unticked **on purpose**: its stated
+> precondition is all three carry-over docs, and G218's is the missing one. Ticking it
+> would be a fabricated pass — see plan v8 Task V42 on retroactive waivers.
+>
+> **Don't read completion off the `- [x]` boxes in Parts 3 and 4.** They were never
+> ticked as those tasks landed, so the boxes say "open" for work that is merged and
+> green (G110 and G118's own headers carry ✅ + commit refs, and every artifact they
+> name — `scripts/ablation.py`, `gate_frontier.py`, `gate_fold_run.py`,
+> `permutation_test.py`, plus the baseline/frontier/ablation/decision evidence docs —
+> is on disk). The task headers and the git history are the reliable signal here.
 >
 > Part 1 (G1-G8), Part 2 (G9-G44) and Part 3 (G45-G88) are committed and green. `swingbot/core/gate/`
 > holds `wr_math.py`, `types.py`, `registry.py`, `score.py`, `atr_regime.py`, `context_htf.py`,
@@ -72,8 +90,8 @@ and never re-add a cut task to satisfy one.
 | 1 | [_1.md](2026-07-14-gatekeeper-v7_1.md) | G1-G8 | Foundations: honest WR math, config, result types, registry, scoring, fixtures | 7 | **done 2026-07-29** |
 | 2 | [_2.md](2026-07-14-gatekeeper-v7_2.md) | G9-G44 | Market context: FRED client, VIX, breadth, sector rotation, event/earnings calendar, snapshot + no-lookahead history | 17 | **done 2026-07-29** |
 | 3 | [_3.md](2026-07-14-gatekeeper-v7_3.md) | G45-G88 | Checklist engine: HTF context, setup quality, 8 red flags, risk, timing, assembly | 32 | **done 2026-07-30** |
-| 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | **partial 2026-07-31** — G89-G96, G103-G104 done; G97-G102, G110, G118 remain |
-| 5 | [_5.md](2026-07-14-gatekeeper-v7_5.md) | G119-G219 | Scan + alert integration, E2E, 4-week forward gate, wrap-up (+ carried-over debt appendix) | 16 | not started |
+| 4 | [_4.md](2026-07-14-gatekeeper-v7_4.md) | G89-G118 | Backtest validation: decile/frontier reports, folds, ablation, permutation, shadow mode | 18 | **done 2026-07-31** — G118's checkpoint is ticked with its evidence docs committed; the per-step boxes above it were never back-filled |
+| 5 | [_5.md](2026-07-14-gatekeeper-v7_5.md) | G119-G219 | Scan + alert integration, E2E, 4-week forward gate, wrap-up (+ carried-over debt appendix) | 16 | **done 2026-07-31 except G206/G215/G216/G218** — G119-G146 merged (`chore(G146)` checkpoint is an ancestor of HEAD); the four exceptions need a live bot or an unrun window, not code |
 
 Phase map: Part 1 = Phase G0 - Part 2 = Phase G1 - Part 3 = Phase G2 - Part 4 = Phase G3 -
 Part 5 = Phase G4 + Phase G7 + the G217-G219 appendix.

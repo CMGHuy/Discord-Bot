@@ -1195,3 +1195,11 @@ git commit -m "docs: verify llm-advisor-v5 implementation status"
 ```
 
 - [ ] **Step 6: Part 12 checkpoint.** All three carry-over docs committed (`2026-07-gate-carryover-e2v2.md`, `2026-07-gate-carryover-cockpit.md`, G219's status verdict). Update this part's Progress block (Completed: G217-G219) and mirror into `2026-07-14-gatekeeper-v7_0-index.md`'s status table (Part 12 row: not started → done).
+
+      > **Half-done on purpose, 2026-08-02 (plan v8 Task V41).** The *mirroring* half is
+      > done: the index's status block and its Part 4/5 rows now state the real position
+      > (86 of 90; G206/G215/G216/G218 open) instead of "44 of 90 — Parts 1-3 complete".
+      > The box stays unticked because the step's own precondition isn't met —
+      > `2026-07-gate-carryover-cockpit.md` does not exist, since G218 is one of the open
+      > tasks. Ticking a checkpoint whose stated evidence is missing is exactly the
+      > fabricated pass plan v8 Task V42 forbids; when G218 lands, tick this then.
