@@ -409,6 +409,19 @@ class TradeLog:
             t["closed_at"] = datetime.now(timezone.utc).isoformat()
             self._settle_account_balance(t)
             self._save()
+            closed = dict(t)
+        # Plan v8 Task V47. This was the ONE close path that never journaled,
+        # and it is the path every v2 plan takes (PlanManager._on_event) --
+        # so with PLAN_ENGINE_V2=on and the intraday manager running, the
+        # journal was silently missing the entire v2 cohort while faithfully
+        # recording the legacy one. The journal is what the retrospective,
+        # the weekly digest and the journal browsers all read, so "the
+        # learn-from-mistakes loop" was learning from only the trades the
+        # new engine didn't manage. Outside the lock, same as the other four
+        # call sites -- _journal_close_safely does its own file I/O under
+        # JournalStore's separate lock.
+        _journal_close_safely(closed)
+        _refresh_snapshot_safely()
 
     def _settle_account_balance(self, t: dict) -> None:
         """
