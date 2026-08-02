@@ -16,7 +16,11 @@ from swingbot.core.registry import get_badge
 from swingbot.core.strategy_types import HORIZONS, MIN_BARS
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
-TRAIN = ("2020-01-01", "2023-12-31")
+# NOT the widened 25-year TRAIN (plan v8 V6/V46): this script compares
+# against numbers recorded under the pre-V6 window, and redefining the
+# window underneath it would change what the comparison MEANS while the
+# output still looked valid. Deliberate -- see backtest_windows.py.
+from swingbot.core.backtest_windows import LEGACY_TRAIN_2020 as TRAIN      # noqa: E402
 
 
 def collect_scored_trades() -> list[dict]:

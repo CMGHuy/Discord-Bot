@@ -2,8 +2,10 @@
 """Full-watchlist parity check: simulate_exit(scale_out=False) vs the legacy
 run_backtest exit loop it was extracted from (Task 21/23).
 
-For every TRAIN-window (2020-01-01..2023-12-31) trade the legacy loop
-produces, across every cached ticker x every strategy x every horizon,
+For every trade the legacy loop produces in the PRE-V6 train window
+(2020-01-01..2023-12-31 — deliberately not the widened 25-year TRAIN; see
+the constant below and swingbot/core/backtest_windows.py), across every
+cached ticker x every strategy x every horizon,
 rebuild a market-entry TradePlanV2 and re-walk it through simulate_exit.
 Legacy is the specification here -- any real mismatch (outcome or
 exit_index differing) means simulate_exit has a bug to fix, not the legacy
@@ -39,7 +41,11 @@ from swingbot.core.indicators import atr, elliott_wave3_entries
 from swingbot.core.plan_engine import PlanStatus, TradePlanV2, simulate_exit
 from swingbot.core.strategy_types import HORIZONS
 
-TRAIN = ("2020-01-01", "2023-12-31")
+# NOT the widened 25-year TRAIN (plan v8 V6/V46): this script compares
+# against numbers recorded under the pre-V6 window, and redefining the
+# window underneath it would change what the comparison MEANS while the
+# output still looked valid. Deliberate -- see backtest_windows.py.
+from swingbot.core.backtest_windows import LEGACY_TRAIN_2020 as TRAIN      # noqa: E402
 R_TOL = 1e-6  # both sides round(r, 3) from the same unrounded inputs
 
 

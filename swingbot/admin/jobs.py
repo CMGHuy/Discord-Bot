@@ -32,11 +32,16 @@ from swingbot.core.backtest import ALL_STRATEGIES
 # --validation), never through this admin UI.
 VALIDATION_WINDOW = ("2024-01-01", "2025-12-31")
 
-# What scripts/tune_strategy.py itself hard-codes as TRAIN today (see this
-# plan's ground-truth deviation #3 -- the script has no date CLI flag at
-# all yet; this constant is shown on the Tuning page so the window is
-# visible even though it can't be changed from here).
-TRAIN_WINDOW = ("2020-01-01", "2023-12-31")
+# The window scripts/tune_strategy.py actually runs (see this plan's
+# ground-truth deviation #3 -- the script has no date CLI flag at all yet;
+# this is shown on the Tuning page so the window is visible even though it
+# can't be changed from here). Imported rather than re-typed since plan v8
+# V46: this is a MIRROR of what the script does, and a mirror that can drift
+# is worse than no mirror -- it would show an operator a window the job
+# isn't using. Note the widened TRAIN makes an admin-triggered tuning run
+# ~6x longer; the job is detached and has no timeout to trip, but it will
+# occupy the single job slot for correspondingly longer.
+from swingbot.core.backtest_windows import TRAIN as TRAIN_WINDOW      # noqa: E402
 
 _DATE_LIKE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 _BANNED_DATE_FLAGS = {"--from", "--to", "--validation"}

@@ -8,6 +8,27 @@ import pandas as pd
 import pytest
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _never_write_telemetry_into_the_real_data_dir(tmp_path_factory):
+    """Any test that drives a real scan pass appends a row to
+    data/scan_telemetry.jsonl -- the module constant is resolved from
+    config.DATA_DIR at IMPORT time, so patching DATA_DIR in a test does not
+    redirect it. Found 2026-08-02 (plan v8): 153 of the 201 rows in the
+    repo's telemetry file were test rows.
+
+    That file is not just untidy-if-polluted, it is a MEASUREMENT INSTRUMENT:
+    V12 Step 2 reads a week of these rows to compute the target-floor survival
+    rate, and test rows (5 tickers, 4 errors, synthetic fixtures) sit in the
+    same file as live scans with nothing to distinguish them. Redirect once
+    per session, for every test, rather than per test file -- the next scan
+    test written won't remember to.
+    """
+    telemetry_dir = tmp_path_factory.mktemp("telemetry")
+    from swingbot.core.scanning import engine
+    engine.TELEMETRY_PATH = str(telemetry_dir / "scan_telemetry.jsonl")
+    yield
+
+
 def make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01"):
     """Build an OHLCV frame from a close series. High/Low straddle the close
     by spread_pct/2 each side; Open is the prior close."""

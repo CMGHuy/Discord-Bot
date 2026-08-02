@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Grid sweep of one strategy's tunables over the TRAIN window ONLY
-(2020-01-01 .. 2023-12-31). Never point this at the validation window --
-that is the whole point of having one.
+(1999-01-01 .. 2023-12-31 since plan v8 V6/V46 — it was 2020-01-01 before,
+and the window now comes from swingbot/core/backtest_windows.py). Never
+point this at the validation window -- that is the whole point of having
+one. A grid is ~6x longer than it used to be at the widened window; chunk
+per-strategy.
 
 Selection rule (spec section 9): among configs with WR>=80, ExpR>0, N>=30,
 pick max expectancy. If none qualify, the ranking output still shows the
@@ -27,7 +30,7 @@ import swingbot.core.backtest as bt
 import swingbot.core.entry_filters as ef
 from swingbot.core.strategy_types import HORIZONS
 
-TRAIN = ("2020-01-01", "2023-12-31")
+from swingbot.core.backtest_windows import TRAIN      # noqa: E402  (widened to 25y by plan v8 V46)
 
 PARAM_GRID = {
     # Rescue (Task 108): grid the new pullback entry-mode gate (Task 107),

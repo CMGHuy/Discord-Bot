@@ -11,14 +11,16 @@ interpreting any backtest, grid, or validation result.
   pre-registered run per component, results recorded as-is, never retuned
   after — a config that fails train never gets a validation shot. Treat the
   2024–2025 window as tainted for any selection decision.
-  **Mind the gap: `--train` in the scripts still means 2020-01-01.** Nine
-  call sites hardcode `TRAIN = ("2020-01-01", "2023-12-31")`
-  (`run_backtest_range.py`, `tune_strategy.py`, `tune_exit_v2.py`,
-  `tune_confluence_gates.py`, `audit_quality_score.py`, `parity_exits.py`,
-  `parity_sizing.py`, `swingbot/admin/jobs.py`, and a comment in
-  `strategy_types.py`). Until plan v8 Task V46 reconciles them, pass
-  `--from 1999-01-01 --to 2023-12-31` explicitly for any run meant to use
-  the widened window — a bare `--train` silently gives you the old one.
+  **`--train` now means the widened window** (plan v8 Task V46, 2026-08-02).
+  The windows live in `swingbot/core/backtest_windows.py` — one definition
+  the scripts import, replacing nine hardcoded copies that had left this doc
+  claiming 25 years while every bare `--train` ran the old 2020 one. Two
+  consequences worth holding onto: a `--train` run is now ~6x longer than it
+  used to be, and `parity_exits.py` / `parity_sizing.py` /
+  `audit_quality_score.py` deliberately stay on `LEGACY_TRAIN_2020` because
+  they compare against numbers recorded under that window — widening them
+  would change what their comparison means while the output still looked
+  valid.
 - **Acceptance gate (replaced by plan v8 Task V6 — the old `win_rate >= 80`
   bar is VOID).** It was set when a "win" meant touching a ~0.85% target;
   under a 2.5% floor it is measuring a different event and cannot carry over.

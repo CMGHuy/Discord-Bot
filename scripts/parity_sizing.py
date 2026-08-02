@@ -10,9 +10,10 @@ stay independent of plan_engine.py.
 
 Runs every ticker cached under data/backtest_cache/ x every strategy in
 backtest.ALL_STRATEGIES x every horizon in HORIZONS x every entry bar whose
-entry date falls in the TRAIN window (2020-01-01..2023-12-31, same window
-scripts/run_backtest_range.py and scripts/tune_strategy.py use), comparing
-(stop, tp1) old vs new.
+entry date falls in the PRE-V6 train window (2020-01-01..2023-12-31),
+comparing (stop, tp1) old vs new. That is deliberately NOT the widened
+25-year TRAIN the tuning scripts now use — this one compares against
+numbers recorded under the old window. See swingbot/core/backtest_windows.py.
 
     python scripts/parity_sizing.py
 
@@ -50,7 +51,11 @@ from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
 TOLERANCE = 1e-6
-TRAIN = ("2020-01-01", "2023-12-31")
+# NOT the widened 25-year TRAIN (plan v8 V6/V46): this script compares
+# against numbers recorded under the pre-V6 window, and redefining the
+# window underneath it would change what the comparison MEANS while the
+# output still looked valid. Deliberate -- see backtest_windows.py.
+from swingbot.core.backtest_windows import LEGACY_TRAIN_2020 as TRAIN      # noqa: E402
 
 
 def _load_cached(path: Path):

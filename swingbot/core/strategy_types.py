@@ -235,6 +235,10 @@ BREAKEVEN_TRIGGER_FRACTION = 0.5
 
 # Per-strategy gating decided by TRAIN-window tuning (Task 19, train window
 # 2020-01-01..2023-12-31, docs/superpowers/results/2026-07-train-tuning.md).
+# That date range is a historical fact about how these masks were fitted, not
+# a live setting: TRAIN itself was widened to 1999-01-01 by plan v8 V6/V46
+# (swingbot/core/backtest_windows.py), so these gates are still carrying a
+# bull-heavy 4-year fit until V17's grid re-decides them on the full history.
 # {"Strategy Name": {"directions": ("bullish",), "horizons": ("4w", "2m")}}
 # A missing key means both directions, all horizons. entry_filters.entries_for
 # applies the mask, so backtest and live signals both respect it.

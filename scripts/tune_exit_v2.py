@@ -19,7 +19,7 @@ from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
-TRAIN = ("2020-01-01", "2023-12-31")
+from swingbot.core.backtest_windows import TRAIN      # noqa: E402  (widened to 25y by plan v8 V46)
 BREAKOUT_CLASS = {"Break & Retest", "Support/Resistance", "EMA Crossover"}
 GRID_TRAIL = [2.0, 2.5, 3.0]
 GRID_TP2 = ["levels", "none"]

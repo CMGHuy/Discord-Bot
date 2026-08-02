@@ -33,7 +33,7 @@ from swingbot.core.backtest_scenarios import _aggregate, replay_scenarios
 from swingbot.core.plan_engine import simulate_exit
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
-TRAIN = ("2020-01-01", "2023-12-31")
+from swingbot.core.backtest_windows import TRAIN      # noqa: E402  (widened to 25y by plan v8 V46)
 HORIZONS_TO_TEST = ["4w", "2m", "3m", "4m", "6m"]
 GRID_CONFL = [2, 3, 4]
 GRID_RR = [0.0, 0.3]

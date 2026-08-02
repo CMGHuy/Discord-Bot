@@ -2,8 +2,12 @@
 """Acceptance harness: runs every strategy x horizon x cached ticker and
 pools results per strategy over an entry-date window.
 
-    python scripts/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
+    python scripts/run_backtest_range.py --train        # 1999-01-01 .. 2023-12-31
     python scripts/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
+
+--train covers 25 years as of plan v8 Task V46 (it meant 2020-01-01 before;
+the windows now come from swingbot/core/backtest_windows.py). A --train run
+is correspondingly ~6x longer than it used to be.
     python scripts/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
 
 PASS gate per spec: win_rate >= 80, expectancy_r > 0, N >= 30 (train) / 15
@@ -28,8 +32,7 @@ from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, run_scenario_back
 from swingbot.core.strategy_types import HORIZONS
 from swingbot.core.universe import data_quality_issues, liquidity_reason
 
-TRAIN = ("2020-01-01", "2023-12-31")
-VALIDATION = ("2024-01-01", "2025-12-31")
+from swingbot.core.backtest_windows import TRAIN, VALIDATION      # noqa: E402
 
 
 def window_trades(summary, date_from, date_to):
