@@ -79,8 +79,9 @@ from swingbot.core.market_events import get_market_events
 from swingbot.core.notifier import notify_secondary
 from swingbot.core.performance import TradeLog
 from swingbot.core.quality import atr_percentile as _atr_percentile
-from swingbot.core.plan_engine import (build_confluence_plan,
-                                       primary_strategy_for, select_tp2)
+from swingbot.core.plan_engine import (PlanStatus, build_confluence_plan,
+                                       primary_strategy_for, record_transition,
+                                       select_tp2)
 from swingbot.core.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
@@ -541,6 +542,56 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
     except Exception:
         log.warning("plan_v2 construction failed for %s/%s", ticker,
                     horizon_key, exc_info=True)
+
+
+def _rollback_blocked_candidate(item, trade_id, reason: str) -> None:
+    """V14: undo the bookkeeping an enforce-mode block arrives too late to
+    prevent. Two things are already on disk by the time the checklist gets
+    consulted in the alert loop:
+
+      1. the paper trade (`log_trade` runs ~150 lines earlier), and
+      2. the v2 plan record in PlanStore, left PENDING.
+
+    Suppressing only the Discord alert left both. That made the gate
+    unable to change the one thing it exists to change: (1) is what every
+    cohort/win-rate analysis reads, so the book would have looked
+    identical with the gate on or off; and (2) is worse than cosmetic --
+    PlanManager.poll() walks `store.open_plans()` and logs a BRAND NEW
+    trade on the fill transition, and its trigger-time `_gate_recheck`
+    only re-runs the "trigger" subset, never tier/min_tier. A blocked plan
+    would therefore have refilled itself the moment price crossed.
+
+    Never raises: the caller runs inside "a gate bug must never cost an
+    alert", and an exception escaping here would land there and ship the
+    very alert this block just refused."""
+    try:
+        if trade_id is not None and trade_log.delete_trade(trade_id):
+            log.info("Gate blocked %s -- rolled back paper trade %s (%s)",
+                      getattr(item.result, "ticker", "?"), trade_id, reason)
+    except Exception:  # noqa: BLE001
+        log.error("Gate blocked %s but its paper trade %s could NOT be rolled back -- "
+                  "the book now contains a trade the gate refused",
+                  getattr(item.result, "ticker", "?"), trade_id, exc_info=True)
+    plan = getattr(item, "plan_v2", None)
+    if plan is None:
+        return
+    # A market-entry plan is already ACTIVE when it is built
+    # (plan_engine.py:641, reason="market_entry"), and the state machine
+    # allows ACTIVE -> CLOSED but not ACTIVE -> CANCELLED. Either terminal
+    # status is out of PlanStore._OPEN_STATUSES, which is what actually keeps
+    # the manager's hands off it; picking the legal one per status is the
+    # whole point, since an illegal transition raises and would leave the
+    # plan live.
+    terminal = (PlanStatus.CANCELLED if plan.status == PlanStatus.PENDING
+                else PlanStatus.CLOSED)
+    try:
+        record_transition(plan, terminal, reason=f"gate_blocked: {reason}",
+                          at=datetime.now(timezone.utc).isoformat())
+        PlanStore().update(plan)
+    except Exception:  # noqa: BLE001
+        log.error("Gate blocked %s but its plan %s could NOT be cancelled -- it stays "
+                  "PENDING and the intraday manager may still fill it",
+                  getattr(item.result, "ticker", "?"), plan.plan_id, exc_info=True)
 
 
 def _reachability_reason(scenario, level_map) -> str | None:
@@ -1364,6 +1415,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     alerts = []
     skipped_already_open = 0
     skipped_legacy_path = 0
+    skipped_gate_blocked = 0
     # The one dangerous pairing of V13's cut, said out loud once per scan
     # rather than discovered as a silent week of no alerts: outside
     # PLAN_ENGINE_V2="on" every alert is a legacy untiered one, so the cut
@@ -1662,7 +1714,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     reason = ", ".join(result_g.hard_blocks) or f"tier {result_g.tier} < {min_tier}"
                     gate_persistence.blocked_log(result_g, decision, reason)
                     gate_telemetry.count("blocked", reason=reason)
-                    continue        # enforce mode only -- alert suppressed, plan record survives
+                    # The block arrives AFTER this candidate's trade and plan
+                    # were already written -- see _rollback_blocked_candidate
+                    # for why suppressing the alert alone left the gate unable
+                    # to change the book it exists to protect.
+                    _rollback_blocked_candidate(item, trade_id, reason)
+                    skipped_gate_blocked += 1
+                    continue        # enforce mode only
                 if result_g.advisory_decision == "downgrade":
                     gate_telemetry.count("downgraded")
                 item.gate_result = result_g        # rendered by build_embed (G123)
@@ -1709,10 +1767,21 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     macro_snap = macro_snapshot.load_snapshot()
                 except Exception:
                     log.debug("macro snapshot unavailable for gate eval on %s", result.ticker)
-            gate_candidate = _types.SimpleNamespace(
+            # V14: this local was named `gate_candidate` -- the same name as
+            # the scan_integration FUNCTION imported at the top of this module
+            # and called ~60 lines above (the enforce decision). Python scopes
+            # per function, so that assignment made the name local for the
+            # WHOLE of _sync_run_scan and the call above could never reach the
+            # import: UnboundLocalError on the first item of a pass, then
+            # TypeError ('SimpleNamespace' object is not callable) on every one
+            # after. Both were swallowed by the broad "a gate bug must never
+            # cost an alert" except, which logged "alert ships ungated" -- so
+            # the checklist gate has never blocked anything in ANY mode, and
+            # said so once per alert in the logs. Do not reuse the name.
+            gate_cand_ns = _types.SimpleNamespace(
                 ticker=result.ticker, strategy=result.strategy,
                 plan=item.plan_v2, df_daily=df)
-            _gate_decision, item.gate = _gate_evaluate(gate_candidate, PlanStore(), macro_snap)
+            _gate_decision, item.gate = _gate_evaluate(gate_cand_ns, PlanStore(), macro_snap)
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
@@ -1727,8 +1796,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             progress.alerts_done += 1
 
     log.info("Scan pass complete: %d alert(s) built, %d skipped (already open), "
-              "%d suppressed (legacy untiered path)",
-              len(alerts), skipped_already_open, skipped_legacy_path)
+              "%d suppressed (legacy untiered path), %d blocked by the gate",
+              len(alerts), skipped_already_open, skipped_legacy_path, skipped_gate_blocked)
 
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2
@@ -1743,6 +1812,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         progress.funnel["deduped"] = len(deduped)
         progress.funnel["skipped_already_open"] = skipped_already_open
         progress.funnel["skipped_legacy_path"] = skipped_legacy_path
+        progress.funnel["skipped_gate_blocked"] = skipped_gate_blocked
 
     # Scan health telemetry (Task E82): logged unconditionally, wrapped so a
     # telemetry failure (disk full, bad path, whatever) never takes down the
