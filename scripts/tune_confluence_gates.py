@@ -40,8 +40,9 @@ GRID_RR = [0.0, 0.3]
 SAMPLE_EVERY = 3   # deterministic alphabetical stride -- see module docstring
 BASE_GATES = {"min_reward_pct": 3.0, "min_stop_distance_pct": 2.0,
               "max_stop_distance_pct": 7.0, "cooldown_bars": 5}
-RULE = ("per horizon: include iff WR>=80 and ExpR>0 and N>=30 and excl<=50%; "
-        "global pair = max pooled ExpR among pairs with >=2 qualifying horizons")
+RULE = ("per horizon: include iff ExpR>0 and N>=30 and dead<=50%; "
+        "global pair = max pooled WIN RATE among pairs with >=2 qualifying horizons "
+        "(plan v8 V6 Step 3 -- the old WR>=80 filter is void, see V49)")
 
 
 def _ticker_worker(args):
@@ -88,8 +89,8 @@ def main():
                 continue
             excl = (s["scratches"] + s["timeouts"]) / max(
                 1, s["n"] + s["scratches"] + s["timeouts"]) * 100
-            ok = (s["win_rate"] or 0) >= 80 and (s["expectancy_r"] or 0) > 0 \
-                and s["n"] >= 30 and excl <= 50
+            # V6 Step 3 / V49: win rate ranks, it does not gate.
+            ok = (s["expectancy_r"] or 0) > 0 and s["n"] >= 30 and excl <= 50
             print(f"confl={confl} rr={rr} {hk}: N={s['n']:<4} "
                   f"WR={s['win_rate'] or 0:5.1f} ExpR={s['expectancy_r'] or 0:+.3f} "
                   f"excl={excl:4.1f}% {'PASS' if ok else 'fail'}")

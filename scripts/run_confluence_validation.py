@@ -141,8 +141,10 @@ def _row_stats(agg: dict) -> dict:
 
 
 def passes(stats: dict, min_n: int) -> bool:
+    """Plan v8 V6 Step 3's gate. `win_rate >= 80` is void under a 2.5% target
+    floor and was removed by V49; win rate ranks candidates, it does not gate
+    them."""
     return (stats["n_eval"] >= min_n
-            and stats["win_rate"] is not None and stats["win_rate"] >= 80
             and stats["expectancy_r"] is not None and stats["expectancy_r"] > 0
             and stats["excluded_share"] <= 0.5)
 
@@ -203,7 +205,7 @@ def main():
     print(f"\naggregated {n_tickers} ticker chunk file(s)\n")
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = [f"== VALIDATION {VALIDATION[0]} .. {VALIDATION[1]} | confluence scenario replay | "
-             f"pass: WR>=80, ExpR>0, N>={MIN_N}, excl<=50% ==", header]
+             f"pass: ExpR>0, N>={MIN_N}, dead<=50% (V6 Step 3; WR is the objective) ==", header]
     all_records = []
     per_horizon_stats = {}
     for hk in HORIZONS:

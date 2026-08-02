@@ -10,10 +10,14 @@ the windows now come from swingbot/core/backtest_windows.py). A --train run
 is correspondingly ~6x longer than it used to be.
     python scripts/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
 
-PASS gate per spec: win_rate >= 80, expectancy_r > 0, N >= 30 (train) / 15
-(validation), scratches+timeouts <= 50% of closed trades."""
+PASS gate is plan v8 V6 Step 3's rule: expectancy_r > 0, N >= 30 (train) / 15
+(validation), scratches+timeouts <= 50% of closed trades. Win rate is the
+RANKING OBJECTIVE, not a threshold -- the old `win_rate >= 80` bar was voided
+by V6 as incompatible with a 2.5% target floor, and removed from the code by
+V49 after V16 caught this script still scoring against it."""
 import argparse
 import json
+import math
 import sys
 import warnings
 from collections import defaultdict
@@ -79,9 +83,54 @@ def pooled_max_dd_pct(trades, risk_pct=1.0):
     return max_dd
 
 
+def _wilson_str(stats):
+    """Formatted Wilson lower bound for a stats row. `wins` is carried by
+    pool() but not by the scenario adapter, so fall back to deriving it --
+    both sides come from integer counts, so the round-trip is exact."""
+    n = stats["n_eval"]
+    if not n or stats["win_rate"] is None:
+        return "n/a"
+    wins = stats.get("wins")
+    if wins is None:
+        wins = round(stats["win_rate"] / 100.0 * n)
+    return f"{wilson_lower_bound(wins, n):.1f}"
+
+
+GATE_LEGEND = "pass: ExpR>0, N>={min_n}, dead<=50% (V6 Step 3; WR is the objective, not a gate)"
+
+
+def wilson_lower_bound(wins, n, z=1.96):
+    """Lower bound of the 95% CI on the win rate, in percent.
+
+    Pre-registered by plan v8 V6 Step 5 and emitted by nothing until V49: a
+    headline win rate on a small N is a hypothesis, not a finding, and the
+    bound is what tells the two apart. V16's RSI reads 80.3% on N=122 and
+    55.2% on the ~12 trades that are actually independent.
+    """
+    if not n:
+        return None
+    p = wins / n
+    den = 1 + z * z / n
+    centre = p + z * z / (2 * n)
+    margin = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return (centre - margin) / den * 100
+
+
 def passes(stats, min_n):
+    """Plan v8 V6 Step 3's acceptance gate.
+
+    The `win_rate >= 80` bar this used to carry is **void** -- V6 retired it
+    explicitly ("void under a 2.5% floor") and made win rate the ranking
+    OBJECTIVE rather than a threshold, because a 2.5% target floor and an 80%
+    win rate are in direct tension. It survived here until V49 found V16's
+    report still printing PASS/FAIL against it, which inverted the verdict:
+    the stale gate passed 1 of 11 strategies, this one passes 10.
+
+    What remains is V6's actual rule -- positive expectancy, enough sample,
+    and no more than half the closed trades dying flat. Ranking by win rate
+    is the caller's job (see the sorted report), not this predicate's.
+    """
     return (stats["n_eval"] >= min_n
-            and stats["win_rate"] is not None and stats["win_rate"] >= 80
             and stats["expectancy_r"] is not None and stats["expectancy_r"] > 0
             and stats["excluded_share"] <= 0.5)
 
@@ -128,7 +177,8 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
                                   gates=CONFLUENCE_GATES, scale_out=scale_out,
                                   horizons=list(HORIZONS))
 
-    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
+    header = (f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'WilLB':>6s} {'ExpR':>7s} "
+              f"{'Scr':>5s} {'TO':>5s} {'Dead%':>6s}  PASS")
     lines = []
     if excluded_illiquid:
         lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
@@ -139,7 +189,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_bad_data)
         lines.append("")
     lines.append(f"== {label} {date_from} .. {date_to} | confluence scenario replay | "
-                 f"pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
+                 f"{GATE_LEGEND.format(min_n=min_n)} ==")
     lines.append(header)
     for hk in HORIZONS:
         st = _scenario_row_stats(stats["by_horizon"][hk])
@@ -148,14 +198,14 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
         wr = f"{st['win_rate']:.1f}" if st["win_rate"] is not None else "n/a"
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         flag = "PASS" if passes(st, min_n) else "FAIL"
-        lines.append(f"{'confluence/' + hk:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s} "
+        lines.append(f"{'confluence/' + hk:22s} {st['n_eval']:5d} {wr:>6s} {_wilson_str(st):>6s} {er:>7s} "
                      f"{st['scratches']:5d} {st['timeouts']:5d} {st['excluded_share']*100:5.0f}%  {flag}")
 
     pooled = _scenario_row_stats(stats["pooled"])
     wr = f"{pooled['win_rate']:.1f}" if pooled["win_rate"] is not None else "n/a"
     er = f"{pooled['expectancy_r']:+.3f}" if pooled["expectancy_r"] is not None else "n/a"
     flag = "PASS" if passes(pooled, min_n) else "FAIL"
-    lines.append(f"{'confluence/pooled':22s} {pooled['n_eval']:5d} {wr:>6s} {er:>7s} "
+    lines.append(f"{'confluence/pooled':22s} {pooled['n_eval']:5d} {wr:>6s} {_wilson_str(pooled):>6s} {er:>7s} "
                  f"{pooled['scratches']:5d} {pooled['timeouts']:5d} {pooled['excluded_share']*100:5.0f}%  {flag}")
 
     report = "\n".join(lines)
@@ -326,10 +376,14 @@ def main():
                     rb["timeout"] += sum(1 for t in tr if t.runner_outcome == "runner_timeout")
                     rb["wins"] += sum(1 for t in tr if t.outcome == "win")
 
-    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'MaxDD%':>7s}"
+    header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'WilLB':>6s} {'ExpR':>7s} {'MaxDD%':>7s}"
     if show_runner_cols:
         header += f" {'AvgWinR':>7s}"
-    header += f" {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}"
+    # "Dead%", not "Excl%": this is (scratches+timeouts)/closed, the share of
+    # CLOSED TRADES that resolved as neither win nor loss. It has nothing to do
+    # with the excluded-ticker blocks printed above, and the old name caused a
+    # misreading in V16's write-up before V49 renamed it.
+    header += f" {'Scr':>5s} {'TO':>5s} {'Dead%':>6s}"
     if show_runner_cols:
         header += f" {'tp2%':>6s} {'trail%':>6s} {'be%':>6s} {'rto%':>6s}"
     header += "  PASS"
@@ -342,7 +396,7 @@ def main():
         lines.append(f"-- excluded (bad data, Task E16): {len(excluded_bad_data)} of {len(tickers)} ticker(s) --")
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_bad_data)
         lines.append("")
-    lines.append(f"== {label} {date_from} .. {date_to} | pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
+    lines.append(f"== {label} {date_from} .. {date_to} | {GATE_LEGEND.format(min_n=min_n)} ==")
     lines.append(header)
     results = {}
     for strat in strategies:
@@ -353,7 +407,7 @@ def main():
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         dd = f"{st['max_dd_pct']:.1f}" if st["max_dd_pct"] is not None else "n/a"
         flag = "PASS" if passes(st, min_n) else "FAIL"
-        row = f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s} {dd:>7s}"
+        row = f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {_wilson_str(st):>6s} {er:>7s} {dd:>7s}"
         if show_runner_cols:
             awr = f"{st['avg_win_r']:+.3f}" if st["avg_win_r"] is not None else "n/a"
             row += f" {awr:>7s}"
@@ -386,6 +440,51 @@ def main():
         wr = f"{st['win_rate']:.1f}" if st["win_rate"] is not None else "n/a"
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         lines.append(f"{strat:22s} {hk:6s} {st['n_eval']:5d} {wr:>6s} {er:>7s}")
+
+    # V49 Step 3: the strategy-level N above is the SUM over horizons. That is
+    # honest only when a strategy's entries actually differ per horizon. Some
+    # ignore the horizon entirely and emit the identical signal set ten times,
+    # in which case the summed N -- and every sample-size gate resting on it --
+    # overstates the independent evidence tenfold. V16 found RSI reading N=122
+    # on ~12 real trades. Detected here rather than assumed: two horizons are
+    # the same run if their (date, entry, direction) signatures match exactly.
+    # Compare DISTINCT entry signals against the summed count rather than
+    # testing horizons for exact equality: a horizon-invariant strategy still
+    # resolves a few trades differently at the window edge (a 9m hold may not
+    # close where a 2m one does), so exact equality gives a false negative --
+    # it did, for RSI, the strategy that motivated this check.
+    invariant = []
+    for strat in strategies:
+        per_hz = {hk: {(t.entry_date, t.entry, t.direction) for t in by_combo[(strat, hk)]}
+                  for hk in HORIZONS if by_combo[(strat, hk)]}
+        if len(per_hz) < 2:
+            continue
+        distinct = set().union(*per_hz.values())
+        summed = sum(len(s) for s in per_hz.values())
+        if not distinct:
+            continue
+        ratio = summed / len(distinct)
+        results[strat]["n_distinct_signals"] = len(distinct)
+        results[strat]["horizon_overcount"] = round(ratio, 2)
+        if ratio >= 1.5:      # anything near 1.0 is genuinely horizon-specific
+            n_indep = round(results[strat]["n_eval"] / ratio)
+            results[strat]["n_independent"] = n_indep
+            invariant.append((strat, len(per_hz), ratio, n_indep))
+    for strat in results:
+        results[strat].setdefault("n_independent", results[strat]["n_eval"])
+
+    if invariant:
+        lines.append("\n-- WARNING: signals reused across horizons (summed N overstates evidence) --")
+        for strat, n_hz, ratio, n_indep in sorted(invariant):
+            st = results[strat]
+            lb = wilson_lower_bound(round((st["win_rate"] or 0) / 100.0 * n_indep), n_indep)
+            lb_s = f"{lb:.1f}%" if lb is not None else "n/a"
+            lines.append(
+                f"  {strat}: the same signals recur across {n_hz} horizons "
+                f"({st['n_distinct_signals']} distinct, counted {ratio:.1f}x over). "
+                f"Reported N={st['n_eval']} is ~{n_indep} independent trades; "
+                f"Wilson LB on the real sample {lb_s}, not {_wilson_str(st)}%.")
+        lines.append("  Do NOT satisfy an N>=15/30 gate with these numbers -- see plan v8 V16/V49.")
 
     report = "\n".join(lines)
     print("\n" + report)

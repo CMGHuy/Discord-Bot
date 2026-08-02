@@ -67,3 +67,44 @@ def test_tickers_for_run_uses_named_universe(monkeypatch):
 def test_tickers_for_run_defaults_to_watchlist(monkeypatch):
     monkeypatch.setattr(rbr, "load_watchlist", lambda: ["ZZZ", "AAA"])
     assert rbr._tickers_for_run(None) == ["AAA", "ZZZ"]
+
+
+# --- V49: the acceptance gate and the evidence-inflation warning -------------
+
+def _stats(n_eval, win_rate, expectancy_r, excluded_share=0.0, wins=None):
+    return {"n_eval": n_eval, "win_rate": win_rate, "expectancy_r": expectancy_r,
+            "excluded_share": excluded_share,
+            "wins": wins if wins is not None else round((win_rate or 0) / 100 * n_eval)}
+
+
+def test_passes_does_not_gate_on_win_rate():
+    """Plan v8 V6 Step 3 voided `win_rate >= 80`: it is the ranking objective,
+    not a threshold. V16 measured a ~78% ceiling, so gating on 80 rejected
+    everything -- including configs the plan's own rule accepts."""
+    assert rbr.passes(_stats(100, 66.0, +0.05), min_n=15) is True
+    assert rbr.passes(_stats(100, 20.0, +0.05), min_n=15) is True
+
+
+def test_passes_still_enforces_the_criteria_v6_kept():
+    assert rbr.passes(_stats(100, 95.0, -0.01), min_n=15) is False       # expectancy
+    assert rbr.passes(_stats(10, 95.0, +0.05), min_n=15) is False        # sample size
+    assert rbr.passes(_stats(100, 95.0, +0.05, 0.75), min_n=15) is False  # dead share
+
+
+def test_wilson_lower_bound_punishes_small_samples():
+    """The bound is the whole point of V6 Step 5: the same win rate on a
+    tenth of the sample must not read as the same evidence."""
+    big = rbr.wilson_lower_bound(80, 100)
+    small = rbr.wilson_lower_bound(8, 10)
+    assert big == pytest.approx(70.8, abs=0.5)
+    assert small == pytest.approx(49.0, abs=1.0)
+    assert small < big
+    assert rbr.wilson_lower_bound(0, 0) is None
+
+
+def test_wilson_str_derives_wins_when_absent():
+    """Scenario rows carry win_rate but not `wins`; both paths must agree."""
+    with_wins = rbr._wilson_str({"n_eval": 100, "win_rate": 80.0, "wins": 80})
+    derived = rbr._wilson_str({"n_eval": 100, "win_rate": 80.0})
+    assert with_wins == derived
+    assert rbr._wilson_str({"n_eval": 0, "win_rate": None}) == "n/a"

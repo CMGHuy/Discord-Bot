@@ -23,7 +23,8 @@ from swingbot.core.backtest_windows import TRAIN      # noqa: E402  (widened to 
 BREAKOUT_CLASS = {"Break & Retest", "Support/Resistance", "EMA Crossover"}
 GRID_TRAIL = [2.0, 2.5, 3.0]
 GRID_TP2 = ["levels", "none"]
-RULE = "WR>=80 and ExpR>0 and N>=30 and excl<=50%; max ExpR wins; else keep defaults"
+RULE = ("ExpR>0 and N>=30 and dead<=50%; max WIN RATE wins; else keep defaults "
+        "(plan v8 V6 Step 3 -- the old WR>=80 filter is void, see V49)")
 
 
 def _gated_horizons(strategy):
@@ -82,11 +83,13 @@ def main():
         plan_engine.TRAIL_ATR_MULT = 2.5
         plan_engine.STRATEGY_ENTRY_TYPE.pop(strategy, None)
 
+        # V6 Step 3 / V49: `win_rate >= 80` is void under a 2.5% floor (V16
+        # measured a ~78% ceiling), so it is a ranking objective, not a filter.
         qualifying = [(cfg, s) for cfg, s in results
-                      if s["win_rate"] >= 80 and s["expectancy_r"] > 0
+                      if s["expectancy_r"] > 0
                       and s["n"] >= 30 and s["excl_pct"] <= 50]
         if qualifying:
-            cfg, s = max(qualifying, key=lambda x: x[1]["expectancy_r"])
+            cfg, s = max(qualifying, key=lambda x: x[1]["win_rate"])
             print(f">>> {strategy}: WINNER trail={cfg[0]} tp2={cfg[1]} entry={cfg[2]} "
                   f"(N={s['n']} WR={s['win_rate']:.1f} ExpR={s['expectancy_r']:+.3f})\n")
         else:

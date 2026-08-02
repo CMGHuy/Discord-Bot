@@ -6,10 +6,12 @@ point this at the validation window -- that is the whole point of having
 one. A grid is ~6x longer than it used to be at the widened window; chunk
 per-strategy.
 
-Selection rule (spec section 9): among configs with WR>=80, ExpR>0, N>=30,
-pick max expectancy. If none qualify, the ranking output still shows the
-best candidates so the failure policy (gating directions/horizons) can be
-applied by hand in Task 19."""
+Selection rule (plan v8 V6 Step 3, superseding spec section 9): among configs
+with ExpR>0, N>=30 and dead<=50%, pick MAX WIN RATE -- win rate is the
+objective, not a threshold. The old `WR>=80` filter is void under a 2.5%
+target floor (V49). If none qualify, the ranking output still shows the best
+candidates so the failure policy (gating directions/horizons) can be applied
+by hand in Task 19."""
 import argparse
 import itertools
 import json
@@ -160,12 +162,19 @@ def main():
     finally:
         ef.DEFAULT_PARAMS[strategy] = baseline
 
+    # Plan v8 V6 Step 3 / V49: the `win_rate >= 80` filter that used to sit here
+    # is VOID -- incompatible with a 2.5% target floor, and V16 measured the
+    # frontier topping out at ~78%, so this grid would have qualified ZERO
+    # configs and silently fallen through to ranking the unfiltered rows.
+    # V6's rule: constrain on expectancy/sample/dead-share, then MAXIMISE WIN
+    # RATE. Trade volume is explicitly not an objective and must not tie-break.
     qualifying = [(p, s) for p, s in rows
-                  if s["n_eval"] >= 30 and (s["win_rate"] or 0) >= 80
+                  if s["n_eval"] >= 30
                   and (s["expectancy_r"] or 0) > 0 and s["excluded_share"] <= 0.5]
-    print(f"\n{len(qualifying)}/{len(rows)} configs qualify (WR>=80, ExpR>0, N>=30, excl<=50%)")
+    print(f"\n{len(qualifying)}/{len(rows)} configs qualify (ExpR>0, N>=30, dead<=50%; "
+          f"ranked by WR per V6 Step 3)")
     ranked = sorted(qualifying or rows,
-                    key=lambda r: (r[1]["expectancy_r"] or -9), reverse=True)
+                    key=lambda r: (r[1]["win_rate"] or -9), reverse=True)
     print("Top 5:")
     for p, s in ranked[:5]:
         print(f"  {p} -> N={s['n_eval']} WR={s['win_rate'] and round(s['win_rate'],1)} ExpR={s['expectancy_r'] and round(s['expectancy_r'],3)}")
