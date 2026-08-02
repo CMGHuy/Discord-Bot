@@ -10,7 +10,10 @@
     "expectancy_r": -0.0005390070921985789,
     "excluded_share": 0.22695035460992907,
     "avg_win_r": 0.5727112676056337,
-    "max_dd_pct": -15.090669541440699
+    "max_dd_pct": -15.090669541440699,
+    "n_distinct_signals": 195,
+    "horizon_overcount": 1.45,
+    "n_independent": 218
   },
   "VWAP": {
     "n_eval": 692,
@@ -23,7 +26,10 @@
     "expectancy_r": 0.02591080277502479,
     "excluded_share": 0.3141724479682854,
     "avg_win_r": 0.5963405172413793,
-    "max_dd_pct": -23.527769287565803
+    "max_dd_pct": -23.527769287565803,
+    "n_distinct_signals": 927,
+    "horizon_overcount": 1.09,
+    "n_independent": 692
   },
   "Fibonacci": {
     "n_eval": 1133,
@@ -36,7 +42,10 @@
     "expectancy_r": 0.044018256772673736,
     "excluded_share": 0.3327444051825677,
     "avg_win_r": 0.460876179245283,
-    "max_dd_pct": -20.385010203586212
+    "max_dd_pct": -20.385010203586212,
+    "n_distinct_signals": 1307,
+    "horizon_overcount": 1.3,
+    "n_independent": 1133
   },
   "Support/Resistance": {
     "n_eval": 1386,
@@ -49,7 +58,10 @@
     "expectancy_r": 0.00014811407543698215,
     "excluded_share": 0.3624655013799448,
     "avg_win_r": 0.3159471733086191,
-    "max_dd_pct": -39.886546636804965
+    "max_dd_pct": -39.886546636804965,
+    "n_distinct_signals": 1161,
+    "horizon_overcount": 1.87,
+    "n_independent": 740
   },
   "RSI": {
     "n_eval": 122,
@@ -62,7 +74,10 @@
     "expectancy_r": 0.18003086419753087,
     "excluded_share": 0.24691358024691357,
     "avg_win_r": 0.5675510204081632,
-    "max_dd_pct": -9.890121085013263
+    "max_dd_pct": -9.890121085013263,
+    "n_distinct_signals": 17,
+    "horizon_overcount": 9.53,
+    "n_independent": 13
   },
   "MACD": {
     "n_eval": 763,
@@ -75,7 +90,10 @@
     "expectancy_r": 0.007565374211000908,
     "excluded_share": 0.31199278629395855,
     "avg_win_r": 0.5253109404990404,
-    "max_dd_pct": -18.907339636070354
+    "max_dd_pct": -18.907339636070354,
+    "n_distinct_signals": 626,
+    "horizon_overcount": 1.77,
+    "n_independent": 431
   },
   "Elliott Wave": {
     "n_eval": 434,
@@ -88,7 +106,8 @@
     "expectancy_r": 0.006146031746031756,
     "excluded_share": 0.3111111111111111,
     "avg_win_r": 0.3203401759530792,
-    "max_dd_pct": -11.42161542038023
+    "max_dd_pct": -11.42161542038023,
+    "n_independent": 434
   },
   "MA Ribbon": {
     "n_eval": 1291,
@@ -101,7 +120,10 @@
     "expectancy_r": 0.03877199778638628,
     "excluded_share": 0.28555617044825676,
     "avg_win_r": 0.6236380510440835,
-    "max_dd_pct": -20.973309548349704
+    "max_dd_pct": -20.973309548349704,
+    "n_distinct_signals": 1105,
+    "horizon_overcount": 1.64,
+    "n_independent": 789
   },
   "Break & Retest": {
     "n_eval": 1581,
@@ -114,7 +136,10 @@
     "expectancy_r": 0.035695878524945775,
     "excluded_share": 0.3140997830802603,
     "avg_win_r": 0.6374842707340325,
-    "max_dd_pct": -35.968152843541496
+    "max_dd_pct": -35.968152843541496,
+    "n_distinct_signals": 1625,
+    "horizon_overcount": 1.42,
+    "n_independent": 1581
   },
   "RSI Divergence": {
     "n_eval": 6922,
@@ -127,7 +152,10 @@
     "expectancy_r": 0.01161941078144589,
     "excluded_share": 0.27684914333472627,
     "avg_win_r": 0.5468435826012427,
-    "max_dd_pct": -97.7252935684439
+    "max_dd_pct": -97.7252935684439,
+    "n_distinct_signals": 983,
+    "horizon_overcount": 9.74,
+    "n_independent": 711
   },
   "Volume Profile": {
     "n_eval": 409,
@@ -140,6 +168,7 @@
     "expectancy_r": 0.05673174872665533,
     "excluded_share": 0.30560271646859083,
     "avg_win_r": 0.5901013986013987,
-    "max_dd_pct": -12.696122536774663
+    "max_dd_pct": -12.696122536774663,
+    "n_independent": 409
   }
 }

@@ -75,9 +75,16 @@ reachability screen exists to bound exactly that trade.
   identical consecutive closes); `CRWV`, `HOOD`, `QBTS`, `SHOP`, `SOFI` (>40%
   bar with no volume spike — bad split adjustment).
 
-Per-strategy `excl%` runs 23–36%, i.e. **a third of setups are being dropped
-before evaluation**. That is high enough to shape every number below and is
-worth its own look during V21's survivorship audit.
+Note the report's `Excl%` column is **not** a ticker-exclusion rate, despite the
+name: `run_backtest_range.py:53` defines `excluded_share` as
+`(scratches + timeouts) / closed` — the share of *closed trades* that resolved
+as neither a win nor a loss. It is the same quantity as the last column of the
+table below, and it is the criterion V6's gate calls "scratches + timeouts
+<= 50% of closed". At 23–36% every strategy is comfortably inside that bar,
+and the level is expected under the floor: V10's own note predicts timeouts
+rise once small wins are unreachable by construction. The column name is
+misleading enough to have caused one misreading already while writing this
+file; renaming it is folded into V49.
 
 ## Headline
 
@@ -120,28 +127,41 @@ maximise WR), **10 of 11 pass and only EMA Crossover fails** — on expectancy,
 by 0.001R. Neither scoring is informative on its own; the gate needs
 reconciling in the script before V17 quotes it. Logged as **V49**.
 
-**2. Aggregate N double-counts horizon-invariant strategies.**
-Strategy-level N is the *sum* over ten horizons. For most strategies the
-entries genuinely differ per horizon, so that is legitimate. For two it is not.
-Verified directly (AAPL/MSFT/GM, 2m vs 9m entry-date sets):
+**2. Aggregate N double-counts signals reused across horizons.**
+Strategy-level N is the *sum* over ten horizons, which is honest only when the
+entries actually differ per horizon. **Five of eleven strategies reuse
+signals.** Measured over the full universe by V49's instrumentation, comparing
+distinct `(entry_date, entry, direction)` signatures against the summed count:
 
-- **RSI** and **RSI Divergence** produce **identical entry sets at every
-  horizon** — 100% overlap, zero unique. RSI Divergence on AAPL: the same 21
-  entry dates at 2m and 9m.
-- The other nine are horizon-specific (disjoint or near-disjoint entry sets).
+| Strategy | horizons | distinct signals | overcount | reported N → independent | Wilson LB reported → real |
+|---|---:|---:|---:|---|---|
+| RSI | 10 | 17 | **9.5×** | 122 → **~13** | 72.4% → **49.7%** |
+| RSI Divergence | 10 | 983 | **9.7×** | 6922 → ~711 | 66.3% → 63.8% |
+| Support/Resistance | 2 | 1161 | 1.9× | 1386 → ~740 | 75.6% → 74.7% |
+| MACD | 5 | 626 | 1.8× | 763 → ~431 | 64.9% → 63.7% |
+| MA Ribbon | 10 | 1105 | 1.6× | 1291 → ~789 | 64.2% → 63.4% |
 
-Consequence, and it inverts the run's only positive finding:
+Two distinct patterns, and they need reading differently. RSI and RSI
+Divergence are **near-total reuse** (~10×) — the horizon is essentially ignored,
+so the summed N is a tenfold overstatement. The other three are **partial**
+(1.6–1.9×) — entries genuinely differ per horizon but overlap substantially, so
+their bounds move only slightly and no conclusion changes.
 
-| | as reported | independent (1 horizon) |
-|---|---|---|
-| RSI | N=122, WR 80.3%, **Wilson LB 72.4%** | N=12, WR 83.3%, **Wilson LB 55.2%** |
-| RSI Divergence | N=6922, WR 67.4%, LB 66.3% | N=692, WR 68.5%, LB 64.9% |
+An earlier, narrower probe in this file's first draft (3 tickers, 2m vs 9m,
+exact set equality) found only the two ~10× cases and reported the other nine as
+horizon-specific. That was too strict on both axes: exact equality misses
+partial reuse, and it also **false-negatived RSI itself**, because a 9m hold
+resolves a few window-edge trades differently from a 2m one. The table above is
+the corrected, full-universe measurement.
+
+The consequence for the run's only positive finding is unchanged and decisive:
 
 **RSI's apparent win — the only strategy to clear even the stale gate — rests
-on ~12 independent trades counted ten times.** Its honest lower bound is 55.2%,
-not 72.4%. V6 Step 5 already pre-registered the standard that kills it: *"A
-high-WR config on N=12 is a hypothesis, not a finding"*, and proving WR > 90%
-needs N ≥ 59. RSI does not have the sample to support any claim here.
+on ~13 independent trades counted 9.5 times.** Its honest lower bound is
+**49.7%**, not 72.4% — i.e. the data cannot rule out a coin flip. V6 Step 5
+already pre-registered the standard that kills it: *"A high-WR config on N=12 is
+a hypothesis, not a finding"*, and proving WR > 90% needs N ≥ 59. RSI does not
+have the sample to support any claim here.
 
 ## Verdict against V6's pre-registered rule
 
@@ -149,11 +169,11 @@ The objective is *maximise win rate* with a **stretch of 90%** and V6 Step 4's
 honesty clause: if the frontier tops out below 90%, **record the achieved
 number and stop**.
 
-**The frontier tops out at ~78% headline WR (best Wilson LB 75.6%,
-Support/Resistance), on essentially zero expectancy (+0.000R).** Nothing in
-this universe approaches 90% at a 2.5% target floor over 24 years. Recording
-that and stopping, per Step 4 — no cohort re-cutting, no floor relaxation, no
-dropping losers from the denominator.
+**The frontier tops out at ~78% headline WR — best defensible lower bound
+74.7% (Support/Resistance, on ~740 independent trades) — at essentially zero
+expectancy (+0.000R).** Nothing in this universe approaches 90% at a 2.5%
+target floor over 24 years. Recording that and stopping, per Step 4 — no cohort
+re-cutting, no floor relaxation, no dropping losers from the denominator.
 
 The uncomfortable reading, stated plainly: **high win rate and positive
 expectancy are anti-correlated here.** The three highest-WR strategies
@@ -169,10 +189,12 @@ one to make inside V17.
 
 - **V17:** do not quote the script's PASS column until V49 lands. Grid on the
   V6 rule directly.
-- **V18:** fold N must be counted per horizon, not summed, or RSI/RSI Divergence
-  will clear `N >= 30/fold` on ~3 real setups.
+- **V18:** fold N must use `n_independent` from the JSON, not summed `n_eval`,
+  or RSI clears `N >= 30/fold` on ~3 real setups. Five strategies are affected,
+  two of them ~10×.
 - **V20:** cut regimes on the 2005/2010 cohort boundary (see coverage above),
   and pull `RSI Divergence`'s −97.7% drawdown apart by regime.
-- **V21:** the 23–36% exclusion share belongs in the survivorship audit.
+- **V21:** the 10 dropped tickers (2 illiquid, 8 bad-data) belong in the
+  survivorship audit — not the `Excl%` column, which measures something else.
 - **V22:** the permutation test is the right instrument for a +0.02R edge —
   that is exactly the magnitude that a null shuffle should be able to produce.
