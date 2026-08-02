@@ -394,6 +394,12 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
     # would ever be reached. The screen has its own tests
     # (tests/test_target_reachability.py); it is not what is under test here.
     monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
+    # PLAN_ENGINE_V2="shadow" above means no alert here is v2-priced, so all of
+    # them are the untiered legacy cohort V13's cut suppresses -- the loop this
+    # fixture exists to drive would never run a single iteration. The cut has
+    # its own tests (tests/test_legacy_alert_path.py); what's under test here is
+    # the intraday annotation inside the loop.
+    monkeypatch.setattr(config, "LEGACY_ALERT_PATH_ENABLED", True)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 

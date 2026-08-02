@@ -543,6 +543,23 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     horizon_key, exc_info=True)
 
 
+def _reachability_reason(scenario, level_map) -> str | None:
+    """The V11 screen's verdict reason for one scenario ("no_levels" /
+    "level_beyond_floor" / "wall"), or None when there is no level map to
+    judge against. Counted for every scenario regardless of pass/fail --
+    see the call site for why the reason breakdown, not failed_counts, is
+    what V12's log-only week reads."""
+    from swingbot.core.plan_engine import target_is_reachable
+
+    if not level_map:
+        return None
+    supports, resistances = level_map
+    _, reason = target_is_reachable([lv.price for lv in resistances],
+                                    [lv.price for lv in supports],
+                                    scenario.direction, scenario.entry)
+    return reason
+
+
 def _check_near_close(ticker: str, df) -> list:
     """
     For every open trade on this ticker, checks how close today's price is
@@ -737,7 +754,12 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "failed_counts": {
             "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
             "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
+            # V11 reachability screen. Stays 0 while TARGET_FLOOR_ENABLED is
+            # off (the check passes by construction then) -- V12's log-only
+            # week reads the reason counts below instead.
+            "target_reachable": 0,
         },
+        "reachability_reasons": {"no_levels": 0, "level_beyond_floor": 0, "wall": 0},
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
     }
@@ -969,12 +991,26 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # point never disappears here just because one number
             # falls short; it's tallied below and shown (marked) by
             # the caller instead of silently dropped.
-            requirements = _build_requirement_checks(scenario, target_confluence, conf, effective_min_confluence)
+            # level_map feeds the V11 reachability screen. Built here in the
+            # per-horizon loop -- NOT in commands/scanning.py::_send_alerts,
+            # which only posts already-built tuples and where wiring a screen
+            # is a documented silent no-op (known-traps.md).
+            requirements = _build_requirement_checks(
+                scenario, target_confluence, conf, effective_min_confluence,
+                level_map=(supports, resistances))
             all_ok = True
             for r in requirements:
                 if not r.passed:
                     stats["failed_counts"][r.key] += 1
                     all_ok = False
+            # V12 survival measurement: the reachability VERDICT is counted
+            # for every scenario, pass or fail, because during the log-only
+            # week (TARGET_FLOOR_ENABLED off) the check always passes and
+            # failed_counts would read zero -- the reason breakdown is the
+            # only place the screen's real effect is visible.
+            reach_reason = _reachability_reason(scenario, (supports, resistances))
+            if reach_reason is not None:
+                stats["reachability_reasons"][reach_reason] += 1
             if all_ok:
                 stats["fully_qualifying"] += 1
 
@@ -1124,7 +1160,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
         "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
+        "target_reachable": 0,
     }
+    reachability_reasons = {"no_levels": 0, "level_beyond_floor": 0, "wall": 0}
     conf_level_counts: dict = {}   # {1..5: number of scenarios scored at that level}
     filtered_by_confirmation = 0
 
@@ -1180,6 +1218,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             data_quality_failed_count += 1
         for key, count in per_ticker["failed_counts"].items():
             failed_counts[key] += count
+        for key, count in per_ticker.get("reachability_reasons", {}).items():
+            reachability_reasons[key] += count
         for level, count in per_ticker["conf_level_counts"].items():
             conf_level_counts[level] = conf_level_counts.get(level, 0) + count
 
@@ -1266,13 +1306,18 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.info("Analyze: stop requested -- scan ended early (%d ticker/horizon combo(s) "
                       "checked, %d scenario(s) found before the stop)", checked_count, len(scan_items))
 
+    # V11's reachability reject belongs in this line too: without it a scan
+    # can log "0 fully qualifying" with every listed reason at zero, which
+    # reads like a bug in the funnel rather than a screen doing its job.
     log.info(
         "Signal funnel: %d ticker/horizon combo(s) checked -> %d had no qualifying entry point (no real "
         "support/resistance, or didn't meet min reward/stop/risk-reward requirements) -> %d scenario(s) found, "
-        "%d fully qualifying (min strategies confirmed failed %d, min confidence failed %d) -> "
+        "%d fully qualifying (min strategies confirmed failed %d, min confidence failed %d, "
+        "target unreachable %d of %d walled) -> "
         "%d still awaiting confirmation (automatic scan only) -> %d shown/posted",
         checked_count, no_entry_point, scenarios_found_count, fully_qualifying_count,
         failed_counts["min_confluence"], failed_counts["min_confidence"],
+        failed_counts["target_reachable"], reachability_reasons["wall"],
         filtered_by_confirmation, len(scan_items),
     )
 
@@ -1296,6 +1341,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_risk_reward": failed_counts["min_risk_reward"],
             "failed_min_confluence": failed_counts["min_confluence"],
             "failed_min_confidence": failed_counts["min_confidence"],
+            "failed_target_reachable": failed_counts["target_reachable"],
+            "reachability_reasons": reachability_reasons,
             "awaiting_confirmation": filtered_by_confirmation,
             "shown": len(deduped),
             "min_confidence_level": config.MIN_ALERT_CONFIDENCE_LEVEL,
@@ -1316,6 +1363,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
     alerts = []
     skipped_already_open = 0
+    skipped_legacy_path = 0
+    # The one dangerous pairing of V13's cut, said out loud once per scan
+    # rather than discovered as a silent week of no alerts: outside
+    # PLAN_ENGINE_V2="on" every alert is a legacy untiered one, so the cut
+    # suppresses all of them, not just a cohort.
+    if config.PLAN_ENGINE_V2 != "on" and not config.LEGACY_ALERT_PATH_ENABLED:
+        log.warning(
+            "PLAN_ENGINE_V2=%s with LEGACY_ALERT_PATH_ENABLED=false: every alert this scan would be "
+            "an untiered legacy one, so NO alerts will be posted. Set PLAN_ENGINE_V2=on (intended) "
+            "or LEGACY_ALERT_PATH_ENABLED=true (restores the -103%% cohort) to change that.",
+            config.PLAN_ENGINE_V2)
     log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
               len(tickers), len(scan_items), len(deduped))
     for item in deduped:
@@ -1372,6 +1430,25 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # for every non-qualifying scenario too.
             log.debug("%s (%s, %s): found but doesn't meet every requirement -- not posted (see funnel summary for counts)",
                        result.ticker, result.horizon_key, result.trend)
+            continue
+
+        # V13: the legacy, untiered alert path. "Legacy" is defined here
+        # EXACTLY as the trade-log row below defines it (PLAN_ENGINE_V2 == "on"
+        # AND a v2 plan actually built) -- that same expression is what decides
+        # whether the logged trade carries source/tier/badge or three Nones, so
+        # gating on it is gating on precisely the source=None cohort V13 names
+        # (n=154, WR 26.0%, -103.0%) and nothing else. A v2 confluence plan
+        # carries source="confluence" and is never caught here.
+        #
+        # This is the one place both scan modes converge before posting: the
+        # automatic scan and `!check` both reach it, so the cut applies to both.
+        v2_priced = config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
+        if not v2_priced and not config.LEGACY_ALERT_PATH_ENABLED:
+            skipped_legacy_path += 1
+            log.info(
+                "%s (%s, %s): suppressed -- no live v2 plan, so this would post and log as an "
+                "untiered source=None trade (LEGACY_ALERT_PATH_ENABLED=false)",
+                result.ticker, result.horizon_key, result.trend)
             continue
 
         df = get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
@@ -1649,7 +1726,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if progress is not None:
             progress.alerts_done += 1
 
-    log.info("Scan pass complete: %d alert(s) built, %d skipped (already open)", len(alerts), skipped_already_open)
+    log.info("Scan pass complete: %d alert(s) built, %d skipped (already open), "
+              "%d suppressed (legacy untiered path)",
+              len(alerts), skipped_already_open, skipped_legacy_path)
 
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2
@@ -1663,6 +1742,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if progress is not None and progress.funnel is not None:
         progress.funnel["deduped"] = len(deduped)
         progress.funnel["skipped_already_open"] = skipped_already_open
+        progress.funnel["skipped_legacy_path"] = skipped_legacy_path
 
     # Scan health telemetry (Task E82): logged unconditionally, wrapped so a
     # telemetry failure (disk full, bad path, whatever) never takes down the
@@ -1680,6 +1760,23 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "alerts": len(alerts),
             "open_heat": heat_mod.open_heat(TradeLog().get_trades(status="open", limit=None),
                                             account_cfg.get("balance", 0.0)),
+            # V12: floor + reachability survival, one row per scan.
+            # `reachability_wall` is the measurement that matters during the
+            # log-only week -- with TARGET_FLOOR_ENABLED off nothing is
+            # rejected, so `rejected_unreachable` reads 0 while `wall` still
+            # counts every setup the screen WOULD have removed.
+            "target_floor_pct": config.MIN_TARGET_PCT,
+            "target_floor_enforced": bool(config.TARGET_FLOOR_ENABLED),
+            # V13: how much of the -103% untiered cohort this scan refused to
+            # post. Read alongside `alerts` -- a scan where the two are close
+            # means the v2 plan build, not the cut, is what's starving the
+            # channel, which is a different bug with a different fix.
+            "legacy_path_enabled": bool(config.LEGACY_ALERT_PATH_ENABLED),
+            "suppressed_legacy": skipped_legacy_path,
+            "rejected_unreachable": failed_counts["target_reachable"],
+            "reachability_wall": reachability_reasons["wall"],
+            "reachability_clear": reachability_reasons["level_beyond_floor"],
+            "reachability_no_levels": reachability_reasons["no_levels"],
         }
         log_scan_telemetry(scan_stats)
         if scan_slowdown():

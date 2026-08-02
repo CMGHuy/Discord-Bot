@@ -442,13 +442,14 @@ to every command that fetches data or renders a chart: `!check`,
 Every trade plan the bot emits can be produced by one shared engine
 (`swingbot/core/plan_engine.py`) whose exit behavior was backtested under a
 train/validation split — so live behavior equals backtested behavior by
-construction. Rollout is gated by two flags (both in `.env` / the admin
+construction. Rollout is gated by these flags (all in `.env` / the admin
 UI's "Plan Engine v2" section, hot-reloadable):
 
 | Flag | Values | Meaning |
 |---|---|---|
 | `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
 | `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
+| `LEGACY_ALERT_PATH_ENABLED` | `true`/`false` (default `false`) | Whether an alert with no live v2 plan (no `source`/`tier`/`badge`) may still be posted and logged as a paper trade. Off since plan v8 Task V13 — that untiered cohort ran 154 live trades at 26.0% WR for **−103.0%**, ~72% of all recorded damage. **Interaction:** with `PLAN_ENGINE_V2` at `off`/`shadow` every alert is a legacy one, so leaving this `false` suppresses alerts entirely; the scan logs a warning per pass when that pairing is set. |
 
 Scale-out itself (at TP1, close 50% and move the stop to break-even; the
 runner rides toward TP2 with a chandelier ATR trail) is **hardcoded on** in

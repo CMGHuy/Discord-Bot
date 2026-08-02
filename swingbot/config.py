@@ -395,6 +395,16 @@ FIELDS: list[Field] = [
           help="Off = MIN_TARGET_PCT is computed and logged but NOT applied, so a week of scans can "
                "measure how many setups would survive the floor before it starts changing live "
                "targets. On = the floor is enforced on every emitted plan."),
+    Field("LEGACY_ALERT_PATH_ENABLED", "LEGACY_ALERT_PATH_ENABLED", "Plan Engine v2",
+          "Legacy (untiered) alert path enabled",
+          type="checkbox", default="false",
+          help="Off (default) = a scenario is only posted and logged as a paper trade when it carries "
+               "a live v2 plan (source/tier/badge set). This is the plan-v8 V13 cut: the untiered "
+               "source=None cohort ran 154 trades at 26.0% WR for -103.0%, about 72% of all live "
+               "damage, and nothing distinguishes it in the channel from a graded alert. On = restore "
+               "the old behavior and post those too. NOTE: with PLAN_ENGINE_V2 set to 'off' or "
+               "'shadow', EVERY alert is a legacy one, so leaving this off silences alerts entirely "
+               "in those modes -- that pairing is logged as a warning on every scan, not silently."),
 
     # --- Data sources (optional external market-data APIs) ---
     Field("FMP_API_KEY", "FMP_API_KEY", "Data Sources", "Financial Modeling Prep API key",
