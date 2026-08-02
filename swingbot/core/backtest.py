@@ -227,6 +227,54 @@ def _gate_blocked(gate_min_tier: str, gate_tier: str | None, fired_hard_block: b
     return TIER_ORDER.index(gate_tier) > TIER_ORDER.index(gate_min_tier)
 
 
+# ---------------------------------------------------------------------------
+# Opt-in level-map memo (plan v8 V17) -- OFF by default, tuning harnesses only
+# ---------------------------------------------------------------------------
+# Measured 2026-08-02 by cProfile: an exit-v2 `tp2_mode="levels"` backtest
+# spends ~98% of its runtime inside `build_level_map` -> `trendline_levels` ->
+# `_find_best_trendline`, which is O(pivots^3) over the FULL df history. A
+# single config over the 78-ticker universe costs ~7 min in v2 against ~14 s
+# in v1, and *all* of that difference is the level map.
+#
+# The level map's inputs are (df-up-to-i, horizon, entry price). None of them
+# is a sizing parameter, so a V17-style grid over MIN_TARGET_PCT / rr /
+# atr_stop_multiple recomputes a bit-identical map once per config -- which is
+# what made the pre-registered grid a ~30-hour job instead of a ~30-minute one.
+#
+# The memo key is the EXACT input tuple, so a hit returns what the call would
+# have computed; it cannot change any result. It is off unless a caller opts
+# in, so the live bot's memory profile is untouched. Harnesses are expected to
+# `clear_level_map_memo()` between (ticker, horizon) groups -- the entries for
+# one group are what the next config re-reads, and nothing beyond that group
+# is ever hit again.
+_LEVEL_MAP_MEMO: dict | None = None
+
+
+def enable_level_map_memo() -> None:
+    """Start memoizing `build_level_map` results (tuning harnesses only)."""
+    global _LEVEL_MAP_MEMO
+    if _LEVEL_MAP_MEMO is None:
+        _LEVEL_MAP_MEMO = {}
+
+
+def clear_level_map_memo() -> None:
+    """Drop everything memoized so far, leaving the memo enabled."""
+    if _LEVEL_MAP_MEMO is not None:
+        _LEVEL_MAP_MEMO.clear()
+
+
+def disable_level_map_memo() -> None:
+    """Turn the memo off and release it. Safe to call when already off."""
+    global _LEVEL_MAP_MEMO
+    _LEVEL_MAP_MEMO = None
+
+
+def level_map_memo_stats() -> dict:
+    """`{enabled, size}` -- so a harness can report the hit it is relying on."""
+    return {"enabled": _LEVEL_MAP_MEMO is not None,
+            "size": len(_LEVEL_MAP_MEMO) if _LEVEL_MAP_MEMO is not None else 0}
+
+
 def run_backtest(
     ticker: str,
     df: pd.DataFrame,
@@ -355,8 +403,18 @@ def run_backtest(
                 cache_key = i // 5
                 if cache_key != _lm_cache_key:
                     from .levels import build_level_map
-                    _lm_supports, _lm_resistances = build_level_map(
-                        df.iloc[:i + 1], HORIZONS[horizon_key], entry)
+                    # The within-run bucket cache above is unchanged; the memo
+                    # (off by default -- see enable_level_map_memo) only avoids
+                    # recomputing the *same* call in a later grid config.
+                    memo_key = (ticker, horizon_key, int(i), float(entry))
+                    memoed = (_LEVEL_MAP_MEMO or {}).get(memo_key)
+                    if memoed is not None:
+                        _lm_supports, _lm_resistances = memoed
+                    else:
+                        _lm_supports, _lm_resistances = build_level_map(
+                            df.iloc[:i + 1], HORIZONS[horizon_key], entry)
+                        if _LEVEL_MAP_MEMO is not None:
+                            _LEVEL_MAP_MEMO[memo_key] = (_lm_supports, _lm_resistances)
                     _lm_cache_key = cache_key
                 tp2 = select_tp2(
                     [lv.price for lv in _lm_resistances],
