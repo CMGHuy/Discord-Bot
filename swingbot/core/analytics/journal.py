@@ -279,6 +279,73 @@ def log_orphan_check(trade_ids) -> int:
     return len(orphans)
 
 
+def _covers(df, trade: dict) -> bool:
+    """Does `df` span this trade's whole open window? A cache that stops
+    before the close date would slice to a shorter window and hand back an
+    MFE that silently understates the real excursion -- worse than no
+    number, because nothing downstream can tell it apart from a real one."""
+    if df is None or len(df) == 0:
+        return False
+    opened = _parse_iso(trade.get("opened_at"))
+    closed = _parse_iso(trade.get("closed_at"))
+    if opened is None or closed is None:
+        return False
+    try:
+        first, last = df.index[0], df.index[-1]
+        first = first.to_pydatetime() if hasattr(first, "to_pydatetime") else first
+        last = last.to_pydatetime() if hasattr(last, "to_pydatetime") else last
+        first = first.replace(tzinfo=None)
+        last = last.replace(tzinfo=None)
+    except Exception:  # noqa: BLE001
+        return False
+    return first <= opened.replace(tzinfo=None) and last >= closed.replace(tzinfo=None)
+
+
+def _parse_iso(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def bars_for_journal(trade: dict):
+    """Bars for one closed trade's MFE/MAE, cache FIRST (plan v8 Task V44).
+
+    `journal_trade_close` used to call `data.get_daily_data()` directly: a
+    live, unguarded `yf.download()` running inline in the trade-close hot
+    path, every time a trade closed. That is a third data-fetch mechanism
+    beyond the two in `docs/claude/known-traps.md`, and it is what exposed
+    the journal to both of V3's corruption modes -- a network hiccup
+    silently degrades the entry to no-MFE, and a bad Yahoo snapshot silently
+    writes a wild number (live example: mfe_r = -1845.95).
+
+    `data/backtest_cache/` is populated for every watchlist ticker (V1), is
+    local, and cannot glitch mid-close. It is used whenever it actually
+    covers the trade's window; the live fetch remains only as the fallback
+    for a ticker that isn't cached or whose cache stops short of the close
+    date. Scoped deliberately to the journal write path -- live scanning,
+    plan_manager and the admin UI all legitimately need fresh data.
+    """
+    ticker = trade.get("ticker")
+    try:
+        from swingbot.core.backtest_cache import load_cached
+        cached = load_cached(ticker)
+        if _covers(cached, trade):
+            return cached
+    except Exception:  # noqa: BLE001
+        log.warning("journal: backtest-cache read failed for %s -- falling back to live",
+                    ticker, exc_info=True)
+    try:
+        from swingbot.core.data import get_daily_data
+        return get_daily_data(ticker)
+    except Exception:
+        log.warning("journal: bars fetch failed for %s -- journaling without MFE/MAE",
+                    ticker, exc_info=True)
+        return None
+
+
 def journal_trade_close(trade: dict) -> None:
     """Called once per newly-closed trade from every TradeLog close path.
     Never raises: a bars fetch failure or any other exception here must
@@ -286,13 +353,7 @@ def journal_trade_close(trade: dict) -> None:
     bookkeeping layered on top of a close that has already happened and
     already been persisted by the time this runs.
     """
-    df = None
-    try:
-        from swingbot.core.data import get_daily_data
-        df = get_daily_data(trade["ticker"])
-    except Exception:
-        log.warning("journal_trade_close: bars fetch failed for %s -- journaling without MFE/MAE",
-                    trade.get("ticker"), exc_info=True)
+    df = bars_for_journal(trade)
 
     try:
         entry = build_entry(trade, df)

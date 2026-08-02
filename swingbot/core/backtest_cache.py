@@ -62,6 +62,28 @@ def normalize_ohlcv(df: pd.DataFrame | None) -> pd.DataFrame | None:
     return df
 
 
+def load_cached(ticker: str) -> pd.DataFrame | None:
+    """This ticker's cached daily bars, or None if not cached / unreadable.
+
+    Never raises and never fetches: a caller asking "what do we already have
+    on disk" must be able to distinguish "nothing" from "the network is
+    down", and must not pay a live download by accident. Lives here rather
+    than in the bulk populator script because this module owns the cache's
+    location and CSV shape (plan v8 Task V44 — `swingbot/` must not import
+    from `scripts/`).
+    """
+    p = cache_path(ticker)
+    if not p.exists():
+        return None
+    try:
+        df = pd.read_csv(p, index_col="Date", parse_dates=True)
+    except Exception:  # noqa: BLE001 -- a corrupt CSV is a cache miss, not a crash
+        log.warning("backtest cache unreadable for %s -- treating as uncached",
+                    ticker, exc_info=True)
+        return None
+    return df if len(df) else None
+
+
 def fetch(ticker: str) -> pd.DataFrame | None:
     """Full available daily history (IPO -> now), split/dividend adjusted,
     normalized to the cache's canonical shape. Returns None on empty."""

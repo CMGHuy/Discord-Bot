@@ -10,8 +10,20 @@ fetching `df` (see Task A22's journal_trade_close)."""
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 from swingbot.core.analytics.metrics import r_multiple
+
+log = logging.getLogger("swing-bot.mfe_mae")
+
+# Plan v8 Task V44 Step 2. Above this, the BARS are wrong, not the trade: a
+# real swing setup does not run 50x its own risk inside its holding window.
+# The live journal contained mfe_r = -1845.95 from a bad Yahoo snapshot, and
+# because it was written as a plain number nothing downstream could tell it
+# from a real one -- it just moved every average that touched it. Generous on
+# purpose: this is a corruption tripwire, not a plausibility filter, and a
+# genuine 20R outlier must still be recorded.
+MAX_PLAUSIBLE_R = 50.0
 
 
 def _parse_dt(iso_str) -> dt.datetime | None:
@@ -82,6 +94,17 @@ def compute_mfe_mae(trade: dict, df) -> dict | None:
     else:
         mfe_r = max(0.0, (entry - float(sliced["Low"].min())) / risk)
         mae_r = max(0.0, (float(sliced["High"].max()) - entry) / risk)
+
+    # Corruption tripwire (V44 Step 2): degrade to "no reading" rather than
+    # write a number no downstream consumer can question. Checked before
+    # exit_efficiency is derived, since that divides by mfe_r and would
+    # inherit the same bad bars.
+    if max(abs(mfe_r), abs(mae_r)) > MAX_PLAUSIBLE_R:
+        log.warning(
+            "mfe/mae for %s implies %.1fR against a %.4f risk -- the bars are "
+            "almost certainly wrong; journaling without MFE/MAE rather than "
+            "recording it", trade.get("ticker"), max(abs(mfe_r), abs(mae_r)), risk)
+        return None
 
     r_real = r_multiple(trade)
     exit_efficiency = None
