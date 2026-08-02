@@ -448,6 +448,115 @@ def test_archive_grows_past_provider_window(tmp_path, monkeypatch):
     assert str(kept.index.min())[:10] == "2026-01-01"
 
 
+# --- save_to_disk shrink guard (v8 V43 Step 3) -------------------------------
+
+def test_save_to_disk_refuses_to_shrink_an_existing_cache(tmp_path):
+    """The last line of defence for the whole class of bug: any write that
+    would leave fewer bars than are already on disk is refused outright."""
+    import numpy as np
+    import pytest
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import (CacheShrinkError, load_from_disk,
+                                          save_to_disk)
+
+    deep = make_ohlcv(np.full(60, 100.0), start="2026-01-01")
+    save_to_disk(deep, "TEST", "hourly", base_dir=str(tmp_path))
+
+    with pytest.raises(CacheShrinkError) as exc:
+        save_to_disk(deep.iloc[-20:], "TEST", "hourly", base_dir=str(tmp_path))
+    assert "60" in str(exc.value) and "20" in str(exc.value)
+
+    kept = load_from_disk("TEST", "hourly", base_dir=str(tmp_path))
+    assert len(kept) == 60, "the refused write must leave the file untouched"
+
+
+def test_save_to_disk_allows_same_or_more_bars_and_cold_writes(tmp_path):
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import load_from_disk, save_to_disk
+
+    frame = make_ohlcv(np.full(30, 100.0), start="2026-01-01")
+    save_to_disk(frame, "TEST", "hourly", base_dir=str(tmp_path))   # cold: no file yet
+    save_to_disk(frame, "TEST", "hourly", base_dir=str(tmp_path))   # equal: allowed
+    save_to_disk(make_ohlcv(np.full(45, 100.0), start="2026-01-01"),
+                 "TEST", "hourly", base_dir=str(tmp_path))          # deeper: allowed
+    assert len(load_from_disk("TEST", "hourly", base_dir=str(tmp_path))) == 45
+
+
+def test_save_to_disk_shrinks_when_explicitly_allowed(tmp_path):
+    """A deliberate repair must still be possible -- the guard is a tripwire,
+    not a lock."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import load_from_disk, save_to_disk
+
+    deep = make_ohlcv(np.full(60, 100.0), start="2026-01-01")
+    save_to_disk(deep, "TEST", "hourly", base_dir=str(tmp_path))
+    save_to_disk(deep.iloc[-20:], "TEST", "hourly", base_dir=str(tmp_path),
+                 allow_shrink=True)
+    assert len(load_from_disk("TEST", "hourly", base_dir=str(tmp_path))) == 20
+
+
+def test_download_and_cache_cannot_truncate_an_hourly_archive(tmp_path, monkeypatch):
+    """The exact scenario V43 measured: the cache reaches back further than
+    Yahoo will now serve, and a naive re-download would delete the difference."""
+    import numpy as np
+    import pytest
+    from tests.conftest import make_ohlcv
+    from swingbot.core import data_store
+    from swingbot.core.data_store import (CacheShrinkError, download_and_cache,
+                                          load_from_disk, save_to_disk)
+
+    archived = make_ohlcv(np.full(60, 100.0), start="2026-01-01")
+    save_to_disk(archived, "TEST", "hourly", base_dir=str(tmp_path))
+    monkeypatch.setattr(data_store, "fetch_interval_data",
+                        lambda t, tf: archived.iloc[-20:])   # Yahoo's window slid on
+
+    with pytest.raises(CacheShrinkError):
+        download_and_cache("TEST", "hourly", base_dir=str(tmp_path))
+    assert len(load_from_disk("TEST", "hourly", base_dir=str(tmp_path))) == 60
+
+
+def test_get_intraday_merges_rather_than_overwriting(tmp_path):
+    """get_intraday refetches period="700d" whenever the cache goes stale. On
+    an archive deeper than 700d that write used to be a silent truncation."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import cache_path, get_intraday, load_from_disk
+
+    archived = make_ohlcv(np.full(60, 100.0), start="2026-01-01")
+    save_path = cache_path("TEST", "1h", base_dir=str(tmp_path))
+    archived.to_csv(save_path)
+    _age_cache(save_path, 5)        # older than INTRADAY_MAX_AGE_SECONDS (4h)
+
+    shallow = archived.iloc[-20:]
+    got = get_intraday("TEST", base_dir=str(tmp_path),
+                       fetch_fn=lambda s, iv: shallow)
+
+    assert len(got) == 60, "returned frame lost the archived bars"
+    assert len(load_from_disk("TEST", "1h", base_dir=str(tmp_path))) == 60
+    assert got.index.min() == archived.index.min()
+
+
+def test_get_intraday_keeps_cache_when_the_merge_cannot_be_done(tmp_path):
+    """A tz-mismatched response must not be able to take the cache with it."""
+    import numpy as np
+    from tests.conftest import make_ohlcv
+    from swingbot.core.data_store import cache_path, get_intraday, load_from_disk
+
+    archived = make_ohlcv(np.full(60, 100.0), start="2026-01-01")
+    path = cache_path("TEST", "1h", base_dir=str(tmp_path))
+    archived.to_csv(path)
+    _age_cache(path, 5)
+
+    tz_aware = archived.iloc[-20:].copy()
+    tz_aware.index = tz_aware.index.tz_localize("UTC")
+    got = get_intraday("TEST", base_dir=str(tmp_path), fetch_fn=lambda s, iv: tz_aware)
+
+    assert len(load_from_disk("TEST", "1h", base_dir=str(tmp_path))) == 60
+    assert got is not None and len(got) == 60
+
+
 def test_transient_failure_is_retried_then_succeeds(tmp_path, monkeypatch):
     import numpy as np
     from tests.conftest import make_ohlcv

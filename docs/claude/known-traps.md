@@ -46,6 +46,14 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   with a guard that refuses to shrink row count.** Daily/weekly/monthly are
   not at risk — full history is always re-servable, so an overwrite there
   loses nothing.
+  **Enforced since v8 V43:** `save_to_disk` raises `CacheShrinkError` when a
+  write would leave fewer bars than are already on disk, so the rule fails
+  loudly instead of relying on being remembered; a caller that genuinely means
+  to discard history passes `allow_shrink=True`. Two paths were writing
+  shallower frames straight over the hourly archive and now merge instead —
+  `get_intraday` (refetches `period="700d"` whenever the cache passes 4h) and
+  `fetch_intraday_cache.py --force`. `data_refresh` was always safe
+  (`_merge_save` unions), and so is `update_cache`.
 - **Legacy shims that are not the real module.** `core/scan_engine.py` and
   `core/scan_embeds.py` are `import *` shims over `core/scanning/engine.py`
   and `core/scanning/embeds.py`. `core/trade_plan.py` is a deprecated adapter

@@ -191,8 +191,47 @@ def cache_path(ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
     return os.path.join(d, f"{safe_symbol(ticker)}.csv")
 
 
-def save_to_disk(df: pd.DataFrame, ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
+class CacheShrinkError(RuntimeError):
+    """A write would have replaced a cache file with fewer bars than it holds.
+
+    Raised rather than logged: for hourly and finer, the bars being dropped are
+    past Yahoo's rolling window and can never be re-fetched, so a silent skip
+    would hide a permanent loss just as effectively as the overwrite would.
+    """
+
+
+def _cached_row_count(path: str) -> int:
+    """Bars currently on disk, without parsing. One header + one line per bar
+    (OHLCV values never contain embedded newlines), so a line count is exact
+    and costs nothing next to a pandas read of a 13k-row file."""
+    try:
+        with open(path, "rb") as fh:
+            lines = sum(1 for _ in fh)
+    except OSError:
+        return 0
+    return max(0, lines - 1)
+
+
+def save_to_disk(df: pd.DataFrame, ticker: str, interval: str, base_dir: str = DATA_DIR,
+                 allow_shrink: bool = False) -> str:
+    """Write `df` as this ticker/timeframe's cache, REPLACING what is there.
+
+    Refuses by default to write fewer bars than the file already holds -- see
+    `CacheShrinkError`. Pass `allow_shrink=True` only when the caller genuinely
+    means to discard history (a repair rewriting a corrupt file, a test). To
+    add bars, prefer `update_cache()`, which merges.
+    """
     path = cache_path(ticker, interval, base_dir)
+    if not allow_shrink and os.path.exists(path):
+        existing_rows = _cached_row_count(path)
+        if len(df) < existing_rows:
+            raise CacheShrinkError(
+                f"refusing to shrink {path}: {existing_rows} bars on disk, "
+                f"{len(df)} in the write. Yahoo ages intraday bars out of its "
+                f"window, so the difference may be unrecoverable. Use "
+                f"update_cache() to merge, or pass allow_shrink=True if the "
+                f"loss is intended."
+            )
     df.to_csv(path)
     return path
 
@@ -219,6 +258,15 @@ def download_and_cache(ticker: str, interval: str = "daily", base_dir: str = DAT
         "path": path,
         "max_days_available": cfg["max_days"],  # None means full history
     }
+
+
+def _union_bars(existing: pd.DataFrame, fresh: pd.DataFrame) -> pd.DataFrame:
+    """Union of existing and fresh, fresh winning on overlapping timestamps.
+    Taking the union
+    (not the replacement) is what lets the archive stay deeper than the window
+    the provider is currently willing to serve."""
+    merged = pd.concat([existing, fresh])
+    return merged[~merged.index.duplicated(keep="last")].sort_index()
 
 
 def _default_ranged_fetch(symbol: str, start, interval: str = "1d") -> "pd.DataFrame | None":
@@ -272,8 +320,7 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
         if fresh is None or fresh.empty:
             result[symbol] = 0
             continue
-        merged = pd.concat([existing, fresh])
-        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        merged = _union_bars(existing, fresh)
         path = cache_path(symbol, interval, base_dir=base_dir)
         tmp = path + ".tmp"
         merged.to_csv(tmp)
@@ -307,5 +354,20 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
         df = None
     if df is None or df.empty:
         return load_from_disk(symbol, interval, base_dir=base_dir)  # stale > nothing
+
+    # Merge, never replace. The default fetch asks for period="700d", but the
+    # on-disk hourly cache has accumulated well past Yahoo's rolling ~730-day
+    # window by being topped up incrementally for months -- so writing this
+    # response straight over the file would silently delete bars Yahoo has
+    # already aged out and will never serve again (v8 Task V43).
+    existing = load_from_disk(symbol, interval, base_dir=base_dir)
+    if existing is not None and not existing.empty:
+        try:
+            df = _union_bars(existing, df)
+        except (TypeError, ValueError) as exc:
+            # Mismatched index dtypes (tz-aware CSV vs naive response, say).
+            # The cache is the irreplaceable copy: keep it, skip the write.
+            log.warning("intraday merge %s failed, keeping cache as-is: %s", symbol, exc)
+            return existing
     save_to_disk(df, symbol, interval, base_dir=base_dir)
     return df

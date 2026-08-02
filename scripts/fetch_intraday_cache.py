@@ -25,7 +25,8 @@ from its IPO/listing date; one that starts AT the floor is truncated by Yahoo.
 
     python scripts/fetch_intraday_cache.py                    # watchlist, hourly
     python scripts/fetch_intraday_cache.py --interval 30min   # 30min (60-day cap)
-    python scripts/fetch_intraday_cache.py --force            # ignore existing cache
+    python scripts/fetch_intraday_cache.py --force            # refetch even if cached
+                                                              # (merges; never discards)
 """
 import argparse
 import datetime as dt
@@ -47,6 +48,7 @@ from swingbot.core.data_store import (
     DATA_DIR,
     TIMEFRAMES,
     _normalize_columns,
+    _union_bars,
     cache_path,
     load_from_disk,
     save_to_disk,
@@ -197,9 +199,20 @@ def main() -> int:
             time.sleep(args.sleep)
             continue
 
-        save_to_disk(df, ticker, interval, base_dir=args.base_dir)
+        # --force means "refetch", never "discard". Yahoo's intraday window
+        # slides forward, so a full-depth response is routinely SHALLOWER than
+        # a cache that has been topped up incrementally for months; writing it
+        # straight over the file would destroy bars nothing can re-serve
+        # (v8 Task V43). Union with what is there and keep the deeper archive.
+        merged, note = df, "truncated by Yahoo cap"
+        prior = load_from_disk(ticker, interval, base_dir=args.base_dir)
+        if prior is not None and not prior.empty:
+            merged = _union_bars(prior, df)
+            if len(merged) > len(df):
+                note = f"merged (+{len(merged) - len(df)} archived bars kept)"
+        save_to_disk(merged, ticker, interval, base_dir=args.base_dir)
         ok.append(ticker)
-        report(ticker, df, "truncated by Yahoo cap"
+        report(ticker, merged, note
                + (f" [resolved {info}]" if info != ticker else ""))
         time.sleep(args.sleep)
 
