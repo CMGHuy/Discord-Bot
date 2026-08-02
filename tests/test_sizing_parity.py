@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from swingbot import config
 from swingbot.core import backtest
 from swingbot.core.backtest import ALL_STRATEGIES
 from swingbot.core.indicators import atr, elliott_wave3_entries
@@ -70,6 +71,24 @@ def _precomputed_series(df, strategy, horizon_key):
         threshold_pct = HORIZONS[horizon_key]["max_risk_pct"]
         _, _, entry_levels = elliott_wave3_entries(df, threshold_pct)
     return atr_series, swing_high_series, swing_low_series, volume_ratio_series, entry_levels
+
+
+@pytest.fixture(autouse=True)
+def _floor_off(monkeypatch):
+    """Pin `TARGET_FLOOR_ENABLED` off for the whole harness.
+
+    This test proves the plan_engine *extraction* still reproduces the frozen
+    pre-extraction implementation. v8 Task V10's target floor is a deliberate
+    change to TP1 that the frozen copy predates, so with the floor on every
+    bar where it binds reports a "parity" failure that is really the floor
+    doing its job -- measuring V10 instead of the extraction. The floor has
+    its own coverage in tests/test_target_floor.py; this is the same triage
+    V10 applied to the four other tests that pin pre-floor geometry.
+
+    It went unnoticed until 2026-08-02 because the whole module skips without
+    `data/backtest_cache/`, which was absent from the box when V10 landed.
+    """
+    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
 
 
 @pytest.mark.parametrize("horizon_key", HORIZON_KEYS)

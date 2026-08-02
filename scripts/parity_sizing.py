@@ -29,6 +29,13 @@ observed today. If a mismatch ever traces back to this specific RR_FLOOR clamp,
 that divergence is EXPECTED — the frozen module represents pre-clamp legacy
 behavior and must remain unchanged. Do not edit legacy_trade_plan_at or loosen
 TOLERANCE because of RR_FLOOR differences.
+
+SECOND KNOWN EXCEPTION (plan v8 V10): `apply_target_floor` pushes TP1 out to
+MIN_TARGET_PCT of entry, which the frozen copy predates. Unlike RR_FLOOR this
+one is NOT inert -- it binds on most bars whenever TARGET_FLOOR_ENABLED is on.
+main() therefore pins the floor off before comparing, so this stays a test of
+the extraction. Same reason, same remedy: do not loosen TOLERANCE or touch the
+frozen reference.
 """
 import sys
 import warnings
@@ -42,6 +49,7 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 import pandas as pd
 
+from swingbot import config
 from swingbot.core import backtest
 from swingbot.core.backtest import ALL_STRATEGIES
 from swingbot.core.indicators import atr, elliott_wave3_entries
@@ -84,6 +92,14 @@ def _precomputed_series(df, strategy, horizon_key):
 
 
 def main() -> int:
+    # Same pin as tests/test_sizing_parity.py: this script measures the
+    # plan_engine EXTRACTION against a frozen pre-extraction copy, and v8 V10's
+    # target floor is a deliberate post-freeze change to TP1. With the floor on
+    # (it is, in production .env) every bar where it binds reports a mismatch
+    # that is really the floor working, and the script exits 1 on the lot.
+    # The floor's own coverage is tests/test_target_floor.py.
+    config.TARGET_FLOOR_ENABLED = False
+
     if not CACHE_DIR.is_dir():
         print(f"no cache dir at {CACHE_DIR}; nothing to check")
         return 0
