@@ -1440,6 +1440,16 @@ async def on_ready():
         config.CONFLUENCE_DEVIATION_PCT, wl_size,
     )
     install_reload_signal_handler()
+
+    # V45: one cheap read of journal.json vs trades.json at startup. These
+    # orphans were found by accident during another task; a future one should
+    # announce itself instead. Never fatal -- see log_orphan_check.
+    try:
+        from swingbot.core.analytics.journal import log_orphan_check
+        log_orphan_check(t["id"] for t in trade_log.get_trades(status="all", limit=None))
+    except Exception:  # noqa: BLE001
+        log.debug("journal orphan check skipped", exc_info=True)
+
     if not session_scan.is_running():
         session_scan.start()
     if not heartbeat.is_running():

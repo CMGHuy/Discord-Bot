@@ -230,6 +230,55 @@ def build_entry(trade: dict, df) -> dict:
     }
 
 
+def orphan_entries(trade_ids) -> list[dict]:
+    """V45: journal entries whose `trade_id` matches no trade on record.
+
+    Found 2026-07-31 while executing V3: 3 of 345 live entries referenced a
+    trade_id present nowhere in trades.json or plans.json, confirmed by raw
+    text search rather than a key-lookup miss.
+
+    **This is not a write-ordering bug.** All four `_journal_close_safely`
+    call sites in performance.py save the trade before journaling it (the
+    helper's own docstring makes that ordering a requirement), so the close →
+    journal handoff cannot produce an entry for a trade that was never
+    persisted. What CAN produce one is deletion after the fact:
+    `delete_trade`, `clear_history` and `clear_open` remove trade records and
+    none of them touches journal.json — a journaled trade that is later
+    cleared leaves exactly this signature. All three orphans being recent and
+    `outcome=win` fits an operator tidying closed trades.
+
+    Deliberately a report, not a repair: the journal is the learning record,
+    and quietly deleting entries because their trade row is gone would
+    destroy the more valuable half of the pair. Whether to backfill the three
+    from their own denormalized fields is a human call — see V45 Step 2.
+    """
+    known = set(trade_ids)
+    return [e for e in JournalStore().entries() if e.get("trade_id") not in known]
+
+
+def log_orphan_check(trade_ids) -> int:
+    """Startup/periodic consistency check (V45 Step 2). Returns the orphan
+    count and says so in the log — the point is that a future orphan surfaces
+    immediately instead of being found by accident months later, which is how
+    these three were found. Never raises: a bookkeeping audit must not be able
+    to stop the bot from starting."""
+    try:
+        orphans = orphan_entries(trade_ids)
+    except Exception:  # noqa: BLE001
+        log.warning("journal orphan check failed -- skipping", exc_info=True)
+        return 0
+    if orphans:
+        sample = ", ".join(f"{e.get('trade_id')}({e.get('ticker')})" for e in orphans[:5])
+        log.warning(
+            "Journal integrity: %d entr%s reference a trade_id that no longer exists "
+            "(most likely a trade deleted/cleared after it was journaled -- the delete "
+            "paths don't touch journal.json). Sample: %s",
+            len(orphans), "y" if len(orphans) == 1 else "ies", sample)
+    else:
+        log.debug("Journal integrity: no orphaned entries")
+    return len(orphans)
+
+
 def journal_trade_close(trade: dict) -> None:
     """Called once per newly-closed trade from every TradeLog close path.
     Never raises: a bars fetch failure or any other exception here must
