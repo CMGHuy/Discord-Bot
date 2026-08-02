@@ -844,6 +844,8 @@ def _single_leg_exit_walk(
 
     end = min(entry_index + max_holding_days, n - 1)
     outcome, exit_price, exit_index = "timeout", None, None
+    early_reason = None
+    mfe_r = mae_r = 0.0
 
     for j in range(entry_index + 1, end + 1):
         hi, lo = float(high[j]), float(low[j])
@@ -867,13 +869,34 @@ def _single_leg_exit_walk(
         if hit_target:
             outcome, exit_price, exit_index = "win", tp1, j
             break
+
+        # V51 Step 3, checked only after the real stop and target so a bar that
+        # resolves normally is untouched and the flags-off path is unchanged.
+        fav = hi if is_bull else lo
+        adv = lo if is_bull else hi
+        mfe_r = max(mfe_r, (fav - entry_price) * sign / risk)
+        mae_r = max(mae_r, (entry_price - adv) * sign / risk)
+        early_reason = early_cut_reason(
+            plan, bars_held=j - entry_index, mfe_r=mfe_r, mae_r=mae_r,
+            bar_close=float(close[j]))
+        if early_reason:
+            exit_price, exit_index = float(close[j]), j
+            outcome = early_cut_outcome((exit_price - entry_price) * sign / risk)
+            break
+
         if reached_trigger and not stop_moved:
             stop_moved = True
 
     if outcome == "timeout":
         exit_price, exit_index = float(close[end]), end
 
-    if outcome == "win":
+    if early_reason:
+        # Priced at the bar's close, NOT at -1R: the whole point is that the
+        # stop was never reached. Checked before the outcome branches because
+        # an early cut carries outcome "loss"/"scratch" for denominator
+        # purposes while having neither's fixed R.
+        r, reason = (exit_price - entry_price) * sign / risk, early_reason
+    elif outcome == "win":
         r, reason = rr, "tp1"
     elif outcome == "loss":
         r, reason = -1.0, "stop"
@@ -894,6 +917,79 @@ def _single_leg_exit_walk(
         r_total=r,
         legs=[{"fraction": 1.0, "exit_price": exit_price, "r": r, "reason": reason}],
     )
+
+
+EARLY_CUT_REASONS = ("thesis_invalidated", "time_stop", "adverse_excursion")
+
+
+def early_cut_reason(plan: TradePlanV2, *, bars_held: int, mfe_r: float,
+                     mae_r: float, bar_close: float) -> str | None:
+    """"Obvious loser" made testable (plan v8 V51 Step 3), as three independent
+    predicates. Returns the reason that fired, or None.
+
+    Only meaningful BEFORE TP1: after TP1 the runner's stop already sits at
+    breakeven, so there is no loss left to cut short.
+
+    **NO-LOOKAHEAD.** Every input is known at the close of the bar being
+    judged: `bars_held` and `bar_close` are that bar's, and `mfe_r`/`mae_r` are
+    running extremes over bars at or before it. Nothing here reads a later bar,
+    and the caller exits at this bar's close rather than a better price found
+    afterwards.
+
+    The three are deliberately separate flags rather than one composite, so
+    V52 can grid them individually and attribute what each is worth:
+
+    (a) `thesis_invalidated` -- a CLOSE back through the plan's trigger price,
+        against the trade. The entry's own logic in reverse. Close, not an
+        intrabar touch: a single wick through the level should not eject a
+        trade the level still supports.
+    (b) `time_stop` -- held `EARLY_CUT_TIME_BARS` bars without ever reaching
+        `EARLY_CUT_TIME_MIN_R` of favourable excursion. Judged on MFE, not the
+        last close, so a trade that ran and gave it back is not treated as one
+        that never moved.
+    (c) `adverse_excursion` -- drawn `EARLY_CUT_MAE_FRACTION` of the way to the
+        stop while MFE never cleared `EARLY_CUT_MAE_MAX_MFE_R`.
+
+    Order is fixed (a, b, c) so a bar satisfying two reports the more
+    defensible one; with all flags off this returns None and every caller
+    behaves exactly as it did before V51.
+    """
+    is_bull = plan.direction == "bullish"
+
+    if config.EARLY_CUT_THESIS_ENABLED:
+        level = plan.trigger_price
+        if (bar_close < level) if is_bull else (bar_close > level):
+            return "thesis_invalidated"
+
+    if (config.EARLY_CUT_TIME_ENABLED
+            and bars_held >= config.EARLY_CUT_TIME_BARS
+            and mfe_r < config.EARLY_CUT_TIME_MIN_R):
+        return "time_stop"
+
+    if (config.EARLY_CUT_MAE_ENABLED
+            and mae_r >= config.EARLY_CUT_MAE_FRACTION
+            and mfe_r < config.EARLY_CUT_MAE_MAX_MFE_R):
+        return "adverse_excursion"
+
+    return None
+
+
+def early_cut_outcome(r: float) -> str:
+    """Classify an early-cut exit. **This is a correctness boundary, not a
+    naming choice.**
+
+    `scratch` and `timeout` are EXCLUDED from the win-rate denominator
+    (`excluded_share`). If early cuts were classified as either, then cutting
+    losers sooner would raise win rate by *removing losses from the
+    denominator* -- turning V51 Step 3 into a machine for manufacturing the
+    very number V52's 80% bar is trying to measure honestly, and breaching V6
+    Step 4's "do not drop losers from the denominator" outright.
+
+    So a cut at a loss is a `loss`, counted like any other. Only a cut that is
+    genuinely not losing (r >= 0, e.g. a time stop on a trade drifting slightly
+    up) is a `scratch`, which matches the existing `breakeven_stop` semantics.
+    """
+    return "loss" if r < 0 else "scratch"
 
 
 def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
@@ -938,6 +1034,7 @@ def _scale_out_exit_walk(
 
     # ---- phase 1: identical to the single-leg walk until TP1 touches ----
     tp1_index = None
+    mfe_r = mae_r = 0.0
     for j in range(entry_index + 1, end + 1):
         hi, lo = float(high[j]), float(low[j])
         cur_stop = entry_price if stop_moved else stop_loss
@@ -960,6 +1057,26 @@ def _scale_out_exit_walk(
         if hit_target:
             tp1_index = j
             break
+
+        # V51 Step 3. Phase 1 only: past TP1 the runner's stop is already at
+        # breakeven, so there is no loss left to cut. Exits the FULL position
+        # as one leg -- TP1 never filled, so there is nothing to scale out of.
+        fav = hi if is_bull else lo
+        adv = lo if is_bull else hi
+        mfe_r = max(mfe_r, (fav - entry_price) * sign / risk)
+        mae_r = max(mae_r, (entry_price - adv) * sign / risk)
+        early_reason = early_cut_reason(
+            plan, bars_held=j - entry_index, mfe_r=mfe_r, mae_r=mae_r,
+            bar_close=float(close[j]))
+        if early_reason:
+            exit_px = float(close[j])
+            r = round((exit_px - entry_price) * sign / risk, 3)
+            return ExitResult(outcome=early_cut_outcome(r), runner_outcome=None,
+                              entry_index=entry_index, exit_index=j,
+                              entry_price=entry_price, r_total=r,
+                              legs=[{"fraction": 1.0, "exit_price": exit_px,
+                                     "r": r, "reason": early_reason}])
+
         if reached_trigger and not stop_moved:
             stop_moved = True
 

@@ -410,6 +410,44 @@ FIELDS: list[Field] = [
                "measuring what the cap would have changed before it changes anything. On = every "
                "emitted plan is capped, and position size is computed off the capped distance so "
                "risk per trade does not move."),
+    # --- V51 Step 3: cut a loser before it reaches the full stop -------------
+    # All three default OFF. They are pre-registered predicates for V52 to grid
+    # one at a time, not shipped behavior -- turning any of them on changes what
+    # a loss costs, and none has been measured yet. Kept as three independent
+    # flags precisely so their effects stay separable.
+    Field("EARLY_CUT_THESIS_ENABLED", "EARLY_CUT_THESIS_ENABLED", "Plan Engine v2",
+          "Early cut: thesis invalidated", type="checkbox", default="false",
+          help="Exit at the close of any bar that closes back through the plan's trigger price, "
+               "against the trade. The most defensible of the three: it is the entry's own logic "
+               "firing in reverse (a breakout that un-breaks, a retest that fails). Uses the CLOSE, "
+               "never an intrabar touch, so one wick through the level does not eject a good trade."),
+    Field("EARLY_CUT_TIME_ENABLED", "EARLY_CUT_TIME_ENABLED", "Plan Engine v2",
+          "Early cut: time stop", type="checkbox", default="false",
+          help="Exit a trade that has gone nowhere: after EARLY_CUT_TIME_BARS bars it has still "
+               "never reached EARLY_CUT_TIME_MIN_R of favourable excursion. E32's time_stop_days "
+               "field has been advisory since it was added; this is the first thing that acts on "
+               "the same idea."),
+    Field("EARLY_CUT_TIME_BARS", "EARLY_CUT_TIME_BARS", "Plan Engine v2",
+          "Early cut: time-stop bars", type="number", default="5", min=1, max=60, step=1,
+          help="Bars held before the time stop can fire. Only read when EARLY_CUT_TIME_ENABLED."),
+    Field("EARLY_CUT_TIME_MIN_R", "EARLY_CUT_TIME_MIN_R", "Plan Engine v2",
+          "Early cut: time-stop min R", type="float", default="0.5", min=0, max=3, step=0.05,
+          help="Favourable excursion the trade must have reached by EARLY_CUT_TIME_BARS to survive "
+               "the time stop. Measured as max favourable excursion in R, not last close."),
+    Field("EARLY_CUT_MAE_ENABLED", "EARLY_CUT_MAE_ENABLED", "Plan Engine v2",
+          "Early cut: adverse excursion", type="checkbox", default="false",
+          help="Exit when the trade has drawn down most of the way to its stop without ever having "
+               "worked: MAE >= EARLY_CUT_MAE_FRACTION of risk while MFE never cleared "
+               "EARLY_CUT_MAE_MAX_MFE_R. The riskiest of the three -- it fires nearest the stop, so "
+               "it converts would-be recoveries into realised losses most often."),
+    Field("EARLY_CUT_MAE_FRACTION", "EARLY_CUT_MAE_FRACTION", "Plan Engine v2",
+          "Early cut: MAE fraction of risk", type="float", default="0.75", min=0.1, max=1.0, step=0.05,
+          help="How far toward the stop (in R) the drawdown must reach. 1.0 is the stop itself, so "
+               "anything at or above 1.0 makes this flag inert."),
+    Field("EARLY_CUT_MAE_MAX_MFE_R", "EARLY_CUT_MAE_MAX_MFE_R", "Plan Engine v2",
+          "Early cut: MAE max prior MFE", type="float", default="0.25", min=0, max=2, step=0.05,
+          help="The trade is only cut if it never got this far in favour first. Higher = cuts more "
+               "trades, including ones that had genuinely worked before turning."),
     Field("LEGACY_ALERT_PATH_ENABLED", "LEGACY_ALERT_PATH_ENABLED", "Plan Engine v2",
           "Legacy (untiered) alert path enabled",
           type="checkbox", default="false",
