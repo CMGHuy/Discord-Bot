@@ -44,6 +44,11 @@ def test_atr_plan_bullish_golden(monkeypatch):
     # helper) is covered by tests/test_target_floor.py.
     from swingbot import config
     monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
+    # Same reason for V51's loss cap: this entry's ATR risk is 4.0 (4% of 100),
+    # which the 1.75% cap binds, so the assertion would be measuring the cap
+    # instead of the R:R arithmetic it exists to pin. The cap's own behavior is
+    # covered by tests/test_max_loss_cap.py.
+    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
     close, atr_val, h = 100.0, 2.0, "4w"
     stop, tp1 = _atr_plan(close, atr_val, "bullish", h, "MACD")
     mult = HORIZONS[h]["atr_stop_multiple"]

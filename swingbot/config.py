@@ -395,6 +395,21 @@ FIELDS: list[Field] = [
           help="Off = MIN_TARGET_PCT is computed and logged but NOT applied, so a week of scans can "
                "measure how many setups would survive the floor before it starts changing live "
                "targets. On = the floor is enforced on every emitted plan."),
+    Field("MAX_LOSS_PCT", "MAX_LOSS_PCT", "Plan Engine v2", "Maximum loss %",
+          type="float", default="1.75", min=0.25, max=20, step=0.05,
+          help="Hard ceiling on the stop distance: no plan may risk more than this % of entry, "
+               "whichever way the per-strategy stop comes out (ATR multiple, fib/wave structure, or "
+               "the S/R fixed percent). Counterpart to MIN_TARGET_PCT -- that one sets the win side, "
+               "this one bounds the loss side, and together they set the payoff ratio. At 2.5%/1.75% "
+               "the payoff is 1.43R and break-even is 41.2%, against a measured 43.4% no-skill rate; "
+               "the old 0.35R-target book needed 63.2% and got 55.6%. Applied BEFORE the target is "
+               "derived, so capping the stop never silently changes R:R. Plan v8 V51."),
+    Field("MAX_LOSS_CAP_ENABLED", "MAX_LOSS_CAP_ENABLED", "Plan Engine v2", "Maximum loss cap enforced",
+          type="checkbox", default="true",
+          help="Off = MAX_LOSS_PCT is ignored and stops keep their per-strategy distance, for "
+               "measuring what the cap would have changed before it changes anything. On = every "
+               "emitted plan is capped, and position size is computed off the capped distance so "
+               "risk per trade does not move."),
     Field("LEGACY_ALERT_PATH_ENABLED", "LEGACY_ALERT_PATH_ENABLED", "Plan Engine v2",
           "Legacy (untiered) alert path enabled",
           type="checkbox", default="false",

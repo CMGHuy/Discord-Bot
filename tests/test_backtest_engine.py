@@ -204,7 +204,7 @@ def test_v2_scale_out_keeps_classification_and_expectancy():
     assert v2.expectancy_r >= v1.expectancy_r - 0.02
 
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
-def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
+def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg(monkeypatch):
     # Regression pin (code review finding): return_pct must be derived from
     # the blended r_multiple, not from legs[-1]'s exit price alone -- a
     # multi-leg scale-out win's return spans both legs, and computing it
@@ -221,6 +221,16 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     # about return_pct arithmetic, not Elliott Wave signal quality -- so the
     # gate is pinned off here to keep exercising the original known-good
     # fixture regardless of future strategy tuning.
+    # Same reasoning for v8 V51's loss cap, and the same triage V10/V48 used:
+    # the cap tightens risk_per_share, and r_multiple is move/risk, so every
+    # R in this fixture inflates -- the runner_be win this regression is built
+    # around moves from ~0.35R to 0.714R and stops matching the `< 0.5` probe
+    # below, emptying be_wins. The cap also shrinks risk in absolute terms,
+    # which amplifies the 4dp entry/stop rounding enough to break the exact
+    # return_pct equality. Both are the cap working, not the arithmetic this
+    # test pins; its own coverage is tests/test_max_loss_cap.py.
+    from swingbot import config
+    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
     baseline = dict(ef.DEFAULT_PARAMS["Elliott Wave"])
     ef.DEFAULT_PARAMS["Elliott Wave"].update(
         {"w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None})

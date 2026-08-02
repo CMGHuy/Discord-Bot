@@ -17,6 +17,28 @@ from swingbot.core.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
 
+@pytest.fixture(autouse=True)
+def _loss_cap_off(monkeypatch):
+    """Pin v8 V51's `MAX_LOSS_CAP_ENABLED` off for this whole module.
+
+    Everything here pins E31/E32 geometry that predates the cap, and at these
+    fixtures the 1.75% ceiling binds on every stop -- so with it on, the
+    stop_mult assertions compare 1.75 to 1.75 (measuring the cap, not the
+    multiplier) and the E32 TP2-from-R cases collapse to None.
+
+    That collapse is REAL, not a fixture artifact, and it has its own coverage
+    in tests/test_max_loss_cap.py: `_tp2_from_r` requires its candidate to sit
+    strictly beyond TP1, so with risk capped at MAX_LOSS_PCT and TP1 floored at
+    MIN_TARGET_PCT, any `tp2_r` below MIN_TARGET_PCT/MAX_LOSS_PCT (1.43 at the
+    shipped 2.5/1.75) can no longer clear TP1 and silently returns None. E32's
+    journal-derived multiples were fitted pre-cap, so a chunk of them are now
+    inert in production. Same triage as V10's floor and V48's parity harness:
+    pin the deliberate change off where a test predates it, and cover the
+    change itself separately.
+    """
+    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
+
+
 def _winners(maes, strategy="RSI"):
     return [{"strategy": strategy, "outcome": "win", "mae_r": m} for m in maes]
 

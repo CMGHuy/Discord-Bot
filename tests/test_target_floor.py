@@ -104,7 +104,7 @@ def test_plan_direction_invariant_survives_the_floor(direction):
         assert plan.stop_loss > plan.trigger_price > plan.tp1
 
 
-def test_floor_breaks_the_rr_proportionality_of_stop_mult():
+def test_floor_breaks_the_rr_proportionality_of_stop_mult(monkeypatch):
     """A consequence worth stating outright: E31's stop_mult was built so
     that scaling `risk_distance` scales the stop AND the rr-derived target
     together, leaving R:R untouched. The floor is an absolute % of entry, so
@@ -112,8 +112,14 @@ def test_floor_breaks_the_rr_proportionality_of_stop_mult():
     R:R falls instead. That is intended (the floor exists precisely to stop
     the target being a function of the stop), but it means "stop_mult
     preserves R:R" is now conditional, not universal.
+
+    V51's loss cap is switched off here: at this entry the ATR risk is 4.0
+    (4% of 100) and the 1.75% cap binds *both* variants to the same stop, which
+    would make the proportionality assertion vacuously compare 1.75 to 1.75.
+    The cap's interaction with stop_mult is asserted in the next test instead.
     """
     from swingbot.core.plan_engine import _atr_plan
+    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
     base_stop, base_tp = _atr_plan(100.0, 2.0, "bullish", "4w", "RSI")
     wide_stop, wide_tp = _atr_plan(100.0, 2.0, "bullish", "4w", "RSI", stop_mult=1.2)
 
@@ -122,6 +128,20 @@ def test_floor_breaks_the_rr_proportionality_of_stop_mult():
     base_rr = (base_tp - 100.0) / (100.0 - base_stop)
     wide_rr = (wide_tp - 100.0) / (100.0 - wide_stop)
     assert wide_rr < base_rr
+
+
+def test_loss_cap_bounds_stop_mult_entirely(monkeypatch):
+    """The other half of the above, and the reason the cap had to be a
+    separate switch: once MAX_LOSS_PCT binds, stop_mult stops moving the stop
+    at all. E31's MAE-informed widening cannot push risk past the ceiling --
+    which is the point of a ceiling, but it means a fold harness passing a
+    stop_mult > 1 may find it silently inert. Plan v8 V51."""
+    from swingbot.core.plan_engine import _atr_plan
+    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", True)
+    monkeypatch.setattr(config, "MAX_LOSS_PCT", 1.75)
+    base_stop, _ = _atr_plan(100.0, 2.0, "bullish", "4w", "RSI")
+    wide_stop, _ = _atr_plan(100.0, 2.0, "bullish", "4w", "RSI", stop_mult=1.2)
+    assert base_stop == wide_stop == pytest.approx(98.25)
 
 
 def test_stop_is_untouched_by_the_floor(monkeypatch):

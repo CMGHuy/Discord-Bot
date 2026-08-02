@@ -99,6 +99,10 @@ def main() -> int:
     # that is really the floor working, and the script exits 1 on the lot.
     # The floor's own coverage is tests/test_target_floor.py.
     config.TARGET_FLOOR_ENABLED = False
+    # V51's loss cap is the same shape: a deliberate post-freeze change to the
+    # STOP, which the frozen copy predates. Its coverage is
+    # tests/test_max_loss_cap.py.
+    config.MAX_LOSS_CAP_ENABLED = False
 
     if not CACHE_DIR.is_dir():
         print(f"no cache dir at {CACHE_DIR}; nothing to check")

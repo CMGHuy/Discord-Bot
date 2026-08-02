@@ -75,7 +75,8 @@ def _precomputed_series(df, strategy, horizon_key):
 
 @pytest.fixture(autouse=True)
 def _floor_off(monkeypatch):
-    """Pin `TARGET_FLOOR_ENABLED` off for the whole harness.
+    """Pin the two deliberate post-freeze sizing changes off for the whole
+    harness: `TARGET_FLOOR_ENABLED` (V10) and `MAX_LOSS_CAP_ENABLED` (V51).
 
     This test proves the plan_engine *extraction* still reproduces the frozen
     pre-extraction implementation. v8 Task V10's target floor is a deliberate
@@ -87,8 +88,15 @@ def _floor_off(monkeypatch):
 
     It went unnoticed until 2026-08-02 because the whole module skips without
     `data/backtest_cache/`, which was absent from the box when V10 landed.
+
+    **V51's loss cap is the same shape and gets the same treatment** (39 of 39
+    cases fail with it on, since a 1.75% ceiling binds on nearly every bar).
+    Its own coverage is tests/test_max_loss_cap.py. As V48 established: pin the
+    deliberate change off, never loosen `TOLERANCE` and never edit the frozen
+    reference -- both would destroy the harness's only reason to exist.
     """
     monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
+    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
 
 
 @pytest.mark.parametrize("horizon_key", HORIZON_KEYS)

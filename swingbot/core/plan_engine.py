@@ -175,6 +175,36 @@ def target_floor_price(entry: float, direction: str) -> float:
     return entry * (1 + pct) if direction == "bullish" else entry * (1 - pct)
 
 
+def max_loss_distance(entry: float) -> float:
+    """The largest stop distance `MAX_LOSS_PCT` allows for this entry. Read from
+    config on every call (never captured at import) so a SIGHUP reload takes
+    effect on the next plan built -- same contract as `target_floor_price`."""
+    return entry * (config.MAX_LOSS_PCT / 100.0)
+
+
+def cap_risk_distance(entry: float, risk_distance: float) -> float:
+    """Bound a computed stop distance by `MAX_LOSS_PCT` (plan v8 Task V51).
+
+    The loss-side counterpart to `apply_target_floor`: that one pushes the win
+    out to a floor, this one pulls the loss in to a ceiling, and together they
+    set the payoff ratio the plan exists to fix.
+
+    **Applied before the target is derived, never after.** All four sizing
+    builders price TP1 off the risk distance (`entry ± risk_distance × rr`), so
+    capping the stop afterwards would leave the target priced off the old, wider
+    distance and silently change R:R -- the plan's own warning in V51 Step 1.
+    Capping the distance first keeps the stop, the target and the position size
+    all consistent with one number.
+
+    Never widens: a stop already inside the cap is returned untouched.
+    `MAX_LOSS_CAP_ENABLED=false` disables it entirely, the log-only position for
+    measuring what the cap would have changed before it changes anything.
+    """
+    if not config.MAX_LOSS_CAP_ENABLED:
+        return risk_distance
+    return min(risk_distance, max_loss_distance(entry))
+
+
 def apply_target_floor(entry: float, tp1: float, direction: str) -> float:
     """Push TP1 out to `MIN_TARGET_PCT` of entry when the R:R math priced it
     closer (plan v8 Task V10). Never pulls a target IN -- a structurally
@@ -227,6 +257,7 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if risk_distance > max_risk_amount:
         risk_distance = max_risk_amount
+    risk_distance = cap_risk_distance(entry, risk_distance)
     if is_bull:
         stop_loss, take_profit = entry - risk_distance, entry + risk_distance * rr
     else:
@@ -247,6 +278,8 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+    risk_capped = cap_risk_distance(entry, abs(entry - stop_loss))
+    stop_loss = entry - risk_capped if is_bull else entry + risk_capped
 
     risk_now = abs(entry - stop_loss)
     override = STRATEGY_RR_OVERRIDE.get("Fibonacci")
@@ -276,7 +309,8 @@ def _sr_plan(entry, volume_ratio, direction, horizon_key):
     strength = max(0.0, min(1.0, strength))
     target_pct = h["sr_target_min_pct"] + (h["sr_target_max_pct"] - h["sr_target_min_pct"]) * strength
 
-    stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
+    sr_risk = cap_risk_distance(entry, entry * (stop_pct / 100))
+    stop_loss = entry - sr_risk if is_bull else entry + sr_risk
     override = STRATEGY_RR_OVERRIDE.get("Support/Resistance")
     if override is not None:
         risk = abs(entry - stop_loss)
@@ -296,6 +330,8 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
+    risk_capped = cap_risk_distance(entry, abs(entry - stop_loss))
+    stop_loss = entry - risk_capped if is_bull else entry + risk_capped
 
     risk_now = abs(entry - stop_loss)
     rr = _rr_for("Elliott Wave", horizon_key)
