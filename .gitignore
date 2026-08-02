@@ -1,13 +1,4 @@
-state.json
-trades.json
-account.json
-watchlist.json
-ticker_meta_cache.json
-retrospective_history.json
 journal.json
-analytics_snapshot.json
-market_data_state.json
-scan_telemetry.jsonl
 docs/superpowers/results/_quarterly_wf_result.json
 .env
 .env.bak
@@ -15,15 +6,12 @@ data/admin_session_secret
 __pycache__/
 exports/
 market_data/
-data/backtest_cache/
 .vscode/
 .claude/settings.local.json
 .claude/worktrees/
 logs/
 backtest_range_summary.txt
 validation_results.json
-data/replay_r_sequence.json
-data/replay_result.json
 
 # Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
 # rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
