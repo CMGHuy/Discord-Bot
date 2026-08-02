@@ -135,7 +135,7 @@ def main():
         bt.BREAKEVEN_TRIGGER_FRACTION = args.be_trigger
 
     dfs = {t: d for t in sorted(load_watchlist()) if (d := load_cached(t)) is not None}
-    print(f"{len(dfs)} tickers loaded from cache")
+    print(f"{len(dfs)} tickers loaded from cache", flush=True)
 
     grid = PARAM_GRID[strategy]
     keys = list(grid)
@@ -150,7 +150,13 @@ def main():
             rows.append((params, stats))
             wr = f"{stats['win_rate']:.1f}" if stats["win_rate"] is not None else "n/a"
             er = f"{stats['expectancy_r']:+.3f}" if stats["expectancy_r"] is not None else "n/a"
-            print(f"  {params} -> N={stats['n_eval']} WR={wr} ExpR={er} excl={stats['excluded_share']*100:.0f}%")
+            # flush per config: a grid is a multi-hour job and its stdout is
+            # almost always redirected to a file, where Python block-buffers
+            # and the run looks hung until it exits. See CLAUDE.md's
+            # long-running-script rule (wf_run.py --full is the counterexample
+            # that cost a monitoring session).
+            print(f"  {params} -> N={stats['n_eval']} WR={wr} ExpR={er} excl={stats['excluded_share']*100:.0f}%",
+                  flush=True)
     finally:
         ef.DEFAULT_PARAMS[strategy] = baseline
 
