@@ -56,6 +56,21 @@ def test_gate_eval_annotates_trades(monkeypatch):
         assert t.gate_score is not None
         assert t.gate_tier is not None
         assert isinstance(t.fired_flags, list)
+        # V52 Step 1: the confluence count rides along with the rest of the
+        # annotation. Read off the real checklist's own CheckResult, so it
+        # cannot drift from the check the gate scored; 0-6 factors exist.
+        assert t.confluence_count is not None
+        assert 0 <= t.confluence_count <= 6
+
+
+def test_confluence_count_is_none_when_gate_eval_is_off(monkeypatch):
+    """The whole G91 annotation stays absent with the gate off -- V52's axis
+    must not become a reason to pay for the checklist on every ordinary run."""
+    df = _fixture_df()
+    summary = _run_with_forced_entry(monkeypatch, df, entry_bar=40, gate_eval=False)
+    assert summary.trades, "fixture must produce at least one simulated trade"
+    for t in summary.trades:
+        assert t.confluence_count is None
 
 
 def test_gate_eval_off_is_byte_identical(monkeypatch):
@@ -103,9 +118,11 @@ def test_filtered_run_drops_exactly_subtier(monkeypatch):
 
     def _fake_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
                          entry, stop_loss, take_profit, spy_df=None):
+        # 5-tuple since V52 Step 1 added confluence_count; this fake controls
+        # tier only, so the count is left None exactly as gate_eval=False gives.
         if not gate_eval:
-            return None, None, [], False
-        return 80.0, tier_by_bar[i], [], False
+            return None, None, [], False, None
+        return 80.0, tier_by_bar[i], [], False, None
     monkeypatch.setattr(bt, "_gate_annotation", _fake_annotation)
 
     summary = bt.run_backtest("TEST", df, "Break & Retest", "2w",

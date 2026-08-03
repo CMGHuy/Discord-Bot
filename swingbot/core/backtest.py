@@ -104,6 +104,10 @@ class BacktestTrade:
     # tell which bucket it came from.
     fired_hard_block: bool = False
     skipped_by_gate: bool = False
+    # V52 Step 1: how many independent confluence factors agreed at the signal
+    # bar (0-6). Populated with the rest of the G91 annotation, so it is None
+    # whenever gate_eval is off.
+    confluence_count: int | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -190,7 +194,7 @@ def _gate_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
     decisions. When gate_eval is False this never imports the gate package
     at all."""
     if not gate_eval:
-        return None, None, [], False
+        return None, None, [], False, None
 
     from swingbot.core.gate import run_checklist
     from swingbot.core.gate.backtest_ctx import historical_macro_snap
@@ -212,7 +216,16 @@ def _gate_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
         macro_snap=historical_macro_snap(signal_date), spy_df=spy_df)
     fired_flags = [c.check_id for c in gate_result.checks
                   if c.section == "redflag" and c.status == "fail"]
-    return gate_result.score, gate_result.tier, fired_flags, bool(gate_result.hard_blocks)
+    # V52 Step 1 names "confluence-method count" as a selectivity axis. The
+    # checklist already computes it (setup_quality.check_confluence puts the
+    # firing factors in .evidence), but the score folds it into one 0-100
+    # number where it cannot be recovered. Surfaced here rather than
+    # recomputed, so the axis cannot drift from the check the gate applied.
+    confluence_count = next(
+        (c.evidence.get("count") for c in gate_result.checks
+         if c.check_id == "confluence" and isinstance(c.evidence, dict)), None)
+    return (gate_result.score, gate_result.tier, fired_flags,
+            bool(gate_result.hard_blocks), confluence_count)
 
 
 def assert_train_only(df) -> None:
@@ -463,7 +476,8 @@ def run_backtest(
             # price can't represent.
             return_pct = r_multiple * (risk_per_share / entry) * 100
             holding_days = exit_i - i
-            gate_score, gate_tier, fired_flags, fired_hard_block = _gate_annotation(
+            (gate_score, gate_tier, fired_flags, fired_hard_block,
+             confluence_count) = _gate_annotation(
                 gate_eval, ticker, strategy, horizon_key, df, i, direction,
                 entry, stop_loss, take_profit)
 
@@ -484,7 +498,7 @@ def run_backtest(
                 runner_outcome=res.runner_outcome,
                 runner_r=runner_r, runner_holding_days=runner_holding_days,
                 gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
-                fired_hard_block=fired_hard_block,
+                fired_hard_block=fired_hard_block, confluence_count=confluence_count,
             )
             if gate_min_tier is not None and _gate_blocked(gate_min_tier, gate_tier, fired_hard_block):
                 record.skipped_by_gate = True
@@ -558,7 +572,8 @@ def run_backtest(
         if frictions:
             r_multiple -= commission_r()
         holding_days = exit_i - i
-        gate_score, gate_tier, fired_flags, fired_hard_block = _gate_annotation(
+        (gate_score, gate_tier, fired_flags, fired_hard_block,
+         confluence_count) = _gate_annotation(
             gate_eval, ticker, strategy, horizon_key, df, i, direction,
             entry, stop_loss, take_profit)
 
@@ -569,7 +584,7 @@ def run_backtest(
             exit_price=round(exit_fill, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
             gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
-            fired_hard_block=fired_hard_block,
+            fired_hard_block=fired_hard_block, confluence_count=confluence_count,
         )
         if gate_min_tier is not None and _gate_blocked(gate_min_tier, gate_tier, fired_hard_block):
             record.skipped_by_gate = True
