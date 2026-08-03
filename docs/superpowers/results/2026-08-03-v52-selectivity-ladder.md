@@ -119,3 +119,133 @@ estimate to reach a rung, no re-cutting cohorts after seeing which cut wins.
 # Results
 
 *(written after the run; nothing above this line is edited)*
+
+Run 2026-08-03 18:50 → 21:0x, 11/11 chunks, 72 tickers × 10 horizons × 8
+cut-flag combos. Regenerate every table with:
+
+```
+python scripts/summarize_v52_grid.py docs/superpowers/results/v52
+```
+
+## Stage 1 — the gate fires. The ladder stops here.
+
+| Stage | bar (Wilson LB) | cells clearing |
+|---|---|---|
+| Stage 1 | > 60% | **0** |
+| Stage 2 | > 70% | **0** |
+| Stage 3 | > 80% | **0** |
+
+**Not one cell, in any strategy, at any cut-flag combination, clears LB 60%.**
+Per Step 2's pre-registered gate the ladder stops and the achieved frontier is
+the result. Steps 3 and 4 are not run: nothing above Stage 1 can be real when
+Stage 1 is empty.
+
+## Step 5 — the frontier, reported instead of a winner
+
+Best cell per strategy by Wilson LB. **`cuts=none` wins for all eleven.**
+
+| Strategy | cell | N ind | WR | **LB** | ExpR | loss med | runner R med |
+|---|---|---|---|---|---|---|---|
+| VWAP | `regime=aligned` | 717 | 51.2% | **47.5%** | +0.367 | 1.75% | +0.82 |
+| Break & Retest | `regime=aligned` | 1658 | 49.5% | **47.1%** | +0.278 | 1.75% | +0.53 |
+| MA Ribbon | `regime=aligned` | 786 | 49.9% | **46.3%** | +0.316 | 1.75% | +0.74 |
+| Elliott Wave | `score>=80` | 202 | 52.5% | **45.4%** | +0.463 | 1.75% | +0.01 |
+| Fibonacci | `tier<=A` | 700 | 47.9% | **44.1%** | +0.212 | 1.75% | +0.00 |
+| Volume Profile | `score>=60` | 430 | 48.8% | **44.0%** | +0.296 | 1.75% | +0.00 |
+| Support/Resistance | `confluence>=5` | 188 | 51.0% | **43.7%** | +0.578 | 1.75% | +0.00 |
+| MACD | `regime=aligned` | 418 | 47.4% | **42.5%** | +0.215 | 1.75% | +0.20 |
+| RSI Divergence | `score>=70` | 709 | 46.2% | **42.4%** | +0.185 | 1.75% | +0.00 |
+| EMA Crossover | `regime=aligned` | 194 | 45.4% | **38.3%** | +0.148 | 1.75% | +0.00 |
+| RSI | — | — | — | **no eligible cell** | — | — | — |
+
+**Adopted set: empty.** Per V6 Step 4 that is a valid result and it is not
+worked around — no lowering 2.5%, no widening 1.75%, no dropping losers from
+the denominator, no quoting the point estimate (51.2%) instead of the bound.
+
+## The finding that matters most: selectivity buys ~1 point
+
+Best LB reachable on each axis family, pooled across all strategies:
+
+| Axis family | best LB | cell |
+|---|---|---|
+| regime | **47.5%** | `regime=aligned` |
+| confluence | 46.8% | `confluence>=3` |
+| score | 46.4% | `score>=70` |
+| tier | 46.3% | `tier<=B` |
+| **all (no selectivity at all)** | **46.3%** | `all` |
+
+**The best unselective cohort is 46.3%. The best selective one is 47.5%.**
+Every axis this task exists to search — the quality score, the gatekeeper tier
+ladder, confluence count, regime alignment — is worth about **1.2 points of
+Wilson lower bound** between them, and the single best axis is the one the
+gatekeeper does not own (SPY regime).
+
+V52's premise was that sizing was exhausted and selectivity was the remaining
+lever. Sizing was exhausted (V17: 49.6% ceiling). **Selectivity is not a lever
+either.** Against V6 Step 3b's 80% constraint the two together fall ~33 points
+short, and against Stage 1's 60% they fall ~13 short.
+
+## V51 Step 3 answered: all three early-cut predicates hurt
+
+Mean best LB and mean best ExpR across strategies, per cut-flag combination:
+
+| combo | mean best LB | mean best ExpR |
+|---|---|---|
+| **none** | **43.96%** | 0.384 |
+| time | 43.26% | 0.385 |
+| mae | 42.56% | 0.384 |
+| time,mae | 42.03% | 0.381 |
+| thesis | 33.36% | 0.380 |
+| thesis,mae | 33.36% | 0.380 |
+| thesis,time | 33.34% | 0.380 |
+| thesis,time,mae | 33.34% | 0.380 |
+
+Every predicate costs win rate and **none buys expectancy** — ExpR is flat at
+0.380-0.385 across all eight. The thesis cut, pre-registered as "the most
+defensible because it is the entry's own logic firing in reverse", is the
+**worst**: −10.6 points of LB. It ejects trades that would have recovered.
+
+**They stay default-off**, which is how V51 shipped them. This is the
+measurement that decision was waiting on.
+
+## The economics: positive expectancy, carried entirely by the tail
+
+Every strategy shows median realised loss of **exactly 1.75%** — the cap binds
+on essentially every loss, and `loss_over_cap_share` is 0.0% throughout, so the
+V51 cap is doing exactly what it claims.
+
+The runner leg is where the money is, and it is not where the *typical* trade
+is. Per V51 Step 2, a win pays `0.5 × 1.4286 + 0.5 × r_runner`:
+
+| Strategy | runner R median | runner R mean | blended R/win | break-even WR | observed WR |
+|---|---|---|---|---|---|
+| VWAP | +0.75 | +2.26 | 1.089R | **47.9%** | 51.2% |
+| MA Ribbon | +0.58 | +2.10 | 1.006R | **49.9%** | 49.9% |
+| Break & Retest | +0.43 | +2.02 | 0.928R | **51.9%** | 49.5% |
+| MACD | +0.29 | +2.02 | 0.857R | 53.8% | 47.4% |
+| Fibonacci / S-R / Volume Profile / EMA / Elliott / RSI Div | **+0.00** | +1.8 to +2.2 | **0.714R** | **58.3%** | 45-52% |
+
+**Six of eleven strategies have a median runner of exactly 0.00R** — the modal
+runner stops at breakeven. Their blended win pays 0.714R, so they need **58.3%**
+to break even and observe 45-52%. They are unprofitable on the typical trade
+and positive only because mean runner R is ~2.0: a thin tail of large winners
+carries the book.
+
+Only VWAP and MA Ribbon sit at or above their own break-even line, and only
+just. This is precisely the world V51 Step 2 flagged as the pessimistic case,
+and it is the one that measured.
+
+## What this means for the rest of the plan
+
+- **V22 (permutation) has nothing to permute.** It was rescoped to test the
+  cohort V52 adopts; the adopted set is empty. Record and stop — which is what
+  V22 Step 3 already pre-registers as a legitimate ending.
+- **V24's headline will be in-sample and should not be read as validation.**
+  With no adopted config there is nothing new to validate; V24 measures the
+  shipped defaults. Its `out_of_sample` row is the only one that means
+  anything.
+- **The 30.3% daily-vs-hourly disagreement from V51 Step 4 is wider than every
+  margin here.** The whole frontier spans 38.3-47.5% LB and selectivity moves
+  it 1.2 points. None of the differences between cells in this grid survive
+  that error bar. Read the frontier as "mid-to-high 40s, flat", not as a
+  ranking.
