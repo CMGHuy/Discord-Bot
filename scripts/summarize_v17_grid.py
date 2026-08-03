@@ -19,6 +19,34 @@ def _f(v, spec, dash="n/a"):
     return format(v, spec) if v is not None else dash
 
 
+def _cap_contrast(outdir, payloads):
+    """The three strategies whose chunks ran before V51's 1.75% cap landed
+    mid-sweep were re-run under it. Both arms are kept, so the cost of the cap
+    is a measurement here rather than an inference. See v17/uncapped/README."""
+    unc_dir = outdir / "uncapped"
+    if not unc_dir.is_dir():
+        return
+    capped = {d["strategy"]: d for d in payloads}
+    print("\n## What the 1.75% loss cap cost — same grid, same window, both arms\n")
+    print("| Strategy | arm | best WR | Wilson LB | ExpR | dead | distinct WR of 108 |")
+    print("|---|---|---|---|---|---|---|")
+    for p in sorted(unc_dir.glob("*.json")):
+        u = json.loads(p.read_text())
+        c = capped.get(u["strategy"])
+        if not c:
+            continue
+        for label, d in (("uncapped", u), ("**capped**", c)):
+            b = d.get("best")
+            n_wr = len({round(r["win_rate"], 6) for r in d["rows"]
+                        if r["win_rate"] is not None})
+            if not b:
+                print(f"| {d['strategy']} | {label} | **none qualifies** | — | — | — | {n_wr} |")
+                continue
+            print(f"| {d['strategy']} | {label} | {b['win_rate']:.1f}% | "
+                  f"{b['wilson_lb']:.1f}% | {_f(b['expectancy_r'], '+.3f')} | "
+                  f"{b['excluded_share'] * 100:.0f}% | {n_wr} |")
+
+
 def main():
     outdir = Path(sys.argv[1] if len(sys.argv) > 1
                   else "docs/superpowers/results/v17")
@@ -72,6 +100,8 @@ def main():
                 best = max(cand, key=lambda r: r["win_rate"] or -9, default=None)
                 cells.append(f"{best['win_rate']:.1f}" if best else "—")
             print(f"| {d['strategy']} | " + " | ".join(cells) + " |")
+
+    _cap_contrast(outdir, payloads)
 
     print("\n## Stretch goal (V6 Step 3: WR >= 90%)\n")
     hits = [(d["strategy"], r) for d in payloads for r in d["rows"]
