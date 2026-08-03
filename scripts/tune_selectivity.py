@@ -73,12 +73,21 @@ REUSE_FLAG_RATIO = 1.5   # the threshold V49 pinned, reused unchanged
 MIN_CELL_N = 20          # below this a cell is reported but never adopted
 
 
+def _num(x):
+    """Coerce numpy scalars to plain Python. `runner_holding_days` arrives as
+    a numpy int64 (it is a difference of positional indices), which json
+    refuses -- and it refuses at write time, after the whole sweep has run."""
+    if x is None:
+        return None
+    return x.item() if hasattr(x, "item") else x
+
+
 def _pct(xs, q):
     if not xs:
         return None
     s = sorted(xs)
     k = max(0, min(len(s) - 1, int(round(q * (len(s) - 1)))))
-    return round(s[k], 3)
+    return round(_num(s[k]), 3)
 
 
 def score_cell(trades) -> dict:
@@ -120,19 +129,19 @@ def score_cell(trades) -> dict:
         "n_eval": n_eval,
         "n_independent": n_indep,
         "horizon_overcount": round(ratio, 2),
-        "win_rate": round(wr, 2),
-        "wilson_lb": round(lb, 2),
-        "expectancy_r": round(sum(rs) / len(rs), 4) if rs else None,
+        "win_rate": round(_num(wr), 2),
+        "wilson_lb": round(_num(lb), 2),
+        "expectancy_r": round(_num(sum(rs) / len(rs)), 4) if rs else None,
         "excluded_share": round(excl / len(closed), 4) if closed else 0.0,
         "loss_pct_median": _pct(losses, 0.5),
         "loss_pct_p95": _pct(losses, 0.95),
-        "loss_pct_max": round(max(losses), 3) if losses else None,
+        "loss_pct_max": round(_num(max(losses)), 3) if losses else None,
         "loss_over_cap_share": (
             round(sum(1 for x in losses if x > config.MAX_LOSS_PCT + 1e-9)
                   / len(losses), 4) if losses else None),
         "n_runners": len(runner_rs),
         "runner_r_median": _pct(runner_rs, 0.5),
-        "runner_r_mean": round(statistics.fmean(runner_rs), 4) if runner_rs else None,
+        "runner_r_mean": round(_num(statistics.fmean(runner_rs)), 4) if runner_rs else None,
         "runner_r_p25": _pct(runner_rs, 0.25),
         "runner_r_p75": _pct(runner_rs, 0.75),
         "runner_hold_median": _pct(runner_holds, 0.5),
