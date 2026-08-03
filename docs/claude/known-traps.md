@@ -54,6 +54,27 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `get_intraday` (refetches `period="700d"` whenever the cache passes 4h) and
   `fetch_intraday_cache.py --force`. `data_refresh` was always safe
   (`_merge_save` unions), and so is `update_cache`.
+  **The guard does not cover `git`, and a deploy is the biggest overwrite of
+  all.** `market_data/` and `data/backtest_cache/` are *tracked*, so
+  `git pull` / `git checkout` writes those CSVs directly — never through
+  `save_to_disk`, so `CacheShrinkError` never fires. Measured 2026-08-03
+  deploying `172c7c3 → ed70782` onto `/opt/swing-bot`: **46 of 78 hourly files
+  would have shrunk, 12,080 bars destroyed**, and the pull did truncate them
+  (NVDA/AAPL/MU 5125 → 5090) before a union-restore from a pre-deploy backup
+  recovered **63,670 bars** — far more than the predicted 12,080, because the
+  checkout replaces each file with a version covering a *different range*, not
+  merely a shorter one. So neither "keep the pulled file" nor "restore the
+  backup" is right on its own; only the union is.
+  **Rule: before any deploy that touches `market_data/`, back it up, and after
+  the checkout union it back with `data_store._union_bars`.** Better still,
+  stop tracking these caches in git — deploying a constantly-appending cache by
+  checkout is what creates the hazard.
+  Same deploy surfaced a second, unrelated blocker worth knowing: unlink
+  permission comes from the **containing directory**, so root-owned
+  `data/backtest_cache/` and `market_data/` made `git pull` fail with
+  `unable to unlink old ...: Permission denied` for the `deploy` user even
+  though the repo root was `deploy`-owned. `chown -R deploy:deploy` on those
+  two trees fixes it; the container runs as root and can still write.
 - **Legacy shims that are not the real module.** `core/scan_engine.py` and
   `core/scan_embeds.py` are `import *` shims over `core/scanning/engine.py`
   and `core/scanning/embeds.py`. `core/trade_plan.py` is a deprecated adapter
