@@ -792,6 +792,12 @@ class ExitResult:
     entry_price: float | None
     r_total: float               # sum over legs of fraction * signed_r
     legs: list                   # [{"fraction","exit_price","r","reason"}]
+    # V52 Step 1: the bar TP1 filled on, so a caller can separate the runner
+    # leg's holding period from the whole trade's. Only ever set by the
+    # scale-out walk once TP1 has actually touched; None everywhere else,
+    # including every single-leg exit. Nothing reads it inside plan_engine --
+    # it is carried for measurement, exactly like G91's gate annotation.
+    tp1_index: int | None = None
 
 
 def _not_triggered() -> ExitResult:
@@ -1139,7 +1145,7 @@ def _scale_out_exit_walk(
                       entry_index=entry_index, exit_index=exit_index,
                       entry_price=entry_price,
                       r_total=round(frac1 * rr + frac2 * r2, 3),
-                      legs=[leg1, leg2])
+                      legs=[leg1, leg2], tp1_index=tp1_index)
 
 
 def simulate_exit(

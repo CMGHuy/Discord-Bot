@@ -85,6 +85,14 @@ class BacktestTrade:
     r_multiple: float | None
     holding_days: int | None
     runner_outcome: str | None = None
+    # V52 Step 1: the runner leg on its own, not blended into r_multiple.
+    # V51 Step 2 measured that with tp1_fraction frozen at 0.5 the break-even
+    # win rate swings 41.2% -> 58.3% purely on how runners do, which straddles
+    # the 43.4% no-skill floor -- so a blended r_multiple cannot answer whether
+    # the economics work. Both stay None unless the trade actually reached TP1
+    # under scale-out (single-leg walks and pre-TP1 exits have no runner).
+    runner_r: float | None = None
+    runner_holding_days: int | None = None
     # G91: gatekeeper annotation, populated only when run_backtest(gate_eval=True).
     # Zero behavior change -- these stay at their defaults (and serialize
     # identically) whenever gate_eval is off.
@@ -459,6 +467,14 @@ def run_backtest(
                 gate_eval, ticker, strategy, horizon_key, df, i, direction,
                 entry, stop_loss, take_profit)
 
+            # V52 Step 1. Two legs only ever exist once TP1 filled under
+            # scale-out; every other path returns a single full-fraction leg,
+            # where there is no runner to report and both stay None.
+            runner_r = res.legs[-1]["r"] if len(res.legs) == 2 else None
+            runner_holding_days = (exit_i - res.tp1_index
+                                   if len(res.legs) == 2 and res.tp1_index is not None
+                                   else None)
+
             record = BacktestTrade(
                 entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
                 direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
@@ -466,6 +482,7 @@ def run_backtest(
                 exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
                 r_multiple=round(r_multiple, 3), holding_days=holding_days,
                 runner_outcome=res.runner_outcome,
+                runner_r=runner_r, runner_holding_days=runner_holding_days,
                 gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
                 fired_hard_block=fired_hard_block,
             )
