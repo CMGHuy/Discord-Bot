@@ -22,12 +22,25 @@
 # change: click "Restart bot container" in the UI (requires the Docker
 # socket mount below), or run `docker compose restart bot`.
 
+# Docker's default json-file log driver keeps *every* line a container has
+# ever written, forever, and `docker compose down`/`rm` is the only thing
+# that reclaims it. On this box two unrelated containers quietly grew 4.0 GB
+# and 3.7 GB of JSON logs and took the disk to 92% full. Both services below
+# anchor this, so a chatty scan loop can't repeat it: 10 MB x 3 files caps
+# each container at 30 MB.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   bot:
     build: .
     image: swing-bot:latest
     container_name: swing-bot
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env
     volumes:
@@ -55,6 +68,7 @@ services:
     image: swing-bot:latest
     container_name: swing-bot-admin
     restart: unless-stopped
+    logging: *default-logging
     command: ["python", "admin_ui.py"]
     env_file:
       - .env
