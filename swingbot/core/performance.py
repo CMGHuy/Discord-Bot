@@ -75,6 +75,68 @@ def _refresh_snapshot_safely() -> None:
             "post-close snapshot refresh failed", exc_info=True)
 
 
+def _close_plan_safely(trade: dict, reason: str) -> None:
+    """Close the v2 plan behind a trade that one of the LEGACY paths in this
+    file just closed.
+
+    Only plan_manager transitions plans, but three paths here can close a
+    manager-owned trade without going through it:
+
+      - `update_open_trades()` and `close_if_live_price_hit()` -- the TARGET
+        side is handed to the manager, the STOP side deliberately stays live
+        as a backstop (see manager_owns_target()), so a stop-out closes the
+        trade here;
+      - `close_trade_manual()` -- the admin UI's "Close" button, which never
+        knew about plans at all.
+
+    Without this, the trade goes closed while the plan stays ACTIVE/PARTIAL
+    forever: the manager keeps polling it every tick, it keeps showing as
+    live in the admin UI and `/plans`, and its own trade-log hooks silently
+    no-op because `append_leg_by_plan`/`close_plan_trade` both require a
+    still-OPEN trade. Observed live on 2026-08-04 -- plan `6341bd00` (MRNA)
+    sat ACTIVE against a trade already closed as `loss`.
+
+    Lazy import + try/except for exactly the same reason as
+    `_journal_close_safely`: plan bookkeeping must never be able to break a
+    trade close. Must be called AFTER the caller's `with _LOCK:` block has
+    released -- PlanStore does its own file I/O under its own lock, so
+    calling it while TradeLog's `_LOCK` is held would be a nested-lock risk.
+    """
+    plan_id = trade.get("plan_id")
+    if not plan_id:
+        return                       # v1/legacy trade -- no plan behind it
+    try:
+        from swingbot.core.plan_engine import PlanStatus, record_transition
+        from swingbot.core.plan_store import PlanStore
+        store = PlanStore()
+        plan = store.get(plan_id)
+        if plan is None:
+            return
+        if plan.status not in (PlanStatus.ACTIVE, PlanStatus.PARTIAL):
+            # Already terminal -- the manager got there first, which is the
+            # normal case and not an error. PENDING is skipped too: it has
+            # no legal transition to CLOSED (plan_engine._LEGAL_TRANSITIONS)
+            # and record_transition would raise.
+            return
+        record_transition(plan, PlanStatus.CLOSED, reason=reason,
+                          at=trade.get("closed_at"))
+        store.update(plan)
+    except Exception:
+        import logging
+        logging.getLogger("swing-bot.performance").warning(
+            "plan close hook failed for trade %s (plan %s)",
+            trade.get("id"), plan_id, exc_info=True)
+
+
+def _backstop_reason(status: str) -> str:
+    """Transition reason recorded on a plan closed by a legacy path rather
+    than by the manager. Deliberately distinct from the manager's own
+    vocabulary ("loss"/"scratch"/"tp1_runner_*") so the plan timeline shows
+    that the backstop fired and the manager did not -- which is the signal
+    you need when diagnosing a missed manager tick."""
+    return "stop_backstop" if status == "loss" else "target_backstop"
+
+
 # ---------------------------------------------------------------------------
 # Trade-health status (admin dashboard) -- how close an OPEN trade's live
 # price is to hitting its stop-loss vs. its target, as a single -1..+1
@@ -592,6 +654,7 @@ class TradeLog:
                 self._save()
         for t in newly_closed:
             _journal_close_safely(t)
+            _close_plan_safely(t, _backstop_reason(t["status"]))
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
@@ -812,6 +875,10 @@ class TradeLog:
                     break
         if closed_trade is not None:
             _journal_close_safely(closed_trade)
+            # A human closing the trade closes the thesis: leaving the plan
+            # ACTIVE would keep the manager managing a position that no
+            # longer exists.
+            _close_plan_safely(closed_trade, f"manual_close:{reason}")
             _refresh_snapshot_safely()
             return True
         return False
@@ -905,6 +972,7 @@ class TradeLog:
                 self._save()
         for t in newly_closed:
             _journal_close_safely(t)
+            _close_plan_safely(t, _backstop_reason(t["status"]))
         if newly_closed:
             _refresh_snapshot_safely()
         return newly_closed
