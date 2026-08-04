@@ -3605,6 +3605,302 @@
       "trade_id": "JPf9guz1GgjigVJG",
       "ticker": "AAPL",
       "status": "win"
+    },
+    {
+      "ts": "2026-08-02T16:35:31.809557+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "lHXFoWwCoM9NX1G4",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T16:35:31.827554+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "wI0ELZoGAnxjYi9q",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T16:35:31.848870+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "XDeQaUz7TAa4g1io",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T16:35:31.872154+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "VT63UBoEhESaxYqk",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T16:35:56.875096+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "otJZjJSoBoczc94m",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T16:36:29.293928+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "7ZXMqXJWELa5JjZ8",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T16:49:20.007485+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "R1rvi6A9HyskdHoF",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:38:10.599257+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "ROWKk0bRfxmWWQfS",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:38:10.619416+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "C1ezzNBQhkPNZVG2",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T17:38:10.642614+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "qeEvXMP9GkRWdUZk",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:38:10.666815+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "m9yTXgV6halg56LI",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:38:27.857258+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "3FSQ47LqFmoMoBAc",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:39:39.946013+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "WE6GRRblBcDjyBLk",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:39:39.965770+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "AJE7TjIMl7PrrYdE",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T17:39:39.980413+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "a7IQdbhLH0lmmvJB",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:39:39.995911+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "lrIkafEumMsosjKz",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T17:39:56.267074+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "Z7UK4uPI3xyKaYHk",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T20:23:30.113656+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "CtqxMgu9oznbU7IT",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T20:23:30.128425+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "Gc75WBxhbT3OHkpM",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T20:23:30.144511+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "6T4gKe0XG4tRj7WX",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T20:23:30.160045+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "bhtJFd1q29dJeE3r",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T20:23:41.969374+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "1WS7ZAg19M14oQ0I",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:51:29.697717+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "S2JCwIFQXEUCFJal",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:51:29.715836+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "XadIaeUdlpeLXTiu",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T21:51:29.736578+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "Mc6jrnRSjNwujOLi",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:51:29.754372+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "c9jV1wULLdzNHOcH",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:51:49.469147+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "gvzZ8zLYkLKoSEM7",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:59:11.829395+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "zejJVzyLhLvngIS1",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:59:11.849457+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "yMrrS50tNCJOb1TD",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T21:59:11.868348+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "MberU4MUqT2BWx02",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:59:11.884681+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "GbVB3yBEQbEmjAPp",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T21:59:32.167055+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "D82FRZZAosm82IEj",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T22:16:54.413124+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "r5KtQSPAw68TsneC",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T22:16:54.426944+00:00",
+      "balance": 999950.0,
+      "pnl_amount": -50.0,
+      "trade_id": "3EHtqGfKlq1c5dX8",
+      "ticker": "AAPL",
+      "status": "loss"
+    },
+    {
+      "ts": "2026-08-02T22:16:54.440579+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "l6HF28iE2ujuMMgD",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T22:16:54.459886+00:00",
+      "balance": 1000100.0,
+      "pnl_amount": 100.0,
+      "trade_id": "44CtUkgRD6Pd0xnE",
+      "ticker": "AAPL",
+      "status": "win"
+    },
+    {
+      "ts": "2026-08-02T22:17:15.012426+00:00",
+      "balance": 1000099.99,
+      "pnl_amount": 99.99,
+      "trade_id": "DLoEDm8gUI76m2wZ",
+      "ticker": "AAPL",
+      "status": "win"
     }
   ],
   "balance": 1000099.99
