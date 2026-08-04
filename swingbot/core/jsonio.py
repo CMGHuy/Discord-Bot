@@ -10,6 +10,7 @@ three pre-existing stores that used to write with plain json.dump.
 import json
 import logging
 import os
+import tempfile
 
 log = logging.getLogger("swing-bot.jsonio")
 
@@ -30,16 +31,57 @@ def atomic_write_json(path: str, obj) -> None:
     (e.g. a stray datetime object a caller forgot to .isoformat()) is
     stringified instead of raising -- a persistence layer should degrade,
     not crash the trade it's trying to save.
+
+    The temp file gets a **unique** name (`mkstemp`) rather than the fixed
+    `<path>.tmp`. The bot and the admin UI are separate processes sharing
+    the same `data/` mount, so a fixed name is one temp file that two
+    writers race over: both open it, the first `os.replace` renames it
+    away, and the second dies with `FileNotFoundError: <path>.tmp ->
+    <path>` -- observed in production on 2026-08-04 in
+    `analytics.snapshots.refresh_snapshot`. Worse than the crash, their
+    interleaved writes could promote a torn file and defeat the whole
+    point of this module. A unique temp per writer makes concurrent
+    writers safe: each promotes its own complete file, last writer wins.
     """
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2, default=str)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # mkstemp creates 0600; match the mode the previous plain open() would
+    # have produced, or the existing file's, so a reader running as another
+    # user (admin UI vs bot) does not suddenly lose access.
+    try:
+        mode = os.stat(path).st_mode & 0o777
+    except OSError:
+        mode = 0o644
+    fd, tmp = tempfile.mkstemp(
+        dir=parent or ".", prefix=os.path.basename(path) + ".", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        # Never leave the temp behind on a failed write -- data/ is a mounted
+        # volume and these would accumulate silently.
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    # fsync the directory so the rename itself survives a power loss, not
+    # just the bytes. Not all platforms/filesystems allow this (Windows has
+    # no directory fd); a failure here costs durability, never correctness.
+    try:
+        dir_fd = os.open(parent or ".", os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except (OSError, AttributeError):
+        pass
 
 
 def read_json(path: str, default):

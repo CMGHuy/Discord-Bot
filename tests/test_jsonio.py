@@ -83,3 +83,51 @@ def test_account_config_atomic(tmp_path):
 
     reloaded = account_module.load_account_config(path)
     assert reloaded["base_balance"] == 50_000.0
+
+
+def test_no_stray_temp_files_left_behind(tmp_path):
+    """The temp name is unique now, so 'no <path>.tmp' is too weak a check --
+    assert the directory holds exactly the target file."""
+    p = str(tmp_path / "x.json")
+    atomic_write_json(p, {"a": 1})
+    assert os.listdir(tmp_path) == ["x.json"]
+
+
+def test_concurrent_writers_do_not_clobber_each_others_temp(tmp_path):
+    """Regression: a fixed `<path>.tmp` meant two processes writing the same
+    file shared one temp -- the second os.replace died with FileNotFoundError.
+    Hit in production 2026-08-04 by the bot and admin UI sharing data/."""
+    import threading
+
+    p = str(tmp_path / "shared.json")
+    errors = []
+    barrier = threading.Barrier(8)
+
+    def writer(n):
+        try:
+            barrier.wait()
+            for _ in range(25):
+                atomic_write_json(p, {"writer": n, "payload": list(range(200))})
+        except BaseException as exc:  # noqa: BLE001 - the assertion is "none"
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == [], f"concurrent writes raised: {errors[:3]}"
+    # Whoever won, the file must be complete and parseable -- never torn.
+    assert read_json(p, None) is not None
+    assert os.listdir(tmp_path) == ["shared.json"]
+
+
+def test_write_preserves_existing_file_mode(tmp_path):
+    """mkstemp creates 0600; a rewrite must not silently narrow permissions
+    on a file the other container reads."""
+    p = str(tmp_path / "perm.json")
+    atomic_write_json(p, {"a": 1})
+    os.chmod(p, 0o644)
+    atomic_write_json(p, {"a": 2})
+    assert oct(os.stat(p).st_mode & 0o777) == "0o644"
