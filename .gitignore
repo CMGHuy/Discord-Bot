@@ -17,3 +17,27 @@ validation_results.json
 # deliverables the backtest methodology in CLAUDE.md requires be committed.
 # Caught when Task E80's results doc silently failed to `git add`.
 docs/superpowers/results/*.log
+
+# Live runtime state -- MUST stay untracked. deploy/deploy.sh line 22 runs
+# `git reset --hard origin/main` on every push to main, so any of these that
+# git tracks gets production overwritten by whatever snapshot was last
+# committed. Proven on 2026-08-04: commit 9f86072 committed trades.json, the
+# next push reset the live file back to it, and a completed reconciliation
+# (26 open plans -> 1) was silently reverted mid-session.
+# Static seed/reference data (data/universe/*, data/macro/ticker_sectors.json,
+# data/backtest_cache/*) stays tracked on purpose -- it is not written at
+# runtime, so a deploy overwriting it is a no-op.
+data/trades.json
+data/account.json
+data/state.json
+data/watchlist.json
+data/analytics_snapshot.json
+data/market_data_state.json
+data/retrospective_history.json
+data/ticker_meta_cache.json
+data/scan_telemetry.jsonl
+data/replay_result.json
+data/replay_r_sequence.json
+data/macro/event_history.json
+data/macro/history/breadth_50dma.json
+data/macro/history/breadth_200dma.json
