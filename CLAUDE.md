@@ -82,14 +82,19 @@ python scripts/shadow_parity_report.py     # v2-vs-legacy comparison from data/s
 make up / make logs / make restart         # docker compose lifecycle
 ```
 
-**Known-good baseline** (commit `e5ef5cb`, 2026-07-30): `1223 passed, 54
-skipped, 1 failed`. The passed count drifts upward as the suite grows —
-a higher count than this is not a regression signal. The one failure,
+**Known-good baseline** (2026-08-04): `1711 passed, 62 skipped, 0 failed`,
+run in chunks (see below). The passed count drifts upward as the suite grows
+— a higher count than this is not a regression signal. **Green now means
+zero failures**, not "one known failure": the long-standing exception,
 `tests/test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`
-(`cancelled_expired` != `filled`), is pre-existing and expiry/wall-clock
-dependent — don't treat it as your regression or "fix" it as a side quest.
-"Green" means your diff adds no *new* failure and no *different* failure —
-the absence of new failures is the invariant, not the exact count.
+(`cancelled_expired` != `filled`), was fixed on 2026-08-04 and is no longer
+permitted. It was never a product bug — the test pinned a plan created
+`2026-07-11` with `expiry_bars=5` and then asserted `filled`, so once the
+wall clock moved ~5 trading days past that date the manager was *correct* to
+cancel it as expired, and the real `_bars_since` reached for live market
+data to decide. It now injects the bar-count feed the same way it already
+injected the price feed. If you see it fail again, something re-introduced a
+real-clock or real-data dependency — fix that, don't re-bless the failure.
 
 Don't add `-q` to any pytest invocation above — `pytest.ini`'s `addopts`
 already sets it, and a second `-q` on the command line stacks to
