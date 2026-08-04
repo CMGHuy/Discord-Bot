@@ -111,6 +111,35 @@ script, either confirm it already logs per-unit progress, or add a
 `print(..., flush=True)` (or `log.info`) per completed unit before
 kicking it off — don't discover this gap hours into an unmonitorable run.
 
+## Restarting the live bot after an outage (reconcile FIRST)
+
+The live deployment is **`/opt/swing-bot`**, not this repo; both clones track
+the same `origin/main`. Trades close only on a **spot-price poll**, so a TP/SL
+touch during downtime is invisible to the bot forever.
+`scripts/reconcile_open_plans.py` replays the missed bars through
+`PlanManager`'s own state machine, but it is a **standalone script, not wired
+into startup** — nothing runs it for you.
+
+**Order matters, and getting it wrong silently corrupts the record:**
+
+```bash
+docker compose stop bot                                          # 1. bot DOWN first
+docker compose run --rm --no-deps -T bot \
+    python scripts/reconcile_open_plans.py                       # 2. dry run, no writes
+docker compose run --rm --no-deps -T bot \
+    python scripts/reconcile_open_plans.py --apply               # 3. commit the transitions
+docker compose up -d bot                                         # 4. only now bring it up
+```
+
+Proven on **2026-08-04**: after a 21h outage with 28 open plans the bot was
+started *before* reconciling, and within ~5 minutes it booked 25 of them at
+*current spot* prices, leaving 3 for the script. Recovery meant restoring
+`data/{plans,trades,account,journal}.json` from the pre-gap backup and
+re-running. The bad bookings were **flattering** — 15W/9L against the correct
+10W/12L, because reconciliation resolves a bar spanning both levels as the
+stop. Nothing errors; the win rate is just wrong. Always back up those four
+files before `--apply`.
+
 ## Reference docs
 
 Not auto-loaded — read the relevant one before starting work in that area.
