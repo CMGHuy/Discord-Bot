@@ -14,7 +14,8 @@ from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core import scan_engine
 from swingbot.core.analytics.rank import rank_plans
-from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
+from swingbot.bot_core import (bot, in_session, log, SESSION_TZ, install_reload_signal_handler,
+                               install_shutdown_signal_handler, on_config_reload)
 from swingbot.core.account import load_account_config
 from swingbot.core.data import get_current_price
 from swingbot.core.gate import run_checklist
@@ -1440,6 +1441,7 @@ async def on_ready():
         config.CONFLUENCE_DEVIATION_PCT, wl_size,
     )
     install_reload_signal_handler()
+    install_shutdown_signal_handler()
 
     # V45: one cheap read of journal.json vs trades.json at startup. These
     # orphans were found by accident during another task; a future one should

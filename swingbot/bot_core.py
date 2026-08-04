@@ -310,6 +310,82 @@ def install_reload_signal_handler():
                   "button (or `docker compose restart bot`) after changing settings instead.")
 
 
+_shutdown_handler_installed = False
+_shutdown_in_progress = False
+# asyncio only holds a weak reference to a running task, so a bare
+# create_task() whose result nobody keeps can be garbage-collected
+# mid-await. Park it here for the few hundred ms it lives.
+_shutdown_task = None
+
+
+async def _close_bot(signame: str):
+    """Closes the gateway connection and lets bot.run() return normally."""
+    try:
+        await bot.close()
+    except Exception:
+        # Nothing left to salvage at this point -- log it and let the
+        # process exit anyway, rather than hanging until Docker's SIGKILL.
+        log.exception("Error closing the Discord client during %s shutdown", signame)
+
+
+def _handle_shutdown_signal(signame: str):
+    """
+    Runs on SIGTERM: asks discord.py to close the gateway cleanly so
+    bot.run() returns and the process exits on its own.
+
+    This matters more than it looks. The bot is PID 1 in its container,
+    and the kernel does not apply default signal dispositions to PID 1 --
+    a process with no explicit SIGTERM handler simply *ignores* it. So
+    without this, every `docker stop` / `docker compose restart` / deploy
+    sent SIGTERM, got nothing, waited out the 10s grace period and then
+    SIGKILLed the bot (exit 137).
+
+    What this does and does not buy: the gateway closes cleanly and the
+    process exits 0 in well under a second instead of hanging for the full
+    grace period. It does **not** let an in-flight scan finish -- once
+    bot.run() returns, asyncio.run()'s shutdown cancels whatever @tasks.loop
+    coroutines are still pending, scan included. Writes survive that because
+    they go through atomic_write_json, not because the scan is allowed to
+    complete.
+    """
+    global _shutdown_in_progress, _shutdown_task
+    if _shutdown_in_progress:
+        # An impatient second Ctrl-C/stop shouldn't stack a second close().
+        log.warning("Received %s again -- shutdown already in progress.", signame)
+        return
+    _shutdown_in_progress = True
+    log.info("Received %s -- closing Discord connection and shutting down.", signame)
+    _shutdown_task = asyncio.create_task(_close_bot(signame))
+
+
+def install_shutdown_signal_handler():
+    """
+    Registers the SIGTERM graceful-shutdown handler on the running loop.
+    Same call-once-from-on_ready contract (and same asyncio-safety
+    reasoning) as install_reload_signal_handler above.
+
+    Signals that arrive before on_ready -- i.e. during the first couple of
+    seconds while the gateway connection is still coming up -- still fall
+    through to the old force-kill path. Covering that window would mean
+    registering a plain `signal` handler before the loop exists, which is
+    exactly the asyncio mix this module avoids elsewhere; a stop issued
+    mid-connect is both rare and cheap (no scan in flight to interrupt).
+    """
+    global _shutdown_handler_installed
+    if _shutdown_handler_installed:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGTERM, _handle_shutdown_signal, "SIGTERM")
+        _shutdown_handler_installed = True
+        log.info("Graceful-shutdown signal handler installed (SIGTERM).")
+    except (NotImplementedError, AttributeError):
+        # Windows: no add_signal_handler for SIGTERM. Ctrl-C there still
+        # goes through discord.py's own KeyboardInterrupt handling.
+        log.info("SIGTERM graceful shutdown isn't available on this platform -- "
+                 "the bot will be force-stopped instead of closing cleanly.")
+
+
 @bot.event
 async def on_command(ctx):
     """Logs every command invocation -- who ran what, where. Cheap, and
