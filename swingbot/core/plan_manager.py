@@ -154,6 +154,15 @@ class PlanManager:
             return
         try:
             if event.transition == "filled":
+                if self.trade_log.has_open_trade_for_plan(plan.plan_id):
+                    # The scan path already wrote this plan's trade when it
+                    # alerted the candidate; logging a second one here would
+                    # double-book the position (and leave one of the two
+                    # stranded when the plan later closes -- see
+                    # TradeLog.has_open_trade_for_plan).
+                    log.debug("plan %s already has an open trade -- not "
+                              "logging a second one on fill", plan.plan_id)
+                    return
                 trade_id = self.trade_log.log_trade(
                     ticker=plan.ticker, strategy=plan.strategy,
                     horizon_key=plan.horizon_key, direction=plan.direction,

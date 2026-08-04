@@ -275,7 +275,7 @@ def append_leg(t: dict, leg: dict) -> None:
     t.setdefault("legs", []).append(leg)
 
 
-def manager_owns_target(t: dict) -> bool:
+def manager_owns_target(t: dict, open_plan_ids: set[str] | None = None) -> bool:
     """True when plan_manager -- not these legacy full-close loops -- owns
     this trade's TARGET side (plan v8 Task V4 Step 2).
 
@@ -299,8 +299,45 @@ def manager_owns_target(t: dict) -> bool:
     Gated on INTRADAY_MANAGER_V2: with the manager off nothing else is
     watching TP1, so the legacy loops must keep closing these trades or
     they'd never close at all.
+
+    ...and gated, for exactly the same reason, on the plan still being one
+    the manager will actually poll. `PlanManager.poll()` walks
+    `store.open_plans()`, so a trade whose plan is missing from plans.json
+    or already terminal is watched by *nobody*: this function handed the
+    target side to the manager, and the manager never sees it. The trade
+    then sits open through its own target forever, and only a stop-out can
+    ever close it. Observed live 2026-08-04 -- GOOGL `p5LTtQ06` and RKLB
+    `nsj3TwaM` were both open against a `plan_id` absent from the store,
+    which is what put them on the dashboard at 100% and not closing.
+
+    `open_plan_ids` lets the caller load the store once per pass instead of
+    once per trade; omit it and the lookup is done lazily here. If the store
+    cannot be read at all we return True -- the pre-existing behaviour --
+    rather than letting a transient read error resurrect the double-close
+    this function exists to prevent.
     """
-    return bool(t.get("plan_id")) and bool(config.INTRADAY_MANAGER_V2)
+    if not (bool(t.get("plan_id")) and bool(config.INTRADAY_MANAGER_V2)):
+        return False
+    if open_plan_ids is None:
+        open_plan_ids = _open_plan_ids()
+    if open_plan_ids is None:
+        return True                  # store unreadable -- keep the old behaviour
+    return t["plan_id"] in open_plan_ids
+
+
+def _open_plan_ids() -> set[str] | None:
+    """Plan IDs the manager will actually poll (PENDING/ACTIVE/PARTIAL), or
+    None if plans.json could not be read. Lazy import for the same reason as
+    `_close_plan_safely`: plan bookkeeping must never break a trade close."""
+    try:
+        from swingbot.core.plan_store import PlanStore
+        return {p.plan_id for p in PlanStore().open_plans()}
+    except Exception:
+        import logging
+        logging.getLogger("swing-bot.performance").warning(
+            "could not read plans.json to check manager ownership; "
+            "leaving the target side with the manager", exc_info=True)
+        return None
 
 
 class TradeLog:
@@ -442,13 +479,19 @@ class TradeLog:
     def append_leg_by_plan(self, plan_id: str, leg: dict) -> None:
         """Bank a leg (e.g. TP1 partial) onto the still-open v2 trade this
         plan created. No-op if the plan's trade can't be found (log_trade
-        may have failed, or trade_log was wired in after the fill)."""
+        may have failed, or trade_log was wired in after the fill).
+
+        Legs every OPEN trade the plan owns, not just the first. A plan
+        normally has exactly one, but the live book proves it can have two
+        (AVGO plan `47def9d0`, 2026-08-04) -- and picking the first by
+        `next()` left the other un-legged."""
         with _LOCK:
-            t = next((t for t in self._trades
-                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
-            if t is None:
+            open_ts = [t for t in self._trades
+                       if t.get("plan_id") == plan_id and t["status"] == "open"]
+            if not open_ts:
                 return
-            append_leg(t, leg)
+            for t in open_ts:
+                append_leg(t, leg)
             self._save()
 
     def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
@@ -457,21 +500,29 @@ class TradeLog:
         which has the TradePlanV2 and so can recompute the r-multiple)
         synthesizes a fraction=1.0 leg for a pre-TP1 loss/scratch that
         closes the ORIGINAL single position -- this method just appends
-        whatever it's given so settle_legs always has a leg to work from."""
+        whatever it's given so settle_legs always has a leg to work from.
+
+        Closes every OPEN trade the plan owns. `next()` closed only the
+        first, so a plan carrying two open trades (AVGO `47def9d0`,
+        2026-08-04) went terminal with one still open -- and once the plan
+        is terminal `manager_owns_target` no longer hands it to anyone, so
+        that leftover could never close by target again."""
+        closed_records = []
         with _LOCK:
-            t = next((t for t in self._trades
-                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
-            if t is None:
+            open_ts = [t for t in self._trades
+                       if t.get("plan_id") == plan_id and t["status"] == "open"]
+            if not open_ts:
                 return
-            if leg is not None:
-                append_leg(t, leg)
-            t["status"] = status
-            t["exit_price"] = (t["legs"][-1]["exit_price"] if t.get("legs")
-                               else t.get("exit_price"))
-            t["closed_at"] = datetime.now(timezone.utc).isoformat()
-            self._settle_account_balance(t)
+            for t in open_ts:
+                if leg is not None:
+                    append_leg(t, leg)
+                t["status"] = status
+                t["exit_price"] = (t["legs"][-1]["exit_price"] if t.get("legs")
+                                   else t.get("exit_price"))
+                t["closed_at"] = datetime.now(timezone.utc).isoformat()
+                self._settle_account_balance(t)
+                closed_records.append(dict(t))
             self._save()
-            closed = dict(t)
         # Plan v8 Task V47. This was the ONE close path that never journaled,
         # and it is the path every v2 plan takes (PlanManager._on_event) --
         # so with PLAN_ENGINE_V2=on and the intraday manager running, the
@@ -482,7 +533,8 @@ class TradeLog:
         # new engine didn't manage. Outside the lock, same as the other four
         # call sites -- _journal_close_safely does its own file I/O under
         # JournalStore's separate lock.
-        _journal_close_safely(closed)
+        for closed in closed_records:
+            _journal_close_safely(closed)
         _refresh_snapshot_safely()
 
     def _settle_account_balance(self, t: dict) -> None:
@@ -559,6 +611,7 @@ class TradeLog:
 
         updates = []   # [(trade_id, new_status, exit_price)]
         already_closed_ids: set = set()
+        open_plan_ids = _open_plan_ids()   # one read per pass, not per trade
         for trade in open_trades:
             opened_at = datetime.fromisoformat(trade["opened_at"])
             bars_since = (
@@ -571,7 +624,7 @@ class TradeLog:
             # v2 manager-owned trade: TP1 is the plan manager's to act on
             # (partial + runner), not ours to full-close. See
             # manager_owns_target(); the stop side below stays live.
-            skip_target = manager_owns_target(trade)
+            skip_target = manager_owns_target(trade, open_plan_ids)
             hit = False
             for _, bar in bars_since.iterrows():
                 hi, lo, op = float(bar["High"]), float(bar["Low"]), float(bar["Open"])
@@ -797,6 +850,23 @@ class TradeLog:
         self.refresh()   # always read fresh — admin UI may have modified the file
         return next((t for t in self._trades if t["id"] == trade_id), None)
 
+    def has_open_trade_for_plan(self, plan_id: str) -> bool:
+        """True if this plan already has an open trade behind it.
+
+        One plan is one position: scale-out is recorded as legs on a single
+        trade, never as a second trade. But two paths log trades and only one
+        of them dedups -- the scan writes the candidate's trade immediately
+        (`scanning/engine.py`, guarded by `already_open`), and PlanManager
+        then logs a brand-new one on the plan's `filled` transition with no
+        check at all. A plan alerted as PENDING and filled minutes later
+        therefore got two, double-booking the risk.
+
+        Live as of 2026-08-04: 13 of 372 plans carry two trades, e.g. AVGO
+        `47def9d0` at 19:17:11 (scan) and 19:25:22 (fill)."""
+        self.refresh()
+        return any(t.get("plan_id") == plan_id and t["status"] == "open"
+                   for t in self._trades)
+
     def has_open_trade(self, ticker: str, strategy: str, horizon_key: str, direction: str) -> bool:
         """True if this exact setup is already being tracked as an open trade --
         used to avoid logging duplicate positions when a snapshot scan re-surfaces
@@ -935,11 +1005,12 @@ class TradeLog:
             return []
 
         updates = []
+        open_plan_ids = _open_plan_ids()   # one read per pass, not per trade
         for trade in open_trades:
             is_bull = trade["direction"] == "bullish"
             # Target side handed to plan_manager for v2 trades; stop side
             # stays as a backstop. See manager_owns_target().
-            skip_target = manager_owns_target(trade)
+            skip_target = manager_owns_target(trade, open_plan_ids)
             if is_bull:
                 if live_price <= trade["stop_loss"]:
                     updates.append((trade["id"], "loss", trade["stop_loss"]))

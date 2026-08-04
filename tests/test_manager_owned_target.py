@@ -18,6 +18,7 @@ import pytest
 
 from swingbot import config
 from swingbot.core.performance import TradeLog
+from swingbot.core.plan_engine import PlanStatus
 from swingbot.core.plan_manager import PlanManager
 from swingbot.core.plan_store import PlanStore
 from tests.conftest import make_ohlcv
@@ -39,10 +40,24 @@ def _trade(plan_id=None, direction="bullish"):
 @pytest.fixture
 def log_factory(tmp_path, monkeypatch):
     """TradeLog over a tmp trades.json, with the journal write path pinned to
-    tmp and off the network (same isolation as test_near_tp_bypass)."""
+    tmp and off the network (same isolation as test_near_tp_bypass).
+
+    Every plan_id referenced by the trades is also registered as an ACTIVE
+    plan in a tmp PlanStore, and the lazily-imported PlanStore is redirected
+    to it. That is what makes these trades *manager-owned* rather than merely
+    plan-tagged: `manager_owns_target` requires a plan the manager will
+    actually poll, because a plan_id pointing at nothing is owned by no one
+    (see tests/test_unowned_target_close.py). Without this the fixture
+    described a scenario it never built, and silently read the real
+    data/plans.json besides."""
     monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+    plan_store = PlanStore(path=str(tmp_path / "plans.json"))
+    monkeypatch.setattr("swingbot.core.plan_store.PlanStore",
+                        lambda *a, **k: plan_store)
 
     def _make(trades):
+        for pid in {t["plan_id"] for t in trades if t.get("plan_id")}:
+            plan_store.add(_pending(plan_id=pid, status=PlanStatus.ACTIVE))
         path = tmp_path / "trades.json"
         path.write_text(json.dumps(trades))
         return TradeLog(path=str(path))
