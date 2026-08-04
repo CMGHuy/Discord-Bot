@@ -149,8 +149,17 @@ def main():
     pre = {n: out["regimes"][n] for n, _, _ in REGIMES if n not in POST_2020}
     post = {n: out["regimes"][n] for n in POST_2020}
     suff_pre = {n: r for n, r in pre.items() if r["verdict"] != "INSUFFICIENT"}
-    post_positive = all((r["pooled"]["expectancy_r"] or 0) > 0 for r in post.values()
-                        if r["verdict"] != "INSUFFICIENT")
+    # `all()` over an empty sequence is True, so without the bool() guard a run
+    # where BOTH post-2020 windows come back INSUFFICIENT would satisfy
+    # "expectancy > 0 in the post-2020 windows" vacuously and could fire a
+    # regime-fragile rejection on no post-2020 evidence at all. Reachable: the
+    # COVID window is ~23 trading days, and the RSI-only check had both post
+    # windows under N=30. The rule as pre-registered requires the post-2020
+    # side to be *measured* positive, which needs at least one sufficient
+    # window. Corrected 2026-08-04 BEFORE the full grid's numbers existed.
+    suff_post = {n: r for n, r in post.items() if r["verdict"] != "INSUFFICIENT"}
+    post_positive = bool(suff_post) and all(
+        (r["pooled"]["expectancy_r"] or 0) > 0 for r in suff_post.values())
     pre_all_nonpos = bool(suff_pre) and all(
         (r["pooled"]["expectancy_r"] or 0) <= 0 for r in suff_pre.values())
     rejected = bool(post_positive and pre_all_nonpos)
@@ -158,6 +167,7 @@ def main():
         "rule": "reject if post-2020 expectancy > 0 AND every sufficient "
                 "pre-2020 window <= 0",
         "sufficient_pre_2020": sorted(suff_pre),
+        "sufficient_post_2020": sorted(suff_post),
         "post_2020_all_positive": post_positive,
         "pre_2020_all_non_positive": pre_all_nonpos,
         "REJECTED_AS_REGIME_FRAGILE": rejected,
@@ -168,6 +178,10 @@ def main():
         print("  NOTE: no pre-2020 window reached N>=%d, so the rejection test "
               "could not be evaluated -- that is an absence of evidence, not a pass."
               % MIN_N, flush=True)
+    if not suff_post:
+        print("  NOTE: no post-2020 window reached N>=%d either, so the "
+              "post-2020 side of the rule is unmeasured -- rejection cannot "
+              "fire on it, in either direction." % MIN_N, flush=True)
 
     out["excluded"] = {"illiquid": excluded["illiquid"],
                        "bad_data": excluded["bad_data"],
