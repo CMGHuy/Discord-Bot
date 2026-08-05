@@ -196,7 +196,11 @@
       </td>
     </tr>
     {% if t.get('legs') and t.legs | length > 1 %}
-    <tr class="muted" style="font-size:11px;">
+    {# Scale-out detail row. NOT a trade row: it carries no .row-num and must
+       never enter the paginator's row set -- it is shown/hidden with its
+       parent instead. Tagged so the JS can tell the two apart by class
+       rather than by guessing from position. #}
+    <tr class="muted ct-legs-row" data-legs-for="{{ t.id }}" style="font-size:11px;">
       <td></td><td></td>
       <td colspan="14" style="padding-left:24px;">
         {% for leg in t.legs[1:] %}
@@ -288,7 +292,15 @@
         return ctSortAsc ? cmp : -cmp;
       });
       var tbody = document.querySelector('#closed-trades-table tbody');
-      allRows.forEach(function(r) { tbody.appendChild(r); });
+      // Pair each trade row with its scale-out detail row BEFORE moving
+      // anything: legRowFor reads nextElementSibling, and the first
+      // appendChild would otherwise re-order the DOM out from under it,
+      // stranding leg rows against whichever trade happened to follow.
+      var pairs = allRows.map(function(r) { return [r, legRowFor(r)]; });
+      pairs.forEach(function(p) {
+        tbody.appendChild(p[0]);
+        if (p[1]) tbody.appendChild(p[1]);
+      });
       document.querySelectorAll('#closed-trades-table .sort-arrow').forEach(function(el) {
         el.textContent = (el.dataset.colId === ctSortCol) ? (ctSortAsc ? ' ▲' : ' ▼') : '';
       });
@@ -306,6 +318,14 @@
     // closed_trade_filter_options in the dashboard route) directly into the
     // <select> markup above, and morphdom patches them in place on every
     // refresh same as any other element -- no client-side rebuild needed.
+
+    // The scale-out detail row that belongs to `row`, if it has one. Adjacent
+    // by construction (the template emits it immediately after its parent),
+    // and identified by class so a trade with no legs simply returns null.
+    function legRowFor(row) {
+      var n = row.nextElementSibling;
+      return (n && n.classList && n.classList.contains('ct-legs-row')) ? n : null;
+    }
 
     function getVisible() {
       return allRows.filter(function(row) {
@@ -325,10 +345,23 @@
       var start = (currentPage - 1) * pp;
       var end   = Math.min(start + pp, total);
 
-      allRows.forEach(function(r){ r.style.display = 'none'; });
+      allRows.forEach(function(r){
+        r.style.display = 'none';
+        var lr = legRowFor(r);
+        if (lr) lr.style.display = 'none';
+      });
       visible.slice(start, end).forEach(function(r, i) {
         r.style.display = '';
-        r.querySelector('.row-num').textContent = start + i + 1;
+        // Guarded: an unguarded .row-num lookup here threw a TypeError on the
+        // first scale-out detail row and aborted this whole forEach, leaving
+        // the rest of the page hidden -- the "page 1 shows only a few trades"
+        // bug. The row set below no longer contains those rows, and this stays
+        // defensive so a future non-trade row degrades instead of blanking
+        // the table.
+        var num = r.querySelector('.row-num');
+        if (num) num.textContent = start + i + 1;
+        var lr = legRowFor(r);
+        if (lr) lr.style.display = '';
       });
 
       document.getElementById('ct-info').textContent =
@@ -349,7 +382,12 @@
     // server-side from the full trade history -- see the note above -- so
     // they no longer need rebuilding here.)
     window.refreshClosedTradesTable = function() {
-      allRows = Array.from(document.querySelectorAll('#closed-trades-table tbody tr'));
+      // Trade rows ONLY. A bare `tbody tr` also matched every scale-out
+      // detail row, which inflated the row count (so "of N" and the page
+      // count were both wrong) and put rows with no .row-num into the
+      // paginated slice.
+      allRows = Array.from(
+        document.querySelectorAll('#closed-trades-table tbody tr[id^="ct-row-"]'));
       render();
     };
 
