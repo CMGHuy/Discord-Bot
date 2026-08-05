@@ -206,4 +206,193 @@ under Result.
 
 # Result
 
-*(empty at pre-registration time — filled in after the grid finished)*
+Grid completed **2026-08-05**, 12:29→14:37 (~2h08m): 67 tickers × 10 horizons
+× 11 strategies, gates off, one pass. Raw output:
+`2026-08-05-v54-strictest-gate-ladder.json`. Screened out: 2 illiquid, 8
+bad-data, 1 no-data. ARM and SNDK are screened *in* but contributed 0 TRAIN
+trades (listed after the window), so the effective universe is smaller than 67
+on both halves.
+
+**The ladder ran clean and returned 9 ADOPT / 2 KEEP. Nothing has been adopted
+yet — the decision is routed to the human partner, for the reasons below, and
+`STRATEGY_GATES` in `strategy_types.py` is unchanged.**
+
+## Harness verification — PASS, and stronger than V53's
+
+V53 could only offer a substitute for its pre-registered check. V54 gets the
+real thing at zero compute: V53 and V54 are independently written harnesses
+that ran the same config over the same screened universe, so their slices must
+agree.
+
+- **All 70 per-regime × per-direction slices** for V53's five strategies are
+  **bit-identical** between the two runs (N, wins, expectancy to 1e-9).
+- Pooling V54's seven regime slices reproduces V53's published table **exactly
+  on all 10 arms** — and V53's table matched V21's Test A exactly, so V54
+  reproduces V21 by transitivity.
+
+Both checks agree with the harnesses behind V16/V17/V20/V21/V53. The caveat
+V53 named still applies and is not weakened: these scripts share `pool`,
+`window_trades` and `run_backtest`, so this verifies the *slicing* agrees, not
+that the core is correct. The pre-registered check — a run with the proposed
+masks written into `STRATEGY_GATES` reproducing the slice they were chosen on
+— remains unmade, and stays unmade while nothing is adopted.
+
+**Trap for the next reader, found doing this check:** `pool()` computes
+`expectancy_r` as the mean over **all** trades (scratches and timeouts
+included) while `n_eval` counts only wins and losses. Pooling per-slice
+expectancies must therefore weight by `closed`, **not** by `n_eval`. Weighting
+by `n_eval` produces a plausible-looking 0.001–0.03R error on every arm — it
+reported 10/10 spurious mismatches here before the formula was fixed.
+
+## Verdicts
+
+| Strategy | Verdict | Current → Proposed | FIT ExpR (N) | CONFIRM ExpR (N) | Signals |
+|---|:-:|---|---|---|---|
+| VWAP | ADOPT | *unchanged* | +0.307 (450) | +0.321 (341) | 1027 → 1027 |
+| Support/Resistance | ADOPT | *unchanged* | +0.138 (953) | +0.127 (845) | 2245 → 2245 |
+| MACD | ADOPT | *unchanged* | +0.187 (455) | +0.069 (409) | 1130 → 1130 |
+| Volume Profile | ADOPT | *unchanged* | +0.218 (278) | +0.333 (226) | 639 → 639 |
+| RSI Divergence | ADOPT | *unchanged* | +0.142 (4281) | +0.129 (3864) | 9980 → 9980 |
+| Fibonacci | ADOPT | bullish → bullish + {2w,4w,2m,4m,6m} | +0.176 (561) | +0.197 (520) | 1757 → 1384 |
+| Elliott Wave | ADOPT | *ungated* → bullish + {4w} | +0.073 (201) | +0.196 (159) | 628 → 445 |
+| MA Ribbon | ADOPT | bullish → bullish + {2w,4w,2m,3m,4m,5m} | +0.335 (710) | +0.230 (615) | 1836 → 1696 |
+| Break & Retest | ADOPT | *ungated* → bullish + {4w,2m…9m} | +0.263 (851) | +0.248 (620) | 2405 → 1934 |
+| EMA Crossover | KEEP | fails CONFIRM | +0.100 (34) | **−0.098 (28)** | — |
+| RSI | KEEP | no admissible cell | — | — | — |
+
+**Step C never fired.** Every candidate's whole-universe signal count is ≤ the
+current mask's, as step A's restriction guarantees. The defensive assertion
+held; no bug.
+
+## Five of the nine "ADOPT"s are no-ops
+
+Read the mask column, not the verdict count. Five strategies proposed a mask
+**identical to what already ships**, so adopting them changes nothing:
+
+- VWAP, Support/Resistance, MACD and Volume Profile re-proposed their exact
+  current masks.
+- RSI Divergence proposed `{directions: [bullish, bearish]}` with no horizon
+  key — both directions, all ten horizons, which is *the same thing as
+  ungated*. Its signal count is unchanged at 9980, which is the proof.
+
+That is a real finding, not an artifact: for these five, the tightest
+expressible subset of the current mask that clears the bar **is** the current
+mask. The ladder found no room to tighten. **Only four masks would actually
+change.**
+
+## The four real tightenings all fail the pre-registered bias disclosure
+
+Signal reductions are material — Fibonacci −21%, Elliott Wave −29%,
+Break & Retest −20%, MA Ribbon −8%. But this pre-registration fixed the rule
+for reading them, and it is unambiguous:
+
+> Any adopted cell whose ExpR is under +0.318R must be read as "not
+> distinguishable from zero" … say so rather than adopting on a sign the known
+> bias erases.
+
+**All four sit under V51's +0.318R daily-bar overstatement on CONFIRM**, and
+three of four on FIT as well. MA Ribbon's FIT +0.335 is the only figure that
+clears it, by 0.017R, and its own CONFIRM half (+0.230) does not. Every one of
+these four adoptions therefore rests entirely on a positive sign that the known
+bias erases. V53's whole result sat under this same floor; so does V54's.
+
+## Mandatory per-regime disclosure — and it is damning
+
+Expectancy of each *proposed* mask across V20's seven drawdown windows.
+Disclosure, never a rejection rule — but it is what the next reader needs:
+
+| Proposed mask | dotcom | 2002 | GFC | 2011 | 2015-16 | COVID | 2022 |
+|---|---|---|---|---|---|---|---|
+| Fibonacci | −0.225 | +0.214 | −0.509 | −0.176 | −0.090 | n/a | −0.376 |
+| Elliott Wave | −0.711 | −0.486 | −0.265 | +0.024 | −1.000 | n/a | −0.500 |
+| MA Ribbon | +0.129 | −0.169 | −0.222 | −0.557 | −0.428 | n/a | −0.440 |
+| Break & Retest | −0.152 | −0.357 | −0.254 | −0.471 | −0.279 | −1.000 | −0.555 |
+
+All four are bullish-only masks that lose money in **almost every drawdown
+window**: Break & Retest is negative in all seven, Elliott Wave in six of six
+with data, MA Ribbon in six of seven, Fibonacci in five of six. Several slices
+are at or below `MIN_N` and should not be read alone, but the direction is
+consistent and the pooled picture is not ambiguous.
+
+This is exactly the pattern that killed V53's two rule-2 masks on inspection:
+**tightening the mask did not remove the bull-majority artifact, it
+concentrated it.** V21's finding stands — direction edge here is
+regime-conditional, and no static cross-product mask encodes that.
+
+## The two KEEPs
+
+- **EMA Crossover** fails CONFIRM twice over: the FIT selection
+  (`bullish + {2w}`, the single admissible cell out of 20) flips to
+  **−0.098** on the held-out half, at N=28, which is itself below `MIN_N`.
+  This is the guard doing precisely its job — a one-cell selection on FIT that
+  does not survive the tickers it was not chosen on. It stays ungated.
+- **RSI** has **zero admissible cells**: no (direction, horizon) cell its
+  current `bullish` mask admits clears `ExpR > 0` at `N ≥ 30` on FIT in 25
+  years. Per rule 3 this is **reported, not auto-disabled** — there is no
+  "disable strategy" primitive in `STRATEGY_GATES` and inventing one here
+  would be scope creep. It is a strong enough statement to deserve a human
+  decision about dropping the strategy outright.
+
+## The adoption decision — NOTHING ADOPTED, by human-partner directive
+
+**Decided 2026-08-05: all eleven masks stay unchanged.** `STRATEGY_GATES` in
+`strategy_types.py` is untouched.
+
+The mechanical ladder says ADOPT for nine. Five are no-ops. The remaining four
+are genuine, strictly non-loosening tightenings whose **entire justification is
+an expectancy the +0.318R bias cannot distinguish from zero**, and whose
+per-regime tables show the retained cells are still bull-market artifacts.
+
+Adopting them on *risk-reduction* grounds ("fewer signals in cells with no
+demonstrable edge") was considered and **declined**. It is a defensible
+position, but it is **not the justification the ladder used**, and swapping in
+a post-hoc rationale after seeing the numbers is the exact failure mode this
+pre-registration was written to prevent.
+
+The one argument that would have rescued it — that the +0.318R bias is a level
+shift, so the *relative* ordering the ladder selects on survives even though
+the absolute sign does not — **does not hold here**. V51's bias is a daily-bar
+resolution artifact that varies with horizon and stop distance, and these masks
+select *on horizon*, so the assumption is weakest exactly where it would have
+to be strongest.
+
+As with V53, this is a **human-partner directive, not a rule failure**, and
+the distinction must not be blurred: the ladder ran clean and its verdicts
+stand as recorded. Note the asymmetry from V53 that makes this the *second*
+non-adoption for a different reason — V53's masks were rejected for
+**loosening**, V54's for resting on a **null**. A third re-derivation should
+expect to be told something new before it is worth the compute.
+
+**RSI:** decided 2026-08-05 to **record and change nothing**, per rule 3. The
+zero-admissible-cell result stands as a documented finding; RSI keeps its
+current `bullish` mask. Dropping the strategy would be a code change, not a
+mask edit, and would need its own task.
+
+## What a successor would have to do differently
+
+V53 (mildest-first) and V54 (strictest-first) have now bracketed the static
+cross-product mask space from both ends and returned nothing adoptable. The
+remaining moves are **not** a third ladder over the same space:
+
+1. **Fix the measurement, not the mask.** Every verdict here was decided by
+   the +0.318R bias. Until V51's daily-bar overstatement is reduced — hourly
+   fidelity, i.e. V23 — no expectancy-sign rule over this data can adopt
+   anything, because the discriminating threshold sits above nearly every
+   cell.
+2. **Change the mask's shape.** V21's regime-conditionality finding is now
+   confirmed from a third direction: these tightenings concentrated the bull
+   artifact instead of removing it. That is a property of static masks, not of
+   the ladder. `REGIME_GATES_ENABLED` + `REGIME_ALLOW` is the structural fix.
+
+## What this run did *not* establish
+
+- **No validation budget was spent.** V24's one shot stays held. These are
+  TRAIN-selected, CONFIRM-checked figures — a within-TRAIN generalisation
+  test, not a validation shot.
+- **It did not find a passing configuration**, and could not. V52's Stage 1
+  bar (Wilson LB > 60%) is cleared nowhere here.
+- **Survivorship runs the same direction in both halves** and is uncorrected,
+  per V21 Test B.
+- **The ladder could not move a mask, only shrink one** — stated in advance.
+  A better mask reachable only by loosening one axis to tighten another was
+  out of scope by construction.
