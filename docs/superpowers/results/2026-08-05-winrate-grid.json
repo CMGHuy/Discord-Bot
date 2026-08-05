@@ -1,0 +1,445 @@
+{
+  "configs": [
+    {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 21707,
+        "wins": 15184,
+        "losses": 6523,
+        "scratches": 773,
+        "timeouts": 0,
+        "closed": 22480,
+        "win_rate": 69.94978578338785,
+        "expectancy_r": 0.020922241992882572,
+        "excluded_share": 0.03438612099644128,
+        "avg_win_r": 0.460572444678609,
+        "max_dd_pct": -99.94751184766051,
+        "wilson_lb": 69.3363791536257
+      }
+    },
+    {
+      "rr": 0.25,
+      "floor": 0.0,
+      "breakeven_wr": 80.0,
+      "stats": {
+        "n_eval": 21005,
+        "wins": 14288,
+        "losses": 6717,
+        "scratches": 1468,
+        "timeouts": 0,
+        "closed": 22473,
+        "win_rate": 68.02189954772673,
+        "expectancy_r": 0.03299101143594535,
+        "excluded_share": 0.06532283184265564,
+        "avg_win_r": 0.5220049692049272,
+        "max_dd_pct": -99.9072888265719,
+        "wilson_lb": 67.38792035794135
+      }
+    },
+    {
+      "rr": 0.15,
+      "floor": 0.5,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 20719,
+        "wins": 13916,
+        "losses": 6803,
+        "scratches": 1751,
+        "timeouts": 0,
+        "closed": 22470,
+        "win_rate": 67.16540373570153,
+        "expectancy_r": 0.03886488651535378,
+        "excluded_share": 0.07792612372051624,
+        "avg_win_r": 0.551616412762288,
+        "max_dd_pct": -99.82673890656946,
+        "wilson_lb": 66.52281746295414
+      }
+    },
+    {
+      "rr": 0.25,
+      "floor": 0.5,
+      "breakeven_wr": 80.0,
+      "stats": {
+        "n_eval": 20719,
+        "wins": 13916,
+        "losses": 6803,
+        "scratches": 1751,
+        "timeouts": 0,
+        "closed": 22470,
+        "win_rate": 67.16540373570153,
+        "expectancy_r": 0.03886488651535378,
+        "excluded_share": 0.07792612372051624,
+        "avg_win_r": 0.551616412762288,
+        "max_dd_pct": -99.82673890656946,
+        "wilson_lb": 66.52281746295414
+      }
+    },
+    {
+      "rr": 0.35,
+      "floor": 0.0,
+      "breakeven_wr": 74.07407407407408,
+      "stats": {
+        "n_eval": 20216,
+        "wins": 13294,
+        "losses": 6922,
+        "scratches": 2242,
+        "timeouts": 0,
+        "closed": 22458,
+        "win_rate": 65.7597942223981,
+        "expectancy_r": 0.05169431828301717,
+        "excluded_share": 0.09983079526226735,
+        "avg_win_r": 0.6080149691590191,
+        "max_dd_pct": -99.60264784561753,
+        "wilson_lb": 65.10273613336315
+      }
+    },
+    {
+      "rr": 0.35,
+      "floor": 0.5,
+      "breakeven_wr": 74.07407407407408,
+      "stats": {
+        "n_eval": 20216,
+        "wins": 13294,
+        "losses": 6922,
+        "scratches": 2242,
+        "timeouts": 0,
+        "closed": 22458,
+        "win_rate": 65.7597942223981,
+        "expectancy_r": 0.05169912725977379,
+        "excluded_share": 0.09983079526226735,
+        "avg_win_r": 0.6080230931247179,
+        "max_dd_pct": -99.60231061327318,
+        "wilson_lb": 65.10273613336315
+      }
+    },
+    {
+      "rr": 0.15,
+      "floor": 1.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 18945,
+        "wins": 11491,
+        "losses": 7454,
+        "scratches": 3432,
+        "timeouts": 0,
+        "closed": 22377,
+        "win_rate": 60.65452626022697,
+        "expectancy_r": 0.08546994682039592,
+        "excluded_share": 0.1533717656522322,
+        "avg_win_r": 0.8151214863806455,
+        "max_dd_pct": -97.24106161580089,
+        "wilson_lb": 59.95678822372105
+      }
+    },
+    {
+      "rr": 0.25,
+      "floor": 1.0,
+      "breakeven_wr": 80.0,
+      "stats": {
+        "n_eval": 18945,
+        "wins": 11491,
+        "losses": 7454,
+        "scratches": 3432,
+        "timeouts": 0,
+        "closed": 22377,
+        "win_rate": 60.65452626022697,
+        "expectancy_r": 0.08546994682039592,
+        "excluded_share": 0.1533717656522322,
+        "avg_win_r": 0.8151214863806455,
+        "max_dd_pct": -97.24106161580089,
+        "wilson_lb": 59.95678822372105
+      }
+    },
+    {
+      "rr": 0.35,
+      "floor": 1.0,
+      "breakeven_wr": 74.07407407407408,
+      "stats": {
+        "n_eval": 18945,
+        "wins": 11491,
+        "losses": 7454,
+        "scratches": 3432,
+        "timeouts": 0,
+        "closed": 22377,
+        "win_rate": 60.65452626022697,
+        "expectancy_r": 0.08546994682039592,
+        "excluded_share": 0.1533717656522322,
+        "avg_win_r": 0.8151214863806455,
+        "max_dd_pct": -97.24106161580089,
+        "wilson_lb": 59.95678822372105
+      }
+    },
+    {
+      "rr": 0.15,
+      "floor": 1.5,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 18270,
+        "wins": 10083,
+        "losses": 8187,
+        "scratches": 3986,
+        "timeouts": 0,
+        "closed": 22256,
+        "win_rate": 55.1888341543514,
+        "expectancy_r": 0.11840591301222143,
+        "excluded_share": 0.179097771387491,
+        "avg_win_r": 1.0733156798571855,
+        "max_dd_pct": -95.88878404701845,
+        "wilson_lb": 54.46670165393471
+      }
+    },
+    {
+      "rr": 0.25,
+      "floor": 1.5,
+      "breakeven_wr": 80.0,
+      "stats": {
+        "n_eval": 18270,
+        "wins": 10083,
+        "losses": 8187,
+        "scratches": 3986,
+        "timeouts": 0,
+        "closed": 22256,
+        "win_rate": 55.1888341543514,
+        "expectancy_r": 0.11840591301222143,
+        "excluded_share": 0.179097771387491,
+        "avg_win_r": 1.0733156798571855,
+        "max_dd_pct": -95.88878404701845,
+        "wilson_lb": 54.46670165393471
+      }
+    },
+    {
+      "rr": 0.35,
+      "floor": 1.5,
+      "breakeven_wr": 74.07407407407408,
+      "stats": {
+        "n_eval": 18270,
+        "wins": 10083,
+        "losses": 8187,
+        "scratches": 3986,
+        "timeouts": 0,
+        "closed": 22256,
+        "win_rate": 55.1888341543514,
+        "expectancy_r": 0.11840591301222143,
+        "excluded_share": 0.179097771387491,
+        "avg_win_r": 1.0733156798571855,
+        "max_dd_pct": -95.88878404701845,
+        "wilson_lb": 54.46670165393471
+      }
+    }
+  ],
+  "per_strategy": {
+    "EMA Crossover": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 278,
+        "wins": 181,
+        "losses": 97,
+        "scratches": 4,
+        "timeouts": 0,
+        "closed": 282,
+        "win_rate": 65.10791366906474,
+        "expectancy_r": -0.02939361702127658,
+        "excluded_share": 0.014184397163120567,
+        "avg_win_r": 0.4901160220994475,
+        "max_dd_pct": -23.01333379792921,
+        "wilson_lb": 59.333579389752146
+      }
+    },
+    "VWAP": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 998,
+        "wins": 766,
+        "losses": 232,
+        "scratches": 42,
+        "timeouts": 0,
+        "closed": 1040,
+        "win_rate": 76.75350701402806,
+        "expectancy_r": 0.17773365384615383,
+        "excluded_share": 0.04038461538461539,
+        "avg_win_r": 0.5441814621409922,
+        "max_dd_pct": -12.43926820222545,
+        "wilson_lb": 74.0332301080393
+      }
+    },
+    "Fibonacci": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 1698,
+        "wins": 1188,
+        "losses": 510,
+        "scratches": 65,
+        "timeouts": 0,
+        "closed": 1763,
+        "win_rate": 69.96466431095406,
+        "expectancy_r": 0.07185195689166195,
+        "excluded_share": 0.0368689733408962,
+        "avg_win_r": 0.5359217171717171,
+        "max_dd_pct": -43.49488679722087,
+        "wilson_lb": 67.7411603104455
+      }
+    },
+    "Support/Resistance": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 2206,
+        "wins": 1461,
+        "losses": 745,
+        "scratches": 70,
+        "timeouts": 0,
+        "closed": 2276,
+        "win_rate": 66.22846781504987,
+        "expectancy_r": -0.0348884007029877,
+        "excluded_share": 0.030755711775043937,
+        "avg_win_r": 0.45557426420260094,
+        "max_dd_pct": -78.33216168273175,
+        "wilson_lb": 64.22820726238353
+      }
+    },
+    "RSI": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 170,
+        "wins": 110,
+        "losses": 60,
+        "scratches": 0,
+        "timeouts": 0,
+        "closed": 170,
+        "win_rate": 64.70588235294117,
+        "expectancy_r": -0.22712352941176464,
+        "excluded_share": 0.0,
+        "avg_win_r": 0.19444545454545453,
+        "max_dd_pct": -33.29793959966143,
+        "wilson_lb": 57.26948980716379
+      }
+    },
+    "MACD": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 1089,
+        "wins": 819,
+        "losses": 270,
+        "scratches": 47,
+        "timeouts": 0,
+        "closed": 1136,
+        "win_rate": 75.20661157024794,
+        "expectancy_r": 0.06657922535211268,
+        "excluded_share": 0.04137323943661972,
+        "avg_win_r": 0.422019536019536,
+        "max_dd_pct": -28.32282182268034,
+        "wilson_lb": 72.55627423979806
+      }
+    },
+    "Elliott Wave": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 614,
+        "wins": 368,
+        "losses": 246,
+        "scratches": 14,
+        "timeouts": 0,
+        "closed": 628,
+        "win_rate": 59.934853420195445,
+        "expectancy_r": -0.09001433121019108,
+        "excluded_share": 0.022292993630573247,
+        "avg_win_r": 0.5148668478260869,
+        "max_dd_pct": -49.05467897338607,
+        "wilson_lb": 56.00855610996642
+      }
+    },
+    "MA Ribbon": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 1770,
+        "wins": 1342,
+        "losses": 428,
+        "scratches": 68,
+        "timeouts": 0,
+        "closed": 1838,
+        "win_rate": 75.81920903954801,
+        "expectancy_r": 0.11750489662676822,
+        "excluded_share": 0.036996735582154515,
+        "avg_win_r": 0.4798614008941877,
+        "max_dd_pct": -19.773181200242075,
+        "wilson_lb": 73.76989248279042
+      }
+    },
+    "Break & Retest": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 2369,
+        "wins": 1901,
+        "losses": 468,
+        "scratches": 139,
+        "timeouts": 0,
+        "closed": 2508,
+        "win_rate": 80.24482904178979,
+        "expectancy_r": 0.112183014354067,
+        "excluded_share": 0.055422647527910686,
+        "avg_win_r": 0.3941899000526039,
+        "max_dd_pct": -26.002951729737728,
+        "wilson_lb": 78.59308498976608
+      }
+    },
+    "RSI Divergence": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 9870,
+        "wins": 6561,
+        "losses": 3309,
+        "scratches": 290,
+        "timeouts": 0,
+        "closed": 10160,
+        "win_rate": 66.4741641337386,
+        "expectancy_r": -0.03135964566929132,
+        "excluded_share": 0.028543307086614175,
+        "avg_win_r": 0.4557820454199056,
+        "max_dd_pct": -99.9108170328675,
+        "wilson_lb": 65.53656192344758
+      }
+    },
+    "Volume Profile": {
+      "rr": 0.15,
+      "floor": 0.0,
+      "breakeven_wr": 86.95652173913044,
+      "stats": {
+        "n_eval": 645,
+        "wins": 487,
+        "losses": 158,
+        "scratches": 34,
+        "timeouts": 0,
+        "closed": 679,
+        "win_rate": 75.50387596899225,
+        "expectancy_r": 0.1285714285714286,
+        "excluded_share": 0.050073637702503684,
+        "avg_win_r": 0.5036960985626283,
+        "max_dd_pct": -12.922615567441124,
+        "wilson_lb": 72.04025435650651
+      }
+    }
+  },
+  "target_wr": 70.0,
+  "note": "ranked by observed win rate, per the directive; expectancy and break-even WR are reported beside it"
+}
