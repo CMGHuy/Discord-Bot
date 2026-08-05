@@ -18,8 +18,10 @@ here mechanically, mildest-gate-first, mirroring the shape of the original
 derivation (`2026-07-train-tuning.md` Step 4) with the voided WR bar replaced
 by expectancy — the objective V6 Step 3b made primary:
 
-  1. UNGATED      pooled over both directions and all horizons, ExpR > 0 at
-                  N >= MIN_N  ->  no mask at all (mildest possible gate)
+  1. UNGATED      BOTH direction arms independently ExpR > 0 at N >= MIN_N
+                  ->  no mask at all (mildest possible gate). Amended
+                  2026-08-05 from a pooled test, which could delete a gate
+                  on the strength of the arm not in question -- see derive().
   2. DIRECTION    else the single direction arm with ExpR > 0 at N >= MIN_N
   3. DIR+HORIZON  else, within the better-ExpR direction, the horizons with
                   ExpR > 0 and N >= MIN_N_HORIZON, if the pooled subset
@@ -95,22 +97,38 @@ def _row(label, st, width=30):
 
 
 def derive(strat, pooled, by_dir, by_dir_hz):
-    """Apply the pre-registered ladder. Returns (mask, rule, why)."""
-    if _ok(pooled):
-        return None, "1-UNGATED", (
-            f"pooled both directions ExpR={pooled['expectancy_r']:+.3f} "
-            f"at N={pooled['n_eval']} -- no mask needed")
+    """Apply the pre-registered ladder. Returns (mask, rule, why).
 
+    AMENDED 2026-08-05 before the grid's numbers existed -- see the
+    "Amendment" section of the results file. Rule 1 originally read the
+    POOLED both-direction sample, which cannot do the job a direction gate
+    exists for: longs outnumber shorts ~3.4:1 (V21: 37,395 vs 10,860), so a
+    long arm at +0.196R carries the pool positive over a short arm at
+    -0.041R, rule 1 fires, and the mask is deleted -- *enabling* a short arm
+    that was never tested on its own. The original ladder's first rung was a
+    pooled `WR >= 80` bar, which a bad arm dragged below the line; swapping
+    the bar to expectancy silently turned pooling from an exposer of bad arms
+    into a concealer of them.
+
+    Rule 1 now requires EACH arm to clear the bar independently. Pooled is
+    still computed and reported, but no rule reads it.
+    """
     positive = [d for d in DIRECTIONS if _ok(by_dir[d])]
+    if len(positive) == 2:
+        return None, "1-UNGATED", (
+            "both direction arms independently ExpR > 0 at N >= "
+            f"{MIN_N}: bullish {by_dir['bullish']['expectancy_r']:+.3f} "
+            f"(N={by_dir['bullish']['n_eval']}), bearish "
+            f"{by_dir['bearish']['expectancy_r']:+.3f} "
+            f"(N={by_dir['bearish']['n_eval']}) -- no mask needed")
     if len(positive) == 1:
         d = positive[0]
+        other = "bearish" if d == "bullish" else "bullish"
         return ({"directions": (d,)}, "2-DIRECTION",
                 f"{d} ExpR={by_dir[d]['expectancy_r']:+.3f} at "
-                f"N={by_dir[d]['n_eval']}; other arm not positive at N>={MIN_N}")
-    if len(positive) == 2:
-        # Both arms positive but the pool is not -> arithmetically impossible
-        # (the pool is their N-weighted mean). Guard rather than assume.
-        return None, "1-UNGATED", "both arms positive; pooled follows"
+                f"N={by_dir[d]['n_eval']}; {other} not positive at N>={MIN_N} "
+                f"(ExpR={by_dir[other]['expectancy_r']}, "
+                f"N={by_dir[other]['n_eval']})")
 
     best = max(DIRECTIONS,
                key=lambda d: (by_dir[d]["expectancy_r"]
@@ -245,14 +263,20 @@ def main():
         print(f"  proposed: {mask}", flush=True)
 
         # Mandatory disclosure: how the SELECTED mask behaves in V20's seven
-        # drawdowns. Reported, never read by the rule.
+        # drawdowns. Reported, never read by the rule. Both arms are stored
+        # per regime as well, so the disclosure stays readable if a later
+        # reader wants it against a mask other than the one selected here.
         dirs = mask["directions"] if mask else DIRECTIONS
-        regimes = {}
+        regimes, regimes_by_dir = {}, {}
         for name, _f, _t in REGIMES:
             trades = [tr for d in dirs for tr in t_dir_regime[(strat, d, name)]]
             st = _stats(trades)
             regimes[name] = {k: v for k, v in st.items() if not k.startswith("_")}
             print(_row(f"    [regime] {name}", st), flush=True)
+            for d in DIRECTIONS:
+                sd = _stats(t_dir_regime[(strat, d, name)])
+                regimes_by_dir[f"{d}/{name}"] = {k: v for k, v in sd.items()
+                                                 if not k.startswith("_")}
 
         out["strategies"][strat] = {
             "current_mask": STRATEGY_GATES.get(strat),
@@ -264,6 +288,7 @@ def main():
                                                    if not k.startswith("_")}
                                      for d in DIRECTIONS for hk in HORIZONS},
             "selected_mask_by_regime": regimes,
+            "by_direction_regime": regimes_by_dir,
         }
 
     print(f"\n{'=' * 72}\n== proposed STRATEGY_GATES changes ==", flush=True)

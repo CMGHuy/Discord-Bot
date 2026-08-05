@@ -80,8 +80,8 @@ estimates are never read alone.
 Applied per strategy, **mildest-gate-first** — the same ladder shape as the
 original derivation, with the voided WR bar replaced by expectancy:
 
-> 1. **UNGATED** — if pooled over both directions and all horizons
->    `ExpR > 0` at `N ≥ 30`, ship **no mask at all**.
+> 1. **UNGATED** — if **both** direction arms *independently* have `ExpR > 0`
+>    at `N ≥ 30`, ship **no mask at all**. *(Amended 2026-08-05 — see below.)*
 > 2. **DIRECTION** — else, if exactly one direction arm has `ExpR > 0` at
 >    `N ≥ 30`, mask to that direction.
 > 3. **DIR+HORIZON** — else, within the better-ExpR direction, keep the
@@ -102,6 +102,50 @@ Two choices in there that are not the original's, both made in advance:
   masks were overfitted; V6's sample-size clause calls a rate on a sample that
   thin "a hypothesis, not a finding". This will select fewer horizons than the
   original did, and that is intended.
+
+## Amendment to rule 1, made 2026-08-05 before the grid's numbers existed
+
+**Rule 1 originally read the *pooled* both-direction sample.** It now requires
+each arm to clear `ExpR > 0` at `N ≥ 30` **independently**. Rules 2-4 are
+unchanged. Recorded here in full, because amending a pre-registered rule is
+the thing this file exists to make hard.
+
+**Why it was wrong.** Longs outnumber shorts about 3.4:1 (V21 measured 37,395
+vs 10,860 over TRAIN). With long at +0.196R and short at −0.041R, the pooled
+average lands near +0.14R — positive. Rule 1 would have fired, the mask would
+have been **deleted**, and that would have *enabled* a short arm which the rule
+never tested on its own. A direction gate exists precisely to stop a direction
+with no edge from trading; a first rung that can remove it on the strength of
+the other direction cannot do that job.
+
+**How it got in.** The ladder's shape was inherited from the original
+derivation (`2026-07-train-tuning.md` Step 4), whose first rung was a pooled
+`WR ≥ 80` bar. Under a win-rate bar, a bad arm *drags the pool down* and the
+rung correctly fails. Under an expectancy bar, the bigger arm's mass *carries
+the pool up* and the rung silently passes. Swapping the bar — which V6 forced,
+since the WR bar is void — turned pooling from an exposer of bad arms into a
+concealer of them. The shape was reused without re-checking that its first
+rung still did its job underneath a different bar.
+
+**Why amending now is legitimate, and what was already known.** V20 set the
+precedent that a pre-registered rule may be touched **only** before its numbers
+exist; the grid was killed at ticker 14 of 67 and restarted from scratch under
+the amended rule, so no result influenced this. Full disclosure of what *was*
+known: a 2-ticker smoke test run before the real grid had sent all five
+strategies to rule 1, which is what prompted the re-reading of the rule. That
+is a hint about the outcome, so the amendment is not made in perfect ignorance.
+
+Two things make it safe anyway, and both were checkable in advance:
+
+1. **The amendment is strictly conservative.** Requiring each arm to pass
+   independently can only ever produce *more* gating, never less — it cannot
+   manufacture an adoption, loosen a restriction, or flatter any strategy. An
+   amendment that can only tighten the outcome cannot be self-serving.
+2. **It restores the original rung's behaviour** rather than inventing a new
+   one. Under the old `WR ≥ 80` bar a negative arm failed the pooled test; this
+   makes it fail again under the expectancy bar. The correction moves the rule
+   back toward what it did before V6 voided the bar, not toward a preferred
+   answer.
 
 ## Mandatory disclosure: the selected mask, re-read in V20's seven drawdowns
 
