@@ -59,9 +59,15 @@ def test_a_dry_run_precedes_the_apply():
 
 
 def test_reconcile_happens_before_the_bot_is_started():
-    """The regression this file exists for."""
+    """The regression this file exists for.
+
+    Anchored to a real command line: the failure branches *echo* a
+    "then bring it up with: docker compose up -d --wait" hint, and an
+    unanchored search matches that recovery advice instead of the step.
+    """
     s = _script()
-    assert _index(r"reconcile_open_plans\.py --apply", s) < _index(r"compose up -d", s)
+    assert (_index(r"reconcile_open_plans\.py --apply", s)
+            < _index(r"(?m)^docker compose up -d", s))
 
 
 def test_the_start_step_does_not_rebuild_behind_the_reconcile():
@@ -90,6 +96,35 @@ def test_the_script_reexecs_itself_after_the_pull():
     s = _script()
     assert _index(r"git reset --hard", s) < _index(r"SWINGBOT_DEPLOY_REEXEC", s)
     assert re.search(r"exec bash \"\$0\"", s), "no re-exec of the pulled script"
+
+
+def test_state_is_copied_inside_the_container_not_on_the_host():
+    """data/ is root-owned (the bot container writes it as root) while this
+    script runs as the unprivileged `deploy` user over SSH. A host-side cp
+    fails with EACCES -- and since the bot is already stopped by then, it
+    stayed down. Happened on the first deploy carrying this script,
+    2026-08-05 18:22."""
+    s = _script()
+    backup = s[_index(r"Backing up trade state", s):_index(r"DRY RUN|dry run|reconcile_open_plans\.py\n", s)]
+    assert "docker compose run" in backup, (
+        "the state backup runs on the host again -- it must run inside the "
+        "container, which owns data/"
+    )
+
+
+def test_anything_that_can_fail_boringly_fails_before_the_bot_is_stopped():
+    """Everything after the stop may abort with the bot down, on purpose. So
+    a preflight has to catch the boring failures while it is still up."""
+    s = _script()
+    assert _index(r"Preflight", s) < _index(r"compose stop bot", s)
+    assert _index(r"predeploy-probe", s) < _index(r"compose stop bot", s)
+
+
+def test_a_failed_backup_does_not_start_the_bot_on_an_unbacked_up_book():
+    s = _script()
+    assert "STATE BACKUP FAILED" in s
+    tail = s[_index(r"STATE BACKUP FAILED", s):]
+    assert "exit 1" in tail
 
 
 def test_deploy_sh_is_executable():

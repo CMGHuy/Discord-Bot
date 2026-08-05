@@ -54,6 +54,24 @@ fi
 echo "==> Building images (nothing is restarted yet)"
 docker compose build
 
+# ── Preflight, while the bot is still RUNNING ──────────────────────────────
+# Everything below the `stop` is allowed to abort with the bot down, because
+# starting it on an unreconciled or unbacked-up book is worse than downtime.
+# That makes it critical that anything which can fail for a boring reason
+# fails HERE instead. A host-side `cp` permission error did exactly this on
+# 2026-08-05 18:22 -- data/ is root-owned, the deploy user is not root, and
+# the bot sat down until a human noticed.
+if [ -f data/plans.json ]; then
+  echo "==> Preflight: can we write state backups?"
+  if ! docker compose run --rm --no-deps -T bot sh -c \
+        'touch data/.predeploy-probe && rm -f data/.predeploy-probe'; then
+    echo "" >&2
+    echo "!! Cannot write to data/ -- aborting BEFORE stopping the bot." >&2
+    echo "!! The bot is still running and nothing has been changed." >&2
+    exit 1
+  fi
+fi
+
 # ── Reconcile, with the bot DOWN ───────────────────────────────────────────
 # Stopped explicitly rather than letting `up` recreate it: the plan state must
 # not move under a running PlanManager while this replays the same bars.
@@ -63,11 +81,22 @@ docker compose stop bot
 if [ -f data/plans.json ]; then
   ts=$(date +%Y%m%d-%H%M%S)
   echo "==> Backing up trade state (data/*.json.predeploy-$ts)"
-  for f in plans trades account journal; do
-    if [ -f "data/$f.json" ]; then
-      cp -a "data/$f.json" "data/$f.json.predeploy-$ts"
-    fi
-  done
+  # Copied INSIDE the container, not on the host. data/ is root-owned because
+  # the bot container writes it as root, while this script runs as the
+  # unprivileged `deploy` user over SSH -- a host-side `cp` fails with
+  # "Permission denied", and because the bot is already stopped by this point
+  # `set -e` then leaves it DOWN. That is exactly what happened on the first
+  # deploy carrying this script (2026-08-05 18:22).
+  if ! docker compose run --rm --no-deps -T bot sh -c \
+        "for f in plans trades account journal; do
+           [ -f data/\$f.json ] && cp -a data/\$f.json data/\$f.json.predeploy-$ts
+         done"; then
+    echo "" >&2
+    echo "!! STATE BACKUP FAILED -- the bot has deliberately been left STOPPED." >&2
+    echo "!! Reconciling without a backup is not recoverable if it goes wrong." >&2
+    echo "!! Investigate, then: docker compose up -d --wait" >&2
+    exit 1
+  fi
 
   echo "==> Reconciling open plans -- DRY RUN (no writes)"
   docker compose run --rm --no-deps -T bot \
