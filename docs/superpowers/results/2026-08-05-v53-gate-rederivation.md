@@ -202,4 +202,157 @@ slices. Recorded under Result.
 
 # Result
 
-*(empty at pre-registration time — filled in after the grid finished)*
+Grid completed **2026-08-05**: 67 tickers × 10 horizons × 5 strategies,
+`--gates off`, one pass, ~45 min. Raw output:
+`2026-08-05-v53-gate-rederivation.json`.
+
+**The rule ran clean and produced five masks. NOTHING WAS ADOPTED.** The
+`STRATEGY_GATES` in `strategy_types.py` are unchanged. Why is in
+"The adoption decision" below, and it is a human-partner directive, not a
+rule failure — the distinction matters and this file must not blur it.
+
+## Harness verification — a different one than pre-registered
+
+The pre-registration promised a run with the proposed masks written into
+`STRATEGY_GATES`, reproducing the pooled figures the rule selected on. **That
+run was not made, and its box stays unticked.** With nothing adopted it would
+verify numbers that inform no shipped config, at ~45 min of compute.
+
+What was done instead, at zero compute and recorded *as* a substitute:
+V53 and V21 are independent harnesses that ran the same config (gates off,
+exit v2 + scale-out, TP2 levels, frictions on) over the same screened
+universe. Pooling V53's seven per-regime slices must therefore reproduce V21's
+Test A arms exactly. It does — **all 10 arms, exact on N, wins and expectancy
+to 1e-9**:
+
+| | V53 pooled from regimes | V21 Test A |
+|---|---|---|
+| Fibonacci bullish / bearish | 218/75/−0.23742 · 276/110/+0.36899 | identical |
+| MA Ribbon bullish / bearish | 212/64/−0.31043 · 146/66/+0.83442 | identical |
+| MACD bullish / bearish | 582/201/−0.14967 · 776/355/+0.11625 | identical |
+| VWAP bullish / bearish | 238/76/−0.17161 · 209/87/+0.09442 | identical |
+| Volume Profile bullish / bearish | 1502/552/−0.14192 · 1197/483/+0.05619 | identical |
+
+This establishes that V53's slicing agrees with an independently written
+harness. It does **not** establish what the pre-registered check would have —
+that a mask written into `STRATEGY_GATES` reproduces the slice it was chosen
+on. That remains unverified, and is named here as the weaker evidence it is.
+
+## The five proposals
+
+| Strategy | Current mask | Rule | Proposed | bullish ExpR (N) | bearish ExpR (N) |
+|---|---|---|:-:|---|---|
+| Fibonacci | bullish | **1** | **no mask** | +0.173 (1407) | **+0.090 (707)** |
+| MA Ribbon | bullish | **1** | **no mask** | +0.275 (1435) | **+0.190 (374)** |
+| MACD | bullish + {3m,4m,7m,8m,9m} | **1** | **no mask** | +0.152 (3693) | **+0.017 (1476)** |
+| VWAP | bullish + {4w,6m,7m,8m,9m} | 2 | bullish | +0.293 (1911) | −0.094 (570) |
+| Volume Profile | bullish + {7m} | 2 | bullish | +0.249 (11349) | −0.079 (3619) |
+
+No strategy reached rule 4. **Three of five clear rule 1** — their bearish arms
+each cleared `ExpR > 0` at `N ≥ 30` independently, which is what the amended
+rule demands.
+
+**Every proposal is looser than what it replaces**, on TRAIN signal count:
+
+| Strategy | current → proposed | |
+|---|---|---|
+| Fibonacci | 1,407 → 2,114 | ×1.5 |
+| MA Ribbon | 1,435 → 1,809 | ×1.3 |
+| VWAP | 791 → 1,911 | ×2.4 |
+| MACD | 864 → 5,169 | **×6.0** |
+| Volume Profile | 504 → 11,349 | **×22.5** |
+
+Volume Profile deserves a second look: it stays bullish-only, so it reads as
+unchanged, but dropping `{7m}` opens nine more horizons and multiplies its
+alerts ~22×.
+
+## The mandatory disclosure, which does not flatter the result
+
+Per-regime ExpR for each **selected** mask (blank = under N=30):
+
+| Strategy | dotcom | 2002 | GFC | 2011 | 2015-16 | 2022 |
+|---|---|---|---|---|---|---|
+| Fibonacci | +0.398 | +0.768 | −0.197 | −0.124 | −0.239 | +0.206 |
+| MA Ribbon | +0.628 | +0.288 | +0.144 | −0.404 | −0.234 | +0.429 |
+| MACD | −0.222 | +0.013 | +0.135 | −0.138 | −0.072 | −0.014 |
+| VWAP | −0.274 | — | −0.097 | — | −0.311 | — |
+| Volume Profile | −0.044 | −0.128 | −0.080 | −0.322 | −0.148 | −0.172 |
+
+**VWAP and Volume Profile are negative in every sufficient drawdown window.**
+The two strategies that stayed bullish-only are exactly the two that remain
+bull-majority artifacts — the failure mode this file pre-registered as "the
+single most likely way this task fails quietly", and it happened.
+
+The three that gained a short arm behave differently, and the bearish arm on
+its own shows why:
+
+| bearish only | dotcom | 2002 | GFC | 2011 | 2015-16 | 2022 |
+|---|---|---|---|---|---|---|
+| Fibonacci | — | **+1.049** | +0.012 | — | −0.397 | **+0.488** |
+| MA Ribbon | — | — | **+0.498** | — | — | **+0.900** |
+| MACD | −0.069 | −0.056 | **+0.197** | — | +0.092 | **+0.242** |
+
+The short side earns its keep precisely where the long side collapses. That is
+V21's regime-conditional finding appearing constructively: **ungating direction
+is the closest a static mask can get to being regime-aware** without the regime
+mechanism the codebase does not have. A partial structural compensation, not a
+fix.
+
+## The adoption decision: NOTHING ADOPTED
+
+**Human-partner directive, 2026-08-05, after seeing the table above:** the
+objective is to *strengthen* signal generation, not loosen it; a change that
+makes it worse is skipped. Every one of the five proposals loosens — ×1.3 to
+×22.5 more signals — so none was applied.
+
+**This is a post-hoc filter and is recorded as one.** It was not
+pre-registered. The pre-registered rule *passed* and produced five masks; the
+decision not to ship them is a separate judgement layered on top, made by the
+human partner whose call adoption is. Anyone reading this later must not
+restate it as "the rule rejected them" — it did not.
+
+Two measured facts support the directive, and they were in the pre-registration
+rather than invented afterwards:
+
+1. **Every expectancy here is inside V51's error bar.** The measured daily-bar
+   overstatement is **+0.318R** and the largest number in the whole result is
+   +0.293. Applying that correction in the direction V51 measured puts **every
+   arm negative**. The rule reads the sign of expectancy, and the sign is
+   exactly what the one quantifiable correction removes. The pre-registration
+   said a mask under +0.318R should be read as "not distinguishable from zero";
+   all ten arms are.
+2. **MACD's rule-1 pass is +0.017R** at N=1476 — arithmetically positive and
+   nothing more, ~19× smaller than the known bias. It clears by a hair and is
+   not evidence that MACD shorts work.
+
+## What this leaves open — stated plainly, not buried
+
+**V21's obligation is NOT discharged.** The five gates it condemned are still
+in place, still fitted on 2020-2023, still contradicted in all seven
+drawdowns. V53 asked whether a better *static* mask exists on the full 25
+years; the answer is that the candidates are all looser and all inside the
+error bar. So the debt stands, and the next reader should not mistake "V53 ran"
+for "the gates are fixed".
+
+Three things fell out that a successor should carry:
+
+- **Mildest-gate-first drops horizon masks without testing them.** VWAP and
+  Volume Profile land on rule 2, so the ladder never reaches rule 3 and their
+  horizon restrictions vanish unexamined. That is a faithful consequence of the
+  pre-registered ladder — flagged, deliberately **not** amended, because
+  results now exist and amending after seeing them is what pre-registration
+  forbids. Re-deriving the horizon halves needs its own pre-registered task.
+- **A tightening ladder was never tried.** This one is ordered
+  mildest-gate-first, inherited from the original derivation, so it structurally
+  cannot return anything stricter than the status quo. A strictest-gate-first
+  ladder would be the tool for the stated objective — but selecting horizons
+  after seeing this file's tables is precisely the multiple-comparisons trap
+  that produced the current masks, so it must be pre-registered on its own and
+  ideally read on a held-out split.
+- **The real answer remains regime-conditional gating**, which needs
+  `REGIME_GATES_ENABLED` wired (one of the four flags `wf_components.py` lists
+  as permanently inert to the fold harness) and `REGIME_ALLOW` populated.
+  Nothing in V53 changes that conclusion from V21.
+
+No validation budget was spent; V24's shot stays held. No file under
+`swingbot/` was modified by this task.
