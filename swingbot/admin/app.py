@@ -261,6 +261,21 @@ def _safe_next(next_value: str | None) -> str:
     return url_for("index")
 
 
+def _is_partial_request() -> bool:
+    """Is this a background fetch for a page *fragment* rather than a
+    top-level navigation? Such a request can only sensibly be answered with
+    markup or a status code -- never with a redirect to an HTML page.
+
+    Three independent signals, because none is universal: the `/fragment`
+    route suffix this app uses by convention, the `X-Requested-With` header
+    older callers send, and `Sec-Fetch-Dest: empty`, which browsers set on
+    `fetch()`/XHR and never on address-bar navigation.
+    """
+    return (request.path.endswith("/fragment")
+            or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or request.headers.get("Sec-Fetch-Dest") == "empty")
+
+
 def require_auth(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -277,6 +292,23 @@ def require_auth(view):
                 "Authentication required.", 401,
                 {"WWW-Authenticate": 'Basic realm="Swing Bot Admin"'},
             )
+        if _is_partial_request():
+            # A fragment poll must never be answered with a login *page*.
+            # `fetch()` follows redirects transparently, so a 302 -> /login
+            # arrives at the caller as a 200 carrying a full HTML document,
+            # which the dashboard's morphdom then patches straight over the
+            # stats and tables -- the page appears to lose all its data, and
+            # the ETag chain breaks too (the login response carries none).
+            # 401 is what the poller already checks for, so it reloads and
+            # the browser lands on the real login page as a top-level
+            # navigation.
+            #
+            # Deliberately WITHOUT a WWW-Authenticate header: sending one
+            # makes the browser pop its native Basic-Auth dialog over the
+            # dashboard. The explicit-Basic-Auth branch above still sends
+            # the challenge, because a client that asked for Basic Auth is
+            # entitled to it.
+            return Response("Authentication required.", 401)
         next_path = request.full_path if request.query_string else request.path
         return redirect(url_for("login_page", next=next_path))
     return wrapped
@@ -412,7 +444,18 @@ def _is_today_berlin(iso_ts: str | None) -> bool:
         return False
 
 
-def _render_dashboard_fragment() -> str:
+def _render_dashboard_fragment(part: str = "all") -> str:
+    """`part`:
+      - "all" (default): both halves, for the initial page load.
+      - "live": session banner + stat cards + open-trades table only. What
+        the 5s poll asks for.
+      - "history": the closed-trades table and its filters, fetched on demand.
+
+    The split exists because the poll used to re-send the entire history
+    table -- up to CLOSED_TRADES_FRAGMENT_LIMIT rows, ~1.8 MB -- every five
+    seconds, to patch stat cards that are a few hundred bytes. The history
+    rows change only when a trade closes, which the live half already
+    reports."""
     # Three modes for the dashboard's summarized panels (stat cards + tables):
     #   - "active" (the default): today's new trades PLUS every still-open
     #     position regardless of which day it was opened -- "what do I need
@@ -749,8 +792,10 @@ def _render_dashboard_fragment() -> str:
     else:
         equity_sparkline_svg = "&mdash;"
 
+    template = {"live": "_dashboard_live.html",
+                "history": "_dashboard_history.html"}.get(part, "dashboard_fragment.html")
     return render_template(
-        "dashboard_fragment.html",
+        template,
         open_trades=open_trades, stats=stats, confidence_hex=_confidence_hex,
         cur_map=cur_map, status_map=status_map, strategy_map=strategy_map,
         price_map=price_map, pnl_map=pnl_map, days_map=days_map,
@@ -791,8 +836,14 @@ def dashboard_fragment():
     the full fragment, which on a page auto-refreshing indefinitely adds
     up to a meaningful bandwidth/CPU (Jinja render) saving over a session.
     """
-    html = _render_dashboard_fragment()
-    etag = hashlib.sha1(html.encode("utf-8")).hexdigest()
+    part = request.args.get("part", "all")
+    if part not in ("all", "live", "history"):
+        part = "all"
+    html = _render_dashboard_fragment(part)
+    # The ETag must vary with `part`, or the live poll and a history fetch
+    # -- different bodies from the same URL path -- would collide on one
+    # hash and 304 each other's content away.
+    etag = hashlib.sha1(f"{part}:{html}".encode("utf-8")).hexdigest()
     if request.headers.get("If-None-Match") == etag:
         return Response(status=304)
     resp = Response(html, mimetype="text/html; charset=utf-8")

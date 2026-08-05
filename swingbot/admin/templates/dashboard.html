@@ -113,8 +113,15 @@
   function refreshDashboard() {
     var _pollHeaders = {};
     if (_lastFragmentEtag) { _pollHeaders['If-None-Match'] = _lastFragmentEtag; }
-    fetch('{{ url_for("dashboard_fragment") }}?mode=' + encodeURIComponent(dashboardMode),
-          { credentials: 'include', headers: _pollHeaders })
+    // part=live: stat cards + open trades only. The closed-trades history is
+    // deliberately NOT polled -- it is up to CLOSED_TRADES_FRAGMENT_LIMIT rows
+    // (~1.8 MB) of markup that changes only when a trade closes, and shipping
+    // it every 5s to patch a few hundred bytes of stats was the bulk of this
+    // page's traffic and render cost. `redirect: 'error'` so an expired
+    // session surfaces as a rejected promise instead of silently resolving to
+    // the login page's HTML -- see the 401 branch and _is_partial_request().
+    fetch('{{ url_for("dashboard_fragment") }}?part=live&mode=' + encodeURIComponent(dashboardMode),
+          { credentials: 'include', headers: _pollHeaders, redirect: 'error' })
       .then(function(r) {
         if (r.status === 401) {
           window.location.reload();
@@ -131,14 +138,21 @@
           return;
         }
         if (!html) return;
-        var container = document.getElementById('dashboard-fragment');
+        // Patch ONLY the live subtree. #dashboard-history is outside it and is
+        // left untouched, which also means the history table's sort order,
+        // filter selections and per-page choice now survive a refresh instead
+        // of being rebuilt from scratch every 5s.
+        var container = document.getElementById('dashboard-live')
+                     || document.getElementById('dashboard-fragment');
         if (!container) return;
         if (typeof morphdom !== 'undefined') {
           // Diff-patch: only updates DOM nodes that actually changed.
           // This prevents the full repaint / layout-thrash that innerHTML
           // causes, eliminating the visible flash on every refresh cycle.
           var wrapper = document.createElement('div');
-          wrapper.id = 'dashboard-fragment';
+          // Must match the container's own id, or morphdom rewrites it and
+          // the next poll can no longer find the element it just patched.
+          wrapper.id = container.id;
           wrapper.innerHTML = html;
           morphdom(container, wrapper, {
             // Keep existing input values and focus state intact across patches
@@ -167,12 +181,13 @@
         if (refreshStatus) refreshStatus.textContent =
           'Updated ' + new Date().toLocaleTimeString();
         if (typeof applyColumnOrder === 'function') { applyColumnOrder(); }
-        // Re-scan the Trade History table + rebuild its ticker/strategy/
-        // horizon filter dropdowns from whatever's in the DOM now -- see
-        // this function's own definition (dashboard_fragment.html) for why
-        // it has to be called explicitly instead of just re-running on its
-        // own: its <script> tag only executes once, on the very first load.
-        if (typeof refreshClosedTradesTable === 'function') { refreshClosedTradesTable(); }
+        // NOT refreshClosedTradesTable() any more: the poll fetches part=live,
+        // so #dashboard-history is never replaced and has nothing to re-scan.
+        // Calling it here would actively hurt -- it rebuilds the filter
+        // dropdowns from the DOM, which resets whatever ticker/strategy/
+        // horizon the operator had selected, every 5 seconds. It is still
+        // called on initial load by its own <script>, and by whoever
+        // re-fetches part=history.
         if (typeof refreshOpenTradesTable === 'function') { refreshOpenTradesTable(); }
         // Force the session banner (Tokyo/London/New York pills) to re-render
         // fresh on every refresh instead of just trusting morphdom's skip-diff
@@ -194,7 +209,17 @@
           el.classList.add('just-updated');
         });
       })
-      .catch(function() {});
+      .catch(function() {
+        // `redirect: 'error'` rejects here when the session has expired and
+        // the server tried to send us /login. Reload so the browser makes a
+        // top-level navigation and gets the real login page, instead of
+        // leaving a dashboard that quietly stops updating. Belt and braces
+        // with the 401 branch above: 401 is what the server now sends, this
+        // covers any proxy that turns it back into a redirect.
+        var s = document.getElementById('refresh-status');
+        if (s) s.textContent = 'Session expired -- reloading...';
+        window.location.reload();
+      });
   }
   setInterval(function() {
     if (document.getElementById('auto-refresh').checked) { refreshDashboard(); }
