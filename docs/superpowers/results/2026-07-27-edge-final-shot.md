@@ -86,3 +86,41 @@ reported as exactly that rather than mechanically forcing the "revert a
 component" language from the plan's generic Step 3 onto a case where
 there's nothing to revert. No re-runs, no adjusted second attempt either
 way.
+
+---
+
+## SUPERSEDED by plan v8 Task V24 — recorded 2026-08-05 (V24 Step 1)
+
+**This shot and plan v8's V24 are the same shot.** Two plans each reserved
+"the one permitted reuse" of this window, which is exactly how a one-shot
+budget gets spent twice by two sessions that never talk to each other. It is
+recorded here, in the artifact the guard reads, rather than only in v8's plan
+file.
+
+- **E92 is retired.** It is not cancelled work and it is not debt: the
+  measurement it describes is now V24's to make, under V24's rules.
+- **The window changed.** E92 pre-registered `2024-01-01..2025-12-31`. A
+  human-partner directive on 2026-08-03 widened V24's window to
+  **`1999-01-01..2026-08-03`**, which **swallows TRAIN** — so the headline
+  from that run is an **in-sample** number over ~90% of its span, and V24 Step
+  2 carries a mandatory full / in-sample / out-of-sample decomposition.
+  **Adoption reads the out-of-sample row (`2024-01-01..2026-08-03`), never the
+  headline.** The gate tables above are E92's, fitted to E92's window; they do
+  not transfer unexamined to the wider one.
+- **When the run happens, its output belongs under this file's `## Result`
+  section**, per V24 Step 3 — one artifact telling the whole story of the
+  window's two spends.
+
+**Do not add a `## Result` heading to this file for any other purpose.**
+`wf_run.py --once-guard` refuses to run when this file already has one, so
+writing that heading by hand — as a placeholder, a stub, or a note — silently
+converts the guard from "runs once" into "never runs again", and the failure
+mode is a *no-op that looks like a pass*.
+
+**Firing status as of 2026-08-05: NOT FIRED, and not currently justified.**
+`git diff HEAD` on this file was empty and it had no `## Result` section when
+V24 Step 1 was executed, confirming E92 never ran. V17 and V52 both terminated
+with an **empty adopted set**, so there is no adopted config for this window to
+validate — firing it now would measure shipped defaults and spend the reuse on
+a question nobody asked. Plan v8 records that **V24 must not be fired without
+an explicit human decision.**
