@@ -193,4 +193,189 @@ that Test B2 requires.
 
 # Result
 
-*(empty at pre-registration time — filled in after the grid finished)*
+Grid completed **2026-08-05 10:03 UTC**: 67 tickers × 10 horizons × 11
+strategies, `--gates off`, one pass, every slice below taken off it. Raw
+output: `2026-08-05-v21-direction-survivorship.json`.
+
+Headline, stated before the tables: **five of the seven gated strategies FAIL
+Test A** — their bullish-only premise is contradicted in the drawdowns. **Test
+B did not fire**, and per the pre-registered asymmetry that clears nothing.
+
+## Harness verification, as pre-registered
+
+`--strategy RSI --gates on` reproduces `regime_slices.py --strategy RSI`
+**exactly** — identical `n_eval`, wins, losses and expectancy in all seven
+windows (`y2011` N=10 ExpR +0.758, `bear_2022` N=10 ExpR +0.714, the other
+five empty). Run 2026-08-05 after the grid; both JSONs compared field by
+field, not eyeballed.
+
+Reproduce (the host `python3` has **no pandas** — these scripts only run
+inside the `swing-bot:latest` image):
+
+```bash
+docker run --rm -v /root/Discord-Bot:/app -w /app swing-bot:latest \
+  python scripts/direction_survivorship.py --gates off \
+  --json docs/superpowers/results/2026-08-05-v21-direction-survivorship.json
+# parity check:
+docker run --rm -v /root/Discord-Bot:/app -w /app swing-bot:latest \
+  python scripts/direction_survivorship.py --strategy RSI --gates on --json /tmp/a.json
+docker run --rm -v /root/Discord-Bot:/app -w /app swing-bot:latest \
+  python scripts/regime_slices.py --strategy RSI --json /tmp/b.json
+```
+
+That same run also **demonstrates** the argument the pre-registration could
+only assert: with gates ON, RSI's short arm is **N=0 in every one of the seven
+windows**. A gated run genuinely cannot compare the two arms, so `--gates off`
+was the only way to ask the question.
+
+**Why the N here dwarfs V20's.** V20's dot-com row is N=396 for the whole
+system; V21's is 707 long + 552 short. Gates off restores the four horizon
+masks as well as the direction masks (`## The gates are run OFF` above). The
+two files are not in conflict — they measure different signal sets, and only
+V21's is direction-complete.
+
+## Step 1 — long vs short expectancy per regime
+
+| Regime | Window | N long | Win% | ExpR long | N short | Win% | ExpR short | long − short |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Dot-com bust | 2000-03-10..2001-12-31 | 707 | 31.1 | −0.208 | 552 | 38.9 | +0.080 | **−0.288** |
+| 2002 bear | 2002-01-01..2002-10-09 | 636 | 40.6 | −0.078 | 920 | 37.5 | −0.035 | **−0.043** |
+| GFC | 2007-10-09..2009-03-09 | 1115 | 39.1 | −0.108 | 1546 | 42.8 | +0.075 | **−0.183** |
+| 2011 | 2011-05-02..2011-10-03 | 602 | 33.4 | −0.222 | 47 | 59.6 | +0.900 | **−1.123** |
+| 2015-16 | 2015-05-21..2016-02-11 | 1190 | 39.1 | −0.027 | 572 | 33.2 | −0.138 | **+0.110** |
+| COVID crash | 2020-02-19..2020-03-23 | 7 | 0.0 | −0.875 | 18 | 33.3 | +2.484 | *INSUFFICIENT* |
+| 2022 bear | 2022-01-03..2022-10-12 | 392 | 34.4 | −0.230 | 977 | 52.1 | +0.320 | **−0.550** |
+| *full TRAIN (reference)* | 1999-01-01..2023-12-31 | 37395 | 46.3 | **+0.196** | 10860 | 39.1 | **−0.041** | **+0.237** |
+
+**The long arm is negative in all seven windows. The short arm beats it in
+five of the six that are sufficient.** The single exception, 2015-16 (+0.110),
+is a window where *both* arms lose. COVID is N=7/18 — under `MIN_N` and
+carrying nothing, exactly as V20 found for the same window.
+
+And the reference row is the whole finding in one line: pooled over all of
+TRAIN the long side wins by **+0.237R**, and inside the drawdowns it loses.
+`STRATEGY_GATES` was fitted 2020-2023 and encodes the TRAIN-wide sign as if it
+were universal. The module's own comment — "still carrying a bull-heavy 4-year
+fit" — is confirmed, not refuted, and it understates the case: the fit is
+bull-heavy against **25** years, not four.
+
+## Step 2 / Test A — per gated strategy, seven drawdowns pooled
+
+| Strategy | Gated | N long | ExpR long | N short | ExpR short | long − short | Verdict |
+|---|:-:|---:|---:|---:|---:|---:|---|
+| MA Ribbon | **✓** | 212 | −0.310 | 146 | +0.834 | −1.145 | **FAILS** |
+| Fibonacci | **✓** | 218 | −0.237 | 276 | +0.369 | −0.606 | **FAILS** |
+| VWAP | **✓** | 238 | −0.172 | 209 | +0.094 | −0.266 | **FAILS** |
+| MACD | **✓** | 582 | −0.150 | 776 | +0.116 | −0.266 | **FAILS** |
+| Volume Profile | **✓** | 1502 | −0.142 | 1197 | +0.056 | −0.198 | **FAILS** |
+| Support/Resistance | **✓** | 844 | −0.054 | 1191 | −0.068 | +0.014 | SURVIVES |
+| RSI | **✓** | 20 | +0.736 | 10 | +0.714 | +0.022 | *INSUFFICIENT* |
+| Break & Retest | — | 168 | −0.338 | 61 | +0.505 | −0.843 | FAILS |
+| EMA Crossover | — | 30 | −0.370 | 31 | +0.212 | −0.583 | FAILS |
+| Elliott Wave | — | 40 | −0.483 | 113 | +0.042 | −0.525 | FAILS |
+| RSI Divergence | — | 795 | +0.007 | 622 | +0.089 | −0.082 | FAILS |
+
+**The rule, applied mechanically: 5 FAIL, 1 SURVIVES, 1 INSUFFICIENT.**
+Fibonacci, MA Ribbon, MACD, VWAP and Volume Profile have their premise
+contradicted in the regimes where a bullish-only mask is most exposed, and
+per the pre-registration **must be re-derived**. Every one of the five has
+both arms over N≥30, and the margins (−0.198R to −1.145R) are not marginal —
+four of the five exceed V51's +0.318R daily-bar bias in size, and the bias
+would have to be strongly *anti*-symmetric by direction to manufacture a sign
+flip this large.
+
+Two verdicts that must not be over-read:
+
+- **Support/Resistance "SURVIVES" on +0.014R, and both arms are negative.**
+  That margin is ~20× smaller than V51's measured bias and well inside noise.
+  The correct reading is "not distinguishable", not "vindicated" — the rule
+  says SURVIVES because it was written to read the sign of the difference and
+  it must be applied as written, but nothing about this strategy's gate is
+  established by it. It loses on both sides.
+- **RSI is INSUFFICIENT at N=20/10** — the least-firing gate in the
+  drawdowns. Its gate comment advertises `N=608 WR=85.2 ExpR=+0.140` from the
+  TRAIN fit; across seven bear markets it produces twenty long trades. The
+  100% win rate in both arms is two 10-trade clusters (`y2011`, `bear_2022`)
+  and is not a result.
+
+The four ungated strategies are shown for completeness and no rule reads them.
+That all four also fail is consistent with the Step 1 picture being a
+system-wide regime effect rather than seven separate strategy defects.
+
+## Test B — is the long-side edge a survivorship artifact?
+
+**B2 (rule-bearing, full-history subsample, 40 tickers, full TRAIN):**
+
+| Tercile | N long | Win% | Wilson LB | ExpR long | N short | ExpR short |
+|---|---:|---:|---:|---:|---:|---:|
+| top | 10024 | 47.4 | 46.4 | **+0.267** | 1952 | −0.019 |
+| middle | 11511 | 45.4 | 44.5 | **+0.147** | 2924 | −0.028 |
+| bottom | 9844 | 45.9 | 44.9 | **+0.160** | 4489 | −0.095 |
+| *excluded from B2* | 6016 | 47.0 | 45.7 | +0.239 | 1495 | +0.077 |
+
+**B1 (all 67, confounded by history length, reported so the confound is
+visible):** top +0.280 (N=9594), middle +0.174 (N=17089), bottom +0.159
+(N=10712).
+
+> **ARTIFACT = false.** The rule required bottom-tercile long ExpR ≤ 0 while
+> top > 0. Bottom is **+0.160**, comfortably positive at N=9844. The rule does
+> not fire.
+
+**Read the asymmetry before citing this.** Per the pre-registration — and this
+is the paragraph that governs the whole file — *Test B firing CONFIRMS the
+artifact; Test B not firing CANNOT CLEAR it.* Every ticker in this universe
+survived to be watchlisted in 2025-2026. A flat long edge across terciles is
+equally consistent with "the whole survivor sample is lifted together", and
+nothing on disk can separate those. **This result does not license the claim
+that the gates are survivorship-clean.**
+
+What is visible is a **gradient in the direction the bias predicts**: the top
+tercile's long edge (+0.267R) is ~67% larger than the bottom's (+0.160R), and
+B1 shows the same ordering (+0.280 vs +0.159). Non-monotonic in the middle
+(B2 middle sits *below* bottom), so it is a top-tercile effect rather than a
+clean ranking — suggestive, and short of the pre-registered bar by design.
+
+## Test C — controls (descriptive; no rule reads this)
+
+- **Survivorship-free control: empty, as pre-registered.** The only asset
+  class present is `equity` (N=37395 long / 10860 short). `GC=F` and `SI=F`
+  were dropped by the liquidity screen before the run — the `=F` contract-count
+  units mismatch documented above, not genuine illiquidity. The one probe that
+  could have broken the one-directional limitation had **zero members before
+  the grid started**, and it is recorded as empty rather than repaired.
+- **Listing cohort:** `late_lister` long +0.275 / short **+0.132** (N=7616 /
+  1902) vs `listed_at_cache_open` long +0.177 / short −0.076 (N=29779 / 8958).
+  Late listers are the tickers whose TRAIN history is mostly 2021-2023, and
+  both arms are positive there — consistent with a regime reading rather than
+  a 24-year one, which is precisely why B2 re-ranks inside the full-history
+  subsample.
+
+## What this licenses
+
+**Nothing is adopted and nothing is cleared.** V21 is an audit; per its own
+pre-registration a non-failure clears nothing, and Test B's non-firing is the
+weakest possible form of non-failure.
+
+One obligation is created, by the rule as written:
+
+> **Fibonacci, MA Ribbon, MACD, VWAP and Volume Profile must have their
+> direction gates re-derived.** Their bullish-only masks are contradicted in
+> the drawdowns at N≥30 per arm, with margins mostly larger than the known
+> daily-bar bias.
+
+Scoping notes for whoever takes that on, so it is not mis-sized:
+
+- **The gates are not simply backwards.** Long beats short by +0.237R across
+  full TRAIN and loses in the drawdowns. A re-derivation that flips the masks
+  to bearish-only would fit the seven bear windows and break everything else.
+  What the evidence supports is that **a static direction mask is the wrong
+  shape**, not that its sign is wrong.
+- **Horizon masks were not adjudicated here** (`## The gates are run OFF`).
+  Gates-off restored them, so they are present in every number above and
+  separately measured in none.
+- **Direction-symmetry of V51's bias is still an assumption.** The hourly run
+  was never sliced by direction. A re-derivation that reads *levels* rather
+  than differences inherits that unmeasured assumption; this file's rules
+  read differences specifically to avoid it.
+- **Everything above is TRAIN.** No validation budget was spent, and none
+  should be spent on a re-derivation until it has a candidate worth testing.
