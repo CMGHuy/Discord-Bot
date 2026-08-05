@@ -65,6 +65,31 @@ def _journal_close_safely(trade: dict) -> None:
             "journal hook failed for trade %s", trade.get("id"), exc_info=True)
 
 
+def _note_deleted_safely(trade_ids) -> None:
+    """Tell the journal that these trade rows were just deleted (V45).
+
+    The journal entries are *kept* — they are the learning record, and V45
+    Step 2 ruled explicitly against auto-deleting them. Stamping them instead
+    means the startup orphan check can separate a deliberate tidy-up from an
+    unexplained dangling reference, which it could not do before: every
+    deletion looked like a data-integrity bug and the count only ever grew.
+
+    Same lazy-import + swallow-everything contract as
+    `_journal_close_safely`, and the same call-site rule — invoke it only
+    after the caller's `with _LOCK:` block has released, since JournalStore
+    takes its own lock and does its own file I/O."""
+    if not trade_ids:
+        return
+    try:
+        from swingbot.core.analytics.journal import JournalStore
+        JournalStore().mark_deleted(trade_ids)
+    except Exception:
+        import logging
+        logging.getLogger("swing-bot.performance").warning(
+            "journal delete-marking failed for %d trade(s)", len(trade_ids),
+            exc_info=True)
+
+
 def _refresh_snapshot_safely() -> None:
     try:
         from swingbot.core.analytics.snapshots import refresh_snapshot
@@ -961,34 +986,42 @@ class TradeLog:
             deleted = len(self._trades) != before
             if deleted:
                 self._save()
+        if deleted:
+            _note_deleted_safely([trade_id])
         return deleted
 
     def clear_history(self) -> int:
         """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
         with _LOCK:
             before = len(self._trades)
+            gone = [t["id"] for t in self._trades if t["status"] != "open"]
             self._trades = [t for t in self._trades if t["status"] == "open"]
             removed = before - len(self._trades)
             if removed:
                 self._save()
+        _note_deleted_safely(gone)
         return removed
 
     def clear_open(self) -> int:
         """Delete every trade currently in status='open', leaving closed win/loss history untouched."""
         with _LOCK:
             before = len(self._trades)
+            gone = [t["id"] for t in self._trades if t["status"] == "open"]
             self._trades = [t for t in self._trades if t["status"] != "open"]
             removed = before - len(self._trades)
             if removed:
                 self._save()
+        _note_deleted_safely(gone)
         return removed
 
     def clear_all(self) -> int:
         """Delete every trade record. Returns how many were removed."""
         with _LOCK:
             count = len(self._trades)
+            gone = [t["id"] for t in self._trades]
             self._trades = []
             self._save()
+        _note_deleted_safely(gone)
         return count
 
     def close_if_live_price_hit(self, ticker: str, live_price: float) -> list:

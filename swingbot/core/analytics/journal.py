@@ -68,6 +68,34 @@ class JournalStore:
         rows.sort(key=lambda e: e.get("closed_at") or e.get("created_at") or "", reverse=True)
         return rows
 
+    def mark_deleted(self, trade_ids) -> int:
+        """Stamp `trade_deleted_at` on the entries of trades that have just
+        been removed from `trades.json`. Returns how many were stamped.
+
+        This is what lets a later orphan check tell a **deliberate deletion**
+        from an **unexplained** dangling reference (V45). Before it existed
+        the two were indistinguishable, so the startup warning counted both
+        and could only ever grow -- noise that hides the signal it exists for.
+
+        The entry itself is deliberately kept, per V45 Step 2: the journal is
+        the learning record, and the lesson outlives the trade row it was
+        derived from. Already-stamped entries are left alone so the timestamp
+        records the *first* deletion, not the latest re-run."""
+        ids = {str(t) for t in trade_ids}
+        if not ids:
+            return 0
+        with _LOCK:
+            entries = self._load()
+            stamp = datetime.now(timezone.utc).isoformat()
+            marked = 0
+            for e in entries:
+                if str(e.get("trade_id")) in ids and not e.get("trade_deleted_at"):
+                    e["trade_deleted_at"] = stamp
+                    marked += 1
+            if marked:
+                self._save(entries)
+            return marked
+
     def set_note(self, trade_id: str, note: str) -> bool:
         """Attach/replace a free-text note on an existing entry. False (no
         exception) when `trade_id` isn't journaled -- most likely a trade
@@ -251,9 +279,18 @@ def orphan_entries(trade_ids) -> list[dict]:
     and quietly deleting entries because their trade row is gone would
     destroy the more valuable half of the pair. Whether to backfill the three
     from their own denormalized fields is a human call — see V45 Step 2.
+
+    **Entries carrying `trade_deleted_at` are excluded** (added 2026-08-05).
+    Those were explained at deletion time by `JournalStore.mark_deleted`, so
+    counting them here would make the warning grow with every routine tidy-up
+    and drown the unexplained orphan it exists to surface. What this returns
+    is the genuinely unaccounted-for set. Entries orphaned *before* that
+    stamp existed cannot be classified after the fact and stay counted here —
+    marking them retroactively would assert a cause nobody observed.
     """
     known = set(trade_ids)
-    return [e for e in JournalStore().entries() if e.get("trade_id") not in known]
+    return [e for e in JournalStore().entries()
+            if e.get("trade_id") not in known and not e.get("trade_deleted_at")]
 
 
 def log_orphan_check(trade_ids) -> int:
