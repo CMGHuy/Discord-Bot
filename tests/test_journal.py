@@ -111,17 +111,43 @@ def _closed_trade():
             "closed_at": "2026-03-05T15:00:00+00:00"}
 
 
+def _uncached(monkeypatch):
+    """Pin the backtest cache to a miss, the way test_journal_bars_source.py does.
+
+    `bars_for_journal` reads `backtest_cache.load_cached` FIRST and only falls
+    back to `data.get_daily_data` (plan v8 Task V44), so a test that patches
+    only the live fetch does not control which source answers. It is not enough
+    to redirect `config.DATA_DIR`: `backtest_cache.CACHE_DIR` is resolved from
+    it at IMPORT time, so the redirect lands only if this test happens to be
+    what imports that module first -- the same import-time-constant trap
+    conftest's telemetry fixture documents.
+
+    That made the fetch-failure test below order-dependent: run alone it passed
+    (the module got imported under the patched DATA_DIR, so the cache missed);
+    run after anything that had already imported it, CACHE_DIR still pointed at
+    the real data/backtest_cache/, AAPL.csv covered the trade window, and the
+    entry came back with a real mfe_r instead of None.
+    """
+    import swingbot.core.backtest_cache as bc
+    monkeypatch.setattr(bc, "load_cached", lambda t: None)
+
+
 def test_journal_trade_close_adds_entry(tmp_path, monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+    _uncached(monkeypatch)
     df = make_ohlcv([100, 108, 98, 104], spread_pct=0.0, start="2026-03-02")
     with patch("swingbot.core.data.get_daily_data", return_value=df):
         journal_trade_close(_closed_trade())
     store = JournalStore(path=str(tmp_path / "journal.json"))
     assert store.get("t1") is not None
+    # The synthetic df above is the one that must have been used -- without the
+    # cache pinned, real AAPL bars answered instead and this passed regardless.
+    assert store.get("t1")["mfe_r"] is not None
 
 
 def test_journal_trade_close_never_raises_on_fetch_failure(tmp_path, monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
+    _uncached(monkeypatch)
     with patch("swingbot.core.data.get_daily_data", side_effect=ValueError("no data")):
         journal_trade_close(_closed_trade())  # must not raise
     store = JournalStore(path=str(tmp_path / "journal.json"))
