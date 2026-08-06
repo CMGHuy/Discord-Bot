@@ -304,3 +304,41 @@ point 3) — the pre-stamp window's timestamp heuristic is not reused. Legs 2, 3
 and 3b stay armed; 3a and 3b are gate-dependent and will read `INSUFFICIENT`
 while `GATE_ENABLED=false`, which is correct rather than a fault: with the gate
 off there is no A+ production to starve.
+
+---
+
+## Addendum, 2026-08-06 — the gate tree was deleted, not just disarmed
+
+Written after the fact, same day, because the last paragraph above stopped
+being true within hours of being written.
+
+`4658d21` turned the gate off by config. `2210c8a` took it out of the decision
+path but deliberately left `swingbot/core/gate/**` and `swingbot/core/macro/**`
+on disk, disconnected, *so that §2's one-at-a-time re-test stayed one flag
+away*. `c84924a` removed both trees, their 9 scripts, their ~40 test modules
+and their 19 config Fields. That option is now closed.
+
+**What this changes, precisely:**
+
+- **Legs 3a and 3b are dead, not armed.** The paragraph above says they "stay
+  armed" and "will read `INSUFFICIENT` while `GATE_ENABLED=false`". There is no
+  `GATE_ENABLED` any more — the Field is gone from `config.py` and the block is
+  gone from `.env.example`. Neither leg can produce a reading of any kind.
+  Legs 1, 2 and 3's baseline comparison are unaffected: they read the live
+  journal through `scripts/live_cohort_report.py`, which never touched the gate.
+- **"Limit 2" got more expensive, not less true.** The attribution is still
+  forfeit, and recovering the *gate* arm of the one-at-a-time re-test now means
+  restoring ~30 modules from git history (`git show c84924a^:swingbot/core/gate/…`)
+  before a single window can be run. The V13 and floor arms are unaffected —
+  those are config, and they are still one flag each.
+- **Nothing about the −0.082R baseline moves.** `c84924a` is a deletion of
+  already-disconnected code; the decision path stayed byte-identical to
+  57252b2 across it (verified with `git diff 57252b2 --cached` on
+  `plan_engine.py`, `scanning/engine.py`, `backtest.py`, `plan_store.py`).
+  Leg 1's first stamp-authoritative reading is still five trading days after
+  2026-08-06.
+
+`core/gate/wr_math.py` survived as `swingbot/core/wr_math.py` — it is pure
+statistics, and Leg 1's harness imports `wilson_lower_bound` from it under V29's
+own "no stat math is re-derived here" rule. Moving it was the point of not
+deleting it blind.

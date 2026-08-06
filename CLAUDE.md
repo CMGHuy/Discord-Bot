@@ -52,10 +52,15 @@ strategy-winrate-redesign, admin-ui-tradingview-redesign-v6 (task IDs
 `U1`-`U36`; manual browser QA left for a future pass). On disk but not
 current focus: cockpit-v3, llm-advisor-v5 (confirmed 0% implemented,
 2026-07-31 — no code, no branch, no commits beyond plan-authoring).
-gatekeeper-v7 is mostly done: G1-G146 (Parts 1-5) merged to `main`; G206's
-forward-gate template is written; G217/G218 (verification-debt audits of
-other plans) are open; G215/G216 need a real bot with real Discord
-keys/live data and can't be run by an agent.
+**gatekeeper-v7 was built and then removed.** G1-G146 (Parts 1-5) merged to
+`main`, then `swingbot/core/gate/**` and `swingbot/core/macro/**` were deleted
+on 2026-08-06 (`c84924a`) after plan v8 V29's rollback trigger fired — with
+their 9 scripts, ~40 test modules and 19 config Fields. Read the ⛔ banner atop
+`gatekeeper-v7_0-index.md` before touching anything that plan names; its task
+bodies describe code that is no longer here. `core/gate/wr_math.py` survived
+the cut as `swingbot/core/wr_math.py`. G215/G216/G206 are unrunnable, not open;
+G217/G218 (verification-debt audits of *other* plans) are still open and don't
+need the gate.
 
 **Don't trust the hook's "NEXT" task ID blind** — it can name IDs (e.g. `E89`)
 that don't exist in the plan file it labels as active (which may use a

@@ -40,7 +40,8 @@ interpreting any backtest, grid, or validation result.
   only; expectancy over all closed trades; same-bar conservative ordering
   (stop before target).
 - **Sample size, and the honesty clause.** Proving WR > 90% at ~95% observed
-  needs **N ≥ 59** (the G1 math already used in gatekeeper G95). Report
+  needs **N ≥ 59** (the G1 math, in `swingbot/core/wr_math.py` — it outlived
+  the gate tree it was written for, which was deleted 2026-08-06). Report
   Wilson lower bounds everywhere, never point estimates, and state N beside
   every rate — a 90% WR on N=12 is a hypothesis, not a finding; treat any
   cohort with N < 59 as provisional however good it looks. The 90% stretch

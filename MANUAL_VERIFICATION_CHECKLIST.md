@@ -4,7 +4,7 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 **Organized by urgency, not by plan**, because most of this backlog isn't actionable yet:
 - **A — Do now or soon**: the active plan, `edge-engine-v4`. Its manual steps are the ones you'll actually hit next.
-- **B — Blocked on future implementation**: `gatekeeper-v7`, `llm-advisor-v5`, `admin-ui-tradingview-redesign-v8` haven't been built yet (0 code, no branch, no commits for any of the three — confirmed by grep/git-log audit). Their manual steps reference scripts that don't exist yet. Listed here so you know what's coming once someone implements the corresponding task.
+- **B — Blocked on future implementation**: `llm-advisor-v5` and `admin-ui-tradingview-redesign-v8` haven't been built (0 code, no branch, no commits for either — grep/git-log audit 2026-07-27, llm-advisor re-confirmed 2026-07-31). Their manual steps reference scripts that don't exist yet. `gatekeeper-v7` was in this bucket, then was built to 86/90, then had its code **deleted** on 2026-08-06 — its steps are now unrunnable rather than pending; see the ⛔ note in its section below.
 - **C — Already done**: `strategy-winrate-redesign` and the bulk of `unified-plan-engine-v2`'s manual steps were already executed to get those plans to "Completed" status. Listed for the record, not as outstanding work.
 - **D — Known gaps carried forward**: `unified-plan-engine-v2`'s staged-rollout smoke and `cockpit-v3`'s live-mutation smoke were *skipped by explicit decision*, not completed. These are now tracked as `gatekeeper-v7` Tasks G217/G218 (see the plan reorg below) rather than being re-run ad hoc here.
 
@@ -82,8 +82,23 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 ## B. Blocked on future implementation
 
-### gatekeeper-v7 (0/219 tasks implemented — see plan reorg)
-Once these tasks are actually built, their manual steps are:
+### gatekeeper-v7 — ⛔ UNRUNNABLE, the code was deleted (2026-08-06, `c84924a`)
+
+**Do not attempt anything in this list.** The header below used to read
+"0/219 tasks implemented"; that was already stale (the plan was reorganised to
+90 tasks and built to 86/90 by 2026-08-02), and it is now moot:
+`swingbot/core/gate/**`, `swingbot/core/macro/**`, `scripts/gate_*.py`,
+`scripts/backfill_macro.py` and `scripts/build_event_history.py` were removed
+from the repo after plan v8 Task V29's rollback trigger fired. Every script,
+command and admin route named below is gone. See the ⛔ banner atop
+`docs/superpowers/plans/2026-07-14-gatekeeper-v7_0-index.md` for the full
+account.
+
+**Two exceptions that are still real work**, because they audit *other* plans
+and never needed the gate: **G217** (unified-plan-engine-v2's staged-rollout
+smoke) and **G218** (cockpit-v3's live-mutation smoke) — see section D.
+
+Kept below as the record of what these steps *were*:
 - **G29** — visit the Fed's published FOMC calendar and paste the second day of each two-day meeting into the script's `FOMC_DECISION_DAYS` list before it will run; then run it once for real and spot-check the JSON output.
 - **G40** — `python scripts/macro_smoke.py` (script doesn't exist yet — created by this task) with real `FRED_API_KEY`/`FINNHUB_API_KEY` in `.env`; paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict.
 - **G44** — Phase G1 checkpoint requires the G40 evidence doc to already be committed.

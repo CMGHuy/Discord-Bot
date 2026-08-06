@@ -1,5 +1,42 @@
 # Gatekeeper v7 - Part index (post win-rate audit, 2026-07-29)
 
+> ## ⛔ THE CODE THIS PLAN BUILT NO LONGER EXISTS (removed 2026-08-06, `c84924a`)
+>
+> `swingbot/core/gate/**` and `swingbot/core/macro/**` were **deleted from the
+> repo**, along with their 9 scripts, ~40 test modules, 19 config Fields and the
+> `.env.example` Gatekeeper block. Every file path, import and `!checklist`
+> command named below is gone. **Do not implement against this plan, and do not
+> read its task bodies as a description of the current codebase.**
+>
+> Why: plan v8 Task V29's pre-registered rollback trigger fired on 2026-08-06
+> (live-polled expectancy -0.333R / 46.43% WR against a -0.082R / 68.58%
+> baseline). `GATE_MODE=enforce` was one of three changes in flight and V29
+> explicitly could not attribute the drop to any one of them. `4658d21` turned
+> the gate off by config; `2210c8a` cut it out of the decision path but left the
+> tree on disk, disconnected, so it stayed re-armable for a one-at-a-time
+> re-test; `c84924a` dropped that option and removed the tree.
+>
+> What survived, and where it went:
+> - `core/gate/wr_math.py` → **`swingbot/core/wr_math.py`** (with
+>   `tests/test_wr_math.py`). It was never gate logic — pure statistics, and
+>   `scripts/live_cohort_report.py` still depends on it. This is the G1 math
+>   that `docs/claude/backtest-methodology.md`'s N ≥ 59 rule cites.
+> - The evidence docs: `docs/superpowers/results/2026-07-gate-{baseline,
+>   ablation,frontier,decision}.md`. Those numbers were really measured and
+>   stay valid as history.
+> - Everything below, as a **record of what was built and why** — recover the
+>   code from git history (`git show c84924a^:swingbot/core/gate/...`) if it is
+>   ever rebuilt.
+>
+> The four "genuinely open" tasks below are now **unrunnable, not open**:
+> `G215`/`G216` smoke a gate that no longer ships, `G206`'s forward-gate window
+> has nothing to gate, and `G218` audits cockpit-v3 rather than the gate (it is
+> the only one still worth doing, and it does not need this code).
+>
+> ---
+>
+> **Historical status block, as of 2026-08-02 — accurate then, describes deleted code now:**
+>
 > **Status: 86 of 90 tasks implemented — Parts 1-5 committed and green** (corrected
 > 2026-08-02 by plan v8 Task V41; this block previously read "44 of 90 — Parts 1-3
 > complete", which was stale by two whole parts).

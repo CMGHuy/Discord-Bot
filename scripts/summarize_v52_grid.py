@@ -3,6 +3,13 @@
 V52 Steps 2-5). Reads only what `tune_selectivity.py` wrote -- it re-ranks
 nothing and re-decides nothing, so the tables cannot disagree with the run.
 
+`tune_selectivity.py` itself was deleted on 2026-08-06 (`c84924a`) with the
+gate tree it annotated against, so this script is now a READER OF ARCHIVED
+RESULTS ONLY: it still reproduces every V52 ladder table from the JSONs already
+in docs/superpowers/results/v52/, but nothing can produce new ones until the
+gate annotation (`run_backtest(gate_eval=True)`) exists again. It imports
+nothing from swingbot, so it keeps working regardless.
+
 The ladder gates are applied here exactly as pre-registered in
 docs/superpowers/results/2026-08-03-v52-selectivity-ladder.md:
 
