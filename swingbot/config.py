@@ -373,8 +373,11 @@ FIELDS: list[Field] = [
     # --- Plan Engine v2 (rollout flags, spec 2026-07-11-unified-plan-engine-design) ---
     Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",
           type="select", default="on", options=["off", "shadow", "on"],
-          help="off = legacy behavior. shadow = v2 plans are computed and logged to "
-               "data/shadow_plans.jsonl during scans but NOT posted (parity evidence for cutover). "
+          help="off = legacy behavior. shadow = v2 plans are computed but NOT posted. "
+               "NOTE (plan v8 V39, 2026-08-06): shadow mode does NOT currently write "
+               "data/shadow_plans.jsonl -- swingbot/core/shadow_log.py:append() has no "
+               "production caller, only tests, so selecting shadow yields no parity "
+               "evidence at all. This help text used to promise that file; it was wrong. "
                "on = scan alerts price and emit v2 plans (badges, TP1/TP2, entry triggers). "
                "Defaults to 'on' for immediate deployment; set to 'shadow' first if you'd rather "
                "compare against legacy numbers for a few sessions before trusting it live."),

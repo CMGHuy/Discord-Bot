@@ -24,6 +24,32 @@ SHADOW_LOG = os.path.join(DATA_DIR, "shadow_plans.jsonl")
 # entries. Changing either needs a new pre-registration.
 MIN_ON_COHORT_N = 20
 
+# Plan v8 V39 exercised this mechanism for the first time (2026-08-06) and
+# MEASURED what the bar above is worth. Feeding it two cohorts drawn from the
+# SAME distribution, 400 trials per size:
+#
+#     n=20 per cohort   PROMOTE 50.7%
+#     n=50              PROMOTE 48.5%
+#     n=200             PROMOTE 48.2%
+#     n=1000            PROMOTE 50.5%
+#
+# A coin flip under the null, at EVERY sample size -- because `on >= off` is a
+# bare comparison of two means with no variance test, so more data narrows the
+# estimates without ever narrowing the decision. MIN_ON_COHORT_N gates sample
+# SIZE, not significance, and cannot help: at n=1000 it is still 50%.
+#
+# This is far below the bar the rest of this repo holds itself to (G100
+# permutation tests, V49's Wilson lower bounds, V54's pre-registration). The
+# verdict below is therefore NOT evidence a component works -- it is evidence
+# the on-cohort's sample mean landed higher, which under no effect happens
+# half the time. Fixing it needs a new pre-registration, not an edit here.
+_NULL_FALSE_POSITIVE_WARNING = (
+    "WARNING (plan v8 V39): this bar is `on_mean >= off_mean` with no variance "
+    "test. Measured against two cohorts drawn from the SAME distribution it "
+    "returns PROMOTE ~50% of the time at every sample size, n=20 through "
+    "n=1000. Treat PROMOTE as 'not ruled out', never as 'demonstrated'."
+)
+
 
 def shadow_component_report(lines: list, component: str) -> dict:
     """Pure: pair each cohort's would-be entries with their 10-day forward
@@ -71,6 +97,10 @@ def main() -> int:
         print(f"\n{args.component} cleared the forward gate. Promotion is a "
               f"HUMAN decision -- flip the flag yourself after reading this.",
               file=sys.stderr)
+        # Printed at the moment of the decision, not buried in a source
+        # comment -- a human reading PROMOTE is exactly who needs to know
+        # what the bar does and does not establish.
+        print(f"\n{_NULL_FALSE_POSITIVE_WARNING}", file=sys.stderr)
     return 0
 
 
