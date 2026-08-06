@@ -1,5 +1,5 @@
 import pytest
-from swingbot.core.gate.wr_math import (
+from swingbot.core.wr_math import (
     breakeven_wr, implied_expectancy, required_filter_precision, wilson_lower_bound,
 )
 

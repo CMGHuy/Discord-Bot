@@ -1,4 +1,9 @@
-"""Win-rate arithmetic every gate surface must share.
+"""Shared win-rate arithmetic, so no consumer re-derives it.
+
+Lived at `core/gate/wr_math.py` until the 2026-08-06 gate removal. It was
+never gate logic -- it is pure statistics, and `scripts/live_cohort_report.py`
+(V29's monitoring harness) still depends on it -- so it was moved here rather
+than deleted with the tree.
 
 Golden numbers (hand-derived, mirrored in tests):
 - breakeven_wr(1.5) = 100/(1+1.5) = 40.0

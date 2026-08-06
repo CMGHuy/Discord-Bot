@@ -7,7 +7,7 @@ loss %, payoff ratio, expectancy R and total % for each cohort.
 
 Every stat comes from the canonical definitions -- `analytics/metrics.py`
 (`r_multiple`, `win_rate`, `expectancy_r`, `profit_factor`) and
-`core/gate/wr_math.py` (`wilson_lower_bound`). No stat math is re-derived
+`core/wr_math.py` (`wilson_lower_bound`). No stat math is re-derived
 here; that is the one rule this script exists under, so its numbers always
 agree with the admin UI and the gate surfaces.
 
@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from swingbot.core.analytics.metrics import (  # noqa: E402
     expectancy_r, profit_factor, r_multiple, win_rate,
 )
-from swingbot.core.gate.wr_math import wilson_lower_bound  # noqa: E402
+from swingbot.core.wr_math import wilson_lower_bound  # noqa: E402
 
 CLOSED_STATUSES = ("win", "loss", "closed")
 

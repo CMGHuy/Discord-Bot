@@ -41,10 +41,11 @@ from swingbot.core.backtest_cache import CACHE_DIR, cache_path, normalize_ohlcv
 
 START, END = "2018-06-01", "2025-12-31"
 
-# Market-context tickers the gatekeeper's macro layer needs cached alongside
-# the watchlist: the 11 SPDR sectors + SPY (sector RS / rotation, G23-G25)
-# and ^VIX (fallback when FRED's VIXCLS is unavailable, G21). HYG/LQD are
-# deliberately absent -- the credit-stress task was cut by the win-rate audit.
+# Market-context tickers cached alongside the watchlist: SPY (the regime
+# reference every backtest slices on), ^VIX, and the 11 SPDR sectors that
+# swingbot/core/edge's sector-relative-strength factors read. Originally
+# seeded for the gatekeeper's macro layer, which was removed 2026-08-06 --
+# these stay because the edge factors and the regime slices still want them.
 CONTEXT_TICKERS = [
     "SPY", "^VIX",
     "XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC",

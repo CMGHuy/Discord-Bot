@@ -59,7 +59,7 @@ Important limitations (stated plainly, not buried):
     that "passes on cached history" is not a promise of future performance.
 This is a directional sanity check, not a guarantee of future performance.
 """
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -85,32 +85,6 @@ class BacktestTrade:
     r_multiple: float | None
     holding_days: int | None
     runner_outcome: str | None = None
-    # V52 Step 1: the runner leg on its own, not blended into r_multiple.
-    # V51 Step 2 measured that with tp1_fraction frozen at 0.5 the break-even
-    # win rate swings 41.2% -> 58.3% purely on how runners do, which straddles
-    # the 43.4% no-skill floor -- so a blended r_multiple cannot answer whether
-    # the economics work. Both stay None unless the trade actually reached TP1
-    # under scale-out (single-leg walks and pre-TP1 exits have no runner).
-    runner_r: float | None = None
-    runner_holding_days: int | None = None
-    # G91: gatekeeper annotation, populated only when run_backtest(gate_eval=True).
-    # Zero behavior change -- these stay at their defaults (and serialize
-    # identically) whenever gate_eval is off.
-    gate_score: float | None = None
-    gate_tier: str | None = None
-    fired_flags: list = field(default_factory=list)
-    # G92: set on the record whichever list it lands in (trades or
-    # summary.skipped_by_gate) -- lets a caller holding just the record
-    # tell which bucket it came from.
-    fired_hard_block: bool = False
-    skipped_by_gate: bool = False
-    # V52 Step 1: how many independent confluence factors agreed at the signal
-    # bar (0-6). Populated with the rest of the G91 annotation, so it is None
-    # whenever gate_eval is off.
-    confluence_count: int | None = None
-
-    def to_dict(self) -> dict:
-        return asdict(self)
 
 
 @dataclass
@@ -136,13 +110,6 @@ class BacktestSummary:
     runner_be: int = 0
     runner_timeout: int = 0
     avg_win_r: float | None = None
-    # G92: signals the gate filtered out (gate_min_tier), kept here for the
-    # frontier math -- excluded from every equity/WR/expectancy figure above,
-    # which are all computed from `trades` only.
-    skipped_by_gate: list = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return asdict(self)
 
 
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
@@ -184,118 +151,6 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     return entry, stop_loss, take_profit
 
 
-def _gate_annotation(gate_eval, ticker, strategy, horizon_key, df, i, direction,
-                     entry, stop_loss, take_profit, spy_df=None):
-    """G91: run the gatekeeper checklist against exactly what was knowable at
-    the signal bar's close (df sliced to i+1, macro reconstructed via
-    backtest_ctx.historical_macro_snap) and return the annotation for the
-    trade record: (score, tier, fired_redflag_ids, fired_hard_block).
-    Annotation only -- callers must not use this to alter entry/exit
-    decisions. When gate_eval is False this never imports the gate package
-    at all."""
-    if not gate_eval:
-        return None, None, [], False, None
-
-    from swingbot.core.gate import run_checklist
-    from swingbot.core.gate.backtest_ctx import historical_macro_snap
-    from swingbot.core.plan_engine import PlanStatus, TradePlanV2
-
-    signal_date = df.index[i].date()
-    plan = TradePlanV2(
-        plan_id="bt", ticker=ticker, created_at=str(signal_date),
-        source="strategy", strategy=strategy, horizon_key=horizon_key,
-        direction=direction, entry_type="market", trigger_price=entry,
-        entry_price=entry, expiry_bars=5, stop_loss=stop_loss,
-        tp1=take_profit, tp1_fraction=0.5, tp2=None,
-        breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
-        trail_atr_mult=2.5, quality_score=0, quality_breakdown=[],
-        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
-    )
-    gate_result = run_checklist(
-        ticker, strategy, plan, df.iloc[:i + 1],
-        macro_snap=historical_macro_snap(signal_date), spy_df=spy_df)
-    fired_flags = [c.check_id for c in gate_result.checks
-                  if c.section == "redflag" and c.status == "fail"]
-    # V52 Step 1 names "confluence-method count" as a selectivity axis. The
-    # checklist already computes it (setup_quality.check_confluence puts the
-    # firing factors in .evidence), but the score folds it into one 0-100
-    # number where it cannot be recovered. Surfaced here rather than
-    # recomputed, so the axis cannot drift from the check the gate applied.
-    confluence_count = next(
-        (c.evidence.get("count") for c in gate_result.checks
-         if c.check_id == "confluence" and isinstance(c.evidence, dict)), None)
-    return (gate_result.score, gate_result.tier, fired_flags,
-            bool(gate_result.hard_blocks), confluence_count)
-
-
-def assert_train_only(df) -> None:
-    """Validation-window hygiene (cockpit C31 pattern): gate tuning never
-    reads 2024-2025 bars. The single pre-registered validation shot belongs
-    to edge-engine E92 -- this plan feeds it, never spends it."""
-    last = df.index.max()
-    if str(last)[:10] > "2023-12-31":
-        raise ValueError(
-            "gate replay touched the 2024-2025 validation window — "
-            "TRAIN folds end 2023; see the gatekeeper-v7 targets doc")
-
-
-def _gate_blocked(gate_min_tier: str, gate_tier: str | None, fired_hard_block: bool) -> bool:
-    """True if a signal's own gate result fails to clear gate_min_tier (or
-    hard-blocked outright, regardless of tier -- G92)."""
-    if gate_tier is None or fired_hard_block:
-        return True
-    from swingbot.core.gate.score import TIER_ORDER
-    return TIER_ORDER.index(gate_tier) > TIER_ORDER.index(gate_min_tier)
-
-
-# ---------------------------------------------------------------------------
-# Opt-in level-map memo (plan v8 V17) -- OFF by default, tuning harnesses only
-# ---------------------------------------------------------------------------
-# Measured 2026-08-02 by cProfile: an exit-v2 `tp2_mode="levels"` backtest
-# spends ~98% of its runtime inside `build_level_map` -> `trendline_levels` ->
-# `_find_best_trendline`, which is O(pivots^3) over the FULL df history. A
-# single config over the 78-ticker universe costs ~7 min in v2 against ~14 s
-# in v1, and *all* of that difference is the level map.
-#
-# The level map's inputs are (df-up-to-i, horizon, entry price). None of them
-# is a sizing parameter, so a V17-style grid over MIN_TARGET_PCT / rr /
-# atr_stop_multiple recomputes a bit-identical map once per config -- which is
-# what made the pre-registered grid a ~30-hour job instead of a ~30-minute one.
-#
-# The memo key is the EXACT input tuple, so a hit returns what the call would
-# have computed; it cannot change any result. It is off unless a caller opts
-# in, so the live bot's memory profile is untouched. Harnesses are expected to
-# `clear_level_map_memo()` between (ticker, horizon) groups -- the entries for
-# one group are what the next config re-reads, and nothing beyond that group
-# is ever hit again.
-_LEVEL_MAP_MEMO: dict | None = None
-
-
-def enable_level_map_memo() -> None:
-    """Start memoizing `build_level_map` results (tuning harnesses only)."""
-    global _LEVEL_MAP_MEMO
-    if _LEVEL_MAP_MEMO is None:
-        _LEVEL_MAP_MEMO = {}
-
-
-def clear_level_map_memo() -> None:
-    """Drop everything memoized so far, leaving the memo enabled."""
-    if _LEVEL_MAP_MEMO is not None:
-        _LEVEL_MAP_MEMO.clear()
-
-
-def disable_level_map_memo() -> None:
-    """Turn the memo off and release it. Safe to call when already off."""
-    global _LEVEL_MAP_MEMO
-    _LEVEL_MAP_MEMO = None
-
-
-def level_map_memo_stats() -> dict:
-    """`{enabled, size}` -- so a harness can report the hit it is relying on."""
-    return {"enabled": _LEVEL_MAP_MEMO is not None,
-            "size": len(_LEVEL_MAP_MEMO) if _LEVEL_MAP_MEMO is not None else 0}
-
-
 def run_backtest(
     ticker: str,
     df: pd.DataFrame,
@@ -306,8 +161,6 @@ def run_backtest(
     scale_out: bool = False,
     tp2_mode: str = "none",
     frictions: bool = True,
-    gate_eval: bool = False,
-    gate_min_tier: str | None = None,
 ) -> BacktestSummary:
     """
     Run a backtest for one (ticker, strategy, horizon) combination.
@@ -329,28 +182,7 @@ def run_backtest(
     round-trip COMMISSION_PER_TRADE expressed against COMMISSION_RISK_BASIS.
     Set False to reproduce the old frictionless arithmetic (e.g. tests
     asserting exact entry/exit/r_multiple logic rather than economics).
-
-    gate_eval: (G91) if True, each simulated trade is additionally annotated
-    with `gate_score`/`gate_tier`/`fired_flags` from the gatekeeper checklist
-    evaluated against exactly what was knowable at the signal bar's close
-    (swingbot.core.gate.backtest_ctx.historical_macro_snap -- no lookahead).
-    Zero behavior change: trades are still taken/classified identically:
-    the gate only annotates the record. Default False, and False never
-    imports the gate package.
-
-    gate_min_tier: (G92) requires gate_eval=True. Signals whose gate_tier
-    fails to clear this bar (or that hard-blocked outright) are recorded in
-    `skipped_by_gate` instead of `trades` -- kept for the frontier math,
-    excluded from every equity/WR/expectancy figure. Train-only hygiene:
-    using either gate kwarg asserts the replay never touches the 2024-2025
-    validation window (assert_train_only) -- the single pre-registered
-    validation shot belongs to edge-engine E92, not this plan.
     """
-    if gate_eval or gate_min_tier is not None:
-        assert_train_only(df)
-    if gate_min_tier is not None and not gate_eval:
-        raise ValueError("gate_min_tier requires gate_eval=True")
-
     min_bars = MIN_BARS[horizon_key]
     if len(df) < min_bars + 10:
         return BacktestSummary(
@@ -387,7 +219,6 @@ def run_backtest(
     n = len(df)
 
     trades: list[BacktestTrade] = []
-    skipped_by_gate: list[BacktestTrade] = []
     total_signals = 0
     runner_counts: dict[str, int] = {}
     _lm_cache_key = None
@@ -424,18 +255,8 @@ def run_backtest(
                 cache_key = i // 5
                 if cache_key != _lm_cache_key:
                     from .levels import build_level_map
-                    # The within-run bucket cache above is unchanged; the memo
-                    # (off by default -- see enable_level_map_memo) only avoids
-                    # recomputing the *same* call in a later grid config.
-                    memo_key = (ticker, horizon_key, int(i), float(entry))
-                    memoed = (_LEVEL_MAP_MEMO or {}).get(memo_key)
-                    if memoed is not None:
-                        _lm_supports, _lm_resistances = memoed
-                    else:
-                        _lm_supports, _lm_resistances = build_level_map(
-                            df.iloc[:i + 1], HORIZONS[horizon_key], entry)
-                        if _LEVEL_MAP_MEMO is not None:
-                            _LEVEL_MAP_MEMO[memo_key] = (_lm_supports, _lm_resistances)
+                    _lm_supports, _lm_resistances = build_level_map(
+                        df.iloc[:i + 1], HORIZONS[horizon_key], entry)
                     _lm_cache_key = cache_key
                 tp2 = select_tp2(
                     [lv.price for lv in _lm_resistances],
@@ -476,38 +297,15 @@ def run_backtest(
             # price can't represent.
             return_pct = r_multiple * (risk_per_share / entry) * 100
             holding_days = exit_i - i
-            (gate_score, gate_tier, fired_flags, fired_hard_block,
-             confluence_count) = _gate_annotation(
-                gate_eval, ticker, strategy, horizon_key, df, i, direction,
-                entry, stop_loss, take_profit)
 
-            # Two legs only ever exist once TP1 filled under scale-out; every
-            # other path returns a single full-fraction leg, where there is no
-            # runner to report and this stays None.
-            runner_r = res.legs[-1]["r"] if len(res.legs) == 2 else None
-            # `runner_holding_days` needs ExitResult.tp1_index, which V52 Step 1
-            # added to plan_engine and the 2026-08-06 backend revert removed
-            # along with the rest of that step. The BacktestTrade field is kept
-            # so the record schema does not change under consumers; it is simply
-            # never populated while the runner-leg split is out.
-            runner_holding_days = None
-
-            record = BacktestTrade(
+            trades.append(BacktestTrade(
                 entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
                 direction=direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
                 take_profit=round(take_profit, 4), outcome=outcome,
                 exit_price=round(exit_price, 4), return_pct=round(return_pct, 3),
                 r_multiple=round(r_multiple, 3), holding_days=holding_days,
                 runner_outcome=res.runner_outcome,
-                runner_r=runner_r, runner_holding_days=runner_holding_days,
-                gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
-                fired_hard_block=fired_hard_block, confluence_count=confluence_count,
-            )
-            if gate_min_tier is not None and _gate_blocked(gate_min_tier, gate_tier, fired_hard_block):
-                record.skipped_by_gate = True
-                skipped_by_gate.append(record)
-            else:
-                trades.append(record)
+            ))
             continue
 
         # ---- v1 walk-forward loop ----
@@ -575,25 +373,14 @@ def run_backtest(
         if frictions:
             r_multiple -= commission_r()
         holding_days = exit_i - i
-        (gate_score, gate_tier, fired_flags, fired_hard_block,
-         confluence_count) = _gate_annotation(
-            gate_eval, ticker, strategy, horizon_key, df, i, direction,
-            entry, stop_loss, take_profit)
 
-        record = BacktestTrade(
+        trades.append(BacktestTrade(
             entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
             direction=direction, entry=round(entry_fill, 4), stop_loss=round(stop_loss, 4),
             take_profit=round(take_profit, 4), outcome=outcome,
             exit_price=round(exit_fill, 4), return_pct=round(return_pct, 3),
             r_multiple=round(r_multiple, 3), holding_days=holding_days,
-            gate_score=gate_score, gate_tier=gate_tier, fired_flags=fired_flags,
-            fired_hard_block=fired_hard_block, confluence_count=confluence_count,
-        )
-        if gate_min_tier is not None and _gate_blocked(gate_min_tier, gate_tier, fired_hard_block):
-            record.skipped_by_gate = True
-            skipped_by_gate.append(record)
-        else:
-            trades.append(record)
+        ))
 
     evaluated_trades = [t for t in trades if t.outcome in ("win", "loss")]
     wins      = [t for t in evaluated_trades if t.outcome == "win"]
@@ -633,7 +420,6 @@ def run_backtest(
         runner_be=runner_counts.get("runner_be", 0),
         runner_timeout=runner_counts.get("runner_timeout", 0),
         avg_win_r=float(np.mean([t.r_multiple for t in wins])) if wins else None,
-        skipped_by_gate=skipped_by_gate,
     )
 
 

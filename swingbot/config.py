@@ -578,88 +578,6 @@ FIELDS: list[Field] = [
                "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
                "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
                "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
-
-    # --- Gatekeeper ---
-    Field("GATE_ENABLED", "GATE_ENABLED", "Gatekeeper", "Gate enabled (master switch)",
-          type="checkbox", default="false",
-          help="Master switch for the pre-trade checklist engine. Off = no gate code runs anywhere."),
-    Field("GATE_MODE", "GATE_MODE", "Gatekeeper", "Gate mode",
-          type="select", default="inform", options=["shadow", "inform", "enforce"],
-          help="shadow: evaluate + log only, alerts unchanged. inform (default): the full checklist is "
-               "rendered on every alert and nothing is ever blocked. enforce: opt-in blocking below "
-               "'Min tier' -- guarded by fold + shadow evidence; never the default."),
-    Field("GATE_MIN_TIER", "GATE_MIN_TIER", "Gatekeeper", "Min tier (enforce mode only)",
-          type="select", default="C", options=["A+", "A", "B", "C"],
-          help="Consulted ONLY in enforce mode: candidates below this tier are held back. "
-               "At the default C nothing is ever blocked by tier."),
-    Field("GATE_BLOCK_ACTION", "GATE_BLOCK_ACTION", "Gatekeeper", "What a block does",
-          type="select", default="flag", options=["flag", "suppress"],
-          help="Consulted ONLY in enforce mode, when a candidate is below 'Min tier' or trips a "
-               "hard block. flag (default): the alert still posts, headlined ENTRY BLOCKED with "
-               "suggested size 0, but NO paper trade is logged and the plan is closed out so the "
-               "intraday manager can't fill it -- the operator sees everything, the book takes "
-               "nothing. This is the plan-v8 V15 ruling: it honors the standing 'WEAK plans are "
-               "never suppressed' requirement while still cutting the -49.5%/308-trade WEAK cohort "
-               "out of the book, since the damage is in the book and not in the alert. suppress: "
-               "drop the alert entirely as well."),
-    Field("GATE_STRICTNESS", "GATE_STRICTNESS", "Gatekeeper", "Strictness preset",
-          type="select", default="balanced", options=["strict", "balanced", "relaxed"],
-          help="One-click reseed of every checklist threshold. relaxed is deliberately generous so "
-               "plans always flow; strict is the A+-hunting profile. Thresholds you have "
-               "individually overridden survive a preset switch."),
-    Field("MACRO_ENABLED", "MACRO_ENABLED", "Gatekeeper", "Macro context enabled",
-          type="checkbox", default="false",
-          help="Refresh the market-context snapshot (VIX, breadth, sector rotation, economic event "
-               "and earnings calendars) before every scan and render the context field on alerts."),
-    Field("FRED_API_KEY", "FRED_API_KEY", "Gatekeeper", "FRED API key",
-          type="password", sensitive=True,
-          help="Free key: https://fred.stlouisfed.org/docs/api/api_key.html. Supplies VIX series and "
-               "economic release dates. Empty = FRED-backed data degrades to 'unknown'; scanning is "
-               "never affected."),
-    Field("MACRO_SNAPSHOT_TTL_MIN", "MACRO_SNAPSHOT_TTL_MIN", "Gatekeeper", "Snapshot TTL (minutes)",
-          type="number", default="30", min=5, step=5,
-          help="A macro snapshot younger than this is reused; older triggers a rebuild before the scan."),
-    Field("GATE_BLACKOUT_ENABLED", "GATE_BLACKOUT_ENABLED", "Gatekeeper", "Event blackout annotations",
-          type="checkbox", default="false",
-          help="Annotate alerts that fall inside a high-impact event window (CPI/NFP/FOMC). "
-               "Annotate-only: actually holding entries additionally requires GATE_BLACKOUT_ENFORCE."),
-    Field("GATE_BLACKOUT_ENFORCE", "GATE_BLACKOUT_ENFORCE", "Gatekeeper", "Event blackout holds entries",
-          type="checkbox", default="false",
-          help="Opt-in: on top of GATE_BLACKOUT_ENABLED, actually hold new entries through a "
-               "high-impact event window instead of only annotating them. Auto-disables (with a "
-               "WARN) when the event calendar hasn't refreshed in over 7 days."),
-    Field("GATE_SHOW_IN_SHADOW", "GATE_SHOW_IN_SHADOW", "Gatekeeper", "Show checklist in shadow mode",
-          type="checkbox", default="false",
-          help="Render the checklist field on alerts while GATE_MODE is still 'shadow' -- for "
-               "previewing the field before promoting to inform."),
-    Field("FINNHUB_API_KEY", "FINNHUB_API_KEY", "Gatekeeper", "Finnhub API key",
-          type="password", sensitive=True,
-          help="Free key: https://finnhub.io/register. Powers the earnings calendar. "
-               "Empty = earnings proximity degrades to 'unknown'."),
-    Field("GATE_BLACKOUT_HOURS_BEFORE", "GATE_BLACKOUT_HOURS_BEFORE", "Gatekeeper",
-          "Blackout hours before event", type="float", default="18", min=0, max=72, step=1,
-          help="High-impact events (CPI/NFP/FOMC) within this many hours ahead flag the "
-               "checklist. Lower to shrink the annotation window."),
-    Field("GATE_BLACKOUT_HOURS_AFTER", "GATE_BLACKOUT_HOURS_AFTER", "Gatekeeper",
-          "Blackout hours after event", type="float", default="2", min=0, max=24, step=0.5,
-          help="The window stays flagged this long after the print."),
-    Field("GATE_EARNINGS_BLACKOUT_DAYS", "GATE_EARNINGS_BLACKOUT_DAYS", "Gatekeeper",
-          "Earnings blackout days", type="number", default="3", min=0, max=15, step=1,
-          help="Flag plans whose ticker reports earnings within this many days. "
-               "Lower to allow entries closer to earnings."),
-    Field("GATE_MIN_DOLLAR_VOL", "GATE_MIN_DOLLAR_VOL", "Gatekeeper",
-          "Min median dollar volume", type="float", default="2000000", min=0, step=100000,
-          help="Tickers whose 20d median dollar volume sits below this get a "
-               "thin-liquidity warning on the checklist. Lower to silence it "
-               "for small caps."),
-    Field("GATE_TIER_APLUS_CUT", "GATE_TIER_APLUS_CUT", "Gatekeeper",
-          "A+ tier score cut", type="float", default="90.0", min=50, max=100, step=1,
-          help="Checklist score at or above this = tier A+. Fold evidence (G95/G102) "
-               "proposes changes; edits are audited (G170)."),
-    Field("GATE_TIER_A_CUT", "GATE_TIER_A_CUT", "Gatekeeper",
-          "A tier score cut", type="float", default="75.0", min=40, max=100, step=1),
-    Field("GATE_TIER_B_CUT", "GATE_TIER_B_CUT", "Gatekeeper",
-          "B tier score cut", type="float", default="55.0", min=20, max=100, step=1),
 ]
 
 _CASTERS = {
@@ -722,18 +640,6 @@ def _apply_env() -> dict:
         if old_value != new_value:
             changed[f.attr] = (old_value, new_value)
     return changed
-
-
-def register_fields(new_fields: list["Field"]) -> None:
-    """Late registration for package-generated Fields (per-check enables,
-    per-threshold values). Called by swingbot.core.gate at import time —
-    config can't import the gate package itself (it's the other way
-    around), so the gate pushes its Fields here. Idempotent by key."""
-    known = {f.key for f in FIELDS}
-    added = [f for f in new_fields if f.key not in known]
-    if added:
-        FIELDS.extend(added)
-        _apply_env()
 
 
 def _load_dotenv_file() -> tuple:
