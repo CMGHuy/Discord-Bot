@@ -68,6 +68,24 @@ DIMENSIONS = [
     # outage's 32 reconciled closes into the cohort the rollback trigger
     # watches.
     ("Close source", lambda t: str(t.get("close_source") or "unstamped")),
+    # V4 Step 3. Scale-out was dead in the live log until 2026-07-31 -- the
+    # legacy SL/TP loops closed 100% of a v2 position the first time price
+    # touched TP1, so `append_leg_by_plan` no-opped and only 24 of 475 trades
+    # ever recorded a leg. Post-fix that runs at 16 of 18 v2 wins carrying two
+    # legs. Kept as a standing cohort because the failure mode is silent:
+    # nothing errors when a runner is lost, the trade just settles at TP1.
+    # A win appearing under `0 legs` means some path closed it without the
+    # manager -- in every measured case so far, an orphaned plan_id.
+    #
+    # READ THIS COHORT AS A DIAGNOSTIC, NOT AS EVIDENCE. Its expectancy
+    # column is close to tautological: a 2-leg trade banked TP1, so it is a
+    # win by construction, and a 1-leg trade is the synthesized fraction=1.0
+    # leg of a pre-TP1 loss. The 2026-08-01+ read (2+ legs: WR 100%, +1.180R;
+    # 1 leg: WR 0%, -1.783R) is therefore NOT a measurement that scale-out
+    # earns anything -- it is win/loss restated. The only load-bearing number
+    # here is the COUNT under `0 legs`.
+    ("Legs", lambda t: f"{min(len(t.get('legs') or []), 2)}"
+                       f"{'+' if len(t.get('legs') or []) >= 2 else ''} legs"),
 ]
 
 
