@@ -3,10 +3,14 @@
 **Date:** 2026-08-06
 **Task:** plan v8 V29 (Phase V5, Rollout)
 **Harness:** `scripts/live_cohort_report.py` (V8), run against `/opt/swing-bot/data`
-**Status:** Step 1 armed. Step 2 pre-registered here — **all four legs armed**
-(Leg 3 was retired as written and replaced by 3a/3b; see §3). The expectancy
-leg **reads as FIRING on today's data** and **Leg 3a reads as firing too**;
-what to do about either is a human-partner decision, not an agent's (§5).
+**Status:** **CLOSED — trigger fired, rollback authorised and executed the same
+day (§6, commit `4658d21`).** Step 1 armed. Step 2 pre-registered here — **all
+four legs armed** (Leg 3 was retired as written and replaced by 3a/3b; see §3).
+The expectancy leg **read as FIRING** and **Leg 3a read as firing too** (§5).
+§5 below is preserved exactly as written *before* the decision, including its
+"escalated, not acted on" close — the pre-registration discipline is the point,
+and back-dating it would destroy the evidence that the reading came first. §6
+is what the human partner then decided.
 
 ---
 
@@ -213,3 +217,90 @@ and finds no cohort to test.
 **Escalated, not acted on.** Rolling back a live config change is a
 human-partner decision — the same standing rule that governs `MAX_LOSS_PCT`
 (V19 Step 1). Recorded here; no live setting was changed by this task.
+
+---
+
+## 6. The decision — rollback authorised and executed (2026-08-06, `4658d21`)
+
+*Appended after §5 was written and read. §5 is unmodified.*
+
+The human partner answered the escalation the same day and the rollback shipped.
+
+### What was rolled back
+
+| flag | was | now | shipped by |
+|---|---|---|---|
+| `TARGET_FLOOR_ENABLED` | `true` | **`false`** | V10 — the 2.5% TP1 floor |
+| `MAX_LOSS_CAP_ENABLED` | `true` | **`false`** | V51 — the stop cap |
+| `GATE_ENABLED` | `true` in `.env.example` | **`false`** | V14 — enforce mode |
+
+The `GATE_ENABLED` code default in `config.py` was *already* `false`; only the
+shipped `.env.example` turned it on, so a fresh deploy would have re-enabled the
+gate even after a live `.env` edit. Both files now agree.
+
+### No code was reverted, and that was the finding
+
+The obvious reading of "get back to the good commit" was a revert of
+`swingbot/core` to the last known-good state. That would have been wrong twice
+over: `swingbot/admin` at HEAD imports `core.gate`, `core.macro` and
+`performance.close_attribution`, so the UI would have broken; and roughly twenty
+genuine bug fixes sit in the same range — the SIGTERM close, the unowned-target
+close, atomic writes, the journal's cache reads, the scale-out plan linkage, and
+the re-alert lockout fix that made live *match* the backtest the good win rates
+came from.
+
+None of that was necessary. **Every suspect was a config flag.** Verified:
+`plan_engine.py:203,229` — both off-switches return their input untouched, so
+the floor and cap revert to exact pre-change geometry rather than an
+approximation of it. `engine.py:1707` reads the gate as `getattr(config,
+"GATE_ENABLED", False)`. All three are attribute reads with no from-imports, so
+`bot_core.py`'s SIGHUP handler reloads them live — the rollback applies with no
+downtime and, more importantly, **no stop/reconcile cycle**, which is the step
+this repo's own history shows corrupting the record when it goes wrong.
+
+The v8 machinery stays on disk, inert and re-armable. `MIN_TARGET_PCT`,
+`MAX_LOSS_PCT`, `GATE_MODE` and `GATE_MIN_TIER` keep their values deliberately:
+a re-test is then one flag back to the geometry that was actually measured, not
+a re-guess of the number.
+
+### What was NOT rolled back, and why
+
+**`LEGACY_ALERT_PATH_ENABLED` stays `false`.** V13's cut was in the same window
+and was a candidate for rollback with the rest. It was excluded on measurement:
+that path *is* the `source=None` cohort, and on the frozen production book it
+runs **156 closed trades at 26.9% WR** against the confluence cohort's **341 at
+67.7%**.
+
+| source | n | WR |
+|---|---|---|
+| `confluence` (v2, tiered) | 341 | 67.7% |
+| legacy (`source=None`) | 156 | **26.9%** |
+
+Restoring it would reproduce the pre-v8 alert routing faithfully and drag the
+blended win rate back toward the ~53% whole-book number. It is the one item in
+this window where *restore the old behavior* and *recover the win rate* point in
+opposite directions. The goal was chosen over the parity, explicitly.
+
+### Two limits on what this achieves
+
+1. **It does not make the book profitable.** The pre-floor geometry it returns
+   to measured **−0.082R** — better than the −0.333R that fired Leg 1, and still
+   negative. The floor existed because wins paid ~0.35R while losses cost 1R;
+   removing it buys back win rate, not edge. Anything downstream that reads this
+   rollback as "fixed" is misreading it.
+2. **It forfeits the attribution.** §5 point 1 said the trigger is a detector,
+   not an attribution — V13, V14 and the floor were all in flight. They went
+   back together rather than being bisected on live money, which was the right
+   call for the book and the wrong one for knowledge: **which change caused the
+   damage is now unknown.** Only a deliberate one-at-a-time re-test recovers it,
+   and each arm needs its own n ≥ 30 window.
+
+### What still runs
+
+Leg 1 is unchanged and keeps reading against the same −0.082R baseline, so **the
+rollback is measured by the trigger that prompted it**. The first
+stamp-authoritative reading is still five trading days after 2026-08-06 (§5
+point 3) — the pre-stamp window's timestamp heuristic is not reused. Legs 2, 3a
+and 3b stay armed; 3a and 3b are gate-dependent and will read `INSUFFICIENT`
+while `GATE_ENABLED=false`, which is correct rather than a fault: with the gate
+off there is no A+ production to starve.
