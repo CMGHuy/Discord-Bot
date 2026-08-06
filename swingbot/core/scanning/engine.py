@@ -177,6 +177,7 @@ class ScanItem:
     gate_result: object = None        # GateResult | None -- set by the G121 checklist evaluation, rendered by G123
     blackout: dict | None = None      # G120 blackout_decision() verdict for this scan run, or None
     gate_blocked: dict | None = None  # V15: enforce refused this candidate; alert still posts, book takes nothing
+    debounce_spent: tuple | None = None  # (state_key, state_value, previously_confirmed_value) for the confirmation this scan consumed; None on the !check path, which never debounces
 
     @property
     def all_requirements_met(self) -> bool:
@@ -1288,10 +1289,19 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # the old inline loop, which never even built it.
                 if not item.all_requirements_met:
                     continue
+                # Read the confirmed value BEFORE confirming: the gate runs
+                # ~400 lines below, in the alert loop, and a block there has
+                # to be able to hand this confirmation back (see
+                # StateStore.revert_confirmation). Once confirm_or_update
+                # commits, the old value is gone.
+                prev_confirmed = state.get_last_trend(item.result.state_key)
                 confirmed = state.confirm_or_update(
                     item.result.state_key, item.result.state_value,
                     required_confirmations=config.SIGNAL_CONFIRMATION_SCANS,
                 )
+                if confirmed:
+                    item.debounce_spent = (item.result.state_key,
+                                           item.result.state_value, prev_confirmed)
                 if not confirmed:
                     filtered_by_confirmation += 1
                     log.debug("%s (%s, %s): awaiting confirmation (needs %d consecutive scans)",
@@ -1724,6 +1734,19 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     _rollback_blocked_candidate(item, trade_id, reason)
                     trade_id = None
                     skipped_gate_blocked += 1
+                    # The book was rolled back; hand the debounce back too.
+                    # A block is a refusal of THIS evaluation, not a verdict
+                    # for all time -- tier moves with volume/momentum/regime
+                    # through the session, and some hard blocks are outright
+                    # time-dependent. Leaving the confirmation spent meant a
+                    # setup refused once was silenced permanently, including
+                    # after the condition that refused it had cleared.
+                    # `repeat_refusal` is read BEFORE the revert writes it.
+                    repeat_refusal = False
+                    if item.debounce_spent is not None:
+                        s_key, s_val, s_prev = item.debounce_spent
+                        repeat_refusal = state.was_refused(s_key, s_val)
+                        state.revert_confirmation(s_key, s_val, s_prev)
                     # V15's ruling: what happens to the ALERT is a separate
                     # question from what happens to the BOOK. The standing
                     # requirement is that WEAK plans are never suppressed, and
@@ -1731,7 +1754,21 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     # so the default flags the alert (same E7/E8/E47
                     # flagged-not-hidden pattern, suggested size 0) instead of
                     # hiding it. "suppress" is the opt-in that also drops it.
-                    if getattr(config, "GATE_BLOCK_ACTION", "flag") == "suppress":
+                    #
+                    # `repeat_refusal` is the one exception, and it exists
+                    # only because the revert above reopens the setup: the
+                    # debounce will re-fire it every SIGNAL_CONFIRMATION_SCANS
+                    # passes for as long as it keeps qualifying, and posting
+                    # the identical "refused" embed every ~15 minutes is
+                    # noise, not disclosure. The FIRST refusal always posts
+                    # -- this suppresses a duplicate of an alert the channel
+                    # has already had, never the alert itself.
+                    if (getattr(config, "GATE_BLOCK_ACTION", "flag") == "suppress"
+                            or repeat_refusal):
+                        if repeat_refusal:
+                            log.debug("%s (%s): gate refused again (%s) -- alert already "
+                                      "posted for this setup, not repeating it",
+                                      result.ticker, result.horizon_key, reason)
                         continue
                     item.gate_blocked = {"tier": result_g.tier, "min_tier": min_tier,
                                          "reason": reason,
@@ -1802,6 +1839,15 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
         alerts.append((embed, chart_path, item.plan_v2))
+
+        # This setup got through, so any earlier refusal recorded against it
+        # is spent history -- drop the marker, or a later refusal of the same
+        # setup would be suppressed as a "duplicate" of one the channel has
+        # long since seen. Blocked candidates never reach here: the block
+        # branch above either `continue`s or falls through with
+        # item.gate_blocked set.
+        if item.debounce_spent is not None and item.gate_blocked is None:
+            state.clear_refusal(item.debounce_spent[0])
 
         # Secondary alerting (email / push) -- fires only for high-confidence,
         # fully-qualifying alerts when enabled. Blocking I/O but we're already

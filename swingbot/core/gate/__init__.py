@@ -43,8 +43,14 @@ def run_checklist(ticker, strategy, plan, df_daily, *, macro_snap=None,
             result = CheckResult(spec.check_id, spec.section, "unknown",
                                  spec.weight, "check errored — treated as unknown", {})
         checks.append(result)
-    hard_blocks = tuple(c.check_id for c in checks
-                        if c.status == "fail" and CHECKS[c.check_id].hard_block)
+    # A failing check hard-blocks per its registered policy, unless the
+    # result itself overrode that policy for this branch (CheckResult.
+    # hard_block; only ever used to soften, never to promote).
+    hard_blocks = tuple(
+        c.check_id for c in checks
+        if c.status == "fail"
+        and (CHECKS[c.check_id].hard_block if c.hard_block is None else c.hard_block)
+    )
     total = score(checks)
     tier = assign_tier(
         total, hard_blocks,

@@ -18,24 +18,55 @@ def test_closed_bar_passes():
     assert check_signal_confirmed(uptrend_daily(), plan, None, now=now).status == "pass"
 
 
-def test_same_day_forming_bar_fails_hard():
+def test_same_day_forming_bar_scores_against_but_does_not_hard_block():
+    # V8/2026-08-06: every candidate the live scanner builds during RTH has
+    # created_at == today (created_at is the last bar's date, and the live
+    # frame carries today's forming bar), so hard-blocking here was a
+    # market-hours blackout, not a screen. It stays a 10-point penalty.
     plan = make_plan(created_at="2026-07-14")
     now = dt.datetime(2026, 7, 14, 15, 0, tzinfo=ET)     # Tuesday, session open
-    assert check_signal_confirmed(uptrend_daily(), plan, None, now=now).status == "fail"
+    result = check_signal_confirmed(uptrend_daily(), plan, None, now=now)
+    assert result.status == "fail"
+    assert result.hard_block is False
     # after the close the same plan is fine
     evening = dt.datetime(2026, 7, 14, 17, 30, tzinfo=ET)
     assert check_signal_confirmed(uptrend_daily(), plan, None, now=evening).status == "pass"
 
 
-def test_breakout_close_back_inside_fails():
+def test_forming_bar_does_not_force_tier_c():
+    """The override has to survive run_checklist's hard_blocks assembly --
+    asserting it on the CheckResult alone would pass even if the
+    orchestrator ignored the field."""
+    from swingbot.core.gate import run_checklist
+
+    plan = make_plan(created_at="2026-07-14")
+    now = dt.datetime(2026, 7, 14, 15, 0, tzinfo=ET)
+    result = run_checklist("AAA", "Fibonacci", plan, uptrend_daily(), now=now)
+    failed = {c.check_id for c in result.checks if c.status == "fail"}
+    assert "signal_confirmed" in failed          # still counted against the score
+    assert "signal_confirmed" not in result.hard_blocks
+
+
+def test_breakout_close_back_inside_fails_hard():
     # market-entry breakout plan whose signal bar poked above the level
-    # intrabar (high 100.5) but closed back inside (99.5)
+    # intrabar (high 100.5) but closed back inside (99.5). This branch keeps
+    # the hard block: it is a statement about a CLOSED bar, not about the
+    # clock, so no amount of waiting changes it.
     df = make_ohlcv(np.concatenate([np.full(59, 97.0), [99.5]]), spread_pct=2.0)
     plan = make_plan(strategy="Break & Retest", entry_type="market",
                      trigger_price=100.0, created_at="2026-07-13")
     now = dt.datetime(2026, 7, 14, 17, 30, tzinfo=ET)
     result = check_signal_confirmed(df, plan, None, now=now)
     assert result.status == "fail" and "inside" in result.detail
+    assert result.hard_block is None            # registry policy applies
+
+    checklist = run_checklist_for(df, plan, now)
+    assert "signal_confirmed" in checklist.hard_blocks
+
+
+def run_checklist_for(df, plan, now):
+    from swingbot.core.gate import run_checklist
+    return run_checklist("AAA", plan.strategy, plan, df, now=now)
 
 
 def test_registered_as_hard_block():

@@ -18,7 +18,28 @@ MEANREV_FAMILY = ("RSI", "RSI Divergence")
 
 
 def check_signal_confirmed(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
-    """HARD BLOCK: never alert on an unclosed pattern."""
+    """Never alert on an unclosed pattern. HARD BLOCK for a breakout bar
+    that closed back inside its level; a SCORED penalty (10 pts, no forced
+    tier C) for a signal bar that is merely still forming.
+
+    Why the split (2026-08-06, from the first live session in enforce
+    mode). `plan.created_at` is the last bar's date (`plan_engine.py:539`,
+    `:663`), and the live daily frame carries today's forming bar all
+    session, so `created_at == today` is true for EVERY candidate the
+    scanner builds between 09:30 and 16:00 ET. As a hard block that made
+    this check a categorical market-hours blackout rather than a quality
+    screen: 12 of the 13 candidates evaluated in the first session after
+    `GATE_MODE=enforce` were blocked here, all of them intraday, and the
+    only one that reached the book was created at 16:11 ET after the
+    close. It also short-circuited tier entirely, so `GATE_MIN_TIER` never
+    got a say -- two of those twelve scored 60.9 and 69.9, comfortably
+    tier B.
+
+    The forming-bar risk is real but it is what the scanner already
+    debounces for: `SIGNAL_CONFIRMATION_SCANS` consecutive identical
+    scans (`state.py`, whose docstring describes exactly this failure).
+    Keeping the 10-point penalty means a still-forming candidate must
+    earn its tier elsewhere; dropping the hard block means it can."""
     now_et = (now or dt.datetime.now(dt.timezone.utc)).astimezone(ET)
     session_open = (now_et.weekday() < 5
                     and dt.time(9, 30) <= now_et.time() < dt.time(16, 0))
@@ -26,7 +47,8 @@ def check_signal_confirmed(df_daily, plan, macro_snap, *, now=None, **ctx) -> Ch
         return CheckResult("signal_confirmed", "setup", "fail", 10.0,
                            "signal bar is still forming — pattern not closed",
                            {"created_at": plan.created_at,
-                            "now_et": now_et.isoformat()})
+                            "now_et": now_et.isoformat()},
+                           hard_block=False)
     if plan.strategy in BREAKOUT_FAMILY and plan.entry_type == "market":
         level = plan.trigger_price
         bullish = plan.direction == "bullish"

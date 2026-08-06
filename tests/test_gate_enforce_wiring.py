@@ -35,13 +35,19 @@ from tests.test_engine_v2_plans import _structured_df
 
 
 def _run(monkeypatch, tmp_path, *, mode, tier="C", min_tier="A", hard_blocks=(),
-         progress=None, block_action="suppress", embed=None):
+         progress=None, block_action="suppress", embed=None,
+         require_confirmation=False, state_store=None):
     """One real scan pass with the gate enabled and every candidate scored
     at `tier`. Returns (alerts, trade_log, plan_store).
 
     `block_action` defaults to "suppress" here (NOT the shipped default) so
     the V14 tests below can assert on the alert list directly; V15's shipped
-    "flag" behavior has its own tests at the bottom of this file."""
+    "flag" behavior has its own tests at the bottom of this file.
+
+    `require_confirmation=True` is the automatic-scan path, and the only one
+    that runs the debounce -- pass a `state_store` with it, or the scan
+    writes to the real data/state.json the module-level singleton opened at
+    import time."""
     df = _structured_df()
     monkeypatch.setattr(config, "GATE_BLOCK_ACTION", block_action)
 
@@ -99,8 +105,11 @@ def _run(monkeypatch, tmp_path, *, mode, tier="C", min_tier="A", hard_blocks=(),
             ticker=ticker, strategy=strategy, as_of="2026-08-02", checks=(),
             score=10.0, tier=tier, hard_blocks=tuple(hard_blocks), macro_stale=False))
 
+    if state_store is not None:
+        monkeypatch.setattr(engine, "state", state_store)
+
     ctx = GateContext(macro_snap={}, open_plans=[], spy_df=None, now=dt.datetime.now())
-    result = engine._sync_run_scan("4w", require_confirmation=False,
+    result = engine._sync_run_scan("4w", require_confirmation=require_confirmation,
                                    progress=progress, min_confluence=0, gate_ctx=ctx)
 
     alerts = []
@@ -250,3 +259,63 @@ def test_a_passing_candidate_is_never_labelled_blocked(monkeypatch, tmp_path):
          embed=lambda item, *a, **k: captured.append(item) or SimpleNamespace(fields=[]))
     assert captured
     assert all(item.gate_blocked is None for item in captured)
+
+
+# --- V8 2026-08-06: a block must not SPEND the setup ------------------------
+# The debounce commits at engine.py:~1291 and the gate blocks ~450 lines
+# later, so a blocked candidate used to leave `trend` set to the value it was
+# refused at. confirm_or_update then takes its `new_value == confirmed`
+# branch on every later scan and returns False forever: the setup is gone,
+# even after the condition that refused it clears. Live proof (2026-08-05):
+# 12 candidates blocked intraday by a time-dependent hard block, none of
+# which could return after the close.
+
+def _confirming_state(tmp_path, monkeypatch):
+    from swingbot.core.state import StateStore
+    monkeypatch.setattr(config, "SIGNAL_CONFIRMATION_SCANS", 1)
+    return StateStore(path=str(tmp_path / "state.json"))
+
+
+def test_a_gate_block_hands_the_confirmation_back(monkeypatch, tmp_path):
+    store = _confirming_state(tmp_path, monkeypatch)
+    _run(monkeypatch, tmp_path, mode="enforce", tier="C", min_tier="A",
+         require_confirmation=True, state_store=store)
+
+    entries = [e for e in store._data.values() if e.get("refused_value")]
+    assert entries, "the block recorded no refusal -- the debounce was spent silently"
+    for e in entries:
+        assert e.get("trend") != e["refused_value"], \
+            "the refused value is still confirmed -- this setup can never fire again"
+
+
+def test_a_refused_setup_can_come_back_once_the_gate_would_pass_it(monkeypatch, tmp_path):
+    """The point of handing the confirmation back. Scan 1 is refused; scan 2
+    scores the same candidate above the floor and must produce a real plan."""
+    store = _confirming_state(tmp_path, monkeypatch)
+    _run(monkeypatch, tmp_path, mode="enforce", tier="C", min_tier="A",
+         require_confirmation=True, state_store=store)
+    alerts, trade_log, plan_store = _run(
+        monkeypatch, tmp_path, mode="enforce", tier="A+", min_tier="C",
+        require_confirmation=True, state_store=store)
+
+    assert alerts, "the setup was silenced by its own refusal"
+    assert plan_store.open_plans(), "no live plan -- the book never recovered the setup"
+    assert trade_log.get_trades(status="open", limit=None)
+    assert not any(e.get("refused_value") for e in store._data.values()), \
+        "a setup that got through still carries a refusal marker"
+
+
+def test_the_same_refusal_is_not_reposted_every_scan(monkeypatch, tmp_path):
+    """Handing the confirmation back re-arms the debounce, so a candidate
+    that keeps qualifying and keeps being refused would otherwise repost the
+    identical flagged embed every SIGNAL_CONFIRMATION_SCANS passes. The first
+    refusal always posts -- only the duplicate is dropped."""
+    store = _confirming_state(tmp_path, monkeypatch)
+    first, _, _ = _run(monkeypatch, tmp_path, mode="enforce", tier="C",
+                       min_tier="A", block_action="flag",
+                       require_confirmation=True, state_store=store)
+    second, _, _ = _run(monkeypatch, tmp_path, mode="enforce", tier="C",
+                        min_tier="A", block_action="flag",
+                        require_confirmation=True, state_store=store)
+    assert first, "the first refusal must still be disclosed"
+    assert second == [], "the same refusal was posted twice"

@@ -13,6 +13,15 @@ class CheckResult:
     weight: float          # scoring weight, 0 for pure-info checks
     detail: str            # one human sentence, embed-ready
     evidence: dict = field(default_factory=dict)   # raw numbers the detail cites
+    # Per-result override of the registry's hard_block policy. None = use
+    # CheckSpec.hard_block (the normal case). A check whose registered
+    # policy is hard_block=True but which fails for a reason that does NOT
+    # warrant forcing tier C sets this False on that branch only -- see
+    # setup_quality.check_signal_confirmed, where the still-forming-bar
+    # branch is a scored penalty and the closed-back-inside-the-level
+    # branch stays a hard block. Never set True here to promote a check
+    # the registry declared soft: the registry owns that direction.
+    hard_block: bool | None = None
 
 
 def scoreable(checks: Sequence[CheckResult]) -> list[CheckResult]:
