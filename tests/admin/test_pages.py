@@ -675,7 +675,13 @@ def test_tuning_page_shows_current_state(client, auth):
     r = client.get("/tuning?strategy=RSI", headers=auth)
     html = r.data.decode("utf-8")
     assert "0.40" in html          # RSI's real current STRATEGY_RR_OVERRIDE
-    assert "2026-07-18" in html    # RSI's real committed registry run_date
+    # RSI's real committed registry run_date. Was 2026-07-18; V25 re-emitted
+    # every source="strategy" row on 2026-08-06 through V6 Step 3's rule after
+    # finding the emitter still scoring against the voided `win_rate >= 80`.
+    # The WINDOW is deliberately unchanged (2024-01-01..2025-12-31) -- the
+    # re-emit replayed the committed July JSONs via --from-json and ran no
+    # backtest, so V24's reserved validation shot is untouched.
+    assert "2026-08-06" in html
     assert "never applies" in html
 
 

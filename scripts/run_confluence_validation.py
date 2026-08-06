@@ -75,13 +75,16 @@ def emit_registry_records(registry_path, run_date, *, results_path=RESULTS_PATH)
     for hk, st in summary["by_horizon"].items():
         new_records.extend(build_registry_records(
             [{"strategy": "ALL", "n": st["n_eval"], "win_rate": st["win_rate"],
-              "expectancy_r": st["expectancy_r"]}],
+              "expectancy_r": st["expectancy_r"],
+              # V25: passes() applies V6 Step 3's dead<=50% criterion too
+              "excluded_share": st.get("excluded_share", 0.0)}],
             source="confluence", window=window_str, run_date=run_date,
             horizon=hk, min_n=min_n))
     pooled = summary["pooled"]
     new_records.extend(build_registry_records(
         [{"strategy": "ALL", "n": pooled["n_eval"], "win_rate": pooled["win_rate"],
-          "expectancy_r": pooled["expectancy_r"]}],
+          "expectancy_r": pooled["expectancy_r"],
+          "excluded_share": pooled.get("excluded_share", 0.0)}],
         source="confluence", window=window_str, run_date=run_date,
         horizon=None, min_n=min_n))
     merge_registry(registry_path, new_records)
