@@ -251,12 +251,17 @@ FIELDS: list[Field] = [
           help="Informational only, same as the two fields above: once this many paper trades are open, "
                "new alerts still post but the Discord embed shows a position-limit warning."),
     Field("MAX_POSITION_SIZE_PCT", "MAX_POSITION_SIZE_PCT", "Account Defaults", "Max position size % of account",
-          type="float", default="0.1", min=0.01, max=100, step=0.01,
+          type="float", default="5.0", min=0.01, max=100, step=0.01,
           help="Position-size cap: the suggested share count is clipped so shares × entry never exceeds "
                "this % of the account balance. Prevents a very tight stop on a cheap stock from implying "
                "a position that's a large fraction of the account (e.g. at 1% risk, a 0.50 stop on a "
                "$5 stock suggests 10× as many shares as a $5 stop on a $50 stock). 20% is a sensible "
-               "ceiling for a single position; lower if you want more diversification headroom."),
+               "ceiling for a single position; lower if you want more diversification headroom. "
+               "PERCENT units, same as RISK_PER_TRADE_PCT: compute_position_size() does "
+               "`balance * max_position_pct / 100`. The default read 0.1 until 2026-08-06, i.e. 0.1% of "
+               "balance -- a cap 200x tighter than the 20% this text calls sensible, tight enough to "
+               "clamp essentially every position and mask the risk setting entirely. Now 5.0, matching "
+               "what .env.example has always shipped."),
     Field("POSITION_SIZING_MODE", "POSITION_SIZING_MODE", "Account Defaults", "Position sizing mode",
           type="select", default="risk_pct",
           options=[("risk_pct", "Fixed risk % per trade"),
