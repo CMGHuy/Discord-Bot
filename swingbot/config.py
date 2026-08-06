@@ -120,6 +120,16 @@ FIELDS: list[Field] = [
     Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
           type="number", default="2", min=1, max=10, step=1,
           help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
+    Field("SIGNAL_REENTRY_COOLDOWN_DAYS", "SIGNAL_REENTRY_COOLDOWN_DAYS",
+          "Scanning & Session", "Re-entry cooldown (days)",
+          type="number", default="5", min=0, max=60, step=1,
+          help="After a plan closes, how long before the SAME ticker/strategy/horizon/direction "
+               "may alert again. Until this shipped the answer was 'never' -- a setup that "
+               "alerted once was spent permanently, which is why a level that keeps holding "
+               "only ever produced one plan. 5 matches the backtest's cooldown_bars, the "
+               "spacing the measured win rate was actually produced under. 0 disables the "
+               "cooldown (re-arm as soon as the plan closes); the setup still has to clear "
+               "every filter and re-serve the full confirmation debounce either way."),
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
           help="DEBUG shows every signal/strategy combo evaluated; INFO shows per-scan progress and trade decisions."),

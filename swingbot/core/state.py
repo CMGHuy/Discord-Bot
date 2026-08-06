@@ -11,12 +11,21 @@ Two jobs:
      scans -- filtering out noise from a single volatile tick.
 """
 import os
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from swingbot import config
 from swingbot.core.jsonio import atomic_write_json, read_json
 
 _LOCK = Lock()
+
+
+def _utcnow() -> datetime:
+    """Isolated so tests can pin the clock instead of reaching for the real
+    one. A real-clock dependency buried in the debounce is exactly the trap
+    that let test_flag_on_polls_open_plans drift into failure once the wall
+    clock moved past a hardcoded date."""
+    return datetime.now(timezone.utc)
 
 
 class StateStore:
@@ -49,6 +58,21 @@ class StateStore:
         """
         with _LOCK:
             entry = self._data.setdefault(key, {})
+
+            # Re-entry cooldown (see release_for_reentry): the setup's last
+            # plan has closed and the lockout was dropped, but re-alerting
+            # the same ticker/strategy/horizon/direction immediately after a
+            # stop-out is how one bad level turns into a run of losses.
+            # Nothing accumulates toward confirmation while this is in force.
+            cooling = entry.get("cooldown_until")
+            if cooling:
+                if _utcnow() < datetime.fromisoformat(cooling):
+                    return False
+                # Expired -- drop the marker so this check costs nothing from
+                # here on, and let the scan below start accumulating.
+                entry.pop("cooldown_until", None)
+                self._save()
+
             confirmed = entry.get("trend")
 
             if new_value == confirmed:
@@ -74,6 +98,53 @@ class StateStore:
 
             self._save()
             return False
+
+    def release_for_reentry(self, key: str, cooldown_days: float = 0.0) -> bool:
+        """Drop the confirmed stamp so a still-valid setup can alert again
+        once the plan it produced has closed. Returns True if something was
+        actually released.
+
+        Why this exists. confirm_or_update() returns True only on the scan
+        where a value BECOMES confirmed; every later scan with the same value
+        takes the `new_value == confirmed` branch and returns False. That is
+        correct while a plan is live -- it stops the same setup re-alerting
+        every 5 minutes -- but nothing ever cleared `trend` when the plan
+        reached a terminal state, so the setup was spent permanently. A
+        ticker/strategy/horizon/direction that alerted once could never alert
+        again while its target stayed in the same bucket, no matter how many
+        times the level held.
+
+        revert_confirmation() already fixes exactly this shape for the
+        gatekeeper's refusals, and its own docstring names the case it does
+        NOT cover: "not when the blocking condition clears, not when its
+        score improves, *not after the close*." This is that last one.
+
+        It also reconciles live with the backtest those thresholds were tuned
+        against: backtest_scenarios.replay_scenarios re-emits the same
+        ticker/horizon/direction after `cooldown_bars` (5), while live
+        implemented an infinite lockout -- strictly more restrictive than the
+        configuration whose win rate was measured. `cooldown_days` is the
+        live analogue and defaults to that same 5.
+
+        Releasing is not a quality concession: the setup must clear every
+        filter again from scratch -- confidence level, min strategies, the
+        gate, the target floor -- and re-serve the full
+        SIGNAL_CONFIRMATION_SCANS debounce before it can post.
+        """
+        with _LOCK:
+            entry = self._data.get(key)
+            if not entry or entry.get("trend") is None:
+                return False
+            entry.pop("trend", None)
+            entry["pending_value"] = None
+            entry["pending_count"] = 0
+            if cooldown_days > 0:
+                entry["cooldown_until"] = (
+                    _utcnow() + timedelta(days=cooldown_days)).isoformat()
+            else:
+                entry.pop("cooldown_until", None)
+            self._save()
+            return True
 
     def was_refused(self, key: str, value: str) -> bool:
         """True if `value` was already surfaced once and refused downstream

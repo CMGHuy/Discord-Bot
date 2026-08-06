@@ -118,12 +118,17 @@ def maybe_pyramid(plan, price: float) -> dict | None:
 
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
-                 atr_fn=None, trade_log=None):
+                 atr_fn=None, trade_log=None, signal_release_fn=None):
         self.store = store
         self.price_fn = price_fn            # ticker -> live float
         self.bar_count_fn = bar_count_fn    # (ticker, created_at) -> bars since
         self.atr_fn = atr_fn                # ticker -> current ATR(14) (Task 66)
         self.trade_log = trade_log          # TradeLog (Task 70)
+        # state_key -> None; releases the scan debounce when a plan reaches a
+        # terminal status so a still-valid setup can alert again. Optional and
+        # None by default: the backtest and the replay harnesses drive this
+        # manager too, and they must not touch live scan state.
+        self.signal_release_fn = signal_release_fn
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -146,8 +151,33 @@ class PlanManager:
                 continue
             for event in new_events:
                 self._on_event(plan, event)
+            self._release_signal_if_terminal(plan)
             events.extend(new_events)
         return events
+
+    def _release_signal_if_terminal(self, plan: TradePlanV2) -> None:
+        """Hand the scan debounce back once this plan is finished.
+
+        The key is rebuilt exactly as ScenarioSignal.state_key composes it
+        (`levels.py`): ticker|strategy|horizon_key|direction, where the
+        signal's `trend` is the plan's `direction`. If that format ever
+        changes, this silently stops matching and setups go back to being
+        spent forever -- tests/test_signal_reentry.py pins the two against
+        each other so the drift fails loudly instead.
+        """
+        if self.signal_release_fn is None:
+            return
+        if plan.status not in (PlanStatus.CLOSED, PlanStatus.CANCELLED):
+            return
+        key = f"{plan.ticker}|{plan.strategy}|{plan.horizon_key}|{plan.direction}"
+        try:
+            self.signal_release_fn(key)
+        except Exception:
+            # Same contract as the trade-log hook: bookkeeping must never
+            # break the state machine. A missed release costs one setup's
+            # re-entry, a raised exception would strand the whole poll.
+            log.warning("signal-release hook failed for plan %s", plan.plan_id,
+                        exc_info=True)
 
     def _on_event(self, plan: TradePlanV2, event: PlanEvent) -> None:
         if self.trade_log is None:
@@ -405,6 +435,7 @@ class PlanManager:
             events = []
         for event in events:
             self._on_event(plan, event)
+        self._release_signal_if_terminal(plan)
         return events
 
     def _check_bar_active(self, plan: TradePlanV2, bar_open: float,
@@ -488,6 +519,18 @@ def _bars_since(ticker, created_at):
         if df.index.tz is None else int((df.index > created_at).sum())
 
 
+def _release_signal(key: str) -> None:
+    """Live wiring for PlanManager's signal_release_fn. Imported lazily: the
+    scan engine imports plan-engine symbols, so binding its StateStore at
+    module scope here would close the import cycle."""
+    from swingbot import config
+    from swingbot.core.scanning.engine import state
+    if state.release_for_reentry(
+            key, cooldown_days=getattr(config, "SIGNAL_REENTRY_COOLDOWN_DAYS", 5)):
+        log.info("signal %s released for re-entry (cooldown %s day(s))",
+                 key, getattr(config, "SIGNAL_REENTRY_COOLDOWN_DAYS", 5))
+
+
 def run_manager_tick() -> list[PlanEvent]:
     """One synchronous manager tick -- the trade_monitor loop calls this via
     asyncio.to_thread. Flag off = pure no-op (no store instantiation, no
@@ -499,7 +542,8 @@ def run_manager_tick() -> list[PlanEvent]:
     if _MANAGER is None:
         from swingbot.core.performance import TradeLog
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
-                               bar_count_fn=_bars_since, trade_log=TradeLog())
+                               bar_count_fn=_bars_since, trade_log=TradeLog(),
+                               signal_release_fn=_release_signal)
     return _MANAGER.poll()
 
 
