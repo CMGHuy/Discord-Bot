@@ -930,8 +930,57 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
     return embed
 
 
+_PLAN_TRANSITION_STYLE = {
+    "CANCELLED": ("🚫 Plan cancelled — {ticker}", discord.Color.dark_grey()),
+    "CLOSED":    ("🔒 Plan closed — {ticker}", discord.Color.light_grey()),
+}
+
+
+def build_plan_transition_embed(plan: dict) -> discord.Embed:
+    """Embed for a plan an operator cancelled/closed from the admin UI
+    (plan v8 V32 Step 4 / cockpit-v3 C17).
+
+    Separate from `build_plan_event_embed`, which renders the *manager's*
+    lifecycle transitions and needs a live `PlanEvent`. This one gets only
+    `dataclasses.asdict(TradePlanV2)` off the notify queue, and the event it
+    describes is different in kind: a human overrode the plan. Every field is
+    read defensively — the queue is written by a separate process (the admin
+    UI) and may predate any field added since it was enqueued."""
+    status = str(plan.get("status", "")).upper()
+    template, color = _PLAN_TRANSITION_STYLE.get(
+        status, ("Plan {ticker} — " + (status or "updated"), discord.Color.light_grey()))
+    embed = discord.Embed(title=template.format(ticker=plan.get("ticker", "?")),
+                          color=color)
+    embed.add_field(name="Plan (v2)", value=(
+        f"{plan.get('strategy', '?')} · {plan.get('horizon_key', '?')} · "
+        f"{plan.get('direction', '?')} · "
+        f"{'✅' if plan.get('badge') == 'VALIDATED' else '⚠️'} {plan.get('badge', '?')}"),
+        inline=False)
+    entry = plan.get("entry_price") or plan.get("trigger_price")
+    if entry is not None:
+        embed.add_field(name="Entry", value=f"{entry:.2f}")
+    if plan.get("stop_loss") is not None:
+        embed.add_field(name="Stop", value=f"{plan['stop_loss']:.2f}")
+    if plan.get("tp1") is not None:
+        embed.add_field(name="TP1", value=f"{plan['tp1']:.2f}")
+    embed.add_field(name="Closed by", value="operator (admin UI)", inline=False)
+    embed.set_footer(text=f"v2 plan {str(plan.get('plan_id', ''))[:8]}")
+    return embed
+
+
 async def notify_closed_trades(bot, newly_closed: list):
-    """Send a notification for every newly-closed trade (win, loss, or manual close)."""
+    """Send a notification for every newly-closed trade (win, loss, or manual close).
+
+    Also drains admin-UI plan transitions (`kind == "plan_transition"`).
+    **Plan v8 V32 Step 4 / cockpit-v3 C17:** those entries were written by
+    `admin/pages.py:_queue_manual_close_notify` and then silently dropped
+    here — a `TradePlanV2.status` is uppercase (`CANCELLED`/`CLOSED`) while
+    the filter below accepts only lowercase trade statuses, and this function
+    had no notion of the `kind` field. The queue file is deleted by the
+    consumer *before* this runs (`commands/scanning.py`), so every cancel or
+    close an operator performed in the admin UI was lost, not deferred. They
+    also cannot go through `build_closed_trade_embed`, which indexes
+    `trade['id']` and other trade-only keys a plan record does not have."""
     if not newly_closed:
         return
     if not config.DISCORD_CHANNEL_TRADES_HISTORY_ID:
@@ -948,6 +997,13 @@ async def notify_closed_trades(bot, newly_closed: list):
             log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce)
             return
     for trade in newly_closed:
+        if trade.get("kind") == "plan_transition":
+            try:
+                await channel.send(embed=build_plan_transition_embed(trade))
+            except Exception as e:
+                log.warning("Could not post plan-transition notification for %s: %s",
+                            trade.get("plan_id"), e)
+            continue
         status = trade.get("status", "")
         if status not in ("win", "loss", "closed"):
             continue   # skip anything unexpected (still-open, etc.)

@@ -16,8 +16,14 @@ def test_rescued_rsi_validated():
 
 
 def test_weak_strategy():
-    b = get_badge("strategy", "EMA Crossover")
+    # V25: EMA Crossover is VALIDATED now that the emitter no longer scores
+    # against V6's voided `win_rate >= 80`, and so is every other registered
+    # strategy. The WEAK path that still matters is the unregistered
+    # fallback -- a strategy with no record at all must degrade to WEAK/n=0,
+    # never to a borrowed badge from some other row.
+    b = get_badge("strategy", "Not A Registered Strategy")
     assert b.status == "WEAK"
+    assert b.n == 0 and b.win_rate == 0.0
 
 
 def test_confluence_falls_back_to_strategy_badge():

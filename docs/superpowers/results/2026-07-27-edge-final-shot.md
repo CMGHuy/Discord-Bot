@@ -124,3 +124,43 @@ with an **empty adopted set**, so there is no adopted config for this window to
 validate — firing it now would measure shipped defaults and spend the reuse on
 a question nobody asked. Plan v8 records that **V24 must not be fired without
 an explicit human decision.**
+
+## CLOSED UNFIRED — human decision, 2026-08-06
+
+**The decision Step 1 required was put and answered: do not fire.** The window's
+one permitted reuse is **preserved, unspent**, and remains available to a future
+run that has something to validate.
+
+This is a decision, not a deferral, and not debt. Recording it here rather than
+only in v8's plan file is the same precaution as the supersession note above: a
+third plan that reserves "the one permitted reuse" must find this file already
+telling it the budget is intact and why nobody spent it.
+
+**Why the answer was no.** The prerequisite had just cleared — plan v8 Task V24
+Step 5 extended all 95 cache files to **2026-08-03**, the window's last bar
+(`docs/superpowers/results/2026-08-06-v24-step5-cache-extension.md`), so the run
+was newly *possible* for the first time. It was still not *justified*:
+
+- **Nothing to validate.** Six tasks — V17, V19, V21, V51, V52, V53, V54 — each
+  terminated with an empty adopted set. No gate, parameter, exit rule or sizing
+  choice was adopted for this window to test.
+- **The headline would be in-sample by construction.** The 2026-08-03 directive
+  widened the window to swallow TRAIN entirely, so ~90% of its span is data every
+  touched parameter was fitted on.
+- **The genuinely unseen slice is ~146 trading days**, not two years. 2024-2025
+  was already spent on the round-1 registry build, so only 2026 is untouched.
+- **The plan already has its ending.** V22 Step 3 recorded "no demonstrable
+  edge" on G100's p-values (0.346–1.0 across all 11 strategies) plus V17 and V52
+  exhausting both pre-registered levers — an ending the plan names in advance as
+  legitimate. Firing a one-shot to attach a number to that ending would be
+  ceremony standing in for a statistical bar, which is risk #7's exact shape.
+
+**The guard is deliberately left armed.** No `## Result` heading was written for
+this closure — writing one to record "we chose not to run" would convert
+`wf_run.py --once-guard` from "runs once" into "never runs again" and destroy the
+budget this decision exists to preserve. That trap is described three paragraphs
+up; this section is what honoring it looks like.
+
+**To reopen:** a future plan that adopts something concrete may fire this shot,
+under V24's rules and its mandatory full / in-sample / out-of-sample
+decomposition. The data is on disk and current through 2026-08-03.

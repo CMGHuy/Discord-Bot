@@ -29,6 +29,43 @@ def _never_write_telemetry_into_the_real_data_dir(tmp_path_factory):
     yield
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _never_write_into_the_real_market_data_dir(tmp_path_factory):
+    """Same shape as the telemetry guard above, for `market_data/`.
+
+    `data_store.DATA_DIR` is the plain relative string "market_data", and every
+    read/write takes it as a DEFAULT ARGUMENT (`base_dir: str = DATA_DIR`) --
+    bound at def time, so reassigning the module attribute redirects nothing.
+    Any test that drives a real scan pass reaches `get_intraday`, which caches
+    to disk, and the bars land in the repo's own market_data/ next to 79 real
+    tickers.
+
+    Found 2026-08-06: `market_data/hourly/TEST.csv`, 443 rows for the fake
+    ticker "TEST" written by tests/test_gate_enforce_wiring.py. It hid well --
+    `get_intraday` skips the write while the file is `fresh_enough`
+    (INTRADAY_MAX_AGE_SECONDS = 4h), so the mtime does not move on repeat runs
+    and the file looks like a one-off manual artifact rather than something the
+    suite recreates. Deleting it and running the suite brings it straight back.
+
+    Redirected at `cache_path`, the single chokepoint all three of
+    save_to_disk/load_from_disk/get_intraday route through. Only the DEFAULT is
+    intercepted: a test that passes an explicit `base_dir` (test_universe.py
+    does, throughout) still gets exactly the directory it asked for.
+    """
+    redirect = tmp_path_factory.mktemp("market_data")
+    from swingbot.core import data_store
+    real_cache_path = data_store.cache_path
+
+    def _redirected(ticker, interval, base_dir=data_store.DATA_DIR):
+        if base_dir == data_store.DATA_DIR:
+            base_dir = str(redirect)
+        return real_cache_path(ticker, interval, base_dir)
+
+    data_store.cache_path = _redirected
+    yield
+    data_store.cache_path = real_cache_path
+
+
 def make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01"):
     """Build an OHLCV frame from a close series. High/Low straddle the close
     by spread_pct/2 each side; Open is the prior close."""

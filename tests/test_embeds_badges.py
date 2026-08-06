@@ -14,9 +14,11 @@ def test_validated_badge_line_carries_registry_numbers():
 
 
 def test_weak_plan_renders_caution_text_verbatim():
-    # EMA Crossover: still WEAK after the rescue round (RSI, the previous
-    # exemplar here, was rescued to VALIDATED in Tasks 95-97).
-    p = _plan(strategy="EMA Crossover")
+    # The exemplar has moved twice (RSI in Tasks 95-97, EMA Crossover in V25).
+    # No registered strategy is WEAK any more, so this exercises the
+    # unregistered fallback -- the path a newly-added strategy takes, and the
+    # only way WEAK_CAUTION_TEXT can still reach a real alert.
+    p = _plan(strategy="Not A Registered Strategy")
     stamp_badge(p)
     name, value = badge_field_for(p)
     assert name.startswith("⚠️ WEAK")

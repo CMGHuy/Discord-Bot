@@ -98,7 +98,8 @@ def test_build_report_slices_every_dimension():
     rep = lcr.build_report(trades)
     assert rep["n_closed"] == 2
     assert set(rep["dimensions"]) == {"Engine path", "Strategy", "Tier", "Badge",
-                                      "Horizon", "Direction", "Source", "Close source"}
+                                      "Horizon", "Direction", "Source", "Close source",
+                                      "Legs"}
     assert rep["dimensions"]["Engine path"]["legacy"]["n"] == 1
     assert rep["dimensions"]["Engine path"]["v2"]["n"] == 1
     # Legacy trades carry no tier/badge/source -- rendered as a real "None"
@@ -174,3 +175,14 @@ def test_unstamped_closes_are_not_assumed_live():
     cs = rep["dimensions"]["Close source"]
     assert cs["unstamped"]["n"] == 1
     assert "live" not in cs
+
+
+def test_legs_cohort_separates_scaled_out_wins():
+    """V4 Step 3. A v2 win with no legs was closed by something other than the
+    plan manager -- the failure is silent, so it needs a standing cohort."""
+    trades = [_t("win", 100.0, 101.0, plan_id="p1",
+                 legs=[{"fraction": 0.5}, {"fraction": 0.5}]),
+              _t("win", 100.0, 101.0, plan_id="p2")]
+    cohorts = lcr.build_report(trades)["dimensions"]["Legs"]
+    assert cohorts["2+ legs"]["n"] == 1
+    assert cohorts["0 legs"]["n"] == 1

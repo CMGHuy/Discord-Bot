@@ -129,29 +129,29 @@
   "win_rate": 84.5,
   "expectancy_r": 0.21,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
   "strategy": "EMA Crossover",
   "horizon": null,
-  "status": "WEAK",
+  "status": "VALIDATED",
   "n": 36,
   "win_rate": 75.0,
   "expectancy_r": 0.061,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
   "strategy": "Elliott Wave",
   "horizon": null,
-  "status": "WEAK",
+  "status": "VALIDATED",
   "n": 75,
   "win_rate": 77.3,
   "expectancy_r": 0.064,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
@@ -162,18 +162,18 @@
   "win_rate": 82.3,
   "expectancy_r": 0.268,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
   "strategy": "MA Ribbon",
   "horizon": null,
-  "status": "WEAK",
+  "status": "VALIDATED",
   "n": 137,
   "win_rate": 78.1,
   "expectancy_r": 0.213,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
@@ -184,7 +184,7 @@
   "win_rate": 81.3,
   "expectancy_r": 0.12,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
@@ -195,18 +195,18 @@
   "win_rate": 100.0,
   "expectancy_r": 0.304,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
   "strategy": "RSI Divergence",
   "horizon": null,
-  "status": "WEAK",
+  "status": "VALIDATED",
   "n": 1099,
   "win_rate": 75.8,
   "expectancy_r": 0.208,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
@@ -217,7 +217,7 @@
   "win_rate": 87.1,
   "expectancy_r": 0.326,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
@@ -228,7 +228,7 @@
   "win_rate": 80.5,
   "expectancy_r": 0.25,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  },
  {
   "source": "strategy",
@@ -239,6 +239,6 @@
   "win_rate": 83.0,
   "expectancy_r": 0.479,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-06"
  }
 ]

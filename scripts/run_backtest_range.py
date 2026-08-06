@@ -225,19 +225,43 @@ def _tickers_for_run(universe: str | None) -> list:
 
 
 def build_registry_records(summaries, *, source, window, run_date,
-                           horizon=None, pass_wr=80.0, min_n=15):
+                           horizon=None, min_n=15):
     """Turn pooled per-strategy summaries into validation-registry records.
 
     A record is VALIDATED only when it clears the acceptance gates on the
     window it was measured on; everything else (including tiny-N) is WEAK.
-    """
+
+    **Plan v8 V25 (2026-08-06): this used its own `win_rate >= 80` test, the
+    gate V6 Step 3 voided.** V49 replaced that rule with `passes()` in this
+    same file and fixed the PASS/FAIL report column in five scripts, but the
+    registry emitter kept a private copy — so the report and the registry
+    disagreed inside one file, the report printing PASS where the registry
+    wrote WEAK. That mattered more than the report did: the registry is the
+    only one of the two the **live bot reads**, through `registry.get_badge`
+    into `WEAK_CAUTION_TEXT` and 20 points of quality score.
+
+    Re-derived against the committed registry, four strategies are WEAK
+    solely because of the voided clause — **RSI Divergence (n=1099, WR 75.8%,
+    ExpR +0.208)**, MA Ribbon (137, 78.1%, +0.213), Elliott Wave (75, 77.3%,
+    +0.064), EMA Crossover (36, 75.0%, +0.061). None of the seven current
+    VALIDATED rows loses its badge under the correct rule.
+
+    Note `passes()` needs `excluded_share`, which the old summary shape
+    dropped. Callers must carry it; a summary without it cannot be judged and
+    raises rather than silently passing a two-of-three test."""
     recs = []
     for s in summaries:
         wr = s.get("win_rate")
         er = s.get("expectancy_r")
-        validated = (wr is not None and wr >= pass_wr
-                     and er is not None and er > 0
-                     and s["n"] >= min_n)
+        if "excluded_share" not in s:
+            raise KeyError(
+                f"registry summary for {s.get('strategy')!r} has no "
+                "'excluded_share' -- passes() cannot apply V6 Step 3's "
+                "dead<=50% criterion, and silently skipping it would "
+                "re-introduce a partial gate")
+        validated = passes({"n_eval": s["n"], "win_rate": wr,
+                            "expectancy_r": er,
+                            "excluded_share": s["excluded_share"]}, min_n)
         recs.append({"source": source, "strategy": s["strategy"], "horizon": horizon,
                      "status": "VALIDATED" if validated else "WEAK",
                      "n": s["n"],
@@ -313,7 +337,16 @@ def main():
         with open(args.from_json, encoding="utf-8") as f:
             results = json.load(f)
         summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
-                      "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
+                      "expectancy_r": v["expectancy_r"],
+                      # V25: passes() needs the dead<=50% criterion too.
+                      # Forwarded only if present rather than defaulted to
+                      # 0.0 -- defaulting a MISSING one asserts "no dead
+                      # trades", the most permissive possible answer, for a
+                      # shape that cannot answer. build_registry_records
+                      # raises on the gap instead of half-applying the gate.
+                      **({"excluded_share": v["excluded_share"]}
+                         if "excluded_share" in v else {})}
+                     for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
             run_date=args.run_date, min_n=min_n))
@@ -494,7 +527,16 @@ def main():
             {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, indent=2))
     if args.emit_registry:
         summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
-                      "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
+                      "expectancy_r": v["expectancy_r"],
+                      # V25: passes() needs the dead<=50% criterion too.
+                      # Forwarded only if present rather than defaulted to
+                      # 0.0 -- defaulting a MISSING one asserts "no dead
+                      # trades", the most permissive possible answer, for a
+                      # shape that cannot answer. build_registry_records
+                      # raises on the gap instead of half-applying the gate.
+                      **({"excluded_share": v["excluded_share"]}
+                         if "excluded_share" in v else {})}
+                     for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
             run_date=args.run_date, min_n=min_n))

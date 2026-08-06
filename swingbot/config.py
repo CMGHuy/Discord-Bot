@@ -120,6 +120,16 @@ FIELDS: list[Field] = [
     Field("SIGNAL_CONFIRMATION_SCANS", "SIGNAL_CONFIRMATION_SCANS", "Scanning & Session", "Confirmation scans",
           type="number", default="2", min=1, max=10, step=1,
           help="A signal must appear the same way this many consecutive scans before it's confirmed and alerted -- filters intraday flicker."),
+    Field("SIGNAL_REENTRY_COOLDOWN_DAYS", "SIGNAL_REENTRY_COOLDOWN_DAYS",
+          "Scanning & Session", "Re-entry cooldown (days)",
+          type="number", default="5", min=0, max=60, step=1,
+          help="After a plan closes, how long before the SAME ticker/strategy/horizon/direction "
+               "may alert again. Until this shipped the answer was 'never' -- a setup that "
+               "alerted once was spent permanently, which is why a level that keeps holding "
+               "only ever produced one plan. 5 matches the backtest's cooldown_bars, the "
+               "spacing the measured win rate was actually produced under. 0 disables the "
+               "cooldown (re-arm as soon as the plan closes); the setup still has to clear "
+               "every filter and re-serve the full confirmation debounce either way."),
     Field("LOG_LEVEL", "LOG_LEVEL", "Scanning & Session", "Log level",
           type="select", default="INFO", options=["DEBUG", "INFO", "WARNING", "ERROR"],
           help="DEBUG shows every signal/strategy combo evaluated; INFO shows per-scan progress and trade decisions."),
@@ -226,9 +236,13 @@ FIELDS: list[Field] = [
           type="float", default="1000000", min=0, step=100,
           help="Seed value the first time data/account.json is created. Edit anytime with !account balance -- not read from .env after that."),
     Field("RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT", "Account Defaults", "Risk per trade %",
-          type="float", default="0.01", min=0, step=0.01,
+          type="float", default="1.0", min=0, max=100, step=0.01,
           help="The % of account balance you're willing to lose on a single trade if its stop-loss is hit -- "
                "a classic position-sizing input (e.g. 1% means a full stop-out only costs 1% of the account). "
+               "PERCENT units, not a fraction: compute_position_size() does `balance * risk_pct / 100`, so "
+               "1.0 means 1%. The default read 0.01 until 2026-08-06, which meant 0.01% -- a 100x "
+               "under-size against this help text, and against the 1.0 fallback every consumer already "
+               "used (account.py compute_position_size, commands/growth.py, core/edge/growth.py). "
                "This is informational only: seeded into data/account.json and shown by !account, but nothing "
                "in the live alert/scan pipeline uses it to size a position -- how many shares to actually buy "
                "is left entirely up to you. Edit anytime with !account risk PCT."),
@@ -237,12 +251,17 @@ FIELDS: list[Field] = [
           help="Informational only, same as the two fields above: once this many paper trades are open, "
                "new alerts still post but the Discord embed shows a position-limit warning."),
     Field("MAX_POSITION_SIZE_PCT", "MAX_POSITION_SIZE_PCT", "Account Defaults", "Max position size % of account",
-          type="float", default="0.1", min=0.01, max=100, step=0.01,
+          type="float", default="5.0", min=0.01, max=100, step=0.01,
           help="Position-size cap: the suggested share count is clipped so shares × entry never exceeds "
                "this % of the account balance. Prevents a very tight stop on a cheap stock from implying "
                "a position that's a large fraction of the account (e.g. at 1% risk, a 0.50 stop on a "
                "$5 stock suggests 10× as many shares as a $5 stop on a $50 stock). 20% is a sensible "
-               "ceiling for a single position; lower if you want more diversification headroom."),
+               "ceiling for a single position; lower if you want more diversification headroom. "
+               "PERCENT units, same as RISK_PER_TRADE_PCT: compute_position_size() does "
+               "`balance * max_position_pct / 100`. The default read 0.1 until 2026-08-06, i.e. 0.1% of "
+               "balance -- a cap 200x tighter than the 20% this text calls sensible, tight enough to "
+               "clamp essentially every position and mask the risk setting entirely. Now 5.0, matching "
+               "what .env.example has always shipped."),
     Field("POSITION_SIZING_MODE", "POSITION_SIZING_MODE", "Account Defaults", "Position sizing mode",
           type="select", default="risk_pct",
           options=[("risk_pct", "Fixed risk % per trade"),
@@ -373,8 +392,11 @@ FIELDS: list[Field] = [
     # --- Plan Engine v2 (rollout flags, spec 2026-07-11-unified-plan-engine-design) ---
     Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",
           type="select", default="on", options=["off", "shadow", "on"],
-          help="off = legacy behavior. shadow = v2 plans are computed and logged to "
-               "data/shadow_plans.jsonl during scans but NOT posted (parity evidence for cutover). "
+          help="off = legacy behavior. shadow = v2 plans are computed but NOT posted. "
+               "NOTE (plan v8 V39, 2026-08-06): shadow mode does NOT currently write "
+               "data/shadow_plans.jsonl -- swingbot/core/shadow_log.py:append() has no "
+               "production caller, only tests, so selecting shadow yields no parity "
+               "evidence at all. This help text used to promise that file; it was wrong. "
                "on = scan alerts price and emit v2 plans (badges, TP1/TP2, entry triggers). "
                "Defaults to 'on' for immediate deployment; set to 'shadow' first if you'd rather "
                "compare against legacy numbers for a few sessions before trusting it live."),

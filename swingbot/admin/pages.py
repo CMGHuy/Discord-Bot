@@ -495,15 +495,15 @@ def _queue_manual_close_notify(plan) -> None:
     entry is tagged "kind": "plan_transition" so the bot's consumer can
     format it distinctly from a raw trade-close entry.
 
-    NOTE (verified against the real consumer as of this task): the queue
-    write below happens, but swingbot/core/scanning/embeds.py's
-    notify_closed_trades() -- the function that actually reads this file
-    and posts to Discord -- only recognizes trade.get("status") in
-    {"win", "loss", "closed"} (lowercase) and has no notion of a "kind"
-    field. A TradePlanV2's status is uppercase ("CANCELLED"/"CLOSED"), so
-    every entry this function writes is currently silently skipped by that
-    consumer. This is a known, out-of-scope gap for this task (see the
-    task report) -- the write itself is harmless and matches the brief.
+    FIXED 2026-08-06 (plan v8 V32 Step 4 / cockpit-v3 C17). This docstring
+    previously recorded the gap as known and out of scope: the write happened,
+    but `notify_closed_trades` accepted only lowercase trade statuses
+    ("win"/"loss"/"closed") and had no notion of `kind`, while a
+    TradePlanV2's status is uppercase ("CANCELLED"/"CLOSED"). Every entry
+    written here was silently skipped -- and because the consumer deletes the
+    queue file before posting, they were LOST, not deferred. The consumer now
+    recognises `kind == "plan_transition"` and renders it via
+    `build_plan_transition_embed`.
     """
     try:
         existing = []
