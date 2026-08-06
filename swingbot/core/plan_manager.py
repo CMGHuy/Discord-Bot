@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.gate.scan_integration import blackout_decision, recheck_delta
 from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition)
@@ -37,8 +36,7 @@ def gap_target_fill(bar_open: float, level: float, direction: str) -> float:
 class PlanEvent:
     plan_id: str
     transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
-                         # "be_moved"|"tp1_partial"|"closed"|"pyramid_add"|
-                         # "recheck_held" (G128 -- fresh blackout since the alert)
+                         # "be_moved"|"tp1_partial"|"closed"|"pyramid_add"
     detail: dict = field(default_factory=dict)
 
 
@@ -236,44 +234,6 @@ class PlanManager:
             return self._step_partial(plan, price)    # Tasks 64-66
         return []
 
-    def _gate_recheck(self, plan: TradePlanV2) -> dict | None:
-        """G128: cheap trigger-time re-check. Runs ONLY the trigger_recheck
-        subset (rf_news_whipsaw, rf_thin_session, not_chasing,
-        calendar_checked) against the SAVED macro snapshot -- never a
-        provider fetch inside the monitor loop -- diffs the result against
-        the gate result stored at alert time (recheck_delta), and persists
-        the fresh result so the next re-check diffs against this one.
-        Returns None (nothing new / gate off), {"hold": {...}} when a fresh
-        blackout applies under GATE_BLACKOUT_ENFORCE (G120 semantics,
-        reused verbatim), or {"delta": [...]} when new flags fired but the
-        entry still fires (inform-first). Never raises -- a gate bug must
-        never cost a fill (same guarantee as the scan path, G121)."""
-        try:
-            from swingbot.core.data import get_daily_data
-            from swingbot.core.gate import run_checklist
-            from swingbot.core.gate.persistence import attach_to_plan
-            from swingbot.core.macro.snapshot import load_snapshot
-
-            now = datetime.now(timezone.utc)
-            snap = load_snapshot() if getattr(config, "MACRO_ENABLED", False) else None
-            verdict = blackout_decision(snap, now) if snap is not None else None
-            if verdict and verdict["action"] == "hold":
-                from swingbot.core.gate import telemetry as gate_telemetry
-                gate_telemetry.count("recheck_held")
-                return {"hold": verdict}
-
-            df = get_daily_data(plan.ticker)
-            new_result = run_checklist(plan.ticker, plan.strategy, plan, df,
-                                       macro_snap=snap, now=now, subset="trigger")
-            stored = self.store.get_extra(plan.plan_id, "gate")
-            delta = recheck_delta(stored, new_result)
-            attach_to_plan(self.store, plan.plan_id, new_result)
-            return {"delta": delta} if delta else None
-        except Exception:  # noqa: BLE001
-            log.warning("gate re-check failed for %s -- entry fires ungated",
-                        plan.plan_id, exc_info=True)
-            return None
-
     def _step_pending(self, plan: TradePlanV2, price: float) -> list[PlanEvent]:
         is_bull = plan.direction == "bullish"
 
@@ -288,14 +248,6 @@ class PlanManager:
 
         crossed = price >= plan.trigger_price if is_bull else price <= plan.trigger_price
         if crossed:
-            gate = self._gate_recheck(plan) if getattr(config, "GATE_ENABLED", False) else None
-            if gate and gate.get("hold"):
-                # G120's hold semantics, reused verbatim at trigger time
-                # (G128): a fresh high-impact event appeared since the
-                # alert and GATE_BLACKOUT_ENFORCE is on -- stay PENDING
-                # this tick instead of firing. Never a status change, so a
-                # gate outage never strands the plan.
-                return [PlanEvent(plan.plan_id, "recheck_held", gate["hold"])]
             fill = max(price, plan.trigger_price) if is_bull \
                 else min(price, plan.trigger_price)
             plan.entry_price = fill
@@ -303,11 +255,6 @@ class PlanManager:
                               at=self._now())
             self.store.update(plan)
             detail = {"entry_price": fill, "live_price": price}
-            if gate and gate.get("delta"):
-                # A flag fired since the alert shipped that WASN'T already
-                # known then -- the entry still fires (inform-first); this
-                # is what's worth pinging the operator about.
-                detail["gate_delta"] = gate["delta"]
             return [PlanEvent(plan.plan_id, "filled", detail)]
 
         if pending_invalidated(plan, price):

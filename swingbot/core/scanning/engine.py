@@ -65,11 +65,6 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
-from swingbot.core.gate import run_checklist
-from swingbot.core.gate import persistence as gate_persistence
-from swingbot.core.gate import telemetry as gate_telemetry
-from swingbot.core.gate.scan_integration import (blackout_decision, entry_allowed_with_killswitch,
-                                                 gate_candidate)
 from swingbot.core.jsonio import read_json
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
@@ -79,9 +74,8 @@ from swingbot.core.market_events import get_market_events
 from swingbot.core.notifier import notify_secondary
 from swingbot.core.performance import TradeLog
 from swingbot.core.quality import atr_percentile as _atr_percentile
-from swingbot.core.plan_engine import (PlanStatus, build_confluence_plan,
-                                       primary_strategy_for, record_transition,
-                                       select_tp2)
+from swingbot.core.plan_engine import (build_confluence_plan,
+                                       primary_strategy_for, select_tp2)
 from swingbot.core.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.state import StateStore
@@ -173,11 +167,6 @@ class ScanItem:
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
     intraday: bool | None = None      # 1h close vs today's VWAP on this plan's side; None = no reading = neutral, never blocks (Task E29)
-    gate: object = None                # GateResult | None from _gate_evaluate; None when GATE_ENABLED=false or no v2 plan (G103)
-    gate_result: object = None        # GateResult | None -- set by the G121 checklist evaluation, rendered by G123
-    blackout: dict | None = None      # G120 blackout_decision() verdict for this scan run, or None
-    gate_blocked: dict | None = None  # V15: enforce refused this candidate; alert still posts, book takes nothing
-    debounce_spent: tuple | None = None  # (state_key, state_value, previously_confirmed_value) for the confirmation this scan consumed; None on the !check path, which never debounces
 
     @property
     def all_requirements_met(self) -> bool:
@@ -546,73 +535,6 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     horizon_key, exc_info=True)
 
 
-def _rollback_blocked_candidate(item, trade_id, reason: str) -> None:
-    """V14: undo the bookkeeping an enforce-mode block arrives too late to
-    prevent. Two things are already on disk by the time the checklist gets
-    consulted in the alert loop:
-
-      1. the paper trade (`log_trade` runs ~150 lines earlier), and
-      2. the v2 plan record in PlanStore, left PENDING.
-
-    Suppressing only the Discord alert left both. That made the gate
-    unable to change the one thing it exists to change: (1) is what every
-    cohort/win-rate analysis reads, so the book would have looked
-    identical with the gate on or off; and (2) is worse than cosmetic --
-    PlanManager.poll() walks `store.open_plans()` and logs a BRAND NEW
-    trade on the fill transition, and its trigger-time `_gate_recheck`
-    only re-runs the "trigger" subset, never tier/min_tier. A blocked plan
-    would therefore have refilled itself the moment price crossed.
-
-    Never raises: the caller runs inside "a gate bug must never cost an
-    alert", and an exception escaping here would land there and ship the
-    very alert this block just refused."""
-    try:
-        if trade_id is not None and trade_log.delete_trade(trade_id):
-            log.info("Gate blocked %s -- rolled back paper trade %s (%s)",
-                      getattr(item.result, "ticker", "?"), trade_id, reason)
-    except Exception:  # noqa: BLE001
-        log.error("Gate blocked %s but its paper trade %s could NOT be rolled back -- "
-                  "the book now contains a trade the gate refused",
-                  getattr(item.result, "ticker", "?"), trade_id, exc_info=True)
-    plan = getattr(item, "plan_v2", None)
-    if plan is None:
-        return
-    # A market-entry plan is already ACTIVE when it is built
-    # (plan_engine.py:641, reason="market_entry"), and the state machine
-    # allows ACTIVE -> CLOSED but not ACTIVE -> CANCELLED. Either terminal
-    # status is out of PlanStore._OPEN_STATUSES, which is what actually keeps
-    # the manager's hands off it; picking the legal one per status is the
-    # whole point, since an illegal transition raises and would leave the
-    # plan live.
-    terminal = (PlanStatus.CANCELLED if plan.status == PlanStatus.PENDING
-                else PlanStatus.CLOSED)
-    try:
-        record_transition(plan, terminal, reason=f"gate_blocked: {reason}",
-                          at=datetime.now(timezone.utc).isoformat())
-        PlanStore().update(plan)
-    except Exception:  # noqa: BLE001
-        log.error("Gate blocked %s but its plan %s could NOT be cancelled -- it stays "
-                  "PENDING and the intraday manager may still fill it",
-                  getattr(item.result, "ticker", "?"), plan.plan_id, exc_info=True)
-
-
-def _reachability_reason(scenario, level_map) -> str | None:
-    """The V11 screen's verdict reason for one scenario ("no_levels" /
-    "level_beyond_floor" / "wall"), or None when there is no level map to
-    judge against. Counted for every scenario regardless of pass/fail --
-    see the call site for why the reason breakdown, not failed_counts, is
-    what V12's log-only week reads."""
-    from swingbot.core.plan_engine import target_is_reachable
-
-    if not level_map:
-        return None
-    supports, resistances = level_map
-    _, reason = target_is_reachable([lv.price for lv in resistances],
-                                    [lv.price for lv in supports],
-                                    scenario.direction, scenario.entry)
-    return reason
-
-
 def _check_near_close(ticker: str, df) -> list:
     """
     For every open trade on this ticker, checks how close today's price is
@@ -807,12 +729,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "failed_counts": {
             "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
             "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
-            # V11 reachability screen. Stays 0 while TARGET_FLOOR_ENABLED is
-            # off (the check passes by construction then) -- V12's log-only
-            # week reads the reason counts below instead.
-            "target_reachable": 0,
         },
-        "reachability_reasons": {"no_levels": 0, "level_beyond_floor": 0, "wall": 0},
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
     }
@@ -1044,26 +961,12 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # point never disappears here just because one number
             # falls short; it's tallied below and shown (marked) by
             # the caller instead of silently dropped.
-            # level_map feeds the V11 reachability screen. Built here in the
-            # per-horizon loop -- NOT in commands/scanning.py::_send_alerts,
-            # which only posts already-built tuples and where wiring a screen
-            # is a documented silent no-op (known-traps.md).
-            requirements = _build_requirement_checks(
-                scenario, target_confluence, conf, effective_min_confluence,
-                level_map=(supports, resistances))
+            requirements = _build_requirement_checks(scenario, target_confluence, conf, effective_min_confluence)
             all_ok = True
             for r in requirements:
                 if not r.passed:
                     stats["failed_counts"][r.key] += 1
                     all_ok = False
-            # V12 survival measurement: the reachability VERDICT is counted
-            # for every scenario, pass or fail, because during the log-only
-            # week (TARGET_FLOOR_ENABLED off) the check always passes and
-            # failed_counts would read zero -- the reason breakdown is the
-            # only place the screen's real effect is visible.
-            reach_reason = _reachability_reason(scenario, (supports, resistances))
-            if reach_reason is not None:
-                stats["reachability_reasons"][reach_reason] += 1
             if all_ok:
                 stats["fully_qualifying"] += 1
 
@@ -1110,7 +1013,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
 
 
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
-                    min_confluence: int = None, gate_ctx=None) -> tuple:
+                    min_confluence: int = None) -> tuple:
     """
     All the heavy synchronous work -- network fetches, pandas computation,
     matplotlib chart rendering -- lives here with NO async/await, so it can
@@ -1122,12 +1025,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     `min_confluence` overrides config.MIN_TARGET_CONFLUENCE_COUNT for this
     run only (used by `!check`'s optional argument); pass None (the
     default) to just use whatever's currently configured.
-
-    `gate_ctx` (gatekeeper-v7 G119): the per-RUN GateContext built once by
-    commands/scanning.py's build_gate_context() -- carries the macro
-    snapshot + open plans + SPY bars every candidate's gate evaluation
-    reads from (G121). None when MACRO_ENABLED and GATE_ENABLED are both
-    off, in which case the alert loop below is a byte-identical no-op.
     """
     _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
 
@@ -1213,9 +1110,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
         "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
-        "target_reachable": 0,
     }
-    reachability_reasons = {"no_levels": 0, "level_beyond_floor": 0, "wall": 0}
     conf_level_counts: dict = {}   # {1..5: number of scenarios scored at that level}
     filtered_by_confirmation = 0
 
@@ -1271,8 +1166,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             data_quality_failed_count += 1
         for key, count in per_ticker["failed_counts"].items():
             failed_counts[key] += count
-        for key, count in per_ticker.get("reachability_reasons", {}).items():
-            reachability_reasons[key] += count
         for level, count in per_ticker["conf_level_counts"].items():
             conf_level_counts[level] = conf_level_counts.get(level, 0) + count
 
@@ -1289,19 +1182,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # the old inline loop, which never even built it.
                 if not item.all_requirements_met:
                     continue
-                # Read the confirmed value BEFORE confirming: the gate runs
-                # ~400 lines below, in the alert loop, and a block there has
-                # to be able to hand this confirmation back (see
-                # StateStore.revert_confirmation). Once confirm_or_update
-                # commits, the old value is gone.
-                prev_confirmed = state.get_last_trend(item.result.state_key)
                 confirmed = state.confirm_or_update(
                     item.result.state_key, item.result.state_value,
                     required_confirmations=config.SIGNAL_CONFIRMATION_SCANS,
                 )
-                if confirmed:
-                    item.debounce_spent = (item.result.state_key,
-                                           item.result.state_value, prev_confirmed)
                 if not confirmed:
                     filtered_by_confirmation += 1
                     log.debug("%s (%s, %s): awaiting confirmation (needs %d consecutive scans)",
@@ -1368,18 +1252,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.info("Analyze: stop requested -- scan ended early (%d ticker/horizon combo(s) "
                       "checked, %d scenario(s) found before the stop)", checked_count, len(scan_items))
 
-    # V11's reachability reject belongs in this line too: without it a scan
-    # can log "0 fully qualifying" with every listed reason at zero, which
-    # reads like a bug in the funnel rather than a screen doing its job.
     log.info(
         "Signal funnel: %d ticker/horizon combo(s) checked -> %d had no qualifying entry point (no real "
         "support/resistance, or didn't meet min reward/stop/risk-reward requirements) -> %d scenario(s) found, "
-        "%d fully qualifying (min strategies confirmed failed %d, min confidence failed %d, "
-        "target unreachable %d of %d walled) -> "
+        "%d fully qualifying (min strategies confirmed failed %d, min confidence failed %d) -> "
         "%d still awaiting confirmation (automatic scan only) -> %d shown/posted",
         checked_count, no_entry_point, scenarios_found_count, fully_qualifying_count,
         failed_counts["min_confluence"], failed_counts["min_confidence"],
-        failed_counts["target_reachable"], reachability_reasons["wall"],
         filtered_by_confirmation, len(scan_items),
     )
 
@@ -1403,8 +1282,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_risk_reward": failed_counts["min_risk_reward"],
             "failed_min_confluence": failed_counts["min_confluence"],
             "failed_min_confidence": failed_counts["min_confidence"],
-            "failed_target_reachable": failed_counts["target_reachable"],
-            "reachability_reasons": reachability_reasons,
             "awaiting_confirmation": filtered_by_confirmation,
             "shown": len(deduped),
             "min_confidence_level": config.MIN_ALERT_CONFIDENCE_LEVEL,
@@ -1412,31 +1289,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "breadth": breadth,  # % of universe above its own 50-EMA at scan time (Task E28)
         }
 
-    # Event blackout (G120): a pure decision computed ONCE per scan run off
-    # the shared macro snapshot, not per candidate -- every alert this pass
-    # carries the same market-wide verdict (or None). Never raises: a
-    # blackout bug must never cost the whole scan.
-    blackout_verdict = None
-    if gate_ctx is not None:
-        try:
-            blackout_verdict = blackout_decision(gate_ctx.macro_snap, gate_ctx.now)
-        except Exception:  # noqa: BLE001
-            log.warning("blackout_decision failed -- scan continues unannotated", exc_info=True)
-
     alerts = []
     skipped_already_open = 0
-    skipped_legacy_path = 0
-    skipped_gate_blocked = 0
-    # The one dangerous pairing of V13's cut, said out loud once per scan
-    # rather than discovered as a silent week of no alerts: outside
-    # PLAN_ENGINE_V2="on" every alert is a legacy untiered one, so the cut
-    # suppresses all of them, not just a cohort.
-    if config.PLAN_ENGINE_V2 != "on" and not config.LEGACY_ALERT_PATH_ENABLED:
-        log.warning(
-            "PLAN_ENGINE_V2=%s with LEGACY_ALERT_PATH_ENABLED=false: every alert this scan would be "
-            "an untiered legacy one, so NO alerts will be posted. Set PLAN_ENGINE_V2=on (intended) "
-            "or LEGACY_ALERT_PATH_ENABLED=true (restores the -103%% cohort) to change that.",
-            config.PLAN_ENGINE_V2)
     log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
               len(tickers), len(scan_items), len(deduped))
     for item in deduped:
@@ -1493,25 +1347,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # for every non-qualifying scenario too.
             log.debug("%s (%s, %s): found but doesn't meet every requirement -- not posted (see funnel summary for counts)",
                        result.ticker, result.horizon_key, result.trend)
-            continue
-
-        # V13: the legacy, untiered alert path. "Legacy" is defined here
-        # EXACTLY as the trade-log row below defines it (PLAN_ENGINE_V2 == "on"
-        # AND a v2 plan actually built) -- that same expression is what decides
-        # whether the logged trade carries source/tier/badge or three Nones, so
-        # gating on it is gating on precisely the source=None cohort V13 names
-        # (n=154, WR 26.0%, -103.0%) and nothing else. A v2 confluence plan
-        # carries source="confluence" and is never caught here.
-        #
-        # This is the one place both scan modes converge before posting: the
-        # automatic scan and `!check` both reach it, so the cut applies to both.
-        v2_priced = config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
-        if not v2_priced and not config.LEGACY_ALERT_PATH_ENABLED:
-            skipped_legacy_path += 1
-            log.info(
-                "%s (%s, %s): suppressed -- no live v2 plan, so this would post and log as an "
-                "untiered source=None trade (LEGACY_ALERT_PATH_ENABLED=false)",
-                result.ticker, result.horizon_key, result.trend)
             continue
 
         df = get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
@@ -1678,109 +1513,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if kill_st.get("on"):
             item.kill_switch_blocked = kill_st
 
-        # Event blackout annotation/hold (G120) -- same verdict for every
-        # alert this scan pass (computed once, above the loop, off the
-        # shared macro snapshot). "hold" additionally stamps a
-        # held_for_event extra on the plan record (release_at) for
-        # plan_manager's trigger-time re-check (G128) to honor; the alert
-        # itself still ships either way (inform-first).
-        if blackout_verdict is not None:
-            item.blackout = blackout_verdict
-            if blackout_verdict["action"] == "hold" and item.plan_v2 is not None:
-                try:
-                    PlanStore().set_extra(item.plan_v2.plan_id, "held_for_event",
-                                          {"release_at": blackout_verdict["release_at"],
-                                           "event": blackout_verdict.get("event")})
-                    gate_telemetry.count("held_for_event")
-                except Exception:  # noqa: BLE001
-                    log.warning("failed to persist held_for_event extra for %s",
-                                item.plan_v2.plan_id, exc_info=True)
-
-        # Per-candidate checklist evaluation (G121/G134): background-thread
-        # work, same seam as the heat/cluster/kill-switch checks above.
-        # inform mode (the default) NEVER drops the alert -- gate_candidate
-        # itself guarantees that, and never blocks on unknown-dominated
-        # evidence even in enforce. Only in enforce mode does an active
-        # kill switch additionally outrank a would-be pass (G134). A gate
-        # bug must never cost an alert -- caught broadly, same pattern as
-        # the intraday annotation below.
-        if gate_ctx is not None and getattr(config, "GATE_ENABLED", False) and item.plan_v2 is not None:
-            try:
-                gate_telemetry.count("evaluated")
-                result_g = run_checklist(
-                    result.ticker, result.strategy, item.plan_v2, df,
-                    macro_snap=gate_ctx.macro_snap, open_plans=gate_ctx.open_plans,
-                    spy_df=gate_ctx.spy_df, now=gate_ctx.now,
-                )
-                mode = getattr(config, "GATE_MODE", "inform")
-                min_tier = getattr(config, "GATE_MIN_TIER", "C")
-                decision, result_g = gate_candidate(result_g, mode, min_tier)
-                if mode == "enforce" and not entry_allowed_with_killswitch(
-                        bool(kill_st.get("on")), decision):
-                    decision = "block"
-                gate_persistence.attach_to_plan(PlanStore(), item.plan_v2.plan_id, result_g)
-                if mode == "shadow":
-                    gate_persistence.shadow_log(result_g, item.plan_v2.plan_id)
-                if decision == "block":
-                    reason = ", ".join(result_g.hard_blocks) or f"tier {result_g.tier} < {min_tier}"
-                    gate_persistence.blocked_log(result_g, decision, reason)
-                    gate_telemetry.count("blocked", reason=reason)
-                    # The block arrives AFTER this candidate's trade and plan
-                    # were already written -- see _rollback_blocked_candidate
-                    # for why suppressing the alert alone left the gate unable
-                    # to change the book it exists to protect. This half runs
-                    # under BOTH block actions: whatever happens to the alert,
-                    # a blocked candidate never keeps its place in the book.
-                    _rollback_blocked_candidate(item, trade_id, reason)
-                    trade_id = None
-                    skipped_gate_blocked += 1
-                    # The book was rolled back; hand the debounce back too.
-                    # A block is a refusal of THIS evaluation, not a verdict
-                    # for all time -- tier moves with volume/momentum/regime
-                    # through the session, and some hard blocks are outright
-                    # time-dependent. Leaving the confirmation spent meant a
-                    # setup refused once was silenced permanently, including
-                    # after the condition that refused it had cleared.
-                    # `repeat_refusal` is read BEFORE the revert writes it.
-                    repeat_refusal = False
-                    if item.debounce_spent is not None:
-                        s_key, s_val, s_prev = item.debounce_spent
-                        repeat_refusal = state.was_refused(s_key, s_val)
-                        state.revert_confirmation(s_key, s_val, s_prev)
-                    # V15's ruling: what happens to the ALERT is a separate
-                    # question from what happens to the BOOK. The standing
-                    # requirement is that WEAK plans are never suppressed, and
-                    # the -49.5%/308-trade damage is entirely in the book --
-                    # so the default flags the alert (same E7/E8/E47
-                    # flagged-not-hidden pattern, suggested size 0) instead of
-                    # hiding it. "suppress" is the opt-in that also drops it.
-                    #
-                    # `repeat_refusal` is the one exception, and it exists
-                    # only because the revert above reopens the setup: the
-                    # debounce will re-fire it every SIGNAL_CONFIRMATION_SCANS
-                    # passes for as long as it keeps qualifying, and posting
-                    # the identical "refused" embed every ~15 minutes is
-                    # noise, not disclosure. The FIRST refusal always posts
-                    # -- this suppresses a duplicate of an alert the channel
-                    # has already had, never the alert itself.
-                    if (getattr(config, "GATE_BLOCK_ACTION", "flag") == "suppress"
-                            or repeat_refusal):
-                        if repeat_refusal:
-                            log.debug("%s (%s): gate refused again (%s) -- alert already "
-                                      "posted for this setup, not repeating it",
-                                      result.ticker, result.horizon_key, reason)
-                        continue
-                    item.gate_blocked = {"tier": result_g.tier, "min_tier": min_tier,
-                                         "reason": reason,
-                                         "hard_blocks": list(result_g.hard_blocks)}
-                    item.gate_result = result_g       # checklist still renders (G123)
-                if result_g.advisory_decision == "downgrade":
-                    gate_telemetry.count("downgraded")
-                item.gate_result = result_g        # rendered by build_embed (G123)
-            except Exception:  # noqa: BLE001 -- a gate bug must never cost an alert
-                log.warning("gate evaluation failed for %s -- alert ships ungated",
-                            result.ticker, exc_info=True)
-
         # Intraday entry-timing annotation (Edge plan E29). Live-only and
         # advisory: it never gates, resizes, or reprices anything -- the
         # plan's daily stop-entry trigger is untouched. Computed here, in
@@ -1795,59 +1527,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             log.debug("Intraday confirmation unavailable for %s: %s", result.ticker, e)
             item.intraday = None
 
-        # Gatekeeper live wiring (G103): evaluated in ALL modes when
-        # GATE_ENABLED -- the shadow log is the evidence stream regardless
-        # of mode. Only meaningful for a v2 plan: the checklist reads
-        # TradePlanV2's own field names (trigger_price/tp1/tp2/direction),
-        # which the legacy `plan` object here does not share (same
-        # constraint as the decision chart above). _gate_evaluate lives in
-        # swingbot.commands.scanning (imported lazily -- that module
-        # imports swingbot.core.scan_engine at load time, so a top-level
-        # import here would cycle). item.gate carries the raw GateResult
-        # (or None); build_embed does not accept it yet -- the render
-        # matrix and its `gate=` kwarg land in G123, so until then this is
-        # evaluated + logged (shadow_log) + attached to the plan, but never
-        # rendered, which is exactly shadow behavior -- alert embeds stay
-        # byte-for-byte unchanged in every mode today.
-        if item.plan_v2 is not None:
-            import types as _types
-            from swingbot.commands.scanning import _gate_evaluate
-
-            macro_snap = None
-            if config.MACRO_ENABLED:
-                try:
-                    from swingbot.core.macro import snapshot as macro_snapshot
-                    macro_snap = macro_snapshot.load_snapshot()
-                except Exception:
-                    log.debug("macro snapshot unavailable for gate eval on %s", result.ticker)
-            # V14: this local was named `gate_candidate` -- the same name as
-            # the scan_integration FUNCTION imported at the top of this module
-            # and called ~60 lines above (the enforce decision). Python scopes
-            # per function, so that assignment made the name local for the
-            # WHOLE of _sync_run_scan and the call above could never reach the
-            # import: UnboundLocalError on the first item of a pass, then
-            # TypeError ('SimpleNamespace' object is not callable) on every one
-            # after. Both were swallowed by the broad "a gate bug must never
-            # cost an alert" except, which logged "alert ships ungated" -- so
-            # the checklist gate has never blocked anything in ANY mode, and
-            # said so once per alert in the logs. Do not reuse the name.
-            gate_cand_ns = _types.SimpleNamespace(
-                ticker=result.ticker, strategy=result.strategy,
-                plan=item.plan_v2, df_daily=df)
-            _gate_decision, item.gate = _gate_evaluate(gate_cand_ns, PlanStore(), macro_snap)
-
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
         alerts.append((embed, chart_path, item.plan_v2))
-
-        # This setup got through, so any earlier refusal recorded against it
-        # is spent history -- drop the marker, or a later refusal of the same
-        # setup would be suppressed as a "duplicate" of one the channel has
-        # long since seen. Blocked candidates never reach here: the block
-        # branch above either `continue`s or falls through with
-        # item.gate_blocked set.
-        if item.debounce_spent is not None and item.gate_blocked is None:
-            state.clear_refusal(item.debounce_spent[0])
 
         # Secondary alerting (email / push) -- fires only for high-confidence,
         # fully-qualifying alerts when enabled. Blocking I/O but we're already
@@ -1857,9 +1539,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if progress is not None:
             progress.alerts_done += 1
 
-    log.info("Scan pass complete: %d alert(s) built, %d skipped (already open), "
-              "%d suppressed (legacy untiered path), %d blocked by the gate",
-              len(alerts), skipped_already_open, skipped_legacy_path, skipped_gate_blocked)
+    log.info("Scan pass complete: %d alert(s) built, %d skipped (already open)", len(alerts), skipped_already_open)
 
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2
@@ -1873,8 +1553,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if progress is not None and progress.funnel is not None:
         progress.funnel["deduped"] = len(deduped)
         progress.funnel["skipped_already_open"] = skipped_already_open
-        progress.funnel["skipped_legacy_path"] = skipped_legacy_path
-        progress.funnel["skipped_gate_blocked"] = skipped_gate_blocked
 
     # Scan health telemetry (Task E82): logged unconditionally, wrapped so a
     # telemetry failure (disk full, bad path, whatever) never takes down the
@@ -1892,23 +1570,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "alerts": len(alerts),
             "open_heat": heat_mod.open_heat(TradeLog().get_trades(status="open", limit=None),
                                             account_cfg.get("balance", 0.0)),
-            # V12: floor + reachability survival, one row per scan.
-            # `reachability_wall` is the measurement that matters during the
-            # log-only week -- with TARGET_FLOOR_ENABLED off nothing is
-            # rejected, so `rejected_unreachable` reads 0 while `wall` still
-            # counts every setup the screen WOULD have removed.
-            "target_floor_pct": config.MIN_TARGET_PCT,
-            "target_floor_enforced": bool(config.TARGET_FLOOR_ENABLED),
-            # V13: how much of the -103% untiered cohort this scan refused to
-            # post. Read alongside `alerts` -- a scan where the two are close
-            # means the v2 plan build, not the cut, is what's starving the
-            # channel, which is a different bug with a different fix.
-            "legacy_path_enabled": bool(config.LEGACY_ALERT_PATH_ENABLED),
-            "suppressed_legacy": skipped_legacy_path,
-            "rejected_unreachable": failed_counts["target_reachable"],
-            "reachability_wall": reachability_reasons["wall"],
-            "reachability_clear": reachability_reasons["level_beyond_floor"],
-            "reachability_no_levels": reachability_reasons["no_levels"],
         }
         log_scan_telemetry(scan_stats)
         if scan_slowdown():
@@ -1922,7 +1583,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
 
 async def run_scan(horizon_filter: str = "all", require_confirmation: bool = True, bot=None, progress: "ScanProgress" = None,
-                    min_confluence: int = None, gate_ctx=None) -> list:
+                    min_confluence: int = None) -> list:
     """
     Thin async wrapper: runs the entire synchronous scan pipeline in a
     background thread (so it never blocks the gateway heartbeat), then
@@ -1945,7 +1606,7 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
         _mark_running(True)
         try:
             alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
-                _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence, gate_ctx
+                _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
             )
         finally:
             _mark_running(False)

@@ -17,28 +17,6 @@ from swingbot.core.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
 
-@pytest.fixture(autouse=True)
-def _loss_cap_off(monkeypatch):
-    """Pin v8 V51's `MAX_LOSS_CAP_ENABLED` off for this whole module.
-
-    Everything here pins E31/E32 geometry that predates the cap, and at these
-    fixtures the 1.75% ceiling binds on every stop -- so with it on, the
-    stop_mult assertions compare 1.75 to 1.75 (measuring the cap, not the
-    multiplier) and the E32 TP2-from-R cases collapse to None.
-
-    That collapse is REAL, not a fixture artifact, and it has its own coverage
-    in tests/test_max_loss_cap.py: `_tp2_from_r` requires its candidate to sit
-    strictly beyond TP1, so with risk capped at MAX_LOSS_PCT and TP1 floored at
-    MIN_TARGET_PCT, any `tp2_r` below MIN_TARGET_PCT/MAX_LOSS_PCT (1.43 at the
-    shipped 2.5/1.75) can no longer clear TP1 and silently returns None. E32's
-    journal-derived multiples were fitted pre-cap, so a chunk of them are now
-    inert in production. Same triage as V10's floor and V48's parity harness:
-    pin the deliberate change off where a test predates it, and cover the
-    change itself separately.
-    """
-    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
-
-
 def _winners(maes, strategy="RSI"):
     return [{"strategy": strategy, "outcome": "win", "mae_r": m} for m in maes]
 
@@ -108,19 +86,10 @@ def test_atr_plan_default_is_bit_identical(df):
            _atr_plan(close, atr_val, "bullish", "4w", "RSI")
 
 
-def test_stop_mult_scales_risk_and_preserves_rr(monkeypatch):
+def test_stop_mult_scales_risk_and_preserves_rr():
     """The multiplier scales `risk_distance`, which feeds BOTH the stop and
     the R:R-derived target -- so R:R survives untouched. That matters: the
-    R:R override table and the 0.30 floor are frozen constants.
-
-    Asserted with the v8 target floor off, because the floor deliberately
-    breaks this proportionality when it binds: it is an absolute % of entry,
-    so a wider stop no longer drags the target out with it (see
-    test_target_floor.py::test_floor_breaks_the_rr_proportionality_of_stop_mult).
-    E31's own scaling arithmetic is what this test exists to pin.
-    """
-    from swingbot import config
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
+    R:R override table and the 0.30 floor are frozen constants."""
     close, atr_val = 100.0, 2.0
     base_stop, base_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI")
     wide_stop, wide_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=1.2)
@@ -405,24 +374,17 @@ def test_confluence_plans_are_untouched_by_both_overrides(df, monkeypatch):
 
 def test_the_leg_cap_ceilings_any_mfe_tp2_at_four_times_rr(df):
     """Worth knowing before reading E33's folds: MAX_TARGET2_LEG_MULTIPLE
-    (3.0, frozen) means a valid TP2 can sit at most 4x the plan's own
-    entry->TP1 leg out. A P60 winner-MFE above that is simply not adoptable
-    as a TP2 without moving a frozen constant, and the level-based TP2
-    stands instead.
-
-    The ceiling is derived from the plan's ACTUAL leg1, not from the rr
-    override, because those are no longer the same number: the v8 target
-    floor (Task V10) raises TP1 to MIN_TARGET_PCT of entry whenever the
-    rr-derived target falls short, which widens leg1 and therefore lifts
-    this ceiling in R terms. Before the floor, MACD's rr=0.35 gave a fixed
-    1.4R; now it depends on which of the two bound.
-    """
+    (3.0, frozen) means a valid TP2 can sit at most 4x the plan's own R:R
+    out -- 1.4R for MACD's rr=0.35. A P60 winner-MFE above that is simply
+    not adoptable as a TP2 without moving a frozen constant, and the
+    level-based TP2 stands instead."""
     from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
+    from swingbot.core.plan_engine import _rr_for
+    rr = _rr_for("MACD", "4w")
+    ceiling = rr * (1 + MAX_TARGET2_LEG_MULTIPLE)
+    assert ceiling == pytest.approx(1.4)
 
     base = _macd_plan(df)
-    leg1_r = abs(base.tp1 - base.trigger_price) / abs(base.trigger_price - base.stop_loss)
-    ceiling = leg1_r * (1 + MAX_TARGET2_LEG_MULTIPLE)
-
     assert _macd_plan(df, tp2_r=ceiling - 0.01).tp2_r_applied == pytest.approx(ceiling - 0.01)
     over_ceiling = _macd_plan(df, tp2_r=ceiling + 0.01)
     assert over_ceiling.tp2_r_applied is None and over_ceiling.tp2 == base.tp2

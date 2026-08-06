@@ -138,12 +138,6 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
-    # Same reason as the four above: this fixture's nearest S/R sits ~1.4%
-    # away, inside the v8 2.5% target floor, so V11's reachability screen
-    # would fail every scenario and nothing downstream of the all_ok gate
-    # would ever be reached. The screen has its own tests
-    # (tests/test_target_reachability.py); it is not what is under test here.
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
     # engine.py also floors the min-reward requirement at 15% of the horizon's
     # OWN sr_target_min_pct (see engine.py's effective_min_reward comment) --
     # 4w's default (15.0) floors it at 2.25%, above this fixture's nearest
@@ -298,12 +292,6 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
-    # Same reason as the four above: this fixture's nearest S/R sits ~1.4%
-    # away, inside the v8 2.5% target floor, so V11's reachability screen
-    # would fail every scenario and nothing downstream of the all_ok gate
-    # would ever be reached. The screen has its own tests
-    # (tests/test_target_reachability.py); it is not what is under test here.
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     # Same per-horizon loosening as test_sync_run_scan_gates_attach_plan_v2_on_all_ok
     # -- see that test's docstring for why 4w's default sr_target_min_pct
@@ -388,18 +376,6 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
-    # Same reason as the four above: this fixture's nearest S/R sits ~1.4%
-    # away, inside the v8 2.5% target floor, so V11's reachability screen
-    # would fail every scenario and nothing downstream of the all_ok gate
-    # would ever be reached. The screen has its own tests
-    # (tests/test_target_reachability.py); it is not what is under test here.
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
-    # PLAN_ENGINE_V2="shadow" above means no alert here is v2-priced, so all of
-    # them are the untiered legacy cohort V13's cut suppresses -- the loop this
-    # fixture exists to drive would never run a single iteration. The cut has
-    # its own tests (tests/test_legacy_alert_path.py); what's under test here is
-    # the intraday annotation inside the loop.
-    monkeypatch.setattr(config, "LEGACY_ALERT_PATH_ENABLED", True)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 

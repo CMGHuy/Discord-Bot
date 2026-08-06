@@ -171,42 +171,8 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
-def _reachability_check(scenario, level_map):
-    """Plan v8 Task V11: does structure support a `MIN_TARGET_PCT` move?
-
-    Returns None when there is no level map to judge against (the caller
-    simply doesn't add the row) -- absence of data is never a failure.
-
-    While `TARGET_FLOOR_ENABLED` is off the check still runs and still
-    reports what it found, but always passes: that is V12 Step 2's log-only
-    week, which measures how many setups the screen *would* remove before
-    V28 lets it remove any.
-    """
-    from swingbot.core.plan_engine import target_floor_price, target_is_reachable
-
-    if not level_map:
-        return None
-    supports, resistances = level_map
-    entry = scenario.entry
-    reachable, reason = target_is_reachable(
-        [lv.price for lv in resistances], [lv.price for lv in supports],
-        scenario.direction, entry)
-    floor = target_floor_price(entry, scenario.direction)
-    detail = {
-        "no_levels": f"no level ahead — clear run to {floor:.2f}",
-        "level_beyond_floor": f"structure supports {config.MIN_TARGET_PCT:.1f}% ({floor:.2f})",
-        "wall": f"nearest level is inside {config.MIN_TARGET_PCT:.1f}% ({floor:.2f})",
-    }[reason]
-    if not config.TARGET_FLOOR_ENABLED:
-        detail += " [log-only: floor disabled]"
-    return RequirementCheck(
-        key="target_reachable", label="Target reachable",
-        passed=reachable or not config.TARGET_FLOOR_ENABLED, detail=detail,
-    )
-
-
 def _build_requirement_checks(scenario, target_confluence: tuple, conf,
-                              effective_min_confluence: int, level_map=None) -> list:
+                              effective_min_confluence: int) -> list:
     """
     Evaluates EVERY configured requirement against one scenario --
     always all of them, never stopping at the first failure -- and
@@ -250,9 +216,6 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf,
             detail=f"Lv{conf.level} {conf.label} (needs Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}+)",
         ),
     ]
-    reachable = _reachability_check(scenario, level_map)
-    if reachable is not None:
-        checks.append(reachable)
     return checks
 
 
@@ -558,44 +521,6 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             "Suggested size **0 shares** — a human needs to review before this re-engages (`!killswitch off`).",
             False,
         ))
-
-    gate_blocked = getattr(item, "gate_blocked", None)
-    if gate_blocked is not None:
-        # V15: the gatekeeper refused this candidate in enforce mode. Same
-        # flagged-not-hidden pattern as E7/E8/E47 above, and for the same
-        # reason the standing "WEAK plans are never suppressed" requirement
-        # exists -- the operator still sees the setup and the checklist that
-        # judged it; what the block actually removes is the paper trade.
-        sections["headline"].append((
-            f"⛔ ENTRY BLOCKED — gate ({gate_blocked['reason']})",
-            (f"Tier {gate_blocked['tier']} against a {gate_blocked['min_tier']} floor — "
-             f"suggested size **0 shares**. No paper trade was logged for this one; "
-             f"it is shown so you can judge it yourself."),
-            False,
-        ))
-
-    blackout = getattr(item, "blackout", None)
-    if blackout is not None:
-        # Event blackout (G120): inform-first -- "annotate" is the default
-        # and the plan/alert are unaffected; "hold" (opt-in via
-        # GATE_BLACKOUT_ENFORCE) additionally says so, but still ships the
-        # alert -- the actual entry hold is enforced by plan_manager (G128).
-        if blackout["action"] == "hold":
-            sections["headline"].append((
-                "⏸ Held — event blackout",
-                f"{blackout['line']}\nReleases after the print (`{blackout.get('release_at', '')}`).",
-                False,
-            ))
-        else:
-            sections["headline"].append(("⚠️ Event", blackout["line"], False))
-
-    gate_result = getattr(item, "gate_result", None)
-    if gate_result is not None:
-        from swingbot.core.gate.render import gate_embed_fields
-        for name, value in gate_embed_fields(
-                gate_result, getattr(config, "GATE_MODE", "inform"),
-                getattr(config, "GATE_SHOW_IN_SHADOW", False)):
-            sections["gate"].append((name, value, False))
 
     intraday = getattr(item, "intraday", None)
     if intraday is not None:

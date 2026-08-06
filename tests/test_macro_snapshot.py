@@ -157,28 +157,3 @@ def test_disabled_returns_none_and_zero_calls(paths, monkeypatch):
         raise AssertionError("no provider calls when MACRO_ENABLED is off")
     monkeypatch.setattr(snap_mod, "build_snapshot", boom)
     assert snap_mod.ensure_fresh_snapshot() is None
-
-
-def test_scan_path_calls_refresh_before_every_run_scan():
-    """Guards the wiring itself: every `alerts = await scan_engine.run_scan(`
-    site in commands/scanning.py must be preceded by the macro refresh.
-    The plan expected 3 call sites; there are 4 — hence a test, not a count
-    written down in a commit message.
-
-    A window of up to 2 lines back (not strictly line-1) so gatekeeper-v7's
-    G119 `gate_ctx = build_gate_context()` line -- which must itself run
-    AFTER the refresh, to read the just-refreshed snapshot -- can sit
-    between the two without this test flagging it as unguarded."""
-    import re
-    from pathlib import Path
-
-    src = Path("swingbot/commands/scanning.py").read_text(encoding="utf-8")
-    lines = src.split("\n")
-    sites = [i for i, ln in enumerate(lines)
-             if "alerts = await scan_engine.run_scan(" in ln]
-    assert len(sites) >= 4
-    for i in sites:
-        window = lines[max(0, i - 3):i]
-        assert any("_refresh_macro_snapshot()" in ln for ln in window), \
-            f"line {i + 1} unguarded"
-    assert re.search(r"async def _refresh_macro_snapshot", src)

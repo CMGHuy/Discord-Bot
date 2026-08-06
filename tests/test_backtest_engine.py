@@ -20,16 +20,6 @@ def test_scratch_when_trigger_reached_then_returns_to_entry(monkeypatch):
     # and every bar's low=99.5 <= entry 100. Bar e+1 arms the break-even move
     # (original stop 98 not hit, target 100.7 not hit), bar e+2 hits the moved
     # stop at entry -> scratch at ~0R.
-    #
-    # Floor off (plan v8 Task V10): every price in that walk-through is
-    # hand-computed against the rr-derived 100.70 target, and the 2.5% floor
-    # would move the target to 102.50 -- far enough out that the BE trigger
-    # at half the target distance never arms either, turning this into a
-    # timeout and silently changing which branch the test exercises. What is
-    # pinned here is scratch classification, not target geometry; the floor's
-    # effect on backtest outcomes has its own test below.
-    from swingbot import config
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
     df = make_ohlcv(np.full(60, 100.0), spread_pct=1.0)
     # frictions=False: this test pins the scratch-classification/exit-price
     # LOGIC (Task E11 leaves it exercising exact arithmetic, not economics --
@@ -45,41 +35,12 @@ def test_scratch_when_trigger_reached_then_returns_to_entry(monkeypatch):
 
 
 def test_win_when_target_hit_before_stop(monkeypatch):
-    # Floor off: 100.70 is the rr-derived target this fixture was priced
-    # against (see test_floor_moves_the_target_out_of_reach_of_a_1pct_jump
-    # for the same jump under the shipped floor).
-    from swingbot import config
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", False)
     closes = np.full(60, 100.0)
     closes[41:] = 101.0                  # bar e+1 jumps: high 101.5 >= target 100.7
     df = make_ohlcv(closes, spread_pct=1.0)
     s = _run_with_forced_entry(monkeypatch, df, entry_bar=40)
     assert s.wins == 1 and s.losses == 0 and s.scratches == 0
     assert s.win_rate == pytest.approx(100.0)
-
-
-def test_floor_moves_the_target_out_of_reach_of_a_1pct_jump(monkeypatch):
-    """The v8 target floor, end-to-end through the backtest rather than at
-    the plan level: with MIN_TARGET_PCT=2.5 the +1% jump above is no longer
-    a win, and a +3% jump is. This is the whole point of the floor -- wins
-    that small are what produced a +1.44% average win against a -2.47%
-    average loss live -- and it is also why V11's reachability screen has to
-    refuse setups whose structure cannot support the move."""
-    from swingbot import config
-    monkeypatch.setattr(config, "TARGET_FLOOR_ENABLED", True)
-    monkeypatch.setattr(config, "MIN_TARGET_PCT", 2.5)
-
-    small = np.full(60, 100.0)
-    small[41:] = 101.0                   # high 101.5 -- short of the 102.5 floor
-    s_small = _run_with_forced_entry(monkeypatch, make_ohlcv(small, spread_pct=1.0),
-                                     entry_bar=40)
-    assert s_small.wins == 0
-
-    big = np.full(60, 100.0)
-    big[41:] = 103.0                     # high 103.5 -- clears it
-    s_big = _run_with_forced_entry(monkeypatch, make_ohlcv(big, spread_pct=1.0),
-                                   entry_bar=40)
-    assert s_big.wins == 1 and s_big.losses == 0
 
 
 def test_loss_when_original_stop_hit_before_trigger(monkeypatch):
@@ -204,7 +165,7 @@ def test_v2_scale_out_keeps_classification_and_expectancy():
     assert v2.expectancy_r >= v1.expectancy_r - 0.02
 
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
-def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg(monkeypatch):
+def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     # Regression pin (code review finding): return_pct must be derived from
     # the blended r_multiple, not from legs[-1]'s exit price alone -- a
     # multi-leg scale-out win's return spans both legs, and computing it
@@ -221,16 +182,6 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg(monkeypa
     # about return_pct arithmetic, not Elliott Wave signal quality -- so the
     # gate is pinned off here to keep exercising the original known-good
     # fixture regardless of future strategy tuning.
-    # Same reasoning for v8 V51's loss cap, and the same triage V10/V48 used:
-    # the cap tightens risk_per_share, and r_multiple is move/risk, so every
-    # R in this fixture inflates -- the runner_be win this regression is built
-    # around moves from ~0.35R to 0.714R and stops matching the `< 0.5` probe
-    # below, emptying be_wins. The cap also shrinks risk in absolute terms,
-    # which amplifies the 4dp entry/stop rounding enough to break the exact
-    # return_pct equality. Both are the cap working, not the arithmetic this
-    # test pins; its own coverage is tests/test_max_loss_cap.py.
-    from swingbot import config
-    monkeypatch.setattr(config, "MAX_LOSS_CAP_ENABLED", False)
     baseline = dict(ef.DEFAULT_PARAMS["Elliott Wave"])
     ef.DEFAULT_PARAMS["Elliott Wave"].update(
         {"w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None})

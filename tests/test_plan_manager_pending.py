@@ -1,4 +1,3 @@
-from swingbot import config
 from swingbot.core.plan_engine import PlanStatus
 from swingbot.core.plan_manager import PlanManager
 from swingbot.core.plan_store import PlanStore
@@ -57,71 +56,6 @@ def test_pending_expires_past_expiry_bars(tmp_path):
     events = mgr.poll()
     assert [e.transition for e in events] == ["cancelled_expired"]
     assert store.get("p1").status == PlanStatus.CANCELLED
-
-
-# -- G128: trigger-time gate re-check ---------------------------------------
-
-
-def test_gate_off_never_calls_recheck(tmp_path, monkeypatch):
-    """GATE_ENABLED off (the default) -- _gate_recheck must not even be
-    attempted, so a fill behaves byte-identically to pre-G128."""
-    monkeypatch.setattr(config, "GATE_ENABLED", False, raising=False)
-    feed = FakePriceFeed([("AAPL", 106.0)])
-    store, mgr = _mgr(tmp_path, feed)
-    monkeypatch.setattr(mgr, "_gate_recheck",
-                        lambda plan: (_ for _ in ()).throw(AssertionError("must not be called")))
-    store.add(_pending())
-    events = mgr.poll()
-    assert [e.transition for e in events] == ["filled"]
-    assert "gate_delta" not in events[0].detail
-
-
-def test_gate_delta_attached_to_filled_event_but_still_fires(tmp_path, monkeypatch):
-    """A new flag since the alert shipped -- inform-first: the entry still
-    fires, but the delta rides along on the event for the caller to ping
-    about."""
-    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
-    feed = FakePriceFeed([("AAPL", 106.0)])
-    store, mgr = _mgr(tmp_path, feed)
-    monkeypatch.setattr(mgr, "_gate_recheck", lambda plan: {"delta": ["rf_news_whipsaw"]})
-    store.add(_pending())
-    events = mgr.poll()
-    assert [e.transition for e in events] == ["filled"]
-    assert events[0].detail["gate_delta"] == ["rf_news_whipsaw"]
-    assert store.get("p1").status == PlanStatus.ACTIVE   # entry still fires
-
-
-def test_gate_hold_keeps_plan_pending_this_tick(tmp_path, monkeypatch):
-    """A fresh blackout appeared since the alert AND GATE_BLACKOUT_ENFORCE
-    is on (G120 semantics, reused verbatim at trigger time) -- stay
-    PENDING this tick instead of firing."""
-    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
-    feed = FakePriceFeed([("AAPL", 106.0)])
-    store, mgr = _mgr(tmp_path, feed)
-    monkeypatch.setattr(mgr, "_gate_recheck",
-                        lambda plan: {"hold": {"action": "hold", "line": "⚠️ CPI soon",
-                                               "release_at": "2099-01-01T00:00:00"}})
-    store.add(_pending())
-    events = mgr.poll()
-    assert [e.transition for e in events] == ["recheck_held"]
-    assert store.get("p1").status == PlanStatus.PENDING  # never fired this tick
-
-
-def test_gate_recheck_failure_never_blocks_the_fill(tmp_path, monkeypatch):
-    """A raising gate re-check must still let the entry fire -- same
-    never-costs-a-trade guarantee as the scan path (G121)."""
-    monkeypatch.setattr(config, "GATE_ENABLED", True, raising=False)
-    monkeypatch.setattr(config, "MACRO_ENABLED", True, raising=False)
-
-    def boom():
-        raise OSError("disk")
-
-    monkeypatch.setattr("swingbot.core.macro.snapshot.load_snapshot", boom)
-    feed = FakePriceFeed([("AAPL", 106.0)])
-    store, mgr = _mgr(tmp_path, feed)
-    store.add(_pending())
-    events = mgr.poll()
-    assert [e.transition for e in events] == ["filled"]
 
 
 def test_pending_at_exactly_expiry_bars_still_live(tmp_path):

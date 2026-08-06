@@ -167,71 +167,6 @@ def _rr_for(strategy: str, horizon_key: str) -> float:
     return max(rr, RR_FLOOR)
 
 
-def target_floor_price(entry: float, direction: str) -> float:
-    """The nearest TP1 `MIN_TARGET_PCT` allows for this entry, signed by
-    direction. Read from config on every call (never captured at import)
-    so a SIGHUP reload takes effect on the next plan built."""
-    pct = config.MIN_TARGET_PCT / 100.0
-    return entry * (1 + pct) if direction == "bullish" else entry * (1 - pct)
-
-
-def max_loss_distance(entry: float) -> float:
-    """The largest stop distance `MAX_LOSS_PCT` allows for this entry. Read from
-    config on every call (never captured at import) so a SIGHUP reload takes
-    effect on the next plan built -- same contract as `target_floor_price`."""
-    return entry * (config.MAX_LOSS_PCT / 100.0)
-
-
-def cap_risk_distance(entry: float, risk_distance: float) -> float:
-    """Bound a computed stop distance by `MAX_LOSS_PCT` (plan v8 Task V51).
-
-    The loss-side counterpart to `apply_target_floor`: that one pushes the win
-    out to a floor, this one pulls the loss in to a ceiling, and together they
-    set the payoff ratio the plan exists to fix.
-
-    **Applied before the target is derived, never after.** All four sizing
-    builders price TP1 off the risk distance (`entry ± risk_distance × rr`), so
-    capping the stop afterwards would leave the target priced off the old, wider
-    distance and silently change R:R -- the plan's own warning in V51 Step 1.
-    Capping the distance first keeps the stop, the target and the position size
-    all consistent with one number.
-
-    Never widens: a stop already inside the cap is returned untouched.
-    `MAX_LOSS_CAP_ENABLED=false` disables it entirely, the log-only position for
-    measuring what the cap would have changed before it changes anything.
-    """
-    if not config.MAX_LOSS_CAP_ENABLED:
-        return risk_distance
-    return min(risk_distance, max_loss_distance(entry))
-
-
-def apply_target_floor(entry: float, tp1: float, direction: str) -> float:
-    """Push TP1 out to `MIN_TARGET_PCT` of entry when the R:R math priced it
-    closer (plan v8 Task V10). Never pulls a target IN -- a structurally
-    larger target is left exactly where it was.
-
-    This is the fix for the live book's structural defect: `TP1 = entry ±
-    risk_distance × rr` with every rr override at 0.30-0.40 banked ~0.35R on
-    a win while a loss cost the full 1R, so the median designed target was
-    0.85% against a 2.19% stop and the median winner could not arithmetically
-    reach 2%.
-
-    **The stop is deliberately untouched here** (Task V10 Step 2). A 2.5%
-    target against the 2.19% median stop lifts R:R to ~1.14 from ~0.35; stop
-    retuning is V19's, and keeping them separate keeps the two effects
-    attributable.
-
-    `TARGET_FLOOR_ENABLED=false` returns TP1 unchanged -- the log-only
-    position V12 Step 2 measures survival from. Callers that need to know
-    what the floor *would* have done in that mode call `target_floor_price`
-    directly rather than inferring it from the returned value.
-    """
-    if not config.TARGET_FLOOR_ENABLED:
-        return tp1
-    floor = target_floor_price(entry, direction)
-    return max(tp1, floor) if direction == "bullish" else min(tp1, floor)
-
-
 def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     """Default volatility sizing: ATR-multiple stop, R:R-override target.
 
@@ -257,12 +192,9 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if risk_distance > max_risk_amount:
         risk_distance = max_risk_amount
-    risk_distance = cap_risk_distance(entry, risk_distance)
     if is_bull:
-        stop_loss, take_profit = entry - risk_distance, entry + risk_distance * rr
-    else:
-        stop_loss, take_profit = entry + risk_distance, entry - risk_distance * rr
-    return stop_loss, apply_target_floor(entry, take_profit, direction)
+        return entry - risk_distance, entry + risk_distance * rr
+    return entry + risk_distance, entry - risk_distance * rr
 
 
 def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key):
@@ -278,8 +210,6 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
-    risk_capped = cap_risk_distance(entry, abs(entry - stop_loss))
-    stop_loss = entry - risk_capped if is_bull else entry + risk_capped
 
     risk_now = abs(entry - stop_loss)
     override = STRATEGY_RR_OVERRIDE.get("Fibonacci")
@@ -292,7 +222,7 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
         target_rr = max(min_rr, min(max_rr, target_rr))
         bounded_reward = risk_now * target_rr
         take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
-    return stop_loss, apply_target_floor(entry, take_profit, direction)
+    return stop_loss, take_profit
 
 
 def _sr_plan(entry, volume_ratio, direction, horizon_key):
@@ -309,15 +239,14 @@ def _sr_plan(entry, volume_ratio, direction, horizon_key):
     strength = max(0.0, min(1.0, strength))
     target_pct = h["sr_target_min_pct"] + (h["sr_target_max_pct"] - h["sr_target_min_pct"]) * strength
 
-    sr_risk = cap_risk_distance(entry, entry * (stop_pct / 100))
-    stop_loss = entry - sr_risk if is_bull else entry + sr_risk
+    stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
     override = STRATEGY_RR_OVERRIDE.get("Support/Resistance")
     if override is not None:
         risk = abs(entry - stop_loss)
         take_profit = entry + risk * override if is_bull else entry - risk * override
     else:
         take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
-    return stop_loss, apply_target_floor(entry, take_profit, direction)
+    return stop_loss, take_profit
 
 
 def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
@@ -330,13 +259,11 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
-    risk_capped = cap_risk_distance(entry, abs(entry - stop_loss))
-    stop_loss = entry - risk_capped if is_bull else entry + risk_capped
 
     risk_now = abs(entry - stop_loss)
     rr = _rr_for("Elliott Wave", horizon_key)
     take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
-    return stop_loss, apply_target_floor(entry, take_profit, direction)
+    return stop_loss, take_profit
 
 
 # ---------------------------------------------------------------------------
@@ -373,40 +300,6 @@ def select_tp2(levels_above: list, levels_below: list, direction: str,
     if leg2 > leg1 * MAX_TARGET2_LEG_MULTIPLE:
         return None
     return candidate
-
-
-def target_is_reachable(levels_above: list, levels_below: list, direction: str,
-                        entry: float) -> tuple[bool, str]:
-    """Can structure actually support a `MIN_TARGET_PCT` move from here?
-    Returns `(reachable, reason)` -- the reason string is for telemetry and
-    for the requirement row the operator reads, never for control flow.
-
-    Plan v8 Task V11. Without this the floor just points targets into a
-    wall: raising TP1 to 2.5% does nothing if the first resistance sits at
-    +0.8% and price stalls there. Takes the same already-clustered
-    `Level.price` floats `select_tp2` does -- callers extract `.price` from
-    `levels.build_level_map`; this must not re-cluster anything.
-
-    **The rule: the NEAREST clustered level in the trade direction must sit
-    at or beyond the floor price.** A nearer one is the wall.
-
-    **Judgment call, recorded because the plan's wording admits two
-    readings** ("no structural level supports a >=MIN_TARGET_PCT move"
-    vs "the floor points targets into a wall"): when there is *no* level at
-    all in the trade direction, this returns reachable. Nothing is capping
-    the move -- that is the blue-sky case, not an unsupported one. It is
-    reported as its own reason (`no_levels`) so V12's telemetry can measure
-    how often it fires before V28 enforces anything.
-    """
-    floor = target_floor_price(entry, direction)
-    candidates = levels_above if direction == "bullish" else levels_below
-    ahead = [p for p in candidates
-             if (p > entry if direction == "bullish" else p < entry)]
-    if not ahead:
-        return True, "no_levels"
-    nearest = min(ahead) if direction == "bullish" else max(ahead)
-    clear = nearest >= floor if direction == "bullish" else nearest <= floor
-    return (True, "level_beyond_floor") if clear else (False, "wall")
 
 
 def _journal_entries() -> list:
@@ -647,11 +540,6 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     risk = abs(entry - scenario.stop_loss)
     rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)
     tp1 = entry + risk * rr if is_bull else entry - risk * rr
-    # Floor applied BEFORE the tp2 decision below (Task V10 Step 3): the
-    # scenario's own, larger target only survives as TP2 while it still lies
-    # beyond the new TP1. A floor that lifted TP1 past it would otherwise
-    # leave a TP2 the runner is already through the moment TP1 fills.
-    tp1 = apply_target_floor(entry, tp1, scenario.direction)
 
     tp2 = None
     if scenario.take_profit is not None:
@@ -792,12 +680,6 @@ class ExitResult:
     entry_price: float | None
     r_total: float               # sum over legs of fraction * signed_r
     legs: list                   # [{"fraction","exit_price","r","reason"}]
-    # V52 Step 1: the bar TP1 filled on, so a caller can separate the runner
-    # leg's holding period from the whole trade's. Only ever set by the
-    # scale-out walk once TP1 has actually touched; None everywhere else,
-    # including every single-leg exit. Nothing reads it inside plan_engine --
-    # it is carried for measurement, exactly like G91's gate annotation.
-    tp1_index: int | None = None
 
 
 def _not_triggered() -> ExitResult:
@@ -850,8 +732,6 @@ def _single_leg_exit_walk(
 
     end = min(entry_index + max_holding_days, n - 1)
     outcome, exit_price, exit_index = "timeout", None, None
-    early_reason = None
-    mfe_r = mae_r = 0.0
 
     for j in range(entry_index + 1, end + 1):
         hi, lo = float(high[j]), float(low[j])
@@ -875,34 +755,13 @@ def _single_leg_exit_walk(
         if hit_target:
             outcome, exit_price, exit_index = "win", tp1, j
             break
-
-        # V51 Step 3, checked only after the real stop and target so a bar that
-        # resolves normally is untouched and the flags-off path is unchanged.
-        fav = hi if is_bull else lo
-        adv = lo if is_bull else hi
-        mfe_r = max(mfe_r, (fav - entry_price) * sign / risk)
-        mae_r = max(mae_r, (entry_price - adv) * sign / risk)
-        early_reason = early_cut_reason(
-            plan, bars_held=j - entry_index, mfe_r=mfe_r, mae_r=mae_r,
-            bar_close=float(close[j]))
-        if early_reason:
-            exit_price, exit_index = float(close[j]), j
-            outcome = early_cut_outcome((exit_price - entry_price) * sign / risk)
-            break
-
         if reached_trigger and not stop_moved:
             stop_moved = True
 
     if outcome == "timeout":
         exit_price, exit_index = float(close[end]), end
 
-    if early_reason:
-        # Priced at the bar's close, NOT at -1R: the whole point is that the
-        # stop was never reached. Checked before the outcome branches because
-        # an early cut carries outcome "loss"/"scratch" for denominator
-        # purposes while having neither's fixed R.
-        r, reason = (exit_price - entry_price) * sign / risk, early_reason
-    elif outcome == "win":
+    if outcome == "win":
         r, reason = rr, "tp1"
     elif outcome == "loss":
         r, reason = -1.0, "stop"
@@ -923,79 +782,6 @@ def _single_leg_exit_walk(
         r_total=r,
         legs=[{"fraction": 1.0, "exit_price": exit_price, "r": r, "reason": reason}],
     )
-
-
-EARLY_CUT_REASONS = ("thesis_invalidated", "time_stop", "adverse_excursion")
-
-
-def early_cut_reason(plan: TradePlanV2, *, bars_held: int, mfe_r: float,
-                     mae_r: float, bar_close: float) -> str | None:
-    """"Obvious loser" made testable (plan v8 V51 Step 3), as three independent
-    predicates. Returns the reason that fired, or None.
-
-    Only meaningful BEFORE TP1: after TP1 the runner's stop already sits at
-    breakeven, so there is no loss left to cut short.
-
-    **NO-LOOKAHEAD.** Every input is known at the close of the bar being
-    judged: `bars_held` and `bar_close` are that bar's, and `mfe_r`/`mae_r` are
-    running extremes over bars at or before it. Nothing here reads a later bar,
-    and the caller exits at this bar's close rather than a better price found
-    afterwards.
-
-    The three are deliberately separate flags rather than one composite, so
-    V52 can grid them individually and attribute what each is worth:
-
-    (a) `thesis_invalidated` -- a CLOSE back through the plan's trigger price,
-        against the trade. The entry's own logic in reverse. Close, not an
-        intrabar touch: a single wick through the level should not eject a
-        trade the level still supports.
-    (b) `time_stop` -- held `EARLY_CUT_TIME_BARS` bars without ever reaching
-        `EARLY_CUT_TIME_MIN_R` of favourable excursion. Judged on MFE, not the
-        last close, so a trade that ran and gave it back is not treated as one
-        that never moved.
-    (c) `adverse_excursion` -- drawn `EARLY_CUT_MAE_FRACTION` of the way to the
-        stop while MFE never cleared `EARLY_CUT_MAE_MAX_MFE_R`.
-
-    Order is fixed (a, b, c) so a bar satisfying two reports the more
-    defensible one; with all flags off this returns None and every caller
-    behaves exactly as it did before V51.
-    """
-    is_bull = plan.direction == "bullish"
-
-    if config.EARLY_CUT_THESIS_ENABLED:
-        level = plan.trigger_price
-        if (bar_close < level) if is_bull else (bar_close > level):
-            return "thesis_invalidated"
-
-    if (config.EARLY_CUT_TIME_ENABLED
-            and bars_held >= config.EARLY_CUT_TIME_BARS
-            and mfe_r < config.EARLY_CUT_TIME_MIN_R):
-        return "time_stop"
-
-    if (config.EARLY_CUT_MAE_ENABLED
-            and mae_r >= config.EARLY_CUT_MAE_FRACTION
-            and mfe_r < config.EARLY_CUT_MAE_MAX_MFE_R):
-        return "adverse_excursion"
-
-    return None
-
-
-def early_cut_outcome(r: float) -> str:
-    """Classify an early-cut exit. **This is a correctness boundary, not a
-    naming choice.**
-
-    `scratch` and `timeout` are EXCLUDED from the win-rate denominator
-    (`excluded_share`). If early cuts were classified as either, then cutting
-    losers sooner would raise win rate by *removing losses from the
-    denominator* -- turning V51 Step 3 into a machine for manufacturing the
-    very number V52's 80% bar is trying to measure honestly, and breaching V6
-    Step 4's "do not drop losers from the denominator" outright.
-
-    So a cut at a loss is a `loss`, counted like any other. Only a cut that is
-    genuinely not losing (r >= 0, e.g. a time stop on a trade drifting slightly
-    up) is a `scratch`, which matches the existing `breakeven_stop` semantics.
-    """
-    return "loss" if r < 0 else "scratch"
 
 
 def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
@@ -1040,7 +826,6 @@ def _scale_out_exit_walk(
 
     # ---- phase 1: identical to the single-leg walk until TP1 touches ----
     tp1_index = None
-    mfe_r = mae_r = 0.0
     for j in range(entry_index + 1, end + 1):
         hi, lo = float(high[j]), float(low[j])
         cur_stop = entry_price if stop_moved else stop_loss
@@ -1063,26 +848,6 @@ def _scale_out_exit_walk(
         if hit_target:
             tp1_index = j
             break
-
-        # V51 Step 3. Phase 1 only: past TP1 the runner's stop is already at
-        # breakeven, so there is no loss left to cut. Exits the FULL position
-        # as one leg -- TP1 never filled, so there is nothing to scale out of.
-        fav = hi if is_bull else lo
-        adv = lo if is_bull else hi
-        mfe_r = max(mfe_r, (fav - entry_price) * sign / risk)
-        mae_r = max(mae_r, (entry_price - adv) * sign / risk)
-        early_reason = early_cut_reason(
-            plan, bars_held=j - entry_index, mfe_r=mfe_r, mae_r=mae_r,
-            bar_close=float(close[j]))
-        if early_reason:
-            exit_px = float(close[j])
-            r = round((exit_px - entry_price) * sign / risk, 3)
-            return ExitResult(outcome=early_cut_outcome(r), runner_outcome=None,
-                              entry_index=entry_index, exit_index=j,
-                              entry_price=entry_price, r_total=r,
-                              legs=[{"fraction": 1.0, "exit_price": exit_px,
-                                     "r": r, "reason": early_reason}])
-
         if reached_trigger and not stop_moved:
             stop_moved = True
 
@@ -1145,7 +910,7 @@ def _scale_out_exit_walk(
                       entry_index=entry_index, exit_index=exit_index,
                       entry_price=entry_price,
                       r_total=round(frac1 * rr + frac2 * r2, 3),
-                      legs=[leg1, leg2], tp1_index=tp1_index)
+                      legs=[leg1, leg2])
 
 
 def simulate_exit(

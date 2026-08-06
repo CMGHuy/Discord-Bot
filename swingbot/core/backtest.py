@@ -481,13 +481,16 @@ def run_backtest(
                 gate_eval, ticker, strategy, horizon_key, df, i, direction,
                 entry, stop_loss, take_profit)
 
-            # V52 Step 1. Two legs only ever exist once TP1 filled under
-            # scale-out; every other path returns a single full-fraction leg,
-            # where there is no runner to report and both stay None.
+            # Two legs only ever exist once TP1 filled under scale-out; every
+            # other path returns a single full-fraction leg, where there is no
+            # runner to report and this stays None.
             runner_r = res.legs[-1]["r"] if len(res.legs) == 2 else None
-            runner_holding_days = (exit_i - res.tp1_index
-                                   if len(res.legs) == 2 and res.tp1_index is not None
-                                   else None)
+            # `runner_holding_days` needs ExitResult.tp1_index, which V52 Step 1
+            # added to plan_engine and the 2026-08-06 backend revert removed
+            # along with the rest of that step. The BacktestTrade field is kept
+            # so the record schema does not change under consumers; it is simply
+            # never populated while the runner-leg split is out.
+            runner_holding_days = None
 
             record = BacktestTrade(
                 entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
