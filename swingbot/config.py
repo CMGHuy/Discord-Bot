@@ -236,9 +236,13 @@ FIELDS: list[Field] = [
           type="float", default="1000000", min=0, step=100,
           help="Seed value the first time data/account.json is created. Edit anytime with !account balance -- not read from .env after that."),
     Field("RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT", "Account Defaults", "Risk per trade %",
-          type="float", default="0.01", min=0, step=0.01,
+          type="float", default="1.0", min=0, max=100, step=0.01,
           help="The % of account balance you're willing to lose on a single trade if its stop-loss is hit -- "
                "a classic position-sizing input (e.g. 1% means a full stop-out only costs 1% of the account). "
+               "PERCENT units, not a fraction: compute_position_size() does `balance * risk_pct / 100`, so "
+               "1.0 means 1%. The default read 0.01 until 2026-08-06, which meant 0.01% -- a 100x "
+               "under-size against this help text, and against the 1.0 fallback every consumer already "
+               "used (account.py compute_position_size, commands/growth.py, core/edge/growth.py). "
                "This is informational only: seeded into data/account.json and shown by !account, but nothing "
                "in the live alert/scan pipeline uses it to size a position -- how many shares to actually buy "
                "is left entirely up to you. Edit anytime with !account risk PCT."),
