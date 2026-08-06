@@ -164,4 +164,15 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # V29: label every close this replay books as `close_source="reconcile"`.
+    # A reconciled close resolves a bar spanning both levels AS THE STOP, so
+    # its loss is the full gap move rather than a managed stop-out -- pooling
+    # the two into one expectancy makes an outage look like strategy decay.
+    # Measured on the live book: -1.041R reconciled (n=32) vs -0.342R
+    # live-polled (n=30) over the same days. Wrapping the entry point rather
+    # than the loop is deliberate: everything this script writes is a
+    # reconciled close, and that stays true if the internals move.
+    from swingbot.core.performance import close_attribution
+
+    with close_attribution("reconcile"):
+        sys.exit(main())

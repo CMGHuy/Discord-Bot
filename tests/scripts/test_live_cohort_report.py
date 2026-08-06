@@ -98,7 +98,7 @@ def test_build_report_slices_every_dimension():
     rep = lcr.build_report(trades)
     assert rep["n_closed"] == 2
     assert set(rep["dimensions"]) == {"Engine path", "Strategy", "Tier", "Badge",
-                                      "Horizon", "Direction", "Source"}
+                                      "Horizon", "Direction", "Source", "Close source"}
     assert rep["dimensions"]["Engine path"]["legacy"]["n"] == 1
     assert rep["dimensions"]["Engine path"]["v2"]["n"] == 1
     # Legacy trades carry no tier/badge/source -- rendered as a real "None"
@@ -147,3 +147,30 @@ def test_diff_names_cohorts_that_appeared_or_vanished(capsys):
     out = capsys.readouterr().out
     assert "NEW in current" in out and "FVG (bullish)" in out
     assert "GONE from current" in out and "S/R Confluence" in out
+
+
+# -- V29: the close-source split the rollback trigger depends on -------------
+# A reconcile-booked close replays missed bars and resolves a bar spanning
+# both levels as the stop, so it books the full gap move. Live measurement
+# (2026-08-06): -1.041R reconciled (n=32) against -0.342R live-polled (n=30)
+# over the same days. If the report pools them, an outage reads as strategy
+# decay and V29's trigger fires on the wrong thing.
+
+def test_close_source_is_its_own_dimension():
+    trades = [_t("loss", 100.0, 90.0, plan_id="p1", close_source="reconcile"),
+              _t("loss", 100.0, 98.0, plan_id="p2", close_source="live")]
+    rep = lcr.build_report(trades)
+    cs = rep["dimensions"]["Close source"]
+    assert cs["reconcile"]["n"] == 1 and cs["live"]["n"] == 1
+    # and it must not be conflated with `source` (which strategy found it)
+    assert set(rep["dimensions"]["Source"]) != set(cs)
+
+
+def test_unstamped_closes_are_not_assumed_live():
+    """Every trade closed before 2026-08-06 has no stamp. Defaulting those to
+    `live` would drop the Aug-4 outage's reconciled closes straight into the
+    cohort the rollback trigger watches."""
+    rep = lcr.build_report([_t("loss", 100.0, 90.0, plan_id="p1")])
+    cs = rep["dimensions"]["Close source"]
+    assert cs["unstamped"]["n"] == 1
+    assert "live" not in cs

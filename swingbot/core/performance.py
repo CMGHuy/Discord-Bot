@@ -20,6 +20,7 @@ import os
 import secrets
 import string
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from threading import Lock
 
@@ -43,6 +44,41 @@ from swingbot.core.strategy_types import HORIZONS as _HORIZONS
 _NEAR_TP_BASELINE_HORIZON_DAYS = _HORIZONS.get("2w", {}).get("max_holding_days", 14)
 
 _LOCK = Lock()
+
+# How the close currently being written came about. Stamped onto every trade
+# `close_plan_trade` closes, as `close_source`.
+#
+# Plan v8 Task V29. A close booked by `scripts/reconcile_open_plans.py` after
+# downtime is not the same event as a close the live poller saw: reconcile
+# replays the missed bars and resolves a bar spanning both levels AS THE STOP,
+# so its losses are the full gap move rather than a managed 1.75% stop-out.
+# Measured on the live book, closes since 2026-08-03 split -1.041R
+# (reconcile-booked, n=32) against -0.342R (live-polled, n=30) — a 3x
+# difference that is an artifact of an outage, not of strategy quality. V29's
+# rollback trigger compares a 5-day expectancy against a baseline, so without
+# this distinction the trigger fires on operational incidents and would roll
+# back changes that had nothing to do with the damage.
+#
+# Inferring it after the fact from timestamp clustering is not good enough: a
+# genuine market break closes many trades in the same minute too. It has to be
+# recorded by the writer that knows.
+_close_source = "live"
+
+
+@contextmanager
+def close_attribution(source: str):
+    """Label every close written inside this block, e.g. "reconcile".
+
+    Process-wide and not thread-safe by design — the one caller that sets it
+    (the reconcile script) is single-threaded and runs with the bot stopped,
+    which is the only supported way to run it."""
+    global _close_source
+    previous = _close_source
+    _close_source = source
+    try:
+        yield
+    finally:
+        _close_source = previous
 
 
 def _journal_close_safely(trade: dict) -> None:
@@ -520,6 +556,7 @@ class TradeLog:
             self._save()
 
     def close_plan_trade(self, plan_id: str, leg: dict | None, status: str) -> None:
+        # (see close_attribution() at module scope for why the stamp exists)
         """Final leg + terminal status for a v2 plan's trade. `leg` is the
         real leg dict for a runner close; the caller (PlanManager._on_event,
         which has the TradePlanV2 and so can recompute the r-multiple)
@@ -545,6 +582,7 @@ class TradeLog:
                 t["exit_price"] = (t["legs"][-1]["exit_price"] if t.get("legs")
                                    else t.get("exit_price"))
                 t["closed_at"] = datetime.now(timezone.utc).isoformat()
+                t["close_source"] = _close_source
                 self._settle_account_balance(t)
                 closed_records.append(dict(t))
             self._save()
@@ -965,6 +1003,7 @@ class TradeLog:
                     t["status"] = "closed"
                     t["closed_at"] = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
+                    t["close_source"] = "manual"
                     self._save()
                     closed_trade = t
                     break

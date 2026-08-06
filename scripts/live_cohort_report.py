@@ -57,6 +57,17 @@ DIMENSIONS = [
     ("Horizon", lambda t: str(t.get("horizon_key"))),
     ("Direction", lambda t: str(t.get("direction"))),
     ("Source", lambda t: str(t.get("source"))),
+    # V29. NOT the same question as "Source" (which strategy family found it)
+    # -- this is how the close came to be written. A `reconcile` close replays
+    # missed bars after downtime and resolves a bar spanning both levels as
+    # the stop, so it books the full gap move instead of a managed 1.75%
+    # stop-out; pooling it with live closes makes an outage read as strategy
+    # decay. Trades closed before the stamp existed (2026-08-06) report
+    # `unstamped` rather than being assumed live -- the field genuinely does
+    # not know, and quietly defaulting them to `live` would put the Aug-4
+    # outage's 32 reconciled closes into the cohort the rollback trigger
+    # watches.
+    ("Close source", lambda t: str(t.get("close_source") or "unstamped")),
 ]
 
 
