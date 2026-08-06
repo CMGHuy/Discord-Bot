@@ -100,8 +100,8 @@ def _quality_rows(ax, q, y):
             transform=ax.transAxes, fontsize=7, color=TEXT_COLOR,
             family="monospace", va="top")
     y -= 0.10
-    if q.get("advisor"):
-        ax.text(0.04, y, f"🤖 {q['advisor']}", transform=ax.transAxes, fontsize=7,
-                color=MUTED_TEXT_COLOR, family="monospace", va="top", wrap=True)
-        y -= 0.10
+    # E51 gave this panel a trailing "🤖 <advisor verdict>" row, fed by
+    # llm-advisor-v5. That plan was deleted unimplemented on 2026-08-06 and
+    # nothing else ever produced the key, so the row could not render -- removed
+    # with its producer rather than left as a slot for something not coming.
     return y

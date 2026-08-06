@@ -342,3 +342,21 @@ and their 19 config Fields. That option is now closed.
 statistics, and Leg 1's harness imports `wilson_lower_bound` from it under V29's
 own "no stat math is re-derived here" rule. Moving it was the point of not
 deleting it blind.
+
+### The byte-identity above has an end date: `scanning/engine.py`, same day
+
+The four-file identity with 57252b2 held through `c84924a`, exactly as stated.
+It was then **broken deliberately** by the llm-advisor-v5 removal, on
+`scanning/engine.py` only, and the human partner made that call knowing the
+cost. What changed there is one dict key — `"advisor": None` — in
+`build_decision_context`'s `quality` block, plus the comment naming the deleted
+plan. The key was always `None` (nothing in the codebase ever produced an
+advisor verdict), and its only reader used `q.get("advisor")`, so removing it
+is behaviour-identical.
+
+**The other three files are untouched and stay byte-identical to 57252b2:**
+`plan_engine.py`, `backtest.py`, `plan_store.py`. Nothing that decides an
+entry, a stop, a target, a size or an exit has moved since the revert. If you
+need to re-verify the baseline's provenance, diff those three and read this
+paragraph for the fourth — do not conclude from a non-empty `engine.py` diff
+that the decision path drifted.

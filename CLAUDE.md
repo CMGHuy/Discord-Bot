@@ -50,8 +50,9 @@ hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
 in-progress multi-hour backtest. Completed plans: unified-plan-engine-v2,
 strategy-winrate-redesign, admin-ui-tradingview-redesign-v6 (task IDs
 `U1`-`U36`; manual browser QA left for a future pass). On disk but not
-current focus: cockpit-v3, llm-advisor-v5 (confirmed 0% implemented,
-2026-07-31 — no code, no branch, no commits beyond plan-authoring).
+current focus: cockpit-v3. **llm-advisor-v5 was deleted on 2026-08-06** —
+plan and spec both, 0% implemented, excluded by human-partner instruction on
+2026-07-31 and then dropped outright; don't go looking for it.
 **gatekeeper-v7 was built and then removed.** G1-G146 (Parts 1-5) merged to
 `main`, then `swingbot/core/gate/**` and `swingbot/core/macro/**` were deleted
 on 2026-08-06 (`c84924a`) after plan v8 V29's rollback trigger fired — with

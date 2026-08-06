@@ -4,7 +4,7 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 **Organized by urgency, not by plan**, because most of this backlog isn't actionable yet:
 - **A — Do now or soon**: the active plan, `edge-engine-v4`. Its manual steps are the ones you'll actually hit next.
-- **B — Blocked on future implementation**: `llm-advisor-v5` and `admin-ui-tradingview-redesign-v8` haven't been built (0 code, no branch, no commits for either — grep/git-log audit 2026-07-27, llm-advisor re-confirmed 2026-07-31). Their manual steps reference scripts that don't exist yet. `gatekeeper-v7` was in this bucket, then was built to 86/90, then had its code **deleted** on 2026-08-06 — its steps are now unrunnable rather than pending; see the ⛔ note in its section below.
+- **B — Blocked on future implementation**: `admin-ui-tradingview-redesign-v8` hasn't been built (0 code, no branch, no commits — grep/git-log audit 2026-07-27). Its manual steps reference scripts that don't exist yet. Two plans left this bucket on 2026-08-06, in opposite directions: `gatekeeper-v7` was built to 86/90 and then had its code **deleted**, so its steps are unrunnable rather than pending (see the ⛔ note below); `llm-advisor-v5` was **deleted plan-and-all** at 0% implemented, so its L1/L2/L31/L32 steps are gone from this doc entirely.
 - **C — Already done**: `strategy-winrate-redesign` and the bulk of `unified-plan-engine-v2`'s manual steps were already executed to get those plans to "Completed" status. Listed for the record, not as outstanding work.
 - **D — Known gaps carried forward**: `unified-plan-engine-v2`'s staged-rollout smoke and `cockpit-v3`'s live-mutation smoke were *skipped by explicit decision*, not completed. These are now tracked as `gatekeeper-v7` Tasks G217/G218 (see the plan reorg below) rather than being re-run ad hoc here.
 
@@ -109,12 +109,6 @@ Kept below as the record of what these steps *were*:
 - **G175/G192/G195** — eyeball the yields/curve chart panel and the mobile layout at 375px with real data; full visual QA pass at desktop + mobile widths.
 - **G215/G216** — the terminal live ritual: real macro smoke, live Discord commands, enabling `MACRO_ENABLED`+`GATE_ENABLED` on a real scan, `!checklist NVDA` full run, dragging threshold sliders live on `/gate` and watching the next scan's tiers shift, a blackout dry-run, confirming zero blocks in inform mode via live telemetry.
 - **G217/G218/G219** (new, added by this audit — see plan reorg below).
-
-### llm-advisor-v5 (implementation status unconfirmed — see G219)
-- **L1** — install Ollama, `ollama pull qwen3:8b` (~5GB) on the user's actual laptop, run once and note wall-clock/tokens-per-second baseline.
-- **L2** — create a real Anthropic API key at the console, make one real (billed) Haiku call, confirm token counts look sane.
-- **L31** — once `scripts/eval_advisor.py` exists, run it against real Ollama on the laptop once per prompt edit; read whether outputs look sensible.
-- **L32** — six-part live smoke: real cloud call, trigger a real scan and check the 🤖 field renders, `!ask` with a real evidence-cited answer, physically open the laptop and run `run_worker.ps1`, watch it process a queued job and post the result, check the `/advisor` admin page reflects it, verify the `usage.jsonl` budget meter incremented.
 
 ### admin-ui-tradingview-redesign-v8 (not started)
 - **U20/U21** — render smoke: load the page in a browser once, confirm a PNG is produced, eyeball it.

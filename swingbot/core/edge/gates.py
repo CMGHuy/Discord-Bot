@@ -30,13 +30,13 @@ def stop_beyond_gap_noise(stop_distance_pct: float, gap_p90_pct: float,
 
 
 def _default_days_to_earnings(symbol: str):
-    try:  # advisor's Finnhub feed, when the llm-advisor plan is merged
-        from swingbot.core.advisor.market_context import days_to_earnings as finnhub_days
-        d = finnhub_days(symbol)
-        if d is not None:
-            return d
-    except ImportError:
-        pass
+    # E18 wrote this with a soft-import of `swingbot.core.advisor.market_context`
+    # ahead of it, as a second earnings source for when llm-advisor-v5 merged.
+    # That plan was deleted unimplemented on 2026-08-06, so the module can never
+    # appear and the try/except only ever took the ImportError branch -- removed
+    # rather than left as a hook for something that is not coming. Behaviour is
+    # unchanged. Callers wanting a different source still inject one via
+    # in_earnings_blackout(days_to_earnings_fn=...).
     from swingbot.core import events
     next_date = events.get_next_earnings_date(symbol)
     if next_date is None:

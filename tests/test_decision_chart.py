@@ -111,8 +111,7 @@ def test_quality_box_renders(tmp_path, daily_df):
     ctx = {"quality": {"score": 74,
                        "components": [("RS", 8, 10), ("MTF", 6, 10), ("breadth", 3, 5)],
                        "follow_score": 81.5, "badge": "VALIDATED",
-                       "badge_stats": "N=206 · 81.6% OOS",
-                       "advisor": "CAUTION (62) — earnings in 2 days"}}
+                       "badge_stats": "N=206 · 81.6% OOS"}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
     assert os.path.getsize(path) > 10_000
 

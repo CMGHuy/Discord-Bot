@@ -287,7 +287,6 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
             "badge": plan.badge,
             "badge_stats": (f"N={plan.badge_stats['n']} · {plan.badge_stats['win_rate']:.1f}% OOS"
                             if getattr(plan, "badge_stats", None) else ""),
-            "advisor": None,        # no LLM-advisor module in this codebase yet (llm-advisor-v5 plan, not built)
         }
     except Exception:
         pass
