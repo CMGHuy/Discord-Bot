@@ -149,6 +149,27 @@ WR 53.41% / expR −0.192 / total −261.8%. Cohort detail — the tier ladder i
 **non-monotonic** (C −0.183, B −0.151, A −0.239) and `VALIDATED` is the only
 badge with positive expectancy (+0.781R, n=14, and n=14 proves little).
 
+> **Correction, same day — that tier ladder is NOT the gatekeeper's.** This
+> section first read the non-monotonic ladder "beside V14's tier-B floor",
+> which conflates two different tiers computed by different code. The `tier`
+> on a trade record is `plan.tier`, assigned by
+> `plan_engine._apply_quality` → `core/quality.score_plan` — the **plan
+> quality** tier. `GATE_MIN_TIER=B` acts on the **gatekeeper checklist** tier
+> from `gate/score.assign_tier`. The two share a letter scale and nothing
+> else. The non-monotonicity is real and worth investigating, but it says
+> **nothing** about whether the gate's tier floor is set correctly, and must
+> not be cited as if it did. The gate's own live tier distribution is the one
+> in Leg 3a: C=14, B=1, A=1, A+=0 over 16 evaluations.
+>
+> **A second consequence, for anyone comparing this table across dates:** V25
+> re-emitted the badge registry on 2026-08-06, making every registered
+> strategy VALIDATED. `quality.component_badge` is 20 of the quality score, so
+> from that date every live plan gains 20 points and the quality tier shifts
+> **up** for plans that were previously WEAK. The `Tier` and `Badge` cohorts
+> are therefore **not comparable across the 2026-08-06 boundary**. Neither
+> field gates anything live — both are display and record-keeping
+> (`embeds.py`, `log_trade`) — so nothing else moves.
+
 ## 5. Reading the armed triggers against today's book — the trigger FIRES
 
 Since the frozen baseline (closes on/after 2026-07-31), split by the
