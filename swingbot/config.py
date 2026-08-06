@@ -413,10 +413,17 @@ FIELDS: list[Field] = [
                "0.85% against a 2.19% stop). This floor sets the win side; the stop side is retuned "
                "separately so the two effects stay attributable."),
     Field("TARGET_FLOOR_ENABLED", "TARGET_FLOOR_ENABLED", "Plan Engine v2", "Target floor enforced",
-          type="checkbox", default="true",
+          type="checkbox", default="false",
           help="Off = MIN_TARGET_PCT is computed and logged but NOT applied, so a week of scans can "
                "measure how many setups would survive the floor before it starts changing live "
-               "targets. On = the floor is enforced on every emitted plan."),
+               "targets. On = the floor is enforced on every emitted plan. "
+               "ROLLED BACK TO OFF 2026-08-06 on human-partner decision, per V29's fired rollback "
+               "trigger. The floor makes small wins unreachable by construction (its own V10 commit "
+               "says so), and live-polled expectancy since it shipped read -0.333R at 46.43% WR "
+               "against a -0.082R / 68.58% baseline. V29 could not attribute that to any single "
+               "change -- V13, V14 and this floor were all in flight -- so all three were rolled "
+               "back together rather than bisected on live money. Re-enabling this is a deliberate "
+               "re-test, not a default: it needs a measured cohort, not a restart."),
     Field("MAX_LOSS_PCT", "MAX_LOSS_PCT", "Plan Engine v2", "Maximum loss %",
           type="float", default="1.75", min=0.25, max=20, step=0.05,
           help="Hard ceiling on the stop distance: no plan may risk more than this % of entry, "
@@ -427,11 +434,14 @@ FIELDS: list[Field] = [
                "the old 0.35R-target book needed 63.2% and got 55.6%. Applied BEFORE the target is "
                "derived, so capping the stop never silently changes R:R. Plan v8 V51."),
     Field("MAX_LOSS_CAP_ENABLED", "MAX_LOSS_CAP_ENABLED", "Plan Engine v2", "Maximum loss cap enforced",
-          type="checkbox", default="true",
+          type="checkbox", default="false",
           help="Off = MAX_LOSS_PCT is ignored and stops keep their per-strategy distance, for "
                "measuring what the cap would have changed before it changes anything. On = every "
                "emitted plan is capped, and position size is computed off the capped distance so "
-               "risk per trade does not move."),
+               "risk per trade does not move. "
+               "ROLLED BACK TO OFF 2026-08-06 alongside TARGET_FLOOR_ENABLED -- see that field. The "
+               "two set the payoff ratio jointly, so rolling back the floor while leaving the cap on "
+               "would leave a geometry that was never measured in either configuration."),
     # --- V51 Step 3: cut a loser before it reaches the full stop -------------
     # All three default OFF. They are pre-registered predicates for V52 to grid
     # one at a time, not shipped behavior -- turning any of them on changes what
