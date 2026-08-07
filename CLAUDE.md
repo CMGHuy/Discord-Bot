@@ -115,3 +115,6 @@ Not auto-loaded — read the relevant one before starting work in that area.
   hygiene, worktrees.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
+- `docs/claude/testing-cost.md` — measured suite timings, the current baseline
+  (1145 collected / 0 failed), why `-n 4` beats `-n auto`, and the two traps
+  that make test timings unreliable. Read before optimising or timing tests.

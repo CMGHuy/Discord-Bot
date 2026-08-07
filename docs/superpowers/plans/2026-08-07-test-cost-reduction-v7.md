@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1 — `test_flag_on_polls_open_plans` quarantined with `xfail(strict=False)`. New baseline verified: **1008 passed, 136 skipped, 1 xfailed, 0 failed** (1145 collected). Green is now machine-checkable.
-> - **Next:** T2 (record the measured baseline as `docs/claude/testing-cost.md`)
+> - **Completed:** T1-T2. T1: `test_flag_on_polls_open_plans` quarantined with `xfail(strict=False)`; baseline verified **1008 passed, 136 skipped, 1 xfailed, 0 failed** (1145 collected), so green is now machine-checkable. T2: `docs/claude/testing-cost.md` written and linked from CLAUDE.md's reference list.
+> - **Next:** T3 (register the `slow` marker, correct the `-n auto` guidance, add pytest entries to `.gitignore`)
 
 ## Global Constraints
 
@@ -96,13 +96,13 @@ Omit `-q` — it suppresses the summary line in pytest 9.1.1. Expect
 
 **Files:** Create `docs/claude/testing-cost.md`
 
-- [ ] **Step 1: Write the doc** containing the design's measurement table (serial 180.4s, `-n 4` 40.2s, `-n auto` 60.0s, fast serial 27.1s), the 20s-cooldown requirement, and the one-liner for re-deriving the optimal worker count on different hardware:
+- [x] **Step 1: Write the doc** containing the design's measurement table (serial 180.4s, `-n 4` 40.2s, `-n auto` 60.0s, fast serial 27.1s), the 20s-cooldown requirement, and the one-liner for re-deriving the optimal worker count on different hardware:
 
 ```powershell
 foreach ($n in 2,4,6,8) { Start-Sleep 20; Measure-Command { python -m pytest tests/ -q -n $n } }
 ```
 
-- [ ] **Step 2:** Commit. This is the artifact that stops the next session from re-deriving all of it.
+- [x] **Step 2:** Commit. This is the artifact that stops the next session from re-deriving all of it.
 
 ---
 
