@@ -45,7 +45,7 @@ a bare diagonal line doesn't make clear how well- or poorly-supported
 it really is; seeing the touch points does.
 
 When levels sit close together (a tight stop, or a target barely beyond
-entry), their right-edge price pills (`_draw_level_pill`, TradingView-
+entry), their right-axis price tags (`chart_annotations.draw_level`, TradingView-
 style, one per entry/stop/target line -- see below) would naturally land
 on top of each other and become unreadable -- the later one is nudged
 vertically by a small fixed offset in screen points (not data units, so
@@ -87,12 +87,13 @@ from .chart_style import (
     SIGNAL_LINE_COLOR, SPINE_COLOR, STOP_COLOR,
     STOP_STRATEGY_COLOR, TARGET2_COLOR, TARGET_COLOR, TARGET_STRATEGY_COLOR,
     TEXT_COLOR, TRENDLINE_RESISTANCE_COLOR, TRENDLINE_SUPPORT_COLOR, UP_COLOR,
-    VOLUME_PROFILE_PANEL_GAP_FRAC, VOLUME_PROFILE_PANEL_WIDTH_FRAC,
+    VOLUME_OVERLAY_HEIGHT_FRAC,
     _label_bbox,
 )
+from .chart_annotations import draw_legend_block, draw_level
 from .chart_drawing import _draw_trendline, _fib_anchor_points, _pick_primary_source
 from .chart_strategy_overlay import _draw_confirmed_strategy, _draw_confirmed_strategy_secondary
-from .chart_volume_profile import _draw_volume_profile_panel
+from .chart_volume_profile import _draw_volume_profile_overlay
 
 log = logging.getLogger("swing-bot.trade_chart")
 
@@ -148,6 +149,40 @@ def _fib_note_lines(df: pd.DataFrame, lookback: int, label: str) -> list:
     ]
 
 
+def _fill_figure(fig, left=0.055, right=0.93, bottom=0.075, top=0.945) -> None:
+    """Rescale every panel so the stack fills the figure.
+
+    mplfinance creates its panels with fig.add_axes(), so fig.subplots_adjust()
+    -- which only moves axes made by subplots()/add_subplot() -- never touched
+    them. Asking it for bottom=0.05 measured out at 0.18, and that ~13% band
+    under the lowest pane is the empty strip at the bottom of every chart.
+
+    Rather than fight mplfinance's geometry, take the panels' common bounding
+    box and affine-map it onto the target rectangle. Relative panel heights and
+    the gaps between them are preserved, and twinned axes (the volume overlay
+    sharing the price panel's box) stay pixel-aligned because the same
+    deterministic map is applied to both.
+
+    Must run AFTER every panel exists and after anything that reads a panel's
+    position, but before savefig.
+    """
+    boxes = [(ax, ax.get_position()) for ax in fig.axes]
+    if not boxes:
+        return
+    cx0 = min(b.x0 for _, b in boxes)
+    cx1 = max(b.x1 for _, b in boxes)
+    cy0 = min(b.y0 for _, b in boxes)
+    cy1 = max(b.y1 for _, b in boxes)
+    if cx1 - cx0 <= 0 or cy1 - cy0 <= 0:
+        return
+    sx = (right - left) / (cx1 - cx0)
+    sy = (top - bottom) / (cy1 - cy0)
+    for ax, b in boxes:
+        ax.set_position([left + (b.x0 - cx0) * sx,
+                         bottom + (b.y0 - cy0) * sy,
+                         b.width * sx, b.height * sy])
+
+
 def _draw_last_price_pill(ax, df, color=CURRENT_PRICE_COLOR):
     """TradingView-style: dashed horizontal ray at the last close plus a
     solid price pill pinned to the right edge of the axes."""
@@ -162,23 +197,10 @@ def _draw_last_price_pill(ax, df, color=CURRENT_PRICE_COLOR):
     )
 
 
-def _draw_level_pill(ax, y, text, color, y_offset: int = 0):
-    """Right-edge pill for a plan level (entry/SL/TP). Replaces the old
-    mid-chart chip boxes, matching TradingView's price-scale labels.
-
-    `y_offset` (screen-space offset points, not data units) lets the
-    overlap-avoidance branch in generate_trade_chart() nudge a pill
-    vertically without moving its real `xy` anchor (the actual price) --
-    used when two pills would otherwise land within 0.8% of the visible
-    y-range of each other. Defaults to 0 (no nudge) for the plain
-    per-level call sites."""
-    ax.annotate(
-        f" {text} ", xy=(1.0, y), xycoords=("axes fraction", "data"),
-        xytext=(2, y_offset), textcoords="offset points", va="center", ha="left",
-        fontsize=7.5, fontweight="bold", color=CHART_BG, zorder=5,
-        bbox=dict(boxstyle="round,pad=0.25", fc=color, ec="none"),
-        annotation_clip=False,
-    )
+# _draw_level_pill lived here. It drew "{name} {price}" as one combined tag
+# in the right gutter; chart_annotations.draw_level replaced it with the
+# name/price pair chart-init.js:8-12 renders. Its axes-fraction anchoring was
+# already right and carried straight over.
 
 
 def generate_trade_chart(
@@ -315,10 +337,10 @@ def generate_trade_chart(
         hist_colors = [TARGET_COLOR if float(v) >= 0 else STOP_COLOR for v in mhist]
         _macd_dir = "▲ rising" if float(mhist[-1]) > float(mhist[-2]) else "▼ falling"
         addplots += [
-            mpf.make_addplot(mhist, panel=2, type="bar", color=hist_colors,
+            mpf.make_addplot(mhist, panel=1, type="bar", color=hist_colors,
                              alpha=0.75, width=0.7),
-            mpf.make_addplot(mline, panel=2, color=MACD_LINE_COLOR, secondary_y=False),
-            mpf.make_addplot(msig,  panel=2, color=SIGNAL_LINE_COLOR, secondary_y=False),
+            mpf.make_addplot(mline, panel=1, color=MACD_LINE_COLOR, secondary_y=False),
+            mpf.make_addplot(msig,  panel=1, color=SIGNAL_LINE_COLOR, secondary_y=False),
         ]
     except Exception as exc:
         log.debug("MACD panel skipped: %s", exc)
@@ -328,7 +350,7 @@ def generate_trade_chart(
         _r = _compute_rsi(df["Close"], 14)
         rsi_arr = _r.iloc[-recent_len:].fillna(50).values
         _rsi_current = round(float(_r.iloc[-1]), 1)
-        addplots.append(mpf.make_addplot(rsi_arr, panel=3, color=RSI_LINE_COLOR))
+        addplots.append(mpf.make_addplot(rsi_arr, panel=2, color=RSI_LINE_COLOR))
     except Exception as exc:
         log.debug("RSI panel skipped: %s", exc)
 
@@ -391,31 +413,34 @@ def generate_trade_chart(
         f"  [{currency_symbol.strip()}, {window_note}]"
     )
 
-    # Panel ratios: price (4) : volume (1) : MACD (1.4) : RSI (1.1)
+    # Volume now overlays the price panel (volume_panel=0 below), so panel 0
+    # carries both and the indicator panels shift down one: MACD=1, RSI=2.
+    # Figure height is DERIVED from the ratios actually in use -- the old
+    # fixed 11.0/9.5/7.0 constants were tuned for the 4-panel layout and did
+    # not follow when a pane was absent.
     # addplots are dicts returned by mpf.make_addplot -- use .get(), not getattr.
-    has_macd = any(ap.get("panel") == 2 for ap in addplots)
-    has_rsi  = any(ap.get("panel") == 3 for ap in addplots)
+    has_macd = any(ap.get("panel") == 1 for ap in addplots)
+    has_rsi  = any(ap.get("panel") == 2 for ap in addplots)
     if has_macd and has_rsi:
-        panel_ratios = (4, 0.9, 1.5, 1.2)
-        fig_height = 11.0
+        panel_ratios = (6, 1.5, 1.2)
     elif has_macd or has_rsi:
-        panel_ratios = (4, 0.9, 1.5)
-        fig_height = 9.5
+        panel_ratios = (6, 1.5)
     else:
-        panel_ratios = (4, 0.9)
-        fig_height = 7.0
+        panel_ratios = (6,)
+    fig_height = 1.05 * sum(panel_ratios) + 1.4
 
     _plot_kwargs = dict(
         type="candle",
         style=PRO_STYLE,
-        title=dict(title=title, color=TEXT_COLOR, fontsize=12.5, fontweight="bold"),
+        # No `title=`: the centered mplfinance title is replaced by the
+        # top-left legend block (chart_annotations.draw_legend_block), which
+        # is where TradingView puts the symbol line.
         volume=True,
+        # Volume rides INSIDE the price panel, as chart-init.js:36-40 does,
+        # rather than owning a pane of its own.
+        volume_panel=0,
         hlines=hlines_cfg,
         returnfig=True,
-        # Wider than a plain candlestick chart would need on its own --
-        # the left-side volume profile panel added after mpf.plot() below
-        # carves its space out of this width via fig.subplots_adjust(left=...),
-        # so the extra inches keep the candlestick area from feeling cramped.
         figsize=(13.5, fig_height),
         panel_ratios=panel_ratios,
         update_width_config=dict(candle_linewidth=1.0, candle_width=0.62, volume_width=0.62),
@@ -433,59 +458,62 @@ def generate_trade_chart(
         if ax.get_legend():
             ax.get_legend().remove()
 
-        # Subtle ticker + horizon watermark in the price panel background
-        # (ax is the price-panel axes object, what the brief called price_ax)
-        ax.text(
-            0.012, 0.985, f"{ticker}  ·  {horizon_label}",
-            transform=ax.transAxes, ha="left", va="top",
-            fontsize=15, fontweight="bold", color=TEXT_COLOR, alpha=0.16, zorder=1,
-        )
+        # Volume rides the bottom slice of the price panel on its own y-axis --
+        # the matplotlib equivalent of chart-init.js:38's
+        # scaleMargins {top: 0.82, bottom: 0}. Giving it an independent scale
+        # (rather than sharing price's) is what stops a low stop-loss line from
+        # squashing the bars, or tall bars from compressing the candles.
+        _vol_ax = axes[1] if len(axes) > 1 else None
+        if _vol_ax is not None:
+            try:
+                _vmax = float(recent["Volume"].max() or 1.0)
+                _vol_ax.set_ylim(0, _vmax / VOLUME_OVERLAY_HEIGHT_FRAC)
+                _vol_ax.set_yticks([])
+                _vol_ax.set_ylabel("")
+            except Exception as _ve:
+                log.debug("Volume overlay scaling skipped: %s", _ve)
+
+        # The old faint ticker+horizon watermark that sat at (0.012, 0.985) is
+        # gone: the legend block below occupies that exact corner and states
+        # the same two facts in the foreground, so the watermark would only
+        # show through it as noise.
 
         # ---------------------------------------------------------------
         # Overlay legend — top-right of the price panel, one row per line type
         # so the user can tell apart the dashed horizontal levels, the KC bands,
         # and the strategy curves at a glance.
         # ---------------------------------------------------------------
+        # The boxed matplotlib legend that used to live here listed every line
+        # type as its own row. It is replaced by draw_legend_block's third
+        # line, which names the same overlays in a single row -- the levels
+        # themselves no longer need legend rows at all now that each one
+        # carries its own name at the left end of its line (draw_level).
         try:
-            import matplotlib.patches as mpatches
-            import matplotlib.lines as mlines
-            _legend_handles = []
-            _legend_handles.append(mlines.Line2D([], [], color=ENTRY_COLOR, linewidth=1.4,
-                                                 linestyle="--", label="Entry"))
-            _legend_handles.append(mlines.Line2D([], [], color=TARGET_COLOR, linewidth=1.4,
-                                                 linestyle="--", label="Target 1"))
-            _legend_handles.append(mlines.Line2D([], [], color=STOP_COLOR, linewidth=1.4,
-                                                 linestyle="--", label="Stop Loss"))
-            if target2 is not None:
-                _legend_handles.append(mlines.Line2D([], [], color=TARGET2_COLOR, linewidth=1.4,
-                                                     linestyle="--", label="Target 2"))
-            # Keltner Channel bands (only if plotted)
+            _overlay_names = []
             if any(ap.get("panel") == 0 and ap.get("color") == KC_COLOR for ap in addplots):
-                _legend_handles.append(mlines.Line2D([], [], color=KC_COLOR, linewidth=1.2,
-                                                     linestyle="--", label="KC (EMA20 ±1.5×ATR)"))
-            # Strategy overlays (primary confirming method per side)
+                _overlay_names.append("KC (EMA20 ±1.5×ATR)")
+            # Strategy overlays (primary confirming method per side) -- these
+            # are what previously forced the price panel's x-axis to be widened
+            # to make room for a label column; naming them here is what lets
+            # that widening go.
             if target_primary and not target_primary.startswith("Trendline"):
-                _legend_handles.append(mlines.Line2D([], [], color=TARGET_STRATEGY_COLOR, linewidth=1.5,
-                                                     linestyle="-", label=f"Target: {target_primary}"))
+                _overlay_names.append(f"Target: {target_primary}")
             if stop_primary and not stop_primary.startswith("Trendline"):
-                _legend_handles.append(mlines.Line2D([], [], color=STOP_STRATEGY_COLOR, linewidth=1.5,
-                                                     linestyle="-", label=f"Stop: {stop_primary}"))
-            if _legend_handles:
-                _leg = ax.legend(
-                    handles=_legend_handles,
-                    loc="upper left",
-                    fontsize=7,
-                    framealpha=0.88,
-                    facecolor=CHIP_BG,
-                    edgecolor=SPINE_COLOR,
-                    labelcolor=TEXT_COLOR,
-                    handlelength=2.2,
-                    borderpad=0.6,
-                    labelspacing=0.35,
-                )
-                ax.add_artist(_leg)
+                _overlay_names.append(f"Stop: {stop_primary}")
+
+            _last_bar = recent.iloc[-1]
+            draw_legend_block(
+                ax,
+                ticker=ticker,
+                horizon_label=horizon_label,
+                direction_label=direction_label,
+                ohlc={"open": float(_last_bar["Open"]), "high": float(_last_bar["High"]),
+                      "low": float(_last_bar["Low"]), "close": float(_last_bar["Close"]),
+                      "volume": float(_last_bar["Volume"])},
+                overlays=_overlay_names,
+            )
         except Exception as _le:
-            log.debug("Overlay legend failed: %s", _le)
+            log.debug("Legend block failed: %s", _le)
 
         # ---------------------------------------------------------------
         # Colored stats subtitle row — placed just below the chart title
@@ -525,39 +553,37 @@ def generate_trade_chart(
         except Exception as _e:
             log.debug("Stats subtitle rendering failed: %s", _e)
 
-        # Give sub-panels breathing room so tick labels, titles and dashed
-        # reference lines don't bleed into adjacent panels.
-        # hspace=0.55 ≈ 55% of average panel height as padding between panels;
-        # the extra breathing room prevents the MACD panel title from bleeding
-        # into the bottom of the volume bars above it at typical 150 dpi output.
-        # top=0.91 reserves space above axes[0] for the two-line title.
-        # left=... reserves a strip on the left of the whole figure for the
-        # volume profile panel added further below (_draw_volume_profile_panel) --
-        # done here (before that panel exists) since subplots_adjust reflows
-        # every mplfinance-created panel that's already on the figure.
-        try:
-            fig.subplots_adjust(
-                hspace=0.55, top=0.91, bottom=0.05, right=0.90,
-                left=VOLUME_PROFILE_PANEL_WIDTH_FRAC + VOLUME_PROFILE_PANEL_GAP_FRAC + 0.02,
-            )
-        except Exception:
-            pass
+        # NOTE: there used to be a fig.subplots_adjust(...) call here, asking
+        # for hspace/top/bottom/right/left. It was a silent no-op the whole
+        # time: mplfinance builds its panels with fig.add_axes(), and
+        # subplots_adjust only moves axes created through subplots()/
+        # add_subplot(). Measured, it requested bottom=0.05 and rendered 0.18 --
+        # which is exactly the dead band that used to sit under the lowest
+        # pane, and also why the `left=` strip it "reserved" for the old volume
+        # profile panel never actually reserved anything.
+        # _fill_figure() below does the job properly, by set_position().
 
         # ---------------------------------------------------------------
         # Sub-panel annotations: MACD and RSI get proper titles, y-axis
         # value labels, reference-line labels, and a current-value callout
         # at the right edge so the reader knows what each panel shows.
         #
-        # Axis index (mplfinance layout):
-        #   axes[0] = price, axes[1] = price twin
-        #   axes[2] = volume, axes[3] = volume twin
-        #   axes[4] = MACD (if present), axes[5] = MACD twin
-        #   axes[6] = RSI  (if present), axes[7] = RSI twin
-        #   (if no MACD: RSI is at axes[4], axes[5])
+        # Axis index (mplfinance layout). mplfinance returns TWO axes per
+        # panel (primary + twin). Volume is no longer a panel of its own --
+        # it overlays panel 0, so it IS the price twin -- which shifts every
+        # index below down by two from the old layout:
+        #   axes[0] = price, axes[1] = price twin (== the volume overlay)
+        #   axes[2] = MACD (if present), axes[3] = MACD twin
+        #   axes[4] = RSI  (if present), axes[5] = RSI twin
+        #   (if no MACD: RSI is at axes[2], axes[3])
+        # Getting this wrong is silent: the MACD annotations simply render on
+        # whatever panel that index happens to hit, and the RSI block skips
+        # itself when its index is past the end.
         # ---------------------------------------------------------------
+        MACD_AX_IDX = 2
         try:
-            if has_macd and len(axes) > 4:
-                ax_macd = axes[4]
+            if has_macd and len(axes) > MACD_AX_IDX:
+                ax_macd = axes[MACD_AX_IDX]
 
                 # Zero line with label
                 ax_macd.axhline(0, color=MUTED_TEXT_COLOR, linewidth=0.9, linestyle="--",
@@ -604,7 +630,7 @@ def generate_trade_chart(
             log.debug("MACD panel annotation failed: %s", _e)
 
         try:
-            rsi_ax_idx = 6 if has_macd else 4
+            rsi_ax_idx = 4 if has_macd else 2
             if has_rsi and len(axes) > rsi_ax_idx:
                 ax_rsi = axes[rsi_ax_idx]
 
@@ -694,18 +720,17 @@ def generate_trade_chart(
         ax.set_ylim(lo - pad, hi + top_pad)
         ylim = ax.get_ylim()
 
-        # Off-candle label margin column, computed here -- BEFORE the
-        # confirming-strategy/trendline overlays are drawn below -- so
-        # their own labels can be placed in a dedicated column away from
-        # the candles. Entry/stop/target1/target2/current-price labels
-        # used to share a second, farther-out column here too (`label_x`),
-        # but U21 moved them to right-edge pills anchored in axes-fraction
-        # coordinates (see _draw_level_pill below) instead of a data-space
-        # column, so only this one column's width still needs reserving
-        # via set_xlim() further down.
+        # Strategy/trendline label column. This used to sit a long way off the
+        # last candle (x_right + extra_width * 0.18, with set_xlim widening to
+        # x_right + extra_width * 0.55 further down) -- with ~20 bars plotted
+        # that reserved roughly 45% of the price panel as empty space and was
+        # what squeezed the candles into the left half of the frame.
+        # The overlay names now also appear on legend line 3, so this column
+        # only needs to clear the candles, not sit in its own gutter: a 3%
+        # inset, with set_xlim below giving it 10% to render into.
         x_right = len(recent) - 1
         extra_width = max(6, len(recent) * 1.1)
-        strategy_label_x = x_right + extra_width * 0.18
+        strategy_label_x = x_right + extra_width * 0.03
         _strategy_label_occupied = []
         _strategy_min_gap = (ylim[1] - ylim[0]) * MIN_LABEL_GAP_FRAC
 
@@ -838,19 +863,23 @@ def generate_trade_chart(
         # single combined label when they're the same price (avoids two
         # always-overlapping marks for the strategies/tools where entry IS
         # simply "now"); show both, separately, when they differ.
+        # Names are short because they now render at the LEFT end of their own
+        # line rather than inside a pill that had the whole right gutter to
+        # spread into -- "Entry / current price" would run across the candles.
         raw_labels = [
-            (entry, ENTRY_COLOR, "Entry / current price" if entry_is_market_price else "Entry (plan)"),
-            (stop_loss, STOP_COLOR, "Stop"),
-            (take_profit, TARGET_COLOR, "Target 1"),
+            (entry, ENTRY_COLOR, "Entry"),
+            (stop_loss, STOP_COLOR, "SL"),
+            (take_profit, TARGET_COLOR, "TP1"),
         ]
         if not entry_is_market_price:
-            raw_labels.append((market_price, CURRENT_PRICE_COLOR, "Current price"))
+            raw_labels.append((market_price, CURRENT_PRICE_COLOR, "Last"))
         if target2 is not None:
-            raw_labels.append((target2, TARGET2_COLOR, "Target 2"))
+            raw_labels.append((target2, TARGET2_COLOR, "TP2"))
 
-        # Right-edge pills (TradingView-style), one per level line, pinned
-        # to the axes' right edge the same way the last-price pill below
-        # is -- replaces the old mid-chart chip boxes + leader lines.
+        # Name at the line's left end + price tag on the right axis, one pair
+        # per level -- what createPriceLine(title=..., axisLabelVisible=true)
+        # renders in chart-init.js:8-12. The combined "{name} {price}" pill
+        # this replaced put both in the right gutter.
         # Processed in ascending price order so an overlap check only
         # ever has to look at levels already placed below it; when a
         # pill would land within 0.8% of the visible y-range of an
@@ -866,9 +895,8 @@ def generate_trade_chart(
         _pill_overlap_gap = (ylim[1] - ylim[0]) * 0.008
         _placed_pill_ys = [float(recent["Close"].iloc[-1])]
         for price, color, label in sorted(raw_labels, key=lambda item: item[0]):
-            pill_text = f"{label} {price:,.2f}"
             overlaps = any(abs(price - placed_y) < _pill_overlap_gap for placed_y in _placed_pill_ys)
-            _draw_level_pill(ax, price, pill_text, color, y_offset=10 if overlaps else 0)
+            draw_level(ax, price, label, color, y_offset=10 if overlaps else 0)
             _placed_pill_ys.append(price)
 
         # Last-price line + right-edge price pill -- TradingView-style dashed
@@ -881,10 +909,11 @@ def generate_trade_chart(
             log.debug("Last-price pill failed: %s", _pe)
 
         # Widen just enough for the strategy/trendline label column
-        # (`strategy_label_x`) and its text to render without clipping --
-        # NOT the old `label_x` chip column's margin, which this chart no
-        # longer draws anything in (see comment above).
-        ax.set_xlim(ax.get_xlim()[0], strategy_label_x + extra_width * 0.55)
+        # (`strategy_label_x`) and its text to render without clipping.
+        # 0.10 of extra_width, not the old 0.55: that widened the axis ~16
+        # bars past the last candle on a 20-bar window. The candles own the
+        # panel now, and tests/test_chart_layout.py pins that.
+        ax.set_xlim(ax.get_xlim()[0], x_right + extra_width * 0.10)
 
         # v2 plan overlays (Tasks 81-82): trigger line for stop-entry plans,
         # TP1/TP2 zones, and (once PARTIAL) the live runner trail.
@@ -1025,7 +1054,7 @@ def generate_trade_chart(
         # much narrower) High/Low extremes, leaving the rest of the
         # panel's height with no bucket, and so no bar, at all.
         try:
-            _draw_volume_profile_panel(fig, ax, df, h.get("sr_lookback", 20), entry_price=entry, price_range=ylim)
+            _draw_volume_profile_overlay(ax, df, h.get("sr_lookback", 20), entry_price=entry, price_range=ylim)
         except Exception as exc:
             log.debug("Volume Profile panel skipped: %s", exc)
 
@@ -1037,6 +1066,14 @@ def generate_trade_chart(
             ax_.tick_params(labelsize=7, colors=MUTED_TEXT_COLOR, length=0)
             if not isinstance(ax_.yaxis.get_major_locator(), matplotlib.ticker.FixedLocator):
                 ax_.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6, prune="both"))
+
+        # Reflow the panel stack to fill the figure. Runs here, after every
+        # panel exists and after the volume-profile overlay (which reads the
+        # price panel's final y-limits), and before the disclaimer + savefig.
+        try:
+            _fill_figure(fig)
+        except Exception as _fe:
+            log.debug("Figure reflow skipped: %s", _fe)
 
         # Legal/liability fine print -- deliberately the very last thing drawn,
         # below every panel (price, volume, MACD/RSI when present), in figure

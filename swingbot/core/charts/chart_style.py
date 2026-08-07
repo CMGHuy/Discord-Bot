@@ -77,7 +77,7 @@ RSI_LINE_COLOR = "#ba68c8"
 KC_COLOR = "#4dd0e1"
 
 # Volume Profile is drawn on EVERY chart, always -- both as the left-side
-# histogram panel (see chart_volume_profile._draw_volume_profile_panel) and,
+# overlay (see chart_volume_profile._draw_volume_profile_overlay) and,
 # when Volume Profile actually confirmed this scenario's target/stop, as a
 # highlighted level on the price panel itself. It gets its own dedicated,
 # always-distinct color (a warm gold/amber tone, deliberately unlike any
@@ -130,11 +130,15 @@ PRO_STYLE = mpf.make_mpf_style(
     figcolor=CHART_BG,
     edgecolor=SPINE_COLOR,
     gridcolor=GRID_COLOR,
-    gridstyle="--",
+    # Solid hairlines, matching chart-init.js:26 -- lightweight-charts draws
+    # plain one-pixel grid lines. gridcolor is deliberately NOT touched here:
+    # it is GRID_COLOR, which is palette and pinned by test_chart_theme.py.
+    gridstyle="-",
     gridaxis="both",
     y_on_right=True,
     rc={
         "font.size": 9,
+        "grid.linewidth": 0.5,
         "axes.labelcolor": TEXT_COLOR,
         "xtick.color": MUTED_TEXT_COLOR,
         "ytick.color": MUTED_TEXT_COLOR,
@@ -150,15 +154,22 @@ PRO_STYLE = mpf.make_mpf_style(
 # histogram shape) -- more buckets makes the panel's profile silhouette
 # read closer to a real market-profile chart. Raised from 26 -> 42 so
 # each bucket's own price-value tick label (see
-# chart_volume_profile._draw_volume_profile_panel) reads as a finer,
+# chart_volume_profile._draw_volume_profile_overlay) reads as a finer,
 # more precise price ladder rather than a handful of coarse bands.
 VOLUME_PROFILE_PANEL_BINS = 42
 
-# Fraction of the total figure width reserved for the left-side volume
-# profile panel (see chart_volume_profile._draw_volume_profile_panel) plus
-# the gap between it and the price panel.
-VOLUME_PROFILE_PANEL_WIDTH_FRAC = 0.15
-VOLUME_PROFILE_PANEL_GAP_FRAC = 0.012
+# Widest volume-profile bucket, as a fraction of the price panel's width.
+# The profile is now drawn as an overlay INSIDE the price panel growing
+# leftward from the right edge (TradingView's "Volume Profile Visible
+# Range"), so it no longer reserves any figure width of its own -- the old
+# VOLUME_PROFILE_PANEL_WIDTH_FRAC/_GAP_FRAC pair that carved out a detached
+# left panel (and, with it, a second duplicate price ladder) is gone.
+VOLUME_PROFILE_OVERLAY_MAX_FRAC = 0.16
+
+# Volume rides the bottom fraction of the price panel on its own hidden
+# y-axis -- the matplotlib equivalent of chart-init.js:38's
+# scaleMargins {top: 0.82, bottom: 0}.
+VOLUME_OVERLAY_HEIGHT_FRAC = 0.18
 
 # Minimum number of trailing bars the volume profile PANEL bins across --
 # deliberately much longer than the short sr_lookback (10-180 days,

@@ -1,36 +1,43 @@
 """
-Draws the left-side Volume Profile histogram panel added to every trade
+Draws the Volume Profile overlaid inside the price panel of every trade
 chart -- see trade_chart.generate_trade_chart(), which calls
-_draw_volume_profile_panel() last, right before saving the figure, so it
-always inherits the price panel's final y-axis. Split out of
-trade_chart.py since this is a large, self-contained unit (its own
-matplotlib Axes, added via fig.add_axes(), independent of the rest of
-that module's figure-assembly code).
+_draw_volume_profile_overlay() last, right before saving the figure, so it
+always sees the price panel's final y-axis. Split out of trade_chart.py
+since this is a large, self-contained unit independent of the rest of that
+module's figure-assembly code.
+
+It used to be a detached panel to the LEFT of the price panel, on its own
+`fig.add_axes(..., sharey=ax)`. That second axes printed its own dense
+per-bucket price ladder, which meant every chart carried two copies of the
+price scale. Drawing straight onto the price axes with a blended transform
+removes the second axis, and the duplicate ladder with it.
 """
 import pandas as pd
 
 from .chart_style import (
-    ENTRY_COLOR, MUTED_TEXT_COLOR, VOLUME_PROFILE_COLOR,
-    VOLUME_PROFILE_PANEL_BINS, VOLUME_PROFILE_PANEL_GAP_FRAC,
-    VOLUME_PROFILE_PANEL_LOOKBACK_DAYS, VOLUME_PROFILE_PANEL_WIDTH_FRAC,
+    ENTRY_COLOR, VOLUME_PROFILE_COLOR,
+    VOLUME_PROFILE_OVERLAY_MAX_FRAC, VOLUME_PROFILE_PANEL_BINS,
+    VOLUME_PROFILE_PANEL_LOOKBACK_DAYS,
     _label_bbox,
 )
 from ..strategy import compute_volume_profile
 
 
-def _draw_volume_profile_panel(fig, ax, df: pd.DataFrame, lookback: int, entry_price: float = None,
-                                price_range: tuple = None) -> None:
+def _draw_volume_profile_overlay(ax, df: pd.DataFrame, lookback: int, entry_price: float = None,
+                                 price_range: tuple = None) -> None:
     """
-    Adds a Volume Profile histogram panel immediately to the LEFT of the
-    price panel `ax` -- a horizontal bar per price bucket, its length
-    proportional to how much volume traded at that price, bars growing
-    away from the price panel (mirroring how market-profile charts are
-    conventionally drawn). The busiest bucket (the Point of Control) is
-    drawn fully opaque; every other bucket is drawn at reduced opacity so
-    the POC still reads as the standout feature of the shape. If
-    `entry_price` falls within the profiled range, the bucket it lands
-    in is outlined and a dashed guide line + label mark exactly where
-    the planned entry sits relative to the volume distribution (e.g.
+    Draws the Volume Profile as an overlay INSIDE the price panel `ax` -- a
+    horizontal bar per price bucket, its length proportional to how much
+    volume traded at that price, bars growing leftward from the panel's
+    right edge (TradingView's "Volume Profile Visible Range" orientation).
+    The busiest bucket (the Point of Control) is
+    drawn at the highest opacity; every other bucket is drawn fainter so
+    the POC still reads as the standout feature of the shape. Everything is
+    knocked back further than the old detached panel needed, because these
+    bars now sit over live candles and must read as background market
+    structure rather than foreground data. If `entry_price` falls within the
+    profiled range, the bucket it lands in is outlined and labelled with
+    where the planned entry sits relative to the volume distribution (e.g.
     "entering into the POC" vs. "entering into a low-volume pocket").
 
     `price_range`, if given, is the (lo, hi) the buckets are forced to
@@ -46,16 +53,13 @@ def _draw_volume_profile_panel(fig, ax, df: pd.DataFrame, lookback: int, entry_p
     there's enough trading history to actually populate that wider range
     with real volume instead of manufacturing an empty-looking panel.
 
-    This is a real matplotlib Axes added to the SAME figure via
-    fig.add_axes(...) rather than a separate composited image, using
-    `sharey=ax` so its price scale is ALWAYS pixel-identical to the
-    price panel's, including after ax.set_ylim() is adjusted to fit
-    every level/label on the chart -- sharing the axis makes that
-    automatic instead of needing to recompute/resync a separately-drawn
-    y-scale by hand. Must be called AFTER ax.set_ylim() has been set to
-    its final value (i.e. near the end of chart construction, right
-    before the figure is saved) so the shared scale it inherits is the
-    real one, not a stale default.
+    Bars are drawn onto `ax` itself through a blended transform (x in axes
+    coordinates, y in data coordinates), so the profile's price scale is the
+    price panel's own -- pixel-identical by construction, with no second axis
+    to resync. Must still be called AFTER ax.set_ylim() has been set to its
+    final value (i.e. near the end of chart construction, right before the
+    figure is saved): the buckets are binned against that range, so a stale
+    limit would bin against the wrong span.
 
     Silently does nothing if there isn't enough history for a profile
     (see compute_volume_profile) -- the rest of the chart is unaffected.
@@ -76,16 +80,16 @@ def _draw_volume_profile_panel(fig, ax, df: pd.DataFrame, lookback: int, entry_p
     if profile is None:
         return
 
-    price_pos = ax.get_position()
-    gap = VOLUME_PROFILE_PANEL_GAP_FRAC
-    vp_width = VOLUME_PROFILE_PANEL_WIDTH_FRAC
-    vp_left = max(0.01, price_pos.x0 - vp_width - gap)
-    # Use whatever room actually exists between the figure's left edge and
-    # the price panel (set up front by generate_trade_chart's
-    # fig.subplots_adjust(left=...)) rather than assuming vp_width fits
-    # exactly -- keeps this robust if that margin ever changes.
-    vp_width = max(0.01, price_pos.x0 - gap - vp_left)
-    vp_ax = fig.add_axes([vp_left, price_pos.y0, vp_width, price_pos.height], sharey=ax)
+    # Bars are drawn straight onto the price axes with a blended transform:
+    # width in AXES coordinates (so a full-width bucket spans a fixed fraction
+    # of the pane regardless of the price scale), position in DATA coordinates
+    # (so each bucket lines up with its real price). This is what lets the
+    # profile share the price panel's ladder instead of owning a second one --
+    # the duplicate left-hand price ladder this module used to print.
+    import matplotlib.transforms as mtransforms
+    blended = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+    vp_ax = ax
+    max_frac = VOLUME_PROFILE_OVERLAY_MAX_FRAC
 
     bin_edges = profile["bin_edges"]
     bin_volumes = profile["bin_volumes"]
@@ -126,43 +130,24 @@ def _draw_volume_profile_panel(fig, ax, df: pd.DataFrame, lookback: int, entry_p
         alpha = 0.9 if (is_poc or is_entry) else (0.22 if is_floor else 0.45)
         edgecolor = ENTRY_COLOR if is_entry else "none"
         linewidth = 1.4 if is_entry else 0
-        vp_ax.barh(center, draw_volume, height=bin_size * 0.92, color=VOLUME_PROFILE_COLOR,
-                   alpha=alpha, edgecolor=edgecolor, linewidth=linewidth, zorder=3 if is_entry else 2)
+        # Bars grow LEFTWARD from the right edge (left=1.0, negative width in
+        # axes coordinates) -- TradingView's Volume Profile Visible Range
+        # orientation. Alpha is knocked down further than the old detached
+        # panel used: this now sits over live candles, so it has to read as
+        # background market structure, never as foreground data.
+        frac = (draw_volume / max_vol) * max_frac if max_vol > 0 else 0.0
+        vp_ax.barh(center, -frac, left=1.0, height=bin_size * 0.92,
+                   color=VOLUME_PROFILE_COLOR, alpha=alpha * 0.75,
+                   edgecolor=edgecolor, linewidth=linewidth,
+                   transform=blended, zorder=3 if is_entry else 2, clip_on=True)
 
-    # Bars grow away from the price panel (x=0 at the boundary shared with
-    # it) -- the conventional market-profile orientation, and the one
-    # shown in the reference layout this panel is modeled on.
-    vp_ax.invert_xaxis()
-    vp_ax.set_ylim(ax.get_ylim())
-
-    # Per-bucket price labels -- one small tick label per bar showing the
-    # exact price that bucket represents, so the granularity actually
-    # reads as granular (rather than only ever labeling the POC/Entry
-    # bars) as VOLUME_PROFILE_PANEL_BINS is turned up. Drawn as real
-    # y-axis tick labels (outside the axes' own drawing area, on this
-    # panel's outer-left edge) rather than in-axes text, so they never
-    # collide with the "Volume Profile" title or the POC/Entry labels
-    # (which sit INSIDE the axes, right-aligned against its right edge
-    # next to the price panel) -- and fig.savefig(..., bbox_inches="tight")
-    # automatically widens the saved image to fit them without needing
-    # any dedicated figure margin reserved up front.
-    vp_ax.set_yticks(centers)
-    vp_ax.set_yticklabels([f"{c:.2f}" for c in centers])
-    vp_ax.tick_params(axis="y", left=False, labelleft=True, labelsize=5.0,
-                       labelcolor=MUTED_TEXT_COLOR, pad=2)
-    # The price scale itself is still also shown on the price panel (shared
-    # y-axis) -- these per-bucket labels are extra granularity, not a
-    # replacement -- and the volume (x) scale isn't precise enough to be
-    # worth reading exactly, just the shape. Keep that axis visually quiet.
-    vp_ax.tick_params(axis="x", labelbottom=False, bottom=False)
-    for side in ("top", "left", "bottom"):
-        vp_ax.spines[side].set_visible(False)
-    vp_ax.spines["right"].set_alpha(0.3)
-    vp_ax.patch.set_alpha(0)
-
-    vp_ax.text(0.05, 0.985, "Volume\nProfile", transform=vp_ax.transAxes,
-               fontsize=7, color=MUTED_TEXT_COLOR, fontweight="bold", va="top", ha="left",
-               linespacing=1.3, alpha=0.9, clip_on=True)
+    # The per-bucket y tick labels this module used to print ARE the duplicate
+    # price ladder: a second, denser copy of the price scale already shown on
+    # the right axis. Sharing the price panel's own axis makes them redundant
+    # by construction, so they are gone -- along with the panel spines, the
+    # transparent patch, and the "Volume Profile" corner title (whose old spot
+    # is now occupied by the top-left legend block). The profile is named on
+    # legend line 3 instead.
 
     poc_price = profile["poc_price"]
     poc_pct = profile["poc_pct"]
@@ -184,20 +169,24 @@ def _draw_volume_profile_panel(fig, ax, df: pd.DataFrame, lookback: int, entry_p
     if entry_index is not None and abs(poc_index - entry_index) <= 1:
         poc_y = poc_price + y_span * 0.035
         poc_va = "bottom"
-    vp_ax.text(0.95, poc_y, f"POC {poc_price:.2f} ({poc_pct:.0f}%) ",
+    # x is an AXES fraction, y a real price -- so the blended transform is
+    # now required. Before the overlay move these labels lived on their own
+    # narrow axes where a bare 0.95 was resolved against that panel's own
+    # scale; on the price axes a bare 0.95 would be read as a PRICE.
+    vp_ax.text(1.0 - max_frac - 0.01, poc_y, f"POC {poc_price:.2f} ({poc_pct:.0f}%) ",
                fontsize=6.5, color=VOLUME_PROFILE_COLOR, fontweight="bold",
                va=poc_va, ha="right", alpha=0.95, zorder=6, clip_on=True,
-               bbox=_label_bbox(VOLUME_PROFILE_COLOR, alpha=0.75))
+               transform=blended, bbox=_label_bbox(VOLUME_PROFILE_COLOR, alpha=0.75))
 
     if entry_index is not None:
         entry_vol_pct = (bin_volumes[entry_index] / sum(bin_volumes) * 100) if sum(bin_volumes) else 0.0
-        # Dashed guide line across the full width of the panel at the exact
-        # entry price -- makes it unambiguous which bar the entry lands on
-        # even when the bucket is thin or near the panel's edge.
-        vp_ax.axhline(entry_price, color=ENTRY_COLOR, linewidth=1.1, linestyle="--", alpha=0.85, zorder=5)
+        # The old dashed guide line at entry_price is gone: on its own narrow
+        # panel it was the only thing marking the entry, but on the price axes
+        # generate_trade_chart already draws that exact level (and now tags it
+        # on the right axis too), so repeating it here would double the line.
         entry_va = "top" if abs(poc_index - entry_index) <= 1 else "center"
         entry_y = entry_price - y_span * 0.035 if entry_va == "top" else entry_price
-        vp_ax.text(0.95, entry_y, f"Entry {entry_price:.2f} ({entry_vol_pct:.0f}%) ",
+        vp_ax.text(1.0 - max_frac - 0.01, entry_y, f"Entry {entry_price:.2f} ({entry_vol_pct:.0f}%) ",
                    fontsize=6.5, color=ENTRY_COLOR, fontweight="bold",
                    va=entry_va, ha="right", alpha=0.95, zorder=6, clip_on=True,
-                   bbox=_label_bbox(ENTRY_COLOR, alpha=0.75))
+                   transform=blended, bbox=_label_bbox(ENTRY_COLOR, alpha=0.75))
