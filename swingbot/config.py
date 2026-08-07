@@ -135,12 +135,41 @@ FIELDS: list[Field] = [
           help="DEBUG shows every signal/strategy combo evaluated; INFO shows per-scan progress and trade decisions."),
 
     # --- Trade filters & risk ---
+    # 2026-08-07: measured as the binding constraint behind "!check returns
+    # nothing". Sample: 480 candidate scenarios (25 tickers x 10 horizons x 2
+    # directions, cached bars to 2026-08-03). Observed geometry was median
+    # reward 1.65%, median stop 1.65%, median R:R 1.01 -- against floors of
+    # 2.0(eff) / 2.0 / 1.5. Only 4 of 480 (0.8%) cleared all of them, so a
+    # 78-ticker scan routinely produced zero plans. max_stop_distance was
+    # almost never binding (2 of 120), so its ceiling is left alone.
+    #
+    # MIN_STOP_DISTANCE_PCT and MIN_RISK_REWARD_RATIO are the only two real
+    # levers here; swept exactly against that sample (min_reward held at the
+    # value the engine actually passed):
+    #     stop>=2.0 rr>=1.5 ->  4 (0.8%)   <- previous
+    #     stop>=1.0 rr>=1.5 -> 14 (2.9%)
+    #     stop>=1.0 rr>=1.2 -> 15 (3.1%)   <- chosen
+    #     stop>=1.0 rr>=1.0 -> 21 (4.4%)
+    # R:R is deliberately kept above 1.0 so break-even win rate stays under
+    # 46% rather than crossing the coin-flip line.
+    #
+    # MIN_REWARD_PCT is NOT a useful lever and is only realigned to the value
+    # .env.example already shipped. engine.py's effective floor is
+    # max(MIN_REWARD_PCT, sr_target_min_pct * 0.15), and that per-horizon term
+    # is 2.25-3.3 for every horizon except 2w (0.75) -- so it dominates, and
+    # 113 of 480 stay blocked by it even at stop>=0.5/rr>=1.0. Moving this
+    # knob 3.0 -> 2.0 changes the funnel for 2w only. Loosening further means
+    # changing that 0.15 multiplier in engine.py, which is a strategy change,
+    # not a config one.
+    #
+    # NOTE: these are code DEFAULTS, and .env is loaded with override=True.
+    # A deployment whose .env sets these keys is unaffected until .env changes.
     Field("MIN_REWARD_PCT", "MIN_REWARD_PCT", "Trade Filters & Risk", "Min reward %",
-          type="float", default="3.0", min=0, step=0.5,
+          type="float", default="2.0", min=0, step=0.5,
           help="Hard filter, enforced exactly as set: a scenario is dropped entirely (not shown, not scored) "
                "unless its target is at least this far from today's price. No exceptions for a close miss."),
     Field("MIN_STOP_DISTANCE_PCT", "MIN_STOP_DISTANCE_PCT", "Trade Filters & Risk", "Min stop distance %",
-          type="float", default="2.0", min=0, step=0.5,
+          type="float", default="1.0", min=0, step=0.5,
           help="Hard filter, enforced exactly as set: dropped entirely if the stop sits closer than this -- "
                "too exposed to ordinary daily noise. No exceptions for a close miss."),
     Field("MAX_STOP_LOSS_PCT", "MAX_STOP_LOSS_PCT", "Trade Filters & Risk", "Max stop-loss %",
@@ -148,7 +177,7 @@ FIELDS: list[Field] = [
           help="Hard filter, enforced exactly as set: dropped entirely if the stop sits further than this from "
                "entry -- disciplined cut-loss ceiling, keep in the 5-7% range. No exceptions for a close miss."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
-          type="float", default="1.5", min=0, step=0.1,
+          type="float", default="1.2", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
                "clears this bar. No exceptions for a close miss."),
     Field("CONFLUENCE_DEVIATION_PCT", "CONFLUENCE_DEVIATION_PCT", "Trade Filters & Risk", "Confluence deviation %",
