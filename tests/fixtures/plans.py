@@ -1,4 +1,11 @@
-"""Minimal TradePlanV2 factory for gate tests."""
+"""Minimal TradePlanV2 factory.
+
+Written for the gatekeeper's tests and lived at `tests/fixtures/gate/plans.py`
+until that tree was deleted (2026-08-06). It was never gate-specific -- it just
+builds a valid TradePlanV2 -- so it moved up here beside
+`legacy_trade_plan_at.py` rather than keeping a package named after a subsystem
+that no longer exists. Used by the plan-orphaning and unowned-target-close tests.
+"""
 from swingbot.core.plan_engine import TradePlanV2
 
 

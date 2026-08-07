@@ -23,7 +23,7 @@ from swingbot.core.performance import TradeLog
 from swingbot.core.plan_engine import PlanStatus
 from swingbot.core.plan_store import PlanStore
 from tests.conftest import make_ohlcv
-from tests.fixtures.gate.plans import make_plan
+from tests.fixtures.plans import make_plan
 
 
 def _trade(plan_id="p_test_0001", direction="bullish"):
