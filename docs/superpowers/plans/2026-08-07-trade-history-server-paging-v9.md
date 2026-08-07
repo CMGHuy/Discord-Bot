@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-trade-history-filter` (worktree at `.claude/worktrees/trade-history-filter`)
-> - **Completed:** H1, H3, H2 (H3 pulled ahead of H2 — the endpoint needs the partial to render). 26 tests green.
-> - **Next:** H4 (move the six filters + pager to the server)
+> - **Completed:** H1–H6. Filters, sorting and paging all server-side; 33 new tests, full admin suite 167 passed. Sorting was NOT in the original plan — it was client-side too and had the same page-scoped bug as the filters, so it moved with them.
+> - **Next:** H7 (manual browser QA) then H8 (docs)
 
 ## Global Constraints
 
@@ -95,19 +95,19 @@ Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is toda
 
 **Files:** Modify `dashboard_fragment.html`
 
-- [ ] **Step 1:** Replace the DOM-hiding filter logic and client pager with a single `loadTradeHistory()` that fetches `/api/trade-history` with the current mode + filters + page, replaces `tbody`, and updates `#ct-page-info` / `#ct-info` / prev+next disabled state.
-- [ ] **Step 2:** Debounce filter changes (~150ms) so rapid dropdown changes don't stack requests, and ignore out-of-order responses (track a request sequence number).
-- [ ] **Step 3:** Any filter change resets to page 1. Changing the dashboard mode also resets to page 1.
-- [ ] **Step 4:** Keep the density toggle purely client-side — it is presentation only and must not trigger a fetch.
-- [ ] **Step 5:** On fetch failure, leave the existing rows and show an inline error rather than blanking the table. Commit.
+- [x] **Step 1:** Replace the DOM-hiding filter logic and client pager with a single `loadTradeHistory()` that fetches `/api/trade-history` with the current mode + filters + page, replaces `tbody`, and updates `#ct-page-info` / `#ct-info` / prev+next disabled state.
+- [x] **Step 2:** Debounce filter changes (~150ms) so rapid dropdown changes don't stack requests, and ignore out-of-order responses (track a request sequence number).
+- [x] **Step 3:** Any filter change resets to page 1. Changing the dashboard mode also resets to page 1.
+- [x] **Step 4:** Keep the density toggle purely client-side — it is presentation only and must not trigger a fetch.
+- [x] **Step 5:** On fetch failure, leave the existing rows and show an inline error rather than blanking the table. Commit.
 
 ### Task H5: Wire the initial render through the same path
 
 **Files:** Modify `swingbot/admin/app.py`, `dashboard_fragment.html`
 
-- [ ] **Step 1:** Have `_render_dashboard_fragment()` call `_query_closed_trades()` for page 1 so first paint and later pages cannot diverge.
-- [ ] **Step 2:** Remove `CLOSED_TRADES_FRAGMENT_LIMIT` and the `closed_trades_truncated` banner — with real paging, the 500-row cap and its "Showing latest N of M" warning are obsolete. Confirm no other template references them.
-- [ ] **Step 3:** Update the stale `app.py` ~476 comment. Commit.
+- [x] **Step 1:** Have `_render_dashboard_fragment()` call `_query_closed_trades()` for page 1 so first paint and later pages cannot diverge.
+- [x] **Step 2:** Remove `CLOSED_TRADES_FRAGMENT_LIMIT` and the `closed_trades_truncated` banner — with real paging, the 500-row cap and its "Showing latest N of M" warning are obsolete. Confirm no other template references them.
+- [x] **Step 3:** Update the stale `app.py` ~476 comment. Commit.
 
 ---
 
@@ -117,9 +117,9 @@ Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is toda
 
 **Files:** Create `tests/admin/test_trade_history_paging.py`
 
-- [ ] **Step 1:** Cover: today-mode shows only trades closed today; `active` matches `today` for this table; `all` shows everything; paging returns disjoint pages whose union is the full filtered set; filters apply across the whole set, not just one page; dropdown options still come from full history.
-- [ ] **Step 2:** Regression guard for `32afe78` ("Trade History showed no trades on page 1") — assert page 1 is non-empty when trades exist.
-- [ ] **Step 3:** `python scripts/testrun.py full`. Commit.
+- [x] **Step 1:** Cover: today-mode shows only trades closed today; `active` matches `today` for this table; `all` shows everything; paging returns disjoint pages whose union is the full filtered set; filters apply across the whole set, not just one page; dropdown options still come from full history.
+- [x] **Step 2:** Regression guard for `32afe78` ("Trade History showed no trades on page 1") — assert page 1 is non-empty when trades exist.
+- [x] **Step 3:** `python scripts/testrun.py full`. Commit.
 
 ### Task H7: Manual check
 

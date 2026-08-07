@@ -228,3 +228,58 @@ def test_endpoint_per_page_clamped_to_allowed_set(client, auth, seeded):
 def test_endpoint_out_of_range_page_is_empty_not_an_error(client, auth, seeded):
     d = _get(client, auth, mode="all", page=99, per_page=25)
     assert d["shown"] == 0 and d["total"] == 62
+
+
+# ── Dashboard page integration (H5/H6) ──────────────────────────────────────
+
+def _row_ids(html):
+    import re
+    m = re.search(r'id="closed-trades-table".*?<tbody>(.*?)</tbody>', html, re.S)
+    return re.findall(r'id="ct-row-([^"]+)"', m.group(1)) if m else []
+
+
+def test_dashboard_today_mode_renders_only_todays_history(client, auth, seeded):
+    html = client.get("/?mode=today", headers=auth).get_data(as_text=True)
+    ids = _row_ids(html)
+    assert set(ids) == {"today1", "today2"}, ids
+
+
+def test_dashboard_active_mode_renders_only_todays_history(client, auth, seeded):
+    assert set(_row_ids(client.get("/?mode=active", headers=auth).get_data(as_text=True))) \
+        == {"today1", "today2"}
+
+
+def test_dashboard_all_mode_renders_first_page_only(client, auth, seeded):
+    ids = _row_ids(client.get("/?mode=all", headers=auth).get_data(as_text=True))
+    assert len(ids) == 25, len(ids)          # first page, not all 62
+    assert "today1" in ids                    # newest-closed first
+
+
+def test_dashboard_no_longer_advertises_a_truncated_history(client, auth, seeded):
+    html = client.get("/?mode=all", headers=auth).get_data(as_text=True)
+    assert "Showing latest" not in html
+
+
+def test_filter_dropdown_options_still_come_from_full_history(client, auth, seeded):
+    """Regression guard: options must reflect every ticker in the log, not
+    just the ones on the current page. AAPL only exists in older trades."""
+    html = client.get("/?mode=today", headers=auth).get_data(as_text=True)
+    import re
+    sel = re.search(r'id="ct-filter-ticker".*?</select>', html, re.S).group(0)
+    assert "AAPL" in sel and "NVDA" in sel
+
+
+def test_endpoint_sorting_is_server_side(client, auth, seeded):
+    asc = _get(client, auth, mode="all", sort_by="closed", sort_dir="asc", per_page=10)
+    desc = _get(client, auth, mode="all", sort_by="closed", sort_dir="desc", per_page=10)
+    import re
+    a = re.findall(r'id="ct-row-([^"]+)"', asc["rows_html"])
+    d = re.findall(r'id="ct-row-([^"]+)"', desc["rows_html"])
+    assert a and d and a[0] != d[0]
+    assert a[0] == "old59"      # oldest close
+    assert d[0] in ("today1", "today2")
+
+
+def test_endpoint_unknown_sort_column_falls_back(client, auth, seeded):
+    d = _get(client, auth, mode="all", sort_by="not_a_column", per_page=10)
+    assert d["total"] == 62

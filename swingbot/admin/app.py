@@ -133,12 +133,11 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)
 # docstring), and Secure=True would silently break the cookie there.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-# Bounds the Trade History table's server-rendered payload -- see the
-# closed_trades slicing in _render_dashboard_fragment() below. High enough
-# that the table's own 10/25/50/All per-page selector has real rows to
-# paginate through, low enough to keep the fragment render/transfer cheap
-# even on an account with years of history.
-CLOSED_TRADES_FRAGMENT_LIMIT = 500
+# Rows the dashboard renders inline for Trade History's FIRST page. Later
+# pages are fetched from /api/trade-history, so this is a first-paint size,
+# not a cap on how much history is reachable (it used to be a hard 500-row
+# ceiling with a 'showing latest N of M' banner; real paging retired that).
+CLOSED_TRADES_FIRST_PAGE = 25
 
 # Wire Flask + Werkzeug request logs to admin.log so the Logs page can show
 # admin UI activity separately from the bot's own log stream.
@@ -472,7 +471,30 @@ _CT_FILTER_FIELDS = {
 }
 
 
-def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=25):
+# Sortable columns -> how to read the sort value, keyed by the `data-col-id`
+# the table header already uses. Sorting is server-side for the same reason
+# filtering is: with paged responses, a client-side sort would only reorder
+# the page you happen to be looking at.
+_CT_SORT_KEYS = {
+    "outcome":  lambda t: t.get("status") or "",
+    "ticker":   lambda t: t.get("ticker") or "",
+    "strategy": lambda t: _primary_strategy_label(t) or "",
+    "horizon":  lambda t: t.get("horizon_key") or "",
+    "dir":      lambda t: t.get("direction") or "",
+    "conf":     lambda t: t.get("confidence_level") or 0,
+    "entry":    lambda t: t.get("entry") or 0.0,
+    "exit":     lambda t: t.get("exit_price") or -1.0,
+    "pnlpct":   lambda t: _closed_pnl(t) if _closed_pnl(t) is not None else -999999,
+    "gainloss": lambda t: t.get("realized_pnl_amount") if t.get("realized_pnl_amount") is not None else -999999,
+    "r":        lambda t: _closed_r(t) if _closed_r(t) is not None else -999999,
+    "days":     lambda t: (_closed_days(t) or {}).get("total_hours", -1),
+    "opened":   lambda t: t.get("opened_at") or "",
+    "closed":   lambda t: t.get("closed_at") or "",
+}
+
+
+def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=25,
+                         sort_by=None, sort_dir="desc"):
     """Scope -> filter -> sort -> slice the closed-trade history, in that order.
 
     Returns ``(rows, total)`` where *total* is the count after scoping and
@@ -497,7 +519,14 @@ def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=
             continue
         rows = [t for t in rows if str(getter(t) or "") == str(value)]
 
-    rows.sort(key=lambda t: t.get("closed_at") or "", reverse=True)
+    # Default: newest close first, matching the table's pre-paging behaviour.
+    key = _CT_SORT_KEYS.get(sort_by or "", _CT_SORT_KEYS["closed"])
+    # str() the key so a column holding mixed types (a None exit price beside
+    # floats, say) can't raise TypeError mid-sort and 500 the whole table.
+    try:
+        rows.sort(key=key, reverse=(sort_dir != "asc"))
+    except TypeError:
+        rows.sort(key=lambda t: str(key(t)), reverse=(sort_dir != "asc"))
     total = len(rows)
 
     if per_page:
@@ -568,13 +597,12 @@ def _render_dashboard_fragment() -> str:
     )
 
     # Closed trades -- built early so their tickers are included in cur_map
-    # below. Deliberately NOT scoped to the dashboard mode -- this feeds the
-    # "Trade history" browser table further down the page, which is its own
-    # general trade log with its own ticker/strategy/horizon/outcome filter
-    # dropdowns. Scoping it to "today" or "active" mode would starve the
-    # table down to whatever handful of trades closed today -- often just
-    # one or two, or none. The mode toggle only affects the KPI stat cards
-    # and the open-trades table above.
+    # below. These ARE scoped to the dashboard mode: "today"/"active" narrow
+    # the Trade History table to trades closed today, "all" shows the whole
+    # log. (This reverses an earlier decision to leave the table unscoped on
+    # the grounds that today-scoping starves it down to a handful of rows.
+    # That is accepted: the toggle now means the same thing everywhere on the
+    # page, rather than silently not applying to this one table.)
     #
     # all_closed_trades is the FULL, unbounded history -- used to build the
     # filter dropdowns' option lists (closed_trade_filter_options below) from
@@ -585,14 +613,15 @@ def _render_dashboard_fragment() -> str:
     # which meant any ticker/strategy/horizon that only appeared in an older,
     # 26th+ closed trade could never be selected in the dropdowns even though
     # it's a perfectly real filterable value).
-    all_closed_trades = [t for t in all_raw if t["status"] in ("win", "loss", "closed")]
-    closed_trades_total = len(all_closed_trades)
-    closed_trades = sorted(
-        all_closed_trades,
-        key=lambda t: t.get("closed_at") or "",
-        reverse=True,
-    )[:CLOSED_TRADES_FRAGMENT_LIMIT]
-    closed_trades_truncated = closed_trades_total > CLOSED_TRADES_FRAGMENT_LIMIT
+    all_closed_trades = [t for t in all_raw if t["status"] in CLOSED_TRADE_STATUSES]
+    # First page only. Everything after this comes from /api/trade-history,
+    # through the SAME _query_closed_trades() call, so first paint and later
+    # pages cannot disagree. The JS re-requests page 1 on load anyway (its
+    # remembered per-page size may not be the 25 used here), but rendering it
+    # server-side keeps the table populated for that first beat instead of
+    # flashing empty.
+    closed_trades, closed_trades_total = _query_closed_trades(
+        all_raw, mode=mode, page=1, per_page=CLOSED_TRADES_FIRST_PAGE)
 
     # Currency symbol map -- covers every ticker shown on the page (open AND
     # recently closed). Previously only open_trades were included, so closed
@@ -816,7 +845,7 @@ def _render_dashboard_fragment() -> str:
         price_map=price_map, pnl_map=pnl_map, days_map=days_map,
         sizing_map=sizing_map, account_cfg=account_cfg, sizing_note=sizing_note,
         closed_trades=closed_trades, closed_trade_filter_options=closed_trade_filter_options,
-        closed_trades_total=closed_trades_total, closed_trades_truncated=closed_trades_truncated,
+        closed_trades_total=closed_trades_total,
         trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
         is_market_active=is_us_market_active(),
         dashboard_mode=mode,
@@ -1238,9 +1267,15 @@ def api_trade_history():
 
     filters = {k: request.args.get(k, "") for k in _CT_FILTER_FIELDS}
 
+    sort_by = request.args.get("sort_by") or None
+    if sort_by not in _CT_SORT_KEYS:
+        sort_by = None
+    sort_dir = "asc" if request.args.get("sort_dir") == "asc" else "desc"
+
     all_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
     rows, total = _query_closed_trades(
-        all_raw, mode=mode, filters=filters, page=page, per_page=per_page)
+        all_raw, mode=mode, filters=filters, page=page, per_page=per_page,
+        sort_by=sort_by, sort_dir=sort_dir)
 
     pages = 1 if not per_page else max(1, -(-total // per_page))
     strategy_map = {t["id"]: _primary_strategy_label(t) for t in rows}
