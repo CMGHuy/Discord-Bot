@@ -200,6 +200,10 @@
              oninput="filterTable()"
              style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;
                     padding:6px 10px;font-size:13px;font-family:inherit;width:220px;">
+      <span class="density-toggle" id="ot-density-toggle" title="Compact hides the analytical columns (strategy, horizon, confidence, score, entry/stop/target, R:R, unrealized amount, opened) -- they are still on the Performance page and each trade's detail page.">
+        <button type="button" data-density="compact">Compact</button>
+        <button type="button" data-density="full">Full</button>
+      </span>
       <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:5px;">
         Show
         <select id="ot-per-page"
@@ -221,6 +225,7 @@
      and Prev/Next/sort silently stop working for the rest of the browser
      session once a trade opens later (scripts inserted via morphdom never
      execute). The JS already handles a zero-row table fine. #}
+  <div class="table-density density-compact" data-density-for="ot">
   <div style="overflow-x:auto;">
   <table id="trades-table">
     <thead>
@@ -231,23 +236,24 @@
         Status <span class="sort-arrow" data-col-id="status"></span>
       </th>
       <th data-col-id="ticker" draggable="true" onclick="sortByHeader(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
-      <th data-col-id="strategy" draggable="true" onclick="sortByHeader(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
-      <th data-col-id="horizon" draggable="true" onclick="sortByHeader(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
-      <th data-col-id="direction" draggable="true" onclick="sortByHeader(this)" title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
-      <th data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
-      <th data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score out of a maximum of 100 points -- higher means more confluence factors lined up behind this setup.">Score <span class="sort-arrow" data-col-id="score"></span></th>
-      <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)" class="num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th class="col-full" data-col-id="strategy" draggable="true" onclick="sortByHeader(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
+      <th class="col-full" data-col-id="horizon" draggable="true" onclick="sortByHeader(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
+      <th class="col-full" data-col-id="direction" draggable="true" onclick="sortByHeader(this)" title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
+      <th class="col-full" data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
+      <th class="col-full" data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score out of a maximum of 100 points -- higher means more confluence factors lined up behind this setup.">Score <span class="sort-arrow" data-col-id="score"></span></th>
+      <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)" class="col-full num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
       <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (incl. pre/aftermarket, cached ~15s)" class="num">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
       <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s)." class="num">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
-      <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)" class="num">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
-      <th data-col-id="target" draggable="true" onclick="sortByHeader(this)" class="num">Target <span class="sort-arrow" data-col-id="target"></span></th>
-      <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio" class="num">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
-      <th data-col-id="size" draggable="true" onclick="sortByHeader(this)"
+      <th data-col-id="plan" draggable="true" class="num col-compact" title="Entry → Target / Stop, standing in for the separate Entry/Stop/Target columns hidden in compact density">Plan <span class="sort-arrow" data-col-id="plan"></span></th>
+      <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)" class="col-full num">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
+      <th data-col-id="target" draggable="true" onclick="sortByHeader(this)" class="col-full num">Target <span class="sort-arrow" data-col-id="target"></span></th>
+      <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio" class="col-full num">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
+      <th class="col-full" data-col-id="size" draggable="true" onclick="sortByHeader(this)"
           title="Unrealized gain/loss in account currency = shares (snapshotted when this trade was opened) x (current price − entry price), direction-adjusted.">
         Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
       </th>
       <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Holding period -- time since opened, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
-      <th data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
+      <th class="col-full" data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="action">Action</th>
     </tr>
     </thead>
@@ -296,36 +302,36 @@
 
       {# Ticker #}
       <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
-        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong>
+        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong><span class="col-compact" title="{{ 'Long (bullish)' if is_bull else 'Short (bearish)' }}" style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }};font-size:11px;font-weight:600;">{{ '▲' if is_bull else '▼' }}</span>
         {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
         {% if t.get('badge') %}<span class="pill {{ 'validated' if t.badge == 'VALIDATED' else 'weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ '✅ VALIDATED' if t.badge == 'VALIDATED' else '⚠️ WEAK' }}</span>{% endif %}
       </td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
-      <td title="Sources: {{ _all_sources | unique | join(', ') if _all_sources else 'n/a' }}">
+      <td class="col-full" title="Sources: {{ _all_sources | unique | join(', ') if _all_sources else 'n/a' }}">
         {{ strategy_map.get(t.id, t.strategy) }}
       </td>
 
-      <td>
+      <td class="col-full">
         <span class="pill" title="{{ horizon_labels.get(t.horizon_key, t.horizon_key) }}" style="cursor:help;">
           {{ t.horizon_key }}
         </span>
       </td>
 
-      <td data-sort="{{ '1' if is_bull else '0' }}">
+      <td class="col-full" data-sort="{{ '1' if is_bull else '0' }}">
         <span style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }}; font-weight:700; font-size:15px; cursor:help;"
               title="{{ 'Long (bullish)' if is_bull else 'Short (bearish)' }}">
           {{ '▲' if is_bull else '▼' }}
         </span>
       </td>
 
-      <td data-sort="{{ t.confidence_level }}" title="Confidence level Lv{{ t.confidence_level }} of 5 -- higher means more confirming signals lined up behind this setup at the time it was opened">
+      <td class="col-full" data-sort="{{ t.confidence_level }}" title="Confidence level Lv{{ t.confidence_level }} of 5 -- higher means more confirming signals lined up behind this setup at the time it was opened">
         <span class="confidence-badge" style="color:{{ confidence_hex(t.confidence_level) }};">
           Lv{{ t.confidence_level }}
         </span>
       </td>
 
-      <td class="num" data-sort="{{ conf_score if conf_score is not none else 0 }}"
+      <td class="num col-full" data-sort="{{ conf_score if conf_score is not none else 0 }}"
           title="Confidence score out of 100 -- the underlying number the Lv1-5 confidence level is derived from">
         {%- if conf_score is not none -%}
           <span style="font-weight:600;color:
@@ -335,7 +341,7 @@
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
 
-      <td class="num" title="Planned entry price for this trade" style="color:#6ea8fe;font-weight:600;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td class="num col-full" title="Planned entry price for this trade" style="color:#6ea8fe;font-weight:600;">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
 
       {# Current price — direction-aware color + blink when live #}
       {%- set price_is_good = (cur_price is not none) and ((is_bull and cur_price >= t.entry) or (not is_bull and cur_price <= t.entry)) -%}
@@ -350,11 +356,18 @@
         {%- endif -%}
       </td>
 
+      {# Hoisted above the P&L cell so its tooltip can carry the unrealized
+         amount -- the "Unreal. P&L" column itself is col-full and therefore
+         hidden in compact density. #}
+      {%- set actual_shares = t.shares if t.get('shares') else (sizing.shares if sizing else None) -%}
+      {%- set unreal_amt = (actual_shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (actual_shares and cur_price is not none) else None -%}
+      {%- set _snap_mode = t.get('sizing_mode') -%}
+
       {# Unrealized P&L % — positive = in profit for this direction #}
       <td class="num {% if pnl is none %}{% elif pnl.pnl_pct >= 0 %}pos{% else %}neg{% endif %}"
           data-sort="{{ pnl.pnl_pct if pnl else 0 }}"
           style="font-weight:600;"
-          title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~15s cache).">
+          title="Direction-adjusted unrealized P&L. Updates when live price refreshes (~15s cache).{% if unreal_amt is not none %} · Unrealized {{ '%+.2f'|format(unreal_amt) }} {{ cur_map.get(t.ticker, '') }}{% endif %}">
         {%- if pnl -%}
           {{ '%+.2f%%'|format(pnl.pnl_pct) }}
         {%- else -%}
@@ -362,9 +375,16 @@
         {%- endif -%}
       </td>
 
-      <td class="num" style="color:#da6d6d;" title="Stop-loss price -- this trade closes as a loss if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
-      <td class="num" style="color:#6dda9e;" title="Take-profit (target) price -- this trade closes as a win if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
-      <td class="num" title="Planned risk:reward ratio at entry -- reward distance (entry to target) ÷ risk distance (entry to stop)">{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
+      {# Plan (compact only): entry → target / stop in one cell, standing in
+         for the three separate price columns that are hidden in compact. #}
+      <td class="num col-compact" style="font-size:11px;white-space:nowrap;"
+          title="Entry {{ '%.2f'|format(t.entry) }} · Target {{ '%.2f'|format(t.take_profit) }} · Stop {{ '%.2f'|format(t.stop_loss) }}">
+        <span class="muted">{{ '%.2f'|format(t.entry) }}</span>→<span style="color:#6dda9e;">{{ '%.2f'|format(t.take_profit) }}</span>/<span style="color:#da6d6d;">{{ '%.2f'|format(t.stop_loss) }}</span>
+      </td>
+
+      <td class="num col-full" style="color:#da6d6d;" title="Stop-loss price -- this trade closes as a loss if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
+      <td class="num col-full" style="color:#6dda9e;" title="Take-profit (target) price -- this trade closes as a win if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.take_profit) }}</td>
+      <td class="num col-full" title="Planned risk:reward ratio at entry -- reward distance (entry to target) ÷ risk distance (entry to stop)">{{ t.risk_reward_ratio if t.risk_reward_ratio else '—' }}:1</td>
 
       {# Unrealized gain/loss in account currency -- ALWAYS the shares actually
          snapshotted onto this trade at open time (t.shares), never sizing_map's
@@ -373,10 +393,7 @@
          change) and would silently misstate what this specific open position
          is really worth. Falls back to sizing_map only for old trades logged
          before shares were snapshotted at all. #}
-      {%- set actual_shares = t.shares if t.get('shares') else (sizing.shares if sizing else None) -%}
-      {%- set unreal_amt = (actual_shares * (cur_price - t.entry) * (1 if is_bull else -1)) if (actual_shares and cur_price is not none) else None -%}
-      {%- set _snap_mode = t.get('sizing_mode') -%}
-      <td class="num {% if unreal_amt is none %}{% elif unreal_amt >= 0 %}pos{% else %}neg{% endif %}"
+      <td class="num col-full {% if unreal_amt is none %}{% elif unreal_amt >= 0 %}pos{% else %}neg{% endif %}"
           data-sort="{{ unreal_amt if unreal_amt is not none else 0 }}"
           style="font-weight:700;"
           title="{% if actual_shares and unreal_amt is not none %}~{{ actual_shares }} shares{{ ' (snapshotted at open)' if t.get('shares') else ' (est. -- no snapshot on this older trade)' }} · {{ cur_map.get(t.ticker,'') }}{{ '%.0f'|format(actual_shares * t.entry) }} deployed{% if _snap_mode %} · sized under {{ 'Account %' if _snap_mode == 'account_pct' else 'Risk %' }} mode when opened{% if _snap_mode != account_cfg.sizing_mode %} (today's setting is {{ 'Account %' if account_cfg.sizing_mode == 'account_pct' else 'Risk %' }} -- this won't match the current premium note above){% endif %}{% endif %}{% elif actual_shares %}No live price yet{% else %}Set !account balance and risk to enable sizing{% endif %}">
@@ -395,7 +412,7 @@
         {{ days_open.label if days_open is not none else '—' }}
       </td>
 
-      <td class="muted" data-sort="{{ t.opened_at }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
+      <td class="muted col-full" data-sort="{{ t.opened_at }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
 
       <td onclick="event.stopPropagation();" style="display:flex;gap:6px;align-items:center;">
         <button type="button" class="icon-btn secondary" title="Open trade detail in new tab"
@@ -409,7 +426,7 @@
     {% if t.get('legs') and t.legs | length > 1 %}
     <tr class="muted ot-leg-row" data-leg-for="{{ t.id }}" style="font-size:11px;">
       <td></td><td></td>
-      <td colspan="16" style="padding-left:24px;">
+      <td colspan="17" style="padding-left:24px;">
         {% for leg in t.legs[1:] %}
         ↳ runner {{ "%.0f%%"|format(leg.fraction * 100) }}:
         {% if leg.exit_price %}{{ "%.2f"|format(leg.exit_price) }} ({{ "%+.2f"|format(leg.r) }}R){% else %}runner: live{% endif %}
@@ -430,6 +447,7 @@
     <span style="flex:1;"></span>
     <span id="ot-info" class="muted" style="font-size:12px;"></span>
   </div>
+  </div>{# /table-density #}
 
   <div style="margin-top:8px; font-size:11px; color:#3d4354; text-align:right;">
     Live prices refresh approximately every 15 seconds (incl. pre/aftermarket sessions) · P&amp;L updates on next refresh · Sizing based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk · <code>!account</code> to change
@@ -519,6 +537,32 @@
       '#trades-table tbody tr.ot-leg-row[data-leg-for="' + id + '"]'));
   }
 
+  // Density: compact by default, independent of the Trade History table's own
+  // ct_density. Same wrapper-class approach and the same reason -- morphdom
+  // may revert a class the server never rendered, so otApplyDensity() is
+  // re-run from refreshOpenTradesTable() on every auto-refresh.
+  var OT_DENSITY_KEY = 'ot_density';
+  var otDensity = localStorage.getItem(OT_DENSITY_KEY) || 'compact';
+
+  function otApplyDensity() {
+    var wrap = document.querySelector('[data-density-for="ot"]');
+    if (!wrap) return;
+    wrap.classList.toggle('density-compact', otDensity === 'compact');
+    wrap.classList.toggle('density-full', otDensity === 'full');
+    var btns = document.querySelectorAll('#ot-density-toggle button');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].dataset.density === otDensity);
+    }
+  }
+
+  document.querySelectorAll('#ot-density-toggle button').forEach(function(b) {
+    b.addEventListener('click', function() {
+      otDensity = this.dataset.density;
+      localStorage.setItem(OT_DENSITY_KEY, otDensity);
+      otApplyDensity();
+    });
+  });
+
   function otRefreshRows() {
     otAllRows = Array.from(document.querySelectorAll(
       '#trades-table tbody tr:not(.ot-leg-row)'));
@@ -569,6 +613,7 @@
   // never update the pagination totals after the first page load.
   window.refreshOpenTradesTable = function() {
     otRefreshRows();
+    otApplyDensity();
     otRender();
   };
 
@@ -720,6 +765,10 @@
     <button type="button" id="ct-reset-filters" class="secondary small"
             style="font-size:12px;padding:4px 10px;">✕ Reset</button>
     <span style="flex:1;"></span>
+    <span class="density-toggle" id="ct-density-toggle" title="Compact hides the analytical columns (strategy, horizon, confidence, entry/exit, P&L%, opened) -- they are still on the Performance page and each trade's detail page.">
+      <button type="button" data-density="compact">Compact</button>
+      <button type="button" data-density="full">Full</button>
+    </span>
     <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:5px;">
       Show
       <select id="ct-per-page"
@@ -733,6 +782,7 @@
     </label>
   </div>
 
+  <div class="table-density density-compact" data-density-for="ct">
   <div style="overflow-x:auto;">
   <table id="closed-trades-table" style="width:100%;">
     <thead>
@@ -740,17 +790,17 @@
       <th style="width:26px;">#</th>
       <th data-col-id="outcome" onclick="sortClosedTable(this)">Outcome <span class="sort-arrow" data-col-id="outcome"></span></th>
       <th data-col-id="ticker" onclick="sortClosedTable(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
-      <th data-col-id="strategy" onclick="sortClosedTable(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
-      <th data-col-id="horizon" onclick="sortClosedTable(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
-      <th data-col-id="dir" onclick="sortClosedTable(this)">Dir <span class="sort-arrow" data-col-id="dir"></span></th>
-      <th data-col-id="conf" onclick="sortClosedTable(this)">Conf <span class="sort-arrow" data-col-id="conf"></span></th>
-      <th data-col-id="entry" onclick="sortClosedTable(this)" class="num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="exit" onclick="sortClosedTable(this)" class="num">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
-      <th data-col-id="pnlpct" onclick="sortClosedTable(this)" class="num" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
+      <th class="col-full" data-col-id="strategy" onclick="sortClosedTable(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
+      <th class="col-full" data-col-id="horizon" onclick="sortClosedTable(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
+      <th class="col-full" data-col-id="dir" onclick="sortClosedTable(this)">Dir <span class="sort-arrow" data-col-id="dir"></span></th>
+      <th class="col-full" data-col-id="conf" onclick="sortClosedTable(this)">Conf <span class="sort-arrow" data-col-id="conf"></span></th>
+      <th data-col-id="entry" onclick="sortClosedTable(this)" class="col-full num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="exit" onclick="sortClosedTable(this)" class="col-full num">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
+      <th data-col-id="pnlpct" onclick="sortClosedTable(this)" class="col-full num" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
       <th data-col-id="gainloss" onclick="sortClosedTable(this)" class="num" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
       <th data-col-id="r" onclick="sortClosedTable(this)" class="num" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
       <th data-col-id="days" onclick="sortClosedTable(this)" class="num" title="Holding period -- time held, from open to close, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
-      <th data-col-id="opened" onclick="sortClosedTable(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
+      <th class="col-full" data-col-id="opened" onclick="sortClosedTable(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
       <th data-col-id="closed" onclick="sortClosedTable(this)">Closed <span class="sort-arrow" data-col-id="closed"></span></th>
       <th style="width:60px;"></th>
     </tr>
@@ -778,26 +828,26 @@
         {% else %}<span class="outcome-closed">CLOSED</span>{% endif %}
       </td>
       <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
-        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong>
+        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong><span class="col-compact" title="{{ 'Long (bullish)' if t.direction == 'bullish' else 'Short (bearish)' }}" style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:11px;font-weight:600;">{{ '▲' if t.direction == 'bullish' else '▼' }}</span>
         {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
         {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ t.badge }}</span>{% endif %}
       </td>
       {%- set _ct_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
-      <td title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>
-      <td title="{{ horizon_labels.get(t.horizon_key, t.horizon_key) if horizon_labels is defined else t.horizon_key }} swing horizon this trade was opened under"><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
-      <td title="{{ 'Long (bullish)' if t.direction == 'bullish' else 'Short (bearish)' }}">
+      <td class="col-full" title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>
+      <td class="col-full" title="{{ horizon_labels.get(t.horizon_key, t.horizon_key) if horizon_labels is defined else t.horizon_key }} swing horizon this trade was opened under"><span class="pill" style="font-size:11px;">{{ t.horizon_key }}</span></td>
+      <td class="col-full" title="{{ 'Long (bullish)' if t.direction == 'bullish' else 'Short (bearish)' }}">
         <span style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:12px;font-weight:600;">
           {{ '▲' if t.direction == 'bullish' else '▼' }}
         </span>
       </td>
-      <td title="Confidence level Lv{{ t.confidence_level }} of 5 at the time this trade was opened"><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
-      <td class="num" style="color:#6ea8fe;font-weight:600;" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
-      <td class="num" data-sort="{{ t.exit_price if t.exit_price else -1 }}"
+      <td class="col-full" title="Confidence level Lv{{ t.confidence_level }} of 5 at the time this trade was opened"><span style="color:{{ confidence_hex(t.confidence_level) }};font-size:12px;font-weight:700;">Lv{{ t.confidence_level }}</span></td>
+      <td class="num col-full" style="color:#6ea8fe;font-weight:600;" data-sort="{{ t.entry }}" title="Entry price this trade was opened at">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.entry) }}</td>
+      <td class="num col-full" data-sort="{{ t.exit_price if t.exit_price else -1 }}"
           title="{{ 'Actual fill price when this trade closed' if t.exit_price else 'No exit price recorded for this trade' }}">
         {%- if t.exit_price -%}{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.exit_price) }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
       </td>
-      <td class="num {% if c_pnl is none %}{% elif c_pnl >= 0 %}pos{% else %}neg{% endif %}"
+      <td class="num col-full {% if c_pnl is none %}{% elif c_pnl >= 0 %}pos{% else %}neg{% endif %}"
           style="font-weight:700;"
           data-sort="{{ c_pnl if c_pnl is not none else -999999 }}"
           title="Realized P&amp;L %, direction-adjusted: (exit − entry) / entry, flipped in sign for short trades">
@@ -806,7 +856,7 @@
       <td class="num {% if pnl_amt is none %}{% elif pnl_amt >= 0 %}pos{% else %}neg{% endif %}"
           style="font-weight:700;"
           data-sort="{{ pnl_amt if pnl_amt is not none else -999999 }}"
-          title="{{ 'Position size at open: ' ~ cur_map.get(t.ticker, '') ~ '%.2f'|format(pos_val) if pos_val else 'No sizing snapshot for this trade (logged before this feature existed)' }}">
+          title="{{ '%+.2f%%'|format(c_pnl) ~ ' vs entry · ' if c_pnl is not none else '' }}{{ 'Position size at open: ' ~ cur_map.get(t.ticker, '') ~ '%.2f'|format(pos_val) if pos_val else 'No sizing snapshot for this trade (logged before this feature existed)' }}">
         {%- if pnl_amt is not none -%}
           {{ '%+.2f'|format(pnl_amt) }} {{ cur_map.get(t.ticker, '') }}
         {%- else -%}<span class="muted">—</span>{%- endif -%}
@@ -819,7 +869,7 @@
       </td>
       <td class="num muted" style="white-space:nowrap;" data-sort="{{ c_days.total_hours if c_days is not none else -1 }}"
           title="Time this trade was actually held, from open to close">{{ c_days.label if c_days is not none else '—' }}</td>
-      <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="Opened {{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
+      <td class="muted col-full" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="Opened {{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.closed_at or '' }}" title="{% if t.closed_at %}Closed {{ t.closed_at[:16] }} UTC{% else %}Not yet closed{% endif %}">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
       <td onclick="event.stopPropagation();" style="padding:4px 6px;display:flex;gap:4px;align-items:center;">
         <button type="button" class="icon-btn secondary"
@@ -855,6 +905,7 @@
     <span style="flex:1;"></span>
     <span id="ct-info" class="muted" style="font-size:12px;"></span>
   </div>
+  </div>{# /table-density #}
 
   {% if closed_trades %}
   <div class="row" style="margin-top:12px;">
@@ -882,6 +933,25 @@
     var currentPage = 1;
     var filters = {};
     var ctSortCol = null, ctSortAsc = false;
+
+    // Density: compact by default, per-table, same localStorage pattern as
+    // ct_per_page. The class lives on a WRAPPER rather than the table so a
+    // morphdom patch of the table itself can't drop it -- and it is re-applied
+    // in refreshClosedTradesTable() below, because morphdom may still revert a
+    // class the server never rendered.
+    var DENSITY_KEY = 'ct_density';
+    var density = localStorage.getItem(DENSITY_KEY) || 'compact';
+
+    function applyDensity() {
+      var wrap = document.querySelector('[data-density-for="ct"]');
+      if (!wrap) return;
+      wrap.classList.toggle('density-compact', density === 'compact');
+      wrap.classList.toggle('density-full', density === 'full');
+      var btns = document.querySelectorAll('#ct-density-toggle button');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('active', btns[i].dataset.density === density);
+      }
+    }
 
     // Columns whose sort value lives on the <tr> itself (data-outcome,
     // data-ticker, etc. -- the same attributes the filter dropdowns already
@@ -1010,6 +1080,7 @@
     window.refreshClosedTradesTable = function() {
       allRows = Array.from(document.querySelectorAll(
         '#closed-trades-table tbody tr:not(.ct-leg-row)'));
+      applyDensity();
       render();
     };
 
@@ -1022,6 +1093,14 @@
         filters[el.dataset.filter] = el.value;
         currentPage = 1;
         render();
+      });
+    });
+
+    document.querySelectorAll('#ct-density-toggle button').forEach(function(b) {
+      b.addEventListener('click', function() {
+        density = this.dataset.density;
+        localStorage.setItem(DENSITY_KEY, density);
+        applyDensity();
       });
     });
 
