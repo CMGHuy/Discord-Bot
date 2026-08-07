@@ -86,7 +86,7 @@ from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, ge
 from swingbot.core.watchlist import load_watchlist
 from .embeds import (
     CONFIDENCE_COLORS, CONFIDENCE_EMOJI, CONFIDENCE_ANSI,
-    confidence_color, _build_requirement_checks, build_embed,
+    confidence_color, _build_requirement_checks, build_embed, build_simple_alert,
     plan_numbers_for_display,
     regenerate_chart_for_trade, build_closed_trade_embed, notify_closed_trades,
     build_near_close_embed, notify_near_close,
@@ -1529,7 +1529,14 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
                             htf_info=item.htf_info, layout=config.ALERT_EMBED_LAYOUT)
-        alerts.append((embed, chart_path, item.plan_v2))
+        # 4th element: the stripped-down text mirror for
+        # DISCORD_CHANNEL_TRADES_SIMPLE_ID. Built here, alongside the embed,
+        # because this is the only frame where the full `item` (result, conf,
+        # legacy plan AND plan_v2) is in scope -- the alert tuple itself only
+        # carries plan_v2. Rendered unconditionally and cheaply (string
+        # formatting, no chart); _send_alerts decides whether a simple channel
+        # is configured to receive it.
+        alerts.append((embed, chart_path, item.plan_v2, build_simple_alert(item)))
 
         # Secondary alerting (email / push) -- fires only for high-confidence,
         # fully-qualifying alerts when enabled. Blocking I/O but we're already
