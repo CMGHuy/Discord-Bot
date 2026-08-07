@@ -137,3 +137,94 @@ def test_out_of_range_page_is_empty_but_total_is_honest(trades):
 def test_per_page_zero_means_all(trades):
     rows, total = _query_closed_trades(trades, mode="all", page=3, per_page=0)
     assert len(rows) == total == 4
+
+
+# ── /api/trade-history endpoint (H2) ────────────────────────────────────────
+
+def _seed(tmp_path, trades):
+    import json as _json
+    (tmp_path / "trades.json").write_text(_json.dumps(trades), encoding="utf-8")
+
+
+@pytest.fixture
+def seeded(tmp_path, admin_app):
+    """60 old + 2 closed-today trades, written straight to the isolated
+    trades.json the admin_app fixture already points DATA_DIR at."""
+    rows = [_trade(f"old{i}", closed=_iso(i + 1), ticker="AAPL") for i in range(60)]
+    rows += [_trade("today1", closed=_iso(0, 9), ticker="NVDA"),
+             _trade("today2", closed=_iso(0, 14), ticker="NVDA", status="loss")]
+    for r in rows:
+        r.update(entry=100.0, exit_price=105.0, stop_loss=95.0)
+    _seed(tmp_path, rows)
+    return rows
+
+
+def _get(client, auth, **params):
+    qs = "&".join(f"{k}={v}" for k, v in params.items())
+    r = client.get(f"/api/trade-history?{qs}", headers=auth)
+    assert r.status_code == 200, r.status_code
+    return r.get_json()
+
+
+def test_endpoint_requires_auth(client, seeded):
+    r = client.get("/api/trade-history")
+    assert r.status_code == 401
+    assert r.get_json()["error"] == "auth"
+
+
+def test_endpoint_all_mode_totals_and_pages(client, auth, seeded):
+    d = _get(client, auth, mode="all", page=1, per_page=25)
+    assert d["total"] == 62
+    assert d["pages"] == 3
+    assert d["shown"] == 25
+    assert d["rows_html"].count("<tr") >= 25
+
+
+def test_endpoint_today_mode_scopes_to_today(client, auth, seeded):
+    d = _get(client, auth, mode="today", per_page=25)
+    assert d["total"] == 2
+    assert "NVDA" in d["rows_html"]
+
+
+def test_endpoint_active_matches_today(client, auth, seeded):
+    assert (_get(client, auth, mode="active")["total"]
+            == _get(client, auth, mode="today")["total"] == 2)
+
+
+def test_endpoint_filter_reaches_beyond_the_first_page(client, auth, seeded):
+    """NVDA trades sort newest-first so they are on page 1 here; the point is
+    that filtering narrows the TOTAL, i.e. it ran server-side over everything
+    rather than over one page's DOM."""
+    d = _get(client, auth, mode="all", ticker="NVDA", per_page=25)
+    assert d["total"] == 2 and d["pages"] == 1
+
+
+def test_endpoint_pages_are_disjoint(client, auth, seeded):
+    import re
+    seen = []
+    for page in (1, 2, 3):
+        html = _get(client, auth, mode="all", page=page, per_page=25)["rows_html"]
+        seen += re.findall(r'id="ct-row-([^"]+)"', html)
+    assert len(seen) == len(set(seen)) == 62
+
+
+def test_endpoint_row_numbers_continue_across_pages(client, auth, seeded):
+    p2 = _get(client, auth, mode="all", page=2, per_page=25)["rows_html"]
+    assert '<span class="row-num">26</span>' in p2
+
+
+def test_endpoint_rejects_junk_params_without_500(client, auth, seeded):
+    for params in ({"page": "abc"}, {"per_page": "9999"}, {"page": "-5"},
+                   {"mode": "bogus"}, {"per_page": "0.5"}):
+        r = client.get("/api/trade-history", query_string=params, headers=auth)
+        assert r.status_code == 200, (params, r.status_code)
+
+
+def test_endpoint_per_page_clamped_to_allowed_set(client, auth, seeded):
+    # 9999 is not offered by the selector; must fall back to 25, not honour it
+    assert _get(client, auth, mode="all", per_page=9999)["shown"] == 25
+
+
+def test_endpoint_out_of_range_page_is_empty_not_an_error(client, auth, seeded):
+    d = _get(client, auth, mode="all", page=99, per_page=25)
+    assert d["shown"] == 0 and d["total"] == 62

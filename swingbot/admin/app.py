@@ -1197,6 +1197,70 @@ def _trade_for_levels(trade_id: str):
     return TradeLog().get_trade_by_id(trade_id)
 
 
+@app.route("/api/trade-history", methods=["GET"])
+def api_trade_history():
+    """One page of the dashboard's Trade History table (plan v9, H2).
+
+    Returns the rendered rows rather than raw JSON records: the table's markup
+    is non-trivial (chips, sizing tooltips, scaled-out leg rows) and
+    reimplementing it in JS would be a second source of truth. The rows come
+    from the same partial the initial server render uses, so a fetched page is
+    indistinguishable from the first one.
+
+    Scoping, all six filters, sorting and slicing happen server-side in
+    _query_closed_trades(). Filtering MUST live here rather than in the
+    browser: with paged responses, DOM-hiding filters would only ever see the
+    current page.
+
+    Auth is inline and returns a bare 401 rather than redirecting to the HTML
+    login page -- same contract and same reasoning as api_ohlcv below.
+    """
+    if not _session_authenticated():
+        auth = request.authorization
+        if not auth or auth.username != ADMIN_USERNAME or auth.password != ADMIN_PASSWORD:
+            return Response(json.dumps({"error": "auth"}), status=401, mimetype="application/json")
+
+    mode = request.args.get("mode", "active")
+    if mode not in ("active", "today", "all"):
+        mode = "active"
+
+    # Never trust the client with how much work this request does.
+    try:
+        per_page = int(request.args.get("per_page", 25))
+    except (TypeError, ValueError):
+        per_page = 25
+    if per_page not in ALLOWED_PER_PAGE:
+        per_page = 25
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+
+    filters = {k: request.args.get(k, "") for k in _CT_FILTER_FIELDS}
+
+    all_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
+    rows, total = _query_closed_trades(
+        all_raw, mode=mode, filters=filters, page=page, per_page=per_page)
+
+    pages = 1 if not per_page else max(1, -(-total // per_page))
+    strategy_map = {t["id"]: _primary_strategy_label(t) for t in rows}
+    cur_map = {t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
+               for t in rows}
+
+    rows_html = render_template(
+        "_trade_history_rows.html",
+        closed_trades=rows, strategy_map=strategy_map, cur_map=cur_map,
+        confidence_hex=_confidence_hex,
+        trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
+        row_offset=(page - 1) * per_page if per_page else 0,
+    )
+    return Response(
+        json.dumps({"rows_html": rows_html, "total": total, "page": page,
+                    "pages": pages, "shown": len(rows)}),
+        mimetype="application/json",
+    )
+
+
 @app.route("/api/ohlcv/<ticker>", methods=["GET"])
 def api_ohlcv(ticker):
     """Daily OHLCV bars for the interactive chart (U29's JS). Read-only,

@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-trade-history-filter` (worktree at `.claude/worktrees/trade-history-filter`)
-> - **Completed:** H1 — `_query_closed_trades()` (scope -> filter -> sort -> slice) plus 16 unit tests, all green.
-> - **Next:** H2 (the `/api/trade-history` endpoint)
+> - **Completed:** H1, H3, H2 (H3 pulled ahead of H2 — the endpoint needs the partial to render). 26 tests green.
+> - **Next:** H4 (move the six filters + pager to the server)
 
 ## Global Constraints
 
@@ -68,7 +68,7 @@ Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is toda
 
 **Files:** Modify `swingbot/admin/app.py`
 
-- [ ] **Step 1:** Add an authed GET route accepting `mode`, `page`, `per_page`, and the six filter params. Return JSON:
+- [x] **Step 1:** Add an authed GET route accepting `mode`, `page`, `per_page`, and the six filter params. Return JSON:
 
 ```json
 {"rows_html": "<tr>...", "total": 412, "page": 3, "pages": 17, "shown": 25}
@@ -76,9 +76,9 @@ Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is toda
 
 `rows_html` is the H3 partial rendered with the same context keys the table already uses (`cur_map`, sizing, etc.) so rows are byte-identical to the initial render.
 
-- [ ] **Step 2:** Reuse the existing admin auth decorator — do not invent a new one; this exposes trade data.
-- [ ] **Step 3:** Clamp `per_page` to the allowed set (10/25/50/All) and `page` to `>= 1`; never trust the client.
-- [ ] **Step 4:** Test: auth required, each mode, pagination maths, bad params don't 500. Commit.
+- [x] **Step 2:** Reuse the existing admin auth decorator — do not invent a new one; this exposes trade data.
+- [x] **Step 3:** Clamp `per_page` to the allowed set (10/25/50/All) and `page` to `>= 1`; never trust the client.
+- [x] **Step 4:** Test: auth required, each mode, pagination maths, bad params don't 500. Commit.
 
 ---
 
@@ -88,8 +88,8 @@ Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is toda
 
 **Files:** Create `swingbot/admin/templates/_trade_history_rows.html`; modify `dashboard_fragment.html`
 
-- [ ] **Step 1:** Move the `{% for t in closed_trades %}` body (`dashboard_fragment.html` ~809-890), including the `.ct-leg-row` scaled-out second row, into the partial. Include it from the fragment so the initial render is unchanged.
-- [ ] **Step 2:** Verify the rendered dashboard HTML is identical to before (diff the table markup). Commit.
+- [x] **Step 1:** Move the `{% for t in closed_trades %}` body (`dashboard_fragment.html` ~809-890), including the `.ct-leg-row` scaled-out second row, into the partial. Include it from the fragment so the initial render is unchanged.
+- [x] **Step 2:** Verify the rendered dashboard HTML is identical to before (diff the table markup). Commit.
 
 ### Task H4: Move the six filters + pager to the server
 
