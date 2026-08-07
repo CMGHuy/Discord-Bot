@@ -12,9 +12,9 @@
 
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
-> - **Branch:** TBD by executing session
-> - **Completed:** none
-> - **Next:** T1
+> - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
+> - **Completed:** T1 — `test_flag_on_polls_open_plans` quarantined with `xfail(strict=False)`. New baseline verified: **1008 passed, 136 skipped, 1 xfailed, 0 failed** (1145 collected). Green is now machine-checkable.
+> - **Next:** T2 (record the measured baseline as `docs/claude/testing-cost.md`)
 
 ## Global Constraints
 
@@ -60,7 +60,7 @@ docs/claude/testing-cost.md                     NEW  measured baseline + how to 
 
 **Why first:** every later task's verification compares against a baseline. Making that baseline `0 failed` turns every subsequent check from a judgment call into a machine comparison.
 
-- [ ] **Step 1: Mark the test xfail**
+- [x] **Step 1: Mark the test xfail**
 
 ```python
 @pytest.mark.xfail(
@@ -74,7 +74,7 @@ def test_flag_on_polls_open_plans(tmp_path, monkeypatch):
 
 Add `import pytest` if absent.
 
-- [ ] **Step 2: Verify the new baseline**
+- [x] **Step 2: Verify the new baseline**
 
 ```powershell
 python -m pytest tests/test_trade_monitor_wiring.py -q
@@ -83,7 +83,7 @@ python -m pytest tests/test_trade_monitor_wiring.py -q
 Expect `1 passed, 1 xfailed`. `strict=False` is deliberate: if the wall-clock
 conditions ever make it pass, that must be an `xpass`, not a new failure.
 
-- [ ] **Step 3: Record the full-suite baseline**
+- [x] **Step 3: Record the full-suite baseline**
 
 ```powershell
 python -m pytest tests/ -p no:cacheprovider -n 4
