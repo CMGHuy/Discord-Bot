@@ -53,3 +53,15 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 - Scans run through `map_tickers()` (`SCAN_WORKERS`, default 4). Anything
   touching shared state (`state.confirm_or_update`, funnel counters) must stay
   serial/post-join.
+- **Trade History: filtering, sorting and paging must stay on the SAME side.**
+  The dashboard's `ct-*` controls used to hide/reorder rows in the DOM while
+  the server shipped up to 500 pre-rendered rows. Once paging moved
+  server-side (`/api/trade-history`, plan v9), any control left in the browser
+  would silently operate on *the current page only* — a ticker filter would
+  quietly mean "matches among these 25", which is worse than no paging at all.
+  All six filters, all 14 sort columns and the pager now go through
+  `_query_closed_trades()`. If you add a Trade History control, add it there
+  too; do not filter or sort rows client-side. The filter dropdown *options*
+  are the deliberate exception — they are built from the FULL history
+  (`closed_trade_filter_options`), never from the loaded page, or values that
+  only appear in older trades become unselectable.

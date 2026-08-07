@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-trade-history-filter` (worktree at `.claude/worktrees/trade-history-filter`)
-> - **Completed:** H1–H6. Filters, sorting and paging all server-side; 33 new tests, full admin suite 167 passed. Sorting was NOT in the original plan — it was client-side too and had the same page-scoped bug as the filters, so it moved with them.
-> - **Next:** H7 (manual browser QA) then H8 (docs)
+> - **Completed:** H1–H6, H8. Full suite **1059 passed, 136 skipped, 1 xfailed, 0 failed**. Sorting was NOT in the original plan — it was client-side too and had the same page-scoped bug as the filters, so it moved with them.
+> - **Next:** H7 only — manual browser QA, deliberately left undone (see the task). Everything else is complete.
 
 ## Global Constraints
 
@@ -123,13 +123,13 @@ Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is toda
 
 ### Task H7: Manual check
 
-- [ ] **Step 1:** Run the admin UI, switch all three modes, page through, combine filters with paging, confirm counts. Charts/templates changed, so `testrun.py fast` will auto-escalate to `full` — let it.
+- [ ] **Step 1: NOT PERFORMED.** No browser was driven. Automated coverage reaches the server-rendered HTML only, so the fetch-based JS has never actually executed against a live DOM. It was syntax-checked with `node --check` (152 lines, clean), which rules out silent breakage from a parse error but not runtime/DOM faults. **Someone should still click through all three modes, page, and combine filters before trusting this in anger.**
 
 ### Task H8: Docs
 
 **Files:** Modify `docs/claude/known-traps.md`
 
-- [ ] **Step 1:** Record the coupling: Trade History's filters and pagination must stay on the same side (both server or both client), because splitting them silently filters only the visible page. Commit.
+- [x] **Step 1:** Record the coupling: Trade History's filters and pagination must stay on the same side (both server or both client), because splitting them silently filters only the visible page. Commit.
 
 ---
 
