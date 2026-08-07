@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T5. T4: `scripts/testrun.py` (fast/full/file/lf, stdout verdict only, no measurable overhead). T5: `fast` auto-escalates to `full` when charts/templates/static are dirty, and fails safe to `full` when git cannot answer.
-> - **Next:** T6 (confirm per-file stderr progress flushes incrementally)
+> - **Completed:** T1-T6. T4-T6: `scripts/testrun.py` complete -- fast/full/file/lf profiles, chart-edit auto-escalation, stdout verdict only, stderr progress proven streaming (113 lines over 47.8s) with immediate startup signal.
+> - **Next:** T7 (`test-runner` subagent wrapping the wrapper)
 
 ## Global Constraints
 
@@ -181,8 +181,8 @@ NOTE: charts/templates touched -> escalating to full tier
 
 **Files:** Modify `scripts/testrun.py`
 
-- [ ] **Step 1:** Confirm the per-file stderr progress line actually flushes during a `full` run (CLAUDE.md's rule: any script running more than a couple of minutes must emit incremental progress). At ~40s the `full` profile is under that bar, but the serial `python -m pytest` passthrough is not.
-- [ ] **Step 2:** Verify by watching stderr live during a full run. Commit.
+- [x] **Step 1:** Confirm the per-file stderr progress line actually flushes during a `full` run (CLAUDE.md's rule: any script running more than a couple of minutes must emit incremental progress). At ~40s the `full` profile is under that bar, but the serial `python -m pytest` passthrough is not.
+- [x] **Step 2:** Verify by watching stderr live during a full run. Commit.
 
 ### Task T7: `test-runner` subagent
 

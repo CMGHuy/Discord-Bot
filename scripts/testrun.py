@@ -109,6 +109,14 @@ def run(pytest_args: list[str]) -> tuple[dict[str, int], list[str], float, int]:
     failed: list[str] = []
     seen: set[str] = set()
 
+    # Collection plus xdist worker startup is ~30s of silence before the first
+    # test result. Announce immediately so a watcher can tell "starting up"
+    # from "hung" -- CLAUDE.md's rule is that a long run must never give zero
+    # signal.
+    print(f"  running: {' '.join(pytest_args)}", file=sys.stderr, flush=True)
+    print("  collecting (no per-file output until the first test finishes)...",
+          file=sys.stderr, flush=True)
+
     with LOG.open("w", encoding="utf-8", errors="replace") as log:
         log.write(f"$ {' '.join(cmd)}\n\n")
         proc = subprocess.Popen(
