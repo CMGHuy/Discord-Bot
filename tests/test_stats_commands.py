@@ -235,11 +235,48 @@ def test_slash_py_has_no_bang_command_channel_send_calls():
     assert 'channel.send("!' not in source
 
 
+BRIDGE_COMMANDS = ("ticker", "backtest", "backtestwatchlist",
+                   "trades", "performance", "watchlist")
+
+
 def test_six_bridge_commands_still_registered():
+    """The six prefix commands that also exist as slash commands.
+
+    swingbot/commands/slash.py registers these on `bot.tree` as an IMPORT
+    SIDE EFFECT (@bot.tree.command decorators run at module import), and
+    swingbot/bot_core.py itself registers nothing. This test used to import
+    only bot_core and read the tree, so it passed purely on whether some
+    earlier test in the same process had already imported a command module
+    -- under `-n 4` that depends on which worker the test lands in, which
+    made it fail at random. Importing the registrar here makes it
+    deterministic; test_bot_entrypoint_still_imports_the_slash_module below
+    is what keeps that import from hiding a real production regression.
+    """
+    import swingbot.commands.slash  # noqa: F401  -- registers on import
     from swingbot.bot_core import bot
+
     names = {cmd.name for cmd in bot.tree.get_commands()}
-    for expected in ("ticker", "backtest", "backtestwatchlist", "trades", "performance", "watchlist"):
-        assert expected in names
+    missing = [c for c in BRIDGE_COMMANDS if c not in names]
+    assert not missing, f"slash commands missing from bot.tree: {missing}"
+
+
+def test_bot_entrypoint_still_imports_the_slash_module():
+    """Guards the hole the fix above would otherwise open.
+
+    Registration only happens for modules something actually imports. With
+    the test importing swingbot.commands.slash itself, deleting bot.py's own
+    import of it would leave the test green while the live bot silently lost
+    all six slash commands -- exactly the regression this pair exists to
+    catch. bot.py is the single entry point that wires them up, so assert
+    the import line is still there.
+    """
+    import re as _re
+    from pathlib import Path
+
+    src = Path("bot.py").read_text(encoding="utf-8")
+    assert _re.search(r"^from swingbot\.commands import slash\b", src, _re.M), (
+        "bot.py no longer imports swingbot.commands.slash -- the six bridge "
+        "slash commands would not be registered on the live bot")
 
 
 import re
