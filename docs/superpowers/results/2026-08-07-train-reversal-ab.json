@@ -1,0 +1,47 @@
+{
+  "window": [
+    "2020-01-01",
+    "2023-12-31"
+  ],
+  "n_signals": 1844,
+  "guards": {
+    "min_hold_days": 1.0,
+    "cooldown_days": 2.0,
+    "max_per_day": 1
+  },
+  "arms": [
+    {
+      "arm": "A current",
+      "taken": 701,
+      "skipped": 1143,
+      "final_multiple": 3.1929,
+      "max_dd_pct": 9.88,
+      "expectancy_r": 0.1716,
+      "trades_per_month": 14.6,
+      "reversals": 0,
+      "reversals_r_delta": 0.0
+    },
+    {
+      "arm": "B one-per-ticker",
+      "taken": 689,
+      "skipped": 1155,
+      "final_multiple": 2.6388,
+      "max_dd_pct": 7.35,
+      "expectancy_r": 0.1442,
+      "trades_per_month": 14.3,
+      "reversals": 0,
+      "reversals_r_delta": 0.0
+    },
+    {
+      "arm": "C reversals",
+      "taken": 689,
+      "skipped": 1155,
+      "final_multiple": 2.6388,
+      "max_dd_pct": 7.35,
+      "expectancy_r": 0.1442,
+      "trades_per_month": 14.3,
+      "reversals": 0,
+      "reversals_r_delta": 0.0
+    }
+  ]
+}
