@@ -45,6 +45,39 @@ Items 1, 2 and 6 are defects rather than style choices: dead space wastes the
 frame, and the duplicate ladder is a direct consequence of the VP panel owning
 its own axis.
 
+### 2a. Two corrections found while planning
+
+Read the code before trusting rows 1 and 5 of that table.
+
+**Row 5 is not what it looks like.** `_draw_level_pill`
+(`trade_chart.py:165-181`) *already* anchors to the axis gutter with
+`xycoords=("axes fraction", "data")` at x=1.0 — the exact mechanism this spec
+proposed adopting. The pills only *look* like they float mid-plot because
+`trade_chart.py:887` widens the x-axis to make room for the strategy-label
+column:
+
+```
+extra_width       = max(6, len(recent) * 1.1)     # 20 sessions -> 22
+strategy_label_x  = x_right + extra_width * 0.18  # x_right + 3.96
+ax.set_xlim(..., strategy_label_x + extra_width * 0.55)  # x_right + 16
+```
+
+With ~20 bars plotted, the axis runs ~16 bars past the last candle — **roughly
+45% of the price pane is reserved empty space**, which is what squeezes the
+candles into the left half of the frame. So the real work for row 5 is: move the
+strategy labels into legend line 3, drop the `set_xlim` widening, and split the
+existing pill's `"{label} {price}"` into a line-end name plus a price-only tag.
+That is a smaller, better-targeted change than "replace the pills".
+
+**Row 1's cause is unknown and must be measured, not guessed.** An earlier draft
+of this spec asserted the fixed `fig_height` constants caused the dead space.
+That does not survive arithmetic: `savefig` already uses `bbox_inches="tight"`
+(`trade_chart.py:1056`), which crops empty margins, and
+`subplots_adjust(bottom=0.05)` with the disclaimer at figure `y=0.015`
+(`trade_chart.py:1048`) predicts a ~58px gap at 150 dpi, against ~300px
+observed. Something overrides the requested bottom margin, and the plan's first
+task is therefore a measurement task, not a fix.
+
 ## 3. Panel architecture
 
 Today (`trade_chart.py:396-421`), plus a manually-placed left panel:
@@ -72,9 +105,9 @@ with scale margins putting it in the bottom ~18% — mirroring `chart-init.js:38
 mplfinance `0.12.10b0`; `volume_panel` and `tight_layout` are both supported.
 
 The three hardcoded `fig_height` constants are replaced by a height derived from
-the panel ratios actually in use. That fixes the dead space at its cause: the
-constants were tuned for a 4-panel layout and do not follow when a pane is
-absent.
+the panel ratios actually in use — they were tuned for a 4-panel layout and do
+not follow when a pane is absent. Note this is a correctness fix in its own
+right and **not** assumed to be the dead-space cause; see §2a.
 
 ## 4. Annotation systems
 
