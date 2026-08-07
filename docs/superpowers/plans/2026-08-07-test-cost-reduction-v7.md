@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T6. T4-T6: `scripts/testrun.py` complete -- fast/full/file/lf profiles, chart-edit auto-escalation, stdout verdict only, stderr progress proven streaming (113 lines over 47.8s) with immediate startup signal.
-> - **Next:** T7 (`test-runner` subagent wrapping the wrapper)
+> - **Completed:** T1-T7. Phase 1 complete: `scripts/testrun.py` (profiles, escalation, streaming progress) plus a `test-runner` subagent so full-suite output never reaches the main context. NOTE: T7 Step 2 (live dispatch) was NOT performed -- definition validated statically only.
+> - **Next:** T8 (mark the nine heavy files `slow`)
 
 ## Global Constraints
 
@@ -188,8 +188,8 @@ NOTE: charts/templates touched -> escalating to full tier
 
 **Files:** Create `.claude/agents/test-runner.md`
 
-- [ ] **Step 1:** Mirror the existing `backtest-runner` agent definition. Tools: `Bash, Read, Grep`. Instructions: run `python scripts/testrun.py <profile>`, return **only** the verdict line plus any failing node IDs; never paste pytest output; on failure, read `.pytest-last-run.log` and summarise the failure in at most 3 sentences.
-- [ ] **Step 2: Verify** by dispatching it for a `full` run and confirming the returned report is a handful of lines. Commit.
+- [x] **Step 1:** Mirror the existing `backtest-runner` agent definition. Tools: `Bash, Read, Grep`. Instructions: run `python scripts/testrun.py <profile>`, return **only** the verdict line plus any failing node IDs; never paste pytest output; on failure, read `.pytest-last-run.log` and summarise the failure in at most 3 sentences.
+- [x] **Step 2: Verify** by dispatching it for a `full` run and confirming the returned report is a handful of lines. Commit.
 
 ---
 
