@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T11. T11: low-DPI autouse fixture (TEST_DPI=30, `SWINGBOT_TEST_FULL_DPI=1` escape hatch), lazy so the fast tier never imports matplotlib. Tier green (64 passed) and the fixture verified in both directions. NOTE: the 84s->44s speedup was NOT reproduced (measured 75.7s production vs 137.5s dpi30 under external load); recorded as unverified in docs/claude/testing-cost.md.
-> - **Next:** T12 (rewrite /gate and correct CLAUDE.md)
+> - **Completed:** T1-T12 — all tasks complete. Wrapper + subagent land the token win; `-n 4` and tiering the wall-clock win; T9/T10 the assertion-quality win. One open item: T11's dpi=30 speedup is unverified (see docs/claude/testing-cost.md), and T7's subagent was validated statically rather than by live dispatch.
+> - **Next:** None — plan complete. Re-measure T11 on an idle box before quoting the 84s->44s figure.
 
 ## Global Constraints
 
@@ -266,16 +266,16 @@ Assert: file exists, decodes as an image, has non-zero dimensions, and contains 
 
 **Files:** Modify `.claude/skills/gate/SKILL.md`, `CLAUDE.md`
 
-- [ ] **Step 1: `/gate`** — replace Steps 2/4/5. The ~40 lines teaching how to distinguish the known failure from a real regression collapse to: run `python scripts/testrun.py full`, expect `0 failed, 1 xfailed`, any other result is yours. Keep Step 1 (CPU contention check) and Step 6 (narrow staging) as-is; both are still correct.
+- [x] **Step 1: `/gate`** — replace Steps 2/4/5. The ~40 lines teaching how to distinguish the known failure from a real regression collapse to: run `python scripts/testrun.py full`, expect `0 failed, 1 xfailed`, any other result is yours. Keep Step 1 (CPU contention check) and Step 6 (narrow staging) as-is; both are still correct.
 
-- [ ] **Step 2: CLAUDE.md** — correct these, all now measurably wrong:
+- [x] **Step 2: CLAUDE.md** — correct these, all now measurably wrong:
   - "~3min" full suite → ~40s via the wrapper
   - the `841 passed, 54 skipped, 1 failed` baseline → post-T1 counts with `1 xfailed`
   - the "one permitted failure" paragraph → quarantined, verdict is machine-checkable
   - "Don't re-run the full suite to check a local change" → point at `testrun.py fast` / `file`
   - add the `test-runner` subagent to the tooling list
 
-- [ ] **Step 3: Verify** by running `/gate` end to end. Commit.
+- [x] **Step 3: Verify** by running `/gate` end to end. Commit.
 
 ---
 

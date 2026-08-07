@@ -34,9 +34,12 @@ entry that feeds both the env parser and the admin UI's Settings page).
   `.claude/worktrees/` from a main-tree session.
 - **README.md is 645 lines** — grep its `^## ` headers and read the one section
   you need. Same for `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
-- **Don't re-run the full suite to check a local change** (~3 min) — run the
-  touched file (`pytest tests/test_edge_gates.py -q`) and save the full suite
-  for the pre-commit gate.
+- **Don't re-run the full suite to check a local change** — use
+  `python scripts/testrun.py file tests/test_edge_gates.py` (~7s) or
+  `... fast` (~27s, skips the render-heavy tier), and save `... full` for the
+  pre-commit gate. Always go through the wrapper: it prints a one-line verdict
+  instead of ~1150 progress lines. Better still for a full run, dispatch the
+  `test-runner` subagent so none of it reaches this context.
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
 
@@ -58,13 +61,17 @@ preflights this repo's documented traps. `/gate` is the pre-commit verification
 gate (knows the one permitted pre-existing failure). Subagents:
 `backtest-runner` (multi-hour jobs in an isolated context, returns only
 verdicts), `symbol-verifier` (`git grep` existence checks for symbols a plan
-names). `.mcp.json` provides context7 for yfinance/pandas-ta/discord.py docs.
+names), `test-runner` (runs the suite via `scripts/testrun.py` and returns
+only the verdict, so ~1150 progress lines stay out of your context).
+`.mcp.json` provides context7 for yfinance/pandas-ta/discord.py docs.
 
 ## Commands
 
 ```bash
-python -m pytest tests/ -q                 # full suite, ~3min — pre-commit gate (see known failure below)
-python -m pytest tests/test_foo.py::test_bar -v   # single test — use this while iterating
+python scripts/testrun.py full             # full suite via -n 4 — the pre-commit gate; one-line verdict
+python scripts/testrun.py fast             # ~27s, skips the slow tier; auto-escalates if charts/templates touched
+python scripts/testrun.py file tests/test_foo.py  # one file (~7s) — use this while iterating
+python -m pytest tests/test_foo.py::test_bar -v   # single test, raw pytest
 make check                                 # py_compile syntax pass (no make on Windows: run python -m py_compile over bot.py admin_ui.py swingbot/**/*.py)
 python scripts/fetch_backtest_data.py      # populate the CSV cache (once, network) — required by every backtest/grid script
 python scripts/run_backtest_range.py --train|--validation [--exit-model v2 --scale-out] [--strategy "RSI"] [--json out.json]
@@ -73,13 +80,17 @@ python scripts/shadow_parity_report.py     # v2-vs-legacy comparison from data/s
 make up / make logs / make restart         # docker compose lifecycle
 ```
 
-**Known-good baseline** (commit `a7d23ab`): `841 passed, 54 skipped, 1 failed`
-in ~3m13s. The one failure,
-`tests/test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`
-(`cancelled_expired` != `filled`), is pre-existing and expiry/wall-clock
-dependent — don't treat it as your regression or "fix" it as a side quest.
-"Green" means your diff adds no *new* failure; a different count or a second
-failure is yours to fix.
+**Green means `0 failed`.** Reference baseline: `~1015 passed, 136 skipped,
+1 xfailed, 0 failed` (1152 collected). The pass count drifts up as tasks land
+tests and concurrent sessions commit — a *changed count* is not a failure;
+only `failed` is. `tests/test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`
+is quarantined `xfail(strict=False)` because it is wall-clock/expiry
+dependent; it shows as `xfailed` or occasionally `xpassed` and **neither is a
+problem**. Don't "fix" it — forbidden side quest.
+
+Timings move a lot with machine load (the same run has measured 40s idle and
+262s under contention), and measuring them has its own traps —
+`docs/claude/testing-cost.md` has the numbers and the method.
 
 Long backtest/grid runs: a full 75-ticker × 10-horizon sweep takes tens of
 minutes (`replay_scenarios` is ~30s per ticker-horizon — hours for a full
@@ -115,6 +126,6 @@ Not auto-loaded — read the relevant one before starting work in that area.
   hygiene, worktrees.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
-- `docs/claude/testing-cost.md` — measured suite timings, the current baseline
-  (1145 collected / 0 failed), why `-n 4` beats `-n auto`, and the two traps
-  that make test timings unreliable. Read before optimising or timing tests.
+- `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats
+  `-n auto`, and the two traps that make test timings unreliable. Read before
+  optimising or timing tests.
