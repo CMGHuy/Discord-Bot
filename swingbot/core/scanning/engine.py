@@ -68,6 +68,7 @@ from swingbot.core.edge import throttle
 from swingbot.core.jsonio import read_json
 from .confidence import ConfidenceResult, score_confidence
 from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
+from swingbot.core.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.events import earnings_within_window
 from swingbot.core.explain import build_explanation
 from swingbot.core.market_events import get_market_events
@@ -1291,6 +1292,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
     alerts = []
     skipped_already_open = 0
+    reversed_count = 0
     log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
               len(tickers), len(scan_items), len(deduped))
     for item in deduped:
@@ -1302,21 +1304,50 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             break
         result, plan, conf = item.result, item.plan, item.conf
 
-        # Broader than an exact (strategy, horizon_key) repeat: also catches
-        # a near-identical plan surfaced under a DIFFERENT strategy/horizon
-        # (e.g. running !check repeatedly finds essentially the same S/R
-        # levels under 3m/5m/7m/9m, each a technically distinct horizon_key)
-        # -- see has_similar_open_trade()'s own docstring. Without this,
-        # has_open_trade()'s exact-key match let repeated !check runs log a
-        # fresh "new" open trade every time for what was really the same
-        # setup, one per horizon that happened to qualify that scan.
-        already_open = (
-            trade_log.has_open_trade(result.ticker, result.strategy, result.horizon_key, result.trend)
-            or trade_log.has_similar_open_trade(
-                result.ticker, result.trend, plan.entry, plan.stop_loss, plan.take_profit,
-                tol_pct=config.DEDUP_TOLERANCE_PCT,
+        # ONE open trade per ticker, full stop -- no matter the strategy,
+        # horizon, entry price or direction. The old guard was scoped to a
+        # matching direction plus near-identical levels, so a different
+        # strategy/horizon or a far enough entry still logged a second
+        # position, and an opposite-direction trade was never blocked at all
+        # (one ticker could carry a long AND a short).
+        existing_trade = trade_log.open_trade_for_ticker(result.ticker)
+        already_open = existing_trade is not None
+
+        # ...unless the opposite setup has taken over. Then close the old
+        # trade early at the live price rather than let it ride to its stop,
+        # and let the inverse through the normal opening path below. Guarded
+        # by cooldown / minimum hold / confidence margin / daily cap --
+        # see core/reversal.py. Automatic scans only: `!check` is an
+        # on-demand snapshot and must never mutate positions.
+        if already_open and require_confirmation and result.trend != existing_trade["direction"]:
+            decision = evaluate_reversal(
+                existing_trade, result.trend, conf.score,
+                now=datetime.now(timezone.utc),
+                recent_flips=reversals_for_ticker(
+                    trade_log.get_trades(status=None, limit=None), result.ticker),
+                enabled=config.REVERSAL_ENABLED,
+                min_hold_hours=config.REVERSAL_MIN_HOLD_HOURS,
+                cooldown_hours=config.REVERSAL_COOLDOWN_HOURS,
+                min_conf_margin=config.REVERSAL_MIN_CONF_MARGIN,
+                max_per_day=config.REVERSAL_MAX_PER_DAY,
             )
-        )
+            if decision.allowed and item.all_requirements_met:
+                # No df in scope this deep in the alert loop; this is the same
+                # live-quote call the scan already uses for SL/TP checks. Only
+                # runs when a flip is otherwise approved, so it costs one quote
+                # on a genuinely rare path, not one per scanned ticker.
+                live_price = get_current_price(result.ticker)
+                if live_price and live_price > 0:
+                    closed = trade_log.close_trade_reversed(existing_trade["id"], live_price)
+                    if closed is not None:
+                        reversed_count += 1
+                        already_open = False
+                        log.info("%s: reversed %s -> %s at %.2f (%s)",
+                                 result.ticker, existing_trade["direction"],
+                                 result.trend, live_price, decision.reason)
+            else:
+                log.debug("%s: opposite %s setup not reversing -- %s",
+                          result.ticker, result.trend, decision.reason)
         if already_open and require_confirmation:
             # Automatic/scheduled scan: this exact setup is already being
             # tracked as an open paper trade -- don't re-fire an alert for
@@ -1546,7 +1577,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if progress is not None:
             progress.alerts_done += 1
 
-    log.info("Scan pass complete: %d alert(s) built, %d skipped (already open)", len(alerts), skipped_already_open)
+    log.info("Scan pass complete: %d alert(s) built, %d skipped (already open), %d reversed",
+              len(alerts), skipped_already_open, reversed_count)
 
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2
@@ -1560,6 +1592,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if progress is not None and progress.funnel is not None:
         progress.funnel["deduped"] = len(deduped)
         progress.funnel["skipped_already_open"] = skipped_already_open
+        progress.funnel["reversed"] = reversed_count
 
     # Scan health telemetry (Task E82): logged unconditionally, wrapped so a
     # telemetry failure (disk full, bad path, whatever) never takes down the
