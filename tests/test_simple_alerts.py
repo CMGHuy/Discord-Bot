@@ -103,13 +103,16 @@ def test_simple_alert_prices_follow_the_same_cutover_as_the_full_embed(
 # --------------------------------------------------------------------------
 
 class FakeChannel:
-    def __init__(self, fail=False):
+    def __init__(self, name="chan", fail=False, order=None):
+        self.name = name
         self.sent = []
         self.fail = fail
+        self.order = order if order is not None else []
 
     async def send(self, *args, **kwargs):
         if self.fail:
             raise RuntimeError("discord is having a day")
+        self.order.append(self.name)
         self.sent.append(kwargs or args)
         return types.SimpleNamespace(id=1)
 
@@ -117,7 +120,9 @@ class FakeChannel:
 @pytest.fixture
 def wired(monkeypatch):
     """Main + simple channels wired up, firehose off, cap high."""
-    main, simple = FakeChannel(), FakeChannel()
+    order = []
+    main = FakeChannel("main", order=order)
+    simple = FakeChannel("simple", order=order)
     monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "", raising=False)
     monkeypatch.setattr(config, "MAX_ALERTS_PER_SCAN", 10, raising=False)
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "999", raising=False)
@@ -174,3 +179,56 @@ def test_unresolvable_simple_channel_id_is_skipped_not_fatal(monkeypatch, wired)
 
     asyncio.run(_send_alerts(main, [_alert()]))
     assert len(main.sent) == 1
+
+
+# --------------------------------------------------------------------------
+# Notification policy: exactly one ping per signal, raised by the simple channel
+# --------------------------------------------------------------------------
+
+def test_mirrored_alert_is_posted_silently_to_the_full_channel(wired):
+    main, simple = wired
+    asyncio.run(_send_alerts(main, [_alert()]))
+
+    assert main.sent[0]["silent"] is True     # full alert delivered, no ping
+    assert simple.sent == [("SIMPLE-TEXT",)]  # mirror sent plainly -> it pings
+
+
+def test_the_simple_mirror_itself_is_never_silenced(wired):
+    main, simple = wired
+    asyncio.run(_send_alerts(main, [_alert()]))
+    assert "silent" not in (simple.sent[0] if isinstance(simple.sent[0], dict) else {})
+
+
+def test_mirror_is_sent_before_the_full_alert(wired):
+    """Ordering is load-bearing, not cosmetic: the full alert can only be
+    silenced once the mirror is known to have landed."""
+    main, simple = wired
+    asyncio.run(_send_alerts(main, [_alert("A"), _alert("B")]))
+    assert main.order == ["simple", "main", "simple", "main"]
+
+
+def test_full_alert_keeps_its_notification_when_no_simple_channel(monkeypatch, wired):
+    """Silencing must never leave a signal unannounced -- with the mirror off,
+    the full alert has to stay the thing that pings."""
+    main, _ = wired
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "", raising=False)
+    asyncio.run(_send_alerts(main, [_alert()]))
+
+    assert main.sent[0]["silent"] is False
+
+
+def test_failed_mirror_hands_the_notification_back_to_the_full_alert(monkeypatch, wired):
+    main, _ = wired
+    broken = FakeChannel("broken", fail=True)
+    monkeypatch.setattr(scanning_mod, "bot",
+                        types.SimpleNamespace(get_channel=lambda _id: broken), raising=False)
+
+    asyncio.run(_send_alerts(main, [_alert()]))
+    assert main.sent[0]["silent"] is False
+
+
+def test_legacy_three_tuple_alert_is_not_silenced(wired):
+    """No simple text to mirror -> nothing else will ping for this signal."""
+    main, _ = wired
+    asyncio.run(_send_alerts(main, [("EMBED", None, None)]))
+    assert main.sent[0]["silent"] is False
