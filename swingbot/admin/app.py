@@ -412,6 +412,46 @@ def _is_today_berlin(iso_ts: str | None) -> bool:
         return False
 
 
+# ── Closed-trade P&L helpers (passed as callables to Jinja) ──────────────
+# Module-level, not nested in _render_dashboard_fragment(): the
+# /api/trade-history endpoint renders the same row partial and needs the
+# identical callables, and duplicating them is how the two paths drift.
+# They are pure -- no closure over fragment state.
+def _closed_pnl(t) -> float | None:
+    ex, en = t.get("exit_price"), t.get("entry")
+    if not ex or not en:
+        return None
+    raw = (ex - en) / en * 100
+    return round(raw if t["direction"] == "bullish" else -raw, 2)
+
+def _closed_r(t) -> float | None:
+    ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
+    if not ex or not en or not sl_v:
+        return None
+    risk = abs(en - sl_v)
+    if not risk:
+        return None
+    realized = (ex - en) if t["direction"] == "bullish" else (en - ex)
+    return round(realized / risk, 2)
+
+def _closed_days(t) -> dict | None:
+    """Returns {label, total_hours} -- the full day/hour/minute holding
+    period label (see _format_duration_hms) plus a raw sortable figure,
+    for the Trade History table's Days column."""
+    try:
+        elapsed = (
+            datetime.fromisoformat(t["closed_at"]) -
+            datetime.fromisoformat(t["opened_at"])
+        )
+        total_seconds = max(0.0, elapsed.total_seconds())
+        return {
+            "label": _format_duration_hms(total_seconds),
+            "total_hours": total_seconds / 3600.0,
+        }
+    except Exception:
+        return None
+
+
 CLOSED_TRADE_STATUSES = ("win", "loss", "closed")
 
 # Allowed page sizes, mirroring the table's own selector. 0 means "All".
@@ -730,41 +770,6 @@ def _render_dashboard_fragment() -> str:
     stats["total_unrealized_pct"] = (
         sum(unrealized_pnls) / len(unrealized_pnls) if unrealized_pnls else None
     )
-
-    # ── Closed-trade P&L helpers (passed as callables to Jinja) ──────────────
-    def _closed_pnl(t) -> float | None:
-        ex, en = t.get("exit_price"), t.get("entry")
-        if not ex or not en:
-            return None
-        raw = (ex - en) / en * 100
-        return round(raw if t["direction"] == "bullish" else -raw, 2)
-
-    def _closed_r(t) -> float | None:
-        ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
-        if not ex or not en or not sl_v:
-            return None
-        risk = abs(en - sl_v)
-        if not risk:
-            return None
-        realized = (ex - en) if t["direction"] == "bullish" else (en - ex)
-        return round(realized / risk, 2)
-
-    def _closed_days(t) -> dict | None:
-        """Returns {label, total_hours} -- the full day/hour/minute holding
-        period label (see _format_duration_hms) plus a raw sortable figure,
-        for the Trade History table's Days column."""
-        try:
-            elapsed = (
-                datetime.fromisoformat(t["closed_at"]) -
-                datetime.fromisoformat(t["opened_at"])
-            )
-            total_seconds = max(0.0, elapsed.total_seconds())
-            return {
-                "label": _format_duration_hms(total_seconds),
-                "total_hours": total_seconds / 3600.0,
-            }
-        except Exception:
-            return None
 
     realized_pnls = [p for p in (_closed_pnl(t) for t in closed_trades) if p is not None]
     stats["total_realized_pct"] = round(sum(realized_pnls) / len(realized_pnls), 2) if realized_pnls else None
