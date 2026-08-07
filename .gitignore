@@ -30,3 +30,8 @@ data/replay_result.json
 # deliverables the backtest methodology in CLAUDE.md requires be committed.
 # Caught when Task E80's results doc silently failed to `git add`.
 docs/superpowers/results/*.log
+
+# pytest scratch: .pytest-last-run.log is where scripts/testrun.py parks full
+# pytest output so only its 1-3 line verdict reaches the caller's context.
+.pytest_cache/
+.pytest-last-run.log

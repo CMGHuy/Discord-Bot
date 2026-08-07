@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T2. T1: `test_flag_on_polls_open_plans` quarantined with `xfail(strict=False)`; baseline verified **1008 passed, 136 skipped, 1 xfailed, 0 failed** (1145 collected), so green is now machine-checkable. T2: `docs/claude/testing-cost.md` written and linked from CLAUDE.md's reference list.
-> - **Next:** T3 (register the `slow` marker, correct the `-n auto` guidance, add pytest entries to `.gitignore`)
+> - **Completed:** T1-T3. T1: wall-clock test quarantined `xfail(strict=False)`; baseline **1008 passed, 136 skipped, 1 xfailed, 0 failed** (1145 collected). T2: `docs/claude/testing-cost.md` written and linked from CLAUDE.md. T3: `slow` marker registered, `-n auto` guidance corrected to `-n 4`, pytest entries added to `.gitignore`; collection unchanged at 1145.
+> - **Next:** T4 (build `scripts/testrun.py` core profiles)
 
 ## Global Constraints
 
@@ -114,25 +114,25 @@ foreach ($n in 2,4,6,8) { Start-Sleep 20; Measure-Command { python -m pytest tes
 
 **Files:** Modify `pytest.ini`, `.gitignore`
 
-- [ ] **Step 1: Register the `slow` marker in `pytest.ini`**
+- [x] **Step 1: Register the `slow` marker in `pytest.ini`**
 
 ```ini
 markers =
     slow: heavy render/backtest test (~85% of suite runtime); excluded from the fast tier
 ```
 
-- [ ] **Step 2: Correct the parallelism comment.** The existing comment recommends `-n auto`. Measured on this box, `-n auto` (12 workers, 60.0s) is *worse* than `-n 4` (40.2s). Replace the recommendation with `-n 4` and cite `docs/claude/testing-cost.md`. Keep the existing (correct) warning about contending with a live backtest.
+- [x] **Step 2: Correct the parallelism comment.** The existing comment recommends `-n auto`. Measured on this box, `-n auto` (12 workers, 60.0s) is *worse* than `-n 4` (40.2s). Replace the recommendation with `-n 4` and cite `docs/claude/testing-cost.md`. Keep the existing (correct) warning about contending with a live backtest.
 
-- [ ] **Step 3: `addopts` stays exactly `-q`.** Do not add `-n` or `-m` — see Global Constraints.
+- [x] **Step 3: `addopts` stays exactly `-q`.** Do not add `-n` or `-m` — see Global Constraints.
 
-- [ ] **Step 4: Add to `.gitignore`** (it currently has no pytest entries):
+- [x] **Step 4: Add to `.gitignore`** (it currently has no pytest entries):
 
 ```
 .pytest_cache/
 .pytest-last-run.log
 ```
 
-- [ ] **Step 5:** Verify `python -m pytest tests/ -q` behaviour is unchanged. Commit.
+- [x] **Step 5:** Verify `python -m pytest tests/ -q` behaviour is unchanged. Commit.
 
 ### Task T4: `scripts/testrun.py` — core profiles
 
