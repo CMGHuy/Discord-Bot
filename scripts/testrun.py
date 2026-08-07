@@ -47,6 +47,46 @@ FAILED_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)")
 COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|xfailed|xpassed|error|errors|deselected)")
 
 
+# Editing any of these can break a test that only runs in the slow tier, so
+# `fast` transparently upgrades itself to `full` when they are dirty. Tiering
+# is a speed optimisation; it must not become a way to miss a regression.
+ESCALATE_PREFIXES = (
+    "swingbot/core/charts/",
+    "swingbot/admin/templates/",
+    "swingbot/admin/static/",
+)
+
+
+def changed_paths() -> list[str] | None:
+    """Working-tree + staged paths vs HEAD. None if git can't answer."""
+    try:
+        out = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"], cwd=REPO,
+            capture_output=True, text=True, timeout=15,
+        )
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"], cwd=REPO,
+            capture_output=True, text=True, timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    paths = out.stdout.splitlines() + untracked.stdout.splitlines()
+    return [p.strip().replace("\\", "/") for p in paths if p.strip()]
+
+
+def should_escalate() -> tuple[bool, str]:
+    paths = changed_paths()
+    if paths is None:
+        # Fail safe, not fast: if we cannot tell what changed, run everything.
+        return True, "git unavailable"
+    hits = [p for p in paths if p.startswith(ESCALATE_PREFIXES)]
+    if hits:
+        return True, f"{hits[0]}{'' if len(hits) == 1 else f' (+{len(hits) - 1} more)'} touched"
+    return False, ""
+
+
 def build_args(profile: str, target: str | None) -> list[str]:
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
@@ -103,9 +143,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("profile", choices=["fast", "full", "file", "lf"])
     ap.add_argument("target", nargs="?")
+    ap.add_argument("--no-escalate", action="store_true",
+                    help="keep `fast` narrow even if chart/template files changed")
     args = ap.parse_args()
 
-    counts, failed, elapsed, rc = run(build_args(args.profile, args.target))
+    profile = args.profile
+    if profile == "fast" and not args.no_escalate:
+        escalate, why = should_escalate()
+        if escalate:
+            print(f"NOTE: {why} -> escalating to full tier")
+            profile = "full"
+
+    counts, failed, elapsed, rc = run(build_args(profile, args.target))
 
     # No parseable counts means we do not know what happened. Never optimistic.
     if not counts:

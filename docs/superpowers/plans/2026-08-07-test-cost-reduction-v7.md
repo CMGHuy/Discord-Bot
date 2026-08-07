@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T4. T1: wall-clock test quarantined. T2: `docs/claude/testing-cost.md`. T3: `slow` marker + `-n 4` guidance. T4: `scripts/testrun.py` with fast/full/file/lf profiles, stdout verdict only, stderr progress, gitignored log, UNKNOWN-on-unparseable. Verified adds no overhead (63.2s vs 64.4s raw) and leaks no tracebacks.
-> - **Next:** T5 (auto-escalate `fast` to `full` when charts/templates change)
+> - **Completed:** T1-T5. T4: `scripts/testrun.py` (fast/full/file/lf, stdout verdict only, no measurable overhead). T5: `fast` auto-escalates to `full` when charts/templates/static are dirty, and fails safe to `full` when git cannot answer.
+> - **Next:** T6 (confirm per-file stderr progress flushes incrementally)
 
 ## Global Constraints
 
@@ -169,13 +169,13 @@ Fast runs **serial on purpose** — measured 27.1s serial vs 27.2s at `-n 4`. It
 
 **Files:** Modify `scripts/testrun.py`
 
-- [ ] **Step 1:** In the `fast` profile, run `git diff --name-only HEAD`. If any path matches `swingbot/core/charts/`, `swingbot/admin/templates/`, or `swingbot/admin/static/`, escalate to the `full` profile and print exactly one stdout line:
+- [x] **Step 1:** In the `fast` profile, run `git diff --name-only HEAD`. If any path matches `swingbot/core/charts/`, `swingbot/admin/templates/`, or `swingbot/admin/static/`, escalate to the `full` profile and print exactly one stdout line:
 
 ```
 NOTE: charts/templates touched -> escalating to full tier
 ```
 
-- [ ] **Step 2: Verify** both branches (touch a chart file, confirm escalation; touch only `swingbot/core/edge/gates.py`, confirm no escalation). Handle the no-git / detached-HEAD case by defaulting to the full tier — fail safe, not fast. Commit.
+- [x] **Step 2: Verify** both branches (touch a chart file, confirm escalation; touch only `swingbot/core/edge/gates.py`, confirm no escalation). Handle the no-git / detached-HEAD case by defaulting to the full tier — fail safe, not fast. Commit.
 
 ### Task T6: Progress output for long runs
 
