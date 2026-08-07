@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T3. T1: wall-clock test quarantined `xfail(strict=False)`; baseline **1008 passed, 136 skipped, 1 xfailed, 0 failed** (1145 collected). T2: `docs/claude/testing-cost.md` written and linked from CLAUDE.md. T3: `slow` marker registered, `-n auto` guidance corrected to `-n 4`, pytest entries added to `.gitignore`; collection unchanged at 1145.
-> - **Next:** T4 (build `scripts/testrun.py` core profiles)
+> - **Completed:** T1-T4. T1: wall-clock test quarantined. T2: `docs/claude/testing-cost.md`. T3: `slow` marker + `-n 4` guidance. T4: `scripts/testrun.py` with fast/full/file/lf profiles, stdout verdict only, stderr progress, gitignored log, UNKNOWN-on-unparseable. Verified adds no overhead (63.2s vs 64.4s raw) and leaks no tracebacks.
+> - **Next:** T5 (auto-escalate `fast` to `full` when charts/templates change)
 
 ## Global Constraints
 
@@ -140,7 +140,7 @@ markers =
 
 **Interfaces — Produces:** the CLI every later task and the subagent depend on.
 
-- [ ] **Step 1: Implement the profiles**
+- [x] **Step 1: Implement the profiles**
 
 | Command | pytest args | Expected |
 | --- | --- | --- |
@@ -151,7 +151,7 @@ markers =
 
 Fast runs **serial on purpose** — measured 27.1s serial vs 27.2s at `-n 4`. It is at the fixed-overhead floor; workers only add startup cost.
 
-- [ ] **Step 2: Output discipline** (the whole point):
+- [x] **Step 2: Output discipline** (the whole point):
   - full pytest output → `.pytest-last-run.log`
   - progress → **stderr**, one flushed line per completed file
   - stdout → verdict only:
@@ -161,9 +161,9 @@ Fast runs **serial on purpose** — measured 27.1s serial vs 27.2s at `-n 4`. It
     On failure: summary + up to 10 failing node IDs + log path. **Never tracebacks.**
   - exit code mirrors pass/fail
 
-- [ ] **Step 3: Parse counts, defensively.** The wrapper must pass `-p no:cacheprovider` and **override `pytest.ini`'s `-q`**, because `-q` suppresses the summary count line entirely in pytest 9.1.1 — a naive parser sees no counts and must not interpret that as success. If the counts line cannot be parsed, exit non-zero with `VERDICT: UNKNOWN (could not parse pytest output)`. Never report PASS on an unparseable run.
+- [x] **Step 3: Parse counts, defensively.** The wrapper must pass `-p no:cacheprovider` and **override `pytest.ini`'s `-q`**, because `-q` suppresses the summary count line entirely in pytest 9.1.1 — a naive parser sees no counts and must not interpret that as success. If the counts line cannot be parsed, exit non-zero with `VERDICT: UNKNOWN (could not parse pytest output)`. Never report PASS on an unparseable run.
 
-- [ ] **Step 4: Verify** each profile's timing and that a deliberately broken test produces a `VERDICT: FAIL` with node IDs and no traceback on stdout. Commit.
+- [x] **Step 4: Verify** each profile's timing and that a deliberately broken test produces a `VERDICT: FAIL` with node IDs and no traceback on stdout. Commit.
 
 ### Task T5: Auto-escalation on chart/template edits
 
