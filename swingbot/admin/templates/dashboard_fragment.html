@@ -261,7 +261,7 @@
     {%- set sizing = sizing_map.get(t.id) -%}
     {%- set is_bull = t.direction == 'bullish' -%}
     {%- set conf_score = t.get('confidence_score') -%}
-    <tr class="clickable" data-ticker="{{ t.ticker }}">
+    <tr class="clickable" data-trade-id="{{ t.id }}" data-ticker="{{ t.ticker }}">
       <td class="muted" title="Row number, per the table's current sort order">{{ loop.index }}</td>
 
       {# ── Status cell: dot + bar + live SL/TP distances ─────────────────── #}
@@ -407,7 +407,7 @@
       </td>
     </tr>
     {% if t.get('legs') and t.legs | length > 1 %}
-    <tr class="muted" style="font-size:11px;">
+    <tr class="muted ot-leg-row" data-leg-for="{{ t.id }}" style="font-size:11px;">
       <td></td><td></td>
       <td colspan="16" style="padding-left:24px;">
         {% for leg in t.legs[1:] %}
@@ -452,7 +452,7 @@
     var idx = colIndexById(colId);
     if (idx === -1) return;
     var tbody = document.querySelector('#trades-table tbody');
-    var rows = Array.from(tbody.querySelectorAll('tr'));
+    var rows = Array.from(tbody.querySelectorAll('tr:not(.ot-leg-row)'));
     rows.sort(function(a, b) {
       var ac = a.cells[idx], bc = b.cells[idx];
       var av = (ac.dataset.sort !== undefined ? ac.dataset.sort : ac.innerText).trim();
@@ -461,7 +461,10 @@
       var cmp = (!isNaN(an) && !isNaN(bn)) ? (an - bn) : av.localeCompare(bv);
       return _sortAsc ? cmp : -cmp;
     });
-    rows.forEach(function(r) { tbody.appendChild(r); });
+    rows.forEach(function(r) {
+      tbody.appendChild(r);
+      otLegRowsFor(r).forEach(function(leg) { tbody.appendChild(leg); });
+    });
     document.querySelectorAll('.sort-arrow').forEach(function(el) {
       el.textContent = (el.dataset.colId === _sortColId) ? (_sortAsc ? ' ▲' : ' ▼') : '';
     });
@@ -476,7 +479,7 @@
     var confIdx = colIndexById('confidence'), scoreIdx = colIndexById('score');
     if (confIdx === -1 || scoreIdx === -1) return;
     var tbody = document.querySelector('#trades-table tbody');
-    var rows = Array.from(tbody.querySelectorAll('tr'));
+    var rows = Array.from(tbody.querySelectorAll('tr:not(.ot-leg-row)'));
     rows.sort(function(a, b) {
       var aConf = parseFloat(a.cells[confIdx].dataset.sort) || 0;
       var bConf = parseFloat(b.cells[confIdx].dataset.sort) || 0;
@@ -485,7 +488,10 @@
       var bScore = parseFloat(b.cells[scoreIdx].dataset.sort) || 0;
       return bScore - aScore;
     });
-    rows.forEach(function(r) { tbody.appendChild(r); });
+    rows.forEach(function(r) {
+      tbody.appendChild(r);
+      otLegRowsFor(r).forEach(function(leg) { tbody.appendChild(leg); });
+    });
   }
 
   function filterTable() {
@@ -504,8 +510,18 @@
   var otPerPage = otSavedPP;
   var otCurrentPage = 1;
 
+  // Same leg-row rule as the Trade History table below: a scaled-out trade's
+  // .ot-leg-row is a continuation of its parent, never a row to paginate.
+  function otLegRowsFor(row) {
+    var id = row.dataset.tradeId;
+    if (!id) return [];
+    return Array.from(document.querySelectorAll(
+      '#trades-table tbody tr.ot-leg-row[data-leg-for="' + id + '"]'));
+  }
+
   function otRefreshRows() {
-    otAllRows = Array.from(document.querySelectorAll('#trades-table tbody tr'));
+    otAllRows = Array.from(document.querySelectorAll(
+      '#trades-table tbody tr:not(.ot-leg-row)'));
   }
 
   function otGetVisible() {
@@ -524,8 +540,12 @@
     var start = (otCurrentPage - 1) * pp;
     var end = Math.min(start + pp, total);
 
-    otAllRows.forEach(function(r) { r.style.display = 'none'; });
-    visible.slice(start, end).forEach(function(r) { r.style.display = ''; });
+    document.querySelectorAll('#trades-table tbody tr')
+      .forEach(function(r) { r.style.display = 'none'; });
+    visible.slice(start, end).forEach(function(r) {
+      r.style.display = '';
+      otLegRowsFor(r).forEach(function(leg) { leg.style.display = ''; });
+    });
 
     var otInfo = document.getElementById('ot-info');
     var otPageInfo = document.getElementById('ot-page-info');
@@ -744,6 +764,7 @@
     {%- set pnl_amt = t.get('realized_pnl_amount') -%}
     {%- set pos_val = t.get('position_value') -%}
     <tr class="clickable" id="ct-row-{{ t.id }}"
+        data-trade-id="{{ t.id }}"
         data-outcome="{{ t.status }}"
         data-ticker="{{ t.ticker }}"
         data-strategy="{{ c_strat }}"
@@ -811,7 +832,7 @@
       </td>
     </tr>
     {% if t.get('legs') and t.legs | length > 1 %}
-    <tr class="muted" style="font-size:11px;">
+    <tr class="muted ct-leg-row" data-leg-for="{{ t.id }}" style="font-size:11px;">
       <td></td><td></td>
       <td colspan="14" style="padding-left:24px;">
         {% for leg in t.legs[1:] %}
@@ -903,7 +924,12 @@
         return ctSortAsc ? cmp : -cmp;
       });
       var tbody = document.querySelector('#closed-trades-table tbody');
-      allRows.forEach(function(r) { tbody.appendChild(r); });
+      allRows.forEach(function(r) {
+        tbody.appendChild(r);
+        // Re-append each trade's leg row directly behind it, or sorting would
+        // leave the runner detail sitting under an unrelated trade.
+        legRowsFor(r).forEach(function(leg) { tbody.appendChild(leg); });
+      });
       document.querySelectorAll('#closed-trades-table .sort-arrow').forEach(function(el) {
         el.textContent = (el.dataset.colId === ctSortCol) ? (ctSortAsc ? ' ▲' : ' ▼') : '';
       });
@@ -921,6 +947,18 @@
     // closed_trade_filter_options in the dashboard route) directly into the
     // <select> markup above, and morphdom patches them in place on every
     // refresh same as any other element -- no client-side rebuild needed.
+
+    // A scaled-out trade renders a SECOND <tr> (.ct-leg-row) right after its
+    // own row, holding the runner's exit detail. That row is a continuation of
+    // its parent, not a trade: it carries no .row-num and no data-* filter
+    // attributes. It must never be counted as a row to paginate -- it is shown
+    // and hidden with whatever trade owns it.
+    function legRowsFor(row) {
+      var id = row.dataset.tradeId;
+      if (!id) return [];
+      return Array.from(document.querySelectorAll(
+        '#closed-trades-table tbody tr.ct-leg-row[data-leg-for="' + id + '"]'));
+    }
 
     function getVisible() {
       return allRows.filter(function(row) {
@@ -940,10 +978,16 @@
       var start = (currentPage - 1) * pp;
       var end   = Math.min(start + pp, total);
 
-      allRows.forEach(function(r){ r.style.display = 'none'; });
+      // Hide EVERY row in the tbody, leg rows included -- they are not in
+      // allRows, so hiding only allRows would leave them stranded on screen
+      // under whichever trade happened to land in their place.
+      document.querySelectorAll('#closed-trades-table tbody tr')
+        .forEach(function(r) { r.style.display = 'none'; });
       visible.slice(start, end).forEach(function(r, i) {
         r.style.display = '';
-        r.querySelector('.row-num').textContent = start + i + 1;
+        var num = r.querySelector('.row-num');
+        if (num) num.textContent = start + i + 1;
+        legRowsFor(r).forEach(function(leg) { leg.style.display = ''; });
       });
 
       document.getElementById('ct-info').textContent =
@@ -964,7 +1008,8 @@
     // server-side from the full trade history -- see the note above -- so
     // they no longer need rebuilding here.)
     window.refreshClosedTradesTable = function() {
-      allRows = Array.from(document.querySelectorAll('#closed-trades-table tbody tr'));
+      allRows = Array.from(document.querySelectorAll(
+        '#closed-trades-table tbody tr:not(.ct-leg-row)'));
       render();
     };
 

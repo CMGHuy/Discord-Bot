@@ -67,3 +67,86 @@ def test_dashboard_fragment_shows_lifecycle_strip_and_equity_sparkline(client, a
     html = r.data.decode("utf-8")
     assert "lifecycle-strip" in html
     assert "<svg" in html
+
+
+def _closed_tbody(html):
+    """The <tbody> of the Trade History table -- the exact node the client-side
+    paginator scans with `#closed-trades-table tbody tr`."""
+    table = html.split('id="closed-trades-table"', 1)[1]
+    return table.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+
+
+def _seed_closed_pair_with_runner(data_dir):
+    """Two closed trades, the NEWER one scaled out (2 legs). The scale-out
+    trade emits a second <tr> for its runner detail line -- that extra row is
+    what the paginator must not mistake for a trade."""
+    base = {
+        "status": "win", "direction": "bullish", "entry": 100.0,
+        "stop_loss": 95.0, "take_profit": 110.0, "exit_price": 110.0,
+        "opened_at": "2026-07-01T00:00:00+00:00", "confidence_level": 3,
+        "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
+    }
+    trades = [
+        dict(base, id="t0", ticker="AAA", closed_at="2026-07-20T00:00:00+00:00",
+             legs=[{"fraction": 0.5, "exit_price": 104.0, "r": 0.4},
+                   {"fraction": 0.5, "exit_price": 110.0, "r": 2.0}]),
+        dict(base, id="t1", ticker="BBB", closed_at="2026-07-19T00:00:00+00:00"),
+    ]
+    with open(os.path.join(data_dir, "trades.json"), "w") as f:
+        json.dump(trades, f)
+
+
+def test_closed_runner_row_is_marked_so_pagination_can_skip_it(client, auth, admin_app):
+    """A scale-out trade's runner row sits in the same <tbody> as real trade
+    rows but carries no .row-num -- the paginator used to count it as a trade
+    and then throw on `.row-num.textContent`, aborting render() mid-page. It
+    must be identifiable as a non-trade row and tied to its parent trade."""
+    from swingbot import config
+    _seed_closed_pair_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    tbody = _closed_tbody(html)
+
+    leg_rows = [row for row in tbody.split("<tr")[1:] if "ct-leg-row" in row.split(">", 1)[0]]
+    assert len(leg_rows) == 1, "the runner detail row must be marked ct-leg-row"
+    assert 'data-leg-for="t0"' in leg_rows[0], "and tied to the trade it belongs to"
+
+
+def test_every_paginated_closed_row_has_a_row_number(client, auth, admin_app):
+    """render() writes `.row-num` on every row it shows. Any row the paginator
+    counts but that has no .row-num crashes it, so the two sets must match:
+    2 trades -> 2 .row-num spans, and exactly 1 extra (excluded) leg row."""
+    from swingbot import config
+    _seed_closed_pair_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    tbody = _closed_tbody(html)
+
+    total_rows = tbody.count("<tr")
+    paginated = [row for row in tbody.split("<tr")[1:] if "ct-leg-row" not in row.split(">", 1)[0]]
+    assert len(paginated) == 2, "one paginatable row per closed trade"
+    assert total_rows == 3, "2 trade rows + 1 runner row"
+    for row in paginated:
+        assert 'class="row-num"' in row
+
+
+def test_open_runner_row_is_marked_so_pagination_can_skip_it(client, auth, admin_app):
+    """The Open Trades table renders the same runner continuation row and
+    paginates the same way, so it needs the same exclusion marker."""
+    from swingbot import config
+    trades = [{
+        "id": "t1", "ticker": "AAPL", "status": "open", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+        "opened_at": "2026-07-01T00:00:00+00:00", "confidence_level": 3,
+        "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
+        "legs": [{"fraction": 0.5, "exit_price": 104.0, "r": 0.4},
+                 {"fraction": 0.5, "exit_price": None, "r": None}],
+    }]
+    with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
+        json.dump(trades, f)
+    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    tbody = html.split('id="trades-table"', 1)[1].split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+
+    rows = tbody.split("<tr")[1:]
+    leg_rows = [r for r in rows if "ot-leg-row" in r.split(">", 1)[0]]
+    trade_rows = [r for r in rows if "ot-leg-row" not in r.split(">", 1)[0]]
+    assert len(leg_rows) == 1 and 'data-leg-for="t1"' in leg_rows[0]
+    assert len(trade_rows) == 1 and 'data-trade-id="t1"' in trade_rows[0]
