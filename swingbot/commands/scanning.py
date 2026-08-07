@@ -288,6 +288,32 @@ def route_channel_id(item) -> str:
     return firehose
 
 
+def _simple_alert_channel():
+    """The channel object for DISCORD_CHANNEL_TRADES_SIMPLE_ID, or None.
+
+    Optional by design, exactly like DISCORD_CHANNEL_FIREHOSE_ID: leaving the
+    var blank is the supported way to turn the simple mirror off, so an unset
+    value is a debug line, not a warning. A set-but-unresolvable id IS worth a
+    warning -- that's a misconfiguration, not a choice. Resolved once per
+    batch rather than per alert since get_channel is a cache lookup that
+    cannot change mid-batch.
+    """
+    chan_id = getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "") or ""
+    if not chan_id:
+        log.debug("DISCORD_CHANNEL_TRADES_SIMPLE_ID not set; simple alerts disabled.")
+        return None
+    try:
+        channel = bot.get_channel(int(chan_id))
+    except (TypeError, ValueError):
+        log.warning("DISCORD_CHANNEL_TRADES_SIMPLE_ID=%r is not a valid channel id; "
+                    "simple alerts disabled for this batch.", chan_id)
+        return None
+    if channel is None:
+        log.warning("Simple-alerts channel %s not found (is the bot in that guild, "
+                    "and can it see the channel?); simple alerts skipped.", chan_id)
+    return channel
+
+
 def deep_scan_report(items: list) -> str:
     """Task E87: renders the Saturday weekend-deep-scan candidate list --
     NOT alerts, just a curated heads-up for Monday. Pure formatting; see
@@ -345,8 +371,16 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
 
     firehose_id = getattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "") or ""
     firehose_channel = bot.get_channel(int(firehose_id)) if route_by_tier and firehose_id else None
+    simple_channel = _simple_alert_channel()
 
-    for embed, chart_path, plan in to_send:
+    for alert in to_send:
+        # Tolerant unpack: engine.py emits 4-tuples (…, simple_text), but the
+        # legacy 3-tuple shape is still built by hand in tests and by any
+        # caller that predates the simple channel. A missing 4th element just
+        # means "no simple mirror for this one", never a crash.
+        embed, chart_path, plan = alert[0], alert[1], alert[2]
+        simple_text = alert[3] if len(alert) > 3 else None
+
         send_to = destination
         if route_by_tier and firehose_channel is not None and plan is not None:
             target_id = route_channel_id(type("I", (), {"plan": plan})())
@@ -362,6 +396,21 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
         msg = await send_to.send(**kwargs)
         if view is not None:
             view.message = msg
+
+        # The simple mirror is deliberately posted AFTER the full alert and in
+        # its own try: it is a convenience copy, so a failure here (bad channel
+        # id, missing permissions, Discord hiccup) must never cost the real
+        # alert or abort the rest of the batch. Note it mirrors EVERY posted
+        # alert, including ones routed to the firehose -- "same function as the
+        # full alerts channel" means the same set of signals, not the same
+        # tier split.
+        if simple_channel is not None and simple_text:
+            try:
+                await simple_channel.send(simple_text)
+            except Exception as _se:
+                log.warning("Could not post simple alert for %s to channel %s: %s",
+                            getattr(plan, "ticker", "?"),
+                            getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), _se)
 
 
 def _presence_text() -> str:

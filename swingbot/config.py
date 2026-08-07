@@ -100,6 +100,9 @@ FIELDS: list[Field] = [
                "the Gateway connection can't be swapped to a new token live."),
     Field("DISCORD_CHANNEL_TRADES_ID", "DISCORD_CHANNEL_TRADES_ID", "Discord Connection", "Alerts channel ID",
           help="Channel where new trade alerts are posted."),
+    Field("DISCORD_CHANNEL_TRADES_SIMPLE_ID", "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "Discord Connection", "Simple-alerts channel ID",
+          help="Mirrors every alert from the alerts channel as a short text message -- ticker, direction, "
+               "confidence, horizon, setup, entry, TP1, TP2, SL -- with no chart image. Empty = off."),
     Field("DISCORD_CHANNEL_TRADES_HISTORY_ID", "DISCORD_CHANNEL_TRADES_HISTORY_ID", "Discord Connection", "Closed-trades channel ID",
           help="Channel for WIN/LOSS and near-SL/TP notifications. Separate from the alerts channel so results don't get lost among new signals."),
     Field("DISCORD_CHANNEL_RETROSPECTIVE_ID", "DISCORD_CHANNEL_RETROSPECTIVE_ID", "Discord Connection", "Daily retrospective channel ID",

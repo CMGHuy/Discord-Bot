@@ -671,6 +671,51 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     return embed
 
 
+def build_simple_alert(item) -> str:
+    """The DISCORD_CHANNEL_TRADES_SIMPLE_ID mirror of a full alert: the same
+    signal stripped to the fields needed to act on it -- ticker, direction,
+    confidence level + score, horizon, setup, entry, TP1, TP2, SL. No chart is
+    generated or attached (that is the point: this channel stays readable on a
+    phone and costs no render time), no embed, no track record, no sizing, no
+    requirement annotations, no plan buttons.
+
+    Prices come from plan_numbers_for_display() -- the SAME funnel
+    _build_trade_plan_table() feeds the full embed from -- so the two channels
+    can never quote different numbers for one signal. Anything that moves
+    pricing (the PLAN_ENGINE_V2 cutover included) moves both at once.
+
+    Returns a plain Discord message string, not an Embed.
+    """
+    result, plan, conf = item.result, item.plan, item.conf
+    is_bull = result.trend == "bullish"
+    direction = "LONG" if is_bull else "SHORT"
+
+    nums = plan_numbers_for_display(_v2_plan(item), {
+        "entry": plan.entry, "stop_loss": plan.stop_loss,
+        "take_profit": plan.take_profit, "target2": plan.target2_price})
+
+    # "Setup" is the full embed's Setup field (the generating strategy) plus
+    # the confluence methods that confirmed the target -- Fib, VWAP, EMA,
+    # structure, ... -- which is the part that says WHY the level is there.
+    # The full embed splits these across two places ("Setup" in the headline,
+    # "Target confirmed by" in the plan table); one line is enough here.
+    setup = result.strategy
+    sources = _sources_str(plan.target_sources)
+    if sources != "n/a":
+        setup = f"{setup} · {sources}"
+
+    tp2 = nums["target2"]
+    tp2_part = f"TP2 `{tp2:.2f}` · " if tp2 is not None else ""
+    return "\n".join([
+        f"{'🟢' if is_bull else '🔴'} **{direction} — {result.ticker}**",
+        f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)",
+        f"Horizon: {result.horizon_label}",
+        f"Setup: {setup}",
+        (f"Entry `{nums['entry']:.2f}` · TP1 `{nums['take_profit']:.2f}` · "
+         f"{tp2_part}SL `{nums['stop_loss']:.2f}`"),
+    ])
+
+
 def regenerate_chart_for_trade(trade: dict) -> str | None:
     # A closed trade's chart never changes once closed (same OHLCV window,
     # same levels) -- if the deterministic file from a prior regen already

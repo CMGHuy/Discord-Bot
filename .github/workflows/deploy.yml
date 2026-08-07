@@ -130,6 +130,7 @@ jobs:
           required_attrs = [
               "TOKEN",
               "DISCORD_CHANNEL_TRADES_ID",
+              "DISCORD_CHANNEL_TRADES_SIMPLE_ID",
               "DISCORD_CHANNEL_TRADES_HISTORY_ID",
               "DISCORD_CHANNEL_RETROSPECTIVE_ID",
               "SESSION_START_HOUR",
