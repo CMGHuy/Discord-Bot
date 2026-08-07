@@ -186,3 +186,62 @@ def test_history_still_renders_every_column_server_side(client, auth, admin_app)
     table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
     # NB: count "<th " / "<th>" -- a bare "<th" also matches "<thead>".
     assert len(re.findall(r"<th[ >]", table)) == 16, "all 16 columns must still render"
+
+
+def _seed_open_trade_with_runner(data_dir):
+    trades = [{
+        "id": "o1", "ticker": "AAPL", "status": "open", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+        "opened_at": "2026-07-01T00:00:00+00:00", "confidence_level": 3,
+        "confidence_score": 60, "strategy": "RSI", "horizon_key": "4w",
+        "legs": [{"fraction": 0.5, "exit_price": 104.0, "r": 0.4},
+                 {"fraction": 0.5, "exit_price": None, "r": None}],
+    }]
+    with open(os.path.join(data_dir, "trades.json"), "w") as f:
+        json.dump(trades, f)
+
+
+def test_open_trades_cell_count_matches_header(client, auth, admin_app):
+    """reorderTableColumns() bails out unless every trade row has exactly as
+    many cells as the header has columns -- adding Plan must not break it."""
+    import re
+    from swingbot import config
+    _seed_open_trade_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    table = html.split('id="trades-table"', 1)[1].split("</table>", 1)[0]
+    head, body = table.split("<tbody>", 1)
+    # NB: count "<th " / "<th>" -- a bare "<th" also matches "<thead>".
+    n_cols = len(re.findall(r"<th[ >]", head))
+    assert n_cols == 19, "18 original columns + Plan"
+    trade_row = [r for r in body.split("<tr")[1:] if "ot-leg-row" not in r.split(">", 1)[0]][0]
+    assert trade_row.count("<td") == n_cols
+
+
+def test_open_trades_leg_row_colspan_covers_every_column(client, auth, admin_app):
+    from swingbot import config
+    _seed_open_trade_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    table = html.split('id="trades-table"', 1)[1].split("</table>", 1)[0]
+    leg = [r for r in table.split("<tr")[1:] if "ot-leg-row" in r.split(">", 1)[0]][0]
+    assert 'colspan="17"' in leg, "2 empty td + colspan 17 == 19 columns"
+
+
+def test_open_trades_defaults_to_compact_density(client, auth, admin_app):
+    from swingbot import config
+    _seed_open_trade_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    assert 'data-density-for="ot"' in html
+    wrapper = html.split('data-density-for="ot"', 1)[0].rsplit("<div", 1)[1]
+    assert "density-compact" in wrapper
+
+
+def test_open_trades_full_only_columns_are_marked(client, auth, admin_app):
+    from swingbot import config
+    _seed_open_trade_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    table = html.split('id="trades-table"', 1)[1].split("</table>", 1)[0]
+    head, body = table.split("<tbody>", 1)
+    for col in ("strategy", "horizon", "direction", "confidence", "score",
+                "entry", "stop", "target", "rr", "size", "opened"):
+        th = [h for h in head.split("<th")[1:] if 'data-col-id="%s"' % col in h]
+        assert th and "col-full" in th[0].split(">", 1)[0], "th %s missing col-full" % col
