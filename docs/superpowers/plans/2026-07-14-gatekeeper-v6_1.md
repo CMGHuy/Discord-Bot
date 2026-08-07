@@ -1,8 +1,8 @@
-# Gatekeeper v7 - Part 1/11: Honest math, contracts & scaffolding (Tasks G1-G8)
+# Gatekeeper v6 - Part 1/11: Honest math, contracts & scaffolding (Tasks G1-G8)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G1 -> G8).
 >
-> **Split note:** this is part 1 of 11, extracted verbatim from the master plan `2026-07-14-gatekeeper-v6.md` (which stays as the reference copy; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
+> **Split note:** this is part 1 of 11, extracted verbatim from the pre-split master plan (deleted 2026-07-26, see the part index; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
 > **Requires complete first:** none within this plan - only the master Prerequisites below.
 >
 > Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts - those modules exist on the branch by the time this part runs.
@@ -11,7 +11,7 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
+> - **Branch:** `feature/gatekeeper-v6`
 > - **Completed:** —
 > - **Next:** Task G1
 
@@ -232,12 +232,12 @@ git commit -m "feat: gate win-rate arithmetic (breakeven, implied E, filter prec
 ### Task G2: Pre-registered targets & promotion gates document
 
 **Files:**
-- Create: `docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md`
+- Create: `docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md`
 
 - [ ] **Step 1: Write the frozen targets doc** — this exact content:
 
 ```markdown
-# Gatekeeper v7 — Pre-registered targets & promotion gates
+# Gatekeeper v6 — Pre-registered targets & promotion gates
 
 **Frozen 2026-07-14, before any data contact.** After the first baseline
 census (Task G97) runs, evidence may be appended (dated) but targets may
@@ -298,14 +298,14 @@ optional forever; plan completion does not depend on it.
 
 Every checklist line maps to its implementing task in
 "Appendix — Checklist-to-task traceability" at the end of
-`docs/superpowers/plans/2026-07-14-gatekeeper-v7_11.md`.
+`docs/superpowers/plans/2026-07-14-gatekeeper-v6_11.md`.
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md
-git commit -m "docs: gatekeeper v7 pre-registered targets (frozen before data contact)"
+git add docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md
+git commit -m "docs: gatekeeper v6 pre-registered targets (frozen before data contact)"
 ```
 
 ### Task G3: Config section "Gatekeeper" — base flags

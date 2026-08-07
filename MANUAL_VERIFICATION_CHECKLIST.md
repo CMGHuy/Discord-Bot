@@ -4,9 +4,9 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 **Organized by urgency, not by plan**, because most of this backlog isn't actionable yet:
 - **A — Do now or soon**: the active plan, `edge-engine-v4`. Its manual steps are the ones you'll actually hit next.
-- **B — Blocked on future implementation**: `gatekeeper-v7` and `admin-ui-tradingview-redesign-v8` haven't been built yet (0 code, no branch, no commits for either — confirmed by grep/git-log audit). Their manual steps reference scripts that don't exist yet. Listed here so you know what's coming once someone implements the corresponding task.
+- **B — Blocked on future implementation**: `gatekeeper-v6` and `admin-ui-tradingview-redesign-v5` haven't been built yet (0 code, no branch, no commits for either — confirmed by grep/git-log audit). Their manual steps reference scripts that don't exist yet. Listed here so you know what's coming once someone implements the corresponding task.
 - **C — Already done**: `strategy-winrate-redesign` and the bulk of `unified-plan-engine-v2`'s manual steps were already executed to get those plans to "Completed" status. Listed for the record, not as outstanding work.
-- **D — Known gaps carried forward**: `unified-plan-engine-v2`'s staged-rollout smoke and `cockpit-v3`'s live-mutation smoke were *skipped by explicit decision*, not completed. These are now tracked as `gatekeeper-v7` Tasks G217/G218 (see the plan reorg below) rather than being re-run ad hoc here.
+- **D — Known gaps carried forward**: `unified-plan-engine-v2`'s staged-rollout smoke and `cockpit-v3`'s live-mutation smoke were *skipped by explicit decision*, not completed. These are now tracked as `gatekeeper-v6` Tasks G217/G218 (see the plan reorg below) rather than being re-run ad hoc here.
 
 ---
 
@@ -82,7 +82,7 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 ## B. Blocked on future implementation
 
-### gatekeeper-v7 (0/206 tasks implemented — see plan reorg)
+### gatekeeper-v6 (0/206 tasks implemented — see plan reorg)
 Once these tasks are actually built, their manual steps are:
 - **G29** — visit the Fed's published FOMC calendar and paste the second day of each two-day meeting into the script's `FOMC_DECISION_DAYS` list before it will run; then run it once for real and spot-check the JSON output.
 - **G40** — `python scripts/macro_smoke.py` (script doesn't exist yet — created by this task) with a real `FRED_API_KEY` in `.env`; paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict.
@@ -95,7 +95,7 @@ Once these tasks are actually built, their manual steps are:
 - **G215/G216** — the terminal live ritual: real macro smoke, live Discord commands, enabling `MACRO_ENABLED`+`GATE_ENABLED` on a real scan, `!checklist NVDA` full run, dragging threshold sliders live on `/gate` and watching the next scan's tiers shift, a blackout dry-run, confirming zero blocks in inform mode via live telemetry.
 - **G217/G218** (new, added by this audit — see plan reorg below).
 
-### admin-ui-tradingview-redesign-v8 (not started)
+### admin-ui-tradingview-redesign-v5 (not started)
 - **U20/U21** — render smoke: load the page in a browser once, confirm a PNG is produced, eyeball it.
 - **U36** — final manual QA: all 7 pages at desktop + 380px, one interactive chart with levels, one Discord-style PNG regenerated and eyeballed side-by-side with an old one.
 
@@ -112,9 +112,9 @@ Once these tasks are actually built, their manual steps are:
 
 ---
 
-## D. Known gaps carried forward into gatekeeper-v7 (not to be re-run here)
+## D. Known gaps carried forward into gatekeeper-v6 (not to be re-run here)
 
-- **unified-plan-engine-v2 Tasks 85, 88, 89 §3–4, 90, 91, 94** (staged-rollout live verification) — skipped by explicit user decision 2026-07-18 in favor of deploying straight to production. → tracked as **gatekeeper-v7 Task G217**.
-- **cockpit-v3 Tasks B38 §2, C46 §2** (live-mutation admin-UI smoke) — deliberately skipped per their own Progress blocks. → tracked as **gatekeeper-v7 Task G218**.
+- **unified-plan-engine-v2 Tasks 85, 88, 89 §3–4, 90, 91, 94** (staged-rollout live verification) — skipped by explicit user decision 2026-07-18 in favor of deploying straight to production. → tracked as **gatekeeper-v6 Task G217**.
+- **cockpit-v3 Tasks B38 §2, C46 §2** (live-mutation admin-UI smoke) — deliberately skipped per their own Progress blocks. → tracked as **gatekeeper-v6 Task G218**.
 
 See "Deliverable 2" of this session's work for the new G217–G218 tasks themselves.

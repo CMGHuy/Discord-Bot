@@ -1,8 +1,8 @@
-# Gatekeeper v7 - Part 7/11: Backtest validation & the win-rate frontier (Tasks G89-G118)
+# Gatekeeper v6 - Part 7/11: Backtest validation & the win-rate frontier (Tasks G89-G118)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G89 -> G118).
 >
-> **Split note:** this is part 7 of 11, extracted verbatim from the master plan `2026-07-14-gatekeeper-v6.md` (which stays as the reference copy; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
+> **Split note:** this is part 7 of 11, extracted verbatim from the pre-split master plan (deleted 2026-07-26, see the part index; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
 > **Requires complete first:** Parts 1-6 complete (all their tasks checked off).
 >
 > Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts - those modules exist on the branch by the time this part runs.
@@ -11,7 +11,7 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
+> - **Branch:** `feature/gatekeeper-v6`
 > - **Completed:** —
 > - **Next:** Task G89
 
@@ -446,7 +446,7 @@ def assert_train_only(df) -> None:
     if str(last)[:10] > "2023-12-31":
         raise ValueError(
             "gate replay touched the 2024-2025 validation window — "
-            "TRAIN folds end 2023; see the gatekeeper-v7 targets doc")
+            "TRAIN folds end 2023; see the gatekeeper-v6 targets doc")
 ```
 
 And in the simulator: add `gate_min_tier: str | None = None`; guard at entry:
@@ -1006,7 +1006,7 @@ git commit -m "feat: gate fold runner"
 - [ ] **Step 2:** Write `docs/superpowers/results/2026-07-gate-baseline.md` in this exact structure (filled from the JSON artifacts + `wr_by_decile` over each strategy's trades):
 
 ```markdown
-# Gatekeeper v7 — baseline census (TRAIN folds, annotate-only)
+# Gatekeeper v6 — baseline census (TRAIN folds, annotate-only)
 
 Run: scripts/gate_fold_run.py --all · date · commit <sha>
 No tuning decisions live in this file — census only.
@@ -1347,7 +1347,7 @@ git commit -m "feat: plateau check for tier cuts"
 - [ ] **Step 1: Write the memo from G97–G101 evidence** — `docs/superpowers/results/2026-07-gate-decision.md`, this exact structure per strategy:
 
 ```markdown
-# Gatekeeper v7 — TRAIN decision memo
+# Gatekeeper v6 — TRAIN decision memo
 
 Sources: baseline census (G97), frontier (G98), ablation (G99),
 permutation p-values (G100), plateau checks (G101). All TRAIN
@@ -1632,9 +1632,9 @@ git commit -m "feat: shadow comparison report"
 
 ### Task G105: Shadow promotion gate — pre-registered
 
-**Files:** Modify `docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md` (checkboxes section)
+**Files:** Modify `docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md` (checkboxes section)
 
-- [ ] **Step 1: Append this exact section to `docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md`** (relevant **only if** the operator ever chooses to leave inform mode — enforce is optional forever):
+- [ ] **Step 1: Append this exact section to `docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md`** (relevant **only if** the operator ever chooses to leave inform mode — enforce is optional forever):
 
 ```markdown
 ## Operational promotion checklist: inform -> enforce
@@ -1661,7 +1661,7 @@ no sign-off needed to loosen, ever.
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-07-14-gatekeeper-v7-targets.md
+git add docs/superpowers/specs/2026-07-14-gatekeeper-v6-targets.md
 git commit -m "docs: shadow->enforce promotion gate (pre-registered)"
 ```
 
@@ -1790,7 +1790,7 @@ git commit -m "feat: optional enforce mode"
 
 The tier cuts chosen in this memo are part of the pooled final system
 that edge-engine Task E92 fires at the 2024-2025 window EXACTLY ONCE.
-Gatekeeper v7 performs no validation-window run of its own — every
+Gatekeeper v6 performs no validation-window run of its own — every
 number above is TRAIN (2018-2023). If edge-engine is unmerged when v7
 finishes, the single shot waits; it is never spent early, split, or
 retried. Anyone proposing "just a quick look at 2024" is proposing to

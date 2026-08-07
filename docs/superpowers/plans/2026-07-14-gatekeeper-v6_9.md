@@ -1,8 +1,8 @@
-# Gatekeeper v7 - Part 9/11: Discord command suite (Tasks G147-G166)
+# Gatekeeper v6 - Part 9/11: Discord command suite (Tasks G147-G166)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G147 -> G166).
 >
-> **Split note:** this is part 9 of 11, extracted verbatim from the master plan `2026-07-14-gatekeeper-v6.md` (which stays as the reference copy; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
+> **Split note:** this is part 9 of 11, extracted verbatim from the pre-split master plan (deleted 2026-07-26, see the part index; the checklist-to-task traceability appendix is in Part 11). Parts execute in numeric order.
 > **Requires complete first:** Parts 1-8 complete (all their tasks checked off).
 >
 > Cross-part references (task numbers like G38, file names, `Interfaces:` blocks) refer to work done in earlier parts - those modules exist on the branch by the time this part runs.
@@ -11,7 +11,7 @@
 
 > Updated by the executing session after each task batch. Resume from the first unchecked task.
 >
-> - **Branch:** `feature/gatekeeper-v7`
+> - **Branch:** `feature/gatekeeper-v6`
 > - **Completed:** —
 > - **Next:** Task G147
 
