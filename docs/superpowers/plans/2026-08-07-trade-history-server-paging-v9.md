@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-trade-history-filter` (worktree at `.claude/worktrees/trade-history-filter`)
-> - **Completed:** none
-> - **Next:** H1
+> - **Completed:** H1 — `_query_closed_trades()` (scope -> filter -> sort -> slice) plus 16 unit tests, all green.
+> - **Next:** H2 (the `/api/trade-history` endpoint)
 
 ## Global Constraints
 
@@ -47,7 +47,7 @@ docs/claude/known-traps.md                             note the filter/paging co
 
 **Interfaces — Produces:** the single query path H2 and H5 both call.
 
-- [ ] **Step 1: Write the function**
+- [x] **Step 1: Write the function**
 
 ```python
 def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=25):
@@ -60,9 +60,9 @@ def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=
 
 Scope: `mode in ("today", "active")` keeps only trades whose `closed_at` is today (Europe/Berlin, via `_is_today_berlin`); `"all"` keeps everything. Filters: `outcome`, `ticker`, `strategy` (via `_primary_strategy_label`), `horizon` (`horizon_key`), `dir` (`direction`), `conf` (`confidence_level`) — each absent/empty value means "no filter". Sort: `closed_at` descending, matching today's behaviour. Slice: `[(page-1)*per_page : page*per_page]`; `per_page=0` means All.
 
-- [ ] **Step 2: Unit-test it directly** (no HTTP) — scoping per mode, each filter independently, filters combined, sort order, slicing, out-of-range page returns empty with correct `total`, and `per_page=0`.
+- [x] **Step 2: Unit-test it directly** (no HTTP) — scoping per mode, each filter independently, filters combined, sort order, slicing, out-of-range page returns empty with correct `total`, and `per_page=0`.
 
-- [ ] **Step 3:** `python scripts/testrun.py file tests/admin`. Commit.
+- [x] **Step 3:** `python scripts/testrun.py file tests/admin`. Commit.
 
 ### Task H2: `/api/trade-history` endpoint
 

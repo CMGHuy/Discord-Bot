@@ -412,6 +412,61 @@ def _is_today_berlin(iso_ts: str | None) -> bool:
         return False
 
 
+CLOSED_TRADE_STATUSES = ("win", "loss", "closed")
+
+# Allowed page sizes, mirroring the table's own selector. 0 means "All".
+# Clamped server-side: the page size decides how much work a request does, so
+# it is never taken on trust from the query string.
+ALLOWED_PER_PAGE = (10, 25, 50, 0)
+
+# Query-string filter name -> how to read the matching value off a trade.
+# These MUST stay in step with the data-* attributes the row partial emits,
+# since both describe the same six Trade History dropdowns.
+_CT_FILTER_FIELDS = {
+    "outcome":  lambda t: t.get("status"),
+    "ticker":   lambda t: t.get("ticker"),
+    "strategy": _primary_strategy_label,
+    "horizon":  lambda t: t.get("horizon_key"),
+    "dir":      lambda t: t.get("direction"),
+    "conf":     lambda t: t.get("confidence_level"),
+}
+
+
+def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=25):
+    """Scope -> filter -> sort -> slice the closed-trade history, in that order.
+
+    Returns ``(rows, total)`` where *total* is the count after scoping and
+    filtering but BEFORE slicing, so the pager can work out how many pages
+    exist without a second pass.
+
+    `mode` follows the dashboard toggle: "today" and "active" both narrow to
+    trades CLOSED today (Europe/Berlin). Those two modes are deliberately
+    identical here -- the only thing separating them is whether still-open
+    positions from other days show, and this table never contains open trades.
+    """
+    rows = [t for t in all_raw if t.get("status") in CLOSED_TRADE_STATUSES]
+
+    if mode in ("today", "active"):
+        rows = [t for t in rows if _is_today_berlin(t.get("closed_at"))]
+
+    for key, value in (filters or {}).items():
+        if not value:
+            continue                      # absent/blank means "no filter"
+        getter = _CT_FILTER_FIELDS.get(key)
+        if getter is None:
+            continue
+        rows = [t for t in rows if str(getter(t) or "") == str(value)]
+
+    rows.sort(key=lambda t: t.get("closed_at") or "", reverse=True)
+    total = len(rows)
+
+    if per_page:
+        page = max(1, int(page or 1))
+        start = (page - 1) * per_page
+        rows = rows[start:start + per_page]
+    return rows, total
+
+
 def _render_dashboard_fragment() -> str:
     # Three modes for the dashboard's summarized panels (stat cards + tables):
     #   - "active" (the default): today's new trades PLUS every still-open
