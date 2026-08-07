@@ -946,3 +946,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: 12px; font-family: inherit; cursor: pointer;
 }
 .density-toggle button.active { background: #232838; color: #dde1ea; }
+
+/* Cells that pack several facts into one column -- Ticker (symbol, direction,
+   tier) and Plan (entry, target, stop). Without this the parts run together
+   as one string, and .muted's own 13px fought the cell's smaller font so the
+   entry price rendered LARGER than the target/stop beside it.
+   inline-flex + gap spaces the parts; font-size:inherit makes every part
+   share whatever size the cell sets. */
+.cell-parts { display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.cell-parts > * { font-size: inherit; }
+.cell-parts .sep { color: #4a5163; }

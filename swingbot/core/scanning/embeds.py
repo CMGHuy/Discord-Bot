@@ -704,16 +704,25 @@ def build_simple_alert(item) -> str:
     if sources != "n/a":
         setup = f"{setup} · {sources}"
 
-    tp2 = nums["target2"]
-    tp2_part = f"TP2 `{tp2:.2f}` · " if tp2 is not None else ""
-    return "\n".join([
+    # One price per line, below Setup. These four numbers are the whole point
+    # of the message, and packing them onto one backtick-and-middot line made
+    # them the least readable part of it -- exactly backwards on a phone.
+    # Labels are padded to a common width so the values line up even in
+    # Discord's proportional font.
+    lines = [
         f"{'🟢' if is_bull else '🔴'} **{direction} — {result.ticker}**",
         f"Confidence: {conf.label} (Lv{conf.level}/5, {conf.score}/100)",
         f"Horizon: {result.horizon_label}",
         f"Setup: {setup}",
-        (f"Entry `{nums['entry']:.2f}` · TP1 `{nums['take_profit']:.2f}` · "
-         f"{tp2_part}SL `{nums['stop_loss']:.2f}`"),
-    ])
+        "",
+        f"Entry  {nums['entry']:.2f}",
+        f"TP1    {nums['take_profit']:.2f}",
+    ]
+    tp2 = nums["target2"]
+    if tp2 is not None:
+        lines.append(f"TP2    {tp2:.2f}")
+    lines.append(f"SL     {nums['stop_loss']:.2f}")
+    return "\n".join(lines)
 
 
 def regenerate_chart_for_trade(trade: dict) -> str | None:

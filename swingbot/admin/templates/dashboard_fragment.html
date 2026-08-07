@@ -302,8 +302,11 @@
 
       {# Ticker #}
       <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
-        <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong><span class="col-compact" title="{{ 'Long (bullish)' if is_bull else 'Short (bearish)' }}" style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }};font-size:11px;font-weight:600;">{{ '▲' if is_bull else '▼' }}</span>
-        {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
+        <span class="cell-parts">
+          <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong>
+          <span class="col-compact" title="{{ 'Long (bullish)' if is_bull else 'Short (bearish)' }}" style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }};font-weight:600;">{{ '▲' if is_bull else '▼' }}</span>
+          {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
+        </span>
         {# The VALIDATED/WEAK badge is deliberately NOT rendered in this table --
            it is per-trade detail, not something to scan a list by. It still
            shows on the trade's own page (trade_detail.html), which the ticker
@@ -383,7 +386,13 @@
          for the three separate price columns that are hidden in compact. #}
       <td class="num col-compact" style="font-size:11px;white-space:nowrap;"
           title="Entry {{ '%.2f'|format(t.entry) }} · Target {{ '%.2f'|format(t.take_profit) }} · Stop {{ '%.2f'|format(t.stop_loss) }}">
-        <span class="muted">{{ '%.2f'|format(t.entry) }}</span>→<span style="color:#6dda9e;">{{ '%.2f'|format(t.take_profit) }}</span>/<span style="color:#da6d6d;">{{ '%.2f'|format(t.stop_loss) }}</span>
+        <span class="cell-parts">
+          <span style="color:#8b93a7;">{{ '%.2f'|format(t.entry) }}</span>
+          <span class="sep">→</span>
+          <span style="color:#6dda9e;">{{ '%.2f'|format(t.take_profit) }}</span>
+          <span class="sep">/</span>
+          <span style="color:#da6d6d;">{{ '%.2f'|format(t.stop_loss) }}</span>
+        </span>
       </td>
 
       <td class="num col-full" style="color:#da6d6d;" title="Stop-loss price -- this trade closes as a loss if price reaches here">{{ cur_map.get(t.ticker, '') }}{{ "%.2f"|format(t.stop_loss) }}</td>
