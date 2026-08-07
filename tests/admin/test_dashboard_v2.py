@@ -150,3 +150,39 @@ def test_open_runner_row_is_marked_so_pagination_can_skip_it(client, auth, admin
     trade_rows = [r for r in rows if "ot-leg-row" not in r.split(">", 1)[0]]
     assert len(leg_rows) == 1 and 'data-leg-for="t1"' in leg_rows[0]
     assert len(trade_rows) == 1 and 'data-trade-id="t1"' in trade_rows[0]
+
+
+def test_history_defaults_to_compact_density(client, auth, admin_app):
+    """A browser with no stored preference must get the compact table."""
+    from swingbot import config
+    _seed_closed_pair_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    assert 'data-density-for="ct"' in html
+    wrapper = html.split('data-density-for="ct"', 1)[0].rsplit("<div", 1)[1]
+    assert "density-compact" in wrapper
+
+
+def test_history_full_only_columns_are_marked(client, auth, admin_app):
+    """The 8 analytical columns must carry col-full on BOTH th and td, or
+    they will not hide together."""
+    from swingbot import config
+    _seed_closed_pair_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
+    head, body = table.split("<tbody>", 1)
+    for col in ("strategy", "horizon", "dir", "conf", "entry", "exit", "pnlpct", "opened"):
+        th = [h for h in head.split("<th")[1:] if 'data-col-id="%s"' % col in h]
+        assert th and "col-full" in th[0].split(">", 1)[0], "th %s missing col-full" % col
+    # one col-full td per full-only column, per trade row (2 trades seeded)
+    assert body.count("col-full") == 8 * 2
+
+
+def test_history_still_renders_every_column_server_side(client, auth, admin_app):
+    """Density is presentational -- nothing may be dropped server-side."""
+    import re
+    from swingbot import config
+    _seed_closed_pair_with_runner(config.DATA_DIR)
+    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
+    # NB: count "<th " / "<th>" -- a bare "<th" also matches "<thead>".
+    assert len(re.findall(r"<th[ >]", table)) == 16, "all 16 columns must still render"
