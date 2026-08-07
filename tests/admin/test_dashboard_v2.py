@@ -18,18 +18,27 @@ def _seed_many_closed_trades(data_dir, n):
         json.dump(trades, f)
 
 
-def test_dashboard_fragment_bounds_closed_history_at_500(client, auth, admin_app):
+def test_dashboard_fragment_renders_only_the_first_page_of_history(client, auth, admin_app):
+    """Was: bounded at 500 rows with a 'Showing latest 500 of 510' banner.
+
+    Plan v9 replaced that cap with real server-side paging -- the fragment now
+    renders only the first page and the rest is fetched from
+    /api/trade-history, so the payload is far smaller AND the older trades the
+    banner used to apologise for are now actually reachable.
+    """
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 510)
     r = client.get("/dashboard/fragment?mode=all", headers=auth)
     html = r.data.decode("utf-8")
-    assert "Showing latest 500 of 510" in html
-    assert html.count('id="ct-row-') <= 500
+    assert html.count('id="ct-row-') == 25
+    assert "510 closed trade(s)" in html          # full total still reported
 
 
-def test_dashboard_fragment_no_banner_under_limit(client, auth, admin_app):
+def test_dashboard_fragment_never_advertises_truncated_history(client, auth, admin_app):
+    """The truncation banner is gone for good -- with paging there is no
+    longer any history the table cannot reach."""
     from swingbot import config
-    _seed_many_closed_trades(config.DATA_DIR, 40)
+    _seed_many_closed_trades(config.DATA_DIR, 510)
     r = client.get("/dashboard/fragment?mode=all", headers=auth)
     assert "Showing latest" not in r.data.decode("utf-8")
 
