@@ -254,3 +254,50 @@ def test_open_trades_full_only_columns_are_marked(client, auth, admin_app):
                 "entry", "stop", "target", "rr", "size", "opened"):
         th = [h for h in head.split("<th")[1:] if 'data-col-id="%s"' % col in h]
         assert th and "col-full" in th[0].split(">", 1)[0], "th %s missing col-full" % col
+
+
+def _seed_trades(data_dir, trades):
+    with open(os.path.join(data_dir, "trades.json"), "w") as f:
+        json.dump(trades, f)
+
+
+def _badged_trade(tid, status, badge, **extra):
+    t = {
+        "id": tid, "ticker": "AAPL", "status": status, "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+        "opened_at": "2026-07-01T00:00:00+00:00",
+        "confidence_level": 3, "confidence_score": 60, "strategy": "RSI",
+        "horizon_key": "4w", "tier": "A", "badge": badge,
+    }
+    t.update(extra)
+    return t
+
+
+# The VALIDATED/WEAK badge is per-trade detail, not a column to scan a list by:
+# it belongs on the trade's own page and nowhere in the two dashboard tables.
+# The tier chip is a separate decision and deliberately stays in both, so each
+# test pins that too -- otherwise "badge is gone" would also pass if a careless
+# edit stripped the whole pedigree block.
+
+def test_open_trades_table_does_not_show_the_validation_badge(client, auth, admin_app):
+    from swingbot import config
+    _seed_trades(config.DATA_DIR, [_badged_trade("t1", "open", "VALIDATED")])
+    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    assert "VALIDATED" not in html
+    assert "chip-tier-a" in html
+
+
+def test_closed_trades_table_does_not_show_the_validation_badge(client, auth, admin_app):
+    from swingbot import config
+    _seed_trades(config.DATA_DIR, [_badged_trade(
+        "t1", "win", "WEAK", exit_price=110.0, closed_at="2026-07-05T00:00:00+00:00")])
+    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    assert "WEAK" not in html
+    assert "chip-tier-a" in html
+
+
+def test_trade_detail_page_still_shows_the_validation_badge(client, auth, admin_app):
+    from swingbot import config
+    _seed_trades(config.DATA_DIR, [_badged_trade("t1", "open", "VALIDATED")])
+    html = client.get("/trades/t1", headers=auth).data.decode("utf-8")
+    assert "VALIDATED" in html

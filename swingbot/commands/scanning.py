@@ -328,7 +328,16 @@ def deep_scan_report(items: list) -> str:
 
 
 async def _send_alerts(destination, alerts, route_by_tier: bool = False):
-    """alerts: list of (embed, chart_path, plan_or_none) 3-tuples.
+    """alerts: list of (embed, chart_path, plan_or_none, simple_text_or_none)
+    tuples; the 4th element is optional (see the unpack below).
+
+    Notification policy: exactly one ping per signal, raised by the simple
+    channel. Whenever an alert is successfully mirrored to
+    DISCORD_CHANNEL_TRADES_SIMPLE_ID, the full embed is posted with
+    silent=True -- it is still delivered and still rendered in full, it just
+    does not notify. With no simple channel configured (or a mirror that
+    failed) the full alert keeps its notification, so silencing can never
+    leave a signal unannounced.
 
     Every plan-carrying alert gets a PlanActionView(plan.plan_id,
     author_id=None) attached (any user may click); legacy (no-plan) alerts
@@ -387,8 +396,34 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
             if target_id == firehose_id:
                 send_to = firehose_channel
 
+        # ONE ping per signal, and it comes from the simple channel. The
+        # mirror therefore goes FIRST and its success is what decides whether
+        # the full alert is silenced: send the full one first and a failed
+        # mirror would leave the signal with no notification at all, which is
+        # strictly worse than the pre-simple-channel behavior. Its try/except
+        # still means a mirror failure never costs the real alert or aborts
+        # the batch -- the alert just keeps its notification.
+        #
+        # The mirror covers EVERY posted alert, firehose-routed ones included:
+        # "same function as the full alerts channel" means the same set of
+        # signals, not the same tier split.
+        mirrored = False
+        if simple_channel is not None and simple_text:
+            try:
+                await simple_channel.send(simple_text)
+                mirrored = True
+            except Exception as _se:
+                log.warning("Could not post simple alert for %s to channel %s: %s "
+                            "-- full alert will notify instead.",
+                            getattr(plan, "ticker", "?"),
+                            getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), _se)
+
         view = PlanActionView(plan.plan_id, author_id=None) if plan is not None else None
-        kwargs = {"embed": embed}
+        # silent=True sets Discord's SUPPRESS_NOTIFICATIONS flag (the `@silent`
+        # feature): the message posts and renders exactly as before, it just
+        # raises no push/desktop notification. Only ever set once the mirror
+        # has actually landed.
+        kwargs = {"embed": embed, "silent": mirrored}
         if chart_path:
             kwargs["file"] = discord.File(chart_path, filename=os.path.basename(chart_path))
         if view is not None:
@@ -396,21 +431,6 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
         msg = await send_to.send(**kwargs)
         if view is not None:
             view.message = msg
-
-        # The simple mirror is deliberately posted AFTER the full alert and in
-        # its own try: it is a convenience copy, so a failure here (bad channel
-        # id, missing permissions, Discord hiccup) must never cost the real
-        # alert or abort the rest of the batch. Note it mirrors EVERY posted
-        # alert, including ones routed to the firehose -- "same function as the
-        # full alerts channel" means the same set of signals, not the same
-        # tier split.
-        if simple_channel is not None and simple_text:
-            try:
-                await simple_channel.send(simple_text)
-            except Exception as _se:
-                log.warning("Could not post simple alert for %s to channel %s: %s",
-                            getattr(plan, "ticker", "?"),
-                            getattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", ""), _se)
 
 
 def _presence_text() -> str:

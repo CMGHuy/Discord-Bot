@@ -304,7 +304,11 @@
       <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
         <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong><span class="col-compact" title="{{ 'Long (bullish)' if is_bull else 'Short (bearish)' }}" style="color:{{ '#6dda9e' if is_bull else '#da6d6d' }};font-size:11px;font-weight:600;">{{ '▲' if is_bull else '▼' }}</span>
         {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
-        {% if t.get('badge') %}<span class="pill {{ 'validated' if t.badge == 'VALIDATED' else 'weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ '✅ VALIDATED' if t.badge == 'VALIDATED' else '⚠️ WEAK' }}</span>{% endif %}
+        {# The VALIDATED/WEAK badge is deliberately NOT rendered in this table --
+           it is per-trade detail, not something to scan a list by. It still
+           shows on the trade's own page (trade_detail.html), which the ticker
+           link above leads to. Same omission in the closed-trades table below;
+           the tier chip stays in both. #}
       </td>
 
       {%- set _all_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}

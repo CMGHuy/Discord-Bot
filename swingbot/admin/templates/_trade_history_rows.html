@@ -32,7 +32,10 @@
   <td title="{{ t.ticker }} -- click the ticker to open the trade's detail page, or the row to preview its chart">
     <strong><a href="{{ url_for('trade_detail', trade_id=t.id) }}">{{ t.ticker }}</a></strong><span class="col-compact" title="{{ 'Long (bullish)' if t.direction == 'bullish' else 'Short (bearish)' }}" style="color:{{ '#6dda9e' if t.direction == 'bullish' else '#da6d6d' }};font-size:11px;font-weight:600;">{{ '▲' if t.direction == 'bullish' else '▼' }}</span>
     {% if t.get('tier') %}<span class="chip chip-tier-{{ t.tier | lower }}" title="Quality tier at entry: A (score ≥75) / B (50-74) / C (below 50) -- see the Performance page's Tier calibration table for how well this grading has held up live.">{{ t.tier }}</span>{% endif %}
-    {% if t.get('badge') %}<span class="chip {{ 'chip-validated' if t.badge == 'VALIDATED' else 'chip-weak' }}" title="{% if t.badge == 'VALIDATED' %}This trade's primary confirming strategy cleared its out-of-sample validation bar.{% else %}This trade's primary confirming strategy has not (yet) cleared its out-of-sample validation bar -- treat with extra care.{% endif %} See the Strategies page for details.">{{ t.badge }}</span>{% endif %}
+    {# VALIDATED/WEAK intentionally omitted here too -- see the open-trades
+       table above. It lives on trade_detail.html only. (Carried over from
+       cd9cd88, which removed it from this markup while it still lived inline
+       in dashboard_fragment.html; it moved here in the same window.) #}
   </td>
   {%- set _ct_sources = (t.target_sources | default([])) + (t.stop_sources | default([])) -%}
   <td class="col-full" title="Sources: {{ _ct_sources | unique | join(', ') if _ct_sources else 'n/a' }}">{{ c_strat }}</td>
