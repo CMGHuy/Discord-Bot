@@ -5,6 +5,7 @@ import pytest
 from swingbot.core.charts.trade_chart import generate_trade_chart
 from tests.helpers import make_ohlcv
 from tests.test_plan_engine_model import _plan
+from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
@@ -21,7 +22,7 @@ def test_chart_renders_with_plan_overlays(tmp_path, tp2):
                                 strategy="Fibonacci", horizon_label="4-Week Swing",
                                 out_dir=str(tmp_path), plan_v2=plan)
     assert path and os.path.exists(path)
-    assert os.path.getsize(path) > 10_000     # non-trivial PNG (convention)
+    assert_rendered(path)
 
 
 def test_chart_without_plan_unchanged(tmp_path):
@@ -44,4 +45,5 @@ def test_partial_plan_renders_trail_and_banked_annotation(tmp_path):
                                 take_profit=110.0, direction="bullish",
                                 strategy="Fibonacci", horizon_label="4-Week Swing",
                                 out_dir=str(tmp_path), plan_v2=plan)
-    assert path and os.path.getsize(path) > 10_000
+    assert path
+    assert_rendered(path)

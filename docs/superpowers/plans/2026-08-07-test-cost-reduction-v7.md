@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T9. T9: `assert_rendered()` added to tests/conftest.py -- PIL-based, resolution-independent. Verified it passes real charts at dpi 150 and 30, and correctly rejects a 15891-byte blank canvas that the old `getsize > 10_000` proxy would have passed.
-> - **Next:** T10 (replace the 24 getsize proxies)
+> - **Completed:** T1-T10. T10: all 24 `getsize` render proxies replaced with `assert_rendered`; slow tier green at production DPI (64 passed). The two non-proxy size assertions (decision_chart size *comparison*, shadow_log stays-small) deliberately preserved. Pre-existing unused imports (np, pd) left alone; the one `import os` my edit orphaned was removed.
+> - **Next:** T11 (low-DPI autouse fixture) -- NOTE: box at 99% CPU from VS Code/Docker, timings unreliable
 
 ## Global Constraints
 
@@ -242,11 +242,11 @@ Assert: file exists, decodes as an image, has non-zero dimensions, and contains 
 
 **Files:** the 7 chart test files carrying them
 
-- [ ] **Step 1:** Replace each `assert os.path.getsize(path) > N` with `assert_rendered(path)`. Locations recorded during design: `test_decision_chart.py` (10), `test_portfolio_charts.py` (5), `test_analytics_charts.py` (4), `test_trade_chart_v2.py` (2), `test_plan_chart_overlays.py` (2), `test_chart_theme.py` (1), `test_chart_cache.py` (1).
+- [x] **Step 1:** Replace each `assert os.path.getsize(path) > N` with `assert_rendered(path)`. Locations recorded during design: `test_decision_chart.py` (10), `test_portfolio_charts.py` (5), `test_analytics_charts.py` (4), `test_trade_chart_v2.py` (2), `test_plan_chart_overlays.py` (2), `test_chart_theme.py` (1), `test_chart_cache.py` (1).
 
-- [ ] **Step 2: Leave two alone.** `test_decision_chart.py:80` compares two files' sizes to each other, and `test_shadow_log.py:29` asserts a file stays *small* — neither is a render proxy. Verify individually before touching.
+- [x] **Step 2: Leave two alone.** `test_decision_chart.py:80` compares two files' sizes to each other, and `test_shadow_log.py:29` asserts a file stays *small* — neither is a render proxy. Verify individually before touching.
 
-- [ ] **Step 3: Verify** the chart tier is green at production DPI (unchanged timing at this point). Commit.
+- [x] **Step 3: Verify** the chart tier is green at production DPI (unchanged timing at this point). Commit.
 
 ### Task T11: Low-DPI test fixture
 

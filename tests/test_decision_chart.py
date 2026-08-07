@@ -6,7 +6,7 @@ matplotlib.use("Agg")
 import numpy as np
 import pytest
 
-from tests.conftest import make_trend_df
+from tests.conftest import assert_rendered, make_trend_df
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
@@ -33,7 +33,7 @@ def test_skeleton_renders_with_empty_context(tmp_path, daily_df):
     from swingbot.core.charts.decision_chart import render_decision_chart
     path = render_decision_chart("TEST", daily_df, FakePlan(), {}, str(tmp_path))
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 10_000       # a real figure, not a stub
+    assert_rendered(path)
     assert path.endswith(".png")
 
 
@@ -42,7 +42,7 @@ def test_weekly_panel_renders(tmp_path, daily_df):
     from swingbot.core.charts.decision_chart import render_decision_chart
     ctx = {"weekly": {"df": weekly_frame(daily_df), "pivots": [105.0, 112.0]}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_avwap_overlay_renders(tmp_path, daily_df):
@@ -52,7 +52,7 @@ def test_avwap_overlay_renders(tmp_path, daily_df):
               for a in avwap_anchors(daily_df)[:3]]
     path = render_decision_chart("TEST", daily_df, FakePlan(),
                                  {"avwaps": avwaps}, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_rs_strip_renders(tmp_path, daily_df):
@@ -61,7 +61,7 @@ def test_rs_strip_renders(tmp_path, daily_df):
     rel = (daily_df["Close"].pct_change(63) - 0.01).dropna()
     ctx = {"rs": {"rel_series": rel, "percentile": 78.0}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_regime_shading_renders(tmp_path, daily_df):
@@ -70,7 +70,7 @@ def test_regime_shading_renders(tmp_path, daily_df):
     labels = (["bull_quiet"] * 150 + ["bear_volatile"] * 150)
     ctx = {"regimes": pd.Series(labels, index=daily_df.index)}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_outcome_cloud_renders_and_respects_min_samples(tmp_path, daily_df):
@@ -91,14 +91,14 @@ def test_ev_cone_renders(tmp_path, daily_df):
                        "p75_path": [0.2, 0.5, 0.8, 1.1],
                        "ev_r": 0.14}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_gap_band_renders(tmp_path, daily_df):
     from swingbot.core.charts.decision_chart import render_decision_chart
     ctx = {"gap": {"p90_gap_pct": 2.5, "gap_fragile": True}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_sizing_box_renders(tmp_path, daily_df):
@@ -107,7 +107,7 @@ def test_sizing_box_renders(tmp_path, daily_df):
                       "shares": 35, "heat_before": 4.0, "heat_after": 4.7,
                       "cap": 6.0, "cluster_note": "corr 0.82 with NVDA"}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_quality_box_renders(tmp_path, daily_df):
@@ -118,7 +118,7 @@ def test_quality_box_renders(tmp_path, daily_df):
                        "badge_stats": "N=206 · 81.6% OOS",
                        "advisor": "CAUTION (62) — earnings in 2 days"}}
     path = render_decision_chart("TEST", daily_df, FakePlan(), ctx, str(tmp_path))
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_build_decision_context_never_raises(daily_df):

@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import matplotlib.pyplot as plt
 
-from tests.conftest import make_ohlcv
+from tests.conftest import assert_rendered, make_ohlcv
 from swingbot.core.charts.trade_chart import generate_trade_chart
 import pytest
 
@@ -40,7 +40,7 @@ def test_generate_trade_chart_with_plan_renders(tmp_path):
         filename="with_plan.png", target2=118.0, plan_v2=_fixture_plan(),
     )
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_generate_trade_chart_without_plan_is_unaffected(tmp_path):
@@ -141,7 +141,7 @@ def test_partial_plan_renders_trail(tmp_path):
         )
 
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
     assert captured_figs, "generate_trade_chart did not call plt.close(fig) as expected"
     fig = captured_figs[0]
     try:

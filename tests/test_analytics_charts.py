@@ -9,6 +9,7 @@ import os
 
 from swingbot.core.charts.analytics_charts import render_calibration, render_equity_curve, render_r_histogram, render_strategy_heatmap
 import pytest
+from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
@@ -30,7 +31,7 @@ def _fixture_curve():
 def test_render_equity_curve_writes_a_real_png(tmp_path):
     path = render_equity_curve(_fixture_curve(), str(tmp_path))
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_render_equity_curve_with_spy_overlay(tmp_path):
@@ -46,7 +47,7 @@ def test_render_r_histogram_writes_a_real_png(tmp_path):
     r_list = [-1.0, -0.5, 0.3, 0.8, 1.2, 1.5, -1.0, 2.0, 0.5, -0.8]
     path = render_r_histogram(r_list, str(tmp_path))
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def test_render_r_histogram_empty_list_still_renders(tmp_path):
@@ -62,7 +63,7 @@ def test_render_calibration_writes_a_real_png(tmp_path):
     ]
     path = render_calibration(deciles, str(tmp_path))
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 10_000
+    assert_rendered(path)
 
 
 def _fixture_rows():
@@ -75,7 +76,7 @@ def _fixture_rows():
 def test_render_strategy_heatmap_win_rate(tmp_path):
     path = render_strategy_heatmap(_fixture_rows(), str(tmp_path))
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 8_000
+    assert_rendered(path)
 
 
 def test_render_strategy_heatmap_expectancy(tmp_path):

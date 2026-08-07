@@ -5,6 +5,7 @@ import time
 import pytest
 
 from swingbot.core.charts.cache import _key_hash, cached_chart, purge
+from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
@@ -104,7 +105,7 @@ def test_cached_chart_real_matplotlib_render_succeeds(tmp_path):
     assert path == expected_target
     assert path.endswith(".png")
     assert os.path.exists(path)
-    assert os.path.getsize(path) > 1000  # a real rendered PNG, not a stub blob
+    assert_rendered(path)
 
     with open(path, "rb") as f:
         header = f.read(8)

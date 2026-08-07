@@ -1,6 +1,7 @@
 # tests/test_chart_theme.py
 from swingbot.core.charts import chart_style as cs
 import pytest
+from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
@@ -47,5 +48,4 @@ def test_generate_trade_chart_smoke(tmp_path, monkeypatch):
         direction="bullish", strategy="RSI", horizon_label="2w", out_dir=str(tmp_path),
     )
     assert out is not None
-    import os
-    assert os.path.getsize(out) > 20_000  # a real rendered chart, not a stub
+    assert_rendered(out)

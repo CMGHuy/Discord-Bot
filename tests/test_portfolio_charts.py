@@ -3,6 +3,7 @@ import os
 
 import matplotlib
 import pytest
+from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
 # the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
@@ -19,7 +20,7 @@ def _trades():
 def test_heat_treemap_renders(tmp_path):
     from swingbot.core.charts.portfolio_charts import render_heat_map
     path = render_heat_map(_trades(), {"total": 6.0, "sector": 3.0}, str(tmp_path))
-    assert os.path.exists(path) and os.path.getsize(path) > 5_000
+    assert_rendered(path)
 
 
 def test_heat_treemap_empty_state(tmp_path):
@@ -38,7 +39,7 @@ def test_corr_matrix_renders(tmp_path):
         100 * np.cumprod(1 + np.random.default_rng(2).normal(0, 0.01, 200)))}
     trades = [{"ticker": t} for t in dfs]
     path = render_corr_matrix(trades, dfs, str(tmp_path))
-    assert os.path.getsize(path) > 5_000
+    assert_rendered(path)
 
 
 def test_mc_fan_renders(tmp_path):
@@ -48,14 +49,14 @@ def test_mc_fan_renders(tmp_path):
                    n_trades=300, n_paths=500, return_paths=True)
     path = render_mc_fan(sim, 10_000.0, str(tmp_path),
                          percentile_paths=sim["percentile_paths"])
-    assert os.path.getsize(path) > 5_000
+    assert_rendered(path)
 
 
 def test_growth_path_chart_renders(tmp_path):
     from swingbot.core.charts.portfolio_charts import render_growth_path
     curve = [(f"2026-{m:02d}-01", 10_000 * (1.02 ** m)) for m in range(1, 13)]
     path = render_growth_path(curve, str(tmp_path))
-    assert os.path.getsize(path) > 5_000
+    assert_rendered(path)
 
 
 def test_fold_evidence_renders(tmp_path):
@@ -63,7 +64,7 @@ def test_fold_evidence_renders(tmp_path):
     results = [{"component": "rs_min_60", "folds": [0.03, 0.02, -0.01], "verdict": "PASS"},
                {"component": "mtf_min_2", "folds": [0.01, -0.06, 0.02], "verdict": "FAIL"}]
     path = render_fold_evidence(results, str(tmp_path))
-    assert os.path.getsize(path) > 5_000
+    assert_rendered(path)
 
 
 def test_every_renderer_saves_through_the_disclaimer_helper():
