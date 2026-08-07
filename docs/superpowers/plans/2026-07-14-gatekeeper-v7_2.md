@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G9
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -116,7 +113,7 @@ data/  macro/ (cache, snapshot, history), gate/ (blocked log, shadow log, tiers)
 
 ---
 
-# Phase G1 — Macro data layer: news, sentiment, rotation, CPI/PPI, treasury (G9–G44)
+# Phase G1 — Macro data layer: rotation, CPI/PPI, treasury (G9–G44)
 
 Everything here is read-only market context. Each provider: 5s timeout, TTL disk cache, `None`-on-failure, no network in tests.
 
@@ -366,9 +363,9 @@ def test_status_math(ledger):
 
 def test_degraded_flip(ledger):
     for _ in range(3):
-        health.record_call("finnhub", ok=False, latency_ms=10.0, from_cache=False)
-    health.record_call("finnhub", ok=True, latency_ms=10.0, from_cache=False)
-    assert health.is_degraded("finnhub")               # ok_rate 0.25 < 0.5
+        health.record_call("treasury", ok=False, latency_ms=10.0, from_cache=False)
+    health.record_call("treasury", ok=True, latency_ms=10.0, from_cache=False)
+    assert health.is_degraded("treasury")               # ok_rate 0.25 < 0.5
 
 
 def test_fetch_json_records(tmp_path, ledger, monkeypatch):
@@ -509,27 +506,27 @@ git commit -m "feat: provider health ledger"
 - Test: `tests/test_macro_health.py`
 
 **Interfaces:**
-- Produces: `QUOTAS: dict[str, dict] = {"fred": {"per_minute": 60, "per_day": 5000}, "finnhub": {"per_minute": 50, "per_day": 3000}}` (soft caps under the published free-tier limits); `allow_call(provider, now=None) -> bool` from the ledger; `fetch_json` returns cached/stale/None without network when disallowed. Quota exhaustion is a WARN in health, never an exception.
+- Produces: `QUOTAS: dict[str, dict] = {"fred": {"per_minute": 60, "per_day": 5000}, "treasury": {"per_minute": 50, "per_day": 3000}}` (FRED's published free-tier limit; Treasury FiscalData is unmetered, so its cap is self-imposed politeness); `allow_call(provider, now=None) -> bool` from the ledger; `fetch_json` returns cached/stale/None without network when disallowed. Quota exhaustion is a WARN in health, never an exception.
 
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_macro_health.py`)
 
 ```python
-def test_quota_denies_next_finnhub_call_after_50_in_a_minute(ledger):
+def test_quota_denies_next_treasury_call_after_50_in_a_minute(ledger):
     for _ in range(50):
-        health.record_call("finnhub", ok=True, latency_ms=5.0, from_cache=False)
-    assert health.allow_call("finnhub") is False
+        health.record_call("treasury", ok=True, latency_ms=5.0, from_cache=False)
+    assert health.allow_call("treasury") is False
     assert health.allow_call("fred") is True            # independent budgets
 
 
 def test_day_rollover_resets(ledger):
     import json
     old = time.time() - 2 * 86400
-    line = {"ts": old, "provider": "finnhub", "ok": True,
+    line = {"ts": old, "provider": "treasury", "ok": True,
             "latency_ms": 5.0, "from_cache": False}
     with open(health.LEDGER_PATH, "a", encoding="utf-8") as fh:
         for _ in range(3000):
             fh.write(json.dumps(line) + "\n")
-    assert health.allow_call("finnhub") is True         # yesterday doesn't count
+    assert health.allow_call("treasury") is True         # yesterday doesn't count
 
 
 def test_denied_call_serves_cache_not_network(tmp_path, ledger, monkeypatch):
@@ -544,9 +541,9 @@ def test_denied_call_serves_cache_not_network(tmp_path, ledger, monkeypatch):
         calls["n"] += 1
         return _Resp()
     monkeypatch.setattr(httpcache.requests, "get", fake_get)
-    httpcache.fetch_json("https://x.test/q", provider="finnhub")     # seeds cache
+    httpcache.fetch_json("https://x.test/q", provider="treasury")     # seeds cache
     monkeypatch.setattr(health, "allow_call", lambda p, now=None: False)
-    assert httpcache.fetch_json("https://x.test/q", ttl_s=0, provider="finnhub") == {"v": 1}
+    assert httpcache.fetch_json("https://x.test/q", ttl_s=0, provider="treasury") == {"v": 1}
     assert calls["n"] == 1                              # denied call never hit network
 ```
 
@@ -558,10 +555,11 @@ Expected: FAIL with `AttributeError: ... 'allow_call'`
 - [ ] **Step 3: Write the implementation** (append to `swingbot/core/macro/health.py`)
 
 ```python
-# Soft caps deliberately under the published free-tier limits.
+# Soft caps: FRED's published free-tier limit; Treasury FiscalData is
+# unmetered, so its cap is self-imposed politeness.
 QUOTAS: dict[str, dict] = {
     "fred": {"per_minute": 60, "per_day": 5000},
-    "finnhub": {"per_minute": 50, "per_day": 3000},
+    "treasury": {"per_minute": 50, "per_day": 3000},
 }
 
 

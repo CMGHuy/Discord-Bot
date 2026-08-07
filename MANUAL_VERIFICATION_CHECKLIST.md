@@ -4,7 +4,7 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 **Organized by urgency, not by plan**, because most of this backlog isn't actionable yet:
 - **A — Do now or soon**: the active plan, `edge-engine-v4`. Its manual steps are the ones you'll actually hit next.
-- **B — Blocked on future implementation**: `gatekeeper-v7`, `llm-advisor-v5`, `admin-ui-tradingview-redesign-v8` haven't been built yet (0 code, no branch, no commits for any of the three — confirmed by grep/git-log audit). Their manual steps reference scripts that don't exist yet. Listed here so you know what's coming once someone implements the corresponding task.
+- **B — Blocked on future implementation**: `gatekeeper-v7` and `admin-ui-tradingview-redesign-v8` haven't been built yet (0 code, no branch, no commits for either — confirmed by grep/git-log audit). Their manual steps reference scripts that don't exist yet. Listed here so you know what's coming once someone implements the corresponding task.
 - **C — Already done**: `strategy-winrate-redesign` and the bulk of `unified-plan-engine-v2`'s manual steps were already executed to get those plans to "Completed" status. Listed for the record, not as outstanding work.
 - **D — Known gaps carried forward**: `unified-plan-engine-v2`'s staged-rollout smoke and `cockpit-v3`'s live-mutation smoke were *skipped by explicit decision*, not completed. These are now tracked as `gatekeeper-v7` Tasks G217/G218 (see the plan reorg below) rather than being re-run ad hoc here.
 
@@ -82,24 +82,18 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 
 ## B. Blocked on future implementation
 
-### gatekeeper-v7 (0/219 tasks implemented — see plan reorg)
+### gatekeeper-v7 (0/206 tasks implemented — see plan reorg)
 Once these tasks are actually built, their manual steps are:
 - **G29** — visit the Fed's published FOMC calendar and paste the second day of each two-day meeting into the script's `FOMC_DECISION_DAYS` list before it will run; then run it once for real and spot-check the JSON output.
-- **G40** — `python scripts/macro_smoke.py` (script doesn't exist yet — created by this task) with real `FRED_API_KEY`/`FINNHUB_API_KEY` in `.env`; paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict.
+- **G40** — `python scripts/macro_smoke.py` (script doesn't exist yet — created by this task) with a real `FRED_API_KEY` in `.env`; paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict.
 - **G44** — Phase G1 checkpoint requires the G40 evidence doc to already be committed.
 - **G97/G98** — `python scripts/gate_fold_run.py --all` (script created by G97) on TRAIN; hand-transcribe the census/frontier numbers.
 - **G100** — permutation check on the G97 annotated trades; **pre-registered stop rule: if p ≥ 0.05 pooled, stop the phase and write that down** — same discipline as E90 above.
 - **G104/G105** — shadow-mode comparison report once live shadow data exists, then a dated sign-off checklist (14+ days shadow, 15+ would-have-blocked decisions, blocked-cohort WR < passed-cohort WR, zero crashes) before enforce mode may ever be turned on.
-- **G166** — live Discord smoke: `!macro`, `!calendar`, `!sectors`, `!sentiment`, `!yields`, `!inflation`, `!checklist NVDA`, `!frontier` all render correctly with real data.
+- **G166** — live Discord smoke: `!macro`, `!calendar`, `!sectors`, `!yields`, `!inflation`, `!checklist NVDA`, `!frontier` all render correctly with real data.
 - **G175/G192/G195** — eyeball the yields/curve chart panel and the mobile layout at 375px with real data; full visual QA pass at desktop + mobile widths.
 - **G215/G216** — the terminal live ritual: real macro smoke, live Discord commands, enabling `MACRO_ENABLED`+`GATE_ENABLED` on a real scan, `!checklist NVDA` full run, dragging threshold sliders live on `/gate` and watching the next scan's tiers shift, a blackout dry-run, confirming zero blocks in inform mode via live telemetry.
-- **G217/G218/G219** (new, added by this audit — see plan reorg below).
-
-### llm-advisor-v5 (implementation status unconfirmed — see G219)
-- **L1** — install Ollama, `ollama pull qwen3:8b` (~5GB) on the user's actual laptop, run once and note wall-clock/tokens-per-second baseline.
-- **L2** — create a real Anthropic API key at the console, make one real (billed) Haiku call, confirm token counts look sane.
-- **L31** — once `scripts/eval_advisor.py` exists, run it against real Ollama on the laptop once per prompt edit; read whether outputs look sensible.
-- **L32** — six-part live smoke: real cloud call, trigger a real scan and check the 🤖 field renders, `!ask` with a real evidence-cited answer, physically open the laptop and run `run_worker.ps1`, watch it process a queued job and post the result, check the `/advisor` admin page reflects it, verify the `usage.jsonl` budget meter incremented.
+- **G217/G218** (new, added by this audit — see plan reorg below).
 
 ### admin-ui-tradingview-redesign-v8 (not started)
 - **U20/U21** — render smoke: load the page in a browser once, confirm a PNG is produced, eyeball it.
@@ -123,4 +117,4 @@ Once these tasks are actually built, their manual steps are:
 - **unified-plan-engine-v2 Tasks 85, 88, 89 §3–4, 90, 91, 94** (staged-rollout live verification) — skipped by explicit user decision 2026-07-18 in favor of deploying straight to production. → tracked as **gatekeeper-v7 Task G217**.
 - **cockpit-v3 Tasks B38 §2, C46 §2** (live-mutation admin-UI smoke) — deliberately skipped per their own Progress blocks. → tracked as **gatekeeper-v7 Task G218**.
 
-See "Deliverable 2" of this session's work for the new G217–G219 tasks themselves.
+See "Deliverable 2" of this session's work for the new G217–G218 tasks themselves.

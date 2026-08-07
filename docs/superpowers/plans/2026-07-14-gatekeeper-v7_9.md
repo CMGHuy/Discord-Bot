@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G147
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -124,7 +121,7 @@ All commands render from the saved snapshot / stored artifacts — a command nev
 
 **Files:** Create `swingbot/commands/macro.py` (registered in `bot_core.py` like other command modules); test `tests/test_commands_macro.py`
 
-**Interfaces:** `!macro` — one embed from `load_snapshot()`: Inflation field (CPI/Core/PPI/PCE yoy + vs-target), Rates field (FF, 2y/10y, curve state), Risk field (VIX regime, credit, dollar, fear/greed), Rotation field (top-3/bottom-3 sectors), Events field (next high-impact + within-24h), News field (sentiment label + top-3 headlines), footer `built_at` + stale marker. `!macro refresh` → `ensure_fresh_snapshot(ttl_min=0)` in a thread, then renders (admin-style confirm). Empty state: "Macro layer off or no snapshot yet — set MACRO_ENABLED and FRED_API_KEY." The pure builder is `build_macro_embed(snap) -> discord.Embed | None` (None on empty state); the command is a thin async shell. **This task also sets the phase's test conventions:** a shared `FakeCtx` (captures `.send(...)` kwargs) and a full fixture snapshot in `tests/fixtures/gate/snapshots.py` (`full_snapshot()` — reused by every G5 command test).
+**Interfaces:** `!macro` — one embed from `load_snapshot()`: Inflation field (CPI/Core/PPI/PCE yoy + vs-target), Rates field (FF, 2y/10y, curve state), Risk field (VIX regime, credit, dollar, fear/greed), Rotation field (top-3/bottom-3 sectors), Events field (next high-impact + within-24h), footer `built_at` + stale marker. `!macro refresh` → `ensure_fresh_snapshot(ttl_min=0)` in a thread, then renders (admin-style confirm). Empty state: "Macro layer off or no snapshot yet — set MACRO_ENABLED and FRED_API_KEY." The pure builder is `build_macro_embed(snap) -> discord.Embed | None` (None on empty state); the command is a thin async shell. **This task also sets the phase's test conventions:** a shared `FakeCtx` (captures `.send(...)` kwargs) and a full fixture snapshot in `tests/fixtures/gate/snapshots.py` (`full_snapshot()` — reused by every G5 command test).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -152,7 +149,7 @@ def test_macro_embed_golden():
     embed = macro.build_macro_embed(full_snapshot())
     names = [f.name for f in embed.fields]
     assert names == ["📈 Inflation", "🏦 Rates", "⚖️ Risk",
-                     "🔄 Rotation", "📅 Events", "📰 News"]
+                     "🔄 Rotation", "📅 Events"]
     inflation = embed.fields[0].value
     assert "CPI 3.1%" in inflation and "Core PCE 2.6%" in inflation
     assert "vs 2% target" in inflation
@@ -235,13 +232,6 @@ def full_snapshot():
                                  "at": "2026-07-17T08:30:00"},
                                 {"name": "OPEX", "importance": 2,
                                  "at": "2026-07-18T16:00:00"}]},
-        "news": {"headlines_top5": [
-                     {"title": "Chipmaker beats and raises guidance",
-                      "score": 0.6, "kind": "confirmed"},
-                     {"title": "Retailer said to weigh merger",
-                      "score": 0.2, "kind": "rumor"}],
-                 "sentiment": {"score": 0.22, "n": 25, "label": "positive"},
-                 "rumor_ratio": 0.2},
         "quality_warnings": [],
     }
 ```
@@ -324,13 +314,6 @@ def build_macro_embed(snap: dict | None) -> discord.Embed | None:
         ev_bits.append("⚠️ within 24h: "
                        + ", ".join(e["name"] for e in events["within_24h"]))
     embed.add_field(name="📅 Events", inline=False, value=" · ".join(ev_bits))
-    news = snap.get("news") or {}
-    sent = news.get("sentiment") or {}
-    heads = "\n".join(f"• {h['title']}" for h in (news.get("headlines_top5") or [])[:3])
-    embed.add_field(name="📰 News", inline=False,
-                    value=f"Sentiment: {sent.get('label', '—')} "
-                          f"({_fmt(sent.get('score'))})"
-                          + (f"\n{heads}" if heads else ""))
     footer = f"Snapshot {str(snap.get('built_at', ''))[:16].replace('T', ' ')}"
     if snap.get("stale"):
         footer += " · STALE"
@@ -551,105 +534,6 @@ git add swingbot/commands/macro.py tests/test_commands_macro.py
 git commit -m "feat: !sectors rotation table"
 ```
 
-### Task G150: `!sentiment`
-
-**Files:** Modify `macro.py`; test `tests/test_commands_macro.py`
-
-**Interfaces:** `!sentiment [ticker]` — market-wide: news sentiment score/label, rumor ratio, fear/greed gauge with the 5-band label; with ticker: company headlines (top 5, each with G36 score emoji and G37 rumor/confirmed tag). Ticker path reads the cached company-news (no fetch); cache miss → "no cached headlines — appears on the next scan". Pure builders `sentiment_overview(snap) -> str`, `ticker_headlines(headlines) -> str`.
-
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_commands_macro.py`)
-
-```python
-def test_sentiment_overview_golden():
-    text = macro.sentiment_overview(full_snapshot())
-    assert "News: positive (+0.22, N=25)" in text
-    assert "Rumor ratio: 20%" in text
-    assert "Fear/greed: greed (66)" in text
-
-
-def test_ticker_headlines_golden():
-    heads = [{"title": "Beats and raises", "score": 0.6, "kind": "confirmed"},
-             {"title": "Said to weigh merger", "score": 0.2, "kind": "rumor"}]
-    text = macro.ticker_headlines(heads)
-    assert text.splitlines()[0] == "🟢 [confirmed] Beats and raises"
-    assert text.splitlines()[1] == "⚪ [rumor] Said to weigh merger"
-
-
-def test_sentiment_ticker_cache_miss(monkeypatch):
-    monkeypatch.setattr(macro, "_cached_company_news", lambda t: None)
-    monkeypatch.setattr(macro, "_load_snapshot", lambda: full_snapshot())
-    ctx = FakeCtx()
-    asyncio.run(macro.sentiment_cmd.callback(ctx, "NVDA"))
-    content, _ = ctx.sent[0]
-    assert "no cached headlines" in content
-```
-
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `macro.py`)
-
-```python
-def _score_emoji(score):
-    if score is None:
-        return "⚪"
-    return "🟢" if score > 0.15 else "🔴" if score < -0.15 else "⚪"
-
-
-def sentiment_overview(snap: dict) -> str:
-    news = (snap or {}).get("news") or {}
-    sent = news.get("sentiment") or {}
-    fg = (snap or {}).get("fear_greed") or {}
-    parts = []
-    if sent.get("label"):
-        parts.append(f"News: {sent['label']} ({sent.get('score', 0):+.2f}, "
-                     f"N={sent.get('n', 0)})")
-    if news.get("rumor_ratio") is not None:
-        parts.append(f"Rumor ratio: {news['rumor_ratio']:.0%}")
-    if fg.get("label"):
-        parts.append(f"Fear/greed: {fg['label']} ({fg.get('score', '—')})")
-    return "\n".join(parts) or "No sentiment data in the snapshot yet."
-
-
-def ticker_headlines(headlines: list) -> str:
-    return "\n".join(
-        f"{_score_emoji(h.get('score'))} [{h.get('kind', '?')}] {h.get('title', '')}"
-        for h in (headlines or [])[:5])
-
-
-def _cached_company_news(ticker: str) -> list | None:
-    """Cache-only read of G35's company headlines — NEVER fetches.
-    Verify the exact cache accessor in core/macro/company_news.py (G35)."""
-    from swingbot.core.macro.company_news import cached_headlines
-    return cached_headlines(ticker)
-
-
-@commands.command(name="sentiment")
-async def sentiment_cmd(ctx, ticker: str = None):
-    """!sentiment [ticker] — market or company news sentiment"""
-    snap = _load_snapshot()
-    if not snap:
-        await ctx.send(EMPTY_STATE)
-        return
-    if ticker:
-        heads = _cached_company_news(ticker.upper())
-        if not heads:
-            await ctx.send(f"{ticker.upper()}: no cached headlines — "
-                           f"appears on the next scan.")
-            return
-        await ctx.send(embed=discord.Embed(
-            title=f"📰 {ticker.upper()} headlines",
-            description=ticker_headlines(heads)))
-        return
-    await ctx.send(embed=discord.Embed(
-        title="📰 Sentiment", description=sentiment_overview(snap)))
-```
-
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
-- [ ] **Step 4: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/commands/macro.py tests/test_commands_macro.py
-git commit -m "feat: !sentiment"
-```
 
 ### Task G151: `!yields`
 
@@ -1226,7 +1110,7 @@ git commit -m "feat: !gutcheck"
 
 **Files:** Modify `macro.py`, `gatecheck.py`; test `tests/test_commands_macro.py`
 
-**Interfaces:** `/macro /calendar /sectors /sentiment /yields /inflation /checklist /whycheck /blocked /gutcheck /frontier /tierwr /redflags` via the repo's existing bridge pattern in `swingbot/commands/slash.py`: `ctx = await commands.Context.from_interaction(interaction)` then `await <prefix_cmd>.callback(ctx, *args)` (this is exactly how `slash_check` bridges today — copy that shape).
+**Interfaces:** `/macro /calendar /sectors /yields /inflation /checklist /whycheck /blocked /gutcheck /frontier /tierwr /redflags` via the repo's existing bridge pattern in `swingbot/commands/slash.py`: `ctx = await commands.Context.from_interaction(interaction)` then `await <prefix_cmd>.callback(ctx, *args)` (this is exactly how `slash_check` bridges today — copy that shape).
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_commands_macro.py`)
 
@@ -1238,7 +1122,7 @@ def test_every_new_command_has_a_slash_bridge():
     command's own tests."""
     import inspect
     import swingbot.commands.slash as slash
-    for name in ("macro", "calendar", "sectors", "sentiment", "yields",
+    for name in ("macro", "calendar", "sectors", "yields",
                  "inflation", "checklist", "whycheck", "blocked",
                  "gutcheck", "frontier", "tierwr", "redflags"):
         fn = getattr(slash, f"slash_{name}", None)
@@ -1267,7 +1151,7 @@ async def slash_checklist(interaction: discord.Interaction,
     await checklist_cmd.callback(ctx, ticker, strategy)
 ```
 
-(Commands with arguments — `/calendar days`, `/sentiment ticker`, `/whycheck plan_id`, `/blocked date` — declare them via `app_commands.describe` exactly like `slash_checklist` above. Match the registration style of the existing `slash.py` functions, including where `bot` comes from.)
+(Commands with arguments — `/calendar days`, `/whycheck plan_id`, `/blocked date` — declare them via `app_commands.describe` exactly like `slash_checklist` above. Match the registration style of the existing `slash.py` functions, including where `bot` comes from.)
 
 - [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_commands_macro.py -v`
 - [ ] **Step 4: Full suite + commit**
@@ -1304,7 +1188,7 @@ def test_help_lists_every_new_command():
     ctx = FakeCtx()
     asyncio.run(info.commands_cmd.callback(ctx))
     rendered = _flatten_sent(ctx)
-    for cmd in ("!macro", "!calendar", "!sectors", "!sentiment", "!yields",
+    for cmd in ("!macro", "!calendar", "!sectors", "!yields",
                 "!inflation", "!checklist", "!whycheck", "!blocked",
                 "!gutcheck", "!frontier", "!tierwr", "!redflags"):
         assert cmd in rendered, f"{cmd} missing from !help"
@@ -1315,7 +1199,7 @@ def test_help_lists_every_new_command():
 
 ```text
 **Market Context**
-!macro [refresh] · !calendar [days] · !sectors · !sentiment [ticker] · !yields · !inflation
+!macro [refresh] · !calendar [days] · !sectors · !yields · !inflation
 
 **Gatekeeper**
 !checklist <TICKER> [strategy] · !whycheck <plan_id> · !blocked [date] · !gutcheck · !frontier [strategy] · !tierwr · !redflags
@@ -1477,67 +1361,6 @@ git add swingbot/core/charts/gate_charts.py swingbot/commands/macro.py tests/tes
 git commit -m "feat: sector rotation chart"
 ```
 
-### Task G161: Sentiment/news trend chart
-
-**Files:** Modify `gate_charts.py`; test `tests/test_gate_charts.py`
-
-**Interfaces:** `sentiment_trend_chart(history_rows, path) -> str | None` — daily aggregate news-sentiment line + fear/greed overlay (30d, twin y-axes); attached by `!sentiment` when ≥ 7 history rows carry sentiment.
-
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_charts.py`)
-
-```python
-def test_sentiment_trend_chart_renders(tmp_path):
-    rows = [{"built_at": f"2026-06-{d:02d}T22:00:00",
-             "news_sentiment": (d % 7 - 3) / 10, "fear_greed": 45 + d}
-            for d in range(1, 31)]
-    path = str(tmp_path / "sent.png")
-    assert sentiment_trend_chart(rows, path) == path
-
-
-def test_sentiment_trend_chart_insufficient(tmp_path):
-    rows = [{"built_at": "2026-06-01", "news_sentiment": 0.1, "fear_greed": 50}]
-    assert sentiment_trend_chart(rows, str(tmp_path / "n.png")) is None
-```
-
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `gate_charts.py`)
-
-```python
-def sentiment_trend_chart(history_rows: list[dict], path: str) -> str | None:
-    """G161: news sentiment (left axis, ±1) + fear/greed (right, 0-100)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    rows = [r for r in (history_rows or [])
-            if r.get("news_sentiment") is not None][-30:]
-    if len(rows) < 7:
-        return None
-    x = list(range(len(rows)))
-    fig, ax1 = plt.subplots(figsize=(8, 4))
-    ax1.plot(x, [r["news_sentiment"] for r in rows], label="news sentiment")
-    ax1.set_ylim(-1, 1)
-    ax1.axhline(0, linewidth=0.8, linestyle="--")
-    ax2 = ax1.twinx()
-    ax2.plot(x, [r.get("fear_greed") for r in rows], alpha=0.6,
-             label="fear/greed")
-    ax2.set_ylim(0, 100)
-    fig.legend(fontsize=8, loc="upper left")
-    fig.tight_layout()
-    fig.savefig(path, dpi=110)
-    plt.close(fig)
-    return path
-```
-
-**Wiring:** `!sentiment` (market-wide path only) attaches it per the G159 pattern.
-
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_charts.py -v`
-- [ ] **Step 4: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/charts/gate_charts.py swingbot/commands/macro.py tests/test_gate_charts.py
-git commit -m "feat: sentiment trend chart"
-```
 
 ### Task G162: `!frontier`/`!tierwr` chart wiring
 
@@ -1830,7 +1653,7 @@ git commit -m "feat: cooldowns + output guards"
 
 ### Task G166: Phase G5 checkpoint
 
-- [ ] **Step 1:** Full suite + `make check` green; manual smoke in a test channel: `!macro`, `!calendar`, `!sectors`, `!sentiment`, `!yields`, `!inflation`, `!checklist NVDA`, `!frontier` all render with real data (evidence screenshot/paste noted in the Progress block).
+- [ ] **Step 1:** Full suite + `make check` green; manual smoke in a test channel: `!macro`, `!calendar`, `!sectors`, `!yields`, `!inflation`, `!checklist NVDA`, `!frontier` all render with real data (evidence screenshot/paste noted in the Progress block).
 - [ ] **Step 2:** Update Progress block. Commit — `chore: phase G5 checkpoint`
 
 ---

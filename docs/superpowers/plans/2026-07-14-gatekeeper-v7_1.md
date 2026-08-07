@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G1
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -318,7 +315,7 @@ git commit -m "docs: gatekeeper v7 pre-registered targets (frozen before data co
 - Test: `tests/test_gate_config.py`
 
 **Interfaces:**
-- Produces Fields (section `"Gatekeeper"`, all default off/neutral): `GATE_ENABLED` (checkbox, false — master switch), `GATE_MODE` (select `shadow`|`inform`|`enforce`, default `inform` — inform renders the checklist on every alert and never blocks; enforce is opt-in and guarded by G170), `GATE_MIN_TIER` (select `A+`|`A`|`B`|`C`, default `C`; **consulted only in enforce mode**), `GATE_STRICTNESS` (select `strict`|`balanced`|`relaxed`, default `balanced` — preset seeding for the G79 threshold fields), `MACRO_ENABLED` (checkbox, false), `FRED_API_KEY` (password, sensitive), `MACRO_SNAPSHOT_TTL_MIN` (int, 30, min 5), `GATE_BLACKOUT_ENABLED` (checkbox, false — annotate-only; holding entries additionally requires `GATE_BLACKOUT_ENFORCE`, G120). (`FINNHUB_API_KEY` already exists from llm-advisor L10; if that plan is unmerged, add it here with the same shape.)
+- Produces Fields (section `"Gatekeeper"`, all default off/neutral): `GATE_ENABLED` (checkbox, false — master switch), `GATE_MODE` (select `shadow`|`inform`|`enforce`, default `inform` — inform renders the checklist on every alert and never blocks; enforce is opt-in and guarded by G170), `GATE_MIN_TIER` (select `A+`|`A`|`B`|`C`, default `C`; **consulted only in enforce mode**), `GATE_STRICTNESS` (select `strict`|`balanced`|`relaxed`, default `balanced` — preset seeding for the G79 threshold fields), `MACRO_ENABLED` (checkbox, false), `FRED_API_KEY` (password, sensitive), `MACRO_SNAPSHOT_TTL_MIN` (int, 30, min 5), `GATE_BLACKOUT_ENABLED` (checkbox, false — annotate-only; holding entries additionally requires `GATE_BLACKOUT_ENFORCE`, G120).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -360,11 +357,6 @@ def test_api_key_sensitive_and_ttl_floor():
     assert field("FRED_API_KEY").sensitive is True
     assert field("MACRO_SNAPSHOT_TTL_MIN").min == 5
 
-
-def test_finnhub_key_exists_somewhere():
-    # From llm-advisor L10 when merged; added here otherwise — either way it must exist.
-    f = field("FINNHUB_API_KEY")
-    assert f is not None and f.sensitive is True
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -395,7 +387,7 @@ Expected: FAIL — `assert f is not None` for `GATE_ENABLED`
                "individually overridden survive a preset switch."),
     Field("MACRO_ENABLED", "MACRO_ENABLED", "Gatekeeper", "Macro context enabled",
           type="checkbox", default="false",
-          help="Refresh the macro snapshot (news, sentiment, CPI/PPI/PCE, yields, VIX, sectors, "
+          help="Refresh the macro snapshot (CPI/PPI/PCE, yields, VIX, sectors, "
                "breadth) before every scan and render the market-context field on alerts."),
     Field("FRED_API_KEY", "FRED_API_KEY", "Gatekeeper", "FRED API key",
           type="password", sensitive=True,
@@ -410,19 +402,10 @@ Expected: FAIL — `assert f is not None` for `GATE_ENABLED`
                "Annotate-only: actually holding entries additionally requires GATE_BLACKOUT_ENFORCE."),
 ```
 
-**Conditional:** if llm-advisor L10 is unmerged at execution time (check: `grep FINNHUB_API_KEY swingbot/config.py`), also add with the same shape:
-
-```python
-    Field("FINNHUB_API_KEY", "FINNHUB_API_KEY", "Gatekeeper", "Finnhub API key",
-          type="password", sensitive=True,
-          help="Free key: https://finnhub.io/register. Powers news, sentiment, and the earnings "
-               "calendar. Empty = those sections degrade to 'unknown'."),
-```
-
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_gate_config.py -v`
-Expected: 4 passed
+Expected: 3 passed
 
 - [ ] **Step 5: Full suite + commit**
 
@@ -488,7 +471,7 @@ def _check(status="pass", check_id="htf_alignment", weight=10.0):
 def _result():
     return GateResult(
         ticker="NVDA", strategy="Break & Retest", as_of="2026-07-14",
-        checks=(_check(), _check(status="unknown", check_id="rf_rumor_spike")),
+        checks=(_check(), _check(status="unknown", check_id="rf_thin_session")),
         score=87.5, tier="A", hard_blocks=(), macro_stale=False,
     )
 
@@ -596,7 +579,7 @@ git commit -m "feat: gate result types"
 
 **Interfaces:**
 - Produces: `CHECKS: dict[str, CheckSpec]` — `CheckSpec(check_id, section, weight, hard_block: bool, applies_to: tuple[str,...] | None, backtestable: bool, config_flag: str, thresholds: dict[str, ThresholdSpec])` where `ThresholdSpec(name, default, min, max, step, relax_direction: str, presets: dict[str, float])` (`presets` carries the strict/balanced/relaxed values; `relax_direction` is the help-text sentence, e.g. "raise to allow later entries"). Check functions read thresholds via `spec.threshold(name)` (config-Field-backed, G79) — never module constants; one entry per check built in Phases G1–G2 (registered incrementally — each later task adds its row and this module's test asserts registry consistency: unique ids, sections valid, weights ≥ 0, every `config_flag` exists in `config.FIELDS`). `applies_to=None` = all strategies. `enabled_checks(strategy) -> list[CheckSpec]`.
-- Hard-block policy: `hard_block=True` checks (news whipsaw inside blackout, kill-switch conflict, unconfirmed signal bar) force tier C on `fail` even at score 100.
+- Hard-block policy: `hard_block=True` checks (kill-switch conflict, unconfirmed signal bar) force tier C on `fail` even at score 100.
 
 **Registration convention used by every Phase-G2 check task:** checks call `register(check_id=..., section=..., weight=..., func=..., thresholds={...})` at module import time; `config_flag` is derived automatically as `GATE_CHECK_<ID>`. The per-check enable Fields and per-threshold Fields are *generated* in G79 — until then `enabled_checks` treats a missing flag attr as True, and the "every config_flag exists in config.FIELDS" invariant is asserted from G79's test onward (not here — the fields don't exist yet).
 
@@ -1044,7 +1027,7 @@ def climax_overbought(n=120, level=120.0):
 
 def gap_spike(pct=12.0, n=80):
     """Flat series, last bar +pct% close-to-close on 5x volume — the
-    rf_rumor_spike geometry scenario."""
+    gap-spike geometry scenario."""
     closes = np.full(n, 100.0)
     closes[-1] = 100.0 * (1 + pct / 100)
     volumes = np.full(n, BASE_VOL)

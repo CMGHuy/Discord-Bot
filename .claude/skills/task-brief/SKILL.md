@@ -1,6 +1,6 @@
 ---
 name: task-brief
-description: Extract one plan task into an execution brief with this repo's known traps pre-corrected. Use when starting a numbered plan task (E53, G131, C43...).
+description: Extract one plan task into an execution brief with this repo's known traps pre-corrected. Use when starting a numbered plan task (E53, G134, C43...).
 disable-model-invocation: true
 ---
 

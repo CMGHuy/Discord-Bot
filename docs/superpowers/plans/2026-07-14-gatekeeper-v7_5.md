@@ -1,4 +1,4 @@
-# Gatekeeper v7 - Part 5/11: Checklist engine II: the 11 red flags (section 3) (Tasks G57-G67)
+# Gatekeeper v7 - Part 5/11: Checklist engine II: the 9 red flags (section 3) (Tasks G57-G67)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G57 -> G67).
 >
@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G57
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -123,7 +120,7 @@ One module per checklist section; one task per check. Every check task follows t
 
 > *(Phase intro above repeated from the part where this phase begins - this part continues it with tasks G57-G67.)*
 
-## Section 3 — The 11 red flags (checklist §3, one task each)
+## Section 3 — The 9 red flags (checklist §3, one task each)
 
 Red-flag checks live in `swingbot/core/gate/redflags.py`, ids prefixed `rf_`, section `"redflag"`. Policy: a red flag that fires = `fail`; flags marked **HB** are hard blocks. Each returns evidence sufficient for the embed's red-flag table row.
 
@@ -180,7 +177,7 @@ def test_non_breakout_strategy_na_pass():
 
 ```python
 # swingbot/core/gate/redflags.py
-"""The 11 red-flag detectors, ids rf_*. A fired flag = status "fail"
+"""The 9 red-flag detectors, ids rf_*. A fired flag = status "fail"
 (warn-grade flags are noted per check); functions stay total — a
 strategy the flag doesn't police returns pass with detail "n/a"."""
 from __future__ import annotations
@@ -622,244 +619,12 @@ git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
 git commit -m "feat: rf_extreme_fade"
 ```
 
-### Task G62: `rf_news_whipsaw` (weight 10, **HB** inside the blackout window)
-
-**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
-
-**Interfaces:** `rf_news_whipsaw(df_daily, plan, macro_snap) -> CheckResult` — from `macro_snap["events"]`: importance-3 event (CPI/NFP/FOMC) within the blackout window (config `GATE_BLACKOUT_HOURS_BEFORE` default 18, `_AFTER` default 2, added to config here) → **fail/HB**; importance-2 within window → warn; earnings within `GATE_EARNINGS_BLACKOUT_DAYS` (default 3, reuses G33; defers to edge-engine E18 gate if merged) → fail. Snapshot missing → `unknown`.
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
-
-```python
-import swingbot.config as config
-import swingbot.core.gate.redflags as redflags
-from swingbot.core.gate.redflags import rf_news_whipsaw
-
-NOW = dt.datetime(2026, 7, 14, 16, 0, tzinfo=dt.timezone.utc)
-
-
-def _snap_with(events_24h):
-    return {"events": {"next_high_impact": events_24h[0] if events_24h else None,
-                       "within_24h": events_24h, "today": []}}
-
-
-def test_cpi_tomorrow_fires_hard(monkeypatch):
-    monkeypatch.setattr(redflags.earnings, "earnings_within",
-                        lambda *a, **k: None)
-    cpi = {"date": "2026-07-15", "time_et": "08:30", "kind": "cpi",
-           "label": "CPI release", "importance": 3}
-    result = rf_news_whipsaw(uptrend_daily(), make_plan(), _snap_with([cpi]), now=NOW)
-    assert result.status == "fail"                    # ~16.5h ahead, inside 18h window
-    from swingbot.core.gate.registry import CHECKS
-    assert CHECKS["rf_news_whipsaw"].hard_block is True
-
-
-def test_importance_2_warns(monkeypatch):
-    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: None)
-    ppi = {"date": "2026-07-15", "time_et": "08:30", "kind": "ppi",
-           "label": "PPI release", "importance": 2}
-    assert rf_news_whipsaw(uptrend_daily(), make_plan(),
-                           _snap_with([ppi]), now=NOW).status == "warn"
-
-
-def test_quiet_week_passes(monkeypatch):
-    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: False)
-    assert rf_news_whipsaw(uptrend_daily(), make_plan(),
-                           _snap_with([]), now=NOW).status == "pass"
-
-
-def test_earnings_inside_blackout_fires(monkeypatch):
-    monkeypatch.setattr(redflags.earnings, "earnings_within", lambda *a, **k: True)
-    result = rf_news_whipsaw(uptrend_daily(), make_plan(), _snap_with([]), now=NOW)
-    assert result.status == "fail" and "earnings" in result.detail
-
-
-def test_no_snapshot_unknown():
-    assert rf_news_whipsaw(uptrend_daily(), make_plan(), None, now=NOW).status == "unknown"
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_news_whipsaw'`)
-- [ ] **Step 3: Write the implementation** (append to `redflags.py`; plus config Fields)
-
-```python
-import swingbot.config as config
-from swingbot.core.macro import calendar_events, earnings
-
-
-def rf_news_whipsaw(df_daily, plan, macro_snap, *, now=None, **ctx) -> CheckResult:
-    """HB inside the blackout window. Statuses are information — actually
-    holding an entry additionally requires GATE_BLACKOUT_ENFORCE (G120)."""
-    if not macro_snap or not macro_snap.get("events"):
-        return _rf("rf_news_whipsaw", "unknown", "no event calendar available", {}, 10.0)
-    now = now or dt.datetime.now(dt.timezone.utc)
-    before = float(getattr(config, "GATE_BLACKOUT_HOURS_BEFORE", 18))
-    after = float(getattr(config, "GATE_BLACKOUT_HOURS_AFTER", 2))
-    seen = {}
-    ev_section = macro_snap["events"]
-    for e in (ev_section.get("within_24h") or []) + \
-             ([ev_section["next_high_impact"]] if ev_section.get("next_high_impact") else []):
-        seen[(e["date"], e["kind"])] = e
-    for event in seen.values():
-        hours = calendar_events.hours_until(event, now)
-        if -after <= hours <= before:
-            detail = f"{event['label']} in {hours:.0f}h — inside the blackout window"
-            if event["importance"] >= 3:
-                return _rf("rf_news_whipsaw", "fail", detail,
-                           {"event": event, "hours": round(hours, 1)}, 10.0)
-            return _rf("rf_news_whipsaw", "warn", detail,
-                       {"event": event, "hours": round(hours, 1)}, 10.0)
-    # Earnings blackout (reuses G33; defers to edge E18's gate if merged)
-    days = int(getattr(config, "GATE_EARNINGS_BLACKOUT_DAYS", 3))
-    within = earnings.earnings_within(plan.ticker, days, now=now.date())
-    if within:
-        return _rf("rf_news_whipsaw", "fail",
-                   f"earnings within {days} days", {"earnings_within_days": days}, 10.0)
-    return _rf("rf_news_whipsaw", "pass", "no high-impact event in the window", {}, 10.0)
-
-
-register(check_id="rf_news_whipsaw", section="redflag", weight=10.0,
-         func=rf_news_whipsaw, hard_block=True)
-```
-
-```python
-# swingbot/config.py — append to the Gatekeeper section:
-    Field("GATE_BLACKOUT_HOURS_BEFORE", "GATE_BLACKOUT_HOURS_BEFORE", "Gatekeeper",
-          "Blackout hours before event", type="float", default="18", min=0, max=72, step=1,
-          help="High-impact events (CPI/NFP/FOMC) within this many hours ahead flag the "
-               "checklist. Lower to shrink the annotation window."),
-    Field("GATE_BLACKOUT_HOURS_AFTER", "GATE_BLACKOUT_HOURS_AFTER", "Gatekeeper",
-          "Blackout hours after event", type="float", default="2", min=0, max=24, step=0.5,
-          help="The window stays flagged this long after the print."),
-    Field("GATE_EARNINGS_BLACKOUT_DAYS", "GATE_EARNINGS_BLACKOUT_DAYS", "Gatekeeper",
-          "Earnings blackout days", type="number", default="3", min=0, max=15, step=1,
-          help="Flag plans whose ticker reports earnings within this many days. "
-               "Lower to allow entries closer to earnings."),
-```
-
-(Extend `tests/test_gate_config.py`'s expected-keys map with these three.)
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py tests/test_gate_config.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/gate/redflags.py swingbot/config.py tests/test_gate_redflags.py tests/test_gate_config.py
-git commit -m "feat: rf_news_whipsaw + blackout config"
-```
-
-### Task G63: `rf_rumor_spike` (weight 6)
-
-**Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
-
-**Interfaces:** `rf_rumor_spike(df_daily, plan, macro_snap, headlines=None) -> CheckResult` — fires when the signal bar gapped ≥ 5% or ranged ≥ 2.5× ATR on ≥ 3× volume **and** the ticker's recent headlines (G35, injected by the orchestrator) are majority `"rumor"`-classified (G37) or absent entirely (unexplained spike). Confirmed-news spike → warn (still event-driven). No headlines provider → `unknown` on the news half, decided by geometry half alone (warn max).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
-
-```python
-from swingbot.core.gate.redflags import rf_rumor_spike
-from tests.fixtures.gate import gap_spike
-
-RUMOR_HEADS = [{"title": "TEST reportedly in talks over mega-merger"},
-               {"title": "Sources say TEST weighing acquisition"}]
-CONFIRMED_HEADS = [{"title": "TEST announces record Q2 earnings"},
-                   {"title": "TEST files 8-K on new contract"}]
-
-
-def test_rumor_spike_fires():
-    result = rf_rumor_spike(gap_spike(pct=12.0), make_plan(), None,
-                            headlines=RUMOR_HEADS)
-    assert result.status == "fail"
-
-
-def test_no_headlines_at_all_is_unexplained_fail():
-    assert rf_rumor_spike(gap_spike(12.0), make_plan(), None,
-                          headlines=[]).status == "fail"
-
-
-def test_confirmed_news_spike_warns():
-    assert rf_rumor_spike(gap_spike(12.0), make_plan(), None,
-                          headlines=CONFIRMED_HEADS).status == "warn"
-
-
-def test_no_provider_geometry_only_warn():
-    assert rf_rumor_spike(gap_spike(12.0), make_plan(), None,
-                          headlines=None).status == "warn"
-
-
-def test_quiet_tape_passes():
-    assert rf_rumor_spike(uptrend_daily(), make_plan(), None,
-                          headlines=RUMOR_HEADS).status == "pass"
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'rf_rumor_spike'`)
-- [ ] **Step 3: Write the implementation** (append to `redflags.py`)
-
-```python
-def rf_rumor_spike(df_daily, plan, macro_snap, *, headlines=None, **ctx) -> CheckResult:
-    """Spike geometry + rumor-classified (or absent) headlines.
-    headlines is injected by the orchestrator (G75) from company news
-    (G35); None = provider unavailable -> geometry half only, warn max."""
-    spec = CHECKS["rf_rumor_spike"]
-    from swingbot.core.gate.levels import _safe_atr
-    from swingbot.core.macro.sentiment import classify_confirmation
-    closes = df_daily["Close"]
-    if len(closes) < 30:
-        return _rf("rf_rumor_spike", "unknown", "insufficient history", {}, 6.0)
-    prev = float(closes.iloc[-2])
-    bar = df_daily.iloc[-1]
-    move_pct = abs(float(bar["Close"]) / prev - 1.0) * 100.0
-    atr_val = _safe_atr(df_daily.iloc[:-1], prev)
-    range_atr = (float(bar["High"]) - float(bar["Low"])) / atr_val
-    vol = volume_ratio(df_daily) or 0.0
-    spiky = ((move_pct >= spec.threshold("gap_pct")
-              or range_atr >= spec.threshold("range_atr"))
-             and vol >= spec.threshold("vol_mult"))
-    evidence = {"move_pct": round(move_pct, 1), "range_atr": round(range_atr, 1),
-                "vol_ratio": round(vol, 1)}
-    if not spiky:
-        return _rf("rf_rumor_spike", "pass", "no spike geometry", evidence, 6.0)
-    if headlines is None:
-        return _rf("rf_rumor_spike", "warn",
-                   f"spike ({move_pct:.0f}%, {vol:.0f}x vol) — headlines "
-                   f"provider unavailable", evidence, 6.0)
-    labels = [classify_confirmation(h.get("title", "")) for h in headlines]
-    evidence["headline_labels"] = labels
-    if not labels or labels.count("rumor") > len(labels) / 2:
-        why = "majority rumor-classified headlines" if labels else "no headlines at all"
-        return _rf("rf_rumor_spike", "fail",
-                   f"spike on {why} — unexplained/rumor-driven", evidence, 6.0)
-    return _rf("rf_rumor_spike", "warn",
-               "event-driven spike (confirmed news) — still volatile tape",
-               evidence, 6.0)
-
-
-register(check_id="rf_rumor_spike", section="redflag", weight=6.0,
-         func=rf_rumor_spike, backtestable=False,   # news half is live-only (G89)
-         thresholds={
-             "gap_pct": ThresholdSpec("gap_pct", 5.0, 2.0, 15.0, 0.5,
-                 "raise to flag only bigger one-day moves",
-                 presets={"strict": 4.0, "balanced": 5.0, "relaxed": 8.0}),
-             "range_atr": ThresholdSpec("range_atr", 2.5, 1.5, 5.0, 0.25,
-                 "raise to flag only wider ranges",
-                 presets={"strict": 2.0, "balanced": 2.5, "relaxed": 3.5}),
-             "vol_mult": ThresholdSpec("vol_mult", 3.0, 1.5, 6.0, 0.25,
-                 "raise to require heavier volume before flagging",
-                 presets={"strict": 2.5, "balanced": 3.0, "relaxed": 4.0}),
-         })
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_gate_redflags.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/gate/redflags.py tests/test_gate_redflags.py
-git commit -m "feat: rf_rumor_spike"
-```
 
 ### Task G64: `rf_buy_rumor_sell_fact` (weight 6)
 
 **Files:** Modify `redflags.py`, `registry.py`; test `tests/test_gate_redflags.py`
 
-**Interfaces:** `rf_buy_rumor_sell_fact(df_daily, plan, macro_snap) -> CheckResult` — fires for with-move entries within 2 sessions **after** a scheduled importance-3 event or the ticker's earnings date when the pre-event 5-day run-up exceeded 1.5× ATR-normalized average (the move was priced in; entering now buys the fact). Evidence: event, run-up multiple.
+**Interfaces:** `rf_buy_rumor_sell_fact(df_daily, plan, macro_snap) -> CheckResult` — fires for with-move entries within 2 sessions **after** a scheduled importance-3 event when the pre-event 5-day run-up exceeded 1.5× ATR-normalized average (the move was priced in; entering now buys the fact). Evidence: event, run-up multiple.
 - [ ] **Step 1: Write the failing test** (append to `tests/test_gate_redflags.py`)
 
 ```python

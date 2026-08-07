@@ -46,7 +46,7 @@ hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
 in-progress multi-hour backtest. Completed plans: unified-plan-engine-v2,
 strategy-winrate-redesign, admin-ui-tradingview-redesign-v6 (task IDs
 `U1`-`U36`; manual browser QA left for a future pass). On disk but not
-current focus: cockpit-v3, gatekeeper-v7, llm-advisor-v5.
+current focus: cockpit-v3, gatekeeper-v7.
 
 **Don't trust the hook's "NEXT" task ID blind** — it can name IDs (e.g. `E89`)
 that don't exist in the plan file it labels as active (which may use a

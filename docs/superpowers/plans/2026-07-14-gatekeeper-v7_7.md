@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G89
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -124,21 +121,21 @@ Where the 95% question gets answered with folds instead of hope. Everything here
 
 **Files:** Modify `swingbot/core/gate/registry.py`; test `tests/test_gate_registry.py`
 
-**Interfaces:** every CheckSpec's `backtestable: bool` finalized: price/volume/calendar checks (htf, levels, atr, setup, rf_fake_breakout, rf_stop_sweep, rf_dead_cat, rf_divergence_trap, rf_extreme_fade, rf_news_whipsaw via G29 history, rf_buy_rumor_sell_fact, rf_thin_session, rf_opex_pin, rf_beta_move, risk checks, not_chasing) = True; live-only checks (rf_rumor_spike's news half, calendar_checked, portfolio_room, trigger_objective) = False. `backtest_checks(strategy) -> list[CheckSpec]`. The backtest tier is computed from backtestable checks only — G103's shadow comparison quantifies how much the live-only checks add.
+**Interfaces:** every CheckSpec's `backtestable: bool` finalized: price/volume/calendar checks (htf, levels, atr, setup, rf_fake_breakout, rf_stop_sweep, rf_dead_cat, rf_divergence_trap, rf_extreme_fade, rf_buy_rumor_sell_fact, rf_thin_session, rf_opex_pin, rf_beta_move, risk checks, not_chasing) = True; live-only checks (calendar_checked, portfolio_room, trigger_objective) = False. `backtest_checks(strategy) -> list[CheckSpec]`. The backtest tier is computed from backtestable checks only — G103's shadow comparison quantifies how much the live-only checks add.
 - [ ] **Step 1: Write the failing test** (append to `tests/test_gate_registry.py`, outside the `_clean_registry` scope like G80's test)
 
 ```python
 def test_backtestable_subset_membership():
     import swingbot.core.gate  # noqa: F401
     from swingbot.core.gate import registry as live
-    LIVE_ONLY = {"rf_rumor_spike", "calendar_checked", "portfolio_room",
+    LIVE_ONLY = {"calendar_checked", "portfolio_room",
                  "trigger_objective", "size_formula"}
     for check_id in LIVE_ONLY:
         assert live.CHECKS[check_id].backtestable is False, check_id
     BACKTESTABLE = {"htf_alignment", "level_map", "atr_normal", "confluence",
                     "volume_confirms", "momentum_agrees", "signal_confirmed",
                     "rf_fake_breakout", "rf_stop_sweep", "rf_dead_cat",
-                    "rf_divergence_trap", "rf_extreme_fade", "rf_news_whipsaw",
+                    "rf_divergence_trap", "rf_extreme_fade",
                     "rf_buy_rumor_sell_fact", "rf_thin_session", "rf_opex_pin",
                     "rf_beta_move", "stop_structural", "rr_realistic",
                     "not_chasing"}
@@ -308,9 +305,6 @@ def historical_macro_snap(as_of) -> dict:
                            if 0 <= calendar_events.hours_until(e, close_utc) <= 24],
             "today": [e for e in upcoming if e["date"] == date],
         },
-        "news": {"headlines_top5": [],
-                 "sentiment": {"score": 0.0, "n": 0, "label": "neutral"},
-                 "rumor_ratio": 0.0},
         "composite": {"score": 0, "label": "unknown", "inputs_used": 0, "detail": []},
         "quality_warnings": [],
     }
@@ -1393,7 +1387,7 @@ git commit -m "docs: gate TRAIN decision memo + inform-mode defaults"
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_gate_shadow.py`
 
-**Interfaces:** with `GATE_ENABLED=true`: every scan candidate gets `run_checklist` (full live inputs — news, portfolio, macro snap), result attached to the plan + `shadow_log` line (G81) in **all modes** (the shadow log is the evidence stream regardless of mode). In `shadow` mode alerts are completely unchanged (byte-compare test on the embed); in `inform`/`enforce` the rendering tasks (G122–G124) take over. The checklist field does NOT render in shadow (G123 defines the render matrix).
+**Interfaces:** with `GATE_ENABLED=true`: every scan candidate gets `run_checklist` (full live inputs — portfolio, macro snap), result attached to the plan + `shadow_log` line (G81) in **all modes** (the shadow log is the evidence stream regardless of mode). In `shadow` mode alerts are completely unchanged (byte-compare test on the embed); in `inform`/`enforce` the rendering tasks (G122–G124) take over. The checklist field does NOT render in shadow (G123 defines the render matrix).
 - [ ] **Step 1: Write the failing tests**
 
 ```python
@@ -1492,7 +1486,7 @@ def _gate_render_payload(result):
     return result.to_dict()
 ```
 
-Wire `_gate_evaluate` into the alert path where each surviving candidate is turned into an embed (same place llm-advisor L14 hooks — verify at execution); pass `_gate_render_payload(result)` to `build_embed(..., gate=...)` (the kwarg lands in G123 — until then it's computed and unused, which is exactly shadow behavior).
+Wire `_gate_evaluate` into the alert path where each surviving candidate is turned into an embed (verify the seam at execution); pass `_gate_render_payload(result)` to `build_embed(..., gate=...)` (the kwarg lands in G123 — until then it's computed and unused, which is exactly shadow behavior).
 
 - [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_shadow.py -v`
 - [ ] **Step 4: Full suite + commit**

@@ -14,7 +14,7 @@
 
 **Tech Stack:** Python 3.11+, pandas, numpy, mplfinance/matplotlib, pytest ≥8. **No new pip dependencies** (no ML frameworks — every model here is transparent arithmetic the walk-forward harness can audit).
 
-**Prerequisites:** plan-engine-v2 merged (TradePlanV2, exit simulator, registry); cockpit-v3 Part 1 merged (analytics: journal MFE/MAE, jsonio, snapshot). Independent of cockpit Parts 2–3 and llm-advisor.
+**Prerequisites:** plan-engine-v2 merged (TradePlanV2, exit simulator, registry); cockpit-v3 Part 1 merged (analytics: journal MFE/MAE, jsonio, snapshot). Independent of cockpit Parts 2–3.
 
 ## Progress
 
@@ -2218,13 +2218,6 @@ from swingbot import config
 
 
 def _default_days_to_earnings(symbol: str):
-    try:  # advisor's Finnhub feed, when the llm-advisor plan is merged
-        from swingbot.core.advisor.market_context import days_to_earnings as finnhub_days
-        d = finnhub_days(symbol)
-        if d is not None:
-            return d
-    except ImportError:
-        pass
     from swingbot.core import market_events
     return market_events.days_to_earnings(symbol)
 

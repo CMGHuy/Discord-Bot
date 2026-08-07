@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G119
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -124,7 +121,7 @@ The gate meets the live bot. Every task here is flag-gated and ships with a "fla
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** one `GateContext` assembled per scan run (not per ticker): `{macro_snap (G39), open_plans, spy_df, now}`; per-candidate additions (company headlines) fetched lazily inside `run_checklist` callers with the quota meter respected. `GateContext` built even when only `MACRO_ENABLED` (for embeds) — gate checks additionally need `GATE_ENABLED`.
+**Interfaces:** one `GateContext` assembled per scan run (not per ticker): `{macro_snap (G39), open_plans, spy_df, now}`; per-candidate additions fetched lazily inside `run_checklist` callers with the quota meter respected. `GateContext` built even when only `MACRO_ENABLED` (for embeds) — gate checks additionally need `GATE_ENABLED`.
 - [ ] **Step 1: Write the failing tests**
 
 ```python
@@ -205,9 +202,8 @@ def build_gate_context(now=None) -> GateContext | None:
     """One per scan RUN, never per ticker (G119). Cheap by construction:
     saved snapshot + open plans + cached SPY bars. Built when MACRO_ENABLED
     alone (the embed macro line needs it); gate inputs are fetched only
-    when GATE_ENABLED. Company headlines are NOT here — they are fetched
-    lazily per candidate inside the run_checklist caller (quota-metered).
-    Every input degrades to None/[] — assembly never raises."""
+    when GATE_ENABLED. Every input degrades to None/[] — assembly
+    never raises."""
     if not (getattr(config, "MACRO_ENABLED", False)
             or getattr(config, "GATE_ENABLED", False)):
         return None
@@ -367,7 +363,7 @@ git commit -m "feat: event blackout annotate-first, hold opt-in"
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread, same place llm-advisor L14 hooks), applies `with_advisory()` per mode (G76/G103/G106 semantics unified here — shadow/inform always pass), attaches results (G81). Two hard invariants tested here: (1) **inform mode never drops an alert** — property test over arbitrary GateResults including all-fail/hard-block ones; (2) extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** even in enforce mode. The unifying function is pure and owns every invariant: `gate_candidate(result, mode, min_tier) -> (decision, result)`.
+**Interfaces:** the alert path calls `run_checklist` per surviving candidate (background thread), applies `with_advisory()` per mode (G76/G103/G106 semantics unified here — shadow/inform always pass), attaches results (G81). Two hard invariants tested here: (1) **inform mode never drops an alert** — property test over arbitrary GateResults including all-fail/hard-block ones; (2) extends the G43 proof through the gate: all providers down → all candidates evaluate with unknowns → **no block ever fires on unknowns** even in enforce mode. The unifying function is pure and owns every invariant: `gate_candidate(result, mode, min_tier) -> (decision, result)`.
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
 
 ```python
@@ -447,10 +443,10 @@ def gate_candidate(result, mode: str, min_tier: str):
     return decision, out
 ```
 
-**Wiring** (alert path in `scanning.py`, per surviving candidate, same seam llm-advisor L14 hooks — all inside `asyncio.to_thread` alongside the existing per-alert work):
+**Wiring** (alert path in `scanning.py`, per surviving candidate — all inside `asyncio.to_thread` alongside the existing per-alert work):
 
 ```python
-    # per candidate: gate_ctx from G119; headlines fetched lazily + quota-metered
+    # per candidate: gate_ctx from G119
     if gate_ctx is not None and getattr(config, "GATE_ENABLED", False):
         try:
             result = run_checklist(item.result.ticker, item.result.strategy,
@@ -685,7 +681,7 @@ git commit -m "feat: checklist field on alerts (inform-first)"
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_embeds_gate.py`
 
-**Interfaces:** the existing breakdown surface (cockpit B10 when present, else follow-up message — mirror llm-advisor L15's degradation pattern) gains the `full_breakdown(result)` chunks: every check, its status emoji, its one-line evidence. This is the checklist *as a readable document* per trade. `full_breakdown` itself exists since G82 — this task is the send path plus the chunk-budget proof over a realistic (25-check) result.
+**Interfaces:** the existing breakdown surface (cockpit B10 when present, else follow-up message) gains the `full_breakdown(result)` chunks: every check, its status emoji, its one-line evidence. This is the checklist *as a readable document* per trade. `full_breakdown` itself exists since G82 — this task is the send path plus the chunk-budget proof over a realistic (25-check) result.
 - [ ] **Step 1: Write the failing test** (append to `tests/test_embeds_gate.py`)
 
 ```python
@@ -715,7 +711,7 @@ def test_full_breakdown_chunks_fit_discord_limit():
 - [ ] **Step 3: Wire the send path** (`scanning.py`, right after the alert message is sent, only for candidates that carry a `gate_result`):
 
 ```python
-    # mirror llm-advisor L15's degradation: cockpit B10 breakdown surface
+    # degradation ladder: cockpit B10 breakdown surface
     # when present, else plain follow-up messages under the alert
     if getattr(item, "gate_result", None) is not None \
             and getattr(config, "GATE_FULL_BREAKDOWN", False):
@@ -942,7 +938,7 @@ git commit -m "feat: gate+macro stamped on plans"
 
 **Files:** Modify the plan-trigger path in the monitor loop; test `tests/test_scan_gate_wiring.py`
 
-**Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_news_whipsaw, rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column — default `False`, set `True` on exactly those checks; `run_checklist` already honors it since G75). A newly-fired flag at trigger time → **the alert message is updated with the new warning and a ping** ("⚠️ since this alert: CPI now within 18h") — the entry still fires normally; it is held per G120 semantics only when `GATE_BLACKOUT_ENFORCE`/enforce mode says so. Pure core: `recheck_delta(stored_gate: dict | None, new_result) -> list[str]`.
+**Interfaces:** a pending plan about to trigger re-runs the **cheap** subset (rf_thin_session, not_chasing, calendar events — no network beyond the snapshot) via `run_checklist(subset="trigger")` (registry gains a `trigger_recheck: bool` column — default `False`, set `True` on exactly those checks; `run_checklist` already honors it since G75). A newly-fired flag at trigger time → **the alert message is updated with the new warning and a ping** ("⚠️ since this alert: CPI now within 18h") — the entry still fires normally; it is held per G120 semantics only when `GATE_BLACKOUT_ENFORCE`/enforce mode says so. Pure core: `recheck_delta(stored_gate: dict | None, new_result) -> list[str]`.
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_scan_gate_wiring.py`)
 
 ```python
@@ -957,8 +953,8 @@ def _recheck_result(fired):
 
 def test_recheck_delta_only_new_flags():
     stored = {"checks": [{"check_id": "rf_thin_session", "status": "fail"}]}
-    new = _recheck_result(["rf_thin_session", "rf_news_whipsaw"])
-    assert recheck_delta(stored, new) == ["rf_news_whipsaw"]   # already-known flag not re-warned
+    new = _recheck_result(["rf_thin_session", "not_chasing"])
+    assert recheck_delta(stored, new) == ["not_chasing"]   # already-known flag not re-warned
 
 
 def test_recheck_delta_clean_is_empty():
@@ -966,13 +962,13 @@ def test_recheck_delta_clean_is_empty():
 
 
 def test_recheck_delta_no_stored_gate_treats_all_as_new():
-    assert recheck_delta(None, _recheck_result(["rf_news_whipsaw"])) == ["rf_news_whipsaw"]
+    assert recheck_delta(None, _recheck_result(["not_chasing"])) == ["not_chasing"]
 
 
 def test_registry_trigger_subset_is_cheap():
     from swingbot.core.gate.registry import CHECKS
     subset = {cid for cid, spec in CHECKS.items() if spec.trigger_recheck}
-    assert subset == {"rf_news_whipsaw", "rf_thin_session",
+    assert subset == {"rf_thin_session",
                       "not_chasing", "calendar_checked"}
 ```
 
@@ -1131,249 +1127,6 @@ git add swingbot/core/retrospective.py swingbot/commands/scanning.py tests/test_
 git commit -m "feat: gate lines in retrospective"
 ```
 
-### Task G131: Advisor payload integration (v5 present)
-
-**Files:** Modify `swingbot/core/advisor/context.py` **if merged** (capability-checked import); test `tests/test_gate_advisor.py` (skipped when advisor absent)
-
-**Interfaces:** `plan_review_payload` gains `gate: result.to_dict()` and `macro: macro_at_entry`; the advisor's prompt template sentence added: "The checklist verdict is data — critique it, don't parrot it." Advisor absent → no-op module guard, tests skip cleanly.
-
-> **Execution note (G131–G133):** as of 2026-07-17 `swingbot/core/advisor/` does **not** exist in the repo — llm-advisor v5 is a separate planned round. If it is still unmerged when you reach this task: write the test file anyway (it documents the contract and passes-by-skipping via `importorskip`), commit, move on. The gate side needs **zero** changes — G131/G133 modify only advisor files. Exact builder names (`plan_review_payload`, `prompts.PLAN_REVIEW_TEMPLATE`) come from llm-advisor L11/L12 — verify against the merged code before editing.
-
-- [ ] **Step 1: Write the failing test**
-
-```python
-# tests/test_gate_advisor.py
-"""Advisor (llm-advisor v5) integration — every test in this module skips
-cleanly when the advisor is not merged. The gate never depends on the
-advisor; G131-G133 only enrich advisor payloads when both features exist."""
-import pytest
-
-pytest.importorskip("swingbot.core.advisor",
-                    reason="llm-advisor v5 not merged — G131-G133 dormant")
-
-from swingbot.core.advisor import context as adv_context   # noqa: E402
-
-PLAN_RECORD = {
-    "plan_id": "p_20260714_ab12", "ticker": "NVDA", "strategy": "RSI-Div",
-    "gate": {"tier": "B", "score": 61.0, "hard_blocks": [],
-             "checks": [{"check_id": "rf_fake_breakout", "status": "warn"}]},
-    "macro_at_entry": {"composite": {"label": "risk_on", "score": 67}},
-}
-
-
-def test_plan_review_payload_carries_gate_and_macro():
-    payload = adv_context.plan_review_payload(PLAN_RECORD)   # L11 signature — verify
-    assert payload["gate"]["tier"] == "B"
-    assert payload["gate"]["checks"][0]["check_id"] == "rf_fake_breakout"
-    assert payload["macro"]["composite"]["label"] == "risk_on"
-
-
-def test_plan_review_payload_without_gate_is_unchanged():
-    record = {k: v for k, v in PLAN_RECORD.items()
-              if k not in ("gate", "macro_at_entry")}
-    payload = adv_context.plan_review_payload(record)
-    assert "gate" not in payload and "macro" not in payload  # pre-gate plans unaffected
-
-
-def test_prompt_template_tells_the_model_to_critique():
-    from swingbot.core.advisor import prompts                # L12's template module
-    assert "critique it, don't parrot it" in prompts.PLAN_REVIEW_TEMPLATE
-```
-
-- [ ] **Step 2: Run — FAIL (or SKIP if advisor absent → commit and stop here)**, then **implement** (inside the advisor's payload builder in `swingbot/core/advisor/context.py`, right after the existing plan fields are assembled):
-
-```python
-    # G131: the checklist verdict rides along as data for the reviewer —
-    # the prompt tells the model to critique it, never to parrot it.
-    gate = (plan_record or {}).get("gate")
-    if gate:
-        payload["gate"] = gate
-        macro = plan_record.get("macro_at_entry")
-        if macro:
-            payload["macro"] = macro
-```
-
-And append this sentence to `prompts.PLAN_REVIEW_TEMPLATE` (same paragraph that describes the plan data): `"The checklist verdict is data — critique it, don't parrot it."`
-
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_advisor.py -v`
-- [ ] **Step 4: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/advisor/context.py swingbot/core/advisor/prompts.py tests/test_gate_advisor.py
-git commit -m "feat: gate context in advisor plan reviews"
-```
-
-### Task G132: Advisor headline nuance job (v5 present)
-
-**Files:** Modify `swingbot/commands/scanning.py` (the gate-side hook — capability-checked, works today); advisor producers **if merged**; test `tests/test_gate_advisor.py`
-
-**Interfaces:** when a candidate fires `rf_rumor_spike` with `unclear` classification and the advisor is enabled+budgeted: a `plan_review` job is enqueued with the headlines attached so Haiku adjudicates rumor-vs-confirmed *advisorily* (result lands via the normal L15 advisor field; the gate's own verdict is never overwritten). Absent advisor → nothing. The gate-side hook `_maybe_enqueue_rumor_review(result, plan_id, headlines) -> bool` is written NOW with a capability-checked import — it tests today via a stub advisor module and starts firing the day v5 merges.
-
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_advisor.py` — these do NOT skip; they inject a stub advisor module, so the hook is tested even before v5 merges. Put them ABOVE the module-level `importorskip` by moving that guard into the G131 tests' class/section, or simpler: put G131's skipping tests in their own module section and these first — `importorskip` must not kill these)
-
-```python
-# tests/test_gate_advisor.py (top of file, BEFORE the importorskip section)
-"""G132 hook tests — run always: the advisor is stubbed into sys.modules."""
-import sys
-import types
-
-from swingbot.core.gate.types import CheckResult, GateResult
-
-
-def _result_with_rumor(classification):
-    checks = (CheckResult("rf_rumor_spike", "redflags", "warn", 6.0,
-                          "spike on unconfirmed headline",
-                          {"classification": classification}),)
-    return GateResult(ticker="NVDA", strategy="RSI-Div", as_of="2026-07-14",
-                      checks=checks, score=55.0, tier="B", hard_blocks=())
-
-
-def _stub_advisor(monkeypatch, *, budgeted=True):
-    jobs = types.ModuleType("swingbot.core.advisor.jobs")
-    jobs.calls = []
-    jobs.enabled_and_budgeted = lambda: budgeted
-    jobs.enqueue = lambda kind, **kw: jobs.calls.append((kind, kw))
-    pkg = types.ModuleType("swingbot.core.advisor")
-    monkeypatch.setitem(sys.modules, "swingbot.core.advisor", pkg)
-    monkeypatch.setitem(sys.modules, "swingbot.core.advisor.jobs", jobs)
-    return jobs
-
-
-def test_unclear_rumor_enqueues_review_with_headlines(monkeypatch):
-    import swingbot.commands.scanning as scanning
-    jobs = _stub_advisor(monkeypatch)
-    result = _result_with_rumor("unclear")
-    fired = scanning._maybe_enqueue_rumor_review(
-        result, "p_1", headlines=["NVDA said to weigh acquisition"])
-    assert fired is True
-    kind, kw = jobs.calls[0]
-    assert kind == "plan_review" and kw["plan_id"] == "p_1"
-    assert kw["extra"]["headlines"] == ["NVDA said to weigh acquisition"]
-    assert result.checks[0].detail["classification"] == "unclear"  # verdict untouched
-
-
-def test_confirmed_classification_enqueues_nothing(monkeypatch):
-    import swingbot.commands.scanning as scanning
-    jobs = _stub_advisor(monkeypatch)
-    assert scanning._maybe_enqueue_rumor_review(
-        _result_with_rumor("confirmed"), "p_1", headlines=[]) is False
-    assert jobs.calls == []
-
-
-def test_absent_advisor_is_a_quiet_noop(monkeypatch):
-    import swingbot.commands.scanning as scanning
-    for mod in ("swingbot.core.advisor", "swingbot.core.advisor.jobs"):
-        monkeypatch.delitem(sys.modules, mod, raising=False)
-    assert scanning._maybe_enqueue_rumor_review(
-        _result_with_rumor("unclear"), "p_1", headlines=["x"]) is False
-
-
-def test_unbudgeted_advisor_enqueues_nothing(monkeypatch):
-    import swingbot.commands.scanning as scanning
-    jobs = _stub_advisor(monkeypatch, budgeted=False)
-    assert scanning._maybe_enqueue_rumor_review(
-        _result_with_rumor("unclear"), "p_1", headlines=["x"]) is False
-    assert jobs.calls == []
-```
-
-- [ ] **Step 2: Run — FAIL**, then **implement** (append to `swingbot/commands/scanning.py`):
-
-```python
-def _maybe_enqueue_rumor_review(result, plan_id: str, headlines: list) -> bool:
-    """G132: when the lexicon classifier answered 'unclear' (G37) and the
-    llm-advisor (v5) is merged+enabled+budgeted, enqueue a plan_review job
-    carrying the headlines so Haiku adjudicates rumor-vs-confirmed
-    ADVISORILY. The gate's own verdict is never overwritten — the answer
-    lands via the normal advisor field (L15). Returns True iff enqueued."""
-    fired = next((c for c in result.checks
-                  if c.check_id == "rf_rumor_spike"
-                  and (c.detail or {}).get("classification") == "unclear"), None)
-    if fired is None:
-        return False
-    try:
-        from swingbot.core.advisor import jobs as advisor_jobs  # v5 — verify names (L14)
-    except ImportError:
-        return False
-    if not advisor_jobs.enabled_and_budgeted():
-        return False
-    advisor_jobs.enqueue("plan_review", plan_id=plan_id,
-                         extra={"headlines": headlines or [],
-                                "question": "rumor or confirmed?"})
-    return True
-```
-
-**Wiring** (G121's per-candidate block, one line after `attach_to_plan`): `_maybe_enqueue_rumor_review(result, item.plan_v2.plan_id, headlines)` — `headlines` is the same lazily-fetched list the checks consumed.
-
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_advisor.py -v`
-- [ ] **Step 4: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/commands/scanning.py tests/test_gate_advisor.py
-git commit -m "feat: advisor adjudication of unclear news spikes"
-```
-
-### Task G133: Nightly analysis gains gate stats (v5 present)
-
-**Files:** Modify advisor nightly payload **if merged**; test `tests/test_gate_advisor.py`
-
-**Interfaces:** `nightly_payload` gains the day's gate telemetry + flag-outcome deltas so the local analyst reasons over them (schema untouched — data rides in the existing snapshot section). Advisor absent → skip (same `importorskip` section as G131).
-
-- [ ] **Step 1: Write the failing test** (append to the **skipping** section of `tests/test_gate_advisor.py`, below the G131 `importorskip`)
-
-```python
-def test_nightly_payload_carries_gate_day_stats(monkeypatch, tmp_path):
-    from swingbot.core.advisor import nightly              # L13's module — verify name
-    import swingbot.core.gate.telemetry as telemetry
-    monkeypatch.setattr(telemetry, "TELEMETRY_PATH",
-                        str(tmp_path / "telemetry.jsonl"))
-    telemetry.count("evaluated")
-    telemetry.count("blocked", reason="rf_fake_breakout")
-    payload = nightly.nightly_payload()                    # L13 signature — verify
-    gate = payload["snapshot"]["gate"]
-    assert gate["today"]["evaluated"] == 1
-    assert gate["today"]["blocked"] == 1
-    assert "flag_outcomes" in gate                         # G85 stats ride along
-
-
-def test_nightly_payload_survives_gate_absence(monkeypatch):
-    """A broken/empty gate layer must never break the nightly job."""
-    from swingbot.core.advisor import nightly
-    import swingbot.core.gate.telemetry as telemetry
-    monkeypatch.setattr(telemetry, "summary",
-                        lambda since=None: (_ for _ in ()).throw(OSError("disk")))
-    payload = nightly.nightly_payload()
-    assert "gate" not in payload["snapshot"]               # section omitted, no crash
-```
-
-- [ ] **Step 2: Run — FAIL (or SKIP if advisor absent → commit the test file and stop)**, then **implement** (inside the advisor's nightly payload builder, after the existing snapshot section is assembled):
-
-```python
-    # G133: the day's gate stats ride in the existing snapshot section —
-    # schema untouched, section simply absent when the gate layer is off/broken.
-    try:
-        from swingbot.core.gate import telemetry
-        from swingbot.core.gate.persistence import flag_outcome_stats
-        payload["snapshot"]["gate"] = {
-            "today": telemetry.summary(since=now.date().isoformat()),
-            "flag_outcomes": flag_outcome_stats(journal_entries),
-        }
-    except Exception:  # noqa: BLE001 — gate absent/broken → payload unchanged
-        payload["snapshot"].pop("gate", None)
-```
-
-(`journal_entries` = whatever the nightly builder already loads for its trade section; if it doesn't load them, pass `[]` — the flag stats are then empty, not wrong.)
-
-- [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_advisor.py -v`
-- [ ] **Step 4: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/advisor/nightly.py tests/test_gate_advisor.py
-git commit -m "feat: gate stats in nightly advisor payload"
-```
-
 ### Task G134: Kill-switch + throttle interop (v4 present)
 
 **Files:** Modify `swingbot/commands/scanning.py`; test `tests/test_scan_gate_wiring.py`
@@ -1485,9 +1238,9 @@ def test_unknown_rate_per_provider(tmp_path, monkeypatch):
     at = dt.datetime(2026, 7, 14, 10, 0)
     telemetry.count("provider_answer", at=at, provider="fred", unknown=False)
     telemetry.count("provider_answer", at=at, provider="fred", unknown=True)
-    telemetry.count("provider_answer", at=at, provider="finnhub", unknown=False)
+    telemetry.count("provider_answer", at=at, provider="treasury", unknown=False)
     rates = telemetry.summary()["unknown_rate"]
-    assert rates == {"fred": 0.5, "finnhub": 0.0}
+    assert rates == {"fred": 0.5, "treasury": 0.0}
 
 
 def test_count_never_raises(tmp_path, monkeypatch):
@@ -1783,8 +1536,8 @@ def test_every_referenced_gate_key_has_a_field():
     referenced anywhere in swingbot/ must be a declared Field — a key that
     exists only as getattr() default is a silent misconfiguration trap."""
     pattern = re.compile(
-        r"(?:config\.((?:GATE|MACRO|FRED|FINNHUB)_[A-Z0-9_]+))"
-        r"|(?:getattr\(config,\s*[\"']((?:GATE|MACRO|FRED|FINNHUB)_[A-Z0-9_]+)[\"'])")
+        r"(?:config\.((?:GATE|MACRO|FRED)_[A-Z0-9_]+))"
+        r"|(?:getattr\(config,\s*[\"']((?:GATE|MACRO|FRED)_[A-Z0-9_]+)[\"'])")
     names = _field_names()
     offenders = []
     for path in pathlib.Path("swingbot").rglob("*.py"):
@@ -1824,7 +1577,7 @@ git commit -m "feat: gate config completeness"
 
 **Files:** Modify `swingbot/bot_core.py` startup; test `tests/test_gate_telemetry.py`
 
-**Interfaces:** one log block when `GATE_ENABLED` or `MACRO_ENABLED`: mode, min tier, cuts, checks on/off count, FRED/Finnhub key presence, snapshot age, event calendar horizon, quota state — one WARNING per misconfiguration (enforce mode without the G105 sign-off file → auto-fallback to **inform** + loud warning; blackout-enforce on without event data → falls back to annotate-only + warning). Pure builder `gate_startup_diagnostics() -> tuple[list[str], list[str]]` (info lines, warning lines) in `scanning.py`; `bot_core.py` startup logs them.
+**Interfaces:** one log block when `GATE_ENABLED` or `MACRO_ENABLED`: mode, min tier, cuts, checks on/off count, FRED key presence, snapshot age, event calendar horizon, quota state — one WARNING per misconfiguration (enforce mode without the G105 sign-off file → auto-fallback to **inform** + loud warning; blackout-enforce on without event data → falls back to annotate-only + warning). Pure builder `gate_startup_diagnostics() -> tuple[list[str], list[str]]` (info lines, warning lines) in `scanning.py`; `bot_core.py` startup logs them.
 
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_gate_telemetry.py`)
 
@@ -1858,11 +1611,10 @@ def test_diagnostics_silent_when_everything_off(monkeypatch, tmp_path):
 def test_diagnostics_info_block_lists_mode_and_keys(monkeypatch, tmp_path):
     _diag_flags(monkeypatch, tmp_path)
     monkeypatch.setattr(config, "FRED_API_KEY", "k", raising=False)
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
     info, _ = scanning.gate_startup_diagnostics()
     joined = "\n".join(info)
     assert "mode=inform" in joined
-    assert "FRED key: present" in joined and "Finnhub key: MISSING" in joined
+    assert "FRED key: present" in joined
 
 
 def test_enforce_without_signoff_falls_back_to_inform(monkeypatch, tmp_path):
@@ -1937,13 +1689,12 @@ def gate_startup_diagnostics() -> tuple[list[str], list[str]]:
         f"B/{getattr(config, 'GATE_TIER_B_CUT', 55)}",
         checks_line,
         f"macro: enabled={macro_on} · {age}",
-        f"FRED key: {'present' if getattr(config, 'FRED_API_KEY', '') else 'MISSING'} · "
-        f"Finnhub key: {'present' if getattr(config, 'FINNHUB_API_KEY', '') else 'MISSING'}",
+        f"FRED key: {'present' if getattr(config, 'FRED_API_KEY', '') else 'MISSING'}",
     ])
     return info, warns
 ```
 
-**Wiring** (`bot_core.py` startup, same place other startup logging happens): `info, warns = gate_startup_diagnostics()`, log each info line at INFO and each warning at WARNING (one log call per line — the block must be greppable). Mirrors llm-advisor L30's pattern if merged.
+**Wiring** (`bot_core.py` startup, same place other startup logging happens): `info, warns = gate_startup_diagnostics()`, log each info line at INFO and each warning at WARNING (one log call per line — the block must be greppable).
 
 - [ ] **Step 3: Run — PASS**: `python -m pytest tests/test_gate_telemetry.py -v`
 - [ ] **Step 4: Full suite + commit**
@@ -1992,9 +1743,6 @@ def fresh_snapshot(now=NOW, **overrides):
             "sectors": {"leader": "Tech", "rs_rows": [], "rotation": "risk_on"},
             "events": {"refreshed_at": now.isoformat(), "upcoming": [],
                        "next_high_impact": None, "within_24h": [], "today": []},
-            "news": {"headlines_top5": [],
-                     "sentiment": {"score": 0.1, "n": 4, "label": "neutral"},
-                     "rumor_ratio": 0.0},
             "quality_warnings": []}
     snap.update(overrides)
     return snap
@@ -2240,8 +1988,7 @@ def test_total_darkness_never_blocks_even_in_enforce(city, monkeypatch):
     decision, result, fields = pipeline(df, plan, city, None)
     assert decision == "pass"                              # unknown never blocks
     macro_checks = [c for c in result.checks
-                    if c.check_id in ("rf_news_whipsaw", "rf_rumor_spike",
-                                      "rf_buy_rumor_sell_fact", "calendar_checked")]
+                    if c.check_id in ("rf_buy_rumor_sell_fact", "calendar_checked")]
     assert macro_checks and all(c.status == "unknown" for c in macro_checks)
     assert result.macro_stale is True
     assert telemetry.summary()["blocked"] == 0

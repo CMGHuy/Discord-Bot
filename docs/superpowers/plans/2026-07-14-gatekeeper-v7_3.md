@@ -1,4 +1,4 @@
-# Gatekeeper v7 - Part 3/11: Macro data layer II: events, news, snapshot & degradation (Tasks G29-G44)
+# Gatekeeper v7 - Part 3/11: Macro data layer II: events, snapshot & degradation (Tasks G29-G44)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute strictly in order (G29 -> G44).
 >
@@ -15,17 +15,17 @@
 > - **Completed:** —
 > - **Next:** Task G29
 
-**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 11 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (news, sentiment, sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
+**Goal:** Push per-strategy win rate toward the 95% final target the honest way — by turning the operator's Pre-Trade Entry Checklist into an automated, fold-validated **advisor** (higher-timeframe context, setup quality, 9 red-flag detectors, risk definition, timing, gut-check ritual) that annotates every trade plan, and by refreshing a full macro context snapshot (sector rotation, CPI, PPI, PCE, treasury curve, inflation expectations, VIX, breadth, credit) before every scan — with new Discord surfaces and admin pages to drive it.
 
 **Inform-first principle (operator decision, 2026-07-14 — binds every task):** the checklist is information, not a gateway. **Every trade plan is created and alerted regardless of its checklist verdict**; negative signals are marked loudly in the Discord message (tier, score, red-flag table) and the human decides. Blocking (`enforce` mode) exists as a strictly opt-in rung the operator may climb *after* the evidence phase proves specific cuts — it is never the default, and plan completion does not depend on it. Every strict threshold is a settings-page field with documented relax direction plus one-click strictness presets, so the checklist can always be loosened without code changes — a checklist that silences all trades is a misconfiguration, not a feature.
 
-**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, sentiment, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
+**Architecture:** Two new packages — `swingbot/core/macro/` (data providers, caches, econ calendar, composite risk score, pre-scan snapshot) and `swingbot/core/gate/` (one module per checklist check, red-flag detectors, scoring, hard-block/soft-flag policy, tier ladder) — wired into the scan pipeline behind default-off flags, validated through the walk-forward fold discipline established in edge-engine-v4, surfaced in Discord embeds/commands and new admin pages. Mode ladder: `shadow` (log only, invisible) → `inform` (**the default destination**: full checklist rendered on every alert, nothing ever blocked) → `enforce` (optional, opt-in, evidence-gated).
 
-**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, Finnhub (key already a config Field from llm-advisor L10), yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
+**Tech Stack:** Python 3.11+, pandas, numpy, requests (already a dependency), mplfinance/matplotlib, Flask + Jinja2 + Chart.js (vendored, per cockpit-v3), pytest ≥8. Data: FRED REST API (free key), U.S. Treasury FiscalData, yfinance daily bars via the existing fetch/cache layer. **No new pip dependencies.**
 
 ## The 95% goal, stated honestly (read before Task G1)
 
-This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header; llm-advisor honesty contract) bind this plan too, so the goal is encoded the only defensible way:
+This plan exists because the operator wants ~95% win rate on every strategy. The series' own honesty rules (edge-engine-v4 header) bind this plan too, so the goal is encoded the only defensible way:
 
 - **95% portfolio-wide cannot be promised, only earned and measured.** Win rate is trivially inflated by shrinking targets and widening stops — that destroys expectancy and the account with it. Every WR gain in this plan must come from *not taking bad trades* (filtering), never from degrading the exit geometry validated in plan-engine-v2.
 - **The target is a ladder, not a number.** The checklist score partitions signals into tiers. Pre-registered targets (Task G2, frozen before any data contact): **A+ tier** (every box checked, zero red flags) targets **≥ 90% pooled fold WR** with N ≥ 30 per fold and expectancy_r ≥ the strategy's unfiltered baseline; if the folds show ≥ 95% at that sample size, the tier is *labeled* 95-class — measured, never assumed. **All-strategies aggregate** targets **+3 to +8 WR points vs. the v2 baseline** at ≤ 40% signal loss.
@@ -36,7 +36,7 @@ This plan exists because the operator wants ~95% win rate on every strategy. The
 ## Prerequisites
 
 - **Required merged:** unified-plan-engine-v2 (TradePlanV2, exit simulator, plan_store/plan_manager, registry) and cockpit-v3 **Part 1** (`swingbot/core/jsonio.py`, `swingbot/core/analytics/` — journal, snapshots, rank).
-- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat; llm-advisor v5 (`swingbot/core/advisor/`) for G132–G133.
+- **Reused when present, degraded when absent (every integration point wrapped in a capability check, noted per task):** edge-engine-v4 `backtest_wf.py` walk-forward engine (G96 ships a minimal fallback fold runner), E47 kill switch, E7 portfolio heat.
 - Cached daily OHLCV 2018-06→present via `scripts/fetch_backtest_data.py`; DataFrame convention `Open,High,Low,Close,Volume`, DatetimeIndex.
 
 ## Global Constraints
@@ -71,11 +71,8 @@ swingbot/core/macro/
   calendar_events.py econ event calendar (historical static + future fetch)
   opex.py            options-expiry / quad-witching calendar
   sessions.py        market holidays, half-days, low-liquidity windows
-  earnings.py        earnings calendar (wraps advisor market_context if merged)
   history.py         publication-lag-aware historical macro frame
   quality.py         snapshot sanity validator
-  news.py            Finnhub market/company headlines
-  sentiment.py       lexicon headline scorer + rumor/confirmed classifier
   snapshot.py        build/save/load data/macro/macro_snapshot.json
 swingbot/core/gate/
   __init__.py        run_checklist() public API
@@ -86,7 +83,7 @@ swingbot/core/gate/
   levels.py          swing S/R extraction, round numbers, distance checks
   atr_regime.py      ATR percentile normality, compression/spike
   setup_quality.py   signal closure, confluence count, volume/momentum
-  redflags.py        the 11 red-flag detectors (one function each)
+  redflags.py        the 9 red-flag detectors (one function each)
   risk_def.py        structural stop, size-formula check, realistic RR
   timing.py          chasing check, trigger objectivity, session calendar
   wr_math.py         win-rate/expectancy identities + frontier math
@@ -103,7 +100,7 @@ swingbot/core/
   backtest.py            MOD checklist evaluation per simulated signal
   scan_engine / scanning/*  MOD pre-scan snapshot, gates, embed fields
 swingbot/commands/
-  macro.py           NEW !macro !calendar !sectors !sentiment !yields !inflation
+  macro.py           NEW !macro !calendar !sectors !yields !inflation
   gatecheck.py       NEW !checklist !whycheck !blocked !gutcheck !frontier !tierwr !redflags
 swingbot/admin/      MOD /api/macro/*, /api/gate/*, macro dashboard, calendar,
                      checklist config, red-flag analytics, frontier pages
@@ -116,7 +113,7 @@ data/  macro/ (cache, snapshot, history), gate/ (blocked log, shadow log, tiers)
 
 ---
 
-# Phase G1 — Macro data layer: news, sentiment, rotation, CPI/PPI, treasury (G9–G44)
+# Phase G1 — Macro data layer: rotation, CPI/PPI, treasury (G9–G44)
 
 Everything here is read-only market context. Each provider: 5s timeout, TTL disk cache, `None`-on-failure, no network in tests.
 
@@ -131,7 +128,7 @@ Everything here is read-only market context. Each provider: 5s timeout, TTL disk
 
 **Interfaces:**
 - Produces: `Event = {date, time_et, kind, label, importance}` with `kind` in `{"fomc", "cpi", "ppi", "nfp", "pce", "opex", "holiday"}`, importance 1–3 (fomc/cpi/nfp = 3). The script builds history from: FOMC — the Fed's published meeting dates hardcoded 2018–2026 (public, finite, stable — a literal list in the script with a source-URL comment; decision days 14:00 ET); CPI/PPI/PCE/NFP — `fred_release_dates()` (release ids: CPI 10, PPI 46, Employment Situation 50, Personal Income & Outlays 54), 08:30 ET. `calendar_events.load_events() -> list[Event]`; `events_between(start, end)`; `events_on(date)`.
-- **This file is what makes the news-whipsaw red flag backtestable** — G90 joins it into the backtest frame.
+- **This file is what makes the event-blackout checks backtestable** — G90 joins it into the backtest frame.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -719,452 +716,6 @@ git add swingbot/core/macro/sessions.py swingbot/core/macro/opex.py tests/test_m
 git commit -m "feat: session liquidity calendar"
 ```
 
-### Task G33: Earnings calendar provider
-
-**Files:**
-- Create: `swingbot/core/macro/earnings.py`
-- Test: `tests/test_macro_earnings.py`
-
-**Interfaces:**
-- Produces: `days_to_earnings(ticker, now=None) -> int | None` — if llm-advisor's `market_context.py` exists, wrap it (one-implementation rule); else implement here: Finnhub `/calendar/earnings` window ±30d, 6h TTL via `fetch_json(provider="finnhub")`, empty key → None. `earnings_within(ticker, days) -> bool | None` (None when unknown — never a silent False).
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_earnings.py
-import datetime as dt
-
-import swingbot.config as config
-import swingbot.core.macro.earnings as earnings
-
-PAYLOAD = {"earningsCalendar": [
-    {"date": "2026-07-01", "symbol": "NVDA"},      # past
-    {"date": "2026-07-22", "symbol": "NVDA"},      # next
-    {"date": "2026-10-21", "symbol": "NVDA"},
-]}
-
-NOW = dt.date(2026, 7, 14)
-
-
-def _with_key(monkeypatch, payload=PAYLOAD):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
-    monkeypatch.setattr(earnings, "fetch_json", lambda *a, **k: payload)
-
-
-def test_day_math(monkeypatch):
-    _with_key(monkeypatch)
-    assert earnings.days_to_earnings("NVDA", now=NOW) == 8
-    assert earnings.earnings_within("NVDA", 10, now=NOW) is True
-    assert earnings.earnings_within("NVDA", 3, now=NOW) is False
-
-
-def test_no_future_earnings_is_none(monkeypatch):
-    _with_key(monkeypatch, {"earningsCalendar": [{"date": "2026-07-01"}]})
-    assert earnings.days_to_earnings("NVDA", now=NOW) is None
-
-
-def test_no_key_none_and_no_network(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
-    def boom(*a, **k):
-        raise AssertionError("no network without a key")
-    monkeypatch.setattr(earnings, "fetch_json", boom)
-    assert earnings.days_to_earnings("NVDA", now=NOW) is None
-    assert earnings.earnings_within("NVDA", 3, now=NOW) is None   # unknown, never False
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_earnings.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/earnings.py
-"""Earnings calendar provider. One-implementation rule: when llm-advisor's
-market_context (v5 L-phase) is merged, wrap it; else Finnhub directly."""
-from __future__ import annotations
-
-import datetime as dt
-
-from swingbot import config
-from swingbot.core.macro.httpcache import fetch_json
-
-_UNAVAILABLE = object()
-
-
-def _via_advisor(ticker: str, now: dt.date):
-    try:
-        from swingbot.core.advisor import market_context   # capability check
-    except ImportError:
-        return _UNAVAILABLE
-    fn = getattr(market_context, "days_to_earnings", None)
-    return fn(ticker, now=now) if fn else _UNAVAILABLE
-
-
-def days_to_earnings(ticker: str, now: dt.date | None = None) -> int | None:
-    now = now or dt.date.today()
-    advisor = _via_advisor(ticker, now)
-    if advisor is not _UNAVAILABLE:
-        return advisor
-    key = (getattr(config, "FINNHUB_API_KEY", "") or "").strip()
-    if not key:
-        return None
-    params = {"symbol": ticker, "token": key,
-              "from": (now - dt.timedelta(days=30)).isoformat(),
-              "to": (now + dt.timedelta(days=30)).isoformat()}
-    data = fetch_json("https://finnhub.io/api/v1/calendar/earnings",
-                      params=params, ttl_s=6 * 3600, provider="finnhub")
-    if not data:
-        return None
-    dates = sorted(e["date"] for e in data.get("earningsCalendar", [])
-                   if e.get("date"))
-    future = [d for d in dates if d >= now.isoformat()]
-    if not future:
-        return None
-    return (dt.date.fromisoformat(future[0]) - now).days
-
-
-def earnings_within(ticker: str, days: int, now: dt.date | None = None) -> bool | None:
-    d = days_to_earnings(ticker, now=now)
-    return None if d is None else d <= days    # None = unknown, never a silent False
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_earnings.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/earnings.py tests/test_macro_earnings.py
-git commit -m "feat: earnings calendar provider"
-```
-
-### Task G34: Market news headlines
-
-**Files:**
-- Create: `swingbot/core/macro/news.py`
-- Test: `tests/test_macro_news.py`
-
-**Interfaces:**
-- Produces: `market_headlines(n=15) -> list[dict]` — Finnhub `/news?category=general`, headline dict `{ts, source, title, url, related}`; 30-min TTL; de-dup by lowercase title prefix (first 60 chars); empty key → `[]`.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_news.py
-import swingbot.config as config
-import swingbot.core.macro.news as news
-
-RAW = [
-    {"datetime": 300, "source": "A", "headline": "Fed holds rates steady", "url": "u1", "related": ""},
-    {"datetime": 200, "source": "B", "headline": "FED HOLDS RATES STEADY", "url": "u2", "related": ""},  # dup by prefix
-    {"datetime": 100, "source": "C", "headline": "Oil surges on supply fears", "url": "u3", "related": ""},
-    {"datetime": 50, "source": "D", "headline": "", "url": "u4", "related": ""},                          # empty dropped
-]
-
-
-def test_parse_dedup_cap(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
-    monkeypatch.setattr(news, "fetch_json", lambda *a, **k: RAW)
-    rows = news.market_headlines(n=15)
-    assert [r["title"] for r in rows] == ["Fed holds rates steady",
-                                          "Oil surges on supply fears"]
-    assert rows[0] == {"ts": 300, "source": "A", "title": "Fed holds rates steady",
-                       "url": "u1", "related": ""}
-    assert news.market_headlines(n=1) == rows[:1]           # cap respected
-
-
-def test_no_key_returns_empty(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
-    def boom(*a, **k):
-        raise AssertionError("no network without a key")
-    monkeypatch.setattr(news, "fetch_json", boom)
-    assert news.market_headlines() == []
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_news.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/news.py
-"""Finnhub market headlines (company headlines arrive in G35)."""
-from __future__ import annotations
-
-import datetime as dt
-
-from swingbot import config
-from swingbot.core.macro.httpcache import fetch_json
-
-BASE = "https://finnhub.io/api/v1"
-
-
-def _key() -> str:
-    return (getattr(config, "FINNHUB_API_KEY", "") or "").strip()
-
-
-def _norm(item: dict) -> dict:
-    return {"ts": item.get("datetime", 0), "source": item.get("source", ""),
-            "title": (item.get("headline") or "").strip(),
-            "url": item.get("url", ""), "related": item.get("related", "")}
-
-
-def _dedup(rows: list[dict], n: int) -> list[dict]:
-    """Newest first, de-duplicated by lowercase 60-char title prefix."""
-    seen, out = set(), []
-    for row in sorted(rows, key=lambda r: r["ts"], reverse=True):
-        prefix = row["title"].lower()[:60]
-        if not row["title"] or prefix in seen:
-            continue
-        seen.add(prefix)
-        out.append(row)
-        if len(out) == n:
-            break
-    return out
-
-
-def market_headlines(n: int = 15) -> list[dict]:
-    if not _key():
-        return []
-    data = fetch_json(f"{BASE}/news", params={"category": "general", "token": _key()},
-                      ttl_s=30 * 60, provider="finnhub")
-    return _dedup([_norm(i) for i in data], n) if isinstance(data, list) else []
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_news.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/news.py tests/test_macro_news.py
-git commit -m "feat: market news provider"
-```
-
-### Task G35: Company news
-
-**Files:** Modify `news.py`; test `tests/test_macro_news.py`
-
-**Interfaces:** `company_headlines(ticker, days=5, n=10) -> list[dict]` — Finnhub `/company-news`, 2h TTL, same dict shape.
-
-- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_news.py`)
-
-```python
-def test_company_headlines(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "k", raising=False)
-    captured = {}
-    def fake_fetch(url, *, params=None, **kw):
-        captured["url"], captured["params"] = url, params
-        return RAW
-    monkeypatch.setattr(news, "fetch_json", fake_fetch)
-    rows = news.company_headlines("NVDA", days=5, n=10)
-    assert captured["url"].endswith("/company-news")
-    assert captured["params"]["symbol"] == "NVDA"
-    assert len(rows) == 2                                   # dedup applies here too
-
-
-def test_company_headlines_no_key(monkeypatch):
-    monkeypatch.setattr(config, "FINNHUB_API_KEY", "", raising=False)
-    assert news.company_headlines("NVDA") == []
-```
-
-- [ ] **Step 2: Run — FAIL** (`AttributeError: ... 'company_headlines'`)
-- [ ] **Step 3: Write the implementation** (append to `news.py`)
-
-```python
-def company_headlines(ticker: str, days: int = 5, n: int = 10) -> list[dict]:
-    if not _key():
-        return []
-    today = dt.date.today()
-    params = {"symbol": ticker, "token": _key(),
-              "from": (today - dt.timedelta(days=days)).isoformat(),
-              "to": today.isoformat()}
-    data = fetch_json(f"{BASE}/company-news", params=params,
-                      ttl_s=2 * 3600, provider="finnhub")
-    return _dedup([_norm(i) for i in data], n) if isinstance(data, list) else []
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_news.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/news.py tests/test_macro_news.py
-git commit -m "feat: company news provider"
-```
-
-### Task G36: Headline sentiment scorer (lexicon)
-
-**Files:**
-- Create: `swingbot/core/macro/sentiment.py`
-- Test: `tests/test_macro_sentiment.py`
-
-**Interfaces:**
-- Produces: `score_headline(title) -> float` in [-1, 1] — transparent finance lexicon (two literal frozensets, ~60 words each: POSITIVE beats/raises/surges/upgrade/record/approval/…, NEGATIVE misses/cuts/plunges/downgrade/probe/recall/bankruptcy/…), hit-count normalized, negation flip for not/no/fails-to within 3 tokens; `aggregate_sentiment(headlines) -> dict` `{score, n, label}` (label cuts ±0.15). Deliberately simple and auditable; the LLM advisor (G132) adds nuance separately and advisorily.
-
-- [ ] **Step 1: Write the failing tests**
-
-```python
-# tests/test_macro_sentiment.py
-from swingbot.core.macro.sentiment import aggregate_sentiment, score_headline
-
-
-def test_golden_directions():
-    assert score_headline("NVDA beats estimates, raises guidance") > 0
-    assert score_headline("Regulator opens probe; shares plunge on recall") < 0
-    assert score_headline("Company holds annual meeting") == 0.0
-
-
-def test_negation_flip():
-    assert score_headline("Company fails to beat estimates") < 0
-    assert score_headline("No probe after review") > 0
-
-
-def test_score_bounds():
-    assert -1.0 <= score_headline("plunges plunges plunges") <= 1.0
-
-
-def test_aggregate():
-    heads = [{"title": "NVDA beats estimates"}, {"title": "Sector rally continues"},
-             {"title": "Weather is mild"}]
-    agg = aggregate_sentiment(heads)
-    assert agg["n"] == 3 and agg["score"] > 0.15 and agg["label"] == "positive"
-    empty = aggregate_sentiment([])
-    assert empty == {"score": 0.0, "n": 0, "label": "neutral"}
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError`): `python -m pytest tests/test_macro_sentiment.py -v`
-- [ ] **Step 3: Write the implementation**
-
-```python
-# swingbot/core/macro/sentiment.py
-"""Transparent finance-lexicon headline scorer. Deliberately simple and
-auditable; the LLM advisor (G132) adds nuance separately, advisorily."""
-from __future__ import annotations
-
-POSITIVE = frozenset("""
-beats beat raises raised surges surged soars soared upgrade upgraded upgrades
-record rally rallies jumps jumped gains gained wins won win approval approved
-strong tops topped exceeds exceeded outperform outperforms outperformed
-bullish accelerates expands expansion growth profitable breakthrough buyback
-dividend hike hikes partnership secures secured awarded milestone robust
-momentum upbeat optimistic rebound rebounds recovers recovery booming
-""".split())
-
-NEGATIVE = frozenset("""
-misses missed cuts plunges plunged sinks sank tumbles tumbled downgrade
-downgraded downgrades probe probes investigation lawsuit sues sued recall
-recalls bankruptcy default warns warning weak slump slumps layoffs fraud
-halted halt delays delayed loss losses declines declined bearish shortfall
-crash crashes selloff scandal fine fined penalty breach outage disappointing
-downbeat pessimistic slowdown plunge tumble miss falls fell
-""".split())
-
-NEGATIONS = frozenset(("not", "no", "never", "fails", "failed", "without"))
-
-
-def _tokens(title: str) -> list[str]:
-    return [t.strip(".,!?:;()'\"").lower() for t in title.split()]
-
-
-def score_headline(title: str) -> float:
-    """[-1, 1]; hit-count normalized; negation within 3 tokens flips."""
-    tokens = _tokens(title)
-    total = hits = 0
-    for i, tok in enumerate(tokens):
-        val = 1 if tok in POSITIVE else -1 if tok in NEGATIVE else 0
-        if val == 0:
-            continue
-        if any(w in NEGATIONS for w in tokens[max(0, i - 3):i]):
-            val = -val
-        total += val
-        hits += 1
-    if hits == 0:
-        return 0.0
-    return max(-1.0, min(1.0, total / hits))
-
-
-def aggregate_sentiment(headlines: list[dict]) -> dict:
-    """label cuts at +/-0.15."""
-    scores = [score_headline(h.get("title", "")) for h in headlines]
-    if not scores:
-        return {"score": 0.0, "n": 0, "label": "neutral"}
-    score = round(sum(scores) / len(scores), 3)
-    label = "positive" if score > 0.15 else "negative" if score < -0.15 else "neutral"
-    return {"score": score, "n": len(scores), "label": label}
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sentiment.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/sentiment.py tests/test_macro_sentiment.py
-git commit -m "feat: lexicon headline sentiment"
-```
-
-### Task G37: Rumor vs. confirmed classifier
-
-**Files:** Modify `sentiment.py`; test `tests/test_macro_sentiment.py`
-
-**Interfaces:** `classify_confirmation(headline_title) -> str` — `"rumor"` (matches report(edly)|sources say|rumor|in talks|considering|mulls|according to people familiar), `"confirmed"` (announces|files|reports Q|8-K|SEC filing|earnings|guidance|completes), else `"unclear"`; `rumor_ratio(headlines) -> float`. Feeds rf_rumor_spike (G63) and rf_buy_rumor (G64).
-- [ ] **Step 1: Write the failing test** (append to `tests/test_macro_sentiment.py`)
-
-```python
-from swingbot.core.macro.sentiment import classify_confirmation, rumor_ratio
-
-
-def test_three_way_classification():
-    assert classify_confirmation("Apple reportedly in talks to acquire startup") == "rumor"
-    assert classify_confirmation("Sources say merger being considered") == "rumor"
-    assert classify_confirmation("NVDA announces record Q2 earnings") == "confirmed"
-    assert classify_confirmation("Company files 8-K with SEC") == "confirmed"
-    assert classify_confirmation("Shares move higher in afternoon trade") == "unclear"
-    # rumor phrasing wins even when confirmation words also appear
-    assert classify_confirmation("Reportedly set to announce acquisition") == "rumor"
-
-
-def test_rumor_ratio():
-    heads = [{"title": "reportedly in talks"}, {"title": "announces earnings"},
-             {"title": "sources say deal near"}, {"title": "plain headline"}]
-    assert rumor_ratio(heads) == 0.5
-    assert rumor_ratio([]) == 0.0
-```
-
-- [ ] **Step 2: Run — FAIL** (`ImportError: ... 'classify_confirmation'`)
-- [ ] **Step 3: Write the implementation** (append to `sentiment.py`)
-
-```python
-import re
-
-_RUMOR = re.compile(
-    r"reportedly|report(s|ed)? that|sources? say|rumou?r|in talks|considering|"
-    r"mulls?|mulling|according to people familiar|weighs?|weighing|exploring|"
-    r"could be|said to be|poised to|set to announce", re.I)
-_CONFIRMED = re.compile(
-    r"announce[sd]?|files?|filed|reports? q[1-4]|8-k|10-[kq]|sec filing|"
-    r"earnings|guidance|completes?|completed|acquires?|acquired|confirms?|"
-    r"confirmed|declares?|launches?|launched|signs?|signed", re.I)
-
-
-def classify_confirmation(headline_title: str) -> str:
-    if _RUMOR.search(headline_title):
-        return "rumor"                 # rumor phrasing outranks confirmation verbs
-    if _CONFIRMED.search(headline_title):
-        return "confirmed"
-    return "unclear"
-
-
-def rumor_ratio(headlines: list[dict]) -> float:
-    if not headlines:
-        return 0.0
-    rumors = sum(classify_confirmation(h.get("title", "")) == "rumor"
-                 for h in headlines)
-    return rumors / len(headlines)
-```
-
-- [ ] **Step 4: Run — PASS**: `python -m pytest tests/test_macro_sentiment.py -v`
-- [ ] **Step 5: Full suite + commit**
-
-```bash
-python -m pytest tests/ -q && make check
-git add swingbot/core/macro/sentiment.py tests/test_macro_sentiment.py
-git commit -m "feat: rumor/confirmed headline classifier"
-```
 
 ### Task G38: Macro snapshot builder
 
@@ -1173,8 +724,8 @@ git commit -m "feat: rumor/confirmed headline classifier"
 - Test: `tests/test_macro_snapshot.py`
 
 **Interfaces:**
-- Produces: `build_snapshot(*, loaders=None, now=None) -> dict` — assembles every upstream module into ONE dict (each section None-tolerant): `{built_at, stale: bool, inflation: {cpi_yoy, core_cpi_yoy, ppi_yoy, pce_yoy, core_pce_yoy, vs_target}, labor: {...}, rates: {fed_funds, y3m, y2, y10, y30, curve_state}, expectations: {breakeven_5y, breakeven_10y}, risk: {vix, credit, dollar, wti}, composite: {...G27}, fear_greed: {...G28}, sectors: {rs_rows, rotation}, breadth: {...}, events: {next_high_impact, within_24h: [...], today: [...]}, news: {headlines_top5, sentiment, rumor_ratio}, quality_warnings: [...]}`. `save_snapshot(snap)` → `data/macro/macro_snapshot.json` (jsonio) + one summary line appended to `data/macro/snapshot_history.jsonl` (admin trend charts); `load_snapshot(max_age_min=None) -> dict | None`.
-- **The single source every consumer reads** — scan gate, embeds, `!macro`, admin pages, advisor payloads. Nobody re-fetches providers at render time.
+- Produces: `build_snapshot(*, loaders=None, now=None) -> dict` — assembles every upstream module into ONE dict (each section None-tolerant): `{built_at, stale: bool, inflation: {cpi_yoy, core_cpi_yoy, ppi_yoy, pce_yoy, core_pce_yoy, vs_target}, labor: {...}, rates: {fed_funds, y3m, y2, y10, y30, curve_state}, expectations: {breakeven_5y, breakeven_10y}, risk: {vix, credit, dollar, wti}, composite: {...G27}, fear_greed: {...G28}, sectors: {rs_rows, rotation}, breadth: {...}, events: {next_high_impact, within_24h: [...], today: [...]}, quality_warnings: [...]}`. `save_snapshot(snap)` → `data/macro/macro_snapshot.json` (jsonio) + one summary line appended to `data/macro/snapshot_history.jsonl` (admin trend charts); `load_snapshot(max_age_min=None) -> dict | None`.
+- **The single source every consumer reads** — scan gate, embeds, `!macro`, admin pages. Nobody re-fetches providers at render time.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1215,10 +766,6 @@ def all_stubbed(monkeypatch):
     monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [
         {"date": "2026-07-15", "time_et": "08:30", "kind": "cpi",
          "label": "CPI release", "importance": 3}])
-    monkeypatch.setattr(snap_mod.news, "market_headlines",
-                        lambda n=15: [{"ts": 1, "source": "A",
-                                       "title": "Stocks rally on strong earnings",
-                                       "url": "", "related": ""}])
 
 
 def test_full_shape(paths, all_stubbed):
@@ -1226,13 +773,12 @@ def test_full_shape(paths, all_stubbed):
     snap = snap_mod.build_snapshot(now=now)
     for section in ("inflation", "labor", "rates", "expectations", "risk",
                     "composite", "fear_greed", "sectors", "breadth", "events",
-                    "news", "quality_warnings"):
+                    "quality_warnings"):
         assert section in snap, section
     assert snap["stale"] is False
     assert snap["rates"]["curve_state"] == "normal"
     assert snap["inflation"]["cpi_yoy"]["value"] == 2.5
     assert snap["events"]["next_high_impact"]["kind"] == "cpi"
-    assert snap["news"]["sentiment"]["label"] == "positive"
     assert snap["composite"]["label"] == "risk_on"     # calm+credit+rotation+curve
 
 
@@ -1244,14 +790,12 @@ def test_total_darkness_skeleton(paths, monkeypatch):
     monkeypatch.setattr(snap_mod.credit, "credit_state", lambda bars=None: None)
     monkeypatch.setattr(snap_mod.sectors, "sector_bars", lambda loader=None: {})
     monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [])
-    monkeypatch.setattr(snap_mod.news, "market_headlines", lambda n=15: [])
     snap = snap_mod.build_snapshot()
     assert snap["stale"] is True                       # the G43 contract starts here
     assert snap["composite"]["label"] == "unknown"
     assert snap["inflation"]["cpi_yoy"] is None
     assert snap["fear_greed"] is None
     assert snap["events"]["next_high_impact"] is None
-    assert snap["news"]["sentiment"] == {"score": 0.0, "n": 0, "label": "neutral"}
 
 
 def test_save_load_round_trip_and_history_line(paths, all_stubbed):
@@ -1280,7 +824,7 @@ Expected: FAIL with `ImportError` (snapshot module missing)
 ```python
 # swingbot/core/macro/snapshot.py
 """Build/save/load the ONE macro snapshot every consumer reads (scan gate,
-embeds, !macro, admin pages, advisor payloads). Nobody re-fetches
+embeds, !macro, admin pages). Nobody re-fetches
 providers at render time."""
 from __future__ import annotations
 
@@ -1292,8 +836,8 @@ import os
 from swingbot import config
 from swingbot.core.jsonio import atomic_write_json, read_json
 from swingbot.core.macro import (breadth as breadth_mod, calendar_events,
-                                 composite, credit, httpcache, news,
-                                 sectors, sentiment, series, vix)
+                                 composite, credit, httpcache,
+                                 sectors, series, vix)
 
 log = logging.getLogger("swing-bot.macro.snapshot")
 
@@ -1387,7 +931,6 @@ def build_snapshot(*, loaders: dict | None = None, now=None) -> dict:
     events = _safe(calendar_events.load_events) or []
     horizon = (now + dt.timedelta(days=30)).date().isoformat()
     upcoming = [e for e in events if today <= e["date"] <= horizon]
-    heads = _safe(news.market_headlines) or []
 
     snap["risk"] = {"vix": vix_state, "credit": credit_state,
                     **_mv_dict(("dollar_index", "wti"))}
@@ -1401,9 +944,6 @@ def build_snapshot(*, loaders: dict | None = None, now=None) -> dict:
                        if 0 <= calendar_events.hours_until(e, now) <= 24],
         "today": [e for e in upcoming if e["date"] == today],
     }
-    snap["news"] = {"headlines_top5": heads[:5],
-                    "sentiment": sentiment.aggregate_sentiment(heads),
-                    "rumor_ratio": sentiment.rumor_ratio(heads)}
     # Stale when a stale cache was served OR too little arrived to say
     # anything (composite needs >= 2 inputs).
     snap["stale"] = bool(httpcache.LAST_SERVED_STALE or comp["inputs_used"] < 2)
@@ -1422,7 +962,6 @@ def save_snapshot(snap: dict) -> None:
         "curve_10y2y": (snap["rates"].get("curve_10y2y") or {}).get("value"),
         "curve_10y3m": (snap["rates"].get("curve_10y3m") or {}).get("value"),
         "fear_greed": (snap["fear_greed"] or {}).get("value"),
-        "sentiment": snap["news"]["sentiment"]["score"],
     }
     with open(HISTORY_PATH, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(line) + "\n")
@@ -1591,7 +1130,7 @@ git commit -m "feat: pre-scan macro snapshot refresh"
 """Live macro smoke test (NETWORK — never imported by the test suite).
 
 Usage:
-    FRED_API_KEY=... FINNHUB_API_KEY=... python scripts/macro_smoke.py
+    FRED_API_KEY=... python scripts/macro_smoke.py
 
 Exit codes: 0 healthy, 1 degraded (> 3 sections missing), 2 config error.
 """
@@ -1606,7 +1145,7 @@ from swingbot.core.macro import fred, health
 from swingbot.core.macro.snapshot import build_snapshot
 
 SECTIONS = ("inflation", "labor", "rates", "expectations", "risk",
-            "composite", "fear_greed", "sectors", "breadth", "events", "news")
+            "composite", "fear_greed", "sectors", "breadth", "events")
 
 
 def _section_missing(snap, name) -> bool:
@@ -1646,7 +1185,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 2: Run once for real** (`FRED_API_KEY=... FINNHUB_API_KEY=... python scripts/macro_smoke.py`); paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict (which sections are live, which providers degraded, build time). Commit both:
+- [ ] **Step 2: Run once for real** (`FRED_API_KEY=... python scripts/macro_smoke.py`); paste the printed summary into `docs/superpowers/results/2026-07-macro-smoke.md` with a one-paragraph verdict (which sections are live, which providers degraded, build time). Commit both:
 
 ```bash
 git add scripts/macro_smoke.py docs/superpowers/results/2026-07-macro-smoke.md
@@ -1875,7 +1414,6 @@ def _healthy():
         "risk": {"vix": {"level": 15.0}},
         "sectors": {"rs_rows": [{"etf": f"X{i}"} for i in range(11)]},
         "events": {"next_high_impact": {"kind": "cpi", "date": "2026-07-15"}},
-        "news": {"headlines_top5": []},
     }
 
 
@@ -1939,7 +1477,7 @@ def validate_snapshot(snap: dict) -> list[str]:
     rs_rows = ((snap.get("sectors") or {}).get("rs_rows")) or []
     if len(rs_rows) < 8:
         warnings.append(f"only {len(rs_rows)} sectors with data (< 8)")
-    for section in ("inflation", "rates", "risk", "events", "news"):
+    for section in ("inflation", "rates", "risk", "events"):
         if not snap.get(section):
             warnings.append(f"section {section} missing")
     events = snap.get("events") or {}
@@ -2000,7 +1538,6 @@ def darkness(tmp_path, monkeypatch):
     monkeypatch.setattr(snap_mod.calendar_events, "load_events", lambda: [])
     monkeypatch.setattr(config_mod, "MACRO_ENABLED", True, raising=False)
     monkeypatch.setattr(config_mod, "FRED_API_KEY", "key-set-net-down", raising=False)
-    monkeypatch.setattr(config_mod, "FINNHUB_API_KEY", "key-set-net-down", raising=False)
 
 
 def test_total_darkness(darkness):
@@ -2010,7 +1547,6 @@ def test_total_darkness(darkness):
     assert snap["inflation"]["cpi_yoy"] is None
     assert snap["rates"]["curve_state"] == "unknown"
     assert snap["risk"]["vix"] is None
-    assert snap["news"]["headlines_top5"] == []
     # the scheduler still serves it — a scan would proceed normally
     served = snap_mod.ensure_fresh_snapshot()
     assert served is not None and served["composite"]["label"] == "unknown"

@@ -30,13 +30,6 @@ def stop_beyond_gap_noise(stop_distance_pct: float, gap_p90_pct: float,
 
 
 def _default_days_to_earnings(symbol: str):
-    try:  # advisor's Finnhub feed, when the llm-advisor plan is merged
-        from swingbot.core.advisor.market_context import days_to_earnings as finnhub_days
-        d = finnhub_days(symbol)
-        if d is not None:
-            return d
-    except ImportError:
-        pass
     from swingbot.core import events
     next_date = events.get_next_earnings_date(symbol)
     if next_date is None:
