@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T10. T10: all 24 `getsize` render proxies replaced with `assert_rendered`; slow tier green at production DPI (64 passed). The two non-proxy size assertions (decision_chart size *comparison*, shadow_log stays-small) deliberately preserved. Pre-existing unused imports (np, pd) left alone; the one `import os` my edit orphaned was removed.
-> - **Next:** T11 (low-DPI autouse fixture) -- NOTE: box at 99% CPU from VS Code/Docker, timings unreliable
+> - **Completed:** T1-T11. T11: low-DPI autouse fixture (TEST_DPI=30, `SWINGBOT_TEST_FULL_DPI=1` escape hatch), lazy so the fast tier never imports matplotlib. Tier green (64 passed) and the fixture verified in both directions. NOTE: the 84s->44s speedup was NOT reproduced (measured 75.7s production vs 137.5s dpi30 under external load); recorded as unverified in docs/claude/testing-cost.md.
+> - **Next:** T12 (rewrite /gate and correct CLAUDE.md)
 
 ## Global Constraints
 
@@ -252,11 +252,11 @@ Assert: file exists, decodes as an image, has non-zero dimensions, and contains 
 
 **Files:** Modify `tests/conftest.py`
 
-- [ ] **Step 1:** Add an autouse fixture forcing `plt.figure`, `plt.subplots`, and `Figure.savefig` to dpi=30, honouring a `SWINGBOT_TEST_FULL_DPI=1` escape hatch for eyeballing generated PNGs.
+- [x] **Step 1:** Add an autouse fixture forcing `plt.figure`, `plt.subplots`, and `Figure.savefig` to dpi=30, honouring a `SWINGBOT_TEST_FULL_DPI=1` escape hatch for eyeballing generated PNGs.
 
-- [ ] **Step 2: Verify.** Expect the 5-file chart tier to drop 84s → ~44s serial, with everything green. `test_heat_treemap_renders` is the canary: it failed at dpi=30 under the old `getsize(path) > 5_000` assertion during design, and must now pass because T10 replaced that proxy. If it still fails, T10 was incomplete.
+- [x] **Step 2: Verify.** Expect the 5-file chart tier to drop 84s → ~44s serial, with everything green. `test_heat_treemap_renders` is the canary: it failed at dpi=30 under the old `getsize(path) > 5_000` assertion during design, and must now pass because T10 replaced that proxy. If it still fails, T10 was incomplete.
 
-- [ ] **Step 3:** Re-measure `full` and `fast` with the 20s cooldown; update `docs/claude/testing-cost.md`. Commit.
+- [x] **Step 3:** Re-measure `full` and `fast` with the 20s cooldown; update `docs/claude/testing-cost.md`. Commit.
 
 ---
 

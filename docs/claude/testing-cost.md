@@ -69,8 +69,16 @@ test_backtest_scenarios.py  test_growth_command.py        test_chart_cache.py
 
 The 5 core chart files alone are 84s (43%) across 34 tests, rendering 16x9
 PNGs at dpi=110-150. One trivial `savefig` is 0.23s;
-`matplotlib`+`mplfinance` import is 3.8s *per process*. Forcing dpi=30 cuts
-that tier to 44s — no test asserts on resolution.
+`matplotlib`+`mplfinance` import is 3.8s *per process*.
+
+> **The dpi=30 speedup is UNVERIFIED.** An isolated design-phase measurement
+> put the 5-file tier at 84s -> 44s, which is why `tests/conftest.py` renders
+> at `TEST_DPI = 30`. A later same-conditions A/B measured the *opposite*
+> (production 75.7s, dpi=30 137.5s) on a box under heavy external load, and
+> the interleaved re-measurement needed to settle it was not run. Treat 84->44
+> as unconfirmed. The fixture is correct and the tier is green either way;
+> only the speed justification is open. Re-measure on an idle box with
+> `SWINGBOT_TEST_FULL_DPI=1` as the control before quoting a number.
 
 ## Gotcha: `-q` hides the counts
 

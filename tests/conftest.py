@@ -4,6 +4,7 @@ All series are deterministic (fixed seed where randomness is used) so
 test failures are reproducible.
 """
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -62,6 +63,46 @@ def assert_entry_invariants(bull, bear, df):
         assert s.index.equals(df.index)
         assert not s.isna().any()
     assert not (bull & bear).any(), "a bar fired bullish AND bearish"
+
+
+TEST_DPI = 30
+
+
+@pytest.fixture(autouse=True)
+def _low_dpi_renders(monkeypatch):
+    """Render test charts at a low DPI -- the tier's dominant cost is raster
+    resolution, which nothing asserts on.
+
+    The chart tests draw 16x9 figures at dpi=110-150; forcing dpi=30 measured
+    the 5 core chart files down from 84s to 44s. Safe because the render
+    assertions are `assert_rendered`, which counts colors rather than bytes
+    (see T9/T10) -- the byte-threshold proxies this would have broken are gone.
+
+    Set SWINGBOT_TEST_FULL_DPI=1 to render at production fidelity when you
+    need to actually look at a test-generated PNG.
+    """
+    if os.environ.get("SWINGBOT_TEST_FULL_DPI"):
+        return
+
+    # Only patch when matplotlib is already loaded. A chart test imports it at
+    # module scope, so it is present by the time this runs; a non-chart test
+    # never triggers the import. This keeps the fast tier free of matplotlib's
+    # 3.8s-per-process import, which is much of why that tier is fast at all.
+    if "matplotlib" not in sys.modules:
+        return
+
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+
+    def _forced(fn):
+        def wrapper(*args, **kwargs):
+            kwargs["dpi"] = TEST_DPI
+            return fn(*args, **kwargs)
+        return wrapper
+
+    monkeypatch.setattr(Figure, "savefig", _forced(Figure.savefig))
+    monkeypatch.setattr(plt, "figure", _forced(plt.figure))
+    monkeypatch.setattr(plt, "subplots", _forced(plt.subplots))
 
 
 @pytest.fixture
