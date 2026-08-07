@@ -12,6 +12,10 @@ import pytest
 
 from swingbot.commands.growth import growth_command, killswitch_command
 
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
+
 
 @pytest.mark.parametrize("target", [1.0, 0.0, -3.0])
 def test_growth_command_rejects_non_positive_target(target):

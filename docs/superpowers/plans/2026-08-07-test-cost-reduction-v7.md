@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T7. Phase 1 complete: `scripts/testrun.py` (profiles, escalation, streaming progress) plus a `test-runner` subagent so full-suite output never reaches the main context. NOTE: T7 Step 2 (live dispatch) was NOT performed -- definition validated statically only.
-> - **Next:** T8 (mark the nine heavy files `slow`)
+> - **Completed:** T1-T8. Phase 2 done: nine heavy files marked `slow` (64 tests). Collection parity verified 1088 fast + 64 slow = 1152. Measured fast 45.1s vs full 68.7s on a contended box (ratio 0.66, matching the predicted 0.67). T8 Step 2 individual marks deliberately skipped -- no measured gain.
+> - **Next:** T9 (`assert_rendered()` helper in tests/conftest.py)
 
 ## Global Constraints
 
@@ -199,7 +199,7 @@ NOTE: charts/templates touched -> escalating to full tier
 
 **Files:** Modify the nine files listed below
 
-- [ ] **Step 1:** Add module-level `pytestmark = pytest.mark.slow` (one line per file, **not** per test) to:
+- [x] **Step 1:** Add module-level `pytestmark = pytest.mark.slow` (one line per file, **not** per test) to:
 
 ```
 test_decision_chart.py      test_plan_chart_overlays.py   test_trade_chart_v2.py
@@ -209,9 +209,9 @@ test_backtest_scenarios.py  test_growth_command.py        test_chart_cache.py
 
 These are ~153s of the 180.4s serial suite (85%).
 
-- [ ] **Step 2: Optional, measure before keeping.** Two individually-slow tests live in otherwise-fast files: `test_engine_v2_plans::test_sync_run_scan_parallel_dispatch_matches_serial` and `test_entry_filters::test_live_signals_agree_with_entry_filters`. The fast tier already hits 27.1s without excluding them, so only mark them if measurement shows a real gain.
+- [x] **Step 2: Optional, measure before keeping.** Two individually-slow tests live in otherwise-fast files: `test_engine_v2_plans::test_sync_run_scan_parallel_dispatch_matches_serial` and `test_entry_filters::test_live_signals_agree_with_entry_filters`. The fast tier already hits 27.1s without excluding them, so only mark them if measurement shows a real gain.
 
-- [ ] **Step 3: Verify** `testrun.py fast` ~27s, `testrun.py full` ~40s, and that `fast` + the slow tier together collect the same total as `full`. Commit.
+- [x] **Step 3: Verify** `testrun.py fast` ~27s, `testrun.py full` ~40s, and that `fast` + the slow tier together collect the same total as `full`. Commit.
 
 ---
 

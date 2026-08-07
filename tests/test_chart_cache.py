@@ -6,6 +6,10 @@ import pytest
 
 from swingbot.core.charts.cache import _key_hash, cached_chart, purge
 
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
+
 
 def _counting_render(calls):
     def render(target_path):

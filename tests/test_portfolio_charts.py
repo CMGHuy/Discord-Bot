@@ -2,6 +2,11 @@
 import os
 
 import matplotlib
+import pytest
+
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
 matplotlib.use("Agg")
 
 

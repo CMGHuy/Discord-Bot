@@ -6,6 +6,10 @@ from swingbot.core.charts.trade_chart import generate_trade_chart
 from tests.helpers import make_ohlcv
 from tests.test_plan_engine_model import _plan
 
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
+
 
 @pytest.mark.parametrize("tp2", [104.0, None])
 def test_chart_renders_with_plan_overlays(tmp_path, tp2):

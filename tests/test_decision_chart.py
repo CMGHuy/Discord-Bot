@@ -8,6 +8,10 @@ import pytest
 
 from tests.conftest import make_trend_df
 
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
+
 
 class FakePlan:
     direction = "bullish"

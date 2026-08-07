@@ -8,6 +8,11 @@ smoke-check in Task B38 is for)."""
 import os
 
 from swingbot.core.charts.analytics_charts import render_calibration, render_equity_curve, render_r_histogram, render_strategy_heatmap
+import pytest
+
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
 
 
 def _fixture_curve():

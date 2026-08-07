@@ -1,5 +1,10 @@
 # tests/test_chart_theme.py
 from swingbot.core.charts import chart_style as cs
+import pytest
+
+# ~85% of suite runtime lives in nine files like this one; excluded from
+# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+pytestmark = pytest.mark.slow
 
 
 def test_theme_dict_matches_module_constants():
