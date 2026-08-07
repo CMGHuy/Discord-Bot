@@ -42,10 +42,21 @@ def test_simple_alert_renders_every_required_field(monkeypatch):
     assert "2 Weeks" in text                 # horizon
     assert "RSI Pullback" in text            # setup (strategy)
     assert "EMA, Fibonacci" in text          # setup (confluence sources)
-    assert "Entry `100.00`" in text
-    assert "TP1 `110.00`" in text
-    assert "TP2 `115.00`" in text
-    assert "SL `95.00`" in text
+    assert "Entry  100.00" in text
+    assert "TP1    110.00" in text
+    assert "TP2    115.00" in text
+    assert "SL     95.00" in text
+
+
+def test_simple_alert_puts_each_price_on_its_own_line_below_setup():
+    """The four numbers are the point of the message; they used to share one
+    backtick-and-middot line, which made them its least readable part."""
+    lines = build_simple_alert(make_item()).splitlines()
+    idx = {l.split()[0]: i for i, l in enumerate(lines) if l.strip()}
+    assert idx["Setup:"] < idx["Entry"] < idx["TP1"] < idx["TP2"] < idx["SL"]
+    for label in ("Entry", "TP1", "TP2", "SL"):
+        row = next(l for l in lines if l.startswith(label))
+        assert "`" not in row and "·" not in row, row
 
 
 def test_simple_alert_marks_a_bearish_signal_short():
@@ -62,7 +73,7 @@ def test_simple_alert_omits_tp2_when_there_is_no_second_target(monkeypatch):
     item.plan.target2_price = None
     text = build_simple_alert(item)
     assert "TP2" not in text
-    assert "TP1 `110.00`" in text and "SL `95.00`" in text
+    assert "TP1    110.00" in text and "SL     95.00" in text
 
 
 def test_simple_alert_carries_no_chart_or_image_reference():
@@ -90,12 +101,12 @@ def test_simple_alert_prices_follow_the_same_cutover_as_the_full_embed(
         "entry": item.plan.entry, "stop_loss": item.plan.stop_loss,
         "take_profit": item.plan.take_profit, "target2": item.plan.target2_price})
 
-    assert f"Entry `{expected['entry']:.2f}`" in text
-    assert f"TP1 `{expected['take_profit']:.2f}`" in text
-    assert f"TP2 `{expected['target2']:.2f}`" in text
-    assert f"Entry `{expected_entry}`" in text
-    assert f"TP1 `{expected_tp1}`" in text
-    assert f"TP2 `{expected_tp2}`" in text
+    assert f"Entry  {expected['entry']:.2f}" in text
+    assert f"TP1    {expected['take_profit']:.2f}" in text
+    assert f"TP2    {expected['target2']:.2f}" in text
+    assert f"Entry  {expected_entry}" in text
+    assert f"TP1    {expected_tp1}" in text
+    assert f"TP2    {expected_tp2}" in text
 
 
 # --------------------------------------------------------------------------
