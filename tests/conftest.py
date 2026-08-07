@@ -3,6 +3,8 @@
 All series are deterministic (fixed seed where randomness is used) so
 test failures are reproducible.
 """
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -27,6 +29,30 @@ def make_ohlcv(closes, spread_pct=1.0, volumes=None, start="2019-01-01"):
 def make_trend_df(n, daily_pct, start_price=100.0, spread_pct=2.0):
     closes = start_price * (1 + daily_pct / 100) ** np.arange(n)
     return make_ohlcv(closes, spread_pct=spread_pct)
+
+
+def assert_rendered(path, min_colors=16):
+    """Assert `path` is a real rendered chart, not a blank canvas or a stub.
+
+    Replaces the `os.path.getsize(path) > N` proxy the chart tests used to
+    share. That proxy conflated "big file" with "actually drew something": it
+    passed for a large blank canvas, and it broke the moment render DPI
+    changed (at dpi=30 a genuine treemap render came in at 3719 bytes against
+    a 5000-byte threshold). Counting distinct colors is resolution-
+    independent, so it survives any DPI and is a strictly stronger check.
+    """
+    from PIL import Image
+
+    assert os.path.exists(path), f"no file at {path}"
+    with Image.open(path) as img:
+        img.load()
+        assert img.width > 0 and img.height > 0, f"{path} has zero extent"
+        colors = img.convert("RGB").getcolors(maxcolors=1 << 24)
+    assert colors is not None, f"{path}: too many colors to count (unexpected)"
+    assert len(colors) >= min_colors, (
+        f"{path} looks blank: only {len(colors)} distinct colors "
+        f"(expected >= {min_colors})"
+    )
 
 
 def assert_entry_invariants(bull, bear, df):

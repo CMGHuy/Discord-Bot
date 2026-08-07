@@ -13,8 +13,8 @@
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `main` (worked directly on main, per human partner's instruction 2026-08-07)
-> - **Completed:** T1-T8. Phase 2 done: nine heavy files marked `slow` (64 tests). Collection parity verified 1088 fast + 64 slow = 1152. Measured fast 45.1s vs full 68.7s on a contended box (ratio 0.66, matching the predicted 0.67). T8 Step 2 individual marks deliberately skipped -- no measured gain.
-> - **Next:** T9 (`assert_rendered()` helper in tests/conftest.py)
+> - **Completed:** T1-T9. T9: `assert_rendered()` added to tests/conftest.py -- PIL-based, resolution-independent. Verified it passes real charts at dpi 150 and 30, and correctly rejects a 15891-byte blank canvas that the old `getsize > 10_000` proxy would have passed.
+> - **Next:** T10 (replace the 24 getsize proxies)
 
 ## Global Constraints
 
@@ -223,7 +223,7 @@ These are ~153s of the 180.4s serial suite (85%).
 
 **Files:** Modify `tests/conftest.py`
 
-- [ ] **Step 1:** Add a resolution-independent helper (PIL 12.3.0 already installed):
+- [x] **Step 1:** Add a resolution-independent helper (PIL 12.3.0 already installed):
 
 ```python
 def assert_rendered(path, min_colors=16):
@@ -236,7 +236,7 @@ def assert_rendered(path, min_colors=16):
 
 Assert: file exists, decodes as an image, has non-zero dimensions, and contains more than `min_colors` distinct colors.
 
-- [ ] **Step 2: Verify** it passes on a current full-DPI render and fails on a deliberately blank figure. Commit.
+- [x] **Step 2: Verify** it passes on a current full-DPI render and fails on a deliberately blank figure. Commit.
 
 ### Task T10: Replace the 24 `getsize` proxies
 
