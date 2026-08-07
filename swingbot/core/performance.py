@@ -397,8 +397,10 @@ class TradeLog:
         No-op (never touches the account) for:
           - a trade logged before this feature existed / that never got a
             valid `shares` snapshot (e.g. account balance was 0 at open time)
-          - anything other than an actual win/loss close -- a manual
-            "closed" (no real exit price) has no real P&L to realize.
+          - a close with no exit price. A manual admin-UI "closed" has none,
+            so it realizes nothing. A REVERSED close does carry one (it exits
+            at the live price), and settles like any other real exit --
+            status alone is not the test, the exit price is.
 
         Call this BEFORE saving `t` to disk (inside the same lock the
         caller already holds) so realized_pnl_amount/account_balance_after
@@ -419,7 +421,11 @@ class TradeLog:
                 return
         else:
             exit_price = t.get("exit_price")
-            if exit_price is None or status not in ("win", "loss"):
+            # "closed" is included because a reversal exits early at the live
+            # price -- real money moved, so it must hit the account balance
+            # like any win/loss. A manual admin close still no-ops, because it
+            # records no exit_price and is caught by the check above it.
+            if exit_price is None or status not in ("win", "loss", "closed"):
                 return
             is_bull = t.get("direction") == "bullish"
             pnl_amount = shares * (exit_price - entry) if is_bull else shares * (entry - exit_price)
@@ -688,6 +694,62 @@ class TradeLog:
     def get_trade_by_id(self, trade_id: str) -> dict | None:
         self.refresh()   # always read fresh — admin UI may have modified the file
         return next((t for t in self._trades if t["id"] == trade_id), None)
+
+    def open_trade_for_ticker(self, ticker: str) -> dict | None:
+        """The open trade on this ticker, if there is one.
+
+        The bot holds at most ONE open trade per ticker. This is deliberately
+        blind to strategy, horizon, entry price and direction -- unlike
+        has_open_trade()/has_similar_open_trade() below, which are scoped to a
+        matching direction and near-identical levels and therefore let a
+        second position through whenever a different strategy, a different
+        horizon, or a far enough entry produced it (and never blocked an
+        opposite-direction trade at all, so one ticker could carry a long and
+        a short simultaneously).
+
+        A same-direction trade is only possible again once this one closes; an
+        opposite-direction one only via the reversal path (core/reversal.py),
+        which closes this trade first.
+        """
+        self.refresh()
+        return next(
+            (t for t in self._trades
+             if t["ticker"] == ticker and t["status"] == "open"),
+            None,
+        )
+
+    def close_trade_reversed(self, trade_id: str, exit_price: float) -> dict | None:
+        """Close an open trade early because the opposite setup has taken over.
+
+        Modelled on check_near_tp_timeout()'s early close, NOT on
+        close_trade_manual(): that one records no exit_price and never settles
+        the account balance, which would leave P&L and R blank in Trade
+        History and hide the whole point of cutting the loss sooner.
+
+        Lands as status "closed" with close_reason "reversed", so it counts as
+        a scratch rather than a win or a loss -- win rate is computed over
+        wins+losses only, and a reversal is neither. The reason keeps them
+        filterable.
+
+        Returns the closed record, or None if the trade was not open (a
+        parallel tick may have closed it first).
+        """
+        closed = None
+        with _LOCK:
+            for t in self._trades:
+                if t["id"] == trade_id and t["status"] == "open":
+                    t["status"] = "closed"
+                    t["exit_price"] = exit_price
+                    t["closed_at"] = datetime.now(timezone.utc).isoformat()
+                    t["close_reason"] = "reversed"
+                    self._settle_account_balance(t)
+                    closed = dict(t)
+                    self._save()
+                    break
+        if closed is not None:
+            _journal_close_safely(closed)
+            _refresh_snapshot_safely()
+        return closed
 
     def has_open_trade(self, ticker: str, strategy: str, horizon_key: str, direction: str) -> bool:
         """True if this exact setup is already being tracked as an open trade --

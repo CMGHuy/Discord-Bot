@@ -127,9 +127,26 @@ refreshes the analytics snapshot — the same sequence every other real close
 performs.
 
 Because the status is `closed` and not `win`/`loss`, reversals count as
-scratches. Win rate is computed over wins+losses only, so it is not distorted;
-`close_reason` keeps them filterable in Trade History and on the Performance
-page.
+scratches, and `close_reason` keeps them filterable in Trade History and on
+the Performance page.
+
+**Correction found during implementation.** "Scratches don't distort win rate"
+is only half true, because there are two win-rate definitions:
+
+- The **backtest** definition (`docs/claude/backtest-methodology.md`) is
+  `win/(win+loss)` with scratches excluded. A reversal is genuinely neutral
+  here, and `expectancy_r` skips it too.
+- The **live dashboard** definition (`get_stats`, `performance.py:578`) is
+  `wins / closed`, where `closed` includes status `"closed"`. A reversal
+  therefore sits in that denominator and drags live win rate down, and the
+  `losses` field (`len(closed) - len(wins)`) counts it.
+
+This is pre-existing and deliberate — manual admin closes already behave
+exactly this way, and the code says so above the computation. It is left
+alone rather than "fixed", because changing it would silently rewrite the
+meaning of every historical manual close. Both behaviours are pinned by
+tests so the distinction cannot drift unnoticed. If reversals become frequent,
+revisit whether the live win rate should exclude scratches.
 
 ### 5. Where it runs
 

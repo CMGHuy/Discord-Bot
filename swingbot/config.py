@@ -175,6 +175,35 @@ FIELDS: list[Field] = [
     Field("NEAR_CLOSE_THRESHOLD_PCT", "NEAR_CLOSE_THRESHOLD_PCT", "Trade Filters & Risk", "Near-close threshold %",
           type="float", default="2.0", min=0, step=0.5,
           help="How close price must get to a trade's SL/TP before a near-close warning posts."),
+    Field("REVERSAL_ENABLED", "REVERSAL_ENABLED", "Trade Filters & Risk", "Reverse into the opposite setup",
+          type="checkbox", default="true",
+          help="The bot holds at most one trade per ticker. With this on, an open trade whose thesis has "
+               "flipped can be closed early at the live price and replaced by the opposite trade, instead "
+               "of riding down to its stop while the better setup goes untaken. The opposite setup must "
+               "still meet every requirement any new trade does, plus the four guards below. The early "
+               "close books as a scratch, not a loss, so win rate is not distorted."),
+    Field("REVERSAL_MIN_HOLD_HOURS", "REVERSAL_MIN_HOLD_HOURS", "Trade Filters & Risk",
+          "Reversal: minimum hold before flipping (hours)",
+          type="float", default="24.0", min=0, step=1,
+          help="A trade must have been open at least this long before it can be flipped. Stops a position "
+               "being reversed out minutes after it was opened on one contrary bar."),
+    Field("REVERSAL_COOLDOWN_HOURS", "REVERSAL_COOLDOWN_HOURS", "Trade Filters & Risk",
+          "Reversal: cooldown after a flip (hours)",
+          type="float", default="48.0", min=0, step=1,
+          help="After reversing a ticker, no further reversal on it for this long. The single most "
+               "effective brake on whipsaw -- without it a choppy market can flip the same ticker back "
+               "and forth, paying the spread and booking a scratch each time."),
+    Field("REVERSAL_MIN_CONF_MARGIN", "REVERSAL_MIN_CONF_MARGIN", "Trade Filters & Risk",
+          "Reversal: confidence margin required",
+          type="float", default="10.0", min=0, step=1,
+          help="How much better the opposite setup's confidence score must be than the open trade's before "
+               "it can flip it. 0 means merely qualifying is enough; higher values demand the inverse be "
+               "clearly better, not marginally."),
+    Field("REVERSAL_MAX_PER_DAY", "REVERSAL_MAX_PER_DAY", "Trade Filters & Risk",
+          "Reversal: max flips per ticker per day",
+          type="number", default="1", min=0, max=20, step=1,
+          help="Hard ceiling on reversals per ticker per calendar day, regardless of how good the signals "
+               "look. 0 disables reversals entirely, same as unticking the box above."),
     Field("NEAR_TP_TIMEOUT_ENABLED", "NEAR_TP_TIMEOUT_ENABLED", "Trade Filters & Risk", "Near-TP timeout exit enabled",
           type="checkbox", default="true",
           help="If a trade gets most of the way to its target and then goes sideways there instead of "
