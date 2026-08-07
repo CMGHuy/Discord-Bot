@@ -194,13 +194,61 @@ def gate(result: dict) -> str:
     return "PASS"
 
 
+def _early_exit_r(pos: dict, exit_price: float) -> float:
+    """R of a position cut short at `exit_price` instead of run to its stop or
+    target. Same direction-adjusted formula get_stats/_closed_r use live."""
+    risk = abs(pos["entry"] - pos["stop_loss"])
+    if not risk:
+        return 0.0
+    realized = ((exit_price - pos["entry"]) if pos["direction"] == "bullish"
+                else (pos["entry"] - exit_price))
+    return realized / risk
+
+
+def _days_between(a: str, b: str) -> float:
+    """Whole days between two ISO date strings, b - a. Signals carry dates
+    (not timestamps), so reversal guards are expressed in days here where the
+    live ones are in hours."""
+    from datetime import date
+    try:
+        da = date.fromisoformat(str(a)[:10])
+        db = date.fromisoformat(str(b)[:10])
+    except ValueError:
+        return 0.0
+    return (db - da).days
+
+
 def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
                      risk_pct: float = 1.0, heat_cap_pct: float = 6.0,
                      sector_cap_pct: float = 3.0, max_open: int | None = None,
-                     sectors: dict | None = None, throttles: bool = True) -> dict:
+                     sectors: dict | None = None, throttles: bool = True,
+                     one_per_ticker: bool = False, reversals: bool = False,
+                     rev_min_hold_days: float = 1.0,
+                     rev_cooldown_days: float = 2.0,
+                     rev_max_per_day: int = 1) -> dict:
     """Chronological replay under real capital constraints. Per-signal
     expectancy answers 'is the edge real'; THIS answers 'what does the
-    account actually do'. The difference is skipped signals."""
+    account actually do'. The difference is skipped signals.
+
+    `one_per_ticker` mirrors the live rule that the account holds at most one
+    position per ticker, whatever strategy/horizon/direction produced it.
+
+    `reversals` additionally models cutting a position short when the opposite
+    side signals: the open position exits at the incoming signal's entry price
+    (the best proxy available for "the live price when the flip fired"), its R
+    is recomputed from that exit, and the new position opens normally.
+
+    Two deliberate fidelity gaps versus live, both making this a PESSIMISTIC
+    read of how often flips happen -- i.e. the backtest flips at least as
+    freely as production would:
+
+      * No confidence-margin guard. BacktestTrade carries no confidence
+        score, so the live REVERSAL_MIN_CONF_MARGIN check cannot be applied
+        and every opposite signal is a candidate.
+      * Guards are in DAYS, not hours -- signals are dated, not timestamped.
+
+    Both flags default False so existing callers replay exactly as before.
+    """
     from swingbot.core.edge.throttle import current_throttle
 
     events = sorted(signals, key=lambda s: (s["date"], s["ticker"]))
@@ -209,6 +257,13 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
     open_pos: list[dict] = []      # {"exit_date", "ticker", "sector", "risk_pct", "r"}
     taken = skipped = 0
     paused = False
+    # Reversal bookkeeping: last flip date per ticker (cooldown), flips per
+    # ticker per day (daily cap), and how much R the flips gained or gave up
+    # versus letting those positions run to their original exits.
+    last_flip: dict = {}
+    flips_on_day: dict = {}
+    reversed_n = 0
+    reversal_r_delta = 0.0
     # R-multiples for trades actually opened, in the order this loop takes
     # them (chronological by entry date) -- the fixed distribution ruin.
     # simulate() bootstraps from. Recorded at open time, not close time, so
@@ -237,6 +292,38 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
             skipped += 1
             continue
 
+        # 2b) one position per ticker -- and, optionally, flip it
+        if one_per_ticker or reversals:
+            held = next((p for p in open_pos if p["ticker"] == sig["ticker"]), None)
+            if held is not None:
+                flipped = False
+                if (reversals
+                        and sig.get("direction")
+                        and held.get("direction")
+                        and sig["direction"] != held["direction"]
+                        and held.get("entry") is not None):
+                    last = last_flip.get(sig["ticker"])
+                    today_n = flips_on_day.get((sig["ticker"], sig["date"]), 0)
+                    if (_days_between(held["entry_date"], sig["date"]) >= rev_min_hold_days
+                            and (last is None
+                                 or _days_between(last, sig["date"]) >= rev_cooldown_days)
+                            and today_n < rev_max_per_day):
+                        # Cut the old position at this signal's entry price and
+                        # bank the recomputed R instead of the one it would have
+                        # earned running to its stop or target.
+                        r_early = _early_exit_r(held, sig["entry"])
+                        balance *= 1 + (held["risk_pct"] / 100.0) * r_early
+                        curve.append((sig["date"], balance))
+                        open_pos.remove(held)
+                        reversed_n += 1
+                        reversal_r_delta += r_early - held["r"]
+                        last_flip[sig["ticker"]] = sig["date"]
+                        flips_on_day[(sig["ticker"], sig["date"])] = today_n + 1
+                        flipped = True
+                if not flipped:
+                    skipped += 1
+                    continue
+
         # 3) capacity checks
         heat = sum(p["risk_pct"] for p in open_pos)
         sec = (sectors or {}).get(sig["ticker"], sig.get("sector"))
@@ -248,7 +335,9 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
             continue
 
         open_pos.append({"exit_date": sig["exit_date"], "ticker": sig["ticker"],
-                         "sector": sec, "risk_pct": eff_risk, "r": sig["r_multiple"]})
+                         "sector": sec, "risk_pct": eff_risk, "r": sig["r_multiple"],
+                         "direction": sig.get("direction"), "entry": sig.get("entry"),
+                         "stop_loss": sig.get("stop_loss"), "entry_date": sig["date"]})
         taken += 1
         r_multiples_taken.append(sig["r_multiple"])
         taken_strategy_outcomes.append((sig.get("strategy", "UNKNOWN"), sig.get("outcome")))
@@ -296,7 +385,12 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
             "max_dd_pct": round(max_dd, 2), "trades_taken": taken,
             "trades_skipped": skipped, "trades_per_month": round(taken / months, 1),
             "r_multiples_taken": r_multiples_taken,
-            "per_strategy_wr": per_strategy_wr}
+            "per_strategy_wr": per_strategy_wr,
+            # reversals_r_delta is the R actually banked by cutting positions
+            # short MINUS the R those same positions would have earned running
+            # to their original exits. Negative means the flips cost money.
+            "reversals": reversed_n,
+            "reversals_r_delta": round(reversal_r_delta, 4)}
 
 
 def _trades_similar(a, b, tol_pct: float) -> bool:
@@ -355,10 +449,16 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
     tol_pct = getattr(config, "DEDUP_TOLERANCE_PCT", 2.0)
 
     signals = []
-    for sym in _symbols_for_folds():
+    # One flushed line per symbol. This loop is minutes-long (every symbol x
+    # strategy x horizon), and CLAUDE.md's rule is that a long run must never
+    # go silent -- wf_run.py --full already cost a monitoring session that way.
+    all_syms = _symbols_for_folds()
+    for si, sym in enumerate(all_syms, 1):
         df = _frame_for(sym)
         if df is None or not liquidity_ok(df):
+            print(f"[{si}/{len(all_syms)}] {sym}: skipped (no frame / illiquid)", flush=True)
             continue
+        print(f"[{si}/{len(all_syms)}] {sym}", flush=True)
 
         # (strategy, trade) pairs -- BacktestTrade itself carries no strategy
         # field (only the per-call BacktestSummary wrapper does), so the
@@ -386,5 +486,12 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
                             "r_multiple": t.r_multiple,
                             "exit_date": t.exit_date,
                             "strategy": strat,
-                            "outcome": t.outcome})
+                            "outcome": t.outcome,
+                            # direction/entry/stop_loss are carried so
+                            # portfolio_replay(reversals=True) can recognise an
+                            # opposite-side signal and recompute the R of the
+                            # position it cuts short. Ignored otherwise.
+                            "direction": t.direction,
+                            "entry": t.entry,
+                            "stop_loss": t.stop_loss})
     return signals
