@@ -133,11 +133,43 @@ def _clear_stop() -> None:
         pass  # already clear
 
 
+# A scan holds _RUNNING_FILE only for its own duration -- seconds for a
+# handful of tickers, a couple of minutes for a full universe. Anything
+# older than this was left behind by a process that died without running
+# run_scan's `finally` (SIGKILL, OOM, container restart mid-scan), which
+# no amount of exception handling can cover.
+_RUNNING_FLAG_MAX_AGE_SEC = 30 * 60
+
+
 def is_scan_running() -> bool:
     """Whether a scan (manual !check/`/check`, admin-UI-triggered, or the
     automatic session scan) is currently executing. Used by the admin UI
-    to enable/disable its "Stop scan" button."""
-    return os.path.exists(_RUNNING_FILE)
+    to enable/disable its "Stop scan" button.
+
+    Treats a flag older than _RUNNING_FLAG_MAX_AGE_SEC as stale and clears
+    it. This is not cosmetic: commands/scanning.py:trade_monitor early-
+    returns whenever this is True, so a flag left behind by a hard kill
+    would permanently disable the 60s SL/TP poller -- open trades would
+    reach their target or stop and never close, sitting on the dashboard
+    at 100%/0% indefinitely. The failure is silent and does not self-heal,
+    because nothing else ever removes the file.
+
+    Self-heals rather than merely returning False so the admin UI's "Stop
+    scan" button and any other reader recover too, and so a subsequent
+    genuine scan starts from a clean slate.
+    """
+    try:
+        age = time.time() - os.path.getmtime(_RUNNING_FILE)
+    except OSError:
+        return False        # missing (or unreadable) -- no scan in flight
+    if age <= _RUNNING_FLAG_MAX_AGE_SEC:
+        return True
+    log.warning("scan_running.flag is %.0f min old -- treating as stale and clearing it. "
+                 "A scan almost certainly died without cleanup (hard kill/restart); "
+                 "while it sat there the 60s SL/TP trade monitor was skipping every tick.",
+                 age / 60)
+    _mark_running(False)
+    return False
 
 
 def _mark_running(running: bool) -> None:
