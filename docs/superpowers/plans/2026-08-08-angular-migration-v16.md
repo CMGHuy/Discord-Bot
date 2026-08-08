@@ -1,0 +1,592 @@
+# Angular admin UI migration — Implementation Plan (v16)
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order NG1→NG57.
+
+**Goal:** Replace the Flask/Jinja admin UI with an Angular SPA, without the bot process changing and without the existing UI breaking at any point before cutover.
+
+**Architecture:** Five sub-projects executed in dependency order. A versioned REST API (`/api/v1/`) is added beside the existing routes; an SSE endpoint pushes thin change events sourced from a filesystem watcher; an Angular 21 app with NgRx SignalStore consumes both, built by a Docker multi-stage so no Node reaches the runtime image; six workspaces replace eleven pages; a flag-gated cutover then deletes Jinja two weeks later.
+
+**Tech Stack:** Flask + Python 3.11 (server) · Angular 21.2 + `@ngrx/signals` 21.1 + TypeScript (client) · `lightweight-charts` 5.x · pytest · Docker multi-stage.
+
+## Specs
+
+Read the spec for a phase before starting it. They contain the reasoning; this plan contains only the sequence.
+
+| # | Sub-project | Spec | Phase |
+|---|---|---|---|
+| 1 | REST API | `docs/superpowers/specs/2026-08-08-admin-rest-api-design-v11.md` | 1 |
+| 2 | Real-time push | `docs/superpowers/specs/2026-08-08-realtime-push-design-v12.md` | 2 |
+| 3 | Design system | `docs/superpowers/specs/2026-08-08-admin-design-system-design.md` | ✅ done |
+| 4 | Angular shell | `docs/superpowers/specs/2026-08-08-angular-shell-design-v13.md` | 3 |
+| 5 | Workspaces | `docs/superpowers/specs/2026-08-08-angular-workspaces-design-v14.md` | 4 |
+| 6 | Cutover | `docs/superpowers/specs/2026-08-08-jinja-cutover-design-v15.md` | 5 |
+
+## Progress
+
+> Updated by the executing session after each task. Resume from the first unchecked task.
+>
+> - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`)
+> - **Completed:** none — specs written (v11–v15), no implementation started.
+> - **Next:** NG1.
+
+## Global Constraints
+
+- **The Jinja UI must work at every commit** until Phase 5. It is the only UI there is. `/api/v1/` is a parallel surface; the old `/api/*` routes and all HTML routes stay untouched until cutover.
+- **The bot process is never modified by this plan.** If a task appears to need a bot change, stop — that is a design error, not a task.
+- **v1 lives in `swingbot/admin/api_v1/`**, its own package. Never alongside the old blueprint.
+- **"Refetch, never patch."** Every event handler in the SPA reissues a query. No client-side reconciliation of server state.
+- **Zero runtime CDN calls.** Fonts and charts are self-hosted. A network request to a third-party host is a defect.
+- **`visible` columns carry no order.** The data table renders in `columns` order. Do not add an ordering input at any call site.
+- **Colour rules (spec 3):** green/red = money only · amber = caution · blue = interactive only · everything else greyscale. Quality chips (confidence, tier) are greyscale, not green/amber/red.
+- Windows dev machine: `python`, never `python3`.
+- `python scripts/testrun.py full` green (`0 failed`) before each commit; `... file tests/admin` while iterating. Conventional commits, one per task, `git add <explicit paths>` — never `-A`.
+- New docs follow the `-vN` naming convention in `docs/claude/working-conventions.md`.
+
+## File Structure
+
+```
+swingbot/admin/api_v1/__init__.py        blueprint, error helpers, auth       (NG2)
+swingbot/admin/api_v1/{trades,cockpit,analytics,universe,risk,system,market}.py   (NG5–NG18)
+swingbot/admin/events/watcher.py         stat() loop + debounce                (NG20)
+swingbot/admin/events/broker.py          fan-out, seq, connection cap          (NG21)
+swingbot/admin/events/stream.py          SSE endpoint                          (NG22)
+frontend/                                Angular project (outside swingbot/)   (NG25+)
+frontend/src/app/{shell,api,stores,ui,workspaces}/
+swingbot/admin/static/app/               build output — GITIGNORED             (NG33)
+swingbot/admin/static/vendor/jetbrains-mono/                                   (NG26)
+Dockerfile                               multi-stage: node build → python      (NG33)
+tests/admin/test_api_v1_contract.py      the API contract gate                 (NG3)
+```
+
+## Dependency notes
+
+- **Phase 1 gates Phase 4.** Workspaces cannot be built against endpoints that do not exist.
+- **Phase 3 does not depend on Phase 1 or 2** beyond the tracer bullet (NG36). It may run in parallel with Phase 1 if two sessions are available; NG36 is the only join.
+- **Phase 2 can land any time after NG11** (a workspace needs something to refetch). It is placed second because it is small and its absence shapes how stores are written.
+- **Phase 5 is last and irreversible at NG57.** NG56 is not.
+
+---
+
+# Phase 0 — Preflight (NG1–NG3)
+
+### Task NG1: Verify trade/plan ID uniqueness
+
+**Files:** read `swingbot/core/plan_store.py`, `swingbot/core/data_store.py`; write `tests/admin/test_id_uniqueness.py`
+
+**Blocks:** every Trades endpoint. Spec v11 Decision 2 — a collision found later invalidates all of them.
+
+- [ ] Trace how IDs are allocated in `plans.json` and `trades.json`
+- [ ] Determine whether the two ID spaces can collide
+- [ ] If they can: adopt `plan:<id>` / `trade:<id>` prefixing and record it in spec v11 as an amendment
+- [ ] Add a test asserting the chosen invariant against real fixture data
+- [ ] **Verify:** `python scripts/testrun.py file tests/admin/test_id_uniqueness.py`
+
+### Task NG2: `api_v1` package skeleton
+
+**Files:** `swingbot/admin/api_v1/__init__.py`, register in `swingbot/admin/app.py`
+
+**Produces:** the blueprint, error helper and auth decorator every later task uses.
+
+- [ ] Blueprint at `/api/v1`
+- [ ] `error(code, message, status)` returning `{"error": {"code", "message"}}`
+- [ ] `require_auth_json` reused from `api.py` — do not write a second auth path
+- [ ] `collection(items, total, page, per_page)` helper; `per_page` caps at 200
+- [ ] Unknown filter parameter → `400 invalid` (spec v11: never silently ignore)
+- [ ] ISO-8601 UTC serialisation helper for all timestamps
+- [ ] **Verify:** `GET /api/v1/` unknown route returns the JSON error shape, not HTML
+
+### Task NG3: Contract test harness
+
+**Files:** `tests/admin/test_api_v1_contract.py`
+
+**Produces:** the gate that keeps the hand-written TS interfaces honest.
+
+- [ ] Helper asserting exact top-level key set **and value types** of a response
+- [ ] Helper asserting the error shape and status of a failure path
+- [ ] One passing case against NG2's error handler
+- [ ] **Verify:** `python scripts/testrun.py file tests/admin/test_api_v1_contract.py`
+
+---
+
+# Phase 1 — REST API (NG4–NG19)
+
+Every task in this phase: add endpoints, add contract-test cases, change nothing existing.
+
+### Task NG4: Session and health
+
+**Files:** `api_v1/session.py`
+
+- [ ] `POST /api/v1/session` (login), `DELETE` (logout), `GET` (am I authenticated)
+- [ ] Reuse the existing session cookie and `pw_hash` check — no new auth mechanism
+- [ ] `GET /api/v1/health` returning `{ok, versions}` from `helpers.get_versions()`
+- [ ] Contract cases incl. `401` body shape
+- [ ] **Verify:** `testrun.py file tests/admin`
+
+### Task NG5: Trades collection — the union
+
+**Files:** `api_v1/trades.py`
+
+**The load-bearing endpoint.** Spec v11 Decision 2.
+
+- [ ] Project `_plan_rows()` and `_query_closed_trades()` onto one row shape
+- [ ] `status` filter spans `PENDING|ACTIVE|PARTIAL|CLOSED|CANCELLED`; absent = all
+- [ ] Fields absent on one side are `null` — do not synthesise
+- [ ] Filters: `status`, `ticker`, `strategy`, `horizon`, `has_note`; `sort`, `page`, `per_page`
+- [ ] `total` = post-filter, pre-slice
+- [ ] Numbers stay numbers — no pre-formatted strings
+- [ ] **Verify:** contract test asserts the row shape from both stores
+
+### Task NG6: Trade detail
+
+**Files:** `api_v1/trades.py`
+
+- [ ] `GET /api/v1/trades/{id}` resolving against both stores
+- [ ] `404 not_found` for unknown ids
+- [ ] Decide (spec v11 open question 1) whether detail extends the list row or is a distinct shape; record the answer in the spec
+
+### Task NG7: Trade commands
+
+**Files:** `api_v1/trades.py`
+
+- [ ] `POST /{id}/close` (optional manual price — preserve the `manual_close_notify.json` path), `POST /{id}/cancel`, `DELETE /{id}`
+- [ ] `POST /trades/clear-open`, `POST /trades/clear-history`
+- [ ] Reuse the existing handlers' logic; do not reimplement close semantics
+- [ ] **Verify:** behavioural tests rewritten from the Jinja equivalents (see NG19)
+
+### Task NG8: Trade note
+
+**Files:** `api_v1/trades.py`
+
+- [ ] `PUT /api/v1/trades/{id}/note` via `JournalStore().set_note`
+- [ ] `404` when the trade is unknown, matching today's behaviour
+
+### Task NG9: CSV export
+
+**Files:** `api_v1/trades.py`
+
+- [ ] `GET /api/v1/trades/export.csv` — stays CSV, same columns and ordering as today
+- [ ] **Verify:** byte-compare against the current `/trades/export.csv` for the same data
+
+### Task NG10: Cockpit
+
+**Files:** `api_v1/cockpit.py`
+
+- [ ] Exactly the nine metrics of spec 3 (3 primary + 6 chips) + 30d equity series
+- [ ] Source from `dashboard.py`'s existing view-model builders — compute nothing new
+- [ ] The six relocated metrics are **not** here
+- [ ] "Risk used" = open portfolio heat as % of `PORTFOLIO_HEAT_CAP_PCT`
+
+### Task NG11: Analytics — snapshot, performance, strategies, calibration, registry
+
+**Files:** `api_v1/analytics.py`
+
+- [ ] `/analytics/snapshot` (was `/api/stats`, incl. `?fresh=1` self-heal), `/performance`, `/strategies`, `/calibration`, `/registry`
+- [ ] `/performance` carries the six metrics relocated from the Cockpit header
+- [ ] Reuse `load_snapshot` / `refresh_snapshot` and `_registry_rows()`
+
+### Task NG12: Tuning proposals and jobs
+
+**Files:** `api_v1/analytics.py`, `api_v1/jobs.py`
+
+- [ ] `GET/POST /analytics/tuning/proposals`, `DELETE /analytics/tuning/proposals/{f}`
+- [ ] `GET /jobs`, `GET /jobs/{id}` (with `log_tail`), `POST /jobs/tune`
+- [ ] `409 conflict` when a job is already running — preserve today's behaviour
+
+### Task NG13: Universe
+
+**Files:** `api_v1/universe.py`
+
+- [ ] `GET /universe/tickers`; `POST` taking **an array** (absorbs single + bulk add)
+- [ ] `DELETE /universe/tickers/{symbol}`; `GET /universe/suggest?q=`
+- [ ] Partial-success reporting for bulk add — do not fail the batch on one bad symbol
+
+### Task NG14: Risk
+
+**Files:** `api_v1/risk.py`
+
+- [ ] `GET /risk` — exposure, heat vs cap, killswitch state
+- [ ] `POST /risk/killswitch`
+
+### Task NG15: System settings
+
+**Files:** `api_v1/system.py`
+
+**The highest-risk endpoint in this phase** — a bad write takes the bot down.
+
+- [ ] `GET /system/settings` returns **schema and values together**, from `config.py`'s `Field` entries. No hardcoded field list anywhere.
+- [ ] `POST /system/settings/preview` → diff; `PUT /system/settings` → save + audit entry
+- [ ] `GET /system/settings/export` — omits sensitive fields entirely; `POST .../import` — applies recognised keys, skips unknown
+- [ ] Sensitive values masked `•••` in responses, diffs and the audit log
+- [ ] **Verify:** round trip — export, edit, import, SIGHUP, bot reads the change
+
+### Task NG16: System logs, scan, bot restart
+
+**Files:** `api_v1/system.py`
+
+- [ ] `GET /system/logs`, `GET /system/logs/raw` (text/plain), `DELETE /system/logs`
+- [ ] `GET /system/scan` (the `/scan/status` payload), `POST /system/scan/{trigger,stop,pause,resume}`
+- [ ] Flag-file names must match exactly what the bot reads — a wrong name is invisible in the UI
+- [ ] `POST /system/bot/restart` → `503 unavailable` when the Docker socket is absent
+
+### Task NG17: Market OHLCV
+
+**Files:** `api_v1/market.py`
+
+- [ ] `GET /market/ohlcv/{ticker}?bars=&trade_id=` — 260 default, 1000 cap, CSV-cache fallback, levels when `trade_id` given
+
+### Task NG18: Route coverage audit
+
+**Files:** `docs/superpowers/specs/2026-08-08-admin-rest-api-design-v11.md`
+
+- [ ] `grep -rn "\.route(" swingbot/admin/*.py`; classify every route as replaced / dropped / **unmapped**
+- [ ] Fix any unmapped route now, or record the deliberate drop with a reason
+- [ ] Update the spec's mapping table if reality diverged
+
+### Task NG19: Test triage, first pass
+
+**Files:** `tests/admin/*`
+
+Spec v15 Decision 4 — do this now, not at cutover.
+
+- [ ] Classify each `tests/admin/` file: HTML-structure (delete at cutover) / behavioural (rewrite against v1 **now**) / builder-level (keep untouched)
+- [ ] Rewrite the behavioural ones against v1; leave the Jinja originals in place until Phase 5
+- [ ] Record the classification in the file headers so Phase 5 does not re-derive it
+- [ ] **Verify:** `python scripts/testrun.py full`
+
+---
+
+# Phase 2 — Real-time push (NG20–NG24)
+
+### Task NG20: File watcher
+
+**Files:** `swingbot/admin/events/watcher.py`
+
+- [ ] `stat()` loop at **500ms**, not configurable; compares `(exists, mtime, size)` — never parses
+- [ ] Path→event-type map per spec v12's taxonomy table
+- [ ] 250ms **trailing** debounce per event type
+- [ ] Daemon thread; survives per-path exceptions; logs at most once per path per minute
+- [ ] **Verify:** unit test driving it with `os.replace` writes and asserting coalescing
+
+### Task NG21: Event broker
+
+**Files:** `swingbot/admin/events/broker.py`
+
+- [ ] One watcher for the process, started lazily; fan-out to per-connection queues
+- [ ] Process-wide monotonic `seq`
+- [ ] Cap of **8** concurrent connections → `503 unavailable`
+- [ ] **Verify:** test asserts one watcher regardless of connection count, and the cap
+
+### Task NG22: SSE endpoint
+
+**Files:** `swingbot/admin/events/stream.py`
+
+- [ ] `GET /api/v1/events`, auth-guarded — `401` JSON **before** the stream opens
+- [ ] `event:` name, `id:` = seq, `data:` = `{seq, at}` — thin, never the object
+- [ ] `ping` every 20s
+- [ ] `resync` on connect; `Last-Event-ID` accepted and logged but not replayed
+- [ ] **Verify:** manual `curl -N` shows events on a real file write
+
+### Task NG23: Confirm atomic writes cover every watched path
+
+**Files:** audit only; note in `docs/claude/known-traps.md`
+
+Spec v12 Decision 2 — load-bearing, so check rather than assume.
+
+- [ ] Confirm each watched `.json` path is written through `jsonio` / `plan_store` / `data_store` / `data_refresh` (all `os.replace`)
+- [ ] Confirm `.jsonl` and `.flag` paths are treated as non-parsed, per spec
+- [ ] Record any path that is **not** atomic as a trap
+
+### Task NG24: Watcher cost measurement
+
+- [ ] Measure admin idle CPU before and after the watcher, per spec v12's risk
+- [ ] Record the numbers in `docs/claude/testing-cost.md`
+- [ ] If the cost is material, raise the interval — do not add a config knob
+
+---
+
+# Phase 3 — Angular shell (NG25–NG36)
+
+### Task NG25: Scaffold `frontend/`
+
+**Files:** `frontend/**`, root `.gitignore`
+
+- [ ] **Re-check `npm view @ngrx/signals peerDependencies` first.** If `@ngrx/signals@22` is stable, take Angular 22 for both and amend spec v13.
+- [ ] Otherwise pin `@angular/core@~21.2`, `@angular/cli@~21.2`, `@ngrx/signals@~21.1`
+- [ ] `ng new` standalone, zoneless (`provideZonelessChangeDetection()`), no SSR, no Zone.js
+- [ ] Gitignore `swingbot/admin/static/app/` and `frontend/node_modules/`
+- [ ] `frontend/` sits **outside** `swingbot/` so pytest and `py_compile` never see it
+- [ ] **Verify:** `npm run build` succeeds; `python scripts/testrun.py fast` unaffected
+
+### Task NG26: Design tokens and fonts
+
+**Files:** `frontend/src/styles/`, `swingbot/admin/static/vendor/jetbrains-mono/`
+
+- [ ] Vendor JetBrains Mono alongside the existing Inter — self-hosted, no CDN
+- [ ] Import spec 3's tokens; **dark only**, no light theme
+- [ ] Type scale 9/10/11/12/14/18/23 · spacing 4/6/8/10/14/20/28 · radii 4px/3px · 120ms ease-out
+- [ ] **Do not change `static/tokens.css` yet** — that is NG38, and it changes the bot's Discord chart colours
+
+### Task NG27: `ApiClient` and interceptors
+
+**Files:** `frontend/src/app/api/`
+
+- [ ] Hand-written TS interfaces mirroring `test_api_v1_contract.py`
+- [ ] `authInterceptor` (`withCredentials`, `401` → login, **no retry**)
+- [ ] `errorInterceptor` → typed `ApiError`; non-JSON failures become `unavailable`
+- [ ] `loadingInterceptor` counting in-flight requests
+- [ ] Components never touch `HttpClient` — stores call `ApiClient`
+
+### Task NG28: `SessionStore` and login
+
+**Files:** `frontend/src/app/stores/session.store.ts`, `shell/login/`
+
+- [ ] `GET /api/v1/session` at boot **before** the shell renders — no dashboard flash
+- [ ] Login view rendered *instead of* the shell, so workspace code never loads unauthenticated
+- [ ] Logout → `DELETE` then full page reload
+- [ ] A `401` from a `pw_hash` change is a normal logout, not an error state
+
+### Task NG29: Shell layout
+
+**Files:** `frontend/src/app/shell/`
+
+- [ ] Sidebar with **six** entries · workspace header · bot/connection status · toast host
+- [ ] Killswitch-engaged state visible from the shell in every workspace
+- [ ] Scan and bot status live here only — never duplicated into Cockpit
+
+### Task NG30: Routing and guard
+
+**Files:** `frontend/src/app/app.routes.ts`
+
+- [ ] Six lazy `loadComponent` routes + `/trades/:id` + `/universe/:symbol`; `/` → `/cockpit`
+- [ ] `authGuard` as a `CanMatchFn`
+- [ ] `withComponentInputBinding()`
+- [ ] Placeholder components — **no workspace content in this phase**
+
+### Task NG31: `EventStream` and `ConnectionStore`
+
+**Files:** `frontend/src/app/stores/connection.store.ts`, `api/event-stream.ts`
+
+- [ ] One `EventSource` for the app; parsed event exposed as a signal
+- [ ] Three reconnects in a minute → degrade to 5s polling, flag it on the store
+- [ ] Stores subscribe by event type; the service knows nothing about stores
+- [ ] **Reaction is always refetch, never patch**
+
+### Task NG32: `PreferencesStore`
+
+**Files:** `frontend/src/app/stores/preferences.store.ts`
+
+- [ ] Server-side persistence via a System setting — **not `localStorage`**
+- [ ] Read once at boot, debounced writes
+- [ ] Holds column-picker visibility per table id
+
+### Task NG33: Docker multi-stage and Flask serving
+
+**Files:** `Dockerfile`, `swingbot/admin/app.py`
+
+- [ ] `node:22-alpine` build stage; `COPY frontend/package*.json` **before** the source, mirroring the existing `requirements.txt` layering
+- [ ] `COPY --from=frontend` into `static/app`; **no Node in the runtime image**
+- [ ] Flask serves `index.html` for the six workspace prefixes — an **allow-list**, not a catch-all
+- [ ] Hashed assets long-cached; `index.html` `no-cache`
+- [ ] **Verify:** `docker compose up --build`; confirm image has no `node` binary
+
+### Task NG34: Dev proxy
+
+**Files:** `frontend/proxy.conf.json`
+
+- [ ] `ng serve` on 4200 proxying `/api` → `localhost:1234`
+- [ ] Never added to `docker-compose.yml`
+
+### Task NG35: `CockpitStore`
+
+**Files:** `frontend/src/app/stores/cockpit.store.ts`
+
+- [ ] `withState` / `withComputed` / `withMethods` — the shape every other store copies
+- [ ] Refetch on `account` and `trades`
+
+### Task NG36: Tracer bullet
+
+**Files:** `frontend/src/app/workspaces/cockpit/`
+
+**The join between Phase 1 and Phase 3.** Everything in Phase 4 repeats this shape.
+
+- [ ] Three primary `MetricCard`s fed by `/api/v1/cockpit` through `ApiClient` → `CockpitStore`
+- [ ] Refetches on an `account` event
+- [ ] **Verify:** blocking `/api/v1/events` flips the connection indicator to degraded and the cards still update by polling
+
+---
+
+# Phase 4 — Workspaces (NG37–NG52)
+
+### Task NG37: `DataTableComponent`
+
+**Files:** `frontend/src/app/ui/data-table/`
+
+**Nothing else in this phase starts until this is settled.** Spec v14 Decision 1.
+
+- [ ] Generic over row type; the exact input/output contract in spec v14
+- [ ] Server-side sort/page — the table never slices its own rows
+- [ ] `visible` is keys only; **render order comes from `columns`** — no ordering input exists
+- [ ] Row expansion is a caller `TemplateRef`
+- [ ] `total` is post-filter/pre-slice; document it at the input
+- [ ] No data access of any kind
+- [ ] **Verify:** review the contract on paper against all four intended call sites before moving on
+
+### Task NG38: `tokens.css` palette swap
+
+**Files:** `swingbot/admin/static/tokens.css`, `swingbot/admin/chart_style.py`
+
+**This changes the colours of charts the bot posts to Discord.** Spec v15 — land it deliberately, here, not as a side effect at cutover.
+
+- [ ] Apply spec 3's palette to `tokens.css`
+- [ ] Update `chart_style.THEME` to match; **the sync test must stay green**
+- [ ] Look at a generated PNG before committing
+- [ ] **Verify:** `python scripts/testrun.py file tests/test_chart_theme.py`
+
+### Task NG39: Column picker, pagination, empty state
+
+**Files:** `frontend/src/app/ui/`
+
+- [ ] Default set is a **distinct input** from the current set; "Reset to default" always present
+- [ ] Visibility only — no ordering affordance
+- [ ] Persists through `PreferencesStore`, keyed by table id
+
+### Task NG40: Display components
+
+**Files:** `frontend/src/app/ui/`
+
+- [ ] `MetricCard`, `MetricChip`, `Sparkline`, `StatusIndicator` (dot + SL→TP bar), `Chip`, `ChartContainer` shell
+- [ ] **`Chip` renders quality on the greyscale ramp** — `Lv5/A` `--text`, `Lv3/B` `--text-secondary`, `Lv1/C` `--warn`. Never green/amber/red.
+
+### Task NG41: Input and layout components
+
+**Files:** `frontend/src/app/ui/`
+
+- [ ] `Button` (primary/secondary/danger/ghost/icon), `Select`, `TextInput`, `Checkbox`, `FilterBar`, `ConfirmDialog`, `Panel`, `TabBar`, `SplitView`, `Drawer`
+- [ ] Nothing outside spec 3's inventory. A new component means amending that spec.
+
+### Task NG42: Trades list
+
+**Files:** `frontend/src/app/workspaces/trades/`, `stores/trades.store.ts`
+
+- [ ] Seven default columns: `#` · Status · Ticker · Now · P&L% · Held · actions
+- [ ] Eleven expansion fields in four groups (plan levels / setup / sizing / opened)
+- [ ] **Query parameters are the source of truth** for filters, sort, page
+- [ ] Status is a filter chip row, **not** tabs
+- [ ] Refetch on `trades` reissues the current query
+
+### Task NG43: Trade detail — shell and Plan tab
+
+- [ ] `TabBar` over Plan · Live · Chart · Notes · Strategy
+- [ ] Plan tab: entry, stop, TP1/TP2, R:R, sizing
+
+### Task NG44: Live tab and trade actions
+
+- [ ] Price, unrealised P&L, `StatusIndicator` SL→TP progress; refetch on `trades`
+- [ ] Close / cancel / delete via `ConfirmDialog` that **names what is destroyed**
+
+### Task NG45: `ChartContainer` and Chart tab
+
+- [ ] `lightweight-charts` **5.x** — read the v4→v5 migration notes first; v4 examples will mislead
+- [ ] Theme from tokens, never hardcoded colours; price lines from `?trade_id=`
+- [ ] Resize handling, disposal on destroy, `OnPush`-safe imperative state
+
+### Task NG46: Notes and Strategy tabs
+
+- [ ] Notes: `PUT .../note`, debounced autosave, visible saved/unsaved state, refetch on `journal`
+- [ ] Strategy: read-only window into `/analytics/strategies` filtered to this trade's strategy
+
+### Task NG47: Cockpit, complete
+
+- [ ] Three cards + six chips per spec 3, including the equity `Sparkline`
+- [ ] Open-positions table = **`DataTableComponent`**, filtered and capped, linking to `/trades`
+- [ ] No card-flash animation
+
+### Task NG48: Analytics
+
+- [ ] `TabBar`: Performance · Strategies · Calibration · Tuning (**tabs, not sub-nav** — spec v14 Decision 6)
+- [ ] Performance shows the six metrics relocated from the Cockpit — verify they are actually present
+- [ ] Tuning job progress via the `jobs` event, replacing polling
+
+### Task NG49: Risk
+
+- [ ] Exposure table, heat vs `PORTFOLIO_HEAT_CAP_PCT`, killswitch (`danger` + `ConfirmDialog`)
+- [ ] Engaged state also surfaces in the shell
+
+### Task NG50: System
+
+- [ ] Tabs: Settings · Logs · Scan
+- [ ] **Settings form renders from the schema** — no hardcoded field list. Preview → diff → save. Masking preserved.
+- [ ] `settings` event while editing → warn, do not silently reload the form
+- [ ] Bot restart degrades honestly on `503`
+
+### Task NG51: Universe
+
+- [ ] Ticker list, add (single + bulk through one endpoint), remove, suggest
+- [ ] Per-ticker detail reuses `DataTableComponent` + `ChartContainer` — build nothing new
+
+### Task NG52: Parity mapping and 1280px check
+
+**Files:** `docs/superpowers/specs/2026-08-08-jinja-cutover-design-v15.md`
+
+- [ ] Table: every Jinja page → its Angular successor, or a named deliberate drop
+- [ ] Verify the Trades expansion content at **1280px** — spec 3 flags mono digits as wide
+- [ ] Colour-rule review: nothing green/red but money, nothing blue but interactive
+- [ ] Confirm `DataTableComponent` has exactly four call sites and there is no second table
+
+---
+
+# Phase 5 — Cutover (NG53–NG57)
+
+### Task NG53: `ADMIN_UI` flag
+
+**Files:** `swingbot/config.py`, `swingbot/admin/app.py`, `.env.example`
+
+- [ ] `ADMIN_UI=spa|jinja`, default `spa`, as a `config.py` `Field`
+- [ ] `spa` serves the SPA at `/`; **all Jinja routes stay mounted and reachable**
+- [ ] **Verify:** flipping the value and restarting swaps the UI with no rebuild
+
+### Task NG54: Acceptance gate
+
+**Files:** record results in the spec
+
+Spec v15 Decision 2. Do not ship Release A until every item passes.
+
+- [ ] Re-derive route coverage from `grep -rn "\.route(" swingbot/admin/*.py` — any unmapped route **blocks**
+- [ ] Walk every Jinja page against the SPA: settings round trip (export→edit→import→SIGHUP), bot restart without the Docker socket, all destructive actions, all four scan controls **and the flag files they leave**, manual-price close incl. `manual_close_notify.json`, CSV byte-compare
+- [ ] Degraded mode: block `/api/v1/events`, confirm every workspace stays correct
+- [ ] `python scripts/testrun.py full` → `0 failed`
+
+### Task NG55: Release A
+
+**Files:** `VERSION.json`
+
+- [ ] `ui` `1.0.9` → `1.1.0` (minor — a different UI is not a patch)
+- [ ] Deploy; **write down the date**. Release B is ≥ 2 weeks of live sessions later.
+- [ ] Update the Progress block with that date
+
+### Task NG56: Wait, and watch
+
+**Not a code task.** The two weeks are the mitigation, and they will feel unnecessary by day three.
+
+- [ ] Two weeks of live trading sessions on `ADMIN_UI=spa`
+- [ ] Record anything that required a flip back to `jinja`
+- [ ] Do not proceed early. Slow-horizon behaviour (TP2, weekly rollovers, a tuning cycle) does not occur in a few days.
+
+### Task NG57: Release B — delete Jinja
+
+**Irreversible.** Everything before this point is not.
+
+- [ ] Delete: 20 templates · the HTML routes and the `pages` blueprint · `api.py` and the 10 legacy `/api/*` routes · `dashboard.js`, `chart-init.js`, `style.css` · vendored `lightweight-charts` 4.2.3 · the `ADMIN_UI` flag
+- [ ] Delete `/trades/<id>/chart.png` and `/plans/<id>/chart.png` — **first verify no bot path reaches chart generation through the admin HTTP layer**
+- [ ] **Keep:** `tokens.css`, `chart_style.THEME` and their sync test (the bot's Discord charts need them); vendored Inter and JetBrains Mono
+- [ ] Apply NG19's test triage: delete HTML-structure tests, keep builder-level ones untouched
+- [ ] Record the **new test baseline** in `CLAUDE.md` in this same commit — an unexplained drop is indistinguishable from lost coverage
+- [ ] Update `README.md` (Admin UI section), `CLAUDE.md`, `docs/claude/architecture.md`, `DOCKER.md`, `DEPLOY_HETZNER.md`, `docs/claude/known-traps.md`
+- [ ] `ui` patch bump
+- [ ] **Verify:** `grep -rn "\.route(" swingbot/admin/*.py` returns only `/api/v1/*` and the SPA-serving routes; `python scripts/testrun.py full` green
+
+---
+
+## Adding nothing
+
+Phase 5 adds no features. The urge to fix "one small thing" while deleting is how a low-risk cutover becomes a high-risk one.
