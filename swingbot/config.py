@@ -558,7 +558,12 @@ FIELDS: list[Field] = [
           type="checkbox", default="false",
           help="Pulls TP1 back inside the nearest undelivered level standing between entry and "
                "target -- the 'gatekeeper' that has to break for the plan to work. Skipped "
-               "(and recorded) whenever pulling in would push R:R under the frozen 0.30 floor."),
+               "(and recorded) whenever pulling in would push R:R under the frozen 0.30 floor. "
+               "MEASURED INERT 2026-08-08: across 428 entry bars the pull-in was rejected by "
+               "that floor 248 times out of 248 and applied ZERO times -- blockers sit adjacent "
+               "to entry, so the pulled-in target is a median 0.063 R:R against a 0.30 floor. "
+               "Turning this on is currently a no-op; it is kept only so the measurement is "
+               "reproducible. Do not lower RR_FLOOR to make it fire (design doc section 7.6)."),
     Field("AVWAP_LEVELS_ENABLED", "AVWAP_LEVELS_ENABLED", "Universe & Scanning",
           "Anchored VWAP level source enabled",
           type="checkbox", default="false",

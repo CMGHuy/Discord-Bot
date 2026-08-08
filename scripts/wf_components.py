@@ -51,6 +51,12 @@ from swingbot.core.watchlist import load_watchlist  # noqa: E402
 REGISTERED_COMPONENTS = {
     "AVWAP_LEVELS_ENABLED": True,
     "VOLUME_PROFILE_NODES_ENABLED": True,
+    # P1 level lifecycle. Observability verified before registering (3 symbols
+    # x 2 strategies x 10 horizons): the stop leg moves expectancy in 2 of 3
+    # folds, so the harness can see it. Its sibling
+    # LEVEL_LIFECYCLE_TARGETS_ENABLED did NOT survive that check -- see
+    # INERT_COMPONENTS.
+    "LEVEL_LIFECYCLE_STOPS_ENABLED": True,
 }
 
 # Flags that CANNOT be measured by this harness -- documented, not run.
@@ -60,10 +66,25 @@ INERT_COMPONENTS = {
         "sizes through backtest._trade_plan_at, which takes no stop_mult/"
         "tp2_r. Needs those threaded through run_backtest first.",
     "REGIME_GATES_ENABLED":
-        "entry_filters.apply_regime_gate needs a `regimes` series that "
-        "run_backtest -> _vectorized_entries -> entries_for never supplies, "
-        "and strategy_types.REGIME_ALLOW is empty, so there is nothing to "
-        "gate even if it did.",
+        "The wiring objection is FIXED (P0: market_context.attach/get now "
+        "supplies entries_for with a ctx_regime series in both the backtest "
+        "and the live scan), but the gate is still inert for a second, "
+        "stronger reason: its pre-registered TRAIN shot ran on 2026-08-08 and "
+        "denied ZERO of 44 (strategy, regime) cells, so REGIME_ALLOW is empty "
+        "by evidence rather than by omission. Re-running this without new "
+        "bear-regime data would only re-measure a table that is empty on "
+        "purpose -- see design doc section 5.5.",
+    "LEVEL_LIFECYCLE_TARGETS_ENABLED":
+        "Structurally cannot fire, measured 2026-08-08 over 12 symbols x 11 "
+        "strategies x 10 horizons: of 428 entry bars, 248 had a gatekeeper in "
+        "the path and 180 had none -- and the pull-in was rejected by RR_FLOOR "
+        "in 248 of 248. Pulling TP1 just inside a blocker yields median 0.063 "
+        "R:R against the frozen 0.30 floor, a 5x gap that no choice of blocker "
+        "closes (farthest clears in 0.4% of bars, king in 0%). Blockers sit "
+        "adjacent to entry, so the 'realistic' target is too close to be a "
+        "trade. Registering it would score exactly 0.0000 -- which is what a "
+        "slice run did score. Fix the concept or drop it; do NOT lower "
+        "RR_FLOOR to make it fire.",
     "PYRAMIDING_ENABLED":
         "E38 lives in the live plan manager; plan_engine.simulate_exit has "
         "no pyramiding concept, so the backtest cannot observe it.",

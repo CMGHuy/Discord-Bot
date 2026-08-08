@@ -342,8 +342,50 @@ assertion that is cheap and proves a great deal:
 If truncating the future changes the answer, there is lookahead. This makes the
 NO-LOOKAHEAD rule mechanically checkable rather than a review convention.
 
-**Measurement.** A/B over TRAIN through `portfolio_replay`, exactly as the
-reversal work in `7d5164b` did.
+**Measurement.** Through `scripts/wf_components.py`, not a bespoke A/B script.
+That harness already encodes the pre-registered E33 fold gate (pooled test
+expectancy improves in ≥2 of 3 anchored folds, no fold degrades by >0.05R,
+N≥30 per fold) and backtests each (symbol, strategy, horizon) once per leg.
+The `reversal_ab.py` pattern does **not** transfer here: it collects one shared
+signal set and varies only the position rule, but the lifecycle re-prices
+stop/TP1 *inside* plan building, which happens during collection — so every
+arm needs its own collection pass.
+
+### 7.6 Consumer 2 (target realism) — measured inert, 2026-08-08. Not registered.
+
+Before registering anything, `wf_components.py`'s own rule is to verify the
+flag moves the number ("flip the flag, same windows, compare expectancy") —
+the check that `DATA_DRIVEN_STOPS_ENABLED` failed by scoring 0.0000. Consumer 2
+failed it too, and instrumentation says it is not a wiring miss but a dead
+concept:
+
+Over 12 symbols × 11 strategies × 10 horizons — **428 entry bars**, of which
+248 had a gatekeeper in the path and 180 had none — the pull-in was applied
+**0 times**. All 248 were rejected by `RR_FLOOR`.
+
+| TP1 pulled to … | median R:R | p90 | max | clears 0.30 floor |
+|---|---:|---:|---:|---:|
+| nearest blocker (what §7.4.2 does) | +0.063 | +0.216 | +0.286 | **0.0%** |
+| farthest blocker | +0.079 | +0.223 | +0.321 | 0.4% |
+| king blocker | −0.049 | +0.084 | +0.270 | 0.0% |
+
+The gap to the floor is ~5×, and no choice of *which* blocker to use closes it.
+The cause is structural: with ~9 classified levels around a typical bar,
+undelivered levels sit adjacent to entry (median 1 blocker per bar, max 2), so
+"just inside the first thing that must break" is a target too close to be a
+trade. Note also that two-in-the-path — the case §7.4.2 argued is materially
+different — occurs at most twice per bar and rarely.
+
+**Do not lower `RR_FLOOR` to make this fire.** The floor is a frozen constant
+(break-even WR at 0.30 is already 76.9%); moving it to rescue a heuristic
+inverts the dependency — the heuristic would be selecting the risk constant.
+
+What survives: §7.4.2's actual wording was *count* non-delivered ceilings, and
+counting is still a plausible **plan-quality signal or entry veto**
+(`gatekeepers_between` is tested and correct). Relocating TP1 was this
+implementation's extrapolation from it, and that is the part that died. The
+flag stays in config default-off and is listed in `wf_components.INERT_COMPONENTS`
+so no future session burns a pre-registration on it.
 
 ---
 
