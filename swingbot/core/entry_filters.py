@@ -127,8 +127,21 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
                 params: dict | None = None,
                 regimes: "pd.Series | None" = None) -> tuple[pd.Series, pd.Series]:
     """Dispatch to the strategy's entry function, then apply STRATEGY_GATES
-    (direction/horizon restrictions decided by train-window tuning)."""
+    (direction/horizon restrictions decided by train-window tuning).
+
+    `regimes` stays an explicit parameter for callers that already hold a
+    series, but it no longer has to be passed: when it is None the regime is
+    read off `df`'s context block instead (market_context.attach). That is what
+    finally feeds apply_regime_gate, which has been inert since E24 for want of
+    a market dataframe in this call chain -- all 12 call sites keep working
+    unchanged."""
     bullish, bearish = ENTRY_FUNCS[strategy](df, horizon_key, params)
+
+    if regimes is None:
+        # Fail-closed by design: with REGIME_GATES_ENABLED on and no context
+        # block on df, this raises rather than silently skipping the gate.
+        from swingbot.core import market_context
+        regimes = market_context.get(df, "ctx_regime")
 
     gates = STRATEGY_GATES.get(strategy)
     if gates:

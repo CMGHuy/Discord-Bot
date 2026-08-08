@@ -197,6 +197,120 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     return entry + risk_distance, entry - risk_distance * rr
 
 
+# --- level lifecycle (P1) ---------------------------------------------------
+#
+# Deliberately lives HERE, next to the sizing builders, and not in either
+# caller. backtest._trade_plan_at and build_strategy_plan are two separate
+# plan paths, and edge-engine-v4's DATA_DRIVEN_STOPS_ENABLED scored exactly
+# 0.0000 -- burning its one pre-registered validation shot -- because it
+# reached only build_strategy_plan while the backtest sized through
+# _trade_plan_at. Anything that touches stop/target must be shared by both or
+# it is unmeasurable by construction.
+
+def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
+    """Classified levels at `index`, from the caller's level_map when it has
+    one (live already builds it) or built on the spot (the backtest does not).
+
+    The backtest branch slices df to `index` BEFORE building levels: `df`
+    there runs to the end of history, so an unsliced build_level_map would
+    draw levels out of bars the trade cannot have seen.
+    """
+    from swingbot.core import levels_lifecycle
+
+    if level_map is not None:
+        supports, resistances = level_map
+        raw = list(supports) + list(resistances)
+    else:
+        from swingbot.core import levels as levels_mod
+        hist = df.iloc[:index + 1]
+        supports, resistances = levels_mod.build_level_map(
+            hist, HORIZONS[horizon_key], entry)
+        raw = list(supports) + list(resistances)
+
+    return levels_lifecycle.classify_levels(df, index, raw, horizon_key=horizon_key)
+
+
+def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
+                          strategy, horizon_key, level_map=None):
+    """Re-price (stop, tp1) against what price has actually done to nearby levels.
+
+    Two independent, independently-flagged adjustments:
+
+      * stop anchoring -- move the stop beyond a level that has been *tested*
+        rather than leaving it inside the noise a fresh level implies. The
+        target is re-derived from the new risk distance so the frozen R:R
+        table is preserved exactly (same arithmetic as _atr_plan).
+      * target realism -- pull TP1 back inside the nearest undelivered
+        "gatekeeper" standing between entry and target.
+
+    Both are capped by the frozen constants: max_risk_pct bounds the stop, and
+    an adjustment that would push R:R under RR_FLOOR is discarded rather than
+    applied. Returns (stop, tp1, meta).
+
+    COST NOTE: with a flag on and no level_map (i.e. in the backtest), this
+    builds a level map per entry bar. Entries are sparse -- single digits per
+    ticker/strategy/horizon -- but a full grid still pays it thousands of
+    times. Flags off is a bit-identical zero-cost fast path, which is why the
+    check comes first.
+    """
+    stops_on = getattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False)
+    targets_on = getattr(config, "LEVEL_LIFECYCLE_TARGETS_ENABLED", False)
+    if not (stops_on or targets_on):
+        return stop, tp1, {}
+
+    try:
+        levels = _lifecycle_levels(df, index, horizon_key, entry, level_map)
+    except Exception:
+        log.debug("level lifecycle unavailable at %s/%s", strategy, horizon_key, exc_info=True)
+        return stop, tp1, {}
+    if not levels:
+        return stop, tp1, {}
+
+    from swingbot.core import levels_lifecycle
+
+    h = HORIZONS[horizon_key]
+    is_bull = direction == "bullish"
+    rr = _rr_for(strategy, horizon_key)
+    max_risk_amount = entry * (h["max_risk_pct"] / 100)
+    buffer = STRUCTURE_BUFFER_ATR * atr_val
+    meta: dict = {}
+
+    if stops_on:
+        anchor = levels_lifecycle.preferred_stop_anchor(levels, direction=direction)
+        # Only a level that has actually held is worth moving a stop for; a
+        # fresh one is an untested guess and the ATR stop is already that.
+        if anchor is not None and anchor.state == "tested":
+            candidate = anchor.price - buffer if is_bull else anchor.price + buffer
+            risk = entry - candidate if is_bull else candidate - entry
+            # Widen only. Tightening onto a level would put the stop inside
+            # the very structure it is meant to sit behind.
+            if 0 < risk <= max_risk_amount and risk > abs(entry - stop):
+                stop = candidate
+                tp1 = entry + risk * rr if is_bull else entry - risk * rr
+                meta["lifecycle_stop"] = {"price": round(anchor.price, 4),
+                                          "state": anchor.state,
+                                          "touches": anchor.touches}
+
+    if targets_on:
+        blockers = levels_lifecycle.gatekeepers_between(levels, entry=entry, target=tp1)
+        if blockers:
+            gk = blockers[0]
+            candidate = gk.price - buffer if is_bull else gk.price + buffer
+            reward = candidate - entry if is_bull else entry - candidate
+            risk = abs(entry - stop)
+            if reward > 0 and risk > 0 and reward / risk >= RR_FLOOR:
+                tp1 = candidate
+                meta["lifecycle_target"] = {"price": round(gk.price, 4),
+                                            "state": gk.state,
+                                            "blockers": len(blockers)}
+            else:
+                # Recorded, not applied: pulling in here would break the frozen
+                # R:R floor, and that floor outranks this heuristic.
+                meta["lifecycle_target_skipped"] = len(blockers)
+
+    return stop, tp1, meta
+
+
 def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key):
     """Structural sizing off the fib swing, risk-capped, R:R-override target."""
     h = HORIZONS[horizon_key]
@@ -424,6 +538,16 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         applied_stop_mult = stop_mult if stop_mult is not None else _resolve_stop_mult(strategy)
         stop, tp1 = _atr_plan(close, atr_val, direction, horizon_key, strategy,
                               stop_mult=applied_stop_mult)
+
+    # P1: the same adjuster backtest._trade_plan_at calls, with the level_map
+    # this path already has (so it costs no extra level build here).
+    # meta is intentionally unused for now: surfacing which level drove the
+    # plan means a TradePlanV2 field, which is a persisted-schema change and a
+    # separate piece of work from wiring the adjuster in.
+    stop, tp1, _lifecycle_meta = apply_level_lifecycle(
+        df, index, entry=close, stop=stop, tp1=tp1, atr_val=atr_val,
+        direction=direction, strategy=strategy, horizon_key=horizon_key,
+        level_map=level_map)
 
     if abs(close - stop) <= 0:
         return None

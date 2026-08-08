@@ -130,6 +130,7 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
         _fibonacci_plan,
         _safe_atr_value,
         _sr_plan,
+        apply_level_lifecycle,
     )
 
     entry = float(df["Close"].iloc[i])
@@ -147,6 +148,13 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
             entry, atr_val, entry_levels[i]["wave2"], direction, horizon_key)
     else:
         stop_loss, take_profit = _atr_plan(entry, atr_val, direction, horizon_key, strategy)
+
+    # P1: same adjuster the live path calls, so the two cannot diverge. Flags
+    # off is a bit-identical no-op -- see apply_level_lifecycle's docstring for
+    # why this must be here and not only in build_strategy_plan.
+    stop_loss, take_profit, _ = apply_level_lifecycle(
+        df, i, entry=entry, stop=stop_loss, tp1=take_profit, atr_val=atr_val,
+        direction=direction, strategy=strategy, horizon_key=horizon_key)
 
     return entry, stop_loss, take_profit
 

@@ -23,10 +23,45 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
+from swingbot import config
+from swingbot.core import market_context
 from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
 from swingbot.core.strategy_types import HORIZONS
 from swingbot.core.universe import data_quality_issues, liquidity_reason
+
+_SPY_CACHE: dict = {}
+
+
+def _market_frame():
+    """The benchmark frame backing market_context, loaded once per process.
+
+    Comes from the same CSV cache as every other ticker, so a run that has
+    not fetched the benchmark gets a loud warning rather than a silent
+    absence of context -- see _with_context.
+    """
+    if "df" not in _SPY_CACHE:
+        ticker = config.MARKET_REGIME_TICKER
+        df = load_cached(ticker)      # never _with_context here -- that recurses
+        if df is None:
+            print(f"WARNING: {ticker} is not in the backtest cache -- no market "
+                  f"context this run. With REGIME_GATES_ENABLED on, every entry "
+                  f"will be blocked. Run scripts/fetch_backtest_data.py first.",
+                  flush=True)
+        _SPY_CACHE["df"] = df
+    return _SPY_CACHE["df"]
+
+
+def _with_context(df):
+    """Stamp one frame with the ctx_* block (P0). No-op when unavailable."""
+    spy = _market_frame()
+    if df is None or spy is None:
+        return df
+    try:
+        return market_context.attach(df, spy_df=spy)
+    except Exception as e:
+        print(f"    ! market_context.attach failed: {e}", flush=True)
+        return df
 
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
@@ -105,7 +140,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ticker in tickers:
-        df = load_cached(ticker)
+        df = _with_context(load_cached(ticker))
         if df is None:
             continue
         reason = liquidity_reason(df)
@@ -289,7 +324,7 @@ def main():
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
     excluded_bad_data = []   # [(ticker, "; ".join(issues)), ...] -- Task E16, same pattern
     for ti, ticker in enumerate(tickers, 1):
-        df = load_cached(ticker)
+        df = _with_context(load_cached(ticker))
         if df is None:
             continue
         reason = liquidity_reason(df)

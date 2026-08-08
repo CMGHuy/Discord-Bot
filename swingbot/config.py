@@ -539,8 +539,39 @@ FIELDS: list[Field] = [
           type="checkbox", default="false",
           help="Restricts each strategy's entries to the market regimes listed for it in "
                "swingbot/core/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
-               "REGIME_ALLOW is empty until E33's walk-forward fold runs populate it, so this "
-               "is a complete no-op today even when enabled."),
+               "The market-context channel that feeds this is now wired in both the live scan "
+               "and the backtest (swingbot/core/market_context.py), so the gate DOES bite -- but "
+               "REGIME_ALLOW still ships empty, so enabling it changes nothing until fold "
+               "evidence populates that table. NOTE: this flag is also what makes market context "
+               "fail closed -- with it on and the benchmark unavailable, entries are blocked "
+               "rather than silently passed."),
+    Field("LEVEL_LIFECYCLE_STOPS_ENABLED", "LEVEL_LIFECYCLE_STOPS_ENABLED", "Universe & Scanning",
+          "Anchor stops behind tested levels",
+          type="checkbox", default="true",
+          help="Moves a stop out beyond a support/resistance level that price has actually "
+               "tested and held, instead of leaving it at the ATR default inside that noise "
+               "(swingbot/core/levels_lifecycle.py). Only ever widens, never tightens, is "
+               "capped by the horizon's max_risk_pct, and re-derives the target so the frozen "
+               "R:R table is preserved. Costs a level build per entry bar in backtests. "
+               "DEFAULT-ON since 2026-08-08 -- and the evidence behind that is deliberately "
+               "modest: it PASSED the TRAIN fold gate (pooled +0.0056R, carried by the 2022 "
+               "bear fold) and then cleared every clause of its one VALIDATION shot, but at "
+               "+0.0037R -- below the strength threshold fixed in advance, i.e. NO MEASURABLE "
+               "out-of-sample effect. It is on because it degrades nothing (0 standing-gate "
+               "flips across 11 strategies, trade count -0.5%) and the mechanism is sound, "
+               "NOT because an edge was measured. Its validation budget is spent; see "
+               "docs/superpowers/results/2026-08-08-level-lifecycle-stops-validation.md."),
+    Field("LEVEL_LIFECYCLE_TARGETS_ENABLED", "LEVEL_LIFECYCLE_TARGETS_ENABLED", "Universe & Scanning",
+          "Pull targets inside blocking levels",
+          type="checkbox", default="false",
+          help="Pulls TP1 back inside the nearest undelivered level standing between entry and "
+               "target -- the 'gatekeeper' that has to break for the plan to work. Skipped "
+               "(and recorded) whenever pulling in would push R:R under the frozen 0.30 floor. "
+               "MEASURED INERT 2026-08-08: across 428 entry bars the pull-in was rejected by "
+               "that floor 248 times out of 248 and applied ZERO times -- blockers sit adjacent "
+               "to entry, so the pulled-in target is a median 0.063 R:R against a 0.30 floor. "
+               "Turning this on is currently a no-op; it is kept only so the measurement is "
+               "reproducible. Do not lower RR_FLOOR to make it fire (design doc section 7.6)."),
     Field("AVWAP_LEVELS_ENABLED", "AVWAP_LEVELS_ENABLED", "Universe & Scanning",
           "Anchored VWAP level source enabled",
           type="checkbox", default="false",

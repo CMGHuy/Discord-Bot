@@ -118,6 +118,17 @@ def main():
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     tickers = load_watchlist()
+
+    # The market-context benchmark (P0) is not necessarily on the watchlist,
+    # but every backtest that gates on regime needs its history cached like
+    # any other ticker. Without this the whole context channel is silently
+    # unavailable in the one place that can actually measure it.
+    from swingbot import config
+    benchmark = config.MARKET_REGIME_TICKER
+    if benchmark and benchmark not in tickers:
+        tickers = list(tickers) + [benchmark]
+        print(f"(+ {benchmark}: market-context benchmark, not on the watchlist)")
+
     print(f"Fetching {len(tickers)} tickers | {start} -> {end} | force={args.force}\n")
     ok, skipped, failed = 0, 0, []
     for t in sorted(tickers):
