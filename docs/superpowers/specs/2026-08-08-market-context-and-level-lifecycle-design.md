@@ -351,6 +351,31 @@ signal set and varies only the position rule, but the lifecycle re-prices
 stop/TP1 *inside* plan building, which happens during collection — so every
 arm needs its own collection pass.
 
+### 7.5b Consumer 1 (stop anchoring) — TRAIN PASS, VALIDATION spent, 2026-08-08.
+
+| stage | result |
+|---|---|
+| TRAIN anchored folds | **PASS** — 2 of 3 folds improve, pooled +0.0056R, carried by 2022 (+0.0209R, the bear fold); 2023 (+0.0007R) is noise |
+| VALIDATION 2024–2025 | **CONFIRMED, NO MEASURABLE EFFECT** — all 4 clauses pass, aggregate delta +0.0037R, below the pre-registered +0.0056R threshold |
+
+Evidence: `2026-08-08-level-lifecycle-folds.md` and
+`2026-08-08-level-lifecycle-stops-validation.md` (rule committed in `e4fb75d`
+before the run).
+
+Net position: the flag **degrades nothing** out-of-sample — 0 standing-gate
+flips, trade count −0.5%, aggregate win rate +0.68pp — and is **not shown to
+help**. Default-on is defensible on mechanism plus a clean no-degradation
+result, not on a measured out-of-sample edge. **The validation budget for this
+component is spent**; there is no second window.
+
+One finding worth carrying forward: the effect is concentrated in the
+strategies that size through the ATR default (Break & Retest +0.0175, MACD
++0.0178, VWAP +0.0141), while the structurally-sized ones (Fibonacci,
+Support/Resistance, Elliott Wave, RSI) moved exactly +0.0000 — a tested floor
+adds nothing to a stop already placed off a swing. Restricting the anchor to
+ATR-sized strategies is a **new component** needing its own TRAIN evidence and
+pre-registration, not a re-reading of the spent table.
+
 ### 7.6 Consumer 2 (target realism) — measured inert, 2026-08-08. Not registered.
 
 Before registering anything, `wf_components.py`'s own rule is to verify the

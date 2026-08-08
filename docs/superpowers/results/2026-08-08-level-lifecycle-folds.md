@@ -74,7 +74,15 @@ expectancy by cutting trades.
 **Recommendation:** the flag has earned its pass and can be considered for
 default-on, but on the strength of one fold. The natural confirmation is the
 VALIDATION window (2024–2025), which this harness's anchored folds do not
-touch — that shot is unspent.
+touch.
+
+**UPDATE 2026-08-08 — that shot has since been spent.** See
+`2026-08-08-level-lifecycle-stops-validation.md`: all four pre-registered
+clauses passed, aggregate delta **+0.0037R**, which is below the `+0.0056R`
+strength threshold fixed in advance → **CONFIRMED, NO MEASURABLE EFFECT**. The
+component degrades nothing out-of-sample (0 standing-gate flips, trade count
+−0.5%) but is not shown to help either. The validation budget for this
+component is spent.
 
 **Its sibling was not run.** `LEVEL_LIFECYCLE_TARGETS_ENABLED` failed the
 pre-registration observability check and is listed above under "Not run"; see

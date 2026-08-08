@@ -1,8 +1,10 @@
 # LEVEL_LIFECYCLE_STOPS_ENABLED — VALIDATION shot (2024–2025)
 
-**Status at time of writing: PRE-REGISTERED, NOT YET RUN.**
-This section is committed *before* the run so the rule provably predates the
-data. The Results and Observations sections below are empty on purpose.
+**Status: RUN AND CLOSED, 2026-08-08. Verdict — CONFIRMED, NO MEASURABLE EFFECT.**
+
+The rule below was committed in `e4fb75d` *before* the run (git history is the
+proof) and is reproduced here unedited. Raw legs:
+`2026-08-08-level-lifecycle-stops-validation-{baseline,component}.json`.
 
 ## Why this shot is being spent
 
@@ -77,8 +79,100 @@ no per-strategy cherry-picking after the fact.
 
 ## Results
 
-_Empty until the run completes._
+Aggregate, trade-weighted across all 11 strategies:
+
+| leg | closed | N | Win% | ExpR | Scr | TO | Excl% |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| baseline | 3491 | 2442 | 78.21 | +0.1068 | 1033 | 16 | 30.0% |
+| component | 3474 | 2398 | 78.90 | **+0.1105** | 1058 | 18 | 31.0% |
+
+**delta expectancy_r = +0.0037R** · delta win_rate = +0.68pp · delta closed = −17
+
+Pre-registered clauses:
+
+| clause | result | value |
+|---|---|---|
+| 1. component ExpR > 0 | PASS | +0.1105 |
+| 2. delta >= 0 | PASS | +0.0037 |
+| 3. component N >= 15 | PASS | 2398 |
+| 4. scr+TO <= 50% of closed | PASS | 31.0% |
+
+Delta `+0.0037R` < the pre-registered `+0.0056R` strength threshold →
+**CONFIRMED, NO MEASURABLE EFFECT.**
+
+Per strategy (reported, never selected on):
+
+| strategy | N_b | N_c | ExpR_b | ExpR_c | delta | WR_b | WR_c |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Break & Retest | 306 | 295 | +0.1239 | +0.1415 | **+0.0175** | 77.5 | 79.7 |
+| MACD | 134 | 139 | +0.0995 | +0.1173 | **+0.0178** | 83.6 | 84.9 |
+| VWAP | 114 | 114 | +0.0663 | +0.0804 | **+0.0141** | 74.6 | 76.3 |
+| Volume Profile | 85 | 82 | +0.1159 | +0.1174 | +0.0015 | 81.2 | 81.7 |
+| MA Ribbon | 160 | 160 | +0.0425 | +0.0426 | +0.0002 | 77.5 | 77.5 |
+| Elliott Wave | 59 | 59 | +0.0329 | +0.0329 | +0.0000 | 74.6 | 74.6 |
+| Fibonacci | 174 | 174 | +0.1930 | +0.1930 | +0.0000 | 82.2 | 82.2 |
+| RSI | 18 | 18 | −0.3600 | −0.3600 | +0.0000 | 50.0 | 50.0 |
+| Support/Resistance | 163 | 163 | +0.1018 | +0.1018 | +0.0000 | 84.0 | 84.0 |
+| RSI Divergence | 1193 | 1159 | +0.1161 | +0.1157 | −0.0004 | 77.5 | 78.0 |
+| EMA Crossover | 36 | 35 | −0.0411 | −0.0451 | −0.0040 | 69.4 | 68.6 |
+
+**Standing-gate PASS/FAIL flips between legs: 0.** No strategy changed status
+under `WR>=80, ExpR>0, N>=15, excl<=50%`.
 
 ## Observations
 
-_Empty until the run completes._
+_Written after reading the numbers; recorded as-is, not fixed._
+
+**The verdict stands as pre-registered, and it is the weak one.** Delta is
+positive, same sign as TRAIN, and roughly two-thirds of TRAIN's pooled
+`+0.0056R` — but "two-thirds of an already-thin effect" is a description, not a
+defence, and the threshold was fixed precisely so that this sentence could not
+become the headline. **No confidence interval was pre-registered and none is
+computed here**, so a delta of `+0.0037R` on a single window cannot be
+distinguished from noise by this shot. That is a limitation of the design, not
+a finding about the component.
+
+**What the shot does establish, and it is not nothing: the flag does not
+degrade anything out-of-sample.** Aggregate expectancy is up, win rate is up
+0.68pp, no strategy flipped its standing-gate status, and the trade count moved
+−0.5% (TRAIN: −0.6%) — the expected signature of a component that only *widens*
+a stop under a `max_risk_pct` cap and re-derives the target to preserve the
+frozen R:R. It is not buying expectancy by cutting trades.
+
+**The interpretation guard applies and is being honoured.** TRAIN put the whole
+effect in the 2022 bear fold; 2024–2025 has no comparable sustained drawdown,
+so a small delta is what the mechanism hypothesis predicted. Per the guard
+committed in advance, that is **not** grounds to upgrade this to a
+confirmation — the prediction was made in a form that would have been satisfied
+by almost any non-negative number, which is exactly why it cannot do the work
+of evidence. It is equally not disproof of the 2022 result.
+
+**The effect is concentrated, and the concentration is informative.** Four
+strategies moved by exactly `+0.0000` (Elliott Wave, Fibonacci, RSI,
+Support/Resistance): for these the stop anchor never fired, or never fired in a
+way that changed an outcome. Three carry the whole aggregate — Break & Retest
+(+0.0175), MACD (+0.0178), VWAP (+0.0141). That is coherent with the mechanism:
+those three size through the ATR default, so a tested floor is a genuine
+improvement on their stop, whereas Fibonacci and Support/Resistance already
+size structurally off swings and levels, leaving the anchor nothing to add.
+Two strategies drift slightly negative (EMA Crossover −0.0040 on N=35, RSI
+Divergence −0.0004 on N=1159); neither is meaningful at those magnitudes.
+
+**Aggregate win rate is 78.2/78.9%, below the standing gate's 80% — in both
+legs.** That is a pre-existing property of the pooled 11-strategy set on this
+window, not something the component caused, and the standing gate is applied
+per strategy (where 0 flipped), not to the pool. Noted so a later reader does
+not attribute it to the flag.
+
+**Recommendation.** Enabling `LEVEL_LIFECYCLE_STOPS_ENABLED` by default is
+*defensible* — it cleared TRAIN, it cleared every clause of this shot, and it
+degrades nothing measurable. It is **not** evidence-backed as beneficial: the
+honest summary is one bear-year fold on TRAIN plus a noise-level positive
+out-of-sample. Whoever makes that call should make it knowing the support is
+mechanistic reasoning, not a measured out-of-sample edge.
+
+**The validation budget for this component is now spent.** No retune, no second
+window, no per-strategy subset re-run. If the concentration finding above is to
+be pursued (e.g. enabling the anchor only for ATR-sized strategies), that is a
+*new* component with its own TRAIN evidence and its own pre-registration — not
+a re-reading of this table.
