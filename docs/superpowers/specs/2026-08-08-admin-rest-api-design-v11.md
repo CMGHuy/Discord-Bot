@@ -100,15 +100,57 @@ migration with real risk and no UI payoff, and it is explicitly out of scope.
 This is the one place the API layer does work the current code does not. It is
 allowed because a union of two already-serialised row sets is a projection, not
 a computation: `_plan_rows()` (`pages.py:111` region) and
-`_query_closed_trades()` (`app.py:740` region) already produce the rows; the new
-endpoint chooses between and concatenates them. If a field exists on one side
-and not the other it is `null` — the API does not invent it.
+`_query_closed_trades()` (`app.py:740` region) already produce the rows. If a
+field exists on one side and not the other it is `null` — the API does not
+invent it.
 
-Consequence: **`id` must be unambiguous across both stores.** Plan IDs and trade
-IDs are allocated independently today. The implementation must either confirm
-they cannot collide or prefix them (`plan:<id>` / `trade:<id>`). This is the
-first thing sub-project 1's implementation should check, before any endpoint is
-written — a collision discovered later invalidates every trade route.
+> ### Amendment — NG1 findings (2026-08-08)
+>
+> Task NG1 traced both stores. Two corrections to the paragraphs above, one of
+> which invalidates the word "concatenates" as originally written.
+>
+> **1. The union is a join, not a concatenation. The stores overlap.**
+>
+> When a plan fills, `PlanManager._on_event` calls `TradeLog.log_trade(...,
+> plan_id=plan.plan_id)` (`plan_manager.py:155`) — and the plan **stays in
+> `plans.json`**, advancing to `ACTIVE`. From that moment one real position
+> exists as two records: a plan row and a trade row linked by `plan_id`.
+> Concatenating `_plan_rows()` with `_query_closed_trades()` would list every
+> closed v2 position **twice**.
+>
+> The correct model, which the data already implies:
+>
+> - **`plans.json` is authoritative for v2 positions, across all five
+>   statuses.** `_plan_rows()` already returns `PENDING` / `ACTIVE` /
+>   `PARTIAL` / `CLOSED` / `CANCELLED` (`pages.py:_ALL_PLAN_STATUSES`) — the
+>   exact vocabulary sub-project 3 adopted. That is not a coincidence to be
+>   re-derived; it is the source.
+> - **`trades.json` contributes two things:** the realised P&L and legs for a
+>   v2 position, joined onto its plan by `plan_id`; and **legacy v1 trades,
+>   which are exactly the records where `plan_id is None`** and which exist in
+>   no other store.
+>
+> So: `GET /api/v1/trades` = all plans, each enriched by its linked trade
+> record, **plus** trades where `plan_id is None`. Deduplication is structural
+> rather than a filtering step applied afterwards.
+>
+> Legacy v1 trades carry `open` / `win` / `loss` / `closed`, not the plan
+> vocabulary. Map `open → ACTIVE` and `win|loss|closed → CLOSED`; they have no
+> `PENDING`, `PARTIAL` or `CANCELLED` equivalent, and none must be synthesised.
+>
+> **2. IDs cannot collide. No prefixing.**
+>
+> Plan ids are `str(uuid.uuid4())` (`plan_engine.py:454`, `:554`) — 36 chars,
+> four dashes. Trade ids are 16 chars drawn from `_TRADE_ID_ALPHABET =
+> string.ascii_letters + string.digits` (`performance.py:28`, `:288`) — no
+> dash. The spaces are disjoint by length *and* by charset, independently.
+>
+> `plan:<id>` / `trade:<id>` prefixing is therefore **not adopted**, and
+> `GET /api/v1/trades/{id}` routes on shape: 36 chars with four dashes is a
+> plan, anything else is a legacy trade.
+>
+> Both properties are pinned by `tests/admin/test_id_uniqueness.py`. If it ever
+> fails, prefixing becomes mandatory before any Trades endpoint is touched.
 
 ## Decision 3 — Conventions
 
@@ -385,9 +427,19 @@ The honest risk is stated in Risks below.
 ## Risks
 
 **The trade/plan union is the load-bearing decision and the easiest to get
-wrong.** If plan IDs and trade IDs can collide, or if the two row shapes differ
-more than expected, every Trades endpoint changes. Check this first; do not
-design the row shape from the spec, design it from both stores.
+wrong.** NG1 has now checked it, and the original wording of Decision 2 was
+already wrong — the stores overlap, so a concatenation double-counts every
+closed v2 position. See the amendment. The residual risk is that the *join*
+is implemented as a post-hoc dedup filter rather than structurally: a filter
+that removes duplicates is one forgotten branch away from letting them back in,
+whereas "plans, plus trades with no `plan_id`" cannot produce a duplicate at
+all. Prefer the second even where the first reads more naturally.
+
+**Legacy v1 trades are the least-exercised path.** They are whatever is left in
+`trades.json` with `plan_id is None`, they carry a different status vocabulary,
+and there may be very few of them — which means bugs there will not show up in
+casual testing. Seed fixtures for them explicitly rather than relying on
+whatever the live `data/` happens to hold.
 
 **Hand-written TS interfaces will drift from the Python.** The contract test
 catches removed and renamed fields but not a type change from `float` to

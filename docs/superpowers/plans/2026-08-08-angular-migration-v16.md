@@ -25,9 +25,9 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
-> - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`)
-> - **Completed:** none — specs written (v11–v15), no implementation started.
-> - **Next:** NG1.
+> - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
+> - **Completed:** NG1. IDs cannot collide, so no prefixing — but NG1 also found the two stores **overlap**, which invalidated the "concatenate" wording in spec v11 Decision 2 and rewrote NG5. See NG1's outcome note.
+> - **Next:** NG2 — the `api_v1` package skeleton.
 
 ## Global Constraints
 
@@ -75,11 +75,15 @@ tests/admin/test_api_v1_contract.py      the API contract gate                 (
 
 **Blocks:** every Trades endpoint. Spec v11 Decision 2 — a collision found later invalidates all of them.
 
-- [ ] Trace how IDs are allocated in `plans.json` and `trades.json`
-- [ ] Determine whether the two ID spaces can collide
-- [ ] If they can: adopt `plan:<id>` / `trade:<id>` prefixing and record it in spec v11 as an amendment
-- [ ] Add a test asserting the chosen invariant against real fixture data
-- [ ] **Verify:** `python scripts/testrun.py file tests/admin/test_id_uniqueness.py`
+- [x] Trace how IDs are allocated in `plans.json` and `trades.json`
+- [x] Determine whether the two ID spaces can collide
+- [x] If they can: adopt `plan:<id>` / `trade:<id>` prefixing and record it in spec v11 as an amendment
+- [x] Add a test asserting the chosen invariant against real fixture data
+- [x] **Verify:** `python scripts/testrun.py file tests/admin/test_id_uniqueness.py`
+
+**Outcome:** IDs **cannot** collide — plan ids are 36-char dashed uuid4, trade ids are 16-char dash-free alphanumeric; disjoint by length and by charset independently. No prefixing. Pinned by `tests/admin/test_id_uniqueness.py`.
+
+**Second finding, larger than the one this task was looking for:** the two stores **overlap**. A filled plan stays in `plans.json` as `ACTIVE` while `log_trade()` writes a linked row into `trades.json`, so concatenating the two row sets double-counts every closed v2 position. The union is a **join**: all plans (authoritative for the five statuses), enriched by their linked trade record, plus trades where `plan_id is None` (legacy v1). Recorded as an amendment in spec v11; **NG5 rewritten accordingly**.
 
 ### Task NG2: `api_v1` package skeleton
 
@@ -126,15 +130,16 @@ Every task in this phase: add endpoints, add contract-test cases, change nothing
 
 **Files:** `api_v1/trades.py`
 
-**The load-bearing endpoint.** Spec v11 Decision 2.
+**The load-bearing endpoint.** Spec v11 Decision 2 **and its NG1 amendment** — read the amendment, not just the decision. The stores overlap; a concatenation double-counts.
 
-- [ ] Project `_plan_rows()` and `_query_closed_trades()` onto one row shape
+- [ ] Build the union as a **join, structurally**: all plans from `_plan_rows()`, each enriched by its `trades.json` row matched on `plan_id`, **plus** trades where `plan_id is None`. Not a concatenate-then-dedup.
+- [ ] Map legacy v1 statuses: `open → ACTIVE`, `win|loss|closed → CLOSED`. Do not synthesise `PENDING`/`PARTIAL`/`CANCELLED` for them.
 - [ ] `status` filter spans `PENDING|ACTIVE|PARTIAL|CLOSED|CANCELLED`; absent = all
 - [ ] Fields absent on one side are `null` — do not synthesise
 - [ ] Filters: `status`, `ticker`, `strategy`, `horizon`, `has_note`; `sort`, `page`, `per_page`
 - [ ] `total` = post-filter, pre-slice
 - [ ] Numbers stay numbers — no pre-formatted strings
-- [ ] **Verify:** contract test asserts the row shape from both stores
+- [ ] **Verify:** a fixture with one filled v2 plan (present in *both* stores) yields **exactly one** row — the regression NG1 found. Plus a legacy `plan_id is None` trade, seeded explicitly.
 
 ### Task NG6: Trade detail
 
