@@ -79,12 +79,11 @@
       title="Time this trade was actually held, from open to close">{{ c_days.label if c_days is not none else '—' }}</td>
   <td class="muted col-full" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.opened_at or '' }}" title="Opened {{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
   <td class="muted" style="font-size:12px;white-space:nowrap;" data-sort="{{ t.closed_at or '' }}" title="{% if t.closed_at %}Closed {{ t.closed_at[:16] }} UTC{% else %}Not yet closed{% endif %}">{{ t.closed_at | berlin_time if t.closed_at else '—' }}</td>
-  <td onclick="event.stopPropagation();" style="padding:4px 6px;display:flex;gap:4px;align-items:center;">
-    <button type="button" class="icon-btn secondary"
-            title="Open trade detail"
-            onclick="window.open('{{ url_for('trade_detail', trade_id=t.id) }}','_blank')">↗</button>
+  <td data-no-row-click style="padding:4px 6px;display:flex;gap:4px;align-items:center;">
+    <a class="icon-btn secondary" href="{{ url_for('trade_detail', trade_id=t.id) }}" target="_blank"
+       title="Open trade detail">↗</a>
     <form method="post" action="{{ url_for('delete_single_trade', trade_id=t.id) }}" style="margin:0;"
-          onsubmit="return confirm('Delete {{ t.ticker }} trade record? This cannot be undone.');">
+          data-confirm="Delete {{ t.ticker }} trade record? This cannot be undone.">
       <button type="submit" class="icon-btn danger" title="Delete this trade record">✕</button>
     </form>
   </td>
