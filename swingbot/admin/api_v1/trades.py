@@ -382,3 +382,23 @@ def _attach_current_prices(rows: list[dict]) -> None:
             r["current_price"] = get_current_price(r["ticker"])
     except Exception:
         pass
+
+
+@api_v1.route("/trades/export.csv", methods=["GET"])
+@require_auth
+def export_trades_csv():
+    """Stays CSV rather than JSON (spec v11): rebuilding the file in the SPA
+    would mean shipping every row to the browser only to serialise it back,
+    and what the user wants is a download.
+
+    Shares its serialiser with the Jinja route so the two cannot drift.
+    """
+    from flask import Response
+
+    from swingbot.admin.trade_export import FILENAME, trades_csv_bytes
+
+    return Response(
+        trades_csv_bytes(TradeLog().get_trades(status=None, limit=None)),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={FILENAME}"},
+    )

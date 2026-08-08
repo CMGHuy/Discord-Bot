@@ -857,22 +857,15 @@ def api_ohlcv(ticker):
 @app.route("/trades/export.csv", methods=["GET"])
 @require_auth
 def export_trades_csv():
-    all_trades = _trades().get_trades(status=None, limit=None)
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=[
-        "id", "ticker", "strategy", "horizon_key", "direction",
-        "confidence_level", "confidence_label", "confidence_score",
-        "entry", "stop_loss", "take_profit", "target2", "risk_reward_ratio",
-        "status", "opened_at", "closed_at", "exit_price", "close_reason",
-    ], extrasaction="ignore")
-    writer.writeheader()
-    for t in (all_trades or []):
-        writer.writerow(t)
-    csv_bytes = output.getvalue().encode("utf-8")
+    # Serialisation lives in swingbot.admin.trade_export so this route and
+    # /api/v1/trades/export.csv cannot drift -- sub-project 6's cutover walk
+    # byte-compares the two.
+    from swingbot.admin.trade_export import FILENAME, trades_csv_bytes
+    csv_bytes = trades_csv_bytes(_trades().get_trades(status=None, limit=None))
     return Response(
         csv_bytes,
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=trades.csv"},
+        headers={"Content-Disposition": f"attachment; filename={FILENAME}"},
     )
 
 
