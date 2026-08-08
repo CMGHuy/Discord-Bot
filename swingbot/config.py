@@ -539,8 +539,26 @@ FIELDS: list[Field] = [
           type="checkbox", default="false",
           help="Restricts each strategy's entries to the market regimes listed for it in "
                "swingbot/core/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
-               "REGIME_ALLOW is empty until E33's walk-forward fold runs populate it, so this "
-               "is a complete no-op today even when enabled."),
+               "The market-context channel that feeds this is now wired in both the live scan "
+               "and the backtest (swingbot/core/market_context.py), so the gate DOES bite -- but "
+               "REGIME_ALLOW still ships empty, so enabling it changes nothing until fold "
+               "evidence populates that table. NOTE: this flag is also what makes market context "
+               "fail closed -- with it on and the benchmark unavailable, entries are blocked "
+               "rather than silently passed."),
+    Field("LEVEL_LIFECYCLE_STOPS_ENABLED", "LEVEL_LIFECYCLE_STOPS_ENABLED", "Universe & Scanning",
+          "Anchor stops behind tested levels",
+          type="checkbox", default="false",
+          help="Moves a stop out beyond a support/resistance level that price has actually "
+               "tested and held, instead of leaving it at the ATR default inside that noise "
+               "(swingbot/core/levels_lifecycle.py). Only ever widens, never tightens, is "
+               "capped by the horizon's max_risk_pct, and re-derives the target so the frozen "
+               "R:R table is preserved. Costs a level build per entry bar in backtests."),
+    Field("LEVEL_LIFECYCLE_TARGETS_ENABLED", "LEVEL_LIFECYCLE_TARGETS_ENABLED", "Universe & Scanning",
+          "Pull targets inside blocking levels",
+          type="checkbox", default="false",
+          help="Pulls TP1 back inside the nearest undelivered level standing between entry and "
+               "target -- the 'gatekeeper' that has to break for the plan to work. Skipped "
+               "(and recorded) whenever pulling in would push R:R under the frozen 0.30 floor."),
     Field("AVWAP_LEVELS_ENABLED", "AVWAP_LEVELS_ENABLED", "Universe & Scanning",
           "Anchored VWAP level source enabled",
           type="checkbox", default="false",
