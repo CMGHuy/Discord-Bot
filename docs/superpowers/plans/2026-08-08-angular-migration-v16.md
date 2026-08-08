@@ -26,8 +26,8 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
-> - **Completed:** NG1–NG5. Phase 0 done; Phase 1 in progress. Read each task's outcome note before the next — NG1, NG2, NG4 and NG5 each recorded a constraint later tasks must respect.
-> - **Next:** NG6 — trade detail.
+> - **Completed:** NG1–NG7. Phase 0 done; Phase 1 in progress (trades surface complete). Read each task's outcome note before the next.
+> - **Next:** NG8 — trade note (PUT).
 
 ## Global Constraints
 
@@ -172,18 +172,30 @@ Every task in this phase: add endpoints, add contract-test cases, change nothing
 
 **Files:** `api_v1/trades.py`
 
-- [ ] `GET /api/v1/trades/{id}` resolving against both stores
-- [ ] `404 not_found` for unknown ids
-- [ ] Decide (spec v11 open question 1) whether detail extends the list row or is a distinct shape; record the answer in the spec
+- [x] `GET /api/v1/trades/{id}` resolving against both stores
+- [x] `404 not_found` for unknown ids
+- [x] Decide (spec v11 open question 1) whether detail extends the list row or is a distinct shape; record the answer in the spec
+
+**Spec v11 open question 1, answered: detail EXTENDS the list row**, adding exactly one key — `detail` — holding the heavy fields (status history, legs, quality/confidence breakdowns, source lists, plan execution parameters). The SPA's store already holds list rows; a detail response with a different shape for the same seven columns would force it to reconcile two representations of one position. `test_detail_row_fields_match_the_list_exactly` pins the equivalence.
+
+**Routing uses NG1's invariant** — a 36-char four-dash id is a plan — so detail loads *one* store, not both. `_looks_like_a_plan_id` in `trades.py` is where that lives; if `test_id_uniqueness.py` ever fails, that function breaks first.
+
+**`detail.trade_id` is exposed deliberately:** the plan id is the public identity, but close/cancel act on the underlying trade record and the SPA would otherwise have no way to name it.
 
 ### Task NG7: Trade commands
 
 **Files:** `api_v1/trades.py`
 
-- [ ] `POST /{id}/close` (optional manual price — preserve the `manual_close_notify.json` path), `POST /{id}/cancel`, `DELETE /{id}`
-- [ ] `POST /trades/clear-open`, `POST /trades/clear-history`
-- [ ] Reuse the existing handlers' logic; do not reimplement close semantics
-- [ ] **Verify:** behavioural tests rewritten from the Jinja equivalents (see NG19)
+- [x] `POST /{id}/close` (optional manual price — preserve the `manual_close_notify.json` path), `POST /{id}/cancel`, `DELETE /{id}`
+- [x] `POST /trades/clear-open`, `POST /trades/clear-history`
+- [x] Reuse the existing handlers' logic; do not reimplement close semantics
+- [x] **Verify:** behavioural tests rewritten from the Jinja equivalents (see NG19)
+
+**`DELETE` refuses plan ids (422), and that is a parity decision, not an omission.** The Jinja UI has no plan-delete route — only `/trades/<id>/delete`. A plan is a lifecycle record whose `CANCELLED`/`CLOSED` states exist to record how it ended; erasing one destroys that history, and deleting only its linked trade row would leave a position with no execution behind it. Supporting it needs a `PlanStore.delete()` in core, which this plan's Global Constraints rule out. **Open question for sub-project 5:** should the Trades workspace offer plan deletion at all? If yes, it needs its own decision and a core change.
+
+**No manual exit price.** The task text mentions one, but `TradeLog.close_trade_manual()` takes only a reason — the Jinja UI has never accepted an exit price on a manual close, and adding one would change realised-P&L semantics. Parity kept; flag for sub-project 5 if the UI wants it.
+
+**Pre-existing bug left alone (out of scope, worth knowing):** `_queue_manual_close_notify` writes plan transitions with uppercase statuses, but `scanning/embeds.notify_closed_trades()` only recognises lowercase `win|loss|closed` — so plan-level entries are silently skipped by the consumer. Documented in `pages.py` as a known gap from an earlier task. v1 reproduces the existing write behaviour rather than fixing it; **sub-project 6's acceptance walk should decide whether to fix it.**
 
 ### Task NG8: Trade note
 
