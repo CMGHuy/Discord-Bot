@@ -180,7 +180,8 @@ def register(app) -> None:
     # app.py's bottom, which is exactly that point. Importing them above
     # would drag those modules in at api_v1 import time and re-create the
     # circular-import deadlock app.py documents.
-    from . import session, trades, trade_commands  # noqa: F401  (register routes)
+    from . import (analytics, cockpit, session, trades,  # noqa: F401
+                   trade_commands)  # (register routes on api_v1)
 
     app.register_blueprint(api_v1)
 
