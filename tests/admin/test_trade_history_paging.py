@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from swingbot.admin.dashboard import _BERLIN_TZ
 from swingbot.admin.dashboard import query_closed_trades as _query_closed_trades
 
 
@@ -29,7 +30,22 @@ def _trade(tid, *, status="win", closed=None, ticker="AAPL",
 
 
 def _iso(days_ago=0, hour=12):
-    d = datetime.now(timezone.utc).replace(hour=hour, minute=0, second=0, microsecond=0)
+    """A timestamp `days_ago` before today, anchored on the SAME calendar day
+    the code under test uses.
+
+    This built its stamps from UTC's date originally, while `is_today_berlin`
+    compares against `datetime.now(Europe/Berlin).date()`. Those two dates
+    disagree for the ~2h window each evening when Berlin has rolled over but
+    UTC has not (22:00-24:00 UTC under CEST) -- so "today" in the fixture was
+    yesterday-in-Berlin, and every today-mode test failed, deterministically,
+    for two hours a day and passed the other twenty-two.
+
+    Anchoring on _BERLIN_TZ (the module's own constant, with its UTC fallback
+    when zoneinfo is unavailable) makes the fixture agree with the code by
+    construction instead of by coincidence.
+    """
+    tz = _BERLIN_TZ or timezone.utc
+    d = datetime.now(tz).replace(hour=hour, minute=0, second=0, microsecond=0)
     return (d - timedelta(days=days_ago)).isoformat()
 
 
