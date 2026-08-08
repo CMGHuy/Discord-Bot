@@ -8,7 +8,7 @@
 THE PRE-REGISTERED SELECTION RULE
 ---------------------------------
 Fixed in docs/superpowers/specs/2026-08-08-market-context-and-level-lifecycle-
-design.md BEFORE any fold was run, and encoded here so it cannot quietly be
+design-v17.md BEFORE any fold was run, and encoded here so it cannot quietly be
 re-read later:
 
     Deny (strategy, regime) only if ALL THREE hold on TRAIN:
