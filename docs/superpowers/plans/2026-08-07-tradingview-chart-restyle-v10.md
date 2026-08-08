@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-07-tradingview-chart-restyle-design.md`
 
+**Version:** ui 1.0.7 · bot 1.1.1 — VERSION.json as of this plan's authoring commit (`6480bef`), not today's. A version stamp records the release a document was written against, so it is never updated after the fact.
+
 ## Global Constraints
 
 - **The palette does not change.** `chart_style.py`'s colour constants, the `THEME` dict, and `swingbot/admin/static/tokens.css` must stay byte-identical. `tests/test_chart_theme.py::test_theme_dict_matches_module_constants` and `::test_theme_matches_tokens_css` must stay green untouched.

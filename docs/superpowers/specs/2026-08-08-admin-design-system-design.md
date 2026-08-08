@@ -1,6 +1,7 @@
 # Admin UI design system
 
 **Date:** 2026-08-08
+**Version:** ui 1.0.9 · bot 1.1.2
 **Status:** design agreed, not implemented
 **Scope:** design only — no Angular code, no backend work
 
