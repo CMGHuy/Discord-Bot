@@ -93,6 +93,27 @@ def attach(df: pd.DataFrame, *, spy_df: pd.DataFrame,
     return out
 
 
+def attach_all(frames: dict, *, spy_df: pd.DataFrame) -> dict:
+    """Stamp a whole {ticker: df} mapping -- the backtest half of the channel.
+
+    Returns a new mapping; the input is not mutated. A frame that cannot be
+    stamped is passed through unstamped rather than dropped, so a single odd
+    ticker never silently shrinks a backtest universe. With the gate flag on,
+    that ticker then raises at entries_for() instead of quietly trading
+    ungated, which is the intended fail-closed behaviour.
+    """
+    out = {}
+    for ticker, df in frames.items():
+        if df is None or getattr(df, "empty", True):
+            out[ticker] = df
+            continue
+        try:
+            out[ticker] = attach(df, spy_df=spy_df)
+        except Exception:
+            out[ticker] = df
+    return out
+
+
 def has_context(df: pd.DataFrame) -> bool:
     """True only when the *entire* block is present -- see CTX_COLUMNS."""
     return all(col in df.columns for col in CTX_COLUMNS)
