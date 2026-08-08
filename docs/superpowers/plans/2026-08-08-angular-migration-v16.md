@@ -26,8 +26,8 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
-> - **Completed:** NG1–NG4. Phase 0 done; Phase 1 started. Read each task's outcome note before the next — NG1, NG2 and NG4 each recorded a constraint later tasks must respect.
-> - **Next:** NG5 — the trades collection (the join). Read spec v11 Decision 2 **and its NG1 amendment**.
+> - **Completed:** NG1–NG5. Phase 0 done; Phase 1 in progress. Read each task's outcome note before the next — NG1, NG2, NG4 and NG5 each recorded a constraint later tasks must respect.
+> - **Next:** NG6 — trade detail.
 
 ## Global Constraints
 
@@ -148,16 +148,25 @@ Every task in this phase: add endpoints, add contract-test cases, change nothing
 
 **Files:** `api_v1/trades.py`
 
-**The load-bearing endpoint.** Spec v11 Decision 2 **and its NG1 amendment** — read the amendment, not just the decision. The stores overlap; a concatenation double-counts.
+**Done.** Implemented in `swingbot/admin/api_v1/trades.py`; row contract pinned in `tests/admin/test_api_v1_trades.py::TRADE_ROW`.
 
-- [ ] Build the union as a **join, structurally**: all plans from `_plan_rows()`, each enriched by its `trades.json` row matched on `plan_id`, **plus** trades where `plan_id is None`. Not a concatenate-then-dedup.
-- [ ] Map legacy v1 statuses: `open → ACTIVE`, `win|loss|closed → CLOSED`. Do not synthesise `PENDING`/`PARTIAL`/`CANCELLED` for them.
-- [ ] `status` filter spans `PENDING|ACTIVE|PARTIAL|CLOSED|CANCELLED`; absent = all
-- [ ] Fields absent on one side are `null` — do not synthesise
-- [ ] Filters: `status`, `ticker`, `strategy`, `horizon`, `has_note`; `sort`, `page`, `per_page`
-- [ ] `total` = post-filter, pre-slice
-- [ ] Numbers stay numbers — no pre-formatted strings
-- [ ] **Verify:** a fixture with one filled v2 plan (present in *both* stores) yields **exactly one** row — the regression NG1 found. Plus a legacy `plan_id is None` trade, seeded explicitly.
+**Corrections to spec v11 found while building it:**
+- The function the spec names as `_query_closed_trades()` in `app.py:740` is really **`dashboard.query_closed_trades()`**, and it is *closed-only and mode-scoped* — tuned for the dashboard's Trade History table, not reusable for a five-status collection. What was reused instead: `dashboard.closed_pnl`, `closed_r`, and the `prefetch_prices` + `get_current_price` batching idiom from `build_open_trade_views`.
+- **Orphaned linked trades** (a `plan_id` naming a plan that no longer exists) are included as legacy rows, not dropped. Losing real trading history is a worse failure than showing a row unjoined. The join condition is "trades no plan claimed", which covers `plan_id is None` and orphans in one branch.
+- **Live prices are fetched after slicing, for the page only** — one batched round trip for at most `per_page` tickers. Prefetching before slicing would fetch every ticker in the store on every request.
+
+**A third reload trap, worse than NG2's.** `app.py` is reloaded *before* `api_v1` in conftest, and `app.py`'s body calls `register(app)` — so Flask captured `ApiError` class **A** in its error handler while the later-reloaded parse helpers raised class **B**. Every 400 escaped its handler as a 500. Fixed by removing `api_v1.*` from `_RELOAD_MODULES` entirely and making its modules reach `app.py` through **module attribute access** (`_app.ADMIN_USERNAME`) rather than binding names at import. Any future `api_v1` module must follow that rule and must not bake an import-time path.
+
+**Original task text:** Spec v11 Decision 2 **and its NG1 amendment** — read the amendment, not just the decision. The stores overlap; a concatenation double-counts.
+
+- [x] Build the union as a **join, structurally**: all plans from `_plan_rows()`, each enriched by its `trades.json` row matched on `plan_id`, **plus** trades where `plan_id is None`. Not a concatenate-then-dedup.
+- [x] Map legacy v1 statuses: `open → ACTIVE`, `win|loss|closed → CLOSED`. Do not synthesise `PENDING`/`PARTIAL`/`CANCELLED` for them.
+- [x] `status` filter spans `PENDING|ACTIVE|PARTIAL|CLOSED|CANCELLED`; absent = all
+- [x] Fields absent on one side are `null` — do not synthesise
+- [x] Filters: `status`, `ticker`, `strategy`, `horizon`, `has_note`; `sort`, `page`, `per_page`
+- [x] `total` = post-filter, pre-slice
+- [x] Numbers stay numbers — no pre-formatted strings
+- [x] **Verify:** a fixture with one filled v2 plan (present in *both* stores) yields **exactly one** row — the regression NG1 found. Plus a legacy `plan_id is None` trade, seeded explicitly.
 
 ### Task NG6: Trade detail
 

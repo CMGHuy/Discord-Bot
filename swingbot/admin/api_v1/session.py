@@ -15,13 +15,9 @@ from __future__ import annotations
 
 from flask import jsonify, request, session
 
-from swingbot.admin.app import (
-    ADMIN_PASSWORD,
-    ADMIN_USERNAME,
-    _password_hash,
-    _session_authenticated,
-)
-from swingbot.admin.helpers import get_versions
+# The app/helpers MODULES, not names out of them -- see the note in auth.py.
+from swingbot.admin import app as _app
+from swingbot.admin import helpers as _helpers
 
 from . import api_v1, error
 from .auth import require_auth
@@ -33,8 +29,9 @@ def _identity() -> dict:
     Always the same shape, so the SPA's SessionStore has a single reducer
     for login, logout and the boot check rather than three.
     """
-    authed = _session_authenticated()
-    return {"authenticated": authed, "username": ADMIN_USERNAME if authed else None}
+    authed = _app._session_authenticated()
+    return {"authenticated": authed,
+            "username": _app.ADMIN_USERNAME if authed else None}
 
 
 @api_v1.route("/session", methods=["GET"])
@@ -54,14 +51,14 @@ def session_create():
     payload = request.get_json(silent=True) or {}
     username = payload.get("username", "")
     password = payload.get("password", "")
-    if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
+    if username != _app.ADMIN_USERNAME or password != _app.ADMIN_PASSWORD:
         return error("auth", "Invalid username or password.", 401)
     # Same four lines as login_submit() in app.py: clear first so a partially
     # populated older session cannot survive, then pin the credential hash so
     # changing ADMIN_PASSWORD invalidates this session (see _password_hash).
     session.clear()
     session["admin_authed"] = True
-    session["pw_hash"] = _password_hash()
+    session["pw_hash"] = _app._password_hash()
     session.permanent = True
     return jsonify(_identity())
 
@@ -77,4 +74,4 @@ def session_delete():
 @api_v1.route("/health", methods=["GET"])
 @require_auth
 def health():
-    return jsonify({"ok": True, "versions": get_versions()})
+    return jsonify({"ok": True, "versions": _helpers.get_versions()})

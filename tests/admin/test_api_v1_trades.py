@@ -1,0 +1,289 @@
+"""NG5 — GET /api/v1/trades, the unified collection.
+
+Spec v11 Decision 2 **and its NG1 amendment**. The amendment is the part
+that matters here: the two stores OVERLAP. When a plan fills, it stays in
+plans.json as ACTIVE while log_trade() writes a linked row into
+trades.json. Concatenating the two row sets would list one real position
+twice, and `test_a_filled_plan_appears_exactly_once` is the regression
+test for precisely that.
+
+The union is therefore a join:
+
+    all plans (authoritative for the five statuses)
+      each enriched by its trades.json row, matched on plan_id
+    + trades where plan_id is None  (legacy v1, in no other store)
+
+Legacy trades carry open/win/loss/closed rather than the plan vocabulary,
+so they are mapped -- open -> ACTIVE, win|loss|closed -> CLOSED -- and get
+no PENDING/PARTIAL/CANCELLED, because they have no such states to report.
+"""
+import json
+
+import pytest
+
+from tests.admin.api_v1_contract import (
+    NULLABLE_NUMBER,
+    NULLABLE_STR,
+    assert_collection,
+    assert_error,
+)
+
+_LOGIN = {"username": "admin", "password": "admin"}
+
+# The full row contract: spec 3's seven default columns plus the eleven
+# fields row expansion reveals. Declared once; every response is checked
+# against it, so an endpoint that grows or drops a field fails here.
+TRADE_ROW = {
+    "id": str,
+    "origin": str,               # "plan" | "legacy" -- which store it came from
+    "status": str,
+    "ticker": str,
+    "direction": str,
+    "strategy": NULLABLE_STR,
+    "horizon": NULLABLE_STR,
+    "tier": NULLABLE_STR,
+    "badge": NULLABLE_STR,
+    "confidence_level": NULLABLE_NUMBER,
+    "confidence_score": NULLABLE_NUMBER,
+    "quality_score": NULLABLE_NUMBER,
+    "entry": NULLABLE_NUMBER,
+    "stop_loss": NULLABLE_NUMBER,
+    "target": NULLABLE_NUMBER,
+    "target2": NULLABLE_NUMBER,
+    "risk_reward": NULLABLE_NUMBER,
+    "shares": NULLABLE_NUMBER,
+    "position_value": NULLABLE_NUMBER,
+    "current_price": NULLABLE_NUMBER,
+    "exit_price": NULLABLE_NUMBER,
+    "realized_pnl_amount": NULLABLE_NUMBER,
+    "pnl_pct": NULLABLE_NUMBER,
+    "r_multiple": NULLABLE_NUMBER,
+    "held_hours": NULLABLE_NUMBER,
+    "opened_at": NULLABLE_STR,
+    "closed_at": NULLABLE_STR,
+    "has_note": bool,
+}
+
+
+# --- fixtures ------------------------------------------------------------
+
+def _plan(plan_id, *, ticker="AAPL", status="PENDING", strategy="RSI Divergence"):
+    """A minimal plans.json record. Only the fields the endpoint reads."""
+    return {
+        "plan_id": plan_id, "ticker": ticker, "created_at": "2026-08-01T10:00:00+00:00",
+        "source": "strategy", "strategy": strategy, "horizon_key": "1m",
+        "direction": "bullish", "entry_type": "stop_entry", "trigger_price": 100.0,
+        "entry_price": 101.0, "expiry_bars": 5, "stop_loss": 95.0, "tp1": 110.0,
+        "tp1_fraction": 0.5, "tp2": 120.0, "breakeven_trigger_fraction": 0.5,
+        "trail_atr_mult": 1.5, "quality_score": 72, "quality_breakdown": [],
+        "tier": "A", "badge": "VALIDATED", "badge_stats": {}, "status": status,
+        "status_history": [], "legs_realized": [],
+    }
+
+
+def _trade(trade_id, *, plan_id=None, ticker="AAPL", status="open"):
+    """A minimal trades.json record."""
+    return {
+        "id": trade_id, "plan_id": plan_id, "ticker": ticker,
+        "strategy": "RSI Divergence", "horizon_key": "1m", "direction": "bullish",
+        "confidence_level": 4, "confidence_label": "High", "confidence_score": 81.0,
+        "entry": 101.0, "stop_loss": 95.0, "take_profit": 110.0, "target2": None,
+        "risk_reward_ratio": 1.8, "tier": "A", "badge": "VALIDATED",
+        "quality_score": 72, "source": "strategy", "legs": [],
+        "opened_at": "2026-08-01T10:00:00+00:00", "status": status,
+        "closed_at": "2026-08-04T15:00:00+00:00" if status != "open" else None,
+        "exit_price": 108.0 if status != "open" else None,
+        "realized_pnl_amount": 70.0 if status != "open" else None,
+        "shares": 10, "position_value": 1010.0,
+        "target_sources": [], "stop_sources": [], "target2_sources": [],
+        "confirmed_by": [], "explanation": None, "confidence_breakdown": None,
+    }
+
+
+@pytest.fixture
+def seed(admin_app, tmp_path):
+    """Write plans.json / trades.json directly. The stores read them fresh on
+    construction, so no reload is needed after this."""
+    def _seed(plans=(), trades=()):
+        (tmp_path / "plans.json").write_text(json.dumps(list(plans)), encoding="utf-8")
+        (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
+    return _seed
+
+
+@pytest.fixture
+def logged_in(client):
+    client.post("/api/v1/session", json=_LOGIN)
+    return client
+
+
+# --- auth ----------------------------------------------------------------
+
+def test_requires_auth(client):
+    assert_error(client.get("/api/v1/trades"), "auth", 401)
+
+
+# --- the join ------------------------------------------------------------
+
+def test_empty_stores_give_an_empty_collection(seed, logged_in):
+    seed()
+    body = logged_in.get("/api/v1/trades").get_json()
+    assert_collection(body, TRADE_ROW)
+    assert body == {"items": [], "total": 0, "page": 1, "per_page": 25}
+
+
+def test_a_pending_plan_appears_with_its_plan_status(seed, logged_in):
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111")])
+    body = logged_in.get("/api/v1/trades").get_json()
+    assert_collection(body, TRADE_ROW)
+    assert body["total"] == 1
+    row = body["items"][0]
+    assert row["id"] == "11111111-1111-4111-8111-111111111111"
+    assert row["status"] == "PENDING"
+    assert row["origin"] == "plan"
+
+
+def test_a_filled_plan_appears_exactly_once(seed, logged_in):
+    """THE regression NG1 found.
+
+    A filled plan lives in BOTH stores -- plans.json as ACTIVE, trades.json
+    as an open row linked by plan_id. Concatenating the two row sets would
+    show this single position twice.
+    """
+    pid = "22222222-2222-4222-8222-222222222222"
+    seed(plans=[_plan(pid, status="ACTIVE")],
+         trades=[_trade("aaaaaaaaaaaaaaaa", plan_id=pid)])
+
+    body = logged_in.get("/api/v1/trades").get_json()
+    assert body["total"] == 1, "the plan and its linked trade are ONE position"
+    assert body["items"][0]["id"] == pid, "the plan id is the identity, not the trade id"
+
+
+def test_a_filled_plan_is_enriched_by_its_trade_row(seed, logged_in):
+    """The join has to actually carry the trade's data across, or the plan
+    row would report no sizing and no realised P&L."""
+    pid = "33333333-3333-4333-8333-333333333333"
+    seed(plans=[_plan(pid, status="CLOSED")],
+         trades=[_trade("bbbbbbbbbbbbbbbb", plan_id=pid, status="win")])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["shares"] == 10
+    assert row["exit_price"] == 108.0
+    assert row["realized_pnl_amount"] == 70.0
+    assert row["closed_at"] == "2026-08-04T15:00:00+00:00"
+
+
+def test_a_legacy_trade_appears_on_its_own(seed, logged_in):
+    """plan_id is None means it exists in no other store."""
+    seed(trades=[_trade("cccccccccccccccc", plan_id=None)])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["id"] == "cccccccccccccccc"
+    assert row["origin"] == "legacy"
+
+
+def test_an_orphaned_linked_trade_is_not_dropped(seed, logged_in):
+    """A trade whose plan_id names a plan that no longer exists must still
+    appear. Silently dropping it would lose real trading history, which is
+    a worse failure than showing it unjoined."""
+    seed(plans=[], trades=[_trade("dddddddddddddddd", plan_id="gone")])
+    body = logged_in.get("/api/v1/trades").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == "dddddddddddddddd"
+
+
+# --- legacy status mapping -----------------------------------------------
+
+@pytest.mark.parametrize("raw,expected", [
+    ("open", "ACTIVE"), ("win", "CLOSED"), ("loss", "CLOSED"), ("closed", "CLOSED"),
+])
+def test_legacy_statuses_map_onto_the_plan_vocabulary(seed, logged_in, raw, expected):
+    seed(trades=[_trade("eeeeeeeeeeeeeeee", plan_id=None, status=raw)])
+    assert logged_in.get("/api/v1/trades").get_json()["items"][0]["status"] == expected
+
+
+# --- filtering, sorting, paging ------------------------------------------
+
+def test_status_filter(seed, logged_in):
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", status="PENDING"),
+        _plan("22222222-2222-4222-8222-222222222222", status="CANCELLED"),
+    ])
+    body = logged_in.get("/api/v1/trades?status=PENDING").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["status"] == "PENDING"
+
+
+def test_ticker_filter(seed, logged_in):
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", ticker="AAPL"),
+        _plan("22222222-2222-4222-8222-222222222222", ticker="MSFT"),
+    ])
+    body = logged_in.get("/api/v1/trades?ticker=MSFT").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["ticker"] == "MSFT"
+
+
+def test_total_is_the_prefilter_count_not_the_page_length(seed, logged_in):
+    """`total` is post-filter, pre-slice. Returning len(items) here would
+    silently collapse a multi-page result to one page."""
+    seed(plans=[_plan(f"{i:08d}-1111-4111-8111-111111111111") for i in range(30)])
+    body = logged_in.get("/api/v1/trades?per_page=10").get_json()
+    assert body["total"] == 30
+    assert len(body["items"]) == 10
+    assert body["per_page"] == 10
+
+
+def test_second_page_returns_different_rows(seed, logged_in):
+    seed(plans=[_plan(f"{i:08d}-1111-4111-8111-111111111111") for i in range(30)])
+    first = logged_in.get("/api/v1/trades?per_page=10&page=1").get_json()["items"]
+    second = logged_in.get("/api/v1/trades?per_page=10&page=2").get_json()["items"]
+    assert {r["id"] for r in first}.isdisjoint({r["id"] for r in second})
+
+
+def test_unknown_filter_is_rejected(seed, logged_in):
+    seed()
+    assert_error(logged_in.get("/api/v1/trades?tikcer=AAPL"), "invalid", 400)
+
+
+def test_unsortable_field_is_rejected(seed, logged_in):
+    seed()
+    assert_error(logged_in.get("/api/v1/trades?sort=nonsense"), "invalid", 400)
+
+
+def test_sort_by_opened_at_descending_is_the_default(seed, logged_in):
+    seed(trades=[
+        dict(_trade("aaaaaaaaaaaaaaaa", plan_id=None), opened_at="2026-08-01T10:00:00+00:00"),
+        dict(_trade("bbbbbbbbbbbbbbbb", plan_id=None), opened_at="2026-08-05T10:00:00+00:00"),
+    ])
+    items = logged_in.get("/api/v1/trades").get_json()["items"]
+    assert [r["id"] for r in items] == ["bbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaa"]
+
+
+def test_sort_ascending(seed, logged_in):
+    seed(trades=[
+        dict(_trade("aaaaaaaaaaaaaaaa", plan_id=None), opened_at="2026-08-01T10:00:00+00:00"),
+        dict(_trade("bbbbbbbbbbbbbbbb", plan_id=None), opened_at="2026-08-05T10:00:00+00:00"),
+    ])
+    items = logged_in.get("/api/v1/trades?sort=opened_at").get_json()["items"]
+    assert [r["id"] for r in items] == ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"]
+
+
+# --- derived values ------------------------------------------------------
+
+def test_closed_row_carries_derived_pnl_and_r(seed, logged_in):
+    """Reuses dashboard.closed_pnl / closed_r rather than recomputing --
+    the admin already has one definition of these and a second would drift."""
+    seed(trades=[_trade("ffffffffffffffff", plan_id=None, status="win")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    # entry 101, exit 108, bullish -> +6.93%; risk |101-95| = 6 -> +1.17R
+    assert row["pnl_pct"] == pytest.approx(6.93, abs=0.01)
+    assert row["r_multiple"] == pytest.approx(1.17, abs=0.01)
+    assert row["held_hours"] == pytest.approx(77.0, abs=0.1)
+
+
+def test_numbers_are_numbers_not_preformatted_strings(seed, logged_in):
+    """Spec v11: formatting is sub-project 3's decision, and a server that
+    ships "+6.93%" has taken it away."""
+    seed(trades=[_trade("ffffffffffffffff", plan_id=None, status="win")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert isinstance(row["pnl_pct"], float)
+    assert isinstance(row["entry"], float)

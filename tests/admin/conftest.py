@@ -27,15 +27,22 @@ _RELOAD_MODULES = [
     "swingbot.admin.api",
     "swingbot.admin.pages",
     "swingbot.admin.jobs",
-    # api_v1 bakes no DATA_DIR path, but it owns the /api/v1 Blueprint that
-    # its endpoint modules decorate at import time. Endpoint modules and the
-    # blueprint must reload TOGETHER or the reloaded module re-adds its routes
-    # to a blueprint that already has them. Add each new api_v1.* endpoint
-    # module here as it is created (NG4 onward).
-    "swingbot.admin.api_v1",
-    "swingbot.admin.api_v1.auth",
-    "swingbot.admin.api_v1.session",
 ]
+
+# swingbot.admin.api_v1.* is deliberately ABSENT from the list above, and must
+# stay that way. app.py is reloaded near the top of it, and app.py's own body
+# calls api_v1.register(app) -- so Flask captures the CURRENT ApiError class in
+# its error handler at that moment. Reloading api_v1 afterwards would rebuild
+# ApiError as a different class object, and the reloaded parse helpers would
+# raise the new one while the app still dispatches on the old: every 400 would
+# escape its handler and surface as a 500.
+#
+# api_v1 needs no reload anyway. It bakes no DATA_DIR path, its stores are
+# constructed per request (so they read the patched config.DATA_DIR live), and
+# its modules reach app.py through MODULE attribute access rather than binding
+# names at import time, so a reloaded app.py is picked up automatically.
+# An api_v1 module that ever does bake an import-time path is the one case that
+# would need revisiting -- prefer making it read the value per request.
 
 # TRAP for any test importing from a module in the list above: importlib.reload
 # mutates the module's __dict__ IN PLACE. Functions that survive the reload

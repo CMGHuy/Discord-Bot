@@ -22,11 +22,11 @@ from functools import wraps
 
 from flask import request
 
-from swingbot.admin.app import (
-    ADMIN_PASSWORD,
-    ADMIN_USERNAME,
-    _session_authenticated,
-)
+# The app MODULE, not names out of it. conftest reloads swingbot.admin.app
+# between tests, which rebinds ADMIN_USERNAME/ADMIN_PASSWORD and rebuilds
+# _session_authenticated; names bound here at import time would go stale and
+# this decorator would authenticate against the previous test's credentials.
+from swingbot.admin import app as _app
 
 from . import error
 
@@ -36,10 +36,11 @@ def require_auth(view):
 
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if _session_authenticated():
+        if _app._session_authenticated():
             return view(*args, **kwargs)
         auth = request.authorization
-        if auth and auth.username == ADMIN_USERNAME and auth.password == ADMIN_PASSWORD:
+        if (auth and auth.username == _app.ADMIN_USERNAME
+                and auth.password == _app.ADMIN_PASSWORD):
             return view(*args, **kwargs)
         # No WWW-Authenticate header: it would make a browser throw up its
         # native Basic Auth dialog over the SPA, which is not the login UI.
