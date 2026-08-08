@@ -33,6 +33,8 @@ _RELOAD_MODULES = [
     # to a blueprint that already has them. Add each new api_v1.* endpoint
     # module here as it is created (NG4 onward).
     "swingbot.admin.api_v1",
+    "swingbot.admin.api_v1.auth",
+    "swingbot.admin.api_v1.session",
 ]
 
 # TRAP for any test importing from a module in the list above: importlib.reload

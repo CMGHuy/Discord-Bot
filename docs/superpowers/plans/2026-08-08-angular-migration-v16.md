@@ -26,8 +26,8 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
-> - **Completed:** NG1, NG2. NG1 found the two trade stores overlap (see its outcome note); NG2 found two import/reload constraints every endpoint module must respect (see its note).
-> - **Next:** NG3 — the contract test harness.
+> - **Completed:** NG1–NG4. Phase 0 done; Phase 1 started. Read each task's outcome note before the next — NG1, NG2 and NG4 each recorded a constraint later tasks must respect.
+> - **Next:** NG5 — the trades collection (the join). Read spec v11 Decision 2 **and its NG1 amendment**.
 
 ## Global Constraints
 
@@ -111,10 +111,14 @@ tests/admin/test_api_v1_contract.py      the API contract gate                 (
 
 **Produces:** the gate that keeps the hand-written TS interfaces honest.
 
-- [ ] Helper asserting exact top-level key set **and value types** of a response
-- [ ] Helper asserting the error shape and status of a failure path
-- [ ] One passing case against NG2's error handler
-- [ ] **Verify:** `python scripts/testrun.py file tests/admin/test_api_v1_contract.py`
+- [x] Helper asserting exact top-level key set **and value types** of a response
+- [x] Helper asserting the error shape and status of a failure path
+- [x] One passing case against NG2's error handler
+- [x] **Verify:** `python scripts/testrun.py file tests/admin/test_api_v1_contract.py`
+
+**Where it lives:** helpers in `tests/admin/api_v1_contract.py` (not `test_*`, so pytest does not collect it); its own self-tests in `tests/admin/test_api_v1_contract.py`, each exercising an assertion in both directions — a contract helper that cannot fail would make every endpoint test vacuous.
+
+**`assert_shape` rejects undeclared keys as loudly as missing ones.** An endpoint returning a field nobody declared is an undocumented contract change the SPA will grow a dependency on. It also excludes `bool` from numeric types: `isinstance(True, int)` is `True`, so a naive check would let a boolean satisfy a price field — precisely the type drift spec v11 Decision 6 names as its residual risk.
 
 ---
 
@@ -126,11 +130,19 @@ Every task in this phase: add endpoints, add contract-test cases, change nothing
 
 **Files:** `api_v1/session.py`
 
-- [ ] `POST /api/v1/session` (login), `DELETE` (logout), `GET` (am I authenticated)
-- [ ] Reuse the existing session cookie and `pw_hash` check — no new auth mechanism
-- [ ] `GET /api/v1/health` returning `{ok, versions}` from `helpers.get_versions()`
-- [ ] Contract cases incl. `401` body shape
-- [ ] **Verify:** `testrun.py file tests/admin`
+- [x] `POST /api/v1/session` (login), `DELETE` (logout), `GET` (am I authenticated)
+- [x] Reuse the existing session cookie and `pw_hash` check — no new auth mechanism
+- [x] `GET /api/v1/health` returning `{ok, versions}` from `helpers.get_versions()`
+- [x] Contract cases incl. `401` body shape
+- [x] **Verify:** `testrun.py file tests/admin`
+
+**Correction to NG2's plan text, found by the contract assertions:** `require_auth_json` from `api.py` could **not** be reused directly. It returns `{"error": "auth"}` — `error` as a bare string — which is not v1's `{"error": {"code", "message"}}`. The *predicate* is shared (`_session_authenticated` plus the same credential comparison, imported not reimplemented); only the failure rendering differs. v1's decorator lives in `swingbot/admin/api_v1/auth.py`. The legacy decorator is left untouched because `dashboard.js` branches on its body today. Pinned by `test_v1_and_legacy_401_bodies_deliberately_differ`.
+
+**`GET /api/v1/session` is deliberately not auth-guarded** — it *is* the question "am I logged in", so 401-ing an unauthenticated caller makes it unanswerable to the only caller that needs it. Returns `200 {"authenticated": false}`.
+
+**v1 401s send no `WWW-Authenticate` header**, or the browser's native Basic dialog appears over the SPA.
+
+**Endpoint modules are imported inside `register()`**, not at `api_v1/__init__.py`'s top — see NG2's constraint 1. Each also joins `_RELOAD_MODULES` in `tests/admin/conftest.py`.
 
 ### Task NG5: Trades collection — the union
 

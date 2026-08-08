@@ -174,6 +174,14 @@ def register(app) -> None:
     the Jinja UI's own 404s stay HTML until cutover -- changing those would
     be a live-UI change, which this migration does not make.
     """
+    # Endpoint modules are imported HERE, not at this module's top level.
+    # They import from swingbot.admin.api / .app, which are only safely
+    # importable once app.py's body has run -- and register() is called from
+    # app.py's bottom, which is exactly that point. Importing them above
+    # would drag those modules in at api_v1 import time and re-create the
+    # circular-import deadlock app.py documents.
+    from . import session  # noqa: F401  (registers routes on api_v1)
+
     app.register_blueprint(api_v1)
 
     @app.errorhandler(ApiError)
