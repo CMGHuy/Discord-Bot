@@ -123,7 +123,11 @@ Not auto-loaded — read the relevant one before starting work in that area.
   gates, frozen constants. Read before running or interpreting any
   backtest/grid/validation.
 - `docs/claude/working-conventions.md` — commit style, concurrent-session git
-  hygiene, worktrees.
+  hygiene, worktrees, and the **`-vN` document-numbering convention**: every
+  spec and plan filename ends in `-vN` drawn from one repo-wide, ever-increasing
+  counter shared by both directories (`ls docs/superpowers/{specs,plans}/ |
+  grep -o 'v[0-9]*' | sort -V | tail -1` gives the last one used). Read it
+  before writing any new spec or plan.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
 - `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats

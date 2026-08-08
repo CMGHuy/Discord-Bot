@@ -9,6 +9,19 @@ Referenced from the root `CLAUDE.md`.
   (gitignored). Update both when completing plan tasks — both have drifted
   before (tasks marked done that weren't), so verify against `git log` and
   actual files before trusting either.
+- **Every spec and plan filename ends in `-vN`, from one repo-wide counter that
+  only ever increments.** Not per-feature, not per-document-type: specs and
+  plans draw from the same sequence, so `-v11` is the eleventh design document
+  written in this repo regardless of which feature it belongs to and whether it
+  is a spec or a plan. Find the next number with
+  `ls docs/superpowers/{specs,plans}/ | grep -o 'v[0-9]*' | sort -V | tail -1`.
+  A number is never reused and never renumbered once committed — links and
+  commit messages reference it. Revising a document in place keeps its number;
+  only a genuinely new document takes the next one. (`gatekeeper-v6_1…_12` are
+  parts of one document, not twelve numbers — a split like that reuses the
+  parent's number with a `_N` part suffix.) Documents predating this convention
+  (2026-08-08) keep their existing names; the specs written before it have no
+  `-vN` and are not backfilled.
 - New specs and plans carry a `**Version:**` line in their header block —
   `ui X.Y.Z · bot A.B.C`, copied from `VERSION.json` **as of the commit that
   authors the document**. It records which release the document was written
