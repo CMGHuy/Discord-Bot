@@ -19,6 +19,28 @@ from tests.helpers import make_ohlcv
 I = 79  # reference bar
 
 
+@pytest.fixture(autouse=True)
+def _lifecycle_off(monkeypatch):
+    """Pin the level-lifecycle flags OFF for this module.
+
+    These are parity tests between `backtest._trade_plan_at` and the bare
+    sizing builders it delegates to (`_atr_plan`, `_fibonacci_plan`, ...).
+    The lifecycle deliberately POST-PROCESSES a builder's output --
+    `_trade_plan_at` calls `apply_level_lifecycle` after sizing -- so with
+    LEVEL_LIFECYCLE_STOPS_ENABLED default-on (2026-08-08) the two sides
+    legitimately differ and the parity assertion stops meaning anything.
+
+    Pinning the flag keeps these tests proving what they were written to
+    prove: that the builders extracted out of `_trade_plan_at` are faithful.
+    Agreement between the two plan paths WITH the lifecycle on is a different
+    property, covered by tests/test_levels_lifecycle_wiring.py.
+    """
+    monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_STOPS_ENABLED", False,
+                        raising=False)
+    monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_TARGETS_ENABLED", False,
+                        raising=False)
+
+
 @pytest.fixture(scope="module")
 def df():
     return make_ohlcv([100 + i * 0.5 for i in range(80)])

@@ -79,6 +79,18 @@ def _precomputed_series(df, strategy, horizon_key):
 
 
 def main() -> int:
+    # The level lifecycle (P1) post-processes _trade_plan_at's output and is
+    # default-on since 2026-08-08, but `legacy_trade_plan_at` is a frozen
+    # pre-extraction copy that cannot have it. Left on, every entry bar where a
+    # tested level moves the stop reports as a parity MISMATCH -- a spurious
+    # one, since this harness exists to answer "did the Task-14 extraction
+    # change sizing?", not to re-detect a measured feature. Forced off here
+    # rather than documented as a caveat, so the answer cannot depend on the
+    # caller's .env. tests/test_sizing_parity.py pins the same flags.
+    from swingbot import config
+    config.LEVEL_LIFECYCLE_STOPS_ENABLED = False
+    config.LEVEL_LIFECYCLE_TARGETS_ENABLED = False
+
     if not CACHE_DIR.is_dir():
         print(f"no cache dir at {CACHE_DIR}; nothing to check")
         return 0

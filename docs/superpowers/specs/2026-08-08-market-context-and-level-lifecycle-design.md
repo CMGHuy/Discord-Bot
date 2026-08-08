@@ -330,7 +330,8 @@ measurable alone:
    translation in the whole design: the level that must break for the plan to
    work.
 3. **Entry filter** *(win rate)* — skip the setup when a `king` ceiling sits
-   inside the early part of the path to TP1.
+   inside the early part of the path to TP1. **NOT BUILT — deliberately
+   dropped 2026-08-08, see §7.7.**
 
 ### 7.5 Tests
 
@@ -413,6 +414,42 @@ flag stays in config default-off and is listed in `wf_components.INERT_COMPONENT
 so no future session burns a pre-registration on it.
 
 ---
+
+### 7.7 Consumer 3 (entry filter) — NOT BUILT. Dropped on a measured ceiling.
+
+Decided 2026-08-08, before writing any code, on evidence from the consumer-2
+instrumentation run rather than on taste.
+
+**The reachable surface is ~5.6% of entries.** Of 428 entry bars, only **24 had
+a `king` blocker** anywhere between entry and TP1. Consumer 3 fires on a
+*subset* of those (king in the *early* part of the path only), so 5.6% is an
+upper bound on the trades it could ever veto.
+
+That bounds the payoff before a line is written. Cutting 5.6% of trades moves
+pooled expectancy by +0.01R only if the vetoed trades run about **0.18R worse
+than average** — a signal the same size as the one that just came back
+inconclusive on consumer 1's validation, measured against the same noise.
+
+Costs it would have carried:
+
+- **The design gap is real.** The shared seam is `entries_for` — the one place
+  that keeps both plan paths honest — but it runs *before* any plan exists, so
+  TP1 is unknown there. Resolving it means either approximating the path with
+  an ATR multiple (inventing a second, unvalidated notion of "the target") or
+  moving the veto post-plan and re-solving the two-path landmine of §7.1.
+- **Its own pre-registered TRAIN evidence and its own VALIDATION shot** — a
+  budget already spent twice on this design.
+- It is an **entry filter**, so it cuts sample, and it is the consumer most
+  exposed to the win-rate trap of §5.3: vetoing trades raises win rate while
+  expectancy falls. §7.4 already ranked it the riskiest of the three.
+
+**Prior from its siblings is weak.** Consumer 2 was structurally inert (§7.6);
+consumer 1 degraded nothing but showed no measurable out-of-sample effect
+(§7.5b). Consumer 3 has a smaller reachable surface than either.
+
+Nothing depends on it — it is purely additive, and `gatekeepers_between` /
+`is_king` remain built and tested for whoever revisits this. If it is ever
+picked up, it starts from a **new pre-registration**, not from this table.
 
 ## 8. P3 — options snapshot archive
 
