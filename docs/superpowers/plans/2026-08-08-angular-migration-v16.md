@@ -26,8 +26,8 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
 > - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
-> - **Completed:** NG1. IDs cannot collide, so no prefixing — but NG1 also found the two stores **overlap**, which invalidated the "concatenate" wording in spec v11 Decision 2 and rewrote NG5. See NG1's outcome note.
-> - **Next:** NG2 — the `api_v1` package skeleton.
+> - **Completed:** NG1, NG2. NG1 found the two trade stores overlap (see its outcome note); NG2 found two import/reload constraints every endpoint module must respect (see its note).
+> - **Next:** NG3 — the contract test harness.
 
 ## Global Constraints
 
@@ -38,6 +38,7 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 - **Zero runtime CDN calls.** Fonts and charts are self-hosted. A network request to a third-party host is a defect.
 - **`visible` columns carry no order.** The data table renders in `columns` order. Do not add an ordering input at any call site.
 - **Colour rules (spec 3):** green/red = money only · amber = caution · blue = interactive only · everything else greyscale. Quality chips (confidence, tier) are greyscale, not green/amber/red.
+- **Merge to `main` once per phase, not per task.** Work accumulates on `worktree-angular-migration` and fast-forwards to `main` at each phase boundary — Phase 1 lands after NG19, Phase 2 after NG24, and so on. Rationale: a phase is the smallest unit that leaves `main` in a coherent state, and `main` is shared with concurrent sessions. Check `git status` on the main tree before merging; other sessions leave it dirty.
 - Windows dev machine: `python`, never `python3`.
 - `python scripts/testrun.py full` green (`0 failed`) before each commit; `... file tests/admin` while iterating. Conventional commits, one per task, `git add <explicit paths>` — never `-A`.
 - New docs follow the `-vN` naming convention in `docs/claude/working-conventions.md`.
@@ -91,13 +92,18 @@ tests/admin/test_api_v1_contract.py      the API contract gate                 (
 
 **Produces:** the blueprint, error helper and auth decorator every later task uses.
 
-- [ ] Blueprint at `/api/v1`
-- [ ] `error(code, message, status)` returning `{"error": {"code", "message"}}`
-- [ ] `require_auth_json` reused from `api.py` — do not write a second auth path
-- [ ] `collection(items, total, page, per_page)` helper; `per_page` caps at 200
-- [ ] Unknown filter parameter → `400 invalid` (spec v11: never silently ignore)
-- [ ] ISO-8601 UTC serialisation helper for all timestamps
-- [ ] **Verify:** `GET /api/v1/` unknown route returns the JSON error shape, not HTML
+- [x] Blueprint at `/api/v1`
+- [x] `error(code, message, status)` returning `{"error": {"code", "message"}}`
+- [x] `require_auth_json` reused from `api.py` — do not write a second auth path
+- [x] `collection(items, total, page, per_page)` helper; `per_page` caps at 200
+- [x] Unknown filter parameter → `400 invalid` (spec v11: never silently ignore)
+- [x] ISO-8601 UTC serialisation helper for all timestamps
+- [x] **Verify:** `GET /api/v1/` unknown route returns the JSON error shape, not HTML
+
+**Two constraints discovered here that NG4+ must respect:**
+
+1. **`api_v1/__init__.py` imports nothing from `swingbot.admin`.** Importing `require_auth_json` there deadlocked on the circular import `app.py` documents (api.py → app.py → bottom-of-app.py → api.py). **Endpoint modules** import `require_auth_json` from `swingbot.admin.api` instead — they are imported from app.py's bottom, where the ordering is already sound. `register(app)` mounts the blueprint *and* the two error handlers, because the 404 handler must be app-level (an unmatched URL never reaches a blueprint).
+2. **Tests must import the module, not its names** — `from swingbot.admin import api_v1 as v1`, then `v1.ApiError`. `importlib.reload` in conftest mutates the module dict in place, so a bound `ApiError` goes stale and `pytest.raises` silently stops matching. Documented in `tests/admin/conftest.py`. Each new `api_v1.*` endpoint module must also be added to that file's `_RELOAD_MODULES`, or its routes get re-added to a blueprint that already has them.
 
 ### Task NG3: Contract test harness
 

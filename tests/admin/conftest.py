@@ -27,7 +27,23 @@ _RELOAD_MODULES = [
     "swingbot.admin.api",
     "swingbot.admin.pages",
     "swingbot.admin.jobs",
+    # api_v1 bakes no DATA_DIR path, but it owns the /api/v1 Blueprint that
+    # its endpoint modules decorate at import time. Endpoint modules and the
+    # blueprint must reload TOGETHER or the reloaded module re-adds its routes
+    # to a blueprint that already has them. Add each new api_v1.* endpoint
+    # module here as it is created (NG4 onward).
+    "swingbot.admin.api_v1",
 ]
+
+# TRAP for any test importing from a module in the list above: importlib.reload
+# mutates the module's __dict__ IN PLACE. Functions that survive the reload
+# resolve globals against that updated dict, so they raise the NEW ApiError --
+# while a module-level `from swingbot.admin.api_v1 import ApiError` in a test
+# still holds the OLD class object. pytest.raises() then silently stops
+# matching, and only in files where some earlier test used `client` (which is
+# what triggers the reload). Import the MODULE and use attribute access:
+#     from swingbot.admin import api_v1 as v1   ->   v1.ApiError
+# See tests/admin/test_api_v1_skeleton.py.
 
 
 @pytest.fixture

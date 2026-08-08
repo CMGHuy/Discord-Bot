@@ -1176,3 +1176,9 @@ from . import api as _api  # noqa: E402
 app.register_blueprint(_api.api)
 from . import pages as _pages  # noqa: E402
 app.register_blueprint(_pages.pages)
+# api_v1 registers itself (blueprint + its two error handlers) rather than
+# exposing a blueprint to register here: its 404 handler must be app-level,
+# because an unmatched URL never reaches a blueprint. Imported last -- it
+# imports require_auth_json from api.py, so that module must already exist.
+from . import api_v1 as _api_v1  # noqa: E402
+_api_v1.register(app)
