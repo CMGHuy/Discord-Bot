@@ -58,6 +58,7 @@ from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core import levels
 from swingbot.core import account as account_module
+from swingbot.core import market_context
 from swingbot.core.account import compute_unrealized_pnl, load_account_config
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
@@ -1097,6 +1098,35 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         log.warning("Could not compute relative-strength cache: %s", e)
         spy_df = None
         rs_cache = None
+
+    # Market context (P0): stamp every crawled frame with the ctx_* block so
+    # entry_filters.entries_for() can read the regime straight off `df`. This
+    # is the live half of the channel that leaves apply_regime_gate inert
+    # otherwise -- see swingbot/core/market_context.py's module docstring.
+    #
+    # Reuses the spy_df already fetched above; adds no network call. With
+    # REGIME_GATES_ENABLED off this is inert decoration, so a failure here
+    # must not break a scan that wasn't going to gate anything anyway --
+    # but with the flag ON, leaving frames unstamped would make every
+    # entries_for() call raise MissingContextError, which is the intended
+    # fail-closed behaviour and is logged loudly rather than swallowed.
+    if spy_df is not None:
+        stamped = 0
+        for _t, _df in list(fresh_data.items()):
+            if _df is None or getattr(_df, "empty", True):
+                continue
+            try:
+                fresh_data[_t] = market_context.attach(_df, spy_df=spy_df)
+                stamped += 1
+            except Exception:
+                log.exception("market_context.attach failed for %s", _t)
+        log.info("Market context attached to %d/%d frames", stamped, len(fresh_data))
+    elif getattr(config, "REGIME_GATES_ENABLED", False):
+        log.error(
+            "REGIME_GATES_ENABLED is on but %s could not be fetched -- no market "
+            "context this scan, so every entry will be blocked (fail-closed).",
+            config.MARKET_REGIME_TICKER,
+        )
 
     account_cfg = load_account_config()
 
