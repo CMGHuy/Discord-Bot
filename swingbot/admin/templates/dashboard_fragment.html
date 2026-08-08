@@ -1,59 +1,27 @@
-{% set _no_closed = closed_trades | length == 0 %}
-{# ── Session banner (populated by JS from browser UTC clock) ─────────────── #}
+{# ===========================================================================
+   Dashboard fragment -- the panels that genuinely change every few seconds:
+   session banner, lifecycle strip, stat cards, Open Trades.
+
+   MARKUP ONLY. This file is re-fetched and morphdom-patched into the page
+   every few seconds, and a <script> that arrives via DOM patching never
+   executes -- which is why all dashboard behaviour lives in static/dashboard.js
+   (loaded once by the shell) and why interactive elements here declare intent
+   with data-* attributes instead of inline onclick/onsubmit.
+
+   Trade History is NOT here: it is static markup in dashboard.html filled by
+   /api/trade-history, so it never needs re-rendering on a poll.
+   =========================================================================== #}
+
+{# ── Session banner (filled client-side from the browser's UTC clock) ────── #}
 <div class="session-banner" id="session-banner">
   <span class="session-time" id="session-time"></span>
   <span id="session-pills"></span>
 </div>
-<script>
-(function() {
-  var SESSIONS = [
-    { name:"Tokyo",    flag:"🗼", start:0*60,     end:9*60,     color:"#6ea8fe", bg:"rgba(110,168,254,0.12)" },
-    { name:"London",   flag:"🏦", start:8*60,     end:16*60+30, color:"#e2b25a", bg:"rgba(226,178,90,0.12)"  },
-    { name:"New York", flag:"🗽", start:13*60+30, end:20*60,    color:"#6dda9e", bg:"rgba(109,218,158,0.12)" }
-  ];
-  function pad(n){ return n<10?'0'+n:String(n); }
-  function renderBanner() {
-    var now = new Date();
-    var h = now.getUTCHours(), m = now.getUTCMinutes();
-    var t = h*60+m;
-    var timeEl   = document.getElementById('session-time');
-    var pillsEl  = document.getElementById('session-pills');
-    if (!timeEl || !pillsEl) return;
-    timeEl.textContent = pad(h)+':'+pad(m)+' UTC';
-    var active = SESSIONS.filter(function(s){ return t >= s.start && t < s.end; });
-    if (active.length === 0) {
-      pillsEl.innerHTML = '<span class="session-pill" style="color:#4a5470;border-color:#2a2e3d;background:#13161d;">⏸ Markets closed</span>';
-    } else {
-      var html = active.map(function(s){
-        return '<span class="session-pill" style="color:'+s.color+';border-color:'+s.color+'55;background:'+s.bg+';">'+s.flag+' '+s.name+'</span>';
-      }).join('');
-      if (active.length > 1) {
-        html += '<span class="session-pill" style="color:#e2b25a;border-color:#e2b25a55;background:rgba(226,178,90,0.08);">⚡ Overlap — high liquidity</span>';
-      }
-      pillsEl.innerHTML = html;
-    }
-  }
-  renderBanner();
-  // Re-render each minute (fragment is polled every ~5s so this stays fresh)
-  setTimeout(function repeat(){ renderBanner(); setTimeout(repeat, 60000); }, (60 - new Date().getUTCSeconds()) * 1000);
-
-  // Also exposed globally so dashboard.html's refreshDashboard() can force a
-  // fresh render after EVERY auto-refresh tick, not just rely on morphdom's
-  // onBeforeElUpdated skip (which preserves this subtree so its self-driven
-  // 60s timer above keeps running, but only if that timer is still alive --
-  // e.g. a slow tab getting throttled/backgrounded by the browser can pause
-  // setTimeout chains, which previously meant the banner could go stale or
-  // blank until the tab regained focus). Calling this explicitly on every
-  // fetch makes the banner self-healing regardless of what happened to the
-  // original timer, exactly like refreshClosedTradesTable/refreshOpenTradesTable.
-  window.renderSessionBanner = renderBanner;
-})();
-</script>
 
 {# ── Lifecycle strip ─────────────────────────────────────────────────────── #}
 <div class="lifecycle-strip">
   {% for status, display in [('PENDING','PENDING'), ('ACTIVE','ACTIVE'), ('PARTIAL','PARTIAL'),
-                              ('CLOSED','CLOSED (today)'), ('CANCELLED','CANCELLED (today)')] %}
+                             ('CLOSED','CLOSED (today)'), ('CANCELLED','CANCELLED (today)')] %}
   <a class="lifecycle-card" href="{{ url_for('pages.plans_page', status=status) }}">
     <span class="lc-count">{{ plan_counts.get(status, 0) }}</span>
     <span class="lc-label">{{ display }}</span>
@@ -84,51 +52,60 @@
       {% endif %}
     </div>
   </div>
-  <div class="stat-card stat-card-wide" title="Last 30 points of the analytics snapshot's equity curve">
+
+  {# Shows the 30-day CHANGE, not the balance -- the balance is already the
+     headline of the card immediately to the left, and printing it twice told
+     you nothing the first card hadn't. #}
+  <div class="stat-card stat-card-wide" title="Movement across the last 30 points of the analytics snapshot's equity curve.">
     <div class="stat-label">Equity (30d)</div>
-    <div class="stat-value" style="color: #6ea8fe;">
-      {{ '{:,.2f}'.format(stats.account.balance) if stats.account.balance is not none else '—' }}
+    <div class="stat-value" style="color: {% if equity.change_pct is none %}#5a6275{% elif equity.change_pct >= 0 %}#6dda9e{% else %}#da6d6d{% endif %};">
+      {{ '%+.2f%%'|format(equity.change_pct) if equity.change_pct is not none else '—' }}
     </div>
-    <div class="stat-sub">{{ equity_sparkline_svg | safe }}</div>
+    <div class="stat-sub">{{ equity.svg | safe }}</div>
   </div>
+
   <div class="stat-card stat-card-wide"
        title="What a trade actually costs right now, based on today's account balance and sizing settings. This only reflects trades opened under these exact settings -- an already-open trade keeps whatever it was actually sized at when it opened (see the Unreal. P&amp;L column tooltip below), so it won't retroactively match this if you've changed the balance, risk %, or sizing mode since.">
     <div class="stat-label">Position premium per trade</div>
     {% if sizing_note.mode == 'account_pct' %}
       <div class="stat-value" style="color: #6ea8fe;">
-        {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.premium) }}
+        {{ currency_symbol }}{{ '{:,.2f}'.format(sizing_note.premium) }}
       </div>
       <div class="stat-sub">
         fixed -- Account % mode, {{ sizing_note.position_pct }}% of balance every trade
       </div>
     {% else %}
       <div class="stat-value" style="color: #e2b25a;">
-        up to {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.max_position) }}
+        up to {{ currency_symbol }}{{ '{:,.2f}'.format(sizing_note.max_position) }}
       </div>
       <div class="stat-sub">
-        Risk % mode -- risks {{ cur_map.values()|list|first|default('') }}{{ '{:,.2f}'.format(sizing_note.risk_amount) }} ({{ sizing_note.risk_pct }}%) if stopped out,
+        Risk % mode -- risks {{ currency_symbol }}{{ '{:,.2f}'.format(sizing_note.risk_amount) }} ({{ sizing_note.risk_pct }}%) if stopped out,
         capped at {{ sizing_note.max_position_pct }}% of balance
-        {%- if sizing_note.max_position_value_absolute %} or {{ cur_map.values()|list|first|default('') }}{{ '{:,.0f}'.format(sizing_note.max_position_value_absolute) }} absolute, whichever is tighter{% endif %}.
+        {%- if sizing_note.max_position_value_absolute %} or {{ currency_symbol }}{{ '{:,.0f}'.format(sizing_note.max_position_value_absolute) }} absolute, whichever is tighter{% endif %}.
         Varies per trade with stop distance --
         switch to <code>!account sizing account</code> for a fixed premium instead.
       </div>
     {% endif %}
   </div>
+
   <div class="stat-card accent-blue" title="Trades currently open (any status: pending trigger, active, or partially closed at TP1) in this dashboard mode's date filter.">
     <div class="stat-label">Open trades</div>
     <div class="stat-value" style="color: #6ea8fe;">{{ stats.open }}</div>
     <div class="stat-sub">currently tracking</div>
   </div>
+
   <div class="stat-card" title="Closed trades that came out ahead, within this dashboard mode's date filter.">
     <div class="stat-label">Wins</div>
     <div class="stat-value" style="color: #6dda9e;">{{ stats.wins }}</div>
     <div class="stat-sub">closed profitable</div>
   </div>
+
   <div class="stat-card" title="Closed trades that lost money, within this dashboard mode's date filter.">
     <div class="stat-label">Losses</div>
     <div class="stat-value" style="color: #da6d6d;">{{ stats.losses }}</div>
     <div class="stat-sub">closed at loss</div>
   </div>
+
   <div class="stat-card" title="Wins ÷ (wins + losses) among closed trades in this filter -- see the Performance page for the full breakdown alongside Profit Factor and Expectancy.">
     <div class="stat-label">Win rate</div>
     <div class="stat-value" style="color: {% if stats.closed > 0 and stats.win_rate >= 50 %}#6dda9e{% elif stats.closed > 0 %}#da6d6d{% else %}#5a6275{% endif %};">
@@ -136,6 +113,7 @@
     </div>
     <div class="stat-sub">{{ stats.closed }} closed total</div>
   </div>
+
   <div class="stat-card" title="Average realized R-multiple across closed win/loss trades">
     <div class="stat-label">Expectancy</div>
     <div class="stat-value" style="color: {% if stats.expectancy_r is not none and stats.expectancy_r >= 0 %}#6dda9e{% elif stats.expectancy_r is not none %}#da6d6d{% else %}#5a6275{% endif %};">
@@ -143,6 +121,7 @@
     </div>
     <div class="stat-sub">{{ stats.r_multiples_count }} R-trades</div>
   </div>
+
   <div class="stat-card" title="Equal-weighted average unrealized P&L% across open trades with a live price">
     <div class="stat-label">Open P&amp;L</div>
     <div class="stat-value" style="color: {% if stats.total_unrealized_pct is not none and stats.total_unrealized_pct >= 0 %}#6dda9e{% elif stats.total_unrealized_pct is not none %}#da6d6d{% else %}#5a6275{% endif %};">
@@ -150,27 +129,34 @@
     </div>
     <div class="stat-sub">avg across open trades</div>
   </div>
-  <div class="stat-card" title="Average realized P&L % across last {{ closed_trades | length }} closed trades with an exit price">
+
+  {# These three cover every closed trade in the current mode. They used to be
+     computed from the first PAGE of Trade History, which quietly made "Best
+     trade" mean "best of the 25 most recently closed". #}
+  <div class="stat-card" title="Average realized P&L % across every closed trade with an exit price in this dashboard mode's date filter.">
     <div class="stat-label">Avg realized P&amp;L</div>
     <div class="stat-value" style="color: {% if stats.total_realized_pct is not none and stats.total_realized_pct >= 0 %}#6dda9e{% elif stats.total_realized_pct is not none %}#da6d6d{% else %}#5a6275{% endif %};">
       {{ '%+.1f%%'|format(stats.total_realized_pct) if stats.total_realized_pct is not none else '—' }}
     </div>
-    <div class="stat-sub">per closed trade</div>
+    <div class="stat-sub">over {{ stats.realized_count }} closed</div>
   </div>
-  <div class="stat-card accent-green" title="Best single closed trade by realized P&L %">
+
+  <div class="stat-card accent-green" title="Best single closed trade by realized P&L % in this dashboard mode's date filter.">
     <div class="stat-label">Best trade</div>
     <div class="stat-value" style="color: {% if stats.best_trade_pct is not none %}#6dda9e{% else %}#5a6275{% endif %};">
       {{ '%+.1f%%'|format(stats.best_trade_pct) if stats.best_trade_pct is not none else '—' }}
     </div>
     <div class="stat-sub">realized</div>
   </div>
-  <div class="stat-card accent-red" title="Worst single closed trade by realized P&L %">
+
+  <div class="stat-card accent-red" title="Worst single closed trade by realized P&L % in this dashboard mode's date filter.">
     <div class="stat-label">Worst trade</div>
     <div class="stat-value" style="color: {% if stats.worst_trade_pct is not none %}#da6d6d{% else %}#5a6275{% endif %};">
       {{ '%+.1f%%'|format(stats.worst_trade_pct) if stats.worst_trade_pct is not none else '—' }}
     </div>
     <div class="stat-sub">realized</div>
   </div>
+
   <div class="stat-card" title="Average 1-5 confidence level (how many independent methods confirmed the setup) across currently-open trades.">
     <div class="stat-label">Avg open confidence</div>
     <div class="stat-value" style="color: #6ea8fe;">
@@ -178,6 +164,7 @@
     </div>
     <div class="stat-sub">across open trades</div>
   </div>
+
   <div class="stat-card" title="Average time held from open to close (win/loss/manually-closed), day/hour/minute granularity">
     <div class="stat-label">Avg holding period</div>
     <div class="stat-value" style="color: #6ea8fe;">
@@ -187,7 +174,7 @@
   </div>
 </div>
 
-{# ── Open trades table ────────────────────────────────────────────────────── #}
+{# ── Open trades table ───────────────────────────────────────────────────── #}
 <div class="card">
   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
     <p class="card-title" style="margin:0;">Open trades
@@ -197,7 +184,6 @@
     </p>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <input id="trade-filter" type="text" placeholder="Filter by ticker, strategy…"
-             oninput="filterTable()"
              style="background:#0a0c10;color:#dde1ea;border:1px solid #252933;border-radius:7px;
                     padding:6px 10px;font-size:13px;font-family:inherit;width:220px;">
       <span class="density-toggle" id="ot-density-toggle" title="Compact hides the analytical columns (strategy, horizon, confidence, score, entry/stop/target, R:R, unrealized amount, opened) -- they are still on the Performance page and each trade's detail page.">
@@ -209,7 +195,7 @@
         <select id="ot-per-page"
                 style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
           <option value="10">10</option>
-          <option value="25" selected>25</option>
+          <option value="25">25</option>
           <option value="50">50</option>
           <option value="0">All</option>
         </select>
@@ -218,43 +204,36 @@
     </div>
   </div>
 
-  {# NOTE: rendered unconditionally regardless of whether open_trades is
-     currently empty -- same fix as the closed-trades history block below.
-     This table/pagination <script> tag must be part of the very first page
-     load every time, or window.refreshOpenTradesTable() never gets defined
-     and Prev/Next/sort silently stop working for the rest of the browser
-     session once a trade opens later (scripts inserted via morphdom never
-     execute). The JS already handles a zero-row table fine. #}
   <div class="table-density density-compact" data-density-for="ot">
   <div style="overflow-x:auto;">
   <table id="trades-table">
     <thead>
     <tr>
-      <th data-col-id="rownum" title="Row number">#</th>
-      <th data-col-id="status" draggable="true" onclick="sortByHeader(this)"
+      <th data-col-id="rownum" data-sortable="false" title="Row number">#</th>
+      <th data-col-id="status" draggable="true"
           title="Dot color: grey=neutral, green=moving toward TP, red=moving toward SL. Bar: SL(left)→TP(right). Numbers: distance to SL and TP.">
         Status <span class="sort-arrow" data-col-id="status"></span>
       </th>
-      <th data-col-id="ticker" draggable="true" onclick="sortByHeader(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
-      <th class="col-full" data-col-id="strategy" draggable="true" onclick="sortByHeader(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
-      <th class="col-full" data-col-id="horizon" draggable="true" onclick="sortByHeader(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
-      <th class="col-full" data-col-id="direction" draggable="true" onclick="sortByHeader(this)" title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
-      <th class="col-full" data-col-id="confidence" draggable="true" onclick="sortByHeader(this)">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
-      <th class="col-full" data-col-id="score" draggable="true" onclick="sortByHeader(this)" title="Confidence score out of a maximum of 100 points -- higher means more confluence factors lined up behind this setup.">Score <span class="sort-arrow" data-col-id="score"></span></th>
-      <th data-col-id="entry" draggable="true" onclick="sortByHeader(this)" class="col-full num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="current_price" draggable="true" onclick="sortByHeader(this)" title="Live price (incl. pre/aftermarket, cached ~15s)" class="num">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
-      <th data-col-id="pnl" draggable="true" onclick="sortByHeader(this)" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s)." class="num">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
-      <th data-col-id="plan" draggable="true" class="num col-compact" title="Entry → Target / Stop, standing in for the separate Entry/Stop/Target columns hidden in compact density">Plan <span class="sort-arrow" data-col-id="plan"></span></th>
-      <th data-col-id="stop" draggable="true" onclick="sortByHeader(this)" class="col-full num">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
-      <th data-col-id="target" draggable="true" onclick="sortByHeader(this)" class="col-full num">Target <span class="sort-arrow" data-col-id="target"></span></th>
-      <th data-col-id="rr" draggable="true" onclick="sortByHeader(this)" title="Risk:Reward ratio" class="col-full num">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
-      <th class="col-full" data-col-id="size" draggable="true" onclick="sortByHeader(this)"
+      <th data-col-id="ticker" draggable="true">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
+      <th class="col-full" data-col-id="strategy" draggable="true" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
+      <th class="col-full" data-col-id="horizon" draggable="true">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
+      <th class="col-full" data-col-id="direction" draggable="true" title="▲ = Long (bullish) · ▼ = Short (bearish)">Dir <span class="sort-arrow" data-col-id="direction"></span></th>
+      <th class="col-full" data-col-id="confidence" draggable="true">Conf <span class="sort-arrow" data-col-id="confidence"></span></th>
+      <th class="col-full" data-col-id="score" draggable="true" title="Confidence score out of a maximum of 100 points -- higher means more confluence factors lined up behind this setup.">Score <span class="sort-arrow" data-col-id="score"></span></th>
+      <th data-col-id="entry" draggable="true" class="col-full num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="current_price" draggable="true" title="Live price (incl. pre/aftermarket, cached ~15s)" class="num">Now <span class="sort-arrow" data-col-id="current_price"></span></th>
+      <th data-col-id="pnl" draggable="true" title="Unrealized P&L % vs entry (direction-adjusted). Refreshes when live price updates (~15s)." class="num">P&amp;L% <span class="sort-arrow" data-col-id="pnl"></span></th>
+      <th data-col-id="plan" data-sortable="false" draggable="true" class="num col-compact" title="Entry → Target / Stop, standing in for the separate Entry/Stop/Target columns hidden in compact density">Plan <span class="sort-arrow" data-col-id="plan"></span></th>
+      <th data-col-id="stop" draggable="true" class="col-full num">Stop <span class="sort-arrow" data-col-id="stop"></span></th>
+      <th data-col-id="target" draggable="true" class="col-full num">Target <span class="sort-arrow" data-col-id="target"></span></th>
+      <th data-col-id="rr" draggable="true" title="Risk:Reward ratio" class="col-full num">R:R <span class="sort-arrow" data-col-id="rr"></span></th>
+      <th class="col-full" data-col-id="size" draggable="true"
           title="Unrealized gain/loss in account currency = shares (snapshotted when this trade was opened) x (current price − entry price), direction-adjusted.">
         Unreal. P&amp;L <span class="sort-arrow" data-col-id="size"></span>
       </th>
-      <th data-col-id="days" draggable="true" onclick="sortByHeader(this)" title="Holding period -- time since opened, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
-      <th class="col-full" data-col-id="opened" draggable="true" onclick="sortByHeader(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
-      <th data-col-id="action">Action</th>
+      <th data-col-id="days" draggable="true" title="Holding period -- time since opened, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
+      <th class="col-full" data-col-id="opened" draggable="true">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
+      <th data-col-id="action" data-sortable="false">Action</th>
     </tr>
     </thead>
     <tbody>
@@ -310,7 +289,7 @@
         {# The VALIDATED/WEAK badge is deliberately NOT rendered in this table --
            it is per-trade detail, not something to scan a list by. It still
            shows on the trade's own page (trade_detail.html), which the ticker
-           link above leads to. Same omission in the closed-trades table below;
+           link above leads to. Same omission in the closed-trades table;
            the tier chip stays in both. #}
       </td>
 
@@ -417,8 +396,7 @@
         {%- endif -%}
       </td>
 
-      {# Time open — shown as hours while under a day old, then "N day(s) M
-         hours" once past 24h; flags trades aging beyond ~30 days #}
+      {# Time open — flags trades aging beyond ~30 days #}
       <td data-sort="{{ days_open.total_hours if days_open is not none else -1 }}"
           style="color:{% if days_open is not none and days_open.days > 30 %}#e2b25a{% else %}#5a6275{% endif %};"
           title="{{ 'Opened ' ~ days_open.label ~ ' ago' if days_open is not none else 'Unknown' }}">
@@ -427,11 +405,11 @@
 
       <td class="muted col-full" data-sort="{{ t.opened_at }}" title="{{ t.opened_at[:16] }} UTC">{{ t.opened_at | berlin_time }}</td>
 
-      <td onclick="event.stopPropagation();" style="display:flex;gap:6px;align-items:center;">
-        <button type="button" class="icon-btn secondary" title="Open trade detail in new tab"
-                onclick="window.open('{{ url_for('trade_detail', trade_id=t.id) }}','_blank')">↗</button>
+      <td data-no-row-click style="display:flex;gap:6px;align-items:center;">
+        <a class="icon-btn secondary" href="{{ url_for('trade_detail', trade_id=t.id) }}" target="_blank"
+           title="Open trade detail in new tab">↗</a>
         <form method="post" action="/trades/{{ t.id }}/close" style="margin:0;"
-              onsubmit="return confirm('Mark {{ t.ticker }} trade as manually closed?');">
+              data-confirm="Mark {{ t.ticker }} trade as manually closed?">
           <button type="submit" class="icon-btn danger" title="Close trade">✕</button>
         </form>
       </td>
@@ -466,218 +444,6 @@
     Live prices refresh approximately every 15 seconds (incl. pre/aftermarket sessions) · P&amp;L updates on next refresh · Sizing based on {{ '%.0f%%'|format(account_cfg.risk_pct) }} risk · <code>!account</code> to change
   </div>
 
-  <script>
-  var _sortColId = null, _sortAsc = false;
-
-  function colIndexById(colId) {
-    var ths = document.querySelectorAll('#trades-table thead th[data-col-id]');
-    for (var i = 0; i < ths.length; i++) {
-      if (ths[i].dataset.colId === colId) return i;
-    }
-    return -1;
-  }
-
-  function sortByHeader(th) {
-    var colId = th.dataset.colId;
-    if (_sortColId === colId) { _sortAsc = !_sortAsc; } else { _sortColId = colId; _sortAsc = false; }
-    var idx = colIndexById(colId);
-    if (idx === -1) return;
-    var tbody = document.querySelector('#trades-table tbody');
-    var rows = Array.from(tbody.querySelectorAll('tr:not(.ot-leg-row)'));
-    rows.sort(function(a, b) {
-      var ac = a.cells[idx], bc = b.cells[idx];
-      var av = (ac.dataset.sort !== undefined ? ac.dataset.sort : ac.innerText).trim();
-      var bv = (bc.dataset.sort !== undefined ? bc.dataset.sort : bc.innerText).trim();
-      var an = parseFloat(av), bn = parseFloat(bv);
-      var cmp = (!isNaN(an) && !isNaN(bn)) ? (an - bn) : av.localeCompare(bv);
-      return _sortAsc ? cmp : -cmp;
-    });
-    rows.forEach(function(r) {
-      tbody.appendChild(r);
-      otLegRowsFor(r).forEach(function(leg) { tbody.appendChild(leg); });
-    });
-    document.querySelectorAll('.sort-arrow').forEach(function(el) {
-      el.textContent = (el.dataset.colId === _sortColId) ? (_sortAsc ? ' ▲' : ' ▼') : '';
-    });
-    // Row order just changed -- re-scan so pagination's "first N" reflects
-    // the new sort order rather than the stale array captured before sorting.
-    otRefreshRows();
-    otCurrentPage = 1;
-    otRender();
-  }
-
-  function applyDefaultSort() {
-    var confIdx = colIndexById('confidence'), scoreIdx = colIndexById('score');
-    if (confIdx === -1 || scoreIdx === -1) return;
-    var tbody = document.querySelector('#trades-table tbody');
-    var rows = Array.from(tbody.querySelectorAll('tr:not(.ot-leg-row)'));
-    rows.sort(function(a, b) {
-      var aConf = parseFloat(a.cells[confIdx].dataset.sort) || 0;
-      var bConf = parseFloat(b.cells[confIdx].dataset.sort) || 0;
-      if (bConf !== aConf) return bConf - aConf;
-      var aScore = parseFloat(a.cells[scoreIdx].dataset.sort) || 0;
-      var bScore = parseFloat(b.cells[scoreIdx].dataset.sort) || 0;
-      return bScore - aScore;
-    });
-    rows.forEach(function(r) {
-      tbody.appendChild(r);
-      otLegRowsFor(r).forEach(function(leg) { tbody.appendChild(leg); });
-    });
-  }
-
-  function filterTable() {
-    otCurrentPage = 1;
-    otRender();
-  }
-
-  // ── Open trades pagination -- mirrors the Trade History table's ct-*
-  // pagination pattern (see below), applied on top of the existing free-text
-  // filter box and column sort rather than a fresh set of filter dropdowns. ──
-  var otAllRows = [];
-  var OT_STORAGE_KEY = 'ot_per_page';
-  var otPPSel = document.getElementById('ot-per-page');
-  var otSavedPP = parseInt(localStorage.getItem(OT_STORAGE_KEY) || '25');
-  otPPSel.value = String(otSavedPP);
-  var otPerPage = otSavedPP;
-  var otCurrentPage = 1;
-
-  // Same leg-row rule as the Trade History table below: a scaled-out trade's
-  // .ot-leg-row is a continuation of its parent, never a row to paginate.
-  function otLegRowsFor(row) {
-    var id = row.dataset.tradeId;
-    if (!id) return [];
-    return Array.from(document.querySelectorAll(
-      '#trades-table tbody tr.ot-leg-row[data-leg-for="' + id + '"]'));
-  }
-
-  // Density: compact by default, independent of the Trade History table's own
-  // ct_density. Same wrapper-class approach and the same reason -- morphdom
-  // may revert a class the server never rendered, so otApplyDensity() is
-  // re-run from refreshOpenTradesTable() on every auto-refresh.
-  var OT_DENSITY_KEY = 'ot_density';
-  var otDensity = localStorage.getItem(OT_DENSITY_KEY) || 'compact';
-
-  function otApplyDensity() {
-    var wrap = document.querySelector('[data-density-for="ot"]');
-    if (!wrap) return;
-    wrap.classList.toggle('density-compact', otDensity === 'compact');
-    wrap.classList.toggle('density-full', otDensity === 'full');
-    var btns = document.querySelectorAll('#ot-density-toggle button');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.toggle('active', btns[i].dataset.density === otDensity);
-    }
-  }
-
-  document.querySelectorAll('#ot-density-toggle button').forEach(function(b) {
-    b.addEventListener('click', function() {
-      otDensity = this.dataset.density;
-      localStorage.setItem(OT_DENSITY_KEY, otDensity);
-      otApplyDensity();
-    });
-  });
-
-  function otRefreshRows() {
-    otAllRows = Array.from(document.querySelectorAll(
-      '#trades-table tbody tr:not(.ot-leg-row)'));
-  }
-
-  function otGetVisible() {
-    var q = (document.getElementById('trade-filter').value || '').toLowerCase();
-    return otAllRows.filter(function(row) {
-      return !q || row.innerText.toLowerCase().includes(q);
-    });
-  }
-
-  function otRender() {
-    var visible = otGetVisible();
-    var total = visible.length;
-    var pp = otPerPage === 0 ? total : otPerPage;
-    var totalPages = pp > 0 ? Math.max(1, Math.ceil(total / pp)) : 1;
-    otCurrentPage = Math.max(1, Math.min(otCurrentPage, totalPages));
-    var start = (otCurrentPage - 1) * pp;
-    var end = Math.min(start + pp, total);
-
-    document.querySelectorAll('#trades-table tbody tr')
-      .forEach(function(r) { r.style.display = 'none'; });
-    visible.slice(start, end).forEach(function(r) {
-      r.style.display = '';
-      otLegRowsFor(r).forEach(function(leg) { leg.style.display = ''; });
-    });
-
-    var otInfo = document.getElementById('ot-info');
-    var otPageInfo = document.getElementById('ot-page-info');
-    var otPrev = document.getElementById('ot-prev');
-    var otNext = document.getElementById('ot-next');
-    if (otInfo) {
-      otInfo.textContent = total === 0 ? 'No matching trades' :
-        'Showing ' + (start + 1) + '–' + end + ' of ' + total;
-    }
-    if (otPageInfo) otPageInfo.textContent = 'Page ' + otCurrentPage + ' / ' + totalPages;
-    if (otPrev) otPrev.disabled = otCurrentPage <= 1;
-    if (otNext) otNext.disabled = otCurrentPage >= totalPages;
-  }
-
-  // Re-scans the (possibly just-refreshed) table for rows and re-renders the
-  // current page. Called once below on initial load, AND again by
-  // dashboard.html's refreshDashboard() after every auto-refresh -- this
-  // table's own <script> tag only ever executes on the very first load
-  // (browsers don't re-run scripts injected via morphdom/innerHTML), so
-  // without this explicit re-run hook, newly opened/closed trades would
-  // never update the pagination totals after the first page load.
-  window.refreshOpenTradesTable = function() {
-    otRefreshRows();
-    otApplyDensity();
-    otRender();
-  };
-
-  otPPSel.addEventListener('change', function() {
-    otPerPage = parseInt(this.value);
-    localStorage.setItem(OT_STORAGE_KEY, otPerPage);
-    otCurrentPage = 1;
-    otRender();
-  });
-  document.getElementById('ot-prev').addEventListener('click', function() {
-    otCurrentPage--; otRender();
-  });
-  document.getElementById('ot-next').addEventListener('click', function() {
-    otCurrentPage++; otRender();
-  });
-
-  var COLUMN_ORDER_KEY = 'swingbot_dashboard_column_order';
-  function saveColumnOrder(order) {
-    try { localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order)); } catch (e) {}
-  }
-  function loadColumnOrder() {
-    try { var raw = localStorage.getItem(COLUMN_ORDER_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
-  }
-  function reorderTableColumns(table, targetOrder) {
-    var headRow = table.querySelector('thead tr');
-    var currentIds = Array.from(headRow.children).map(function(th) { return th.dataset.colId; });
-    var indices = targetOrder.map(function(id) { return currentIds.indexOf(id); }).filter(function(i) { return i !== -1; });
-    if (indices.length !== currentIds.length) return;
-    table.querySelectorAll('tr').forEach(function(row) {
-      var cells = Array.from(row.children);
-      if (cells.length !== currentIds.length) return;
-      indices.forEach(function(i) { row.appendChild(cells[i]); });
-    });
-  }
-  function applyColumnOrder() {
-    var table = document.getElementById('trades-table');
-    if (!table) return;
-    var saved = loadColumnOrder();
-    if (!saved) return;
-    var headRow = table.querySelector('thead tr');
-    var currentIds = Array.from(headRow.children).map(function(th) { return th.dataset.colId; });
-    var target = saved.filter(function(id) { return currentIds.indexOf(id) !== -1; });
-    currentIds.forEach(function(id) { if (target.indexOf(id) === -1) target.push(id); });
-    reorderTableColumns(table, target);
-  }
-
-  applyColumnOrder();
-  applyDefaultSort();
-  window.refreshOpenTradesTable();
-  </script>
-
   {% if not open_trades %}
   <div style="padding: 28px 0; text-align: center; color: #5a6275;">
     No open trades right now. Run <code>!check</code> in Discord to scan.
@@ -686,318 +452,11 @@
 
   <div class="row" style="margin-top: 18px;">
     <form method="post" action="{{ url_for('clear_open_trades') }}"
-          onsubmit="return confirm('Clear all {{ stats.open }} open trade(s)? Closed win/loss history is kept.');">
+          data-confirm="Clear all {{ stats.open }} open trade(s)? Closed win/loss history is kept.">
       <button type="submit" class="danger small" {{ 'disabled' if stats.open == 0 else '' }}>
         🗑 Clear open trades
       </button>
     </form>
     <span class="muted">Closed win/loss history is never touched.</span>
   </div>
-</div>
-
-{# ── Closed trades history ────────────────────────────────────────────────── #}
-<div class="card">
-  {# The "showing latest N of M" banner is gone: with real server-side paging
-     every closed trade is reachable, so there is nothing left to warn about. #}
-  <p class="card-title" style="margin-bottom:14px;">
-    Trade history
-    <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
-      {{ closed_trades_total }} closed trade(s) · win/loss/manually-closed
-      {%- if dashboard_mode in ('today', 'active') %} · closed today{% endif %}
-    </span>
-  </p>
-
-  {# NOTE: this whole block (filters/table/pagination/script) used to be
-     wrapped in "{% if closed_trades %}", with a plain placeholder <div> in
-     the {% else %} branch when there were none. That's exactly what broke
-     pagination (and sorting, and filtering): whether this <script> tag
-     exists in the page AT ALL depended on closed_trades being non-empty at
-     the moment of the very first full-page load. If you loaded the
-     dashboard while there happened to be zero closed trades (e.g. fresh
-     "Today only" mode early in the day) and a trade closed later, the next
-     auto-refresh's morphdom patch ADDS this script tag to the DOM for the
-     first time -- but a <script> element that arrives via DOM patching
-     (morphdom, innerHTML, etc.) never executes, only ones present in the
-     original parsed HTML or freshly created via document.createElement do.
-     So window.refreshClosedTradesTable() was never defined, every button/
-     dropdown below rendered and looked normal, and clicking Prev/Next
-     silently did nothing for the rest of that session -- only a full
-     manual page reload (with closed_trades already non-empty at that
-     point) would ever make it work. Rendering this block unconditionally
-     guarantees the script is part of the very first page load every time,
-     regardless of whether there happen to be 0 or 500 closed trades right
-     now; the table/pagination JS already handles an empty result set fine
-     (see render()'s "No matching trades" case). #}
-
-  {# ── Filter + pagination toolbar ── #}
-  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
-    <select id="ct-filter-outcome" class="ct-filter" data-filter="outcome"
-            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-      <option value="">All outcomes</option>
-      <option value="win">WIN</option>
-      <option value="loss">LOSS</option>
-      <option value="closed">CLOSED</option>
-    </select>
-    <select id="ct-filter-ticker" class="ct-filter" data-filter="ticker"
-            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-      <option value="">All tickers</option>
-      {%- for v in closed_trade_filter_options.ticker %}
-      <option value="{{ v }}">{{ v }}</option>
-      {%- endfor %}
-    </select>
-    <select id="ct-filter-strategy" class="ct-filter" data-filter="strategy"
-            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-      <option value="">All strategies</option>
-      {%- for v in closed_trade_filter_options.strategy %}
-      <option value="{{ v }}">{{ v }}</option>
-      {%- endfor %}
-    </select>
-    <select id="ct-filter-horizon" class="ct-filter" data-filter="horizon"
-            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-      <option value="">All horizons</option>
-      {%- for v in closed_trade_filter_options.horizon %}
-      <option value="{{ v }}">{{ v }}</option>
-      {%- endfor %}
-    </select>
-    <select id="ct-filter-dir" class="ct-filter" data-filter="dir"
-            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-      <option value="">All directions</option>
-      <option value="bullish">▲ Long</option>
-      <option value="bearish">▼ Short</option>
-    </select>
-    <select id="ct-filter-conf" class="ct-filter" data-filter="conf"
-            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-      <option value="">All confidence</option>
-      <option value="1">Lv1</option><option value="2">Lv2</option><option value="3">Lv3</option>
-      <option value="4">Lv4</option><option value="5">Lv5</option>
-    </select>
-    <button type="button" id="ct-reset-filters" class="secondary small"
-            style="font-size:12px;padding:4px 10px;">✕ Reset</button>
-    <span style="flex:1;"></span>
-    <span class="density-toggle" id="ct-density-toggle" title="Compact hides the analytical columns (strategy, horizon, confidence, entry/exit, P&L%, opened) -- they are still on the Performance page and each trade's detail page.">
-      <button type="button" data-density="compact">Compact</button>
-      <button type="button" data-density="full">Full</button>
-    </span>
-    <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:5px;">
-      Show
-      <select id="ct-per-page"
-              style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
-        <option value="10" selected>10</option>
-        <option value="25">25</option>
-        <option value="50">50</option>
-        <option value="0">All</option>
-      </select>
-      per page
-    </label>
-  </div>
-
-  <div class="table-density density-compact" data-density-for="ct">
-  <div style="overflow-x:auto;">
-  <table id="closed-trades-table" style="width:100%;">
-    <thead>
-    <tr>
-      <th style="width:26px;">#</th>
-      <th data-col-id="outcome" onclick="sortClosedTable(this)">Outcome <span class="sort-arrow" data-col-id="outcome"></span></th>
-      <th data-col-id="ticker" onclick="sortClosedTable(this)">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
-      <th class="col-full" data-col-id="strategy" onclick="sortClosedTable(this)" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
-      <th class="col-full" data-col-id="horizon" onclick="sortClosedTable(this)">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
-      <th class="col-full" data-col-id="dir" onclick="sortClosedTable(this)">Dir <span class="sort-arrow" data-col-id="dir"></span></th>
-      <th class="col-full" data-col-id="conf" onclick="sortClosedTable(this)">Conf <span class="sort-arrow" data-col-id="conf"></span></th>
-      <th data-col-id="entry" onclick="sortClosedTable(this)" class="col-full num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
-      <th data-col-id="exit" onclick="sortClosedTable(this)" class="col-full num">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
-      <th data-col-id="pnlpct" onclick="sortClosedTable(this)" class="col-full num" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
-      <th data-col-id="gainloss" onclick="sortClosedTable(this)" class="num" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
-      <th data-col-id="r" onclick="sortClosedTable(this)" class="num" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
-      <th data-col-id="days" onclick="sortClosedTable(this)" class="num" title="Holding period -- time held, from open to close, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
-      <th class="col-full" data-col-id="opened" onclick="sortClosedTable(this)">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
-      <th data-col-id="closed" onclick="sortClosedTable(this)">Closed <span class="sort-arrow" data-col-id="closed"></span></th>
-      <th style="width:60px;"></th>
-    </tr>
-    </thead>
-    <tbody>
-    {% include '_trade_history_rows.html' %}
-    </tbody>
-  </table>
-  </div>
-
-  {# ── Pagination bar ── #}
-  <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
-    <button type="button" id="ct-prev" class="secondary small" style="padding:4px 12px;">‹ Prev</button>
-    <span id="ct-page-info" class="muted" style="font-size:12px;">Page 1 / 1</span>
-    <button type="button" id="ct-next" class="secondary small" style="padding:4px 12px;">Next ›</button>
-    <span style="flex:1;"></span>
-    <span id="ct-info" class="muted" style="font-size:12px;"></span>
-  </div>
-  </div>{# /table-density #}
-
-  {% if closed_trades %}
-  <div class="row" style="margin-top:12px;">
-    <form method="post" action="{{ url_for('clear_trade_history') }}"
-          onsubmit="return confirm('Delete all {{ closed_trades | length }} closed trade record(s)? This cannot be undone.');">
-      <button type="submit" class="danger small">🗑 Clear all history</button>
-    </form>
-    <span class="muted" style="font-size:12px;">Open trades are not affected.</span>
-  </div>
-  {% endif %}
-
-  <script>
-  (function() {
-    // Trade History is served a PAGE AT A TIME by /api/trade-history (plan
-    // v9). Scoping to the dashboard mode, all six filters, sorting and
-    // slicing happen server-side; this file only asks for a page and swaps
-    // the tbody.
-    //
-    // Filters and sorting had to move with the paging, not stay here. Hiding
-    // or reordering rows in the DOM only ever sees the page currently
-    // loaded, so a "AAPL" filter would have quietly meant "AAPL among these
-    // 25" -- worse than the unpaginated behaviour it replaced.
-    var STORAGE_KEY = 'ct_per_page';
-    var savedPP = parseInt(localStorage.getItem(STORAGE_KEY) || '10');
-    var ppSel = document.getElementById('ct-per-page');
-    ppSel.value = String(savedPP);
-    var perPage = savedPP;
-    var currentPage = 1;
-    var filters = {};
-    var ctSortCol = null, ctSortAsc = false;
-    var reqSeq = 0;            // guards against out-of-order responses
-    var debounceTimer = null;
-
-    var DENSITY_KEY = 'ct_density';
-    var density = localStorage.getItem(DENSITY_KEY) || 'compact';
-
-    function applyDensity() {
-      var wrap = document.querySelector('[data-density-for="ct"]');
-      if (!wrap) return;
-      wrap.classList.toggle('density-compact', density === 'compact');
-      wrap.classList.toggle('density-full', density === 'full');
-      var btns = document.querySelectorAll('#ct-density-toggle button');
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].classList.toggle('active', btns[i].dataset.density === density);
-      }
-    }
-
-    function currentMode() {
-      var m = new URLSearchParams(window.location.search).get('mode');
-      return (m === 'today' || m === 'all' || m === 'active') ? m : 'active';
-    }
-
-    function buildQuery() {
-      var q = new URLSearchParams();
-      q.set('mode', currentMode());
-      q.set('page', String(currentPage));
-      q.set('per_page', String(perPage));
-      for (var k in filters) { if (filters[k]) q.set(k, filters[k]); }
-      if (ctSortCol) { q.set('sort_by', ctSortCol); q.set('sort_dir', ctSortAsc ? 'asc' : 'desc'); }
-      return q.toString();
-    }
-
-    function setStatus(text) {
-      var el = document.getElementById('ct-info');
-      if (el) el.textContent = text;
-    }
-
-    function loadTradeHistory() {
-      var seq = ++reqSeq;
-      var tbody = document.querySelector('#closed-trades-table tbody');
-      if (!tbody) return;
-      fetch('/api/trade-history?' + buildQuery(), { credentials: 'same-origin' })
-        .then(function(r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .then(function(d) {
-          if (seq !== reqSeq) return;      // a newer request already won
-          tbody.innerHTML = d.rows_html;
-          var start = d.total === 0 ? 0 : (d.page - 1) * (perPage || d.total) + 1;
-          var end = d.total === 0 ? 0 : start + d.shown - 1;
-          setStatus(d.total === 0 ? 'No matching trades'
-                                  : 'Showing ' + start + '\u2013' + end + ' of ' + d.total);
-          document.getElementById('ct-page-info').textContent =
-            'Page ' + d.page + ' / ' + d.pages;
-          document.getElementById('ct-prev').disabled = d.page <= 1;
-          document.getElementById('ct-next').disabled = d.page >= d.pages;
-          document.querySelectorAll('#closed-trades-table .sort-arrow').forEach(function(el) {
-            el.textContent = (el.dataset.colId === ctSortCol) ? (ctSortAsc ? ' \u25B2' : ' \u25BC') : '';
-          });
-          applyDensity();
-        })
-        .catch(function(err) {
-          if (seq !== reqSeq) return;
-          // Leave the rows that are already on screen -- a transient fetch
-          // failure should not blank the table out from under the user.
-          setStatus('Could not load trade history (' + err.message + ')');
-        });
-    }
-
-    // Debounced so spinning through a dropdown does not stack one request per
-    // keystroke; the seq guard above handles any that do overlap.
-    function reload(resetPage) {
-      if (resetPage) currentPage = 1;
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(loadTradeHistory, 150);
-    }
-
-    window.sortClosedTable = function(th) {
-      var colId = th.dataset.colId;
-      if (!colId) return;
-      if (ctSortCol === colId) { ctSortAsc = !ctSortAsc; } else { ctSortCol = colId; ctSortAsc = false; }
-      reload(true);
-    };
-
-    // Called by dashboard.html's refreshDashboard() after each auto-refresh.
-    // This <script> only ever runs on the very first page load (browsers do
-    // not re-execute scripts injected via morphdom), so the refresh hook has
-    // to be a global.
-    window.refreshClosedTradesTable = function() {
-      applyDensity();
-      loadTradeHistory();
-    };
-
-    // Bound ONCE: morphdom patches these controls in place rather than
-    // recreating them, so re-binding per refresh would stack listeners.
-    document.querySelectorAll('.ct-filter').forEach(function(el) {
-      el.addEventListener('change', function() {
-        filters[el.dataset.filter] = el.value;
-        reload(true);
-      });
-    });
-
-    // Density is presentation only -- never refetch for it.
-    document.querySelectorAll('#ct-density-toggle button').forEach(function(b) {
-      b.addEventListener('click', function() {
-        density = this.dataset.density;
-        localStorage.setItem(DENSITY_KEY, density);
-        applyDensity();
-      });
-    });
-
-    ppSel.addEventListener('change', function() {
-      perPage = parseInt(this.value);
-      localStorage.setItem(STORAGE_KEY, perPage);
-      reload(true);
-    });
-
-    document.getElementById('ct-prev').addEventListener('click', function() {
-      if (currentPage > 1) { currentPage--; loadTradeHistory(); }
-    });
-    document.getElementById('ct-next').addEventListener('click', function() {
-      currentPage++; loadTradeHistory();
-    });
-
-    document.getElementById('ct-reset-filters').addEventListener('click', function() {
-      document.querySelectorAll('.ct-filter').forEach(function(el){ el.value = ''; });
-      filters = {};
-      reload(true);
-    });
-
-    applyDensity();
-    loadTradeHistory();
-  })();
-  </script>
-
-  {% if not closed_trades %}
-  <p class="muted" style="text-align:center;padding:8px 0 0;">
-    No closed trades yet. Trades are marked win/loss automatically when price hits stop or target.
-  </p>
-  {% endif %}
 </div>

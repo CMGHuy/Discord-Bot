@@ -33,7 +33,8 @@ from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_O
 from swingbot.admin.jobs import TRAIN_WINDOW
 from swingbot.admin.jobs import manager as job_manager
 
-from .app import MANUAL_CLOSE_QUEUE, _is_today_berlin, _render, require_auth
+from .app import MANUAL_CLOSE_QUEUE, _render, require_auth
+from .dashboard import is_today_berlin as _is_today_berlin
 
 pages = Blueprint("pages", __name__)
 
@@ -255,7 +256,7 @@ def _strategy_horizon_heatmap() -> dict:
 def _rolling_win_rate_series(closed_trades: list[dict], window: int = 10) -> list[float | None]:
     """Rolling win-rate (0-100 scale) over a strategy's own closed-trade
     sequence, ordered by closed_at. Same "small per-trade display helper"
-    category as app.py's _closed_pnl/_closed_r -- not an analytics call,
+    category as dashboard.py's closed_pnl/closed_r -- not an analytics call,
     just windowed arithmetic for a sparkline."""
     ordered = sorted(closed_trades, key=lambda t: t.get("closed_at") or "")
     outcomes = [1 if t["status"] == "win" else 0 for t in ordered if t["status"] in ("win", "loss")]

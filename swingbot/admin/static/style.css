@@ -200,11 +200,15 @@ button:disabled { opacity: .45; cursor: not-allowed; }
    than a full labeled pill button, and won't fight the row's other text
    for space). ".icon-btn.danger"'s specificity (2 classes) beats the plain
    ".danger" rule above regardless of source order, same as before. */
+/* text-decoration:none because the "open in new tab" icon is an <a> now, not a
+   <button> running window.open() from an inline onclick -- a link that opens a
+   link needs no JavaScript, and middle-click/ctrl-click work for free. */
 .icon-btn {
   background: transparent; box-shadow: none; color: #8a92a6; border: none;
   width: 30px; height: 30px; padding: 0; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 14px; line-height: 1; cursor: pointer; transition: background 0.15s, color 0.15s;
+  font-size: 14px; line-height: 1; cursor: pointer; text-decoration: none;
+  transition: background 0.15s, color 0.15s;
 }
 .icon-btn:hover { background: #1c2030; }
 .icon-btn:active { transform: none; }
@@ -946,6 +950,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: 12px; font-family: inherit; cursor: pointer;
 }
 .density-toggle button.active { background: #232838; color: #dde1ea; }
+
+/* Dashboard mode toggle (Today + Open / Today only / All days). The selected
+   state used to be painted by JS writing inline background/color on every
+   button, which duplicated a Jinja class the server had already set. One
+   class, toggled in one place, rendered here. */
+.dashboard-mode-btn { background: #13161d; color: #9aa3b8; }
+.dashboard-mode-btn.active { background: #2558c9; color: #fff; }
 
 /* Cells that pack several facts into one column -- Ticker (symbol, direction,
    tier) and Plan (entry, target, stop). Without this the parts run together

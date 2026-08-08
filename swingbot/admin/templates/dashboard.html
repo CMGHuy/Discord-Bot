@@ -1,22 +1,29 @@
 {% extends "base.html" %}
 {% block body %}
+{# ===========================================================================
+   Dashboard shell. Everything here is parsed ONCE per page load: the toolbar,
+   the Trade History card, and the <script> that drives all of it.
+
+   Only #dashboard-fragment is re-fetched on the auto-refresh poll. Trade
+   History deliberately sits outside it -- the table is filled by
+   /api/trade-history from first paint onward, so re-rendering its rows and
+   its filter dropdowns on every 5s tick only ever produced markup the browser
+   threw away.
+   =========================================================================== #}
 <div class="toolbar">
   <div id="dashboard-mode-toggle" title="Which trades the stat cards/tables below summarize"
        style="display:flex; border:1px solid #2a2e3d; border-radius:8px; overflow:hidden;">
-    <button type="button" class="btn ghost small dashboard-mode-btn{% if (dashboard_mode | default('active')) == 'active' %} secondary{% endif %}" data-mode="active"
-            onclick="setDashboardMode('active')"
+    <button type="button" class="btn ghost small dashboard-mode-btn" data-mode="active"
             title="Today's new trades, plus every still-open position from any day">Today + Open</button>
-    <button type="button" class="btn ghost small dashboard-mode-btn{% if (dashboard_mode | default('active')) == 'today' %} secondary{% endif %}" data-mode="today"
-            onclick="setDashboardMode('today')"
+    <button type="button" class="btn ghost small dashboard-mode-btn" data-mode="today"
             title="Only today's activity -- trades opened or closed today">Today only</button>
-    <button type="button" class="btn ghost small dashboard-mode-btn{% if (dashboard_mode | default('active')) == 'all' %} secondary{% endif %}" data-mode="all"
-            onclick="setDashboardMode('all')"
+    <button type="button" class="btn ghost small dashboard-mode-btn" data-mode="all"
             title="Every trade ever logged, no date filtering">All days</button>
   </div>
   <label class="muted" style="display:flex;align-items:center;gap:6px;">
     <input type="checkbox" id="auto-refresh" checked> Auto-refresh every {{ dashboard_refresh_seconds }}s
   </label>
-  <button type="button" class="secondary small" onclick="refreshDashboard()">&#8635; Refresh now</button>
+  <button type="button" class="secondary small" id="refresh-now">&#8635; Refresh now</button>
   <span class="muted" id="refresh-status" style="font-size:12px;"></span>
 
   <!-- Bot liveness indicator: green = bot process active, red = offline/hung -->
@@ -28,8 +35,9 @@
 
   <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
     <span id="scan-pause-badge" class="pill" style="display:none;"></span>
-    <form method="post" id="pause-resume-form" style="margin:0;"
-          onsubmit="return confirm(this.action.endsWith('/scan/pause') ? 'Pause automatic scanning? Manual !check and \"Run !check now\" will still work.' : 'Resume automatic scanning?');">
+    {# action + data-confirm are set by dashboard.js once it knows whether
+       scanning is currently paused. #}
+    <form method="post" id="pause-resume-form" style="margin:0;">
       <button type="submit" class="secondary small" id="pause-resume-btn">…</button>
     </form>
     <form method="post" action="{{ url_for('trigger_scan') }}" style="margin:0;">
@@ -38,7 +46,7 @@
       </button>
     </form>
     <form method="post" action="{{ url_for('stop_scan') }}" style="margin:0;"
-          onsubmit="return confirm('Stop the scan currently running?');">
+          data-confirm="Stop the scan currently running?">
       <button type="submit" class="danger small" id="stop-btn" disabled
               title="Stop the scan currently in progress (only enabled while one is running)">
         🛑 Stop scan
@@ -60,277 +68,135 @@
 </div>
 
 <div id="dashboard-fragment">{{ fragment | safe }}</div>
-<script src="{{ url_for('static', filename='vendor/morphdom-umd.min.js') }}"></script>
-<script>
-  // Basic-Auth credentials are cached by the browser per-origin.
-  // We encode them ourselves here so the fetch() request is never
-  // rejected with a silent 401 (which the catch() would swallow).
-  var _authHeader = null;
-  (function() {
-    // Try to parse credentials from the URL if the user navigated here
-    // with them in the address bar (unlikely with Basic Auth dialogs, but
-    // a useful fallback). Prompt-dialog credentials are stored by the
-    // browser -- XMLHttpRequest always re-sends them; fetch() with
-    // credentials:'include' does too in most browsers for same-origin.
-    _authHeader = 'same-origin';
-  })();
 
-  // ---- Dashboard mode (Today + Open / Today only / All days) --------------
-  // Reflected in the URL (?mode=...) so switching modes is visible in the
-  // address bar and the choice is shareable/bookmarkable -- reloading THIS
-  // URL keeps it. Deliberately NOT persisted in localStorage: that used to
-  // survive to every future page load even with no ?mode= in the URL at
-  // all, silently reapplying a forgotten "Today only"/"All days" choice
-  // from a past session the instant the page loaded -- "Today only" mode
-  // excludes any open trade not opened today by design (see
-  // _render_dashboard_fragment's docstring), so a single old click could
-  // make a live open position vanish from every future load and every
-  // auto-refresh tick after it, with nothing but a re-highlighted toggle
-  // button (easy to miss) to explain why. "active" (today's new trades +
-  // every still-open position) is the default and the only thing you get
-  // back from a plain reload now.
-  var dashboardMode = {{ (dashboard_mode | default('active')) | tojson }};
-  function updateDashboardModeButtons() {
-    document.querySelectorAll('.dashboard-mode-btn').forEach(function(btn) {
-      var active = btn.dataset.mode === dashboardMode;
-      btn.style.background = active ? '#2558c9' : '#13161d';
-      btn.style.color = active ? '#fff' : '#9aa3b8';
-      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
-  }
-  function setDashboardMode(mode) {
-    if (mode === dashboardMode) return;
-    dashboardMode = mode;
-    var url = new URL(window.location.href);
-    url.searchParams.set('mode', mode);
-    window.history.replaceState(null, '', url);
-    updateDashboardModeButtons();
-    refreshDashboard();
-  }
-  updateDashboardModeButtons();
+{# ── Trade history ───────────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title" style="margin-bottom:14px;">
+    Trade history
+    <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;">
+      <span id="ct-total-count">{{ closed_trades_total }}</span> closed trade(s) · win/loss/manually-closed
+      {%- if dashboard_mode in ('today', 'active') %} · closed today{% endif %}
+    </span>
+  </p>
 
-  var _lastFragmentEtag = null;
-  function refreshDashboard() {
-    var _pollHeaders = {};
-    if (_lastFragmentEtag) { _pollHeaders['If-None-Match'] = _lastFragmentEtag; }
-    fetch('{{ url_for("dashboard_fragment") }}?mode=' + encodeURIComponent(dashboardMode),
-          { credentials: 'include', headers: _pollHeaders })
-      .then(function(r) {
-        if (r.status === 401) {
-          window.location.reload();
-          return null;
-        }
-        if (r.status === 304) { return undefined; } // unchanged since last poll -- nothing to patch
-        _lastFragmentEtag = r.headers.get('ETag');
-        return r.text();
-      })
-      .then(function(html) {
-        var refreshStatus = document.getElementById('refresh-status');
-        if (html === undefined) {
-          if (refreshStatus) refreshStatus.textContent = 'Up to date ' + new Date().toLocaleTimeString();
-          return;
-        }
-        if (!html) return;
-        var container = document.getElementById('dashboard-fragment');
-        if (!container) return;
-        if (typeof morphdom !== 'undefined') {
-          // Diff-patch: only updates DOM nodes that actually changed.
-          // This prevents the full repaint / layout-thrash that innerHTML
-          // causes, eliminating the visible flash on every refresh cycle.
-          var wrapper = document.createElement('div');
-          wrapper.id = 'dashboard-fragment';
-          wrapper.innerHTML = html;
-          morphdom(container, wrapper, {
-            // Keep existing input values and focus state intact across patches
-            onBeforeElUpdated: function(from, to) {
-              if (from.nodeName === 'INPUT' || from.nodeName === 'SELECT') return false;
-              // The session banner (Tokyo/London/New York pills) is populated
-              // entirely client-side by a <script> that runs once on initial
-              // load and keeps itself fresh via its own internal setTimeout
-              // loop -- it doesn't depend on server data at all. Scripts
-              // fetched via AJAX and patched into the DOM (morphdom or
-              // innerHTML) never re-execute, so if this subtree gets diffed
-              // like everything else, morphdom overwrites the JS-populated
-              // pills with the empty server-rendered markup from the fresh
-              // fetch and nothing ever fills them back in -- the banner goes
-              // blank after the very first auto-refresh and stays that way.
-              // Skipping the whole subtree here leaves the original script's
-              // DOM nodes (and its running timer) untouched across refreshes.
-              if (from.id === 'session-banner') return false;
-              return true;
-            }
-          });
-        } else {
-          // morphdom not yet loaded (first render) -- fall back to innerHTML
-          container.innerHTML = html;
-        }
-        if (refreshStatus) refreshStatus.textContent =
-          'Updated ' + new Date().toLocaleTimeString();
-        if (typeof applyColumnOrder === 'function') { applyColumnOrder(); }
-        // Re-scan the Trade History table + rebuild its ticker/strategy/
-        // horizon filter dropdowns from whatever's in the DOM now -- see
-        // this function's own definition (dashboard_fragment.html) for why
-        // it has to be called explicitly instead of just re-running on its
-        // own: its <script> tag only executes once, on the very first load.
-        if (typeof refreshClosedTradesTable === 'function') { refreshClosedTradesTable(); }
-        if (typeof refreshOpenTradesTable === 'function') { refreshOpenTradesTable(); }
-        // Force the session banner (Tokyo/London/New York pills) to re-render
-        // fresh on every refresh instead of just trusting morphdom's skip-diff
-        // + the banner's own internal 60s timer to keep it alive indefinitely
-        // (a backgrounded/throttled tab can pause that timer, which is
-        // exactly what made the banner appear to "disappear after showing
-        // once" -- it goes stale until the tab regains focus, or blank if
-        // morphdom ever failed to preserve the subtree for any reason).
-        if (typeof renderSessionBanner === 'function') { renderSessionBanner(); }
-        // Quick "this just refreshed" flash on the stat cards (see .card.
-        // just-updated / @keyframes card-flash in style.css) -- a subtle
-        // live-data cue for an auto-refreshing page. Re-triggering a CSS
-        // animation on an element that already has the class requires
-        // forcing a reflow between removing and re-adding it, or the
-        // browser just no-ops the second addClass since nothing "changed".
-        document.querySelectorAll('.stat-card').forEach(function(el) {
-          el.classList.remove('just-updated');
-          void el.offsetWidth;   // force reflow so the next line's class-add is seen as a fresh animation start
-          el.classList.add('just-updated');
-        });
-      })
-      .catch(function() {});
-  }
-  setInterval(function() {
-    if (document.getElementById('auto-refresh').checked) { refreshDashboard(); }
-  }, {{ (dashboard_refresh_seconds * 1000) | int }});
+  {# ── Filter + pagination toolbar ── #}
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+    <select id="ct-filter-outcome" class="ct-filter" data-filter="outcome"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All outcomes</option>
+      <option value="win">WIN</option>
+      <option value="loss">LOSS</option>
+      <option value="closed">CLOSED</option>
+    </select>
+    <select id="ct-filter-ticker" class="ct-filter" data-filter="ticker"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All tickers</option>
+      {%- for v in closed_trade_filter_options.ticker %}
+      <option value="{{ v }}">{{ v }}</option>
+      {%- endfor %}
+    </select>
+    <select id="ct-filter-strategy" class="ct-filter" data-filter="strategy"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All strategies</option>
+      {%- for v in closed_trade_filter_options.strategy %}
+      <option value="{{ v }}">{{ v }}</option>
+      {%- endfor %}
+    </select>
+    <select id="ct-filter-horizon" class="ct-filter" data-filter="horizon"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All horizons</option>
+      {%- for v in closed_trade_filter_options.horizon %}
+      <option value="{{ v }}">{{ v }}</option>
+      {%- endfor %}
+    </select>
+    <select id="ct-filter-dir" class="ct-filter" data-filter="dir"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All directions</option>
+      <option value="bullish">▲ Long</option>
+      <option value="bearish">▼ Short</option>
+    </select>
+    <select id="ct-filter-conf" class="ct-filter" data-filter="conf"
+            style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+      <option value="">All confidence</option>
+      <option value="1">Lv1</option><option value="2">Lv2</option><option value="3">Lv3</option>
+      <option value="4">Lv4</option><option value="5">Lv5</option>
+    </select>
+    <button type="button" id="ct-reset-filters" class="secondary small"
+            style="font-size:12px;padding:4px 10px;">✕ Reset</button>
+    <span style="flex:1;"></span>
+    <span class="density-toggle" id="ct-density-toggle" title="Compact hides the analytical columns (strategy, horizon, confidence, entry/exit, P&L%, opened) -- they are still on the Performance page and each trade's detail page.">
+      <button type="button" data-density="compact">Compact</button>
+      <button type="button" data-density="full">Full</button>
+    </span>
+    <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:5px;">
+      Show
+      <select id="ct-per-page"
+              style="background:#13161d;color:#dde1ea;border:1px solid #1f2330;border-radius:6px;padding:4px 8px;font-size:12px;">
+        <option value="10">10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="0">All</option>
+      </select>
+      per page
+    </label>
+  </div>
 
-  // ---- Drag-and-drop column reordering ------------------------------------
-  // Delegated on the OUTER #dashboard-fragment container (which itself is
-  // never replaced, only its contents), so these listeners keep working
-  // across every auto-refresh without needing to be re-attached -- unlike a
-  // handler bound directly to a <th>, which would be destroyed and lost the
-  // moment that element is replaced by a fresh fragment render.
-  (function() {
-    var container = document.getElementById('dashboard-fragment');
-    var dragSrcColId = null;
+  <div class="table-density density-compact" data-density-for="ct">
+  <div style="overflow-x:auto;">
+  <table id="closed-trades-table" style="width:100%;">
+    <thead>
+    <tr>
+      <th style="width:26px;">#</th>
+      <th data-col-id="outcome">Outcome <span class="sort-arrow" data-col-id="outcome"></span></th>
+      <th data-col-id="ticker">Ticker <span class="sort-arrow" data-col-id="ticker"></span></th>
+      <th class="col-full" data-col-id="strategy" title="Primary confirming method">Strategy <span class="sort-arrow" data-col-id="strategy"></span></th>
+      <th class="col-full" data-col-id="horizon">Horizon <span class="sort-arrow" data-col-id="horizon"></span></th>
+      <th class="col-full" data-col-id="dir">Dir <span class="sort-arrow" data-col-id="dir"></span></th>
+      <th class="col-full" data-col-id="conf">Conf <span class="sort-arrow" data-col-id="conf"></span></th>
+      <th data-col-id="entry" class="col-full num">Entry <span class="sort-arrow" data-col-id="entry"></span></th>
+      <th data-col-id="exit" class="col-full num">Exit <span class="sort-arrow" data-col-id="exit"></span></th>
+      <th data-col-id="pnlpct" class="col-full num" title="Realized P&L % vs entry">P&amp;L% <span class="sort-arrow" data-col-id="pnlpct"></span></th>
+      <th data-col-id="gainloss" class="num" title="Realized gain/loss in account currency, based on the position size snapshotted when the trade was opened">Gain/Loss <span class="sort-arrow" data-col-id="gainloss"></span></th>
+      <th data-col-id="r" class="num" title="Realized R-multiple">R <span class="sort-arrow" data-col-id="r"></span></th>
+      <th data-col-id="days" class="num" title="Holding period -- time held, from open to close, down to the minute">Held <span class="sort-arrow" data-col-id="days"></span></th>
+      <th class="col-full" data-col-id="opened">Opened <span class="sort-arrow" data-col-id="opened"></span></th>
+      <th data-col-id="closed">Closed <span class="sort-arrow" data-col-id="closed"></span></th>
+      <th style="width:60px;"></th>
+    </tr>
+    </thead>
+    {# Rendered server-side for first paint so the table is populated straight
+       away; dashboard.js re-requests page 1 on load (its remembered page size
+       may differ from the 25 used here) and owns the tbody from then on. #}
+    <tbody>
+    {% include '_trade_history_rows.html' %}
+    </tbody>
+  </table>
+  </div>
 
-    container.addEventListener('dragstart', function(e) {
-      var th = e.target.closest('th[data-col-id]');
-      if (!th) return;
-      dragSrcColId = th.dataset.colId;
-      e.dataTransfer.effectAllowed = 'move';
-      th.classList.add('dragging-col');
-    });
+  {# ── Pagination bar ── #}
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+    <button type="button" id="ct-prev" class="secondary small" style="padding:4px 12px;">‹ Prev</button>
+    <span id="ct-page-info" class="muted" style="font-size:12px;">Page 1 / 1</span>
+    <button type="button" id="ct-next" class="secondary small" style="padding:4px 12px;">Next ›</button>
+    <span style="flex:1;"></span>
+    <span id="ct-info" class="muted" style="font-size:12px;"></span>
+  </div>
+  </div>{# /table-density #}
 
-    container.addEventListener('dragover', function(e) {
-      if (!dragSrcColId) return;
-      var th = e.target.closest('th[data-col-id]');
-      if (!th) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      th.classList.add('drop-target-col');
-    });
-
-    container.addEventListener('dragleave', function(e) {
-      var th = e.target.closest('th[data-col-id]');
-      if (th) th.classList.remove('drop-target-col');
-    });
-
-    container.addEventListener('drop', function(e) {
-      var th = e.target.closest('th[data-col-id]');
-      if (th) th.classList.remove('drop-target-col');
-      if (!th || !dragSrcColId) return;
-      e.preventDefault();
-      var targetColId = th.dataset.colId;
-      if (targetColId === dragSrcColId) return;
-      var table = document.getElementById('trades-table');
-      if (!table || typeof reorderTableColumns !== 'function') return;
-      var headRow = table.querySelector('thead tr');
-      var order = Array.from(headRow.children).map(function(el) { return el.dataset.colId; });
-      var fromIdx = order.indexOf(dragSrcColId);
-      var toIdx = order.indexOf(targetColId);
-      if (fromIdx === -1 || toIdx === -1) return;
-      order.splice(fromIdx, 1);
-      order.splice(toIdx, 0, dragSrcColId);
-      reorderTableColumns(table, order);
-      if (typeof saveColumnOrder === 'function') { saveColumnOrder(order); }
-    });
-
-    container.addEventListener('dragend', function(e) {
-      var th = e.target.closest('th[data-col-id]');
-      if (th) th.classList.remove('dragging-col');
-      container.querySelectorAll('.drop-target-col').forEach(function(el) {
-        el.classList.remove('drop-target-col');
-      });
-      dragSrcColId = null;
-    });
-  })();
-
-  function refreshScanStatus() {
-    fetch('{{ url_for("scan_status") }}', { credentials: 'include' })
-      .then(function(r) { return r.status === 401 ? null : r.json(); })
-      .then(function(data) {
-        if (!data) return;
-        var btn = document.getElementById('pause-resume-btn');
-        var form = document.getElementById('pause-resume-form');
-        var badge = document.getElementById('scan-pause-badge');
-        if (btn && form && badge) {
-          if (data.paused) {
-            btn.textContent = '▶ Resume scanning';
-            btn.title = 'Resume the automatic background scan loop';
-            form.action = '{{ url_for("resume_scan") }}';
-            badge.style.display = 'inline-block';
-            badge.textContent = '⏸ Paused';
-            badge.style.color = '#e2b25a';
-            badge.style.borderColor = '#e2b25a';
-          } else {
-            btn.textContent = '⏸ Pause scanning';
-            btn.title = 'Pause the automatic background scan loop (manual !check still works)';
-            form.action = '{{ url_for("pause_scan") }}';
-            badge.style.display = 'none';
-          }
-        }
-        // "Stop scan" only makes sense -- and is only enabled -- while a
-        // scan is actually in progress right now.
-        var stopBtn = document.getElementById('stop-btn');
-        if (stopBtn) stopBtn.disabled = !data.running;
-
-        // ---- Bot liveness indicator ----------------------------------------
-        var dot   = document.getElementById('bot-status-dot');
-        var label = document.getElementById('bot-status-label');
-        var wrap  = document.getElementById('bot-status-wrap');
-        if (dot && label) {
-          if (data.bot_alive) {
-            var statusParts = ['Bot: 🟢 active'];
-            if (data.bot_session_active === false) { statusParts = ['Bot: 🟡 online (off-hours)']; }
-            if (data.bot_scan_paused)              { statusParts = ['Bot: ⏸ paused']; }
-            var lastSeen = data.bot_last_seen
-              ? ' · last seen ' + new Date(data.bot_last_seen).toLocaleTimeString()
-              : '';
-            dot.style.setProperty('--status-color', data.bot_scan_paused ? '#e2b25a'
-                                   : data.bot_session_active ? '#26a69a' : '#6ea8fe');
-            dot.style.setProperty('--blink-duration', '2.2s');
-            label.textContent = statusParts[0] + lastSeen;
-            if (wrap) wrap.title = 'Bot process is alive' + lastSeen;
-          } else if (data.bot_last_seen) {
-            // Heartbeat file exists but is stale — bot has gone quiet.
-            var ago = Math.round((Date.now() - new Date(data.bot_last_seen).getTime()) / 1000);
-            var agoStr = ago < 120 ? ago + 's ago' : Math.round(ago / 60) + 'm ago';
-            dot.style.setProperty('--status-color', '#ef5350');
-            dot.style.setProperty('--blink-duration', '0.8s');
-            label.textContent = 'Bot: 🔴 offline (last seen ' + agoStr + ')';
-            if (wrap) wrap.title = 'Bot process has not responded in over ' + agoStr;
-          } else {
-            // No heartbeat file at all — bot has never written one (first run,
-            // or file deleted) — show neutral grey rather than alarming red.
-            dot.style.setProperty('--status-color', '#5a6275');
-            dot.style.setProperty('--blink-duration', '2.2s');
-            label.textContent = 'Bot: status unknown';
-            if (wrap) wrap.title = 'No heartbeat file found — bot may not be running yet';
-          }
-        }
-      })
-      .catch(function() {});
-  }
-  refreshScanStatus();
-  setInterval(refreshScanStatus, 5000);
-</script>
+  {% if closed_trades_total %}
+  <div class="row" style="margin-top:12px;">
+    <form method="post" action="{{ url_for('clear_trade_history') }}"
+          data-confirm="Delete all {{ closed_trades_total }} closed trade record(s)? This cannot be undone.">
+      <button type="submit" class="danger small">🗑 Clear all history</button>
+    </form>
+    <span class="muted" style="font-size:12px;">Open trades are not affected.</span>
+  </div>
+  {% else %}
+  <p class="muted" style="text-align:center;padding:8px 0 0;">
+    No closed trades yet. Trades are marked win/loss automatically when price hits stop or target.
+  </p>
+  {% endif %}
+</div>
 
 <div class="chart-modal" id="chart-modal" hidden>
   <div class="chart-modal-panel">
@@ -339,21 +205,21 @@
     <div class="swing-chart" id="chart-modal-chart" style="height:380px;"></div>
   </div>
 </div>
-<script>
-(function () {
-  const modal = document.getElementById("chart-modal");
-  const host = document.getElementById("chart-modal-chart");
-  document.addEventListener("click", (e) => {
-    const row = e.target.closest("tr[data-ticker]");
-    if (row && !e.target.closest("a, button, form")) {
-      modal.hidden = false;
-      document.getElementById("chart-modal-title").textContent = row.dataset.ticker;
-      host.innerHTML = ""; host.dataset.ticker = row.dataset.ticker;
-      SwingChart.mount(host);
-    }
-    if (e.target === modal || e.target.id === "chart-modal-close") { modal.hidden = true; host.innerHTML = ""; }
-  });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { modal.hidden = true; host.innerHTML = ""; } });
-})();
+
+{# Server values for static/dashboard.js. A static .js file is never run
+   through Jinja, so URLs and settings are handed over as data rather than
+   interpolated into the script. #}
+<script type="application/json" id="dashboard-boot">
+{{ {
+  "fragmentUrl":   url_for('dashboard_fragment'),
+  "historyUrl":    url_for('api_trade_history'),
+  "scanStatusUrl": url_for('scan_status'),
+  "pauseUrl":      url_for('pause_scan'),
+  "resumeUrl":     url_for('resume_scan'),
+  "refreshSeconds": dashboard_refresh_seconds,
+  "mode":          dashboard_mode | default('active')
+} | tojson }}
 </script>
+<script defer src="{{ url_for('static', filename='vendor/morphdom-umd.min.js') }}"></script>
+<script defer src="{{ url_for('static', filename='dashboard.js') }}"></script>
 {% endblock %}

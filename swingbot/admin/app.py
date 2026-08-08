@@ -66,14 +66,17 @@ except Exception:
 from flask import Flask, Response, abort, redirect, render_template, request, send_file, session, url_for
 
 from swingbot import config
-from swingbot.core.performance import TradeLog, trade_proximity
+from swingbot.core.performance import TradeLog
 from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
-from swingbot.core.account import compute_position_size, get_daily_summary, load_account_config
-from swingbot.core.data import get_company_name, get_currency_symbol, get_current_price, prefetch_prices, is_us_market_active
+from swingbot.core.data import get_company_name, get_currency_symbol
 from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
 from swingbot.core.backtest_cache import ensure_cached_background
 from swingbot.core.ticker_directory import search_tickers
 from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
+# Dashboard view-model builders. Imported as a namespace rather than by name:
+# these are the ONLY dashboard computation left outside this file's routes,
+# and `dash.` at each call site says so.
+from . import dashboard as dash
 # Pure helper functions (.env parsing, Docker container control, confidence-hex,
 # log tailing) live in their own module -- see helpers.py's own docstring for why.
 from .helpers import (
@@ -132,12 +135,6 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)
 # often run over plain HTTP on a private network/localhost (see module
 # docstring), and Secure=True would silently break the cookie there.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-# Rows the dashboard renders inline for Trade History's FIRST page. Later
-# pages are fetched from /api/trade-history, so this is a first-paint size,
-# not a cap on how much history is reachable (it used to be a hard 500-row
-# ceiling with a 'showing latest N of M' banner; real paging retired that).
-CLOSED_TRADES_FIRST_PAGE = 25
 
 # Wire Flask + Werkzeug request logs to admin.log so the Logs page can show
 # admin UI activity separately from the bot's own log stream.
@@ -335,532 +332,41 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 # ---------------------------------------------------------------------------
 # Routes -- Dashboard
 # ---------------------------------------------------------------------------
-def _format_duration_hms(total_seconds: float) -> str:
-    """
-    Human-readable elapsed-time label with day/hour/MINUTE granularity --
-    e.g. "12m", "4h 20m", "1d 5h 32m" -- used everywhere a "how long has
-    this been open/how long was this held" figure is shown (dashboard's
-    Open Trades + Trade History Holding columns, plus the Avg holding
-    period stat card). Short d/h/m suffixes (not the old spelled-out
-    "4 hours 20 minutes") so the figure stays compact in a narrow table
-    column. Whole-calendar-days-only (as this used to show, before d/h/m
-    granularity was added at all) reads as "0" for anything opened/closed
-    same-day regardless of whether that was 10 minutes or 23 hours -- this
-    is precise down to the minute instead, and always surfaces hours+
-    minutes even once the duration spans full days, rather than dropping
-    them once a coarser unit is available.
-    """
-    total_seconds = max(0.0, total_seconds)
-    total_minutes = int(total_seconds // 60)
-    days, rem = divmod(total_minutes, 24 * 60)
-    hours, minutes = divmod(rem, 60)
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours or days:
-        parts.append(f"{hours}h")
-    parts.append(f"{minutes}m")
-    return ' '.join(parts)
-
-
-def _format_open_duration(total_hours: float) -> str:
-    """Thin wrapper over _format_duration_hms for callers that already have
-    an elapsed-hours figure (the Open Trades loop below)."""
-    return _format_duration_hms(max(0.0, total_hours) * 3600)
-
-
-def _pos_color(pos_pct: float, entry_pct: float) -> str:
-    """Color for the SL→TP progress bar and percentage text.
-    Interpolates red (SL, 0%) → grey (entry) → green (TP, 100%)
-    so the bar always shows absolute position between stop and target,
-    independent of whether the trade is currently profitable.
-    """
-    SL      = (0xda, 0x6d, 0x6d)   # red   (#da6d6d)
-    NEUTRAL = (0x5a, 0x62, 0x75)   # grey  (#5a6275)
-    TP      = (0x6d, 0xda, 0x9e)   # green (#6dda9e)
-    ep = max(1.0, min(99.0, entry_pct))
-    if pos_pct <= ep:
-        t = max(0.0, min(1.0, pos_pct / ep))
-        c1, c2 = SL, NEUTRAL
-    else:
-        t = max(0.0, min(1.0, (pos_pct - ep) / (100.0 - ep)))
-        c1, c2 = NEUTRAL, TP
-    r = round(c1[0] + (c2[0] - c1[0]) * t)
-    g = round(c1[1] + (c2[1] - c1[1]) * t)
-    b = round(c1[2] + (c2[2] - c1[2]) * t)
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _is_today_berlin(iso_ts: str | None) -> bool:
-    """True if the given ISO timestamp falls on today's Europe/Berlin calendar
-    day -- the same day boundary the daily retrospective and account summary
-    already use, so the dashboard's "Today" mode lines up with them."""
-    if not iso_ts:
-        return False
-    try:
-        dt = datetime.fromisoformat(iso_ts)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        if _BERLIN_TZ:
-            dt = dt.astimezone(_BERLIN_TZ)
-            today = datetime.now(_BERLIN_TZ).date()
-        else:
-            today = datetime.now(timezone.utc).date()
-        return dt.date() == today
-    except Exception:
-        return False
-
-
-# ── Closed-trade P&L helpers (passed as callables to Jinja) ──────────────
-# Module-level, not nested in _render_dashboard_fragment(): the
-# /api/trade-history endpoint renders the same row partial and needs the
-# identical callables, and duplicating them is how the two paths drift.
-# They are pure -- no closure over fragment state.
-def _closed_pnl(t) -> float | None:
-    ex, en = t.get("exit_price"), t.get("entry")
-    if not ex or not en:
-        return None
-    raw = (ex - en) / en * 100
-    return round(raw if t["direction"] == "bullish" else -raw, 2)
-
-def _closed_r(t) -> float | None:
-    ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
-    if not ex or not en or not sl_v:
-        return None
-    risk = abs(en - sl_v)
-    if not risk:
-        return None
-    realized = (ex - en) if t["direction"] == "bullish" else (en - ex)
-    return round(realized / risk, 2)
-
-def _closed_days(t) -> dict | None:
-    """Returns {label, total_hours} -- the full day/hour/minute holding
-    period label (see _format_duration_hms) plus a raw sortable figure,
-    for the Trade History table's Days column."""
-    try:
-        elapsed = (
-            datetime.fromisoformat(t["closed_at"]) -
-            datetime.fromisoformat(t["opened_at"])
-        )
-        total_seconds = max(0.0, elapsed.total_seconds())
-        return {
-            "label": _format_duration_hms(total_seconds),
-            "total_hours": total_seconds / 3600.0,
-        }
-    except Exception:
-        return None
-
-
-CLOSED_TRADE_STATUSES = ("win", "loss", "closed")
-
-# Allowed page sizes, mirroring the table's own selector. 0 means "All".
-# Clamped server-side: the page size decides how much work a request does, so
-# it is never taken on trust from the query string.
-ALLOWED_PER_PAGE = (10, 25, 50, 0)
-
-# Query-string filter name -> how to read the matching value off a trade.
-# These MUST stay in step with the data-* attributes the row partial emits,
-# since both describe the same six Trade History dropdowns.
-_CT_FILTER_FIELDS = {
-    "outcome":  lambda t: t.get("status"),
-    "ticker":   lambda t: t.get("ticker"),
-    "strategy": _primary_strategy_label,
-    "horizon":  lambda t: t.get("horizon_key"),
-    "dir":      lambda t: t.get("direction"),
-    "conf":     lambda t: t.get("confidence_level"),
-}
-
-
-# Sortable columns -> how to read the sort value, keyed by the `data-col-id`
-# the table header already uses. Sorting is server-side for the same reason
-# filtering is: with paged responses, a client-side sort would only reorder
-# the page you happen to be looking at.
-_CT_SORT_KEYS = {
-    "outcome":  lambda t: t.get("status") or "",
-    "ticker":   lambda t: t.get("ticker") or "",
-    "strategy": lambda t: _primary_strategy_label(t) or "",
-    "horizon":  lambda t: t.get("horizon_key") or "",
-    "dir":      lambda t: t.get("direction") or "",
-    "conf":     lambda t: t.get("confidence_level") or 0,
-    "entry":    lambda t: t.get("entry") or 0.0,
-    "exit":     lambda t: t.get("exit_price") or -1.0,
-    "pnlpct":   lambda t: _closed_pnl(t) if _closed_pnl(t) is not None else -999999,
-    "gainloss": lambda t: t.get("realized_pnl_amount") if t.get("realized_pnl_amount") is not None else -999999,
-    "r":        lambda t: _closed_r(t) if _closed_r(t) is not None else -999999,
-    "days":     lambda t: (_closed_days(t) or {}).get("total_hours", -1),
-    "opened":   lambda t: t.get("opened_at") or "",
-    "closed":   lambda t: t.get("closed_at") or "",
-}
-
-
-def _query_closed_trades(all_raw, *, mode="all", filters=None, page=1, per_page=25,
-                         sort_by=None, sort_dir="desc"):
-    """Scope -> filter -> sort -> slice the closed-trade history, in that order.
-
-    Returns ``(rows, total)`` where *total* is the count after scoping and
-    filtering but BEFORE slicing, so the pager can work out how many pages
-    exist without a second pass.
-
-    `mode` follows the dashboard toggle: "today" and "active" both narrow to
-    trades CLOSED today (Europe/Berlin). Those two modes are deliberately
-    identical here -- the only thing separating them is whether still-open
-    positions from other days show, and this table never contains open trades.
-    """
-    rows = [t for t in all_raw if t.get("status") in CLOSED_TRADE_STATUSES]
-
-    if mode in ("today", "active"):
-        rows = [t for t in rows if _is_today_berlin(t.get("closed_at"))]
-
-    for key, value in (filters or {}).items():
-        if not value:
-            continue                      # absent/blank means "no filter"
-        getter = _CT_FILTER_FIELDS.get(key)
-        if getter is None:
-            continue
-        rows = [t for t in rows if str(getter(t) or "") == str(value)]
-
-    # Default: newest close first, matching the table's pre-paging behaviour.
-    key = _CT_SORT_KEYS.get(sort_by or "", _CT_SORT_KEYS["closed"])
-    # str() the key so a column holding mixed types (a None exit price beside
-    # floats, say) can't raise TypeError mid-sort and 500 the whole table.
-    try:
-        rows.sort(key=key, reverse=(sort_dir != "asc"))
-    except TypeError:
-        rows.sort(key=lambda t: str(key(t)), reverse=(sort_dir != "asc"))
-    total = len(rows)
-
-    if per_page:
-        page = max(1, int(page or 1))
-        start = (page - 1) * per_page
-        rows = rows[start:start + per_page]
-    return rows, total
-
-
-def _render_dashboard_fragment() -> str:
-    # Three modes for the dashboard's summarized panels (stat cards + tables):
-    #   - "active" (the default): today's new trades PLUS every still-open
-    #     position regardless of which day it was opened -- "what do I need
-    #     to pay attention to right now". This is the only mode that mixes
-    #     days: an old open swing sitting from last week still shows up
-    #     (it's still live risk), but closed-trade stats only count today's
-    #     closes, not the whole history.
-    #   - "today": strictly today's activity (Europe/Berlin calendar day)
-    #     only -- trades opened today, or closed today. An old open trade
-    #     from last week is NOT shown here even though it's still open,
-    #     since it's not part of "today".
-    #   - "all": the original behavior -- every trade, no filtering.
-    # Read from the query string so both the full-page load and the
-    # auto-refresh fragment fetch respect whichever mode the user picked.
-    mode = request.args.get("mode", "active")
-    if mode not in ("active", "today", "all"):
-        mode = "active"
-
-    # Single TradeLog read for the whole render -- avoids re-reading trades.json
-    # separately for get_stats(), get_extended_stats(), and the trade lists.
-    tl = _trades()
-    all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at")
-
-    if mode == "today":
-        scoped_trades = [
-            t for t in all_raw
-            if _is_today_berlin(t.get("opened_at")) or _is_today_berlin(t.get("closed_at"))
-        ]
-    elif mode == "active":
-        scoped_trades = [
-            t for t in all_raw
-            if t["status"] == "open"
-            or _is_today_berlin(t.get("opened_at"))
-            or _is_today_berlin(t.get("closed_at"))
-        ]
-    else:
-        scoped_trades = None  # None -> get_stats()/get_extended_stats() use the full trade set
-
-    if mode in ("today", "active"):
-        open_trades = sorted(
-            [t for t in scoped_trades if t["status"] == "open"],
-            key=lambda t: (t.get("confidence_level") or 0, t.get("confidence_score") or 0),
-            reverse=True,
-        )
-    else:
-        open_trades = tl.get_trades(status="open", limit=None, sort_by="confidence")
-
-    stats = tl.get_stats(trades=scoped_trades)
-    stats.update(tl.get_extended_stats(trades=scoped_trades))
-    # Day/hour/minute label for the "Avg holding period" stat card, same
-    # granularity as every other holding-period display on this page (Open
-    # Trades' Days column, Trade History's Days column) -- avg_holding_days
-    # alone as "%.1f d" collapsed anything under a day down to "0.0 d",
-    # which is a less useful reading than "18 hours 24 minutes".
-    stats["avg_holding_label"] = (
-        _format_duration_hms(stats["avg_holding_days"] * 86400)
-        if stats.get("avg_holding_days") is not None else None
-    )
-
-    # Closed trades -- built early so their tickers are included in cur_map
-    # below. These ARE scoped to the dashboard mode: "today"/"active" narrow
-    # the Trade History table to trades closed today, "all" shows the whole
-    # log. (This reverses an earlier decision to leave the table unscoped on
-    # the grounds that today-scoping starves it down to a handful of rows.
-    # That is accepted: the toggle now means the same thing everywhere on the
-    # page, rather than silently not applying to this one table.)
-    #
-    # all_closed_trades is the FULL, unbounded history -- used to build the
-    # filter dropdowns' option lists (closed_trade_filter_options below) from
-    # the COMPLETE history, not just whatever rows end up in the table. The
-    # table itself (closed_trades) is then sliced down to the most recent 25
-    # for actual display -- that row limit and the filter options are two
-    # different concerns and shouldn't share one data source (they used to,
-    # which meant any ticker/strategy/horizon that only appeared in an older,
-    # 26th+ closed trade could never be selected in the dropdowns even though
-    # it's a perfectly real filterable value).
-    all_closed_trades = [t for t in all_raw if t["status"] in CLOSED_TRADE_STATUSES]
-    # First page only. Everything after this comes from /api/trade-history,
-    # through the SAME _query_closed_trades() call, so first paint and later
-    # pages cannot disagree. The JS re-requests page 1 on load anyway (its
-    # remembered per-page size may not be the 25 used here), but rendering it
-    # server-side keeps the table populated for that first beat instead of
-    # flashing empty.
-    closed_trades, closed_trades_total = _query_closed_trades(
-        all_raw, mode=mode, page=1, per_page=CLOSED_TRADES_FIRST_PAGE)
-
-    # Currency symbol map -- covers every ticker shown on the page (open AND
-    # recently closed). Previously only open_trades were included, so closed
-    # trades for tickers without a current open position showed no symbol.
-    all_tickers = {t["ticker"] for t in open_trades + closed_trades}
-    cur_map     = {tk: get_currency_symbol(tk, config.CURRENCY_SYMBOL) for tk in all_tickers}
-
-    # Ticker/strategy/horizon options for the Trade History filter dropdowns.
-    closed_trade_filter_options = {
-        "ticker":   sorted({t["ticker"] for t in all_closed_trades if t.get("ticker")}),
-        "strategy": sorted({_primary_strategy_label(t) for t in all_closed_trades}),
-        "horizon":  sorted({t.get("horizon_key") for t in all_closed_trades if t.get("horizon_key")}),
-    }
-
-    # Account config for position sizing (guaranteed to have all keys via
-    # load_account_config's {**defaults, **stored} merge).
-    account_cfg = load_account_config()
-
-    # "What does a trade actually cost right now" note for the dashboard --
-    # answers the recurring question of why unrealized P&L on open positions
-    # doesn't match a naive "balance x position %" guess. In Account % mode
-    # the premium IS that exact fixed number every time. In Risk % mode
-    # (the default) there is no single fixed premium -- position value varies
-    # per trade with how far away its stop is, up to the Max position size %
-    # cap -- so we surface the worked-out range instead of a single figure.
-    #
-    # Every figure here is ALSO run through the two absolute $ caps
-    # (max_position_value_absolute / max_risk_amount_absolute -- see
-    # compute_position_size()'s docstring in core/account.py) the same way
-    # compute_position_size() itself does, taking whichever cap is tighter.
-    # This card used to only apply the %-based caps, so once the absolute
-    # caps were introduced it could show a stale, much larger "up to" figure
-    # than any trade could actually reach -- e.g. balance x max_position_pct
-    # coming out to $50,000 while every real trade was actually being capped
-    # at the $1,000 absolute limit under the hood.
-    #
-    # Note this reflects TODAY's settings only: any trade opened under a
-    # different balance/risk/mode has its own shares snapshotted at open time
-    # (see account.py's module docstring) and won't retroactively match this.
-    _sizing_balance = float(account_cfg.get("balance", 0))
-    _max_pos_abs = float(account_cfg.get("max_position_value_absolute", 0) or 0)
-    _max_risk_abs = float(account_cfg.get("max_risk_amount_absolute", 0) or 0)
-    if account_cfg.get("sizing_mode") == "account_pct":
-        _premium = _sizing_balance * float(account_cfg.get("position_pct", 0)) / 100.0
-        _premium = min(_premium, _sizing_balance * float(account_cfg.get("max_position_pct", 0)) / 100.0) \
-            if account_cfg.get("max_position_pct") else _premium
-        if _max_pos_abs > 0:
-            _premium = min(_premium, _max_pos_abs)
-        sizing_note = {
-            "mode": "account_pct",
-            "premium": round(_premium, 2),
-            "position_pct": account_cfg.get("position_pct", 0),
-        }
-    else:
-        _risk_amount = _sizing_balance * float(account_cfg.get("risk_pct", 0)) / 100.0
-        if _max_risk_abs > 0:
-            _risk_amount = min(_risk_amount, _max_risk_abs)
-        _max_position = _sizing_balance * float(account_cfg.get("max_position_pct", 0)) / 100.0
-        if _max_pos_abs > 0:
-            _max_position = min(_max_position, _max_pos_abs)
-        sizing_note = {
-            "mode": "risk_pct",
-            "risk_amount": round(_risk_amount, 2),
-            "risk_pct": account_cfg.get("risk_pct", 0),
-            "max_position": round(_max_position, 2),
-            "max_position_pct": account_cfg.get("max_position_pct", 0),
-            "max_position_value_absolute": _max_pos_abs,
-            "max_risk_amount_absolute": _max_risk_abs,
-        }
-
-    # Per-trade strategy label (reuses chart ranking so dashboard + chart agree).
-    # Covers open_trades AND all_closed_trades (not just open_trades) -- the
-    # Trade History table below looks up this same map for its Strategy
-    # column, and needs the identical recomputed label that was shown while
-    # the trade was still open, not the raw t["strategy"] field (which is
-    # always the same hardcoded default -- see primary_strategy_label's
-    # docstring in core/performance.py). Previously this map only covered
-    # open_trades, so every closed-trade lookup missed and silently fell back
-    # to that one hardcoded string for every row.
-    strategy_map = {t["id"]: _primary_strategy_label(t) for t in open_trades + all_closed_trades}
-
-    # ── Single pass over open trades ─────────────────────────────────────────
-    # Computes prices, status colors, P&L, SL/TP progress, position bar,
-    # days-open, and sizing all in one loop instead of the previous two
-    # (price/status then pnl/days) plus a separate sizing loop.
-    status_map    : dict = {}
-    price_map     : dict = {}
-    pnl_map       : dict = {}
-    days_map      : dict = {}
-    sizing_map    : dict = {}
-    unrealized_pnls: list = []
-    now_utc = datetime.now(timezone.utc)
-
-    # Fetch all prices concurrently so the loop below hits the in-memory
-    # cache and never blocks on a sequential network call per ticker.
-    prefetch_prices([t["ticker"] for t in open_trades])
-
-    for t in open_trades:
-        tid     = t["id"]
-        price   = get_current_price(t["ticker"])
-        entry   = t.get("entry")    or 0.0
-        sl      = t.get("stop_loss")  or 0.0
-        tp      = t.get("take_profit") or 0.0
-        is_bull = t.get("direction") == "bullish"
-
-        price_map[tid] = price
-
-        # Status dot color/speed
-        if price is None:
-            status_map[tid] = {
-                "color": "#5a6275", "proximity": 0.0,
-                "blink_seconds": 2.2, "label": "Price unavailable",
-            }
-        else:
-            status_map[tid] = trade_proximity(t["direction"], entry, sl, tp, price)
-
-        # Time open -- shown as hours while under a day old, then "N day(s) M
-        # hours" once it crosses 24h, instead of a coarse whole-calendar-days
-        # count that reads as "0" for anything opened today regardless of
-        # whether that was 10 minutes or 23 hours ago.
-        try:
-            elapsed = now_utc - datetime.fromisoformat(t["opened_at"])
-            total_hours = max(0, elapsed.total_seconds() / 3600.0)
-            days_map[tid] = {
-                "days": int(total_hours // 24),          # whole calendar days, for the >30-day aging color
-                "total_hours": total_hours,               # for sorting
-                "label": _format_open_duration(total_hours),
-            }
-        except Exception:
-            days_map[tid] = None
-
-        # P&L, SL/TP progress, position bar
-        if price and entry:
-            raw_pnl = (price - entry) / entry * 100
-            pnl_pct = raw_pnl if is_bull else -raw_pnl
-            unrealized_pnls.append(pnl_pct)
-
-            # Progress toward each level from entry (0% = at entry, 100% = at
-            # level, >100% = past it). Clamped to 0 when price moved AWAY.
-            sl_dist = abs(entry - sl) or 1.0
-            tp_dist = abs(tp - entry) or 1.0
-            if is_bull:
-                sl_raw = (entry - price) / sl_dist * 100
-                tp_raw = (price - entry) / tp_dist * 100
-            else:
-                sl_raw = (price - entry) / sl_dist * 100
-                tp_raw = (entry - price) / tp_dist * 100
-
-            # Position bar: SL = 0%, TP = 100%
-            span = (tp - sl) if is_bull else (sl - tp)
-            if span > 0:
-                cur_pos   = (price - sl) / span * 100 if is_bull else (sl - price) / span * 100
-                entry_pos = (entry - sl) / span * 100 if is_bull else (sl - entry) / span * 100
-            else:
-                cur_pos = entry_pos = 50.0
-
-            _p   = max(0.0, min(100.0, round(cur_pos, 1)))
-            _ep  = max(0.0, min(100.0, round(entry_pos, 1)))
-            pnl_map[tid] = {
-                "pnl_pct":   round(pnl_pct, 2),
-                "to_sl_pct": round(max(0.0, sl_raw), 1),
-                "to_tp_pct": round(max(0.0, tp_raw), 1),
-                "pos_pct":   _p,
-                "entry_pct": _ep,
-                "pos_color": _pos_color(_p, _ep),
-            }
-        else:
-            pnl_map[tid] = None
-
-        # Position sizing
-        sizing_map[tid] = compute_position_size(entry=entry, stop_loss=sl, account_cfg=account_cfg)
-
-    # Equal-weighted average unrealized return across all open positions with a
-    # live price (None → shown as "—" in the stat card).
-    stats["total_unrealized_pct"] = (
-        sum(unrealized_pnls) / len(unrealized_pnls) if unrealized_pnls else None
-    )
-
-    realized_pnls = [p for p in (_closed_pnl(t) for t in closed_trades) if p is not None]
-    stats["total_realized_pct"] = round(sum(realized_pnls) / len(realized_pnls), 2) if realized_pnls else None
-    stats["best_trade_pct"]     = round(max(realized_pnls), 2) if realized_pnls else None
-    stats["worst_trade_pct"]    = round(min(realized_pnls), 2) if realized_pnls else None
-
-    # Account balance + today's movement -- recomputed on every fragment
-    # render, so with the dashboard's existing auto-refresh poll this stat
-    # card updates on its own the moment a trade closes and settles into
-    # the account balance (see performance.py's _settle_account_balance),
-    # with no extra JS/websocket plumbing needed.
-    stats["account"] = get_daily_summary()
-
-    # Local import -- pages.py does `from .app import _render, require_auth`
-    # at its own top, so a module-level import here would deadlock on the
-    # circular reference. Both modules are fully loaded by request time.
-    from .pages import _plan_rows, _sparkline_svg
-
-    plan_counts = _plan_rows()["counts"]
-
-    # Equity (30d) sparkline. snap["equity_curve"] is {"points": [...],
-    # "skipped_n": ...} (see metrics.equity_curve), not a bare list -- each
-    # point's balance key is "date"/"balance", not "ts"/"balance". Balances
-    # are raw account-currency figures (e.g. 10000+), not the 0-100 scale
-    # _sparkline_svg assumes (it's shared with the win-rate sparkline), so
-    # they're min-max normalized to 0-100 purely for the sparkline's shape;
-    # the headline number below still shows the real current balance.
-    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
-    equity_points_raw = [
-        p["balance"] for p in ((snap or {}).get("equity_curve") or {}).get("points", [])[-30:]
-    ]
-    if equity_points_raw:
-        lo, hi = min(equity_points_raw), max(equity_points_raw)
-        span = hi - lo
-        equity_points = [(v - lo) / span * 100.0 if span else 50.0 for v in equity_points_raw]
-        equity_sparkline_svg = _sparkline_svg(equity_points, ref=None)
-    else:
-        equity_sparkline_svg = "&mdash;"
-
-    return render_template(
-        "dashboard_fragment.html",
-        open_trades=open_trades, stats=stats, confidence_hex=_confidence_hex,
-        cur_map=cur_map, status_map=status_map, strategy_map=strategy_map,
-        price_map=price_map, pnl_map=pnl_map, days_map=days_map,
-        sizing_map=sizing_map, account_cfg=account_cfg, sizing_note=sizing_note,
-        closed_trades=closed_trades, closed_trade_filter_options=closed_trade_filter_options,
-        closed_trades_total=closed_trades_total,
-        trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
-        is_market_active=is_us_market_active(),
-        dashboard_mode=mode,
-        plan_counts=plan_counts, equity_sparkline_svg=equity_sparkline_svg,
-    )
+# Every computation these three routes need lives in dashboard.py as plain
+# functions of their arguments. What is left here is the HTTP shell: read the
+# query string, clamp it, delegate, respond.
 
 
 @app.route("/", methods=["GET"])
 @require_auth
 def index():
+    """Full Dashboard page.
+
+    Renders the auto-refreshing fragment inline for first paint, and -- unlike
+    the fragment -- also the Trade History card's filter options. Those belong
+    to markup the poll never replaces, so building them once per page load
+    rather than once per 5s tick costs nothing and saves a full-history walk
+    every tick.
+    """
+    mode = dash.normalize_mode(request.args.get("mode"))
+    all_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
+    first_page, total = dash.query_closed_trades(
+        all_raw, mode=mode, page=1, per_page=dash.CLOSED_TRADES_FIRST_PAGE)
     return _render(
         "Dashboard", "dashboard", "dashboard.html",
-        fragment=_render_dashboard_fragment(),
+        fragment=render_template("dashboard_fragment.html",
+                                 **dash.build_fragment_context(mode)),
         dashboard_refresh_seconds=config.DASHBOARD_REFRESH_SECONDS,
-        dashboard_mode=request.args.get("mode", "active"),
+        dashboard_mode=mode,
+        closed_trades=first_page,
+        closed_trades_total=total,
+        closed_trade_filter_options=dash.build_filter_options(all_raw),
+        strategy_map={t["id"]: _primary_strategy_label(t) for t in first_page},
+        cur_map={t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
+                 for t in first_page},
+        confidence_hex=_confidence_hex,
+        trade_pnl=dash.closed_pnl, trade_r=dash.closed_r, trade_days=dash.closed_days,
+        row_offset=0,
     )
 
 
@@ -868,25 +374,30 @@ def index():
 @require_auth
 def dashboard_fragment():
     """
-    Just the open-trades table + stats, re-rendered fresh from
-    trades.json. Polled by the dashboard's own JS every few seconds so a
-    trade logged by `!check` (or the background scan) shows up without
-    a manual browser refresh -- the admin process is separate from the
-    bot process, so nothing pushes it a notification; it has to ask.
+    The panels that actually change every few seconds: session banner,
+    lifecycle strip, stat cards, Open Trades. Polled by dashboard.js so a
+    trade logged by `!check` (or the background scan) shows up without a
+    manual refresh -- the admin process is separate from the bot process, so
+    nothing pushes it a notification; it has to ask.
 
-    ETag'd on the rendered HTML's sha1: when nothing has actually changed
-    since the browser's last poll (the common case -- most 5s ticks see
-    no new trade), the response is a 5-byte "304 Not Modified" instead of
-    the full fragment, which on a page auto-refreshing indefinitely adds
-    up to a meaningful bandwidth/CPU (Jinja render) saving over a session.
+    Trade History is NOT part of this. It is served a page at a time by
+    /api/trade-history and owned by the client from first paint onward, so
+    re-rendering its rows and dropdowns here only ever produced markup the
+    browser immediately threw away.
+
+    ETag'd on the rendered HTML's sha1: when nothing has changed since the
+    last poll (the common case) the response is a 304 instead of the full
+    fragment, which on a page auto-refreshing indefinitely adds up.
     """
-    html = _render_dashboard_fragment()
+    mode = dash.normalize_mode(request.args.get("mode"))
+    html = render_template("dashboard_fragment.html", **dash.build_fragment_context(mode))
     etag = hashlib.sha1(html.encode("utf-8")).hexdigest()
     if request.headers.get("If-None-Match") == etag:
         return Response(status=304)
     resp = Response(html, mimetype="text/html; charset=utf-8")
     resp.headers["ETag"] = etag
     return resp
+
 
 
 @app.route("/trades/clear-open", methods=["POST"])
@@ -1237,9 +748,9 @@ def api_trade_history():
     indistinguishable from the first one.
 
     Scoping, all six filters, sorting and slicing happen server-side in
-    _query_closed_trades(). Filtering MUST live here rather than in the
-    browser: with paged responses, DOM-hiding filters would only ever see the
-    current page.
+    dashboard.query_closed_trades(). Filtering MUST live here rather than in
+    the browser: with paged responses, DOM-hiding filters would only ever see
+    the current page.
 
     Auth is inline and returns a bare 401 rather than redirecting to the HTML
     login page -- same contract and same reasoning as api_ohlcv below.
@@ -1249,44 +760,41 @@ def api_trade_history():
         if not auth or auth.username != ADMIN_USERNAME or auth.password != ADMIN_PASSWORD:
             return Response(json.dumps({"error": "auth"}), status=401, mimetype="application/json")
 
-    mode = request.args.get("mode", "active")
-    if mode not in ("active", "today", "all"):
-        mode = "active"
+    mode = dash.normalize_mode(request.args.get("mode"))
 
     # Never trust the client with how much work this request does.
     try:
         per_page = int(request.args.get("per_page", 25))
     except (TypeError, ValueError):
         per_page = 25
-    if per_page not in ALLOWED_PER_PAGE:
+    if per_page not in dash.ALLOWED_PER_PAGE:
         per_page = 25
     try:
         page = max(1, int(request.args.get("page", 1)))
     except (TypeError, ValueError):
         page = 1
 
-    filters = {k: request.args.get(k, "") for k in _CT_FILTER_FIELDS}
+    filters = {k: request.args.get(k, "") for k in dash.FILTER_FIELDS}
 
     sort_by = request.args.get("sort_by") or None
-    if sort_by not in _CT_SORT_KEYS:
+    if sort_by not in dash.SORT_KEYS:
         sort_by = None
     sort_dir = "asc" if request.args.get("sort_dir") == "asc" else "desc"
 
     all_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
-    rows, total = _query_closed_trades(
+    rows, total = dash.query_closed_trades(
         all_raw, mode=mode, filters=filters, page=page, per_page=per_page,
         sort_by=sort_by, sort_dir=sort_dir)
 
     pages = 1 if not per_page else max(1, -(-total // per_page))
-    strategy_map = {t["id"]: _primary_strategy_label(t) for t in rows}
-    cur_map = {t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
-               for t in rows}
-
     rows_html = render_template(
         "_trade_history_rows.html",
-        closed_trades=rows, strategy_map=strategy_map, cur_map=cur_map,
+        closed_trades=rows,
+        strategy_map={t["id"]: _primary_strategy_label(t) for t in rows},
+        cur_map={t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
+                 for t in rows},
         confidence_hex=_confidence_hex,
-        trade_pnl=_closed_pnl, trade_r=_closed_r, trade_days=_closed_days,
+        trade_pnl=dash.closed_pnl, trade_r=dash.closed_r, trade_days=dash.closed_days,
         row_offset=(page - 1) * per_page if per_page else 0,
     )
     return Response(
@@ -1638,8 +1146,8 @@ def stats_page():
     calibration = (snap or {}).get("calibration", {})
     calibration_chart_json = json.dumps({"deciles": calibration.get("deciles", [])})
 
-    # Local import -- same circularity reasoning as _render_dashboard_fragment
-    # above (pages.py imports FROM app.py at its own top).
+    # Local import -- pages.py imports FROM app.py at its own top, so a
+    # module-level import here would close the circle.
     from .pages import _heatmap_color, _strategy_horizon_heatmap
     heatmap = _strategy_horizon_heatmap()
 

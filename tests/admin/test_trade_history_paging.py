@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from swingbot.admin.app import _query_closed_trades
+from swingbot.admin.dashboard import query_closed_trades as _query_closed_trades
 
 
 def _trade(tid, *, status="win", closed=None, ticker="AAPL",
