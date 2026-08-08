@@ -24,7 +24,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from flask import jsonify
+from flask import jsonify, request
 
 from swingbot import config
 from swingbot.core.performance import TradeLog
@@ -214,3 +214,56 @@ def clear_open():
 @require_auth
 def clear_history():
     return jsonify({"removed": TradeLog().clear_history()})
+
+
+# --- note ----------------------------------------------------------------
+
+@api_v1.route("/trades/<trade_id>/note", methods=["PUT"])
+@require_auth
+def set_note(trade_id: str):
+    """Replace the free-text note on a position.
+
+    PUT, not POST: this is idempotent replacement of one field, not
+    creation of a resource.
+
+    404 when the trade has no journal entry. Journal entries are written at
+    close, so an open position usually has none, and `JournalStore.set_note`
+    returns False for it. Creating the entry here was rejected -- journal
+    records feed the analytics snapshot and `_resolve_outcome` expects a
+    closed trade, so a half-populated entry for a running position could
+    corrupt the numbers. Sub-project 5's Notes tab must render "not
+    journaled yet" as a state rather than surfacing it as an error.
+    """
+    from swingbot.core.analytics.journal import JournalStore
+
+    payload = request.get_json(silent=True) or {}
+    if "note" not in payload:
+        # An ABSENT note is malformed, not an instruction to clear: treating
+        # it as a clear would let a client bug silently destroy text. An
+        # explicit empty string does clear, and that is tested.
+        return error("invalid", "Body must contain a 'note' field.", 400)
+
+    note = payload["note"]
+    if not isinstance(note, str):
+        return error("invalid", "'note' must be a string.", 400)
+
+    plan_backed = _looks_like_a_plan_id(trade_id)
+    target = trade_id
+    if plan_backed:
+        # Notes live against the TRADE id, so a plan-backed position notes
+        # through its linked trade -- otherwise the note would attach to an
+        # id the journal has never seen.
+        linked = _linked_trade(TradeLog(), trade_id)
+        if linked is None:
+            return error("not_found", f"No trade with id {trade_id!r}", 404)
+        target = linked["id"]
+    elif TradeLog().get_trade_by_id(trade_id) is None:
+        return error("not_found", f"No trade with id {trade_id!r}", 404)
+
+    if not JournalStore().set_note(target, note):
+        return error(
+            "not_found",
+            f"Trade {trade_id!r} has no journal entry yet; notes attach on close.",
+            404,
+        )
+    return jsonify({"id": trade_id, "note": note})
