@@ -41,7 +41,7 @@ from swingbot.admin import dashboard as dash
 from swingbot.core.performance import TradeLog
 from swingbot.core.plan_store import PlanStore
 
-from . import api_v1, collection, parse_collection_params
+from . import api_v1, collection, error, parse_collection_params
 from .auth import require_auth
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
@@ -201,6 +201,127 @@ def build_rows() -> list[dict]:
         if not t.get("plan_id") or t.get("plan_id") not in claimed
     ]
     return rows
+
+
+def _looks_like_a_plan_id(value: str) -> bool:
+    """NG1's invariant, applied as routing.
+
+    Plan ids are 36-char dashed uuid4s; trade ids are 16 dash-free
+    alphanumerics. The spaces are disjoint by length AND by charset, so a
+    bare id names its own store and needs no `plan:` / `trade:` prefix.
+    Pinned by tests/admin/test_id_uniqueness.py -- if that ever fails, this
+    function is the first thing that breaks.
+    """
+    return len(value) == 36 and value.count("-") == 4
+
+
+def _plan_detail(plan: dict, trade: dict | None) -> dict:
+    """Heavy fields for a plan-backed position.
+
+    `trade_id` is deliberately exposed: the plan id is the public identity,
+    but close/cancel/delete act on the underlying trade record, and the SPA
+    would otherwise have no way to name it.
+    """
+    t = trade or {}
+    return {
+        "trade_id": t.get("id"),
+        "created_at": plan.get("created_at"),
+        "plan_source": plan.get("source"),
+        "entry_type": plan.get("entry_type"),
+        "trigger_price": plan.get("trigger_price"),
+        "expiry_bars": plan.get("expiry_bars"),
+        "tp1_fraction": plan.get("tp1_fraction"),
+        "breakeven_trigger_fraction": plan.get("breakeven_trigger_fraction"),
+        "trail_atr_mult": plan.get("trail_atr_mult"),
+        "working_stop": plan.get("working_stop"),
+        "runner_high_close": plan.get("runner_high_close"),
+        "stop_mult_applied": plan.get("stop_mult_applied"),
+        "quality_breakdown": plan.get("quality_breakdown") or [],
+        "badge_stats": plan.get("badge_stats") or {},
+        "status_history": plan.get("status_history") or [],
+        "legs_realized": plan.get("legs_realized") or [],
+        "legs": t.get("legs") or [],
+        "confidence_breakdown": t.get("confidence_breakdown"),
+        "explanation": t.get("explanation"),
+        "confirmed_by": t.get("confirmed_by") or [],
+        "target_sources": t.get("target_sources") or [],
+        "stop_sources": t.get("stop_sources") or [],
+        "target2_sources": t.get("target2_sources") or [],
+        "sizing_mode": t.get("sizing_mode"),
+        "account_balance_after": t.get("account_balance_after"),
+    }
+
+
+def _legacy_detail(t: dict) -> dict:
+    """Same keys as _plan_detail, with the plan-only fields None.
+
+    One detail shape rather than two: the SPA renders one Plan tab, and
+    branching it on `origin` would double the component for a handful of
+    fields that are simply absent on older records.
+    """
+    return {
+        "trade_id": t.get("id"),
+        "created_at": t.get("opened_at"),
+        "plan_source": t.get("source"),
+        "entry_type": None,
+        "trigger_price": None,
+        "expiry_bars": None,
+        "tp1_fraction": None,
+        "breakeven_trigger_fraction": None,
+        "trail_atr_mult": None,
+        "working_stop": None,
+        "runner_high_close": None,
+        "stop_mult_applied": None,
+        "quality_breakdown": [],
+        "badge_stats": {},
+        "status_history": [],
+        "legs_realized": [],
+        "legs": t.get("legs") or [],
+        "confidence_breakdown": t.get("confidence_breakdown"),
+        "explanation": t.get("explanation"),
+        "confirmed_by": t.get("confirmed_by") or [],
+        "target_sources": t.get("target_sources") or [],
+        "stop_sources": t.get("stop_sources") or [],
+        "target2_sources": t.get("target2_sources") or [],
+        "sizing_mode": t.get("sizing_mode"),
+        "account_balance_after": t.get("account_balance_after"),
+    }
+
+
+@api_v1.route("/trades/<trade_id>", methods=["GET"])
+@require_auth
+def get_trade(trade_id: str):
+    """One position, as the list row plus a `detail` object.
+
+    Spec v11 open question 1, answered: detail EXTENDS the list row rather
+    than being its own shape, so a detail response drops straight into the
+    SPA's store beside list rows instead of needing reconciliation.
+
+    Looks in one store, not both -- see _looks_like_a_plan_id.
+    """
+    noted = _noted_ids()
+    log = TradeLog()
+
+    if _looks_like_a_plan_id(trade_id):
+        plan = PlanStore()._plans.get(trade_id)
+        if plan is None:
+            return error("not_found", f"No trade with id {trade_id!r}", 404)
+        trade = next(
+            (t for t in log.get_trades(status=None, limit=None) or []
+             if t.get("plan_id") == trade_id),
+            None,
+        )
+        row = _row_from_plan(plan, trade, noted)
+        row["detail"] = _plan_detail(plan, trade)
+    else:
+        trade = log.get_trade_by_id(trade_id)
+        if trade is None:
+            return error("not_found", f"No trade with id {trade_id!r}", 404)
+        row = _row_from_trade(trade, noted)
+        row["detail"] = _legacy_detail(trade)
+
+    _attach_current_prices([row])
+    return jsonify(row)
 
 
 def _sort_key(field: str):
