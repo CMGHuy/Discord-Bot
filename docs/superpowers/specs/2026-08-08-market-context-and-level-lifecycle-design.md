@@ -210,6 +210,37 @@ justified" is a legitimate, recordable outcome — **not** a prompt to loosen
 thresholds and retry. That is the failure mode the one-shot validation budget
 exists to prevent.
 
+### 5.5 Outcome (2026-08-08) — NO GATE JUSTIFIED. P2a is closed.
+
+The pre-registered shot ran: 78 tickers × 11 strategies × 10 horizons over
+TRAIN. **Zero of the 44 cells cleared the rule**, so `REGIME_ALLOW` stays `{}`
+and `REGIME_GATES_ENABLED` stays default-off. Evidence:
+`docs/superpowers/results/2026-08-08-regime-allow-train.{md,json}`,
+reproducible via `scripts/fill_regime_allow.py`.
+
+The rule needed `N>=30` **and** `expectancy_r<0` **and** a negative sign in
+≥3 of 4 sub-folds. The binding constraint was the third: the worst cells by
+expectancy (RSI Divergence `bear_quiet`, −0.267 on N=242; `bear_volatile`,
+−0.122 on N=383) reached only **2 of 4** and **1 of 4** negative folds — not
+because the sign flipped, but because 2020–2021 hold almost no bear-regime
+bars, so those folds have N<30 and score as "sign does not hold" by §5.2.
+TRAIN's regime coverage, not the strategies, is what failed to support a gate.
+
+This is the recorded result, not a threshold to retune. **Do not re-run this
+with relaxed bounds** — the shot is spent, and a rule fitted after seeing this
+table is no longer pre-registered. A future gate needs *more bear data*
+(a longer TRAIN window, which changes the frozen backtest windows and is its
+own decision), not a looser rule.
+
+**P2b (COT) is therefore not built** — §6 conditions it on P2a clearing
+validation, and P2a did not clear. The design in §6 stands as-is for whenever
+the data situation changes; the lookahead trap recorded there is the part
+worth keeping.
+
+The P0 channel it was built on is **not** wasted: `market_context.attach`/`get`
+is what finally makes `entries_for` regime-aware at all, and it is the
+prerequisite for any future context gate (COT, IV/RV, GEX).
+
 ---
 
 ## 6. P2b — COT positioning (deferred, designed)
