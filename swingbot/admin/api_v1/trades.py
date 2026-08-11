@@ -56,7 +56,14 @@ _LEGACY_STATUS = {
 # Statuses where a live price is meaningless -- the position is over.
 _TERMINAL = {"CLOSED", "CANCELLED"}
 
-FILTERS = frozenset({"status", "ticker", "strategy", "horizon", "direction", "tier", "origin"})
+FILTERS = frozenset({"status", "ticker", "strategy", "horizon", "direction",
+                     "tier", "origin", "has_note"})
+
+# Compared as booleans, not as strings. `has_note` is a real bool on the row,
+# and the generic comparison below stringifies it -- so `?has_note=1` would
+# test "1" == "True" and quietly match nothing.
+_BOOLEAN_FILTERS = frozenset({"has_note"})
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 # Closed set, per the collection convention: an unsortable field is a 400.
 SORTABLE = frozenset({
@@ -345,7 +352,11 @@ def list_trades():
     # Filter -> sort -> slice, in that order, so `total` is the post-filter
     # pre-slice count the collection convention requires.
     for key, value in params.filters.items():
-        rows = [r for r in rows if str(r.get(key) or "") == str(value)]
+        if key in _BOOLEAN_FILTERS:
+            want = str(value).strip().lower() in _TRUTHY
+            rows = [r for r in rows if bool(r.get(key)) is want]
+        else:
+            rows = [r for r in rows if str(r.get(key) or "") == str(value)]
 
     field, direction = params.sort or ("opened_at", "desc")
     try:

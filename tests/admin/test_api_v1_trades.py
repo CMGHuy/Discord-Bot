@@ -287,3 +287,49 @@ def test_numbers_are_numbers_not_preformatted_strings(seed, logged_in):
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
     assert isinstance(row["pnl_pct"], float)
     assert isinstance(row["entry"], float)
+
+
+# --- has_note (NG18) -----------------------------------------------------
+# The route audit found this missing. Spec v11's mapping table replaces
+# `GET /journal` and `GET /api/journal` with `GET /api/v1/trades?has_note=1`,
+# and `has_note` was emitted on every row but absent from FILTERS -- so the
+# documented replacement 400'd as an unknown parameter, and the Notes
+# workspace (spec v14, "was Journal") had no way to list its own rows.
+
+def _with_note(trade_id, tmp_path):
+    (tmp_path / "journal.json").write_text(
+        json.dumps([{"trade_id": trade_id, "note": "watched the open"}]),
+        encoding="utf-8")
+
+
+def test_has_note_filters_to_noted_trades(seed, logged_in, tmp_path):
+    seed(trades=[_trade("aaaaaaaaaaaaaaaa"), _trade("bbbbbbbbbbbbbbbb")])
+    _with_note("aaaaaaaaaaaaaaaa", tmp_path)
+
+    items = logged_in.get("/api/v1/trades?has_note=1").get_json()["items"]
+    assert [r["id"] for r in items] == ["aaaaaaaaaaaaaaaa"]
+
+
+def test_has_note_false_returns_the_others(seed, logged_in, tmp_path):
+    seed(trades=[_trade("aaaaaaaaaaaaaaaa"), _trade("bbbbbbbbbbbbbbbb")])
+    _with_note("aaaaaaaaaaaaaaaa", tmp_path)
+
+    items = logged_in.get("/api/v1/trades?has_note=0").get_json()["items"]
+    assert [r["id"] for r in items] == ["bbbbbbbbbbbbbbbb"]
+
+
+def test_has_note_is_compared_as_a_bool_not_a_string(seed, logged_in, tmp_path):
+    """The generic filter stringifies both sides, so `?has_note=1` would test
+    "1" == "True" and match nothing -- a filter that silently returns an empty
+    list rather than erroring."""
+    seed(trades=[_trade("aaaaaaaaaaaaaaaa")])
+    _with_note("aaaaaaaaaaaaaaaa", tmp_path)
+
+    for truthy in ("1", "true", "True", "yes"):
+        assert logged_in.get(f"/api/v1/trades?has_note={truthy}").get_json()["total"] == 1
+
+
+def test_has_note_total_is_the_post_filter_count(seed, logged_in, tmp_path):
+    seed(trades=[_trade("aaaaaaaaaaaaaaaa"), _trade("bbbbbbbbbbbbbbbb")])
+    _with_note("aaaaaaaaaaaaaaaa", tmp_path)
+    assert logged_in.get("/api/v1/trades?has_note=1").get_json()["total"] == 1

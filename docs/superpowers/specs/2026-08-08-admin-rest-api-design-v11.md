@@ -374,6 +374,28 @@ trade's levels.
 plus `/api/plans` absorbed) · the rest mapped. Any route added to `app.py` or
 `pages.py` after this date must be added to this table or consciously excluded.
 
+**Audited against the implementation at NG18.** `grep -rn "\.route(" swingbot/
+admin/*.py` returns 58 decorators — 36 in `app.py`, 12 in `pages.py`, 10 in
+`api.py` — matching the count above exactly, and every one classifies as
+*replaced* or as one of the 5 recorded drops. No route was found unmapped, and
+nothing in this table diverged from what got built.
+
+One gap was found and closed, on the v1 side rather than in this table: the
+`GET /journal` and `GET /api/journal` rows both resolve to
+`GET /api/v1/trades?has_note=1`, and `has_note` was being emitted on every
+trade row while being absent from that endpoint's `FILTERS` set — so the
+documented replacement answered `400 unknown parameter`, and the Notes
+workspace (sub-project 5, "was Journal") had no way to list its own rows. The
+filter now exists and is compared as a boolean: the generic comparison
+stringifies both sides, so `?has_note=1` would otherwise have tested
+`"1" == "True"` and returned an empty list rather than an error — a mapped
+route that is present, answers 200, and is wrong.
+
+The two `chart.png` routes remain `(drop)` **as an open question, not a
+decision** — unchanged from what this table already said. Sub-project 6 owns
+whether the admin's PNG copies are still wanted once every chart in the UI is
+`lightweight-charts`; they still serve Discord embeds through a different path.
+
 ## Decision 5 — Auth
 
 The v1 API uses the **existing session cookie**, unchanged: `session["admin_authed"]`
