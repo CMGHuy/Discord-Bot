@@ -735,6 +735,30 @@ def _trade_for_levels(trade_id: str):
     return TradeLog().get_trade_by_id(trade_id)
 
 
+def trade_levels(trade: dict) -> dict:
+    """The plan lines a chart draws, from a trade record.
+
+    Shared with /api/v1/market/ohlcv (NG17). Two charts read these keys
+    during the migration; a second mapping here would let one of them draw a
+    take-profit line at the wrong price, which looks entirely plausible.
+    """
+    return {"entry": trade.get("entry"), "stop_loss": trade.get("stop_loss"),
+            "tp1": trade.get("take_profit"), "tp2": trade.get("target2_price"),
+            "direction": trade.get("direction")}
+
+
+def ohlcv_bars(df) -> list:
+    """DataFrame rows -> the bar objects a chart consumes. One definition,
+    shared with /api/v1/market/ohlcv so the Angular and Jinja charts cannot
+    disagree about rounding or field names."""
+    return [
+        {"time": idx.strftime("%Y-%m-%d"), "open": round(float(r["Open"]), 4),
+         "high": round(float(r["High"]), 4), "low": round(float(r["Low"]), 4),
+         "close": round(float(r["Close"]), 4), "volume": float(r["Volume"])}
+        for idx, r in df.iterrows()
+    ]
+
+
 @app.route("/api/trade-history", methods=["GET"])
 def api_trade_history():
     """One page of the dashboard's Trade History table (plan v9, H2).
@@ -835,18 +859,8 @@ def api_ohlcv(ticker):
     if trade_id:
         t = _trade_for_levels(trade_id)
         if t:
-            levels = {"entry": t.get("entry"), "stop_loss": t.get("stop_loss"),
-                      "tp1": t.get("take_profit"), "tp2": t.get("target2_price"),
-                      "direction": t.get("direction")}
-    payload = {
-        "ticker": ticker,
-        "bars": [
-            {"time": idx.strftime("%Y-%m-%d"), "open": round(float(r["Open"]), 4),
-             "high": round(float(r["High"]), 4), "low": round(float(r["Low"]), 4),
-             "close": round(float(r["Close"]), 4), "volume": float(r["Volume"])}
-            for idx, r in df.iterrows()
-        ],
-    }
+            levels = trade_levels(t)
+    payload = {"ticker": ticker, "bars": ohlcv_bars(df)}
     if levels is not None:
         payload["levels"] = levels
     return Response(json.dumps(payload), mimetype="application/json")
