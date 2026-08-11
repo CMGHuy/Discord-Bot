@@ -1033,14 +1033,18 @@ def stop_scan():
     return redirect(url_for("index", msg=msg, ok=ok))
 
 
-@app.route("/scan/status", methods=["GET"])
-@require_auth
-def scan_status():
-    """Return JSON indicating whether a scan trigger is pending, whether
-    the automatic background scan loop is currently paused, whether a
-    scan is actively running right now, and whether the bot process
-    itself appears to be alive (based on the heartbeat file written by
-    session_scan on every tick -- see scanning.py)."""
+def scan_status_payload() -> dict:
+    """Whether a scan trigger is pending, whether the automatic background
+    scan loop is paused, whether a scan is running right now, and whether the
+    bot process appears alive (from the heartbeat file session_scan writes on
+    every tick -- see commands/scanning.py).
+
+    A plain dict rather than a Response so /api/v1/system/scan can serve the
+    same payload (NG16). The flag-file names this reads must match the ones
+    the BOT reads; a mismatch is invisible in the UI, which simply shows
+    "not paused" forever. tests/admin/test_api_v1_system_scan.py pins
+    these constants against commands/scanning.py's.
+    """
     pending = os.path.exists(TRIGGER_FILE)
     mtime = None
     if pending:
@@ -1080,17 +1084,20 @@ def scan_status():
         except (OSError, json.JSONDecodeError):
             pass
 
-    return Response(
-        json.dumps({
-            "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
-            "running": running,
-            "bot_alive": bot_alive,
-            "bot_last_seen": bot_last_seen,
-            "bot_session_active": bot_session_active,
-            "bot_scan_paused": bot_scan_paused,
-        }),
-        mimetype="application/json",
-    )
+    return {
+        "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
+        "running": running,
+        "bot_alive": bot_alive,
+        "bot_last_seen": bot_last_seen,
+        "bot_session_active": bot_session_active,
+        "bot_scan_paused": bot_scan_paused,
+    }
+
+
+@app.route("/scan/status", methods=["GET"])
+@require_auth
+def scan_status():
+    return Response(json.dumps(scan_status_payload()), mimetype="application/json")
 
 
 @app.route("/scan/pause", methods=["POST"])

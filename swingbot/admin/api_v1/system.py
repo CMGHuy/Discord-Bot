@@ -294,3 +294,205 @@ def import_settings():
 
     applied, unknown = import_env_text(text)
     return jsonify({"applied": applied, "unknown_keys": unknown})
+
+
+# --- logs (NG16) --------------------------------------------------------
+
+_LOG_SOURCES = ("bot", "admin")
+_DEFAULT_LOG_LINES = 500
+_MAX_LOG_LINES = 5000
+
+
+def _log_request() -> tuple[str, int] | tuple[None, tuple]:
+    """(source, lines) or (None, (code, message)).
+
+    Both are rejected rather than defaulted, unlike the Jinja routes, which
+    fall back to the bot log and 500 lines on anything unparseable. A typo'd
+    source silently showing a DIFFERENT log than the one asked for is how
+    someone concludes the bot is idle while reading the admin log.
+    """
+    source = request.args.get("source", "bot")
+    if source not in _LOG_SOURCES:
+        return None, ("invalid", f"source must be one of {list(_LOG_SOURCES)}")
+
+    raw = request.args.get("lines")
+    if raw is None:
+        return source, _DEFAULT_LOG_LINES
+    try:
+        lines = int(raw)
+    except (TypeError, ValueError):
+        return None, ("invalid", f"lines must be an integer, got {raw!r}")
+    # Still clamped rather than rejected: a caller asking for more than the
+    # cap wants "as much as you have", which is what it gets.
+    return source, max(1, min(lines, _MAX_LOG_LINES))
+
+
+def _log_text(source: str, lines: int) -> str:
+    from swingbot.admin.helpers import _tail_admin_log, _tail_log
+    return _tail_admin_log(lines) if source == "admin" else _tail_log(lines)
+
+
+def _log_path(source: str) -> str:
+    return config.ADMIN_LOG_FILE if source == "admin" else config.LOG_FILE
+
+
+@api_v1.route("/system/logs", methods=["GET"])
+@require_auth
+def get_logs():
+    source, rest = _log_request()
+    if source is None:
+        return error(rest[0], rest[1], 400)
+    return jsonify({
+        "source": source,
+        "lines": rest,
+        "path": _log_path(source),
+        "content": _log_text(source, rest),
+    })
+
+
+@api_v1.route("/system/logs/raw", methods=["GET"])
+@require_auth
+def get_logs_raw():
+    """Stays text/plain (spec v11). The SPA streams this into a <pre>; JSON
+    would mean escaping every line to un-escape it again on arrival."""
+    source, rest = _log_request()
+    if source is None:
+        return error(rest[0], rest[1], 400)
+    return Response(_log_text(source, rest), mimetype="text/plain; charset=utf-8")
+
+
+@api_v1.route("/system/logs", methods=["DELETE"])
+@require_auth
+def clear_logs():
+    """DELETE on the collection, not POST /logs/clear -- emptying the log IS
+    deleting the resource.
+
+    A missing file reports ok=false with the reason rather than 404: there is
+    nothing to delete and nothing went wrong, and the Jinja route already
+    treats it as a message rather than a failure.
+    """
+    from swingbot.admin.helpers import _clear_admin_log, _clear_log
+
+    source, rest = _log_request()
+    if source is None:
+        return error(rest[0], rest[1], 400)
+    ok, message = _clear_admin_log() if source == "admin" else _clear_log()
+    return jsonify({"source": source, "ok": ok, "message": message})
+
+
+# --- scan control (NG16) ------------------------------------------------
+
+def _scan_status() -> dict:
+    """Straight from app.py's `scan_status_payload`, which owns the flag-file
+    paths. Re-deriving those names here is the failure mode NG16 calls out:
+    a wrong name never errors, it just reports "not paused" forever while the
+    bot stays paused."""
+    from swingbot.admin.app import scan_status_payload
+    return scan_status_payload()
+
+
+def _scan_result(ok: bool, message: str):
+    """Every scan command answers with the resulting status, not just an
+    acknowledgement. These are all cooperative -- the bot acts on a file it
+    polls -- so "did it take effect" is a separate question from "was it
+    written", and the SPA would have to ask immediately anyway."""
+    return jsonify({"ok": ok, "message": message, "scan": _scan_status()})
+
+
+@api_v1.route("/system/scan", methods=["GET"])
+@require_auth
+def get_scan():
+    return jsonify(_scan_status())
+
+
+@api_v1.route("/system/scan/trigger", methods=["POST"])
+@require_auth
+def scan_trigger():
+    import json
+    import os
+
+    from swingbot.admin.app import TRIGGER_FILE
+
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(TRIGGER_FILE, "w") as f:
+            f.write(json.dumps({
+                "triggered_at": datetime.now(timezone.utc).isoformat(),
+                "source": "admin_ui",
+            }))
+    except OSError as exc:
+        return error("unavailable", f"Could not write the trigger file: {exc}", 503)
+    return _scan_result(True, "Scan queued — the bot picks it up within 30 seconds.")
+
+
+@api_v1.route("/system/scan/stop", methods=["POST"])
+@require_auth
+def scan_stop():
+    """Cooperative, and different from pause: this cuts short a scan already
+    running (at its next per-ticker checkpoint), where pause stops future
+    automatic ones."""
+    from swingbot.core.scanning.engine import request_stop
+
+    try:
+        request_stop()
+    except OSError as exc:
+        return error("unavailable", f"Could not request a stop: {exc}", 503)
+    return _scan_result(True, "Stop requested — the scan ends after its current ticker.")
+
+
+@api_v1.route("/system/scan/pause", methods=["POST"])
+@require_auth
+def scan_pause():
+    import os
+
+    from swingbot.admin.app import PAUSE_FILE
+
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(PAUSE_FILE, "w") as f:
+            f.write(datetime.now(timezone.utc).isoformat())
+    except OSError as exc:
+        return error("unavailable", f"Could not write the pause file: {exc}", 503)
+    return _scan_result(True, "Automatic scanning paused — manual !check still works.")
+
+
+@api_v1.route("/system/scan/resume", methods=["POST"])
+@require_auth
+def scan_resume():
+    import os
+
+    from swingbot.admin.app import PAUSE_FILE
+
+    try:
+        if os.path.exists(PAUSE_FILE):
+            os.remove(PAUSE_FILE)
+    except OSError as exc:
+        return error("unavailable", f"Could not remove the pause file: {exc}", 503)
+    return _scan_result(True, "Automatic scanning resumed.")
+
+
+# --- bot restart (NG16) -------------------------------------------------
+
+@api_v1.route("/system/bot/restart", methods=["POST"])
+@require_auth
+def restart_bot():
+    """503 when the Docker socket is absent, rather than a 200 carrying a
+    failure message.
+
+    The admin container talks to the bot container through a mounted Docker
+    socket. Without it a restart is not something that failed, it is
+    something this deployment cannot do -- and the SPA needs to tell those
+    apart to decide whether to offer the button at all. (`restart_available`
+    on the settings document is the same fact, ahead of time.)
+    """
+    from swingbot.admin.helpers import _restart_bot_container, docker_sdk
+
+    if docker_sdk is None:
+        return error("unavailable",
+                     "Restarting needs the Docker socket mounted into the admin "
+                     "container. Restart manually with `docker compose restart bot`.",
+                     503)
+    ok, message = _restart_bot_container()
+    if not ok:
+        return error("unavailable", message, 503)
+    return jsonify({"ok": True, "message": message})
