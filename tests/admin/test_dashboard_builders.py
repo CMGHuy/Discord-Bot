@@ -1,5 +1,12 @@
 """swingbot/admin/dashboard.py -- the Dashboard's view-model builders.
 
+NG19 TRIAGE — **builder-level · KEEP UNCHANGED.** Spec v15 Decision 4 names
+this file explicitly. These target dashboard.py, which /api/v1/cockpit and
+/api/v1/trades project from rather than replace; they were extracted out of
+the templates precisely so they would survive this migration. Nothing here
+touches a template or a route.
+
+
 These are plain functions of their arguments (the dashboard mode arrives as a
 parameter, not off `flask.request`), so most of this file needs no client and
 no request context at all.

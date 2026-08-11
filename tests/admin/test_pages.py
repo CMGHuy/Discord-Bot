@@ -1,6 +1,16 @@
 """Route-level smoke tests for the admin Flask app. Every test in this file
 (and every other tests/admin/*.py file in this plan) uses the `client`/`auth`
-fixtures from conftest.py rather than talking to a real running server."""
+fixtures from conftest.py rather than talking to a real running server.
+
+NG19 TRIAGE — **HTML-structure · DELETE at cutover.** The largest file in the
+directory and the one with the least to migrate: these assert that a page
+returns 200 and contains a string, for pages that are being deleted. Where a
+test here also pins a domain behaviour, that behaviour now has a v1 successor
+(watchlist add/remove → test_api_v1_universe.py · trade close/delete/clear →
+test_api_v1_trade_commands.py · settings save/export/import →
+test_api_v1_system_settings.py · scan trigger/pause/resume →
+test_api_v1_system_scan.py). Check a specific assertion against those four
+before deleting it, not this docstring."""
 
 
 def test_index_requires_auth(client):

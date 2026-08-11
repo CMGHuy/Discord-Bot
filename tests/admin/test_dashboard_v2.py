@@ -1,6 +1,16 @@
 """Dashboard v2 behaviours: bounded history, pedigree chips, leg rows,
 lifecycle strip, equity sparkline.
 
+NG19 TRIAGE — **HTML-structure · DELETE at cutover.** Every assertion here is
+about rendered markup: which table has which columns, which cells carry which
+density class, what the polled fragment does and does not contain. All of it
+tests a UI that will not exist. The two underlying behaviours worth keeping
+are already covered elsewhere and are NOT lost with this file — history
+paging by test_trade_history_paging.py (kept) and via /api/v1/trades, and the
+equity series by test_api_v1_cockpit.py, which asserts the numbers rather
+than the rendered <svg>.
+
+
 Two response bodies are exercised here and the distinction matters:
 
   * "/dashboard/fragment" -- the polled fragment: session banner, lifecycle

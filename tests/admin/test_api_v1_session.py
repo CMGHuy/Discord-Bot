@@ -139,3 +139,28 @@ def test_health_ok_with_session_cookie(client):
     cookie, so both paths are pinned."""
     client.post("/api/v1/session", json=_LOGIN)
     assert client.get("/api/v1/health").status_code == 200
+
+
+# --- NG19: behaviour carried over from test_login.py ----------------------
+
+def test_a_session_stops_working_when_the_password_changes(client, admin_app):
+    """Rotating ADMIN_PASSWORD must invalidate sessions already issued.
+
+    Carried over from test_login.py's Jinja version during NG19's triage.
+    The mechanism is `session["pw_hash"]`, checked by `_session_authenticated`
+    -- which v1 shares rather than reimplements -- but "v1 inherits it" is an
+    assumption about a security property, and rotating the password is the
+    one thing an operator does *because* they believe it locks people out.
+    A regression in the shared predicate would otherwise surface only in a
+    test of the UI being deleted.
+    """
+    import swingbot.admin.app as admin_app_module
+
+    client.post("/api/v1/session", json=_LOGIN)
+    assert client.get("/api/v1/health").status_code == 200
+
+    admin_app_module.ADMIN_PASSWORD = "rotated"
+    try:
+        assert_error(client.get("/api/v1/health"), "auth", 401)
+    finally:
+        admin_app_module.ADMIN_PASSWORD = "admin"

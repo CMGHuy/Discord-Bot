@@ -1,6 +1,16 @@
 """Render smoke tests: every admin page returns 200 and carries the marker
 classes the redesign relies on. Auth is satisfied by pointing config at
-known credentials for the duration of each test."""
+known credentials for the duration of each test.
+
+NG19 TRIAGE — **HTML-structure · DELETE at cutover.** Spec v15 Decision 4
+names this file as being in the same position as tests/admin/'s render tests
+despite living a directory up. It asserts marker classes on pages that are
+being deleted; no domain behaviour is pinned here that /api/v1 does not
+already cover.
+
+**Its `client` fixture is imported by other test modules** (see
+tests/test_admin_api_ohlcv.py) -- move the fixture before deleting the file,
+or those go red for an unrelated reason at the least convenient moment."""
 import base64
 
 import pytest

@@ -1,5 +1,12 @@
 """Trade History scoping/filtering/paging (plan v9, H1).
 
+NG19 TRIAGE — **query-level · KEEP UNCHANGED.** Spec v15 Decision 4 names
+this file explicitly. It targets `query_closed_trades()`, which
+/api/v1/trades reuses -- the filter-then-sort-then-slice ordering these pin
+is the same ordering that makes the v1 collection's `total` a post-filter
+pre-slice count. Deleting these would remove the only coverage of that.
+
+
 The table used to ignore the dashboard's Today+Open / Today only / All days
 toggle entirely. These lock in the three behaviours that replaced that:
 

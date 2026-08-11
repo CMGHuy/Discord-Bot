@@ -1,6 +1,18 @@
 """Session-cookie login page (/login, /logout) -- coexists with the
 existing Basic Auth check (see conftest.py's `auth` fixture) rather than
-replacing it. See swingbot/admin/app.py's Auth section."""
+replacing it. See swingbot/admin/app.py's Auth section.
+
+NG19 TRIAGE — **MIXED · DELETE at cutover, coverage migrated.** `GET /login`
+is a recorded drop (the SPA renders its own login view), so the page-render
+and `next`-param tests go with it -- including the open-redirect one, which
+protects a parameter that ceases to exist.
+
+Everything about the session itself is behavioural and now has a v1
+successor in test_api_v1_session.py: login, wrong password, logout, Basic
+Auth coexisting with the cookie, and -- added during this triage --
+`test_a_session_stops_working_when_the_password_changes`. That last one was
+the only assertion in this directory whose v1 equivalent was missing
+entirely, and it is a security property, not a UI one."""
 
 
 def test_login_page_renders_without_auth(client):

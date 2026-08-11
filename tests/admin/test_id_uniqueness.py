@@ -1,5 +1,9 @@
 """NG1 — the invariant that lets /api/v1/trades expose one `id` namespace.
 
+NG19 TRIAGE — **v1-era · KEEP.** Written for this migration, not inherited
+from the Jinja UI; nothing here survives on rendered HTML.
+
+
 Spec `docs/superpowers/specs/2026-08-08-admin-rest-api-design-v11.md`
 (Decision 2) unifies plans and trades into one collection at the API layer.
 That is only safe if a plan id can never be mistaken for a trade id: the SPA
