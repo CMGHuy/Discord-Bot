@@ -130,14 +130,25 @@ def test_positions_are_ordered_by_risk(logged_in, killswitch_file, tmp_path):
 def test_utilisation_is_not_clamped_at_100(logged_in, killswitch_file, tmp_path):
     """An over-cap portfolio must report the true figure. The Jinja page
     clamps the WIDTH of its bar so it cannot paint past its track; clamping
-    the number would hide exactly the situation the reader needs to see."""
+    the number would hide exactly the situation the reader needs to see.
+
+    Risk is stated on the trade rather than derived from entry/stop/balance
+    ON PURPOSE. `trade_risk_pct` honours a stored `risk_pct` and only falls
+    back to the balance calculation without one -- and the balance is not
+    reliably isolated: `account.load_account_config` takes its path as an
+    import-time default argument (`account.py`'s CONFIG_PATH), and
+    `swingbot.core.account` is not in conftest's reload list, so whether it
+    sees the test's account.json or the real one depends on which test
+    imported it first. An earlier version of this test asserted against the
+    seeded 10,000 balance and passed alone while failing in a full run.
+    """
     (tmp_path / "trades.json").write_text(json.dumps([
-        # 10000 balance, 50-wide stop, 40 shares -> 2000 at risk = 20%,
-        # against a 6% default cap.
-        _open_trade("a" * 16, "AAPL", entry=200.0, stop=150.0, shares=40),
+        # 20% of the account at risk against the 6% default cap -> 333%.
+        {**_open_trade("a" * 16, "AAPL"), "risk_pct": 20.0},
     ]), encoding="utf-8")
 
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
+    assert heat["open_pct"] == pytest.approx(20.0)
     assert heat["utilisation_pct"] > 100
 
 
