@@ -181,7 +181,7 @@ def register(app) -> None:
     # would drag those modules in at api_v1 import time and re-create the
     # circular-import deadlock app.py documents.
     from . import (analytics, cockpit, jobs, risk, session,  # noqa: F401
-                   trade_commands, trades, universe)  # (register routes)
+                   system, trade_commands, trades, universe)  # (register routes)
 
     app.register_blueprint(api_v1)
 

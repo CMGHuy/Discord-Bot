@@ -86,7 +86,7 @@ from .helpers import (
     _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
     _clear_admin_log, _write_env_text, get_versions, settings_diff,
     append_settings_audit, read_settings_audit, import_env_text,
-    _load_or_create_secret_key,
+    build_settings_export_text, _load_or_create_secret_key,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -509,13 +509,11 @@ def save_settings():
 @app.route("/settings/export", methods=["GET"])
 @require_auth
 def settings_export():
-    existing = _read_env_values()
-    lines = []
-    for f in config.FIELDS:
-        if f.sensitive:
-            continue  # omitted entirely, not masked -- an import must never accidentally blank a real secret
-        lines.append(f"{f.key}={existing.get(f.key, f.default)}")
-    body = "\n".join(lines) + "\n"
+    # Body built by helpers.build_settings_export_text so this route and
+    # /api/v1/system/settings/export cannot drift apart during the migration
+    # (NG15). Sensitive fields are omitted there, not masked -- an import must
+    # never accidentally blank a real secret.
+    body = build_settings_export_text()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return Response(
         body, mimetype="text/plain",
