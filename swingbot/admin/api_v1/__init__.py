@@ -183,6 +183,10 @@ def register(app) -> None:
     from . import (analytics, cockpit, jobs, market, risk,  # noqa: F401
                    session, system, trade_commands, trades,
                    universe)  # (register routes)
+    # /api/v1/events lives outside this package -- it is one route on top of
+    # the watcher and broker, and splitting those across two packages to put
+    # the route here would be filing by framework rather than by concern.
+    from swingbot.admin.events import stream  # noqa: F401  (registers /events)
 
     app.register_blueprint(api_v1)
 

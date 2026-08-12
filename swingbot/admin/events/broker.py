@@ -179,6 +179,19 @@ class EventBroker:
         with self._lock:
             return len(self._subscriptions)
 
+    @property
+    def seq(self) -> int:
+        """The last issued sequence number -- a high-water mark, not a claim.
+
+        Read by the stream (NG22) to stamp the `resync` it sends on connect,
+        which means "your data is current as of here". It deliberately does
+        NOT consume a number: a resync goes to one connection, so issuing a
+        fresh seq for it would burn an id every other open connection never
+        sees, putting a permanent gap in their streams.
+        """
+        with self._lock:
+            return self._seq
+
     # -- connections -----------------------------------------------------
 
     def subscribe(self) -> Subscription:
