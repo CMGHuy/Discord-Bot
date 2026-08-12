@@ -30,7 +30,10 @@
         <span class="killswitch" role="alert">KILLSWITCH ENGAGED</span>
       }
       <div class="spacer"></div>
-      <sb-connection-status [state]="streamState()" [botAlive]="botAlive()" />
+      <sb-connection-status
+        [state]="connection.state()"
+        [botAlive]="connection.botAlive()"
+      />
     </header>
 
     <main class="workspace">

@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-/** How the SPA is currently hearing about changes. */
-export type StreamState = 'connecting' | 'live' | 'degraded' | 'dead';
+// The state union is declared once, on the store that produces it. Three
+// spellings of the same four strings across transport, store and chrome is
+// how one of them quietly grows a fifth.
+import { ConnectionState } from '../stores/connection.store';
 
 /**
  * "Is what I am looking at actually current?" — answered in the shell,
@@ -61,7 +63,7 @@ export type StreamState = 'connecting' | 'live' | 'degraded' | 'dead';
   `,
 })
 export class ConnectionStatus {
-  readonly state = input.required<StreamState>();
+  readonly state = input.required<ConnectionState>();
   /** Null until the bot has ever reported -- distinct from "offline". */
   readonly botAlive = input<boolean | null>(null);
 

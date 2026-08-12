@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApiClient } from '../api/api-client';
+import { EventStream } from '../api/event-stream';
+import { ConnectionStore } from '../stores/connection.store';
 import { SessionStore } from '../stores/session.store';
-import { ConnectionStatus, StreamState } from './connection-status';
+import { ConnectionStatus } from './connection-status';
 import { ToastHost } from './toast-host';
 
 interface NavEntry {
@@ -31,7 +33,9 @@ interface NavEntry {
 })
 export class Shell {
   private readonly api = inject(ApiClient);
+  private readonly events = inject(EventStream);
   protected readonly session = inject(SessionStore);
+  protected readonly connection = inject(ConnectionStore);
 
   /** The six workspaces, in the IA's order: what is true now, then the
    *  entities, then the analysis, then the two administrative ones. */
@@ -44,11 +48,6 @@ export class Shell {
     { path: '/system', label: 'System' },
   ];
 
-  // Wired to ConnectionStore in NG31. Until then the indicator renders its
-  // initial state honestly rather than claiming to be live.
-  protected readonly streamState = signal<StreamState>('connecting');
-  protected readonly botAlive = signal<boolean | null>(null);
-
   /**
    * Killswitch state, owned by the shell rather than by RiskStore.
    *
@@ -60,7 +59,14 @@ export class Shell {
   protected readonly killswitchOn = signal(false);
 
   constructor() {
-    this.refreshKillswitch();
+    // Reading the counter inside the effect is the subscription. The first
+    // run is also the initial load, so the load path and the refetch path
+    // are the same code and cannot drift apart.
+    const risk = this.events.changes('risk');
+    effect(() => {
+      risk();
+      this.refreshKillswitch();
+    });
   }
 
   protected refreshKillswitch(): void {
