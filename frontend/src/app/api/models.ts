@@ -354,12 +354,38 @@ export interface ScanCommandResult {
 /* -- market ------------------------------------------------------------- */
 
 export interface Candle {
+  /** `YYYY-MM-DD`, which is also what lightweight-charts accepts directly. */
   time: string;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
+}
+
+/** The plan lines a chart draws. Present ONLY when `trade_id` was supplied
+ *  and resolved -- an unresolvable id is a 404 rather than a chart quietly
+ *  missing its levels, because a plain chart that looks complete is how a
+ *  reader concludes the lines were never set. */
+export interface TradeLevels {
+  entry: number | null;
+  stop_loss: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  direction: string | null;
+}
+
+/** `GET /market/ohlcv/:ticker`.
+ *
+ *  An ENVELOPE, not a bare array. This was previously typed as `Candle[]`,
+ *  which compiled fine and would have handed the chart `undefined` at
+ *  runtime -- NG45 is the first consumer, so it is the first thing that
+ *  would have noticed. `tests/admin/test_api_v1_market.py` is the contract
+ *  and it asserts `body["bars"]`. */
+export interface OhlcvResponse {
+  ticker: string;
+  bars: Candle[];
+  levels?: TradeLevels;
 }
 
 /* -- preferences -------------------------------------------------------- */

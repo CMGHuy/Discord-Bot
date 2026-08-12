@@ -10,10 +10,13 @@ import {
 import { Router, RouterLink } from '@angular/router';
 
 import { ApiClient } from '../../api/api-client';
+import { OhlcvStore } from '../../stores/ohlcv.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { Button } from '../../ui/button';
 import { QualityChip } from '../../ui/chip';
+import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { PriceChart } from '../../ui/price-chart';
 import { dateTime, held, num, pct, text } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
@@ -52,8 +55,8 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 @Component({
   selector: 'sb-trade-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [TradeDetailStore],
-  imports: [RouterLink, TabBar, Panel, StatusIndicator, QualityChip, Button, ConfirmDialog],
+  providers: [TradeDetailStore, OhlcvStore],
+  imports: [RouterLink, TabBar, Panel, StatusIndicator, QualityChip, Button, ConfirmDialog, ChartContainer, PriceChart],
   template: `
     <header class="head">
       <a class="back" routerLink="/trades">← Trades</a>
@@ -207,6 +210,19 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           </div>
         }
       }
+      @case ('chart') {
+        <div class="chart">
+          <sb-chart-container
+            [loading]="chart.loading()"
+            [error]="chart.error()"
+            [hasData]="!chart.isEmpty()"
+            [height]="420"
+            [caption]="chartCaption()"
+          >
+            <sb-price-chart [bars]="chart.bars()" [levels]="chart.levels()" />
+          </sb-chart-container>
+        </div>
+      }
       @default {
         <p class="todo">{{ placeholder() }}</p>
       }
@@ -259,6 +275,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
 
+    .chart { margin-top: var(--space-14); }
     .progress { margin-bottom: var(--space-10); }
     .commands { display: flex; flex-wrap: wrap; gap: var(--space-8); }
 
@@ -269,6 +286,7 @@ export class TradeDetail {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
+  protected readonly chart = inject(OhlcvStore);
 
   readonly id = input.required<string>();
   /** The active tab, as a query parameter. */
@@ -312,10 +330,14 @@ export class TradeDetail {
     return kind && trade ? actionConsequence(kind, trade) : '';
   });
 
+  protected readonly chartCaption = computed(() => {
+    const trade = this.store.trade();
+    return trade ? `${trade.ticker} — daily, with this plan's levels` : null;
+  });
+
   protected readonly placeholder = computed(
     () =>
       ({
-        chart: 'Chart — NG45',
         notes: 'Notes — NG46',
         strategy: 'Strategy — NG46',
       })[this.activeTab()] ?? '',
@@ -323,6 +345,14 @@ export class TradeDetail {
 
   constructor() {
     effect(() => this.store.setId(this.id()));
+
+    // The chart follows the trade, and carries its id so the endpoint returns
+    // this plan's levels rather than a bare price chart. Only once the trade
+    // has loaded: the ticker is not known before that.
+    effect(() => {
+      const trade = this.store.trade();
+      this.chart.setTarget(trade?.ticker ?? null, trade?.id ?? null);
+    });
   }
 
   protected pnlClass(value: number | null | undefined): string {

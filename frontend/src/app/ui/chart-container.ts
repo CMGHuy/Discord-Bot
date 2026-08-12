@@ -20,9 +20,9 @@ import { EmptyStateComponent } from './empty-state';
  *
  * What the shell owns, so NG45 does not have to re-solve it per call site:
  *
- *  - **One host element with a stable size**, exposed as `surface()`. A chart
- *    library that measures a zero-height parent renders a zero-height chart,
- *    which is the single most common way this goes wrong.
+ *  - **One host element with a stable size.** A chart library that measures a
+ *    zero-height parent renders a zero-height chart, which is the single most
+ *    common way this goes wrong.
  *  - **The three non-chart states.** Loading, error and no-data are chrome,
  *    not chart, and a half-initialised chart library rendering "no data" in
  *    its own house style would not match anything else in the UI.
@@ -30,12 +30,9 @@ import { EmptyStateComponent } from './empty-state';
  *    can be built from the same tokens rather than from hardcoded hex — the
  *    requirement Decision 10 states outright.
  *
- * Two notes for NG45, recorded here because they are cheap now and expensive
- * to rediscover: the library must be **5.x from npm**, not the 4.2.3 vendored
- * for the Jinja UI, and the v4→v5 API change is real enough that every example
- * predating v5 will mislead. And the chart must survive change detection —
  * `OnPush` here means the surface element is never re-created, so the chart
- * instance can outlive a re-render, which is exactly what it needs.
+ * instance projected into it outlives every re-render — which is exactly what
+ * imperative canvas state needs.
  */
 @Component({
   selector: 'sb-chart-container',
@@ -49,8 +46,12 @@ import { EmptyStateComponent } from './empty-state';
 
       <!-- Always present, never behind an @if: the chart library measures
            this element, and an element that appears a tick later measures as
-           zero and renders as nothing. -->
-      <div #surface class="surface" [class.hidden]="state() !== 'ready'"></div>
+           zero and renders as nothing. The chart is PROJECTED into it rather
+           than mounted from outside, so the container owns the element's
+           lifetime and the chart component owns the canvas. -->
+      <div #surface class="surface" [class.hidden]="state() !== 'ready'">
+        <ng-content />
+      </div>
 
       @switch (state()) {
         @case ('loading') {
@@ -120,7 +121,8 @@ export class ChartContainer {
   readonly height = input(320);
   readonly caption = input<string | null>(null);
 
-  /** The element NG45 mounts the chart into. */
+  /** Kept for anything that needs to measure the drawing area. The chart
+   *  itself arrives by projection and does not need this. */
   readonly surface = viewChild.required<ElementRef<HTMLDivElement>>('surface');
 
   /** Error beats loading: a refetch that failed should say so rather than

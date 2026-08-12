@@ -8,7 +8,7 @@ import {
   AnalyticsRegistry,
   AnalyticsSnapshot,
   AnalyticsStrategies,
-  Candle,
+  OhlcvResponse,
   Cockpit,
   Collection,
   Health,
@@ -280,8 +280,8 @@ export class ApiClient {
 
   /* -- market ---------------------------------------------------------- */
 
-  ohlcv(ticker: string, params: Record<string, unknown> = {}): Observable<Candle[]> {
-    return this.http.get<Candle[]>(
+  ohlcv(ticker: string, params: Record<string, unknown> = {}): Observable<OhlcvResponse> {
+    return this.http.get<OhlcvResponse>(
       `${this.base}/market/ohlcv/${encodeURIComponent(ticker)}`,
       { params: toParams(params) },
     );
