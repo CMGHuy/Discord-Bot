@@ -10,7 +10,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { Observable } from 'rxjs';
 
 import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
@@ -27,15 +26,21 @@ import { dateTime, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
 import { StatusIndicator } from '../../ui/status-indicator';
 import {
+  ACTION_LABELS,
+  ACTION_TITLES,
+  TradeActionKind,
+  actionConsequence,
+  availableActions,
+  runTradeAction,
+} from './trade-actions';
+import {
   DEFAULT_TRADE_COLUMNS,
   STATUS_CHIPS,
   TRADES_TABLE_ID,
   tradeColumns,
 } from './trades.columns';
 
-/** The three irreversible commands, and the sentence each one has to justify
- *  itself with. */
-type PendingAction = { kind: 'close' | 'cancel' | 'delete'; row: TradeRow } | null;
+type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
 /**
  * The Trades workspace — the entity that Plans, Journal and the dashboard's
@@ -166,15 +171,11 @@ type PendingAction = { kind: 'close' | 'cancel' | 'delete'; row: TradeRow } | nu
 
     <ng-template #actionsCell let-row>
       <span class="actions">
-        @if (row.status === 'open') {
-          <button sb-button variant="ghost" type="button" (click)="ask('close', row)">Close</button>
+        @for (kind of actionsFor(row.status); track kind) {
+          <button sb-button variant="ghost" type="button" (click)="ask(kind, row)">
+            {{ actionLabels[kind] }}
+          </button>
         }
-        @if (row.status === 'planned' || row.status === 'pending') {
-          <button sb-button variant="ghost" type="button" (click)="ask('cancel', row)">Cancel</button>
-        }
-        <button sb-button variant="icon" type="button" aria-label="Delete" (click)="ask('delete', row)">
-          ×
-        </button>
       </span>
     </ng-template>
 
@@ -422,61 +423,34 @@ export class Trades {
     this.router.navigate(['/trades', row.id]);
   }
 
-  protected ask(kind: 'close' | 'cancel' | 'delete', row: TradeRow): void {
+  protected ask(kind: TradeActionKind, row: TradeRow): void {
     this.pending.set({ kind, row });
   }
 
+  protected readonly actionLabels = ACTION_LABELS;
+  protected readonly actionsFor = availableActions;
+
   protected readonly confirmTitle = computed(() => {
     const action = this.pending();
-    if (!action) return '';
-    return { close: 'Close trade', cancel: 'Cancel plan', delete: 'Delete trade' }[
-      action.kind
-    ];
+    return action ? ACTION_TITLES[action.kind] : '';
   });
 
   protected readonly confirmLabel = computed(() => {
     const action = this.pending();
-    if (!action) return 'Confirm';
-    return { close: 'Close', cancel: 'Cancel plan', delete: 'Delete' }[action.kind];
+    return action ? ACTION_LABELS[action.kind] : 'Confirm';
   });
 
-  /**
-   * Names the trade and what will not come back. Spec v14 is explicit that
-   * these dialogs must not ask "are you sure?" — delete and clear-open are
-   * irreversible against paper-trade history that has no backup, so the
-   * sentence has to carry the specific thing being destroyed.
-   */
   protected readonly confirmConsequence = computed(() => {
     const action = this.pending();
-    if (!action) return '';
-    const { row } = action;
-    const opened = row.opened_at ? `, opened ${dateTime(row.opened_at)}` : '';
-
-    switch (action.kind) {
-      case 'close':
-        return `${row.ticker}${opened} will be closed at the current price and counted as a settled result.`;
-      case 'cancel':
-        return `The planned ${row.ticker} entry${opened} will be cancelled and never opened.`;
-      case 'delete':
-        return `${row.ticker}${opened} will be deleted permanently, along with its notes and history. This cannot be undone.`;
-    }
+    return action ? actionConsequence(action.kind, action.row) : '';
   });
 
   protected runPending(): void {
     const action = this.pending();
     if (!action) return;
 
-    // Typed as Observable<unknown>: the three commands have different
-    // response types, and a union of Observables has no callable subscribe.
-    const request: Observable<unknown> =
-      action.kind === 'close'
-        ? this.api.closeTrade(action.row.id)
-        : action.kind === 'cancel'
-          ? this.api.cancelTrade(action.row.id)
-          : this.api.deleteTrade(action.row.id);
-
     this.working.set(true);
-    request.subscribe({
+    runTradeAction(this.api, action.kind, action.row.id).subscribe({
       // No manual refetch on success: the command changes trades, the server
       // emits a `trades` event, and the store's effect reissues the current
       // query. Refetching here as well would double every command.

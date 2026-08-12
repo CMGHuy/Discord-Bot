@@ -5,14 +5,26 @@ import {
   effect,
   inject,
   input,
+  signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
+import { ApiClient } from '../../api/api-client';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { Button } from '../../ui/button';
 import { QualityChip } from '../../ui/chip';
-import { dateTime, num, pct, text } from '../../ui/format';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { dateTime, held, num, pct, text } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
+import {
+  ACTION_LABELS,
+  ACTION_TITLES,
+  TradeActionKind,
+  actionConsequence,
+  availableActions,
+  runTradeAction,
+} from './trade-actions';
 
 /** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
 const TABS: Tab[] = [
@@ -41,7 +53,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
   selector: 'sb-trade-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [TradeDetailStore],
-  imports: [RouterLink, TabBar, Panel, StatusIndicator, QualityChip],
+  imports: [RouterLink, TabBar, Panel, StatusIndicator, QualityChip, Button, ConfirmDialog],
   template: `
     <header class="head">
       <a class="back" routerLink="/trades">← Trades</a>
@@ -141,10 +153,74 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           </div>
         }
       }
+      @case ('live') {
+        @if (store.trade(); as trade) {
+          <div class="panels">
+            <sb-panel heading="Now">
+              <dl>
+                <div><dt>Price</dt><dd class="num">{{ fmt(trade.current_price) }}</dd></div>
+                <div>
+                  <dt>Unrealised</dt>
+                  <dd class="num" [class]="pnlClass(trade.pnl_pct)">{{ fmtPct(trade.pnl_pct) }}</dd>
+                </div>
+                <div>
+                  <dt>Amount</dt>
+                  <dd class="num" [class]="pnlClass(trade.realized_pnl_amount)">
+                    {{ fmt(trade.realized_pnl_amount) }}
+                  </dd>
+                </div>
+                <div><dt>Held</dt><dd class="num">{{ fmtHeld(trade.held_hours) }}</dd></div>
+              </dl>
+            </sb-panel>
+
+            <sb-panel heading="Stop to target">
+              <div class="progress">
+                <sb-status-indicator
+                  [status]="trade.status"
+                  [current]="trade.current_price"
+                  [entry]="trade.entry"
+                  [stop]="trade.stop_loss"
+                  [target]="trade.target"
+                />
+              </div>
+              <dl>
+                <div><dt>Stop</dt><dd class="num neg">{{ fmt(trade.stop_loss) }}</dd></div>
+                <div><dt>Entry</dt><dd class="num">{{ fmt(trade.entry) }}</dd></div>
+                <div><dt>Target</dt><dd class="num pos">{{ fmt(trade.target) }}</dd></div>
+              </dl>
+            </sb-panel>
+
+            <sb-panel heading="Actions">
+              <div class="commands">
+                @for (kind of actionsFor(trade.status); track kind) {
+                  <button
+                    sb-button
+                    [variant]="kind === 'delete' ? 'danger' : 'secondary'"
+                    type="button"
+                    (click)="ask(kind)"
+                  >
+                    {{ actionLabels[kind] }}
+                  </button>
+                }
+              </div>
+            </sb-panel>
+          </div>
+        }
+      }
       @default {
         <p class="todo">{{ placeholder() }}</p>
       }
     }
+
+    <sb-confirm-dialog
+      [open]="pending() !== null"
+      [title]="confirmTitle()"
+      [consequence]="confirmConsequence()"
+      [confirmLabel]="confirmLabel()"
+      [working]="working()"
+      (confirmed)="runPending()"
+      (cancelled)="pending.set(null)"
+    />
   `,
   styles: `
     .head { display: grid; gap: var(--space-8); }
@@ -183,11 +259,15 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
 
+    .progress { margin-bottom: var(--space-10); }
+    .commands { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+
     .todo { margin-top: var(--space-14); color: var(--text-faint); font-size: var(--text-table); }
   `,
 })
 export class TradeDetail {
   private readonly router = inject(Router);
+  private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
 
   readonly id = input.required<string>();
@@ -200,6 +280,7 @@ export class TradeDetail {
   protected readonly fmtText = text;
   protected readonly fmtDate = dateTime;
   protected readonly fmtPct = pct;
+  protected readonly fmtHeld = held;
 
   /** An unknown or absent `?tab=` falls back to Plan rather than rendering
    *  nothing, so a hand-edited or stale URL still shows the trade. */
@@ -208,10 +289,32 @@ export class TradeDetail {
     return requested && TAB_IDS.has(requested) ? requested : 'plan';
   });
 
+  protected readonly actionLabels = ACTION_LABELS;
+  protected readonly actionsFor = availableActions;
+  protected readonly pending = signal<TradeActionKind | null>(null);
+  protected readonly working = signal(false);
+
+  protected readonly confirmTitle = computed(() => {
+    const kind = this.pending();
+    return kind ? ACTION_TITLES[kind] : '';
+  });
+
+  protected readonly confirmLabel = computed(() => {
+    const kind = this.pending();
+    return kind ? ACTION_LABELS[kind] : 'Confirm';
+  });
+
+  /** The same sentences the Trades list uses -- see `trade-actions.ts` for
+   *  why they live in exactly one place. */
+  protected readonly confirmConsequence = computed(() => {
+    const kind = this.pending();
+    const trade = this.store.trade();
+    return kind && trade ? actionConsequence(kind, trade) : '';
+  });
+
   protected readonly placeholder = computed(
     () =>
       ({
-        live: 'Live — NG44',
         chart: 'Chart — NG45',
         notes: 'Notes — NG46',
         strategy: 'Strategy — NG46',
@@ -220,6 +323,40 @@ export class TradeDetail {
 
   constructor() {
     effect(() => this.store.setId(this.id()));
+  }
+
+  protected pnlClass(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '';
+    if (value > 0) return 'pos';
+    if (value < 0) return 'neg';
+    return '';
+  }
+
+  protected ask(kind: TradeActionKind): void {
+    this.pending.set(kind);
+  }
+
+  protected runPending(): void {
+    const kind = this.pending();
+    const trade = this.store.trade();
+    if (!kind || !trade) return;
+
+    this.working.set(true);
+    runTradeAction(this.api, kind, trade.id).subscribe({
+      // Deleting removes the thing this route is about, so it navigates away.
+      // Close and cancel leave a trade that still has a detail page, and the
+      // server's `trades` event refetches it -- no manual reload here, which
+      // would double every command.
+      next: () => {
+        this.working.set(false);
+        this.pending.set(null);
+        if (kind === 'delete') this.router.navigate(['/trades']);
+      },
+      error: () => {
+        this.working.set(false);
+        this.pending.set(null);
+      },
+    });
   }
 
   protected goToTab(tab: string): void {
