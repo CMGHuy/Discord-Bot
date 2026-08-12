@@ -89,3 +89,42 @@ override it, and must never read "no counts found" as success:
 ```powershell
 python -m pytest tests/ -p no:cacheprovider -n 4     # no -q: prints the counts line
 ```
+
+## Runtime cost: the admin event watcher (NG24)
+
+Not a test cost, but measured the same way and filed here because this is
+where the repo keeps measured-not-estimated numbers. Measured 2026-08-12 on
+the same box (Windows, NTFS, 12 logical cores), two runs, `time.process_time()
+/ wall` over 30s windows. Spec: `2026-08-08-realtime-push-design-v12.md`,
+which asks for a before/after because "it is small, but it never stops".
+
+| | run 1 | run 2 |
+| --- | --- | --- |
+| One `stat()` sweep of all 20 paths | 1797 us | 1117 us |
+| Admin idle, **no** event connection | 0.000% | 0.052% |
+| Admin idle, **one** event connection | 0.624% | 0.728% |
+| Attributable to the watcher | 0.62 pp | 0.68 pp |
+
+**Verdict: not material — the 500ms interval stands.** ~0.65% of one core,
+and only while a browser is actually connected: the watcher is started
+lazily by the broker on the first SSE connection and stopped when the last
+one closes, so an admin nobody has open measures at zero, which is what the
+"no connection" row is.
+
+Two things worth knowing before re-measuring:
+
+- **The sweep is dominated by the 16 absent paths, not the 4 present ones.**
+  Most watched paths (all four `.flag` files, and everything a fresh install
+  has not written yet) do not exist, and each one costs a `FileNotFoundError`
+  — an exception, not a syscall result. That is why a 20-path sweep costs
+  ~1.5ms rather than ~50us. It also means the cost *falls* as the install
+  fills in, which is the opposite of the intuition.
+- **This is a pessimistic number for production.** `stat()` on Windows/NTFS
+  is far more expensive than on the Linux container the admin actually
+  deploys to. Treat ~0.65% as a ceiling, and re-measure on the Hetzner box
+  before acting on it.
+
+The sweep accounts for ~0.36 pp of the total (1.8ms x 2/s); the rest is the
+run loop, which ticks every 250ms — the debounce granularity — so that a
+settled event is not held back until the next sweep. Flushing is free
+compared to sweeping, which is why the two cadences differ.
