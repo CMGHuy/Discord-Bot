@@ -20,6 +20,26 @@ interface CockpitSlice {
 }
 
 /**
+ * Pulls one finite number out of a loosely typed server bag.
+ *
+ * Two of the Cockpit's fields are `unknown[]` / `Record<string, unknown>` in
+ * `models.ts` on purpose: their shape is decided by the Python side
+ * (`build_sizing_note`, the equity snapshot) and pinning a TypeScript
+ * interface to it would make every backend tweak a compile error in the
+ * client. The cost is that the narrowing has to happen somewhere, and the
+ * store is the right somewhere -- a template that did it would be asserting a
+ * wire format, and a component that trusted the `unknown` blindly would print
+ * `[object Object]` the first time the backend renamed a key.
+ *
+ * Anything that is not a finite number becomes `null` rather than `0`: a
+ * metric that failed to arrive is not a metric that is zero, which is the rule
+ * running through `ui/format.ts` and every card on this screen.
+ */
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
  * The Cockpit's nine metrics.
  *
  * **This is the reference shape.** Every workspace store in Phase 4 copies
@@ -63,6 +83,45 @@ export const CockpitStore = signalStore(
     winRate: computed(() => data()?.win_rate ?? null),
     expectancyR: computed(() => data()?.expectancy_r ?? null),
     equity30d: computed(() => data()?.equity_30d ?? null),
+
+    /** The 30 balance points, as numbers the `Sparkline` can draw.
+     *
+     *  Non-numbers are dropped rather than coerced: a `null` balance in the
+     *  middle of the series would become 0 under `Number()` and draw a spike
+     *  to the floor that never happened. The server already ships at most 30
+     *  points, so there is no cap to apply here. */
+    equityPoints: computed<readonly number[]>(() => {
+      const points = data()?.equity_30d?.points ?? [];
+      return points
+        .map(finiteNumber)
+        .filter((point): point is number => point !== null);
+    }),
+
+    /** The window's percentage change, which is the number the sparkline is
+     *  labelled with. P&L direction, so it is one of the few figures allowed
+     *  to be green or red. */
+    equityChangePct: computed(() => data()?.equity_30d?.change_pct ?? null),
+
+    /**
+     * "What does one trade cost right now", in dollars.
+     *
+     * The server answers this in two shapes because sizing has two modes. In
+     * `account_pct` there is a single fixed premium per trade. In `risk_pct`
+     * (the default) there is no fixed premium at all -- position value varies
+     * with how far the stop sits, up to the max-position cap -- so the cap is
+     * the only single number that is true, and `positionPremiumIsCap` exists
+     * so the chip can say "max" rather than quietly presenting a ceiling as
+     * a typical cost.
+     */
+    positionPremium: computed(() => {
+      const premium = data()?.position_premium;
+      if (!premium) return null;
+      return premium['mode'] === 'account_pct'
+        ? finiteNumber(premium['premium'])
+        : finiteNumber(premium['max_position']);
+    }),
+
+    positionPremiumIsCap: computed(() => data()?.position_premium?.['mode'] === 'risk_pct'),
 
     /** Risk used as a fraction of the cap, for a meter. Null rather than 0
      *  when either side is missing: an empty meter and a meter at zero look

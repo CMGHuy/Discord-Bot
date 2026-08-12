@@ -195,6 +195,72 @@ describe('CockpitStore', () => {
     expect(store.riskUtilisation()).toBeNull();
   });
 
+  /* -- the chip tier's loosely typed fields ----------------------------- */
+
+  it('narrows the equity series to numbers the sparkline can draw', () => {
+    tick();
+    respond({ equity_30d: { points: [100, 101.5, 99], change_pct: -1 } });
+
+    expect(store.equityPoints()).toEqual([100, 101.5, 99]);
+    expect(store.equityChangePct()).toBe(-1);
+  });
+
+  it('drops non-numeric equity points instead of coercing them', () => {
+    // A null balance coerced with Number() becomes 0 and draws a spike to
+    // the floor that never happened.
+    tick();
+    respond({
+      equity_30d: { points: [100, null, 'n/a', 102], change_pct: 2 },
+    });
+
+    expect(store.equityPoints()).toEqual([100, 102]);
+  });
+
+  it('reports an empty equity series rather than failing on it', () => {
+    tick();
+    respond({ equity_30d: { points: [], change_pct: null } });
+
+    expect(store.equityPoints()).toEqual([]);
+    expect(store.equityChangePct()).toBeNull();
+  });
+
+  it('reads the fixed premium in account-% sizing', () => {
+    tick();
+    respond({
+      position_premium: { mode: 'account_pct', premium: 500, position_pct: 5 },
+    });
+
+    expect(store.positionPremium()).toBe(500);
+    expect(store.positionPremiumIsCap()).toBe(false);
+  });
+
+  it('reads the max position in risk-% sizing, and flags it as a cap', () => {
+    // There is no single premium in this mode -- position value varies per
+    // trade with the stop distance -- so the chip must be able to say "max"
+    // rather than present a ceiling as a typical cost.
+    tick();
+    respond({
+      position_premium: {
+        mode: 'risk_pct',
+        risk_amount: 100,
+        max_position: 1_200,
+        max_position_pct: 12,
+      },
+    });
+
+    expect(store.positionPremium()).toBe(1_200);
+    expect(store.positionPremiumIsCap()).toBe(true);
+  });
+
+  it('reports an unreadable premium as null, not zero', () => {
+    // The shape is the Python side's to change; a renamed key must read as
+    // "unknown", never as "this trade costs nothing".
+    tick();
+    respond({ position_premium: { mode: 'risk_pct' } });
+
+    expect(store.positionPremium()).toBeNull();
+  });
+
   it('passes nulls through rather than substituting zero', () => {
     // A balance that has not loaded is not a balance of zero, and on this
     // particular number those differ by everything.
