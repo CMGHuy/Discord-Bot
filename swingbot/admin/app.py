@@ -1194,3 +1194,10 @@ app.register_blueprint(_pages.pages)
 # imports require_auth_json from api.py, so that module must already exist.
 from . import api_v1 as _api_v1  # noqa: E402
 _api_v1.register(app)
+# The SPA's own routes -- an allow-list of six workspace prefixes plus its
+# asset directory. Registered last so a workspace name can never shadow an
+# API route; /cockpit and /api/v1/cockpit are different rules, but the
+# ordering makes that a property of this file rather than of Werkzeug's
+# matcher.
+from . import spa as _spa  # noqa: E402
+_spa.register(app)
