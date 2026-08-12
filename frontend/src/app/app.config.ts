@@ -6,7 +6,7 @@ import {
   provideZonelessChangeDetection,
 } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import {
   authInterceptor,
@@ -25,7 +25,10 @@ export const appConfig: ApplicationConfig = {
     // loudly if someone reintroduces zone.js, which would otherwise
     // silently restore the change detection this design does not want.
     provideZonelessChangeDetection(),
-    provideRouter(routes),
+    // withComponentInputBinding: :id and :symbol arrive as input() signals
+    // rather than through ActivatedRoute, which keeps a detail component
+    // testable without standing up a router.
+    provideRouter(routes, withComponentInputBinding()),
     // Order matters and is not alphabetical. Requests pass through this list
     // front to back; responses and errors unwind back to front. So:
     //   auth      is LAST, which makes it FIRST on the way back -- it sees a
