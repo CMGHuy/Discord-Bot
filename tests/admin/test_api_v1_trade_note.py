@@ -113,3 +113,47 @@ def test_a_trade_with_no_journal_entry_is_404(seed, logged_in):
         logged_in.put(f"/api/v1/trades/{_TRADE_ID}/note", json={"note": "x"}),
         "not_found", 404,
     )
+
+
+# -- reading the note back (NG46) -------------------------------------------
+#
+# `has_note` answers "is there one"; the Notes tab needs the words. There is
+# no journal endpoint in v1, so without `detail.note` the tab could write
+# through this route and never read back what it wrote.
+
+
+def test_the_detail_carries_the_note_text(seed, logged_in):
+    seed(trades=[_trade(_TRADE_ID, plan_id=None, status="win")],
+         journal=[_entry(_TRADE_ID, note="stopped out on the gap")])
+    detail = logged_in.get(f"/api/v1/trades/{_TRADE_ID}").get_json()["detail"]
+    assert detail["note"] == "stopped out on the gap"
+
+
+def test_a_round_trip_reads_back_what_was_written(seed, logged_in):
+    """The property the tab actually depends on, which `has_note` cannot
+    express: PUT then GET returns the same text."""
+    seed(trades=[_trade(_TRADE_ID, plan_id=None, status="win")],
+         journal=[_entry(_TRADE_ID)])
+    logged_in.put(f"/api/v1/trades/{_TRADE_ID}/note", json={"note": "round trip"})
+    detail = logged_in.get(f"/api/v1/trades/{_TRADE_ID}").get_json()["detail"]
+    assert detail["note"] == "round trip"
+
+
+def test_the_note_is_null_rather_than_absent_when_there_is_none(seed, logged_in):
+    """Present-and-null, not missing. A key that appears only sometimes makes
+    the client branch on `undefined` vs `null` for one field."""
+    seed(trades=[_trade(_TRADE_ID, plan_id=None, status="win")],
+         journal=[_entry(_TRADE_ID, note="")])
+    detail = logged_in.get(f"/api/v1/trades/{_TRADE_ID}").get_json()["detail"]
+    assert "note" in detail
+    assert detail["note"] is None
+
+
+def test_an_unjournaled_trade_reads_as_no_note_rather_than_failing(seed, logged_in):
+    """Journal entries are written at close, so an open position has none.
+    That is the "not journaled yet" STATE the tab renders -- the detail must
+    still load."""
+    seed(trades=[_trade(_TRADE_ID, plan_id=None, status="open")], journal=[])
+    r = logged_in.get(f"/api/v1/trades/{_TRADE_ID}")
+    assert r.status_code == 200
+    assert r.get_json()["detail"]["note"] is None

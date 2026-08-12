@@ -98,6 +98,15 @@ export interface TradeDetailFields {
    *  but close/cancel/delete act on this one. Null when no trade was ever
    *  opened for the plan. */
   trade_id: string | null;
+  /** The journal note's TEXT, for the Notes tab to render and edit.
+   *
+   *  The row's `has_note` only answers whether one exists. Without this the
+   *  tab could write through `PUT /trades/{id}/note` and never read back what
+   *  it wrote. Null both when there is no note and when the position has no
+   *  journal entry at all -- entries are written at close, so an open trade
+   *  usually has none, and the tab renders that as a state rather than an
+   *  error. */
+  note: string | null;
   created_at: string | null;
   plan_source: string | null;
   entry_type: string | null;
@@ -207,10 +216,16 @@ export interface AnalyticsCalibration {
   drift: unknown[];
 }
 
+/** `GET /analytics/registry`.
+ *
+ *  It really is this one key. The `{strategies, horizons, cells}` shape this
+ *  interface used to declare belongs to the HEATMAP nested inside
+ *  `/analytics/strategies` -- pinned by `test_strategies_ships_series_not_svg`
+ *  -- and describing the registry with it meant the first caller would have
+ *  read three keys the endpoint has never sent. Same failure as the `ohlcv`
+ *  envelope: it type-checks and returns `undefined`. */
 export interface AnalyticsRegistry {
-  strategies: unknown[];
-  horizons: unknown[];
-  cells: unknown[];
+  registry: unknown[];
 }
 
 /* -- jobs and tuning ---------------------------------------------------- */
@@ -223,6 +238,15 @@ export interface Job {
   id: string;
   state: string;
   log_tail: string;
+}
+
+/** What `POST /jobs/tune` answers: the new job's id and nothing else.
+ *
+ *  NOT a `Job` -- the handler returns `{"job_id": ...}` and never the job
+ *  itself, so a caller that read `.state` off this got `undefined`. Fetch the
+ *  job with `job(id)`, or wait for the `jobs` event. */
+export interface JobStarted {
+  job_id: string;
 }
 
 export interface ProposalList {

@@ -15,6 +15,7 @@ import {
   Identity,
   Job,
   JobList,
+  JobStarted,
   Logs,
   Preferences,
   Proposal,
@@ -158,8 +159,8 @@ export class ApiClient {
     return this.http.get<Job>(`${this.base}/jobs/${encodeURIComponent(id)}`);
   }
 
-  startTuneJob(args: Record<string, unknown>): Observable<Job> {
-    return this.http.post<Job>(`${this.base}/jobs/tune`, args);
+  startTuneJob(args: Record<string, unknown>): Observable<JobStarted> {
+    return this.http.post<JobStarted>(`${this.base}/jobs/tune`, args);
   }
 
   proposals(): Observable<ProposalList> {

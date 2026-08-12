@@ -185,6 +185,33 @@ def _noted_ids() -> set:
         return set()
 
 
+def _note_for(trade_id: str | None) -> str | None:
+    """The note TEXT for one position, for the detail payload.
+
+    `has_note` on the row answers "is there one"; the Notes tab needs the
+    words, and there is no journal endpoint in v1 to fetch them from -- so
+    without this the tab could write a note through
+    `PUT /trades/{id}/note` and then never read it back.
+
+    Notes attach to the TRADE id: `set_note` resolves a plan-backed position
+    to its linked trade before writing, so callers must pass the trade id
+    rather than the plan id or the lookup silently misses.
+
+    Same defensive read as `_noted_ids` -- an unreadable journal degrades to
+    "no note" rather than failing the whole detail response.
+    """
+    if not trade_id:
+        return None
+    try:
+        from swingbot.core.analytics.journal import JournalStore
+        for entry in JournalStore().entries():
+            if entry.get("trade_id") == trade_id:
+                return entry.get("note") or None
+    except Exception:
+        return None
+    return None
+
+
 def build_rows() -> list[dict]:
     """The join. Every row the collection can return, unfiltered."""
     plans = list(PlanStore()._plans.values())
@@ -232,6 +259,7 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
     t = trade or {}
     return {
         "trade_id": t.get("id"),
+        "note": _note_for(t.get("id")),
         "created_at": plan.get("created_at"),
         "plan_source": plan.get("source"),
         "entry_type": plan.get("entry_type"),
@@ -268,6 +296,7 @@ def _legacy_detail(t: dict) -> dict:
     """
     return {
         "trade_id": t.get("id"),
+        "note": _note_for(t.get("id")),
         "created_at": t.get("opened_at"),
         "plan_source": t.get("source"),
         "entry_type": None,
