@@ -16,6 +16,7 @@ import {
   Job,
   JobList,
   Logs,
+  Preferences,
   Proposal,
   ProposalList,
   Risk,
@@ -265,6 +266,16 @@ export class ApiClient {
 
   restartBot(): Observable<unknown> {
     return this.http.post(`${this.base}/system/bot/restart`, {});
+  }
+
+  preferences(): Observable<{ preferences: Preferences }> {
+    return this.http.get<{ preferences: Preferences }>(`${this.base}/system/preferences`);
+  }
+
+  savePreferences(preferences: Preferences): Observable<{ preferences: Preferences }> {
+    return this.http.put<{ preferences: Preferences }>(
+      `${this.base}/system/preferences`, { preferences },
+    );
   }
 
   /* -- market ---------------------------------------------------------- */

@@ -361,3 +361,13 @@ export interface Candle {
   close: number;
   volume: number;
 }
+
+/* -- preferences -------------------------------------------------------- */
+
+/** Per-user UI state. Opaque to the server on purpose -- it is UI state, and
+ *  a server that validated its shape would need editing every time the SPA
+ *  remembered one more thing. Typed here, where it is actually used. */
+export interface Preferences {
+  /** Visible column ids, per table id. Absent means "the table's default". */
+  tables?: Record<string, string[]>;
+}

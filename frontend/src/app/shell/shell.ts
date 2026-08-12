@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
+import { PreferencesStore } from '../stores/preferences.store';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
 import { ToastHost } from './toast-host';
@@ -36,6 +37,7 @@ export class Shell {
   private readonly events = inject(EventStream);
   protected readonly session = inject(SessionStore);
   protected readonly connection = inject(ConnectionStore);
+  private readonly preferences = inject(PreferencesStore);
 
   /** The six workspaces, in the IA's order: what is true now, then the
    *  entities, then the analysis, then the two administrative ones. */
@@ -59,6 +61,11 @@ export class Shell {
   protected readonly killswitchOn = signal(false);
 
   constructor() {
+    // Read once, here rather than in an app initializer: preferences are
+    // only meaningful once authenticated, and the shell is the thing that
+    // exists exactly when that is true.
+    this.preferences.load();
+
     // Reading the counter inside the effect is the subscription. The first
     // run is also the initial load, so the load path and the refetch path
     // are the same code and cannot drift apart.

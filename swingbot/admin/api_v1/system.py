@@ -496,3 +496,75 @@ def restart_bot():
     if not ok:
         return error("unavailable", message, 503)
     return jsonify({"ok": True, "message": message})
+
+
+# --- UI preferences (NG32) ----------------------------------------------
+
+#: Refuse a blob past this size. Preferences are a handful of column lists;
+#: anything approaching a megabyte is a client bug or someone using the
+#: admin as a key-value store, and both are better refused than persisted.
+_PREFERENCES_MAX_BYTES = 64 * 1024
+
+
+def _preferences_path() -> str:
+    import os
+
+    return os.path.join(config.DATA_DIR, "ui_preferences.json")
+
+
+@api_v1.route("/system/preferences", methods=["GET"])
+@require_auth
+def get_preferences():
+    """Per-user UI state: column-picker visibility, and whatever follows.
+
+    **Deliberately NOT a `config.Field` in .env**, which is what spec v13
+    proposed ("exposed as a System setting"). The intent -- server-side, so
+    the same person on a laptop and a desktop sees the same columns, which
+    localStorage silently fails -- is kept; the mechanism is not, for two
+    reasons found while implementing it:
+
+    - `_build_env_text` rewrites the WHOLE .env from the mapping it is
+      handed. Toggling a column would rewrite every setting the bot has,
+      through a writer NG23 confirmed is not atomic, on a file whose
+      corruption takes the bot down silently.
+    - .env is watched and raises a `settings` event, whose documented
+      meaning is "another session changed your configuration". Every column
+      toggle would tell every open tab exactly that, about itself.
+
+    The blob is opaque to the server on purpose. It is UI state, and a
+    server that validated its shape would need editing every time the SPA
+    remembered one more thing.
+    """
+    from swingbot.core.jsonio import read_json
+
+    return jsonify({"preferences": read_json(_preferences_path(), {}) or {}})
+
+
+@api_v1.route("/system/preferences", methods=["PUT"])
+@require_auth
+def put_preferences():
+    """Replace the blob wholesale.
+
+    Replace rather than merge: the client holds the whole object anyway, and
+    a merge would make deleting a key impossible without a second verb.
+    """
+    import json
+
+    from swingbot.core.jsonio import atomic_write_json
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, Mapping):
+        return error("invalid", "Body must be a JSON object.", 400)
+
+    preferences = payload.get("preferences")
+    if not isinstance(preferences, Mapping):
+        return error("invalid", "`preferences` must be a JSON object.", 400)
+
+    encoded = json.dumps(preferences)
+    if len(encoded.encode("utf-8")) > _PREFERENCES_MAX_BYTES:
+        return error("invalid",
+                     f"Preferences must be under {_PREFERENCES_MAX_BYTES} bytes.",
+                     400)
+
+    atomic_write_json(_preferences_path(), dict(preferences))
+    return jsonify({"preferences": dict(preferences)})

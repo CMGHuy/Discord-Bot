@@ -128,3 +128,32 @@ The sweep accounts for ~0.36 pp of the total (1.8ms x 2/s); the rest is the
 run loop, which ticks every 250ms — the debounce granularity — so that a
 settled event is not held back until the next sweep. Flushing is free
 compared to sweeping, which is why the two cadences differ.
+
+## Frontend: `ng test` times out before running anything (flaky)
+
+`cd frontend && npx ng test --watch=false`. Vitest 4 via `@angular/build:unit-test`,
+config in `frontend/vitest.config.ts`.
+
+**Symptom:** exactly 60 seconds, then `[vitest-pool-runner]: Timeout waiting
+for worker to respond`, `Test Files no tests`. Nothing ran.
+
+**It is load, and a re-run fixes it.** 60s is `START_TIMEOUT`, a hard-coded
+constant in vitest's pool runner — not an option, so it cannot be raised from
+the config. Worker startup on this box occasionally exceeds it while an
+Angular build or the Python suite is competing for the machine.
+
+Two plausible-looking explanations were chased and are both wrong; don't
+repeat them:
+
+- **Not the `forks` pool.** Switching to `threads` made it pass at two spec
+  files, and it failed again at three.
+- **Not parallel worker startup.** `maxWorkers: 1` + `fileParallelism: false`
+  made it pass at four, and it failed again at five — then the same command
+  passed on retry with no change at all.
+
+Those settings are still in the config: fewer workers is fewer chances to
+trip the timeout, and these tests have no native modules or shared state, so
+parallelism was buying wall-clock only. But they are mitigation, not a fix.
+
+Same discipline as the Python suite above: **cool down, and don't measure or
+diagnose while something else is running.**
