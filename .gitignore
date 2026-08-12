@@ -35,3 +35,15 @@ docs/superpowers/results/*.log
 # pytest output so only its 1-3 line verdict reaches the caller's context.
 .pytest_cache/
 .pytest-last-run.log
+
+# Angular SPA (sub-project 4). `frontend/` has its own .gitignore from
+# `ng new`; these are here as well because the root file is where anyone
+# looks, and because static/app/ is OUTSIDE frontend/ and its own file
+# therefore cannot cover it.
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+# The built SPA, copied here by the Dockerfile's frontend stage (NG33) and
+# served by Flask. A build artefact -- never committed, or the image would
+# ship whichever bundle someone last built by hand.
+swingbot/admin/static/app/
