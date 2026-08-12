@@ -157,3 +157,24 @@ parallelism was buying wall-clock only. But they are mitigation, not a fix.
 
 Same discipline as the Python suite above: **cool down, and don't measure or
 diagnose while something else is running.**
+
+## A second load-sensitive test: `test_analytics_perf`
+
+`tests/test_analytics_perf.py::test_build_snapshot_5000_trades_under_2_seconds`
+asserts a **wall-clock budget**, so it measures the machine as much as the
+code. Observed on 2026-08-12 on a loaded box, same commit, consecutive runs:
+
+| Run | build_snapshot(5000 trades) |
+| --- | --- |
+| in the full `-n 4` suite | 2.73s — FAILED |
+| isolated, immediately after | 12.60s — FAILED |
+| isolated, again | 3.23s — passed |
+
+A 4x swing between two back-to-back runs of the same test. The same suite
+passed 0-failed earlier the same day, when the full run took 180s rather
+than 604s.
+
+**Before believing this one, check the load.** It is not quarantined —
+unlike `test_flag_on_polls_open_plans` it is a real budget worth keeping —
+but a failure here on a busy box is evidence about the box. Re-run it
+isolated on an idle machine before touching `swingbot/core/analytics/`.
