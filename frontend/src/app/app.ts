@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
 
 import { Login } from './shell/login/login';
+import { Shell } from './shell/shell';
 import { SessionStore } from './stores/session.store';
 
 /**
@@ -21,11 +21,11 @@ import { SessionStore } from './stores/session.store';
  */
 @Component({
   selector: 'sb-root',
-  imports: [RouterOutlet, Login],
+  imports: [Shell, Login],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (session.isAuthenticated()) {
-      <router-outlet />
+      <sb-shell />
     } @else if (session.isResolving()) {
       <!-- deliberately empty -->
     } @else {
