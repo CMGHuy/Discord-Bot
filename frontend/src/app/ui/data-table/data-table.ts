@@ -9,6 +9,8 @@ import {
   signal,
 } from '@angular/core';
 
+import { EmptyStateComponent } from '../empty-state';
+import { PaginationComponent } from '../pagination';
 import {
   ColumnDef,
   EmptyState,
@@ -40,15 +42,15 @@ import {
  *  5. **No data access.** This component cannot fetch and does not know a
  *     store exists.
  *
- * The pager markup below is deliberately minimal; NG39 extracts it into
- * `PaginationComponent` along with the column picker and the empty state. What
- * matters here is that `pageChange` is wired to something real, so the
- * contract is exercised rather than merely declared.
+ * The pager and the empty state are `PaginationComponent` and
+ * `EmptyStateComponent` (NG39). They live outside this file because Cockpit
+ * and the Analytics panels need an empty state without a table, but the table
+ * still owns *when* they appear — a caller cannot forget to render the pager.
  */
 @Component({
   selector: 'sb-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
   template: `
     <div class="wrap" [attr.aria-busy]="loading()">
       <table>
@@ -122,32 +124,12 @@ import {
         </tbody>
       </table>
 
-      @if (showEmptyState()) {
-        <div class="empty">
-          <p class="empty-title">{{ emptyState()!.title }}</p>
-          @if (emptyState()!.hint; as hint) {
-            <p class="empty-hint">{{ hint }}</p>
-          }
-        </div>
+      @if (showEmptyState(); as state) {
+        <sb-empty-state [title]="state.title" [hint]="state.hint" />
       }
 
       @if (pagination(); as page) {
-        @if (pageCount() > 1) {
-          <div class="pager">
-            <span class="range num">{{ rangeLabel() }}</span>
-            <button type="button" [disabled]="page.page <= 1" (click)="goTo(page.page - 1)">
-              Previous
-            </button>
-            <span class="of num">{{ page.page }} / {{ pageCount() }}</span>
-            <button
-              type="button"
-              [disabled]="page.page >= pageCount()"
-              (click)="goTo(page.page + 1)"
-            >
-              Next
-            </button>
-          </div>
-        }
+        <sb-pagination [pagination]="page" (pageChange)="pageChange.emit($event)" />
       }
     </div>
   `,
@@ -212,31 +194,6 @@ import {
     .expander:hover { color: var(--text); }
     .expander:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
-    .empty { padding: var(--space-28) var(--space-20); text-align: center; }
-    .empty-title { color: var(--text-secondary); font-size: var(--text-body); }
-    .empty-hint { margin-top: var(--space-6); color: var(--text-muted); font-size: var(--text-table); }
-
-    .pager {
-      display: flex;
-      align-items: center;
-      gap: var(--space-10);
-      padding: var(--space-10);
-      font-size: var(--text-table);
-      color: var(--text-secondary);
-    }
-    .range { margin-right: auto; }
-    .pager button {
-      padding: var(--space-4) var(--space-10);
-      background: var(--surface-raised);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font: inherit;
-      cursor: pointer;
-    }
-    .pager button:disabled { color: var(--text-faint); cursor: default; }
-    .pager button:not(:disabled):hover { border-color: var(--border-strong); }
-
     .sr-only {
       position: absolute;
       width: 1px; height: 1px;
@@ -284,23 +241,9 @@ export class DataTable<T> {
 
   /** Not while loading: "No trades match this filter" under a spinner is a
    *  claim the table cannot yet make. */
-  protected readonly showEmptyState = computed(
-    () => !this.loading() && this.rows().length === 0 && this.emptyState() !== null,
+  protected readonly showEmptyState = computed(() =>
+    !this.loading() && this.rows().length === 0 ? this.emptyState() : null,
   );
-
-  protected readonly pageCount = computed(() => {
-    const page = this.pagination();
-    if (!page || page.perPage <= 0) return 1;
-    return Math.max(1, Math.ceil(page.total / page.perPage));
-  });
-
-  protected readonly rangeLabel = computed(() => {
-    const page = this.pagination();
-    if (!page) return '';
-    const first = (page.page - 1) * page.perPage + 1;
-    const last = Math.min(page.page * page.perPage, page.total);
-    return `${first}–${last} of ${page.total}`;
-  });
 
   /** An em dash, not an empty cell: a value that has not been computed reads
    *  as missing, where blank reads as a rendering fault. */
@@ -329,11 +272,6 @@ export class DataTable<T> {
     const direction =
       sort?.key === column.key && sort.direction === 'asc' ? 'desc' : 'asc';
     this.sortChange.emit({ key: column.key, direction });
-  }
-
-  protected goTo(page: number): void {
-    if (page < 1 || page > this.pageCount()) return;
-    this.pageChange.emit(page);
   }
 
   protected isExpanded(row: T): boolean {
