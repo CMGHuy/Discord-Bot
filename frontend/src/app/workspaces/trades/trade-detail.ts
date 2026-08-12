@@ -1,20 +1,234 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+} from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 
-/** Placeholder. The real detail view is NG43.
+import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { QualityChip } from '../../ui/chip';
+import { dateTime, num, pct, text } from '../../ui/format';
+import { Panel, Tab, TabBar } from '../../ui/layout';
+import { StatusIndicator } from '../../ui/status-indicator';
+
+/** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
+const TABS: Tab[] = [
+  { id: 'plan', label: 'Plan' },
+  { id: 'live', label: 'Live' },
+  { id: 'chart', label: 'Chart' },
+  { id: 'notes', label: 'Notes' },
+  { id: 'strategy', label: 'Strategy' },
+];
+
+const TAB_IDS = new Set(TABS.map((tab) => tab.id));
+
+/**
+ * One trade — the shell and the Plan tab (NG43). Live is NG44, Chart NG45,
+ * Notes and Strategy NG46.
  *
- * `id` arrives as an input() rather than through ActivatedRoute, via
- * withComponentInputBinding() -- which makes the parameter a normal signal
- * input and keeps the component testable without a router.
+ * **The active tab is a query parameter**, for the same reason the Trades
+ * list keeps its filters there: a tab held only in component state cannot be
+ * linked to, does not survive a reload, and makes the back button skip the
+ * whole detail view instead of stepping back through it.
+ *
+ * `id` arrives as an input rather than through `ActivatedRoute`, so this
+ * component is testable without standing up a router.
  */
 @Component({
   selector: 'sb-trade-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<h1>{{ id() }}</h1><p class="todo">NG43</p>`,
+  providers: [TradeDetailStore],
+  imports: [RouterLink, TabBar, Panel, StatusIndicator, QualityChip],
+  template: `
+    <header class="head">
+      <a class="back" routerLink="/trades">← Trades</a>
+
+      @if (store.trade(); as trade) {
+        <h1>
+          <span class="ticker">{{ trade.ticker }}</span>
+          <sb-status-indicator
+            [status]="trade.status"
+            [current]="trade.current_price"
+            [entry]="trade.entry"
+            [stop]="trade.stop_loss"
+            [target]="trade.target"
+          />
+        </h1>
+        <div class="tags">
+          @if (trade.horizon) {
+            <span class="tag">{{ trade.horizon }}</span>
+          }
+          @if (trade.strategy) {
+            <span class="tag">{{ trade.strategy }}</span>
+          }
+          @if (trade.tier) {
+            <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
+          }
+          @if (trade.confidence_level !== null) {
+            <sb-quality-chip
+              [value]="trade.confidence_level"
+              [label]="'Lv' + trade.confidence_level"
+            />
+          }
+        </div>
+      } @else if (store.error(); as message) {
+        <h1>{{ message }}</h1>
+      } @else {
+        <h1 class="skeleton">Loading…</h1>
+      }
+    </header>
+
+    <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
+
+    @switch (activeTab()) {
+      @case ('plan') {
+        @if (store.trade(); as trade) {
+          <div class="panels">
+            <sb-panel heading="Levels">
+              <dl>
+                <div><dt>Entry</dt><dd class="num">{{ fmt(trade.entry) }}</dd></div>
+                <div>
+                  <dt>Stop</dt>
+                  <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
+                </div>
+                <div>
+                  <dt>Target 1</dt>
+                  <dd class="num pos">{{ fmt(trade.target) }}</dd>
+                </div>
+                <div>
+                  <dt>Target 2</dt>
+                  <dd class="num pos">{{ fmt(trade.target2) }}</dd>
+                </div>
+                <div><dt>R:R</dt><dd class="num">{{ fmt(trade.risk_reward) }}</dd></div>
+              </dl>
+            </sb-panel>
+
+            <sb-panel heading="Per share">
+              <dl>
+                <div><dt>Risk</dt><dd class="num">{{ fmt(store.riskPerShare()) }}</dd></div>
+                <div><dt>Reward</dt><dd class="num">{{ fmt(store.rewardPerShare()) }}</dd></div>
+                <div><dt>Direction</dt><dd>{{ fmtText(trade.direction) }}</dd></div>
+                <div><dt>Origin</dt><dd>{{ fmtText(trade.origin) }}</dd></div>
+              </dl>
+            </sb-panel>
+
+            <sb-panel heading="Sizing">
+              <dl>
+                <div><dt>Shares</dt><dd class="num">{{ fmt(trade.shares, 0) }}</dd></div>
+                <div><dt>Deployed</dt><dd class="num">{{ fmt(trade.position_value) }}</dd></div>
+                <div>
+                  <dt>Sizing mode</dt>
+                  <dd>{{ fmtText(store.detail()?.sizing_mode ?? null) }}</dd>
+                </div>
+                <div>
+                  <dt>Working stop</dt>
+                  <dd class="num">{{ fmt(store.detail()?.working_stop ?? null) }}</dd>
+                </div>
+              </dl>
+            </sb-panel>
+
+            <sb-panel heading="Opened">
+              <dl>
+                <div><dt>At</dt><dd>{{ fmtDate(trade.opened_at) }}</dd></div>
+                <div><dt>Closed</dt><dd>{{ fmtDate(trade.closed_at) }}</dd></div>
+                <div><dt>Entry type</dt><dd>{{ fmtText(store.detail()?.entry_type ?? null) }}</dd></div>
+                <div><dt>P&L</dt><dd class="num">{{ fmtPct(trade.pnl_pct) }}</dd></div>
+              </dl>
+            </sb-panel>
+          </div>
+        }
+      }
+      @default {
+        <p class="todo">{{ placeholder() }}</p>
+      }
+    }
+  `,
   styles: `
-    h1 { margin: 0; font-family: var(--font-mono); font-size: var(--text-title); }
-    .todo { color: var(--text-faint); font-size: var(--text-table); }
+    .head { display: grid; gap: var(--space-8); }
+    .back { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
+    .back:hover { text-decoration: underline; }
+
+    h1 {
+      display: flex;
+      align-items: center;
+      gap: var(--space-10);
+      font-size: var(--text-title);
+      font-weight: 600;
+    }
+    .ticker { font-family: var(--font-mono); }
+    .skeleton { color: var(--text-faint); }
+
+    .tags { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
+    .tag {
+      padding: 1px var(--space-6);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-chip);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-14);
+      margin-top: var(--space-14);
+    }
+    dl { display: grid; gap: var(--space-6); }
+    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    dt { color: var(--text-secondary); font-size: var(--text-table); }
+    dd { color: var(--text); font-size: var(--text-table); }
+    .pos { color: var(--pos); }
+    .neg { color: var(--neg); }
+
+    .todo { margin-top: var(--space-14); color: var(--text-faint); font-size: var(--text-table); }
   `,
 })
 export class TradeDetail {
+  private readonly router = inject(Router);
+  protected readonly store = inject(TradeDetailStore);
+
   readonly id = input.required<string>();
+  /** The active tab, as a query parameter. */
+  readonly tab = input<string>();
+
+  protected readonly tabs = TABS;
+
+  protected readonly fmt = num;
+  protected readonly fmtText = text;
+  protected readonly fmtDate = dateTime;
+  protected readonly fmtPct = pct;
+
+  /** An unknown or absent `?tab=` falls back to Plan rather than rendering
+   *  nothing, so a hand-edited or stale URL still shows the trade. */
+  protected readonly activeTab = computed(() => {
+    const requested = this.tab();
+    return requested && TAB_IDS.has(requested) ? requested : 'plan';
+  });
+
+  protected readonly placeholder = computed(
+    () =>
+      ({
+        live: 'Live — NG44',
+        chart: 'Chart — NG45',
+        notes: 'Notes — NG46',
+        strategy: 'Strategy — NG46',
+      })[this.activeTab()] ?? '',
+  );
+
+  constructor() {
+    effect(() => this.store.setId(this.id()));
+  }
+
+  protected goToTab(tab: string): void {
+    // replaceUrl: flipping between tabs should not fill the history with
+    // steps, but the tab must still be in the URL so it can be linked to.
+    this.router.navigate([], {
+      queryParams: { tab: tab === 'plan' ? null : tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
 }
