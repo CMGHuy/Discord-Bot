@@ -65,3 +65,37 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   are the deliberate exception — they are built from the FULL history
   (`closed_trade_filter_options`), never from the loaded page, or values that
   only appear in older trades become unselectable.
+- **Not every `data/` JSON file is written atomically — six are not.** Spec
+  v12 Decision 2 asserted the whole directory was; the NG23 audit found
+  otherwise, which is why that task existed. Atomic, via
+  `jsonio.atomic_write_json` (`<path>.tmp` → fsync → `os.replace`):
+  `trades.json` (`core/performance.py:225`), `plans.json` (`plan_store.py`),
+  `starred_plans.json` (`commands/views.py:36`), `account.json`
+  (`core/account.py:174`), `state.json` (`core/state.py:31`),
+  `analytics_snapshot.json` (`core/analytics/snapshots.py:71`),
+  `journal.json` (`core/analytics/journal.py:32`), `killswitch.json`
+  (`core/edge/throttle.py:94`). **Plain `open(path, "w")` + `json.dump`**
+  — truncate first, then fill, so a reader inside that window gets a
+  truncated document: `scan_snapshots.json` (`core/scanning/embeds.py:58`),
+  `bot_heartbeat.json` (`commands/scanning.py:172`), `watchlist.json`
+  (`core/watchlist.py:21`), `ticker_directory.json`
+  (`core/ticker_directory.py:108`), `admin_jobs.json` (`admin/jobs.py:120`),
+  and `.env` (`admin/helpers.py:114`). `tuning_results/<job>.json` uses
+  `Path.write_text` (`scripts/tune_strategy.py:171`) — a fresh file per job,
+  so nothing is truncated, but it is listed in the directory before it is
+  complete. **The event watcher is not the exposure** — it compares
+  `(mtime, size)` and never opens a watched file. The exposure is the SPA,
+  which refetches through the v1 API on the event, and the API does parse.
+  The 250ms trailing debounce puts that refetch at least a debounce after
+  the last observed write, which covers all of these in practice (they are
+  small), so this is a narrow race and not a live bug — but note that push
+  *correlates* it where polling did not: the 5-second poll hit a write
+  window by luck, an event fires precisely because of the write. Use
+  `atomic_write_json` for any new file under `data/`, and before growing any
+  of the six.
+- **The non-parsed watched paths are deliberate, not an oversight.** The four
+  `*.flag` files carry their whole meaning in existence + mtime, and
+  `scan_telemetry.jsonl` is append-only, so a torn trailing line is the
+  reader's problem and the API owns tolerating it (spec v12 Decision 2).
+  Do not "fix" either by adding a parse to the watcher — that would trade
+  away the property that makes it immune to schema changes.
