@@ -1,13 +1,831 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { Router } from '@angular/router';
 
-/** Placeholder. The real workspace is NG48. */
+import {
+  ANALYTICS_TABS,
+  AnalyticsStore,
+  AnalyticsTab,
+  DriftRow,
+  HeatmapCell,
+  JobStatus,
+  ProposalRow,
+  StrategyRow,
+  TierRow,
+} from '../../stores/analytics.store';
+import { Button } from '../../ui/button';
+import { Chip, QualityChip, qualityTone } from '../../ui/chip';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { DataTable } from '../../ui/data-table/data-table';
+import { ColumnDef } from '../../ui/data-table/data-table.types';
+import { Select } from '../../ui/form-controls';
+import { ABSENT, dateTime } from '../../ui/format';
+import { Panel, Tab, TabBar } from '../../ui/layout';
+import { MetricChip } from '../../ui/metric-chip';
+import { Sparkline } from '../../ui/sparkline';
+import {
+  CONFIDENCE_COLUMNS,
+  DECILE_COLUMNS,
+  DRIFT_COLUMNS,
+  STRATEGY_COLUMNS,
+  TIER_COLUMNS,
+  allKeys,
+  expectancy,
+  rate,
+} from './analytics.columns';
+
+/** Performance · Strategies · Calibration · Tuning — spec v14 Decision 6, in
+ *  its order. **Tabs, not sub-navigation**: four sections is within what a tab
+ *  strip carries comfortably, and a second level of navigation inside one of
+ *  six workspaces reintroduces exactly the depth the IA change removed. */
+const TABS: Tab[] = [
+  { id: 'performance', label: 'Performance' },
+  { id: 'strategies', label: 'Strategies' },
+  { id: 'calibration', label: 'Calibration' },
+  { id: 'tuning', label: 'Tuning' },
+];
+
+const TAB_IDS = new Set<string>(ANALYTICS_TABS);
+
+/** A proposal with its parameter diff already paired up for rendering. */
+interface ProposalView extends ProposalRow {
+  params: { key: string; current: string; proposed: string }[];
+  trainSummary: string;
+}
+
+/**
+ * Analytics — the workspace that absorbs the old Performance, Strategies,
+ * Calibration and Tuning pages (spec v14 Decision 6).
+ *
+ * Three things here are load-bearing and easy to lose in a later edit:
+ *
+ * **The six relocated Cockpit metrics are on the Performance tab.** Spec 3
+ * accepted the cost of moving wins, losses, average realised P&L, best trade,
+ * worst trade and average holding period one click away from the header —
+ * *not* the cost of losing them. They are rendered from
+ * `RELOCATED_METRICS`, and the store reports any the payload failed to carry
+ * so the loss would be visible rather than silent.
+ *
+ * **The active tab is a query parameter.** Same reason the Trades list keeps
+ * its filters there: a tab held only in component state cannot be linked to,
+ * does not survive a reload, and makes the back button skip the entire
+ * workspace instead of stepping back through it.
+ *
+ * **Tuning has no timer.** The Jinja page polled `/api/jobs/:id` every three
+ * seconds and called `window.location.reload()` when the job finished. Here
+ * the `jobs` event drives the refetch and the log tail updates in place —
+ * which also means a failed grid's traceback stays on screen instead of being
+ * reloaded away at the moment it becomes worth reading.
+ */
 @Component({
   selector: 'sb-analytics',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<h1>Analytics</h1><p class="todo">NG48</p>`,
+  // Provided here rather than in root, matching Cockpit and Trades: the store
+  // is created on entry and destroyed on exit, so this workspace never holds
+  // stale analytics while you are looking at another one.
+  providers: [AnalyticsStore],
+  imports: [
+    TabBar,
+    Panel,
+    DataTable,
+    MetricChip,
+    Chip,
+    QualityChip,
+    Sparkline,
+    Select,
+    Button,
+    ConfirmDialog,
+  ],
+  template: `
+    <header class="head">
+      <h1>Analytics</h1>
+      @if (store.error(); as message) {
+        <!-- Beside the data, never instead of it: one failed refetch should
+             not empty a table that is still the best information available. -->
+        <span class="stale" role="status">{{ message }}</span>
+      }
+    </header>
+
+    <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
+
+    @switch (activeTab()) {
+      <!-- -- performance ---------------------------------------------- -->
+      @case ('performance') {
+        @if (store.missingRelocated(); as missing) {
+          @if (missing.length) {
+            <!-- The relocation's own alarm. These six moved off the Cockpit
+                 header on the promise that they would appear here; a missing
+                 one otherwise looks exactly like a metric with no value yet. -->
+            <p class="alert" role="alert">
+              Not returned by the API: {{ missing.join(', ') }}. These metrics
+              moved here from the Cockpit and should be present.
+            </p>
+          }
+        }
+
+        <div class="panels">
+          <sb-panel heading="Record">
+            <div class="chips">
+              @for (metric of store.relocated(); track metric.key) {
+                <sb-metric-chip
+                  [label]="metric.label"
+                  [value]="metric.value"
+                  [unit]="metric.unit"
+                  [decimals]="metric.decimals"
+                  [tone]="metric.pnl ? 'pnl' : 'plain'"
+                />
+              }
+            </div>
+          </sb-panel>
+
+          <sb-panel heading="Overall">
+            <dl>
+              <div><dt>Win rate</dt><dd class="num">{{ fmtRate(store.winRate()) }}</dd></div>
+              <div>
+                <dt>Expectancy</dt>
+                <dd class="num">{{ fmtExpectancy(store.expectancyR()) }}</dd>
+              </div>
+              <div><dt>Trades</dt><dd class="num">{{ fmtCount(store.totals().total) }}</dd></div>
+              <div><dt>Open</dt><dd class="num">{{ fmtCount(store.totals().open) }}</dd></div>
+              <div><dt>Closed</dt><dd class="num">{{ fmtCount(store.totals().closed) }}</dd></div>
+            </dl>
+          </sb-panel>
+        </div>
+
+        <sb-panel heading="By confidence level" [flush]="true">
+          <sb-data-table
+            [rows]="store.byConfidence()"
+            [columns]="confidenceColumns()"
+            [visible]="confidenceKeys"
+            [rowKey]="confidenceKey"
+            [loading]="store.loading()"
+            [emptyState]="confidenceEmpty"
+          />
+        </sb-panel>
+      }
+
+      <!-- -- strategies ----------------------------------------------- -->
+      @case ('strategies') {
+        @if (decayed(); as names) {
+          @if (names.length) {
+            <p class="alert" role="alert">
+              Edge decay flagged for {{ names.join(', ') }} — live win rate has
+              drifted meaningfully below the out-of-sample figure.
+            </p>
+          }
+        }
+
+        <sb-panel heading="Strategy registry" [flush]="true">
+          <sb-data-table
+            [rows]="store.strategyRows()"
+            [columns]="strategyColumns()"
+            [visible]="strategyKeys"
+            [rowKey]="strategyKey"
+            [loading]="store.loading()"
+            [emptyState]="strategyEmpty"
+          />
+        </sb-panel>
+
+        @if (store.heatmap(); as heatmap) {
+          <sb-panel heading="Win rate by strategy and horizon" [flush]="true">
+            <div class="scroller">
+              <table class="heat">
+                <thead>
+                  <tr>
+                    <th></th>
+                    @for (horizon of heatmap.horizons; track horizon) {
+                      <th class="num">{{ horizon }}</th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (strategy of heatmap.strategies; track strategy) {
+                    <tr>
+                      <th scope="row">{{ strategy }}</th>
+                      @for (horizon of heatmap.horizons; track horizon) {
+                        <td class="num cell" [style.--heat]="heat(strategy, horizon)">
+                          {{ heatLabel(strategy, horizon) }}
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </sb-panel>
+        }
+      }
+
+      <!-- -- calibration ---------------------------------------------- -->
+      @case ('calibration') {
+        <sb-panel heading="Quality score vs outcome" [flush]="true">
+          <sb-data-table
+            [rows]="store.deciles()"
+            [columns]="decileColumns"
+            [visible]="decileKeys"
+            [rowKey]="decileKey"
+            [loading]="store.loading()"
+            [emptyState]="decileEmpty"
+          />
+        </sb-panel>
+
+        <sb-panel heading="Tier calibration" [flush]="true">
+          <sb-data-table
+            [rows]="store.tiers()"
+            [columns]="tierColumns()"
+            [visible]="tierKeys"
+            [rowKey]="tierKey"
+            [loading]="store.loading()"
+            [emptyState]="tierEmpty"
+          />
+        </sb-panel>
+
+        <sb-panel heading="Badge drift" [flush]="true">
+          <sb-data-table
+            [rows]="store.drift()"
+            [columns]="driftColumns()"
+            [visible]="driftKeys"
+            [rowKey]="driftKey"
+            [loading]="store.loading()"
+            [emptyState]="driftEmpty"
+          />
+        </sb-panel>
+      }
+
+      <!-- -- tuning --------------------------------------------------- -->
+      @case ('tuning') {
+        <sb-panel heading="Run a TRAIN grid">
+          <p class="note">
+            A grid search runs one strategy's parameters through every
+            combination in its tuning grid against the fixed TRAIN window —
+            never the VALIDATION window the badges on the Strategies tab are
+            measured against. That firewall is what keeps those badges honest,
+            so no date input exists here or anywhere in this workbench.
+          </p>
+
+          @if (store.jobActive()) {
+            <p class="note">
+              A job is running. The server allows one at a time, so the
+              launcher returns when it finishes.
+            </p>
+          } @else {
+            <div class="launch">
+              <sb-select
+                label="Strategy"
+                placeholder="Pick a strategy"
+                [(value)]="strategy"
+                [options]="strategyOptions()"
+              />
+              <button
+                sb-button
+                type="button"
+                variant="primary"
+                [disabled]="strategy() === ''"
+                [loading]="store.launching()"
+                (click)="launch()"
+              >
+                Launch TRAIN grid
+              </button>
+            </div>
+            @if (store.launchError(); as message) {
+              <p class="alert" role="alert">{{ message }}</p>
+            }
+          }
+        </sb-panel>
+
+        @if (store.job(); as job) {
+          <sb-panel [heading]="'Job ' + job.id" [flush]="true">
+            <div class="jobhead">
+              <sb-chip [label]="jobStateLabel(job)" [tone]="jobTone(job)" />
+              <span class="muted">started {{ fmtDateTime(job.started_at) }}</span>
+            </div>
+            <pre class="log">{{ job.log_tail || 'No output yet.' }}</pre>
+            <p class="note">
+              Progress arrives on the <code>jobs</code> event. Nothing on this
+              page polls, and the log stays put when the job ends.
+            </p>
+          </sb-panel>
+        }
+
+        @if (store.pastJobs(); as past) {
+          @if (past.length) {
+            <sb-panel heading="Earlier jobs">
+              <ul class="jobs">
+                @for (job of past; track job.id) {
+                  <li>
+                    <code>{{ job.id }}</code>
+                    <span class="muted">
+                      {{ job.state }} · started {{ fmtDateTime(job.started_at) }}
+                    </span>
+                  </li>
+                }
+              </ul>
+            </sb-panel>
+          }
+        }
+
+        <sb-panel heading="Proposals">
+          <p class="note">
+            A proposal is a staged parameter change, not an applied one:
+            applying means editing <code>entry_filters.DEFAULT_PARAMS</code> by
+            hand, running the suite, and only then spending a validation shot.
+          </p>
+
+          @if (proposalViews(); as proposals) {
+            @if (proposals.length === 0) {
+              <p class="muted">No proposals yet.</p>
+            }
+            @for (proposal of proposals; track proposal.filename) {
+              <div class="proposal">
+                <header class="proposal-head">
+                  <strong>{{ proposal.strategy }}</strong>
+                  <span class="muted">
+                    {{ fmtDateTime(proposal.created_at) }} · job {{ proposal.job_id }}
+                  </span>
+                </header>
+                <table class="diff">
+                  <thead>
+                    <tr><th>Parameter</th><th class="num">Current</th><th class="num">Proposed</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (param of proposal.params; track param.key) {
+                      <tr>
+                        <td>{{ param.key }}</td>
+                        <td class="num muted">{{ param.current }}</td>
+                        <td class="num">{{ param.proposed }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+                <p class="muted">{{ proposal.trainSummary }}</p>
+                <button
+                  sb-button
+                  type="button"
+                  variant="danger"
+                  (click)="pendingDelete.set(proposal)"
+                >
+                  Delete
+                </button>
+              </div>
+            }
+          }
+        </sb-panel>
+      }
+    }
+
+    <!-- cells ----------------------------------------------------------
+         Declared at the top level, never inside the @switch: a template
+         inside an inactive branch does not exist, and the viewChild queries
+         below are required. -->
+
+    <ng-template #rollingCell let-row>
+      @if (series(row); as points) {
+        @if (points.length > 1) {
+          <sb-sparkline [points]="points" [label]="row.strategy + ' rolling win rate'" />
+        } @else {
+          <span class="muted">—</span>
+        }
+      }
+    </ng-template>
+
+    <ng-template #badgeCell let-row>
+      <!-- Greyscale, not green/red: a validation badge is a quality judgement
+           and green means P&L direction and nothing else. -->
+      <sb-chip
+        [label]="row.status"
+        [tone]="row.status === 'VALIDATED' ? 'quality-high' : 'quality-low'"
+      />
+    </ng-template>
+
+    <ng-template #levelCell let-row>
+      <sb-quality-chip [value]="row.level" [label]="'Lv' + row.level" />
+    </ng-template>
+
+    <ng-template #tierCell let-row>
+      <sb-quality-chip [value]="row.tier" [label]="row.tier" />
+    </ng-template>
+
+    <ng-template #bandCell let-row>
+      @if (row.ok === null) {
+        <!-- Three-valued, and this is the third: "not enough live data to
+             judge" is not the same claim as "judged and missing its band". -->
+        <span class="muted" title="Fewer than 10 closed trades — not judged yet">—</span>
+      } @else if (row.ok) {
+        <span>In band</span>
+      } @else {
+        <sb-chip label="Off band" tone="quality-low" />
+      }
+    </ng-template>
+
+    <ng-template #decayCell let-row>
+      @if (row.drift_alert) {
+        <sb-chip label="DECAY" tone="quality-low" />
+      } @else {
+        <span class="muted">—</span>
+      }
+    </ng-template>
+
+    <sb-confirm-dialog
+      [open]="pendingDelete() !== null"
+      title="Delete this proposal?"
+      [consequence]="deleteConsequence()"
+      confirmLabel="Delete"
+      (confirmed)="confirmDelete()"
+      (cancelled)="pendingDelete.set(null)"
+    />
+  `,
   styles: `
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
-    .todo { color: var(--text-faint); font-size: var(--text-table); }
+    .head {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-14);
+      margin-bottom: var(--space-14);
+    }
+    h1 { font-size: var(--text-title); font-weight: 600; }
+    .stale { color: var(--warn); font-size: var(--text-table); }
+
+    sb-panel { display: block; margin-top: var(--space-14); }
+
+    .alert {
+      margin-top: var(--space-14);
+      padding: var(--space-8) var(--space-10);
+      border: 1px solid var(--warn);
+      border-radius: var(--radius);
+      color: var(--warn);
+      font-size: var(--text-table);
+    }
+
+    .panels {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      gap: var(--space-14);
+      align-items: start;
+    }
+    @media (max-width: 1000px) {
+      .panels { grid-template-columns: 1fr; }
+    }
+
+    .chips {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: var(--space-8);
+    }
+
+    dl { display: grid; gap: var(--space-6); }
+    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    dt { color: var(--text-secondary); font-size: var(--text-table); }
+    dd { color: var(--text); font-size: var(--text-table); }
+
+    .muted { color: var(--text-muted); font-size: var(--text-table); }
+    .note {
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+      line-height: 1.5;
+      max-width: 70ch;
+    }
+    .note + .note, .note + .launch { margin-top: var(--space-10); }
+    code { font-family: var(--font-mono); }
+
+    /* -- heatmap ------------------------------------------------------
+       Intensity is a greyscale wash rather than a green-to-red ramp. A win
+       rate is a quality figure, not money, and the colour rules reserve
+       green and red for P&L direction — a red cell here would mean the same
+       thing as a red P&L two tabs away, which it does not. */
+    .scroller { overflow-x: auto; }
+    .heat { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
+    .heat th, .heat td {
+      padding: var(--space-6) var(--space-10);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .heat thead th {
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .heat tbody th { text-align: left; font-weight: 600; }
+    .heat .num { text-align: right; font-family: var(--font-mono); }
+    .cell {
+      background: color-mix(in srgb, var(--text) calc(var(--heat, 0) * 14%), transparent);
+    }
+
+    /* -- tuning -------------------------------------------------------- */
+    .launch { display: flex; align-items: flex-end; gap: var(--space-10); }
+
+    .jobhead {
+      display: flex;
+      align-items: center;
+      gap: var(--space-10);
+      padding: var(--space-10) var(--space-14);
+    }
+    .log {
+      max-height: 320px;
+      margin: 0;
+      padding: var(--space-10) var(--space-14);
+      overflow: auto;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: var(--text-table);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .log + .note { padding: var(--space-10) var(--space-14); }
+
+    .jobs { display: grid; gap: var(--space-6); list-style: none; }
+    .jobs li { display: flex; align-items: baseline; gap: var(--space-8); font-size: var(--text-table); }
+    .jobs code { color: var(--text); font-family: var(--font-mono); }
+
+    .proposal {
+      margin-top: var(--space-10);
+      padding: var(--space-10);
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .proposal-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-10);
+      margin-bottom: var(--space-8);
+      font-size: var(--text-table);
+    }
+    .diff { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
+    .diff th, .diff td {
+      padding: var(--space-4) var(--space-8);
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .diff th {
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .diff .num { text-align: right; font-family: var(--font-mono); }
+    .proposal .muted { display: block; margin: var(--space-8) 0; }
   `,
 })
-export class Analytics {}
+export class Analytics {
+  private readonly router = inject(Router);
+  protected readonly store = inject(AnalyticsStore);
+
+  /** The active tab, as a query parameter — arriving through
+   *  `withComponentInputBinding` rather than `ActivatedRoute`, so this
+   *  component is testable without standing up a router. */
+  readonly tab = input<string>();
+
+  protected readonly tabs = TABS;
+
+  /** An unknown or absent `?tab=` falls back to Performance rather than
+   *  rendering nothing, so a hand-edited or stale URL still shows data. */
+  protected readonly activeTab = computed<AnalyticsTab>(() => {
+    const requested = this.tab();
+    return requested && TAB_IDS.has(requested)
+      ? (requested as AnalyticsTab)
+      : 'performance';
+  });
+
+  /* -- formatters (shared with the column declarations) ---------------- */
+
+  protected readonly fmtRate = rate;
+  protected readonly fmtDateTime = dateTime;
+
+  protected fmtExpectancy(value: number | null): string {
+    return value === null ? ABSENT : `${expectancy(value)}R`;
+  }
+
+  protected fmtCount(value: number | null): string {
+    return value === null ? ABSENT : String(value);
+  }
+
+  /* -- cell templates --------------------------------------------------- */
+
+  private readonly rollingCell = viewChild.required<TemplateRef<unknown>>('rollingCell');
+  private readonly badgeCell = viewChild.required<TemplateRef<unknown>>('badgeCell');
+  private readonly levelCell = viewChild.required<TemplateRef<unknown>>('levelCell');
+  private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
+  private readonly bandCell = viewChild.required<TemplateRef<unknown>>('bandCell');
+  private readonly decayCell = viewChild.required<TemplateRef<unknown>>('decayCell');
+
+  /** The declared columns with rich cells attached by key — the same split
+   *  Trades uses, so `analytics.columns.ts` stays free of templates. */
+  protected readonly strategyColumns = computed<ColumnDef<StrategyRow>[]>(() =>
+    attach(STRATEGY_COLUMNS, {
+      rolling: this.rollingCell(),
+      status: this.badgeCell(),
+    }),
+  );
+
+  protected readonly confidenceColumns = computed(() =>
+    attach(CONFIDENCE_COLUMNS, { level: this.levelCell() }),
+  );
+
+  protected readonly tierColumns = computed(() =>
+    attach(TIER_COLUMNS, { tier: this.tierCell(), ok: this.bandCell() }),
+  );
+
+  protected readonly driftColumns = computed(() =>
+    attach(DRIFT_COLUMNS, { drift_alert: this.decayCell() }),
+  );
+
+  protected readonly decileColumns = DECILE_COLUMNS;
+
+  protected readonly strategyKeys = allKeys(STRATEGY_COLUMNS);
+  protected readonly confidenceKeys = allKeys(CONFIDENCE_COLUMNS);
+  protected readonly decileKeys = allKeys(DECILE_COLUMNS);
+  protected readonly tierKeys = allKeys(TIER_COLUMNS);
+  protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
+
+  protected readonly strategyKey = (row: StrategyRow) => row.strategy;
+  protected readonly confidenceKey = (row: { level: number }) => String(row.level);
+  protected readonly decileKey = (row: { decile: string }) => row.decile;
+  protected readonly tierKey = (row: TierRow) => row.tier;
+  protected readonly driftKey = (row: DriftRow) => row.strategy;
+
+  /* Empty states are sentences about *this* table's situation, never a
+   * generic "No data" — see `EmptyStateComponent`. */
+  protected readonly strategyEmpty = {
+    title: 'No strategies in the registry',
+    hint: 'The validation registry is committed with the code; an empty one means it has not been generated yet.',
+  };
+  protected readonly confidenceEmpty = {
+    title: 'No trades to break down',
+    hint: 'Levels appear once trades have been logged against them.',
+  };
+  protected readonly decileEmpty = {
+    title: 'No scored trades yet',
+    hint: 'Only closed trades carrying a quality score can be bucketed.',
+  };
+  protected readonly tierEmpty = {
+    title: 'No tier calibration available',
+    hint: 'The analytics snapshot has not been built yet.',
+  };
+  protected readonly driftEmpty = {
+    title: 'No validated strategies to watch',
+    hint: 'Drift is only measured for strategies that hold a VALIDATED badge.',
+  };
+
+  /* -- strategies ------------------------------------------------------- */
+
+  protected readonly decayed = computed(() =>
+    this.store
+      .strategyRows()
+      .filter((row) => row.decayed)
+      .map((row) => row.strategy),
+  );
+
+  /** Nulls dropped: the server emits one for a window it could not compute,
+   *  and the sparkline plots numbers. */
+  protected series(row: StrategyRow): number[] {
+    return (row.win_rate_series ?? []).filter((point): point is number => point !== null);
+  }
+
+  /** The flattened cells, indexed for O(1) lookup while rendering the grid.
+   *  A linear scan per cell would be strategies × horizons × cells. */
+  private readonly heatIndex = computed(() => {
+    const index = new Map<string, HeatmapCell>();
+    for (const cell of this.store.heatmap()?.cells ?? []) {
+      index.set(`${cell.strategy} ${cell.horizon}`, cell);
+    }
+    return index;
+  });
+
+  /** 0–1, feeding the greyscale wash. A cell with no sample gets 0 rather
+   *  than a faint tint, so "untested" and "tested and terrible" look
+   *  different. */
+  protected heat(strategy: string, horizon: string): number {
+    const cell = this.heatIndex().get(`${strategy} ${horizon}`);
+    if (!cell || cell.win_rate === null) return 0;
+    return Math.max(0, Math.min(1, cell.win_rate / 100));
+  }
+
+  protected heatLabel(strategy: string, horizon: string): string {
+    const cell = this.heatIndex().get(`${strategy} ${horizon}`);
+    if (!cell || cell.win_rate === null) return ABSENT;
+    return `${cell.win_rate.toFixed(0)}% (${cell.n ?? 0})`;
+  }
+
+  /* -- tuning ----------------------------------------------------------- */
+
+  protected readonly strategy = signal('');
+
+  protected readonly strategyOptions = computed(() =>
+    this.store.strategyNames().map((name) => ({ value: name, label: name })),
+  );
+
+  protected jobStateLabel(job: JobStatus): string {
+    const state = job.state.toUpperCase();
+    return job.returncode === null || job.returncode === undefined
+      ? state
+      : `${state} (exit ${job.returncode})`;
+  }
+
+  /** Amber for a failure, greyscale otherwise. A failed job is a caution to
+   *  act on, not a loss — and red is reserved for P&L. */
+  protected jobTone(job: JobStatus) {
+    if (job.state === 'failed') return qualityTone('C');
+    if (job.state === 'running' || job.state === 'queued') return qualityTone('A');
+    return qualityTone(null);
+  }
+
+  protected launch(): void {
+    const strategy = this.strategy();
+    if (strategy) this.store.startTune(strategy);
+  }
+
+  /* -- proposals -------------------------------------------------------- */
+
+  protected readonly pendingDelete = signal<ProposalRow | null>(null);
+
+  /** Proposals with their parameter diff paired up. Built once per change
+   *  rather than by a method the template calls per row: a method would
+   *  return a new array on every check and defeat `@for`'s tracking. */
+  protected readonly proposalViews = computed<ProposalView[]>(() =>
+    this.store.proposals().map((proposal) => {
+      const current = proposal.current_params ?? {};
+      const proposed = proposal.proposed_params ?? {};
+      return {
+        ...proposal,
+        params: Object.entries(proposed).map(([key, value]) => ({
+          key,
+          // An em dash, not "undefined": a parameter the code does not
+          // currently set is missing, not set to the string "undefined".
+          current: current[key] === undefined ? ABSENT : String(current[key]),
+          proposed: String(value),
+        })),
+        trainSummary: trainSummary(proposal),
+      };
+    }),
+  );
+
+  protected readonly deleteConsequence = computed(() => {
+    const proposal = this.pendingDelete();
+    return proposal
+      ? `Removes the staged ${proposal.strategy} proposal from disk. Nothing running changes — a proposal was never applied.`
+      : '';
+  });
+
+  protected confirmDelete(): void {
+    const proposal = this.pendingDelete();
+    if (!proposal) return;
+    this.store.removeProposal(proposal.filename);
+    this.pendingDelete.set(null);
+  }
+
+  /* -- wiring ----------------------------------------------------------- */
+
+  constructor() {
+    // The one place the URL becomes store state, and the only thing that
+    // decides which payload is fetched.
+    effect(() => this.store.setTab(this.activeTab()));
+  }
+
+  protected goToTab(tab: string): void {
+    // replaceUrl: flipping between tabs should not fill the history with
+    // steps, but the tab must still be in the URL so it can be linked to.
+    this.router.navigate([], {
+      queryParams: { tab: tab === 'performance' ? null : tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+}
+
+/** Attach rich cell templates to declared columns by key. */
+function attach<T>(
+  columns: ColumnDef<T>[],
+  cells: Record<string, TemplateRef<unknown>>,
+): ColumnDef<T>[] {
+  return columns.map((column) =>
+    cells[column.key]
+      ? // The templates are declared once for every table on the workspace, so
+        // they cannot be typed to one row shape at their declaration site. The
+        // cast is contained here rather than repeated at four call sites.
+        { ...column, cell: cells[column.key] as unknown as ColumnDef<T>['cell'] }
+      : column,
+  );
+}
+
+/** The TRAIN-window figures a proposal was frozen from, on one line. */
+function trainSummary(proposal: ProposalRow): string {
+  const stats = proposal.train_stats ?? {};
+  const n = typeof stats['n_eval'] === 'number' ? stats['n_eval'] : null;
+  const wr = typeof stats['win_rate'] === 'number' ? stats['win_rate'] : null;
+  const er = typeof stats['expectancy_r'] === 'number' ? stats['expectancy_r'] : null;
+  return `TRAIN: N=${n ?? ABSENT} · WR=${rate(wr)} · ExpR=${expectancy(er)}`;
+}
