@@ -1,5 +1,7 @@
 import {
   ApplicationConfig,
+  inject,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
@@ -12,6 +14,7 @@ import {
   loadingInterceptor,
 } from './api/interceptors';
 import { routes } from './app.routes';
+import { SessionStore } from './stores/session.store';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -38,5 +41,11 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(
       withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
     ),
+    // Answer "who am I" BEFORE the app bootstraps. Angular waits on the
+    // returned promise, so App never renders in the 'unknown' state -- which
+    // is what stops an unauthenticated visitor seeing a frame of the real
+    // shell, and stops every workspace firing a doomed request on load.
+    // It must be registered after provideHttpClient: it makes an HTTP call.
+    provideAppInitializer(() => inject(SessionStore).boot()),
   ],
 };

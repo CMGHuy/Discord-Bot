@@ -1,0 +1,36 @@
+<main class="login">
+  <form class="panel" (ngSubmit)="submit()">
+    <h1 class="mark">swingbot</h1>
+    <p class="sub">admin</p>
+
+    <label class="field">
+      <span>Username</span>
+      <input
+        name="username"
+        autocomplete="username"
+        autofocus
+        [ngModel]="username()"
+        (ngModelChange)="username.set($event)"
+      />
+    </label>
+
+    <label class="field">
+      <span>Password</span>
+      <input
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        [ngModel]="password()"
+        (ngModelChange)="password.set($event)"
+      />
+    </label>
+
+    @if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+
+    <button type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Signing in…' : 'Sign in' }}
+    </button>
+  </form>
+</main>
