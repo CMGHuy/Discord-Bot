@@ -1,0 +1,95 @@
+/* Design tokens — spec `2026-08-08-admin-design-system-design.md`, Decision 3.
+ *
+ * **Dark only. There is no light theme and there is not going to be one**, so
+ * there is no `prefers-color-scheme` block here and no `[data-theme]` hook to
+ * hang one on. A terminal aesthetic has no light counterpart worth
+ * maintaining, and this is a single-user private tool. Adding one later means
+ * revisiting the spec, not adding a media query.
+ *
+ * This file is NOT `swingbot/admin/static/tokens.css`. That one still drives
+ * the Jinja UI *and* the bot's Discord chart colours, and changing it is its
+ * own task (NG38) with its own blast radius. Until then the two coexist and
+ * this is the SPA's only palette.
+ */
+
+:root {
+  /* -- colour ----------------------------------------------------------
+   * Three rules, enforced by review, and the single biggest fix for the
+   * "inconsistent" complaint the design system exists to answer:
+   *
+   *   green/red  P&L DIRECTION only. Never decoration, never a status that
+   *              is not money.
+   *   amber      caution -- risk near cap, scanning paused, data stale.
+   *   blue       interactive only -- links, focus, selection. Never data.
+   *
+   * Everything else is greyscale. The current UI uses blue for both values
+   * and links, and green for both profit and generic success; that is what
+   * these rules exist to stop.
+   */
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface-raised: #121212;
+  --border: #1c1c1c;
+  --border-strong: #2a2a2a;
+
+  --text: #f0f0f0;
+  --text-secondary: #888888;
+  --text-muted: #666666;
+  --text-faint: #444444;
+
+  --pos: #00d26a;
+  --neg: #ff4d4d;
+  --warn: #ffb020;
+  --accent: #4d9fff;
+
+  /* Quality is not money, so confidence/tier chips take a greyscale ramp
+   * with amber reserved for the weakest band. Leaving them green/amber/red
+   * would make green mean two different things in adjacent columns of the
+   * same row -- worse than not applying the colour rule at all. */
+  --quality-high: var(--text);
+  --quality-mid: var(--text-secondary);
+  --quality-low: var(--warn);
+
+  /* -- type ------------------------------------------------------------
+   * Named by role, not by size: the scale is closed (9/10/11/12/14/18/23)
+   * and a component should be choosing "this is a chip" rather than
+   * "this is 10px". A size not on this list is a review defect.
+   */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --text-micro: 9px;      /* micro-label */
+  --text-chip: 10px;      /* chip */
+  --text-table: 11px;     /* table body */
+  --text-body: 12px;      /* body */
+  --text-subhead: 14px;   /* subheading */
+  --text-title: 18px;     /* section title */
+  --text-metric: 23px;    /* primary metric */
+
+  /* -- spacing ---------------------------------------------------------
+   * Closed scale, named by value on purpose. An indirection table
+   * (--space-3 = 8px) is one more thing to remember and makes an
+   * off-scale value look plausible; --space-8 cannot be mistyped into
+   * something that is not on the scale.
+   */
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-14: 14px;
+  --space-20: 20px;
+  --space-28: 28px;
+
+  /* -- radii, motion ---------------------------------------------------
+   * Tight radii: terminal, not consumer app. 120ms on state change and
+   * nothing on entrance -- with real-time push, "something changed" is
+   * continuous rather than a 5-second event, so the old card-flash would
+   * now be a permanent flicker.
+   */
+  --radius: 4px;
+  --radius-chip: 3px;
+
+  --duration: 120ms;
+  --easing: ease-out;
+  --transition: var(--duration) var(--easing);
+}

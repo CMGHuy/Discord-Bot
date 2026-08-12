@@ -1,1 +1,52 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles. Everything component-level lives with its component --
+ * this file is tokens, the document base, and nothing else. */
+@import './styles/fonts.css';
+@import './styles/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: 1.45;
+  /* The admin is watched for hours on a dark screen; unsmoothed text on
+   * near-black is what makes a dark UI feel "heavy". */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numerics are mono everywhere, which is the whole reason the family is
+ * vendored: digits align down a column, and that is what makes a dense
+ * price table scannable. Applied by class rather than by element so a
+ * label inside a numeric cell can opt back out. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Blue is interactive and only interactive. */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
