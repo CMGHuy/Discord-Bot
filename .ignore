@@ -32,5 +32,13 @@ exports/
 .superpowers/sdd/*.diff
 .superpowers/sdd/*.log
 
+# Angular frontend dependencies and build output. node_modules alone is tens of
+# thousands of files and would undo everything this file achieves; dist/ is
+# generated, and .angular/ is the CLI's build cache. frontend/src IS searchable
+# — only these three are excluded.
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
 __pycache__/
 .pytest_cache/

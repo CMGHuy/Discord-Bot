@@ -16,6 +16,7 @@ __pycache__/
 exports/
 market_data/
 data/backtest_cache/
+data/backups/
 .vscode/
 .claude/settings.local.json
 .claude/worktrees/
