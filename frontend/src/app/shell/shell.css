@@ -1,0 +1,123 @@
+.shell {
+  display: grid;
+  /* Fixed sidebar: the nav is six fixed labels and never needs to grow, and
+     a fluid one would move the workspace's left edge between routes. */
+  grid-template-columns: 168px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+  padding: var(--space-20) var(--space-14);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.mark {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+}
+
+.mark .name {
+  font-family: var(--font-mono);
+  font-size: var(--text-subhead);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.mark .tag {
+  padding: 1px var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav a {
+  display: block;
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: var(--text-body);
+  transition: color var(--transition), background var(--transition);
+}
+
+.nav a:hover {
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface-raised);
+}
+
+/* Selection is interactive state, so it is allowed blue -- but as the text
+   colour and a rule, not a filled blue block, which would read as data. */
+.nav a.active {
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.logout {
+  margin-top: auto;
+  padding: var(--space-6);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-table);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.logout:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* let wide tables scroll instead of stretching the grid */
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-14);
+  padding: var(--space-10) var(--space-20);
+  border-bottom: 1px solid var(--border);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.killswitch {
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--neg);
+  border-radius: var(--radius-chip);
+  color: var(--neg);
+  font-size: var(--text-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.workspace {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-20);
+}

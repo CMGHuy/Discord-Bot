@@ -1,0 +1,45 @@
+<div class="shell">
+  <nav class="sidebar">
+    <div class="mark">
+      <span class="name">swingbot</span>
+      <span class="tag">paper</span>
+    </div>
+
+    <ul class="nav">
+      @for (entry of nav; track entry.path) {
+        <li>
+          <a
+            [routerLink]="entry.path"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: false }"
+            >{{ entry.label }}</a
+          >
+        </li>
+      }
+    </ul>
+
+    <button class="logout" type="button" (click)="logout()">Sign out</button>
+  </nav>
+
+  <div class="main">
+    <header class="topbar">
+      <!-- Engaged killswitch is shell-level and unmissable: it means the bot
+           has stopped taking positions, which is true no matter which
+           workspace happens to be open. -->
+      @if (killswitchOn()) {
+        <span class="killswitch" role="alert">KILLSWITCH ENGAGED</span>
+      }
+      <div class="spacer"></div>
+      <sb-connection-status
+        [state]="connection.state()"
+        [botAlive]="connection.botAlive()"
+      />
+    </header>
+
+    <main class="workspace">
+      <router-outlet />
+    </main>
+  </div>
+
+  <sb-toast-host />
+</div>

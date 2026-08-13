@@ -201,6 +201,26 @@ def read_settings_audit(n: int = 20) -> list[dict]:
     return list(reversed(rows))
 
 
+def build_settings_export_text() -> str:
+    """The exported .env body — one definition, two callers.
+
+    Extracted from app.py's `/settings/export` when `/api/v1/system/settings/
+    export` needed the same bytes (NG15). NG15's acceptance check is a round
+    trip: export, edit, import, and the bot reads the change. That check only
+    means anything if the two exports cannot drift apart in the meantime, and
+    a copied field loop would drift.
+
+    Sensitive fields are OMITTED, not masked. A masked line would import as
+    the literal mask and blank out a real secret, and an export is exactly
+    the file someone re-imports.
+    """
+    existing = _read_env_values()
+    return "\n".join(
+        f"{f.key}={existing.get(f.key, f.default)}"
+        for f in config.FIELDS if not f.sensitive
+    ) + "\n"
+
+
 def import_env_text(text: str) -> tuple[int, list[str]]:
     """Parses a pasted/uploaded .env-format text, validates each key
     against FIELDS_BY_KEY, type-checks numerics (a bad numeric value is

@@ -26,3 +26,39 @@ venv/
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# The SPA's build artefacts and its ~1,100 installed packages.
+#
+# `frontend/` itself is NOT excluded, and cannot be: .dockerignore applies to
+# the whole build context, so hiding it would starve the `frontend` build
+# stage of the sources it exists to compile. What these three lines do is
+# keep the HOST's node_modules out of the context entirely -- so the build
+# stage's own `npm ci` result is never overwritten by whatever happens to be
+# installed on the developer's machine, and the context stays small.
+#
+# Consequence worth knowing: the runtime stage's `COPY . .` therefore does
+# include frontend/src and the manifests. A few hundred KB of TypeScript
+# that is never executed -- the bundle it produces arrives separately from
+# the build stage. Excluding it would need a .dockerignore per stage, which
+# Docker does not have.
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# The BUILD OUTPUT the frontend stage produces. It must come from that stage
+# and from nowhere else.
+#
+# This line is load-bearing and its absence was a real defect. `COPY . .` in
+# the runtime stage copies whatever is in the context, and .gitignore has no
+# say in what the context contains -- only this file does. So a developer who
+# had built the SPA locally (which NG54's acceptance walk required) shipped
+# their own bundle into the image. `COPY --from=frontend` then overwrote only
+# the files whose names MATCHED; every hashed chunk from the local build that
+# the fresh build did not happen to reproduce survived alongside it. The image
+# carried two `main-<hash>.js`, one of them stale.
+#
+# It was not visibly broken -- index.html names exactly one bundle, and that
+# one came from the stage. But the image depended on the developer's working
+# tree, which is the property a container build exists to remove, and a broken
+# local bundle would have shipped just as quietly as a stale one.
+swingbot/admin/static/app/

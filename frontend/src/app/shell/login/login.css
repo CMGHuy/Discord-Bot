@@ -1,0 +1,94 @@
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--space-20);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+  width: 100%;
+  max-width: 280px;
+  padding: var(--space-28);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.mark {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sub {
+  margin: calc(var(--space-14) * -1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.field span {
+  color: var(--text-secondary);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.field input {
+  padding: var(--space-8) var(--space-10);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  transition: border-color var(--transition);
+}
+
+.field input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Amber, not red: a rejected password is caution, and red is reserved for
+   P&L direction. Using red here is exactly the inconsistency the design
+   system exists to remove. */
+.error {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--text-table);
+}
+
+button {
+  padding: var(--space-8);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-body);
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}

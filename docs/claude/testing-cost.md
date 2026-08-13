@@ -89,3 +89,92 @@ override it, and must never read "no counts found" as success:
 ```powershell
 python -m pytest tests/ -p no:cacheprovider -n 4     # no -q: prints the counts line
 ```
+
+## Runtime cost: the admin event watcher (NG24)
+
+Not a test cost, but measured the same way and filed here because this is
+where the repo keeps measured-not-estimated numbers. Measured 2026-08-12 on
+the same box (Windows, NTFS, 12 logical cores), two runs, `time.process_time()
+/ wall` over 30s windows. Spec: `2026-08-08-realtime-push-design-v12.md`,
+which asks for a before/after because "it is small, but it never stops".
+
+| | run 1 | run 2 |
+| --- | --- | --- |
+| One `stat()` sweep of all 20 paths | 1797 us | 1117 us |
+| Admin idle, **no** event connection | 0.000% | 0.052% |
+| Admin idle, **one** event connection | 0.624% | 0.728% |
+| Attributable to the watcher | 0.62 pp | 0.68 pp |
+
+**Verdict: not material — the 500ms interval stands.** ~0.65% of one core,
+and only while a browser is actually connected: the watcher is started
+lazily by the broker on the first SSE connection and stopped when the last
+one closes, so an admin nobody has open measures at zero, which is what the
+"no connection" row is.
+
+Two things worth knowing before re-measuring:
+
+- **The sweep is dominated by the 16 absent paths, not the 4 present ones.**
+  Most watched paths (all four `.flag` files, and everything a fresh install
+  has not written yet) do not exist, and each one costs a `FileNotFoundError`
+  — an exception, not a syscall result. That is why a 20-path sweep costs
+  ~1.5ms rather than ~50us. It also means the cost *falls* as the install
+  fills in, which is the opposite of the intuition.
+- **This is a pessimistic number for production.** `stat()` on Windows/NTFS
+  is far more expensive than on the Linux container the admin actually
+  deploys to. Treat ~0.65% as a ceiling, and re-measure on the Hetzner box
+  before acting on it.
+
+The sweep accounts for ~0.36 pp of the total (1.8ms x 2/s); the rest is the
+run loop, which ticks every 250ms — the debounce granularity — so that a
+settled event is not held back until the next sweep. Flushing is free
+compared to sweeping, which is why the two cadences differ.
+
+## Frontend: `ng test` times out before running anything (flaky)
+
+`cd frontend && npx ng test --watch=false`. Vitest 4 via `@angular/build:unit-test`,
+config in `frontend/vitest.config.ts`.
+
+**Symptom:** exactly 60 seconds, then `[vitest-pool-runner]: Timeout waiting
+for worker to respond`, `Test Files no tests`. Nothing ran.
+
+**It is load, and a re-run fixes it.** 60s is `START_TIMEOUT`, a hard-coded
+constant in vitest's pool runner — not an option, so it cannot be raised from
+the config. Worker startup on this box occasionally exceeds it while an
+Angular build or the Python suite is competing for the machine.
+
+Two plausible-looking explanations were chased and are both wrong; don't
+repeat them:
+
+- **Not the `forks` pool.** Switching to `threads` made it pass at two spec
+  files, and it failed again at three.
+- **Not parallel worker startup.** `maxWorkers: 1` + `fileParallelism: false`
+  made it pass at four, and it failed again at five — then the same command
+  passed on retry with no change at all.
+
+Those settings are still in the config: fewer workers is fewer chances to
+trip the timeout, and these tests have no native modules or shared state, so
+parallelism was buying wall-clock only. But they are mitigation, not a fix.
+
+Same discipline as the Python suite above: **cool down, and don't measure or
+diagnose while something else is running.**
+
+## A second load-sensitive test: `test_analytics_perf`
+
+`tests/test_analytics_perf.py::test_build_snapshot_5000_trades_under_2_seconds`
+asserts a **wall-clock budget**, so it measures the machine as much as the
+code. Observed on 2026-08-12 on a loaded box, same commit, consecutive runs:
+
+| Run | build_snapshot(5000 trades) |
+| --- | --- |
+| in the full `-n 4` suite | 2.73s — FAILED |
+| isolated, immediately after | 12.60s — FAILED |
+| isolated, again | 3.23s — passed |
+
+A 4x swing between two back-to-back runs of the same test. The same suite
+passed 0-failed earlier the same day, when the full run took 180s rather
+than 604s.
+
+**Before believing this one, check the load.** It is not quarantined —
+unlike `test_flag_on_polls_open_plans` it is a real budget worth keeping —
+but a failure here on a busy box is evidence about the box. Re-run it
+isolated on an idle machine before touching `swingbot/core/analytics/`.

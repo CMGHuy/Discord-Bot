@@ -1,0 +1,68 @@
+/* The two vendored families, declared for the SPA.
+ *
+ * The woff2 files are served by Flask out of `swingbot/admin/static/vendor/`
+ * and are NOT bundled: absolute `/static/...` URLs, which the build leaves
+ * alone. Zero CDN (spec v13) -- the admin has to work on a box with no
+ * outbound internet, so nothing here may reach fonts.googleapis.com.
+ *
+ * These @font-face rules duplicate the ones in the vendored `inter.css` and
+ * `jetbrains-mono.css`, which is deliberate and temporary. Those files are
+ * what the *Jinja* UI loads, and both UIs are live until cutover. Declaring
+ * them here instead of `<link>`-ing those stylesheets from index.html keeps
+ * the build silent: the build tries to resolve a `<link rel=stylesheet>` at
+ * build time to inline it, cannot find `/static/...` on disk, and warns on
+ * every single build -- which is how a project teaches itself to ignore
+ * build warnings. At cutover (NG57) the vendored .css files go and these
+ * become the only copy; the .woff2 files stay where they are.
+ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/vendor/inter/inter-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/vendor/inter/inter-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/vendor/inter/inter-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/vendor/inter/inter-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/vendor/jetbrains-mono/jetbrains-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/static/vendor/jetbrains-mono/jetbrains-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/vendor/jetbrains-mono/jetbrains-mono-700.woff2") format("woff2");
+}

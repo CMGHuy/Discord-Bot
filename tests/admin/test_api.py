@@ -1,4 +1,23 @@
-"""Tests for the /api/* JSON blueprint."""
+"""Tests for the /api/* JSON blueprint.
+
+NG19 TRIAGE — **behavioural · DELETE at cutover, coverage already migrated.**
+Every assertion here targets the legacy /api namespace, which dies with the
+Jinja UI. Successors, endpoint for endpoint: /api/health and the auth shape →
+test_api_v1_session.py · /api/stats, /api/calibration, /api/registry →
+test_api_v1_analytics.py · /api/plans → test_api_v1_trades.py ·
+/api/journal/{id}/note → test_api_v1_trade_note.py · /api/jobs* →
+test_api_v1_jobs.py.
+
+ONE assertion has no v1 successor: `test_api_journal_filters_by_tag`. Spec
+v11 records /api/journal as "absorbed by GET /api/v1/trades?has_note=1", and
+that absorbed the note flag but NOT the tag filter — journal tags are
+auto-generated (`journal.tags_for`: gap_fill, near_miss_tp, fast_win,
+slow_burn, weak_source), drive the journal page's "All tags" dropdown, and
+feed !stats and the weekly insights. Spec v14's Notes tab describes note
+editing only, so this may well be an intended reduction, but it was never
+written down as one. Do not delete this test at cutover until sub-project 5
+decides — see the note in spec v11's Coverage check.
+"""
 import json
 
 from swingbot.core.plan_engine import PlanStatus, TradePlanV2

@@ -31,21 +31,28 @@ if os.path.exists(_INTER_TTF):
 # drawn from this same small palette so nothing clashes with a leftover
 # light-theme color.
 # ---------------------------------------------------------------------------
-CHART_BG = "#131722"           # figure + every panel's background
-GRID_COLOR = "#232734"         # gridlines -- subtle, never competes with data
-SPINE_COLOR = "#2a2e39"        # axis borders
-TEXT_COLOR = "#d1d4dc"         # primary text (titles, axis labels)
-MUTED_TEXT_COLOR = "#787b86"   # secondary text (tick labels, fine print)
-UP_COLOR = "#26a69a"           # bullish candle body/wick
-DOWN_COLOR = "#ef5350"         # bearish candle body/wick
-CHIP_BG = "#1c2030"            # background for the small rounded "chip" labels every overlay uses
-CHIP_EDGE = "#363a45"          # neutral chip border when no accent color applies
+CHART_BG = "#0a0a0a"           # figure + every panel's background
+GRID_COLOR = "#1c1c1c"         # gridlines -- subtle, never competes with data
+SPINE_COLOR = "#2a2a2a"        # axis borders
+TEXT_COLOR = "#f0f0f0"         # primary text (titles, axis labels)
+MUTED_TEXT_COLOR = "#666666"   # secondary text (tick labels, fine print)
+UP_COLOR = "#00d26a"           # bullish candle body/wick
+DOWN_COLOR = "#ff4d4d"         # bearish candle body/wick
+CHIP_BG = "#121212"            # background for the small rounded "chip" labels every overlay uses
+CHIP_EDGE = "#2a2a2a"          # neutral chip border when no accent color applies
 
-ENTRY_COLOR = "#2f7dfa"
-STOP_COLOR = "#ef5350"
-TARGET_COLOR = "#00c896"
+# One green and one red across the whole image, per the palette's first rule:
+# green and red mean P&L direction and nothing else. A target IS the profit
+# side and a stop IS the loss side, so they take the same two colours the
+# candles do rather than near-miss shades of them -- the old #00c896 target
+# against #26a69a candles was two greens that meant the same thing. Line
+# weight, dashing and the labelled chip are what separate a level from a
+# candle body, not a third hue.
+ENTRY_COLOR = "#4d9fff"
+STOP_COLOR = "#ff4d4d"
+TARGET_COLOR = "#00d26a"
 TARGET2_COLOR = "#ab47bc"
-CURRENT_PRICE_COLOR = "#ffa726"  # distinct from entry -- entry is a planned limit level, this is where price actually is
+CURRENT_PRICE_COLOR = "#ffb020"  # distinct from entry -- entry is a planned limit level, this is where price actually is
 TRENDLINE_SUPPORT_COLOR = "#26c6da"
 TRENDLINE_RESISTANCE_COLOR = "#ec407a"
 AVWAP_COLOR = "#b39ddb"
@@ -54,10 +61,10 @@ AVWAP_COLOR = "#b39ddb"
 # PNGs share one palette. tests/test_chart_theme.py asserts these pairs
 # stay equal to the module constants; change BOTH files together.
 THEME = {
-    "bg-1": "#131722", "border-1": "#232734", "border-2": "#2a2e39",
-    "text-1": "#d1d4dc", "text-3": "#787b86",
-    "up": "#26a69a", "down": "#ef5350", "accent": "#2f7dfa",
-    "warn": "#ffa726", "purple": "#ab47bc",
+    "bg-1": "#0a0a0a", "border-1": "#1c1c1c", "border-2": "#2a2a2a",
+    "text-1": "#f0f0f0", "text-3": "#666666",
+    "up": "#00d26a", "down": "#ff4d4d", "accent": "#4d9fff",
+    "warn": "#ffb020", "purple": "#ab47bc",
 }
 
 # Fixed accent colors for the confirmed-strategy overlay -- one per

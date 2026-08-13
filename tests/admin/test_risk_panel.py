@@ -1,5 +1,14 @@
 """Flask test-client tests for the admin risk panel (Task E54).
 
+NG19 TRIAGE — **behavioural · DELETE at cutover, coverage already migrated.**
+All four assertions have successors in test_api_v1_risk.py: the page render
+and the scan-health sparkline become payload-shape assertions there (the SPA
+draws its own sparkline from the numbers), and the killswitch round trip is
+covered along with the stricter JSON contract v1 applies to it. That file
+also inherits this one's KILLSWITCH_PATH monkeypatch, for the same reason --
+without it a test engages the real bot's killswitch.
+
+
 Uses the existing tests/admin/conftest.py fixtures: `client` is an
 UNAUTHENTICATED Flask test client (routes are guarded by @require_auth,
 HTTP Basic Auth), so every request here passes the separate `auth` fixture

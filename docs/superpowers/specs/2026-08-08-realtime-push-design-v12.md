@@ -110,6 +110,17 @@ same loop, with a dependency in front of it.
 
 ## Decision 2 — Partial reads are already impossible
 
+> **NG23 correction (2026-08-12).** This decision's premise is too strong, and
+> the audit it demanded is what found that out. Eight of the watched `.json`
+> paths are written atomically as claimed below; **six are not** —
+> `scan_snapshots.json`, `bot_heartbeat.json`, `watchlist.json`,
+> `ticker_directory.json`, `admin_jobs.json` and `.env` use plain
+> `open(path, "w")` + `json.dump`. The conclusion the decision draws still
+> holds for the *watcher*, which never opens a watched file; what does not
+> hold is the claim that a mid-write read is impossible anywhere. Full list,
+> line references and the narrowness of the actual race:
+> `docs/claude/known-traps.md`.
+
 The one thing that would make file-watching genuinely dangerous — reading a
 file mid-write and parsing half a JSON document — **does not happen in this
 repo**, and that is not luck.

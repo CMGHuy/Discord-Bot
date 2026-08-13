@@ -1,6 +1,16 @@
 """Dashboard v2 behaviours: bounded history, pedigree chips, leg rows,
 lifecycle strip, equity sparkline.
 
+NG19 TRIAGE — **HTML-structure · DELETE at cutover.** Every assertion here is
+about rendered markup: which table has which columns, which cells carry which
+density class, what the polled fragment does and does not contain. All of it
+tests a UI that will not exist. The two underlying behaviours worth keeping
+are already covered elsewhere and are NOT lost with this file — history
+paging by test_trade_history_paging.py (kept) and via /api/v1/trades, and the
+equity series by test_api_v1_cockpit.py, which asserts the numbers rather
+than the rendered <svg>.
+
+
 Two response bodies are exercised here and the distinction matters:
 
   * "/dashboard/fragment" -- the polled fragment: session banner, lifecycle
@@ -37,7 +47,7 @@ def test_dashboard_renders_only_the_first_page_of_history(client, auth, admin_ap
     """
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 510)
-    r = client.get("/?mode=all", headers=auth)
+    r = client.get("/dashboard?mode=all", headers=auth)
     html = r.data.decode("utf-8")
     assert html.count('id="ct-row-') == 25
     assert 'id="ct-total-count">510<' in html     # full total still reported
@@ -57,7 +67,7 @@ def test_history_is_not_part_of_the_polled_fragment(client, auth, admin_app):
     assert "closed-trades-table" not in fragment
     assert "ct-filter-ticker" not in fragment
 
-    page = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    page = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     assert "closed-trades-table" in page
 
 
@@ -76,7 +86,7 @@ def test_dashboard_never_advertises_truncated_history(client, auth, admin_app):
     longer any history the table cannot reach."""
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 510)
-    r = client.get("/?mode=all", headers=auth)
+    r = client.get("/dashboard?mode=all", headers=auth)
     assert "Showing latest" not in r.data.decode("utf-8")
 
 
@@ -149,7 +159,7 @@ def test_closed_runner_row_is_marked_so_pagination_can_skip_it(client, auth, adm
     must be identifiable as a non-trade row and tied to its parent trade."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     tbody = _closed_tbody(html)
 
     leg_rows = [row for row in tbody.split("<tr")[1:] if "ct-leg-row" in row.split(">", 1)[0]]
@@ -163,7 +173,7 @@ def test_every_paginated_closed_row_has_a_row_number(client, auth, admin_app):
     2 trades -> 2 .row-num spans, and exactly 1 extra (excluded) leg row."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     tbody = _closed_tbody(html)
 
     total_rows = tbody.count("<tr")
@@ -202,7 +212,7 @@ def test_history_defaults_to_compact_density(client, auth, admin_app):
     """A browser with no stored preference must get the compact table."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     assert 'data-density-for="ct"' in html
     wrapper = html.split('data-density-for="ct"', 1)[0].rsplit("<div", 1)[1]
     assert "density-compact" in wrapper
@@ -213,7 +223,7 @@ def test_history_full_only_columns_are_marked(client, auth, admin_app):
     they will not hide together."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
     head, body = table.split("<tbody>", 1)
     for col in ("strategy", "horizon", "dir", "conf", "entry", "exit", "pnlpct", "opened"):
@@ -228,7 +238,7 @@ def test_history_still_renders_every_column_server_side(client, auth, admin_app)
     import re
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
     # NB: count "<th " / "<th>" -- a bare "<th" also matches "<thead>".
     assert len(re.findall(r"<th[ >]", table)) == 16, "all 16 columns must still render"
@@ -328,7 +338,7 @@ def test_closed_trades_table_does_not_show_the_validation_badge(client, auth, ad
     from swingbot import config
     _seed_trades(config.DATA_DIR, [_badged_trade(
         "t1", "win", "WEAK", exit_price=110.0, closed_at="2026-07-05T00:00:00+00:00")])
-    html = client.get("/?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
     assert "WEAK" not in html
     assert "chip-tier-a" in html
 

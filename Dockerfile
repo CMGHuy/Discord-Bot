@@ -1,5 +1,34 @@
 # syntax=docker/dockerfile:1
 #
+# Two stages. The first builds the Angular SPA; the second is the image that
+# actually ships, and has no Node in it at all -- the browser bundle is the
+# only thing that crosses between them.
+#
+# ---------------------------------------------------------------------------
+# Stage 1: the SPA
+# ---------------------------------------------------------------------------
+# Same layering trick as requirements.txt below, for the same reason: the
+# manifests are copied and installed BEFORE the source tree, so editing a
+# component reuses the whole npm install layer. Without the split, one
+# changed .ts file re-installs ~1,100 packages.
+FROM node:22-alpine AS frontend
+
+WORKDIR /build
+
+# package-lock.json, not just package.json: `npm ci` requires it and installs
+# exactly what it pins. `npm install` would be free to resolve something
+# newer at build time, which is how a container ends up running a dependency
+# tree nobody has tested.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 2: the runtime image
+# ---------------------------------------------------------------------------
+#
 # Single image, shared by both the bot and admin-ui services in
 # docker-compose.yml (they just run different commands against it).
 #
@@ -59,6 +88,22 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system -r requirements.txt
 
 COPY . .
+
+# The built SPA, from stage 1. Copied AFTER the source tree, so `COPY . .`
+# above cannot land on top of it.
+#
+# An earlier version of this comment claimed static/app/ was "gitignored and
+# absent from the context". Only the first half was true: .gitignore has no
+# say in what the build context contains -- .dockerignore does, and it did not
+# mention the directory. So a developer's locally-built bundle was being
+# copied in by `COPY . .`, and this line overwrote only the files whose names
+# collided, leaving stale hashed chunks behind. Now excluded there, which is
+# what makes this stage the only source of the bundle.
+#
+# Nothing from stage 1 but this directory crosses the boundary: no Node, no
+# npm, no package cache. `docker compose exec admin-ui which node` finding
+# nothing is the test.
+COPY --from=frontend /build/dist/frontend/browser /app/swingbot/admin/static/app
 
 # Default command runs the bot; docker-compose.yml overrides this to
 # `python admin_ui.py` for the admin service, from the same image.

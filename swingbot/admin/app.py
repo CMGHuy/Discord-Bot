@@ -86,7 +86,7 @@ from .helpers import (
     _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
     _clear_admin_log, _write_env_text, get_versions, settings_diff,
     append_settings_audit, read_settings_audit, import_env_text,
-    _load_or_create_secret_key,
+    build_settings_export_text, _load_or_create_secret_key,
 )
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -340,6 +340,50 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 @app.route("/", methods=["GET"])
 @require_auth
 def index():
+    """The front door — whichever UI `ADMIN_UI` says owns it (NG53).
+
+    The flag decides this one thing. Every Jinja page stays mounted in both
+    modes, this one included: `/dashboard` below is its own URL, and it is
+    what makes rolling back a restart rather than a rebuild or a deploy.
+
+    `index` stays the endpoint `url_for` resolves to `/`, which several
+    redirects (login, and every `redirect(url_for("index", ...))` in this
+    module) depend on — hence a separate view for the alias rather than a
+    second `@app.route` on this one, which would make `url_for("index")`
+    build `/dashboard` and quietly move where logging in lands you.
+    """
+    # Imported inside the function: `spa` is registered at the bottom of this
+    # module (it needs `app` to exist), so a module-level import here would
+    # be circular.
+    from . import spa as _spa_module
+
+    if _spa_module.serves_root():
+        # The SPA has no route of its own at "/" -- its six workspaces are
+        # registered individually (spa.py) -- so the flag is honoured by
+        # sending the browser to the default workspace. A redirect rather
+        # than serving index.html here, so the URL in the address bar is one
+        # the SPA's router actually owns; landing on "/" and having the
+        # router rewrite it is the version that breaks the back button.
+        # Endpoint is bare `spa_cockpit`: spa.register() adds the workspace
+        # rules to the app directly, not to the blueprint, so there is no
+        # `spa.` prefix on this one.
+        return redirect(url_for("spa_cockpit"))
+    return _dashboard_page()
+
+
+@app.route("/dashboard", methods=["GET"])
+@require_auth
+def dashboard_page():
+    """The Jinja dashboard's own URL, reachable in either mode.
+
+    Added by NG53 so that turning the SPA on does not make one Jinja page
+    unreachable while the other eleven stay up — the acceptance gate walks
+    all twelve, and a rollback that needs a redeploy is not a rollback.
+    """
+    return _dashboard_page()
+
+
+def _dashboard_page():
     """Full Dashboard page.
 
     Renders the auto-refreshing fragment inline for first paint, and -- unlike
@@ -509,13 +553,11 @@ def save_settings():
 @app.route("/settings/export", methods=["GET"])
 @require_auth
 def settings_export():
-    existing = _read_env_values()
-    lines = []
-    for f in config.FIELDS:
-        if f.sensitive:
-            continue  # omitted entirely, not masked -- an import must never accidentally blank a real secret
-        lines.append(f"{f.key}={existing.get(f.key, f.default)}")
-    body = "\n".join(lines) + "\n"
+    # Body built by helpers.build_settings_export_text so this route and
+    # /api/v1/system/settings/export cannot drift apart during the migration
+    # (NG15). Sensitive fields are omitted there, not masked -- an import must
+    # never accidentally blank a real secret.
+    body = build_settings_export_text()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return Response(
         body, mimetype="text/plain",
@@ -737,6 +779,30 @@ def _trade_for_levels(trade_id: str):
     return TradeLog().get_trade_by_id(trade_id)
 
 
+def trade_levels(trade: dict) -> dict:
+    """The plan lines a chart draws, from a trade record.
+
+    Shared with /api/v1/market/ohlcv (NG17). Two charts read these keys
+    during the migration; a second mapping here would let one of them draw a
+    take-profit line at the wrong price, which looks entirely plausible.
+    """
+    return {"entry": trade.get("entry"), "stop_loss": trade.get("stop_loss"),
+            "tp1": trade.get("take_profit"), "tp2": trade.get("target2_price"),
+            "direction": trade.get("direction")}
+
+
+def ohlcv_bars(df) -> list:
+    """DataFrame rows -> the bar objects a chart consumes. One definition,
+    shared with /api/v1/market/ohlcv so the Angular and Jinja charts cannot
+    disagree about rounding or field names."""
+    return [
+        {"time": idx.strftime("%Y-%m-%d"), "open": round(float(r["Open"]), 4),
+         "high": round(float(r["High"]), 4), "low": round(float(r["Low"]), 4),
+         "close": round(float(r["Close"]), 4), "volume": float(r["Volume"])}
+        for idx, r in df.iterrows()
+    ]
+
+
 @app.route("/api/trade-history", methods=["GET"])
 def api_trade_history():
     """One page of the dashboard's Trade History table (plan v9, H2).
@@ -837,18 +903,8 @@ def api_ohlcv(ticker):
     if trade_id:
         t = _trade_for_levels(trade_id)
         if t:
-            levels = {"entry": t.get("entry"), "stop_loss": t.get("stop_loss"),
-                      "tp1": t.get("take_profit"), "tp2": t.get("target2_price"),
-                      "direction": t.get("direction")}
-    payload = {
-        "ticker": ticker,
-        "bars": [
-            {"time": idx.strftime("%Y-%m-%d"), "open": round(float(r["Open"]), 4),
-             "high": round(float(r["High"]), 4), "low": round(float(r["Low"]), 4),
-             "close": round(float(r["Close"]), 4), "volume": float(r["Volume"])}
-            for idx, r in df.iterrows()
-        ],
-    }
+            levels = trade_levels(t)
+    payload = {"ticker": ticker, "bars": ohlcv_bars(df)}
     if levels is not None:
         payload["levels"] = levels
     return Response(json.dumps(payload), mimetype="application/json")
@@ -857,22 +913,15 @@ def api_ohlcv(ticker):
 @app.route("/trades/export.csv", methods=["GET"])
 @require_auth
 def export_trades_csv():
-    all_trades = _trades().get_trades(status=None, limit=None)
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=[
-        "id", "ticker", "strategy", "horizon_key", "direction",
-        "confidence_level", "confidence_label", "confidence_score",
-        "entry", "stop_loss", "take_profit", "target2", "risk_reward_ratio",
-        "status", "opened_at", "closed_at", "exit_price", "close_reason",
-    ], extrasaction="ignore")
-    writer.writeheader()
-    for t in (all_trades or []):
-        writer.writerow(t)
-    csv_bytes = output.getvalue().encode("utf-8")
+    # Serialisation lives in swingbot.admin.trade_export so this route and
+    # /api/v1/trades/export.csv cannot drift -- sub-project 6's cutover walk
+    # byte-compares the two.
+    from swingbot.admin.trade_export import FILENAME, trades_csv_bytes
+    csv_bytes = trades_csv_bytes(_trades().get_trades(status=None, limit=None))
     return Response(
         csv_bytes,
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=trades.csv"},
+        headers={"Content-Disposition": f"attachment; filename={FILENAME}"},
     )
 
 
@@ -1042,14 +1091,18 @@ def stop_scan():
     return redirect(url_for("index", msg=msg, ok=ok))
 
 
-@app.route("/scan/status", methods=["GET"])
-@require_auth
-def scan_status():
-    """Return JSON indicating whether a scan trigger is pending, whether
-    the automatic background scan loop is currently paused, whether a
-    scan is actively running right now, and whether the bot process
-    itself appears to be alive (based on the heartbeat file written by
-    session_scan on every tick -- see scanning.py)."""
+def scan_status_payload() -> dict:
+    """Whether a scan trigger is pending, whether the automatic background
+    scan loop is paused, whether a scan is running right now, and whether the
+    bot process appears alive (from the heartbeat file session_scan writes on
+    every tick -- see commands/scanning.py).
+
+    A plain dict rather than a Response so /api/v1/system/scan can serve the
+    same payload (NG16). The flag-file names this reads must match the ones
+    the BOT reads; a mismatch is invisible in the UI, which simply shows
+    "not paused" forever. tests/admin/test_api_v1_system_scan.py pins
+    these constants against commands/scanning.py's.
+    """
     pending = os.path.exists(TRIGGER_FILE)
     mtime = None
     if pending:
@@ -1089,17 +1142,20 @@ def scan_status():
         except (OSError, json.JSONDecodeError):
             pass
 
-    return Response(
-        json.dumps({
-            "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
-            "running": running,
-            "bot_alive": bot_alive,
-            "bot_last_seen": bot_last_seen,
-            "bot_session_active": bot_session_active,
-            "bot_scan_paused": bot_scan_paused,
-        }),
-        mimetype="application/json",
-    )
+    return {
+        "pending": pending, "triggered_at": mtime, "paused": paused, "paused_at": paused_at,
+        "running": running,
+        "bot_alive": bot_alive,
+        "bot_last_seen": bot_last_seen,
+        "bot_session_active": bot_session_active,
+        "bot_scan_paused": bot_scan_paused,
+    }
+
+
+@app.route("/scan/status", methods=["GET"])
+@require_auth
+def scan_status():
+    return Response(json.dumps(scan_status_payload()), mimetype="application/json")
 
 
 @app.route("/scan/pause", methods=["POST"])
@@ -1176,3 +1232,16 @@ from . import api as _api  # noqa: E402
 app.register_blueprint(_api.api)
 from . import pages as _pages  # noqa: E402
 app.register_blueprint(_pages.pages)
+# api_v1 registers itself (blueprint + its two error handlers) rather than
+# exposing a blueprint to register here: its 404 handler must be app-level,
+# because an unmatched URL never reaches a blueprint. Imported last -- it
+# imports require_auth_json from api.py, so that module must already exist.
+from . import api_v1 as _api_v1  # noqa: E402
+_api_v1.register(app)
+# The SPA's own routes -- an allow-list of six workspace prefixes plus its
+# asset directory. Registered last so a workspace name can never shadow an
+# API route; /cockpit and /api/v1/cockpit are different rules, but the
+# ordering makes that a property of this file rather than of Werkzeug's
+# matcher.
+from . import spa as _spa  # noqa: E402
+_spa.register(app)

@@ -1,5 +1,19 @@
 """Settings v2: diff preview, audit trail, export/import profiles,
-changed-only filter + resets."""
+changed-only filter + resets.
+
+NG19 TRIAGE — **MIXED · split at cutover.**
+
+KEEP UNCHANGED: the four helper-level tests calling `settings_diff` and
+`import_env_text` directly (masking, changed-only, known-vs-unknown keys).
+Those functions are what /api/v1/system/settings routes through rather than
+reimplements -- NG15 adapts JSON to their mapping shape precisely so there is
+one definition of "blank means no change".
+
+DELETE: the route and page-render tests (`..._route_renders_diff_table`,
+`..._page_shows_recent_changes_panel`, `..._page_has_changed_only_toggle...`).
+Their behavioural content is in test_api_v1_system_settings.py, which pins
+more than these do -- masked values never being written back, omitted keys
+left alone, and a checkbox not being turned off by its own absence."""
 import json
 import os
 

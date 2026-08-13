@@ -25,9 +25,9 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
-> - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`)
-> - **Completed:** none — specs written (v11–v15), no implementation started.
-> - **Next:** NG1.
+> - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
+> - **Completed:** NG1–NG7. Phase 0 done; Phase 1 in progress (trades surface complete). Read each task's outcome note before the next.
+> - **Next:** NG8 — trade note (PUT).
 
 ## Global Constraints
 
@@ -38,6 +38,7 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 - **Zero runtime CDN calls.** Fonts and charts are self-hosted. A network request to a third-party host is a defect.
 - **`visible` columns carry no order.** The data table renders in `columns` order. Do not add an ordering input at any call site.
 - **Colour rules (spec 3):** green/red = money only · amber = caution · blue = interactive only · everything else greyscale. Quality chips (confidence, tier) are greyscale, not green/amber/red.
+- **Merge to `main` once per phase, not per task.** Work accumulates on `worktree-angular-migration` and fast-forwards to `main` at each phase boundary — Phase 1 lands after NG19, Phase 2 after NG24, and so on. Rationale: a phase is the smallest unit that leaves `main` in a coherent state, and `main` is shared with concurrent sessions. Check `git status` on the main tree before merging; other sessions leave it dirty.
 - Windows dev machine: `python`, never `python3`.
 - `python scripts/testrun.py full` green (`0 failed`) before each commit; `... file tests/admin` while iterating. Conventional commits, one per task, `git add <explicit paths>` — never `-A`.
 - New docs follow the `-vN` naming convention in `docs/claude/working-conventions.md`.
@@ -75,11 +76,15 @@ tests/admin/test_api_v1_contract.py      the API contract gate                 (
 
 **Blocks:** every Trades endpoint. Spec v11 Decision 2 — a collision found later invalidates all of them.
 
-- [ ] Trace how IDs are allocated in `plans.json` and `trades.json`
-- [ ] Determine whether the two ID spaces can collide
-- [ ] If they can: adopt `plan:<id>` / `trade:<id>` prefixing and record it in spec v11 as an amendment
-- [ ] Add a test asserting the chosen invariant against real fixture data
-- [ ] **Verify:** `python scripts/testrun.py file tests/admin/test_id_uniqueness.py`
+- [x] Trace how IDs are allocated in `plans.json` and `trades.json`
+- [x] Determine whether the two ID spaces can collide
+- [x] If they can: adopt `plan:<id>` / `trade:<id>` prefixing and record it in spec v11 as an amendment
+- [x] Add a test asserting the chosen invariant against real fixture data
+- [x] **Verify:** `python scripts/testrun.py file tests/admin/test_id_uniqueness.py`
+
+**Outcome:** IDs **cannot** collide — plan ids are 36-char dashed uuid4, trade ids are 16-char dash-free alphanumeric; disjoint by length and by charset independently. No prefixing. Pinned by `tests/admin/test_id_uniqueness.py`.
+
+**Second finding, larger than the one this task was looking for:** the two stores **overlap**. A filled plan stays in `plans.json` as `ACTIVE` while `log_trade()` writes a linked row into `trades.json`, so concatenating the two row sets double-counts every closed v2 position. The union is a **join**: all plans (authoritative for the five statuses), enriched by their linked trade record, plus trades where `plan_id is None` (legacy v1). Recorded as an amendment in spec v11; **NG5 rewritten accordingly**.
 
 ### Task NG2: `api_v1` package skeleton
 
@@ -87,13 +92,18 @@ tests/admin/test_api_v1_contract.py      the API contract gate                 (
 
 **Produces:** the blueprint, error helper and auth decorator every later task uses.
 
-- [ ] Blueprint at `/api/v1`
-- [ ] `error(code, message, status)` returning `{"error": {"code", "message"}}`
-- [ ] `require_auth_json` reused from `api.py` — do not write a second auth path
-- [ ] `collection(items, total, page, per_page)` helper; `per_page` caps at 200
-- [ ] Unknown filter parameter → `400 invalid` (spec v11: never silently ignore)
-- [ ] ISO-8601 UTC serialisation helper for all timestamps
-- [ ] **Verify:** `GET /api/v1/` unknown route returns the JSON error shape, not HTML
+- [x] Blueprint at `/api/v1`
+- [x] `error(code, message, status)` returning `{"error": {"code", "message"}}`
+- [x] `require_auth_json` reused from `api.py` — do not write a second auth path
+- [x] `collection(items, total, page, per_page)` helper; `per_page` caps at 200
+- [x] Unknown filter parameter → `400 invalid` (spec v11: never silently ignore)
+- [x] ISO-8601 UTC serialisation helper for all timestamps
+- [x] **Verify:** `GET /api/v1/` unknown route returns the JSON error shape, not HTML
+
+**Two constraints discovered here that NG4+ must respect:**
+
+1. **`api_v1/__init__.py` imports nothing from `swingbot.admin`.** Importing `require_auth_json` there deadlocked on the circular import `app.py` documents (api.py → app.py → bottom-of-app.py → api.py). **Endpoint modules** import `require_auth_json` from `swingbot.admin.api` instead — they are imported from app.py's bottom, where the ordering is already sound. `register(app)` mounts the blueprint *and* the two error handlers, because the 404 handler must be app-level (an unmatched URL never reaches a blueprint).
+2. **Tests must import the module, not its names** — `from swingbot.admin import api_v1 as v1`, then `v1.ApiError`. `importlib.reload` in conftest mutates the module dict in place, so a bound `ApiError` goes stale and `pytest.raises` silently stops matching. Documented in `tests/admin/conftest.py`. Each new `api_v1.*` endpoint module must also be added to that file's `_RELOAD_MODULES`, or its routes get re-added to a blueprint that already has them.
 
 ### Task NG3: Contract test harness
 
@@ -101,10 +111,14 @@ tests/admin/test_api_v1_contract.py      the API contract gate                 (
 
 **Produces:** the gate that keeps the hand-written TS interfaces honest.
 
-- [ ] Helper asserting exact top-level key set **and value types** of a response
-- [ ] Helper asserting the error shape and status of a failure path
-- [ ] One passing case against NG2's error handler
-- [ ] **Verify:** `python scripts/testrun.py file tests/admin/test_api_v1_contract.py`
+- [x] Helper asserting exact top-level key set **and value types** of a response
+- [x] Helper asserting the error shape and status of a failure path
+- [x] One passing case against NG2's error handler
+- [x] **Verify:** `python scripts/testrun.py file tests/admin/test_api_v1_contract.py`
+
+**Where it lives:** helpers in `tests/admin/api_v1_contract.py` (not `test_*`, so pytest does not collect it); its own self-tests in `tests/admin/test_api_v1_contract.py`, each exercising an assertion in both directions — a contract helper that cannot fail would make every endpoint test vacuous.
+
+**`assert_shape` rejects undeclared keys as loudly as missing ones.** An endpoint returning a field nobody declared is an undocumented contract change the SPA will grow a dependency on. It also excludes `bool` from numeric types: `isinstance(True, int)` is `True`, so a naive check would let a boolean satisfy a price field — precisely the type drift spec v11 Decision 6 names as its residual risk.
 
 ---
 
@@ -116,42 +130,72 @@ Every task in this phase: add endpoints, add contract-test cases, change nothing
 
 **Files:** `api_v1/session.py`
 
-- [ ] `POST /api/v1/session` (login), `DELETE` (logout), `GET` (am I authenticated)
-- [ ] Reuse the existing session cookie and `pw_hash` check — no new auth mechanism
-- [ ] `GET /api/v1/health` returning `{ok, versions}` from `helpers.get_versions()`
-- [ ] Contract cases incl. `401` body shape
-- [ ] **Verify:** `testrun.py file tests/admin`
+- [x] `POST /api/v1/session` (login), `DELETE` (logout), `GET` (am I authenticated)
+- [x] Reuse the existing session cookie and `pw_hash` check — no new auth mechanism
+- [x] `GET /api/v1/health` returning `{ok, versions}` from `helpers.get_versions()`
+- [x] Contract cases incl. `401` body shape
+- [x] **Verify:** `testrun.py file tests/admin`
+
+**Correction to NG2's plan text, found by the contract assertions:** `require_auth_json` from `api.py` could **not** be reused directly. It returns `{"error": "auth"}` — `error` as a bare string — which is not v1's `{"error": {"code", "message"}}`. The *predicate* is shared (`_session_authenticated` plus the same credential comparison, imported not reimplemented); only the failure rendering differs. v1's decorator lives in `swingbot/admin/api_v1/auth.py`. The legacy decorator is left untouched because `dashboard.js` branches on its body today. Pinned by `test_v1_and_legacy_401_bodies_deliberately_differ`.
+
+**`GET /api/v1/session` is deliberately not auth-guarded** — it *is* the question "am I logged in", so 401-ing an unauthenticated caller makes it unanswerable to the only caller that needs it. Returns `200 {"authenticated": false}`.
+
+**v1 401s send no `WWW-Authenticate` header**, or the browser's native Basic dialog appears over the SPA.
+
+**Endpoint modules are imported inside `register()`**, not at `api_v1/__init__.py`'s top — see NG2's constraint 1. Each also joins `_RELOAD_MODULES` in `tests/admin/conftest.py`.
 
 ### Task NG5: Trades collection — the union
 
 **Files:** `api_v1/trades.py`
 
-**The load-bearing endpoint.** Spec v11 Decision 2.
+**Done.** Implemented in `swingbot/admin/api_v1/trades.py`; row contract pinned in `tests/admin/test_api_v1_trades.py::TRADE_ROW`.
 
-- [ ] Project `_plan_rows()` and `_query_closed_trades()` onto one row shape
-- [ ] `status` filter spans `PENDING|ACTIVE|PARTIAL|CLOSED|CANCELLED`; absent = all
-- [ ] Fields absent on one side are `null` — do not synthesise
-- [ ] Filters: `status`, `ticker`, `strategy`, `horizon`, `has_note`; `sort`, `page`, `per_page`
-- [ ] `total` = post-filter, pre-slice
-- [ ] Numbers stay numbers — no pre-formatted strings
-- [ ] **Verify:** contract test asserts the row shape from both stores
+**Corrections to spec v11 found while building it:**
+- The function the spec names as `_query_closed_trades()` in `app.py:740` is really **`dashboard.query_closed_trades()`**, and it is *closed-only and mode-scoped* — tuned for the dashboard's Trade History table, not reusable for a five-status collection. What was reused instead: `dashboard.closed_pnl`, `closed_r`, and the `prefetch_prices` + `get_current_price` batching idiom from `build_open_trade_views`.
+- **Orphaned linked trades** (a `plan_id` naming a plan that no longer exists) are included as legacy rows, not dropped. Losing real trading history is a worse failure than showing a row unjoined. The join condition is "trades no plan claimed", which covers `plan_id is None` and orphans in one branch.
+- **Live prices are fetched after slicing, for the page only** — one batched round trip for at most `per_page` tickers. Prefetching before slicing would fetch every ticker in the store on every request.
+
+**A third reload trap, worse than NG2's.** `app.py` is reloaded *before* `api_v1` in conftest, and `app.py`'s body calls `register(app)` — so Flask captured `ApiError` class **A** in its error handler while the later-reloaded parse helpers raised class **B**. Every 400 escaped its handler as a 500. Fixed by removing `api_v1.*` from `_RELOAD_MODULES` entirely and making its modules reach `app.py` through **module attribute access** (`_app.ADMIN_USERNAME`) rather than binding names at import. Any future `api_v1` module must follow that rule and must not bake an import-time path.
+
+**Original task text:** Spec v11 Decision 2 **and its NG1 amendment** — read the amendment, not just the decision. The stores overlap; a concatenation double-counts.
+
+- [x] Build the union as a **join, structurally**: all plans from `_plan_rows()`, each enriched by its `trades.json` row matched on `plan_id`, **plus** trades where `plan_id is None`. Not a concatenate-then-dedup.
+- [x] Map legacy v1 statuses: `open → ACTIVE`, `win|loss|closed → CLOSED`. Do not synthesise `PENDING`/`PARTIAL`/`CANCELLED` for them.
+- [x] `status` filter spans `PENDING|ACTIVE|PARTIAL|CLOSED|CANCELLED`; absent = all
+- [x] Fields absent on one side are `null` — do not synthesise
+- [x] Filters: `status`, `ticker`, `strategy`, `horizon`, `has_note`; `sort`, `page`, `per_page`
+- [x] `total` = post-filter, pre-slice
+- [x] Numbers stay numbers — no pre-formatted strings
+- [x] **Verify:** a fixture with one filled v2 plan (present in *both* stores) yields **exactly one** row — the regression NG1 found. Plus a legacy `plan_id is None` trade, seeded explicitly.
 
 ### Task NG6: Trade detail
 
 **Files:** `api_v1/trades.py`
 
-- [ ] `GET /api/v1/trades/{id}` resolving against both stores
-- [ ] `404 not_found` for unknown ids
-- [ ] Decide (spec v11 open question 1) whether detail extends the list row or is a distinct shape; record the answer in the spec
+- [x] `GET /api/v1/trades/{id}` resolving against both stores
+- [x] `404 not_found` for unknown ids
+- [x] Decide (spec v11 open question 1) whether detail extends the list row or is a distinct shape; record the answer in the spec
+
+**Spec v11 open question 1, answered: detail EXTENDS the list row**, adding exactly one key — `detail` — holding the heavy fields (status history, legs, quality/confidence breakdowns, source lists, plan execution parameters). The SPA's store already holds list rows; a detail response with a different shape for the same seven columns would force it to reconcile two representations of one position. `test_detail_row_fields_match_the_list_exactly` pins the equivalence.
+
+**Routing uses NG1's invariant** — a 36-char four-dash id is a plan — so detail loads *one* store, not both. `_looks_like_a_plan_id` in `trades.py` is where that lives; if `test_id_uniqueness.py` ever fails, that function breaks first.
+
+**`detail.trade_id` is exposed deliberately:** the plan id is the public identity, but close/cancel act on the underlying trade record and the SPA would otherwise have no way to name it.
 
 ### Task NG7: Trade commands
 
 **Files:** `api_v1/trades.py`
 
-- [ ] `POST /{id}/close` (optional manual price — preserve the `manual_close_notify.json` path), `POST /{id}/cancel`, `DELETE /{id}`
-- [ ] `POST /trades/clear-open`, `POST /trades/clear-history`
-- [ ] Reuse the existing handlers' logic; do not reimplement close semantics
-- [ ] **Verify:** behavioural tests rewritten from the Jinja equivalents (see NG19)
+- [x] `POST /{id}/close` (optional manual price — preserve the `manual_close_notify.json` path), `POST /{id}/cancel`, `DELETE /{id}`
+- [x] `POST /trades/clear-open`, `POST /trades/clear-history`
+- [x] Reuse the existing handlers' logic; do not reimplement close semantics
+- [x] **Verify:** behavioural tests rewritten from the Jinja equivalents (see NG19)
+
+**`DELETE` refuses plan ids (422), and that is a parity decision, not an omission.** The Jinja UI has no plan-delete route — only `/trades/<id>/delete`. A plan is a lifecycle record whose `CANCELLED`/`CLOSED` states exist to record how it ended; erasing one destroys that history, and deleting only its linked trade row would leave a position with no execution behind it. Supporting it needs a `PlanStore.delete()` in core, which this plan's Global Constraints rule out. **Open question for sub-project 5:** should the Trades workspace offer plan deletion at all? If yes, it needs its own decision and a core change.
+
+**No manual exit price.** The task text mentions one, but `TradeLog.close_trade_manual()` takes only a reason — the Jinja UI has never accepted an exit price on a manual close, and adding one would change realised-P&L semantics. Parity kept; flag for sub-project 5 if the UI wants it.
+
+**Pre-existing bug left alone (out of scope, worth knowing):** `_queue_manual_close_notify` writes plan transitions with uppercase statuses, but `scanning/embeds.notify_closed_trades()` only recognises lowercase `win|loss|closed` — so plan-level entries are silently skipped by the consumer. Documented in `pages.py` as a known gap from an earlier task. v1 reproduces the existing write behaviour rather than fixing it; **sub-project 6's acceptance walk should decide whether to fix it.**
 
 ### Task NG8: Trade note
 
@@ -551,12 +595,26 @@ Spec v12 Decision 2 — load-bearing, so check rather than assume.
 
 Spec v15 Decision 2. Do not ship Release A until every item passes.
 
-- [ ] Re-derive route coverage from `grep -rn "\.route(" swingbot/admin/*.py` — any unmapped route **blocks**
-- [ ] Walk every Jinja page against the SPA: settings round trip (export→edit→import→SIGHUP), bot restart without the Docker socket, all destructive actions, all four scan controls **and the flag files they leave**, manual-price close incl. `manual_close_notify.json`, CSV byte-compare
-- [ ] Degraded mode: block `/api/v1/events`, confirm every workspace stays correct
-- [ ] `python scripts/testrun.py full` → `0 failed`
+- [x] Re-derive route coverage — nothing unmapped. Done from the live `app.url_map`, not the grep, which cannot see `spa.py`'s `add_url_rule` routes; one route (`GET /dashboard`, NG53) had appeared since the NG52 audit. Spec Appendix B1.
+- [x] Walk every Jinja page against the SPA — walked in a browser on synthetic fixtures. Found the SPA did not load at all (`<base href="/">` vs the `/app/` mount; fixed + regression test) and two open defects: five of six status chips return nothing, and the Export CSV link carries a query the endpoint ignores. Settings round trip, bot restart, destructive actions, all four scan controls' flag files and the CSV byte-compare all pass. Manual-price close does not exist in this codebase. Spec Appendix B2.
+- [x] Degraded mode: block `/api/v1/events`, confirm every workspace stays correct — all six correct; indicator escalates LIVE → CONNECTING → POLLING in ~7.5s. Spec Appendix B3.
+- [x] A5's browser half at 1280px (owed by NG52, closed here) — fonts load and A5's digit estimate held; the Trades table at all 24 columns scrolled the whole document (1877px at a 1280px viewport) instead of itself. Fixed with a scroller in `DataTable`. Spec Appendix B6.
+- [x] `python scripts/testrun.py full` → `0 failed` — 1537 passed, 136 skipped, 1 xfailed. Frontend too (not named in the gate, run anyway): 294 passed, and 7 pre-existing unhandled rejections fixed. Spec Appendix B4.
 
 ### Task NG55: Release A
+
+**NG54's gate passes — unblocked.** Its two defects (the status chips and the
+Export CSV query) are fixed; see spec Appendix B2 and B5.
+
+Two things to do rather than assume, both from what NG54 found:
+
+- **Re-run the route derivation from the live `url_map`** (spec B1's command,
+  not the grep) immediately before shipping. One route appeared in the five
+  days between the NG52 audit and the gate.
+- **Rebuild and reinstall the bundle, then load one page in a browser.**
+  `static/app/` is gitignored, so what the suite validates is never the
+  artifact that ships — which is exactly how NG54's blocker survived 1544
+  passing tests.
 
 **Files:** `VERSION.json`
 

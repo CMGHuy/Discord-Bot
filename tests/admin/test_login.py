@@ -1,6 +1,18 @@
 """Session-cookie login page (/login, /logout) -- coexists with the
 existing Basic Auth check (see conftest.py's `auth` fixture) rather than
-replacing it. See swingbot/admin/app.py's Auth section."""
+replacing it. See swingbot/admin/app.py's Auth section.
+
+NG19 TRIAGE — **MIXED · DELETE at cutover, coverage migrated.** `GET /login`
+is a recorded drop (the SPA renders its own login view), so the page-render
+and `next`-param tests go with it -- including the open-redirect one, which
+protects a parameter that ceases to exist.
+
+Everything about the session itself is behavioural and now has a v1
+successor in test_api_v1_session.py: login, wrong password, logout, Basic
+Auth coexisting with the cookie, and -- added during this triage --
+`test_a_session_stops_working_when_the_password_changes`. That last one was
+the only assertion in this directory whose v1 equivalent was missing
+entirely, and it is a security property, not a UI one."""
 
 
 def test_login_page_renders_without_auth(client):
@@ -20,7 +32,7 @@ def test_login_with_correct_credentials_sets_session_and_redirects(client):
     assert r.status_code == 302
     assert r.headers["Location"] == "/"
     # Session cookie now authenticates subsequent requests with no auth header at all.
-    r2 = client.get("/")
+    r2 = client.get("/dashboard")
     assert r2.status_code == 200
 
 
@@ -50,7 +62,7 @@ def test_login_rejects_open_redirect_next(client):
 
 def test_logout_clears_session(client):
     client.post("/login", data={"username": "admin", "password": "admin"})
-    assert client.get("/").status_code == 200
+    assert client.get("/dashboard").status_code == 200
 
     r = client.post("/logout")
     assert r.status_code == 302
@@ -63,7 +75,7 @@ def test_logout_clears_session(client):
 
 def test_session_invalidated_when_password_changes(client, admin_app):
     client.post("/login", data={"username": "admin", "password": "admin"})
-    assert client.get("/").status_code == 200
+    assert client.get("/dashboard").status_code == 200
 
     import swingbot.admin.app as admin_app_module
     admin_app_module.ADMIN_PASSWORD = "rotated"
@@ -78,7 +90,10 @@ def test_session_invalidated_when_password_changes(client, admin_app):
 def test_basic_auth_still_works_alongside_session_login(client, auth):
     """Existing Basic-Auth callers (scripts, this suite's own fixture) are
     unaffected by the new session check -- coexistence, not replacement."""
-    r = client.get("/", headers=auth)
+    # /dashboard rather than /: since NG53 the root's answer depends on the
+    # ADMIN_UI flag and on whether a bundle is built, and neither is what
+    # this test is about.
+    r = client.get("/dashboard", headers=auth)
     assert r.status_code == 200
 
 

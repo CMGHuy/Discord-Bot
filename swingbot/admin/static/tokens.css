@@ -2,26 +2,47 @@
    Design tokens — the single visual source of truth.
    chart_style.py mirrors the color values (THEME dict); a unit
    test (tests/test_chart_theme.py) keeps the two in sync.
+
+   NG38 swapped the VALUES to the terminal palette of spec
+   `2026-08-08-admin-design-system-design.md` Decision 3, and
+   deliberately kept the NAMES. Every Jinja template binds to
+   these names and Jinja is not deleted until NG57, so renaming
+   here would break the running UI to save an edit that NG57
+   deletes anyway. `frontend/src/styles/tokens.css` is the SPA's
+   copy, under the spec's own names; the two carry the same
+   colours by hand until Jinja goes.
+
+   Three colour rules this palette exists to enforce:
+     green/red  P&L DIRECTION only — never decoration, never a
+                status that is not money.
+     amber      caution: risk near cap, scanning paused, stale.
+     blue       interactive only: links, focus, selection.
+                Never data.
+   Everything else is greyscale. `--purple` is the one exception
+   and survives for charts alone: a TP2 line has to be told apart
+   from TP1 at a glance, and greyscale cannot do that over
+   candles. It is not for UI use.
    ============================================================ */
 :root {
   color-scheme: dark;
-  /* --- Surfaces (TradingView-derived family) --- */
-  --bg-0: #0e1118;        /* page */
-  --bg-1: #131722;        /* panels / cards — matches chart background */
-  --bg-2: #1c2230;        /* raised: chips, hovers, inputs */
-  --border-1: #232734;    /* hairline borders / gridline family */
-  --border-2: #2a2e39;    /* stronger borders (chart spine family) */
+  /* --- Surfaces (terminal near-black family) --- */
+  --bg-0: #000000;        /* page */
+  --bg-1: #0a0a0a;        /* panels / cards — matches chart background */
+  --bg-2: #121212;        /* raised: chips, hovers, inputs */
+  --border-1: #1c1c1c;    /* hairline borders / gridline family */
+  --border-2: #2a2a2a;    /* stronger borders (chart spine family) */
   /* --- Text --- */
-  --text-1: #d1d4dc;      /* primary */
-  --text-2: #9aa0ac;      /* secondary */
-  --text-3: #787b86;      /* muted / fine print */
+  --text-1: #f0f0f0;      /* primary */
+  --text-2: #888888;      /* secondary */
+  --text-3: #666666;      /* muted / fine print */
+  --text-4: #444444;      /* row numbers, disabled */
   /* --- Semantics --- */
-  --accent: #2f7dfa;      /* actions, links, active nav (entry-line blue) */
-  --accent-soft: rgba(47, 125, 250, .14);
-  --up: #26a69a;  --up-soft: rgba(38, 166, 154, .14);
-  --down: #ef5350; --down-soft: rgba(239, 83, 80, .14);
-  --warn: #ffa726; --warn-soft: rgba(255, 167, 38, .14);
-  --purple: #ab47bc;      /* TP2 family */
+  --accent: #4d9fff;      /* actions, links, active nav — interactive ONLY */
+  --accent-soft: rgba(77, 159, 255, .14);
+  --up: #00d26a;  --up-soft: rgba(0, 210, 106, .14);
+  --down: #ff4d4d; --down-soft: rgba(255, 77, 77, .14);
+  --warn: #ffb020; --warn-soft: rgba(255, 176, 32, .14);
+  --purple: #ab47bc;      /* TP2 family — charts only, see note below */
   /* --- Type --- */
   --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;

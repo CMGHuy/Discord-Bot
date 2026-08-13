@@ -1,0 +1,36 @@
+{
+  "//": [
+    "Dev-only. `ng serve` on :4200 forwards these prefixes to the Flask admin",
+    "on :1234, so the browser sees one origin and the SPA's relative URLs work",
+    "unchanged between `ng serve` and the container.",
+    "",
+    "Same-origin is not cosmetic here: the API authenticates by session cookie,",
+    "and EventSource cannot send headers. A cross-origin dev setup would need",
+    "CORS plus SameSite=None, i.e. a development environment exercising a",
+    "different auth path from production -- which is where a whole class of",
+    "'works locally' bugs comes from.",
+    "",
+    "/static is proxied as well as /api because the SPA loads both vendored",
+    "fonts from Flask (see src/styles/fonts.css) rather than bundling them.",
+    "Without it, `ng serve` renders in the fallback system font and nobody",
+    "notices until a screenshot looks wrong.",
+    "",
+    "This file is NEVER referenced from docker-compose.yml. The container",
+    "serves the built bundle from Flask; there is no ng serve in production,",
+    "and a proxy config that leaked into the image would be a second, silent",
+    "routing layer.",
+    "",
+    "Start it with: npm start  (see angular.json's serve.options.proxyConfig)",
+    "and have `python admin_ui.py` running alongside."
+  ],
+  "/api": {
+    "target": "http://localhost:1234",
+    "secure": false,
+    "changeOrigin": false
+  },
+  "/static": {
+    "target": "http://localhost:1234",
+    "secure": false,
+    "changeOrigin": false
+  }
+}
