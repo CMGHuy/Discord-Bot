@@ -12,6 +12,26 @@
 html,
 body {
   height: 100%;
+  /* SR23, the overflow guard. Two halves, and BOTH are needed.
+   *
+   * `overflow-x: hidden` only hides the symptom -- the page stops scrolling
+   * sideways, and whatever was too wide is now silently cut off instead.
+   * `min-width: 0` on the grid child below is the actual fix: a grid item
+   * defaults to `min-width: auto`, which means "never shrink below my
+   * content", so one wide table stretches its parent and every ancestor
+   * rather than scrolling inside its own box.
+   *
+   * Keeping only the hidden would leave content unreachable; keeping only
+   * the min-width would let a genuinely un-scrollable element push the page.
+   */
+  overflow-x: hidden;
+}
+
+/* The workspace is a grid child of the shell. Without this it refuses to be
+ * narrower than its widest descendant, and the tables' own `overflow-x: auto`
+ * containers never get the chance to scroll. */
+.workspace {
+  min-width: 0;
 }
 
 body {

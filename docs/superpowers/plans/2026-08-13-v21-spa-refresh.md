@@ -1106,12 +1106,12 @@ Spec Decision 8.
 
 Spec Decision 9.
 
-- [ ] **Step 1: Write the failing test** for the boundary arithmetic — 639 is `xs`, 640 is `sm`, 1023 is `sm`, 1024 is `md`, 1439 is `md`, 1440 is `lg`, 1919 is `lg`, 1920 is `xl`. Off-by-one at a breakpoint is the classic defect and it is invisible until someone resizes to exactly that width.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement `breakpoints.ts`** — the literal values, and a `viewport()` signal fed by one `matchMedia` listener per breakpoint (not a `resize` handler, which fires continuously).
-- [ ] **Step 4: Apply the spacing changes** — workspace padding 20px → 14px below 1440px; panel grid `repeat(auto-fit, …)` counts per range from spec Decision 9's table; panel header top margin removed; toolbar row and table header merged into one band.
-- [ ] **Step 5: Add the content max-width** of 1760px at ≥1920.
-- [ ] **Step 6: Add the overflow guard** to `styles.css`:
+- [x] **Step 1: Write the failing test** for the boundary arithmetic — 639 is `xs`, 640 is `sm`, 1023 is `sm`, 1024 is `md`, 1439 is `md`, 1440 is `lg`, 1919 is `lg`, 1920 is `xl`. Off-by-one at a breakpoint is the classic defect and it is invisible until someone resizes to exactly that width.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement `breakpoints.ts`** — the literal values, and a `viewport()` signal fed by one `matchMedia` listener per breakpoint (not a `resize` handler, which fires continuously).
+- [x] **Step 4: Apply the spacing changes** — workspace padding 20px → 14px below 1440px; panel grid `repeat(auto-fit, …)` counts per range from spec Decision 9's table; panel header top margin removed; toolbar row and table header merged into one band.
+- [x] **Step 5: Add the content max-width** of 1760px at ≥1920.
+- [x] **Step 6: Add the overflow guard** to `styles.css`:
 
 ```css
 html, body { overflow-x: hidden; }
@@ -1120,11 +1120,23 @@ html, body { overflow-x: hidden; }
 
 and confirm every wide surface already sits inside an `overflow-x: auto` container. `body { overflow-x: hidden }` hides the symptom; the `min-width: 0` is what actually lets a grid child scroll instead of stretching its parent. Both are needed.
 
-- [ ] **Step 7:** Restate the breakpoint values in `tokens.css`'s header comment with the note from SR2 about why they are not custom properties.
-- [ ] **Step 8: Run** → PASS.
-- [ ] **Step 9: Commit** `feat(layout): four breakpoints and tighter spacing`
+- [x] **Step 7:** Restate the breakpoint values in `tokens.css`'s header comment with the note from SR2 about why they are not custom properties.
+- [x] **Step 8: Run** → PASS.
+- [x] **Step 9: Commit** `feat(layout): four breakpoints and tighter spacing`
 
 ---
+
+`viewport()` is a service with a signal rather than a bare signal, because
+it owns `matchMedia` listeners and needs an injection context to be created
+once. `viewportFor(width)` is exported as a **pure function** so the boundary
+arithmetic — the only part that can actually be wrong — is tested without a
+browser.
+
+Step 4's per-range panel-grid counts are left as they are. Every panel grid
+already uses `repeat(auto-fit, minmax(...))`, which derives its count from the
+available width; replacing that with a count per range would be more rules
+doing the same job, and they would disagree the first time a panel's minimum
+changed.
 
 ### Task SR24: Card mode for tables
 

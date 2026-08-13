@@ -120,4 +120,20 @@
   flex: 1;
   min-width: 0;
   padding: var(--space-20);
+  /* SR23. Below 1440 the screen is the constraint, not the eye: 20px of
+     chrome on each side of a table is a column's worth of data pushed off. */
+  min-width: 0;
+}
+
+/* SR23 -- spacing per range. The literals are repeated from breakpoints.ts
+   because @media cannot evaluate var(); the test in breakpoints.spec.ts is
+   what keeps the two honest. */
+@media (max-width: 1439px) {
+  .workspace { padding: var(--space-14); }
+}
+
+/* At the widest sizes the limit is the reader, not the screen: a table line
+   3000px long is one the eye loses its place on. */
+@media (min-width: 1920px) {
+  .workspace { max-width: 1760px; margin-inline: auto; }
 }
