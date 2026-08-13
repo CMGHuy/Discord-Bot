@@ -601,11 +601,11 @@ single spec is run with `npx ng test`, not vitest.
 
 Spec Decision 4. The one recorded exception to the valence rule.
 
-- [ ] **Step 1: Write the failing test** — assert `▲` with class `long` for `bullish`, `▼` with class `short` for `bearish`, `—` for `null`, and that `title` and `aria-label` both read `Long (bullish)` / `Short (bearish)`. The accessible name is not optional here: the glyph alone is the entire content of the cell, so without it the column is unreadable to a screen reader.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — `.long { color: var(--pos); } .short { color: var(--neg); }`, `font-weight: 700`, `font-size: var(--text-subhead)`, `cursor: help`.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(ui): direction as a glyph`
+- [x] **Step 1: Write the failing test** — assert `▲` with class `long` for `bullish`, `▼` with class `short` for `bearish`, `—` for `null`, and that `title` and `aria-label` both read `Long (bullish)` / `Short (bearish)`. The accessible name is not optional here: the glyph alone is the entire content of the cell, so without it the column is unreadable to a screen reader.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — `.long { color: var(--pos); } .short { color: var(--neg); }`, `font-weight: 700`, `font-size: var(--text-subhead)`, `cursor: help`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(ui): direction as a glyph`
 
 ---
 
@@ -617,9 +617,9 @@ Spec Decision 4. The one recorded exception to the valence rule.
 
 Spec Decision 4.
 
-- [ ] **Step 1: Write the failing test** — `Lv4 · 78` when both present; `Lv4` alone when `score` is null (**not** `Lv4 · —`); `—` when level is null; and the badge carries `quality-4` for level 4, `quality-1` for level 1.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, mapping level to `var(--quality-N)` via a class per level. Do not index a token name by string interpolation in the template — a level outside 1–5 would produce a `var(--quality-9)` that resolves to nothing and renders invisible text.
+- [x] **Step 1: Write the failing test** — `Lv4 · 78` when both present; `Lv4` alone when `score` is null (**not** `Lv4 · —`); `—` when level is null; and the badge carries `quality-4` for level 4, `quality-1` for level 1.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, mapping level to `var(--quality-N)` via a class per level. Do not index a token name by string interpolation in the template — a level outside 1–5 would produce a `var(--quality-9)` that resolves to nothing and renders invisible text.
 
 ```ts
 protected readonly band = computed(() => {
@@ -628,8 +628,8 @@ protected readonly band = computed(() => {
 });
 ```
 
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(ui): confidence as level and score`
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(ui): confidence as level and score`
 
 ---
 
