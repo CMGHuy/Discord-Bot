@@ -595,10 +595,10 @@ Spec v12 Decision 2 — load-bearing, so check rather than assume.
 
 Spec v15 Decision 2. Do not ship Release A until every item passes.
 
-- [ ] Re-derive route coverage from `grep -rn "\.route(" swingbot/admin/*.py` — any unmapped route **blocks**
+- [x] Re-derive route coverage — nothing unmapped. Done from the live `app.url_map`, not the grep, which cannot see `spa.py`'s `add_url_rule` routes; one route (`GET /dashboard`, NG53) had appeared since the NG52 audit. Spec Appendix B1.
 - [ ] Walk every Jinja page against the SPA: settings round trip (export→edit→import→SIGHUP), bot restart without the Docker socket, all destructive actions, all four scan controls **and the flag files they leave**, manual-price close incl. `manual_close_notify.json`, CSV byte-compare
 - [ ] Degraded mode: block `/api/v1/events`, confirm every workspace stays correct
-- [ ] `python scripts/testrun.py full` → `0 failed`
+- [x] `python scripts/testrun.py full` → `0 failed` — 1537 passed, 136 skipped, 1 xfailed. Frontend too (not named in the gate, run anyway): 294 passed, and 7 pre-existing unhandled rejections fixed. Spec Appendix B4.
 
 ### Task NG55: Release A
 

@@ -306,6 +306,7 @@ JavaScript calls — *(legacy JSON)*.
 | Jinja route | v1 endpoint | Angular successor |
 |---|---|---|
 | `GET /` (dashboard) | `GET /cockpit`, `GET /trades` | `/cockpit` |
+| `GET /dashboard` *(added after this audit, by NG53 — see B1)* | `GET /cockpit`, `GET /trades` | `/cockpit` |
 | `GET /dashboard/fragment` | — | none needed: the fragment poll is what the event stream replaces |
 | `GET /plans` *(pages)* | `GET /trades?status=planned` | `/trades` with the status chip |
 | `GET /plans/fragment` *(pages)* | — | as above; no fragment polling in the SPA |
@@ -480,3 +481,148 @@ counts, and the three surfaces wider than the expansion — Trades with all
 eighteen columns picked, Analytics' strategy registry, and the heatmap at ten
 horizons. Those belong to 2b's walk-through, at 1280px, and this appendix does
 not claim them.
+
+---
+
+# Appendix B — the NG54 acceptance gate
+
+Recorded 2026-08-13. Decision 2's four items, each with its result. **The gate
+is not passed:** 2a and 2d pass, 2b and 2c are untouched and are the only
+things between here and Release A.
+
+## B1 — 2a route coverage, re-derived — PASS, with one addition and a method fix
+
+### The method the spec asks for is not sufficient any more
+
+Decision 2a and NG57's own verify step both say to re-derive coverage from:
+
+```bash
+grep -rn "\.route(" swingbot/admin/*.py
+```
+
+That grep returns 60 rules. The application actually serves **121**. The
+difference is not all missing coverage — most of it is `/api/v1`, registered on
+a blueprint in `api_v1/__init__.py`, which the glob `swingbot/admin/*.py` does
+not descend into. But **12 of the missing rules are the SPA's own workspace
+routes**, and those are invisible to the grep for a different and more
+interesting reason: `spa.py:register()` mounts them with `app.add_url_rule()` in
+a loop, not with a `@route` decorator. A pattern that only sees decorators
+cannot see them.
+
+That matters beyond bookkeeping. `register()` deliberately *skips* any rule the
+Jinja UI already owns, so which SPA routes exist is a runtime outcome, not a
+readable fact — and the grep would report the same 60 rules whether the skip
+logic worked or was broken. Re-derive from the live map instead:
+
+```bash
+python -c "
+import os; os.environ.setdefault('ADMIN_PASSWORD','x')
+from swingbot.admin.app import app
+for r in sorted(app.url_map.iter_rules(), key=lambda r: r.rule):
+    print(r.rule, sorted(r.methods - {'HEAD','OPTIONS'}), r.endpoint)"
+```
+
+This is what B1 was derived from, and **NG57's verify step should use it too** —
+the grep there would pass on a build where the Jinja routes were deleted but
+some `add_url_rule` caller still served HTML.
+
+### The live map, classified
+
+121 rules: 33 `/api/v1/*`, 13 SPA (`/app/<path:filename>` plus 12 workspace
+rules), 1 Flask `static`, and 74 Jinja-era page, command and legacy-JSON rules.
+Every one of the 74 is in Appendix A's tables — **unmapped: none** — with one
+exception, below.
+
+Two rules confirm `spa.py:register()`'s documented collisions actually behave as
+its docstring claims, which is exactly what the grep could not have shown:
+
+| Rule | Endpoint | Reading |
+|---|---|---|
+| `/risk` | `risk_panel` *(Jinja)* | the skip fired; no duplicate rule was registered |
+| `/risk/<path:_rest>` | `spa_risk_sub` | the sub-route registered, as intended |
+| `/trades` | `spa_trades` | no Jinja rule for the bare path, so the SPA has it |
+| `/trades/<trade_id>` | `trade_detail` *(Jinja)* | Werkzeug ranks the narrower converter first, as documented |
+
+All six workspaces are present (`spa_cockpit`, `spa_trades`, `spa_analytics`,
+`spa_universe`, `spa_system`, and `spa_risk_sub`).
+
+### The one route added after the audit
+
+`GET /dashboard` → `dashboard_page`. It does not appear in Appendix A because
+it did not exist when A was written — it was added by **NG53** so the Jinja
+dashboard keeps a URL of its own once `/` hands over to the SPA, which is what
+makes the rollback a restart. Verified absent at `d1ddb95` (the audit commit)
+and present at HEAD.
+
+It is **mapped, not unmapped**: same successor as `/`, the `/cockpit`
+workspace. Its row has been added to A1's "Pages, replaced" so that table
+stands on its own.
+
+This is Decision 2a's own warning landing exactly as written — "routes added
+after 2026-08-08 will not be in that table, and they are exactly the ones most
+likely to be forgotten." One route, five days, one sub-project. It is worth
+assuming the same thing happens again between here and Release A, and re-running
+the live-map derivation immediately before NG55 rather than trusting this
+appendix.
+
+## B2 — 2b behaviour parity, walked — NOT DONE
+
+Not attempted. It needs both UIs running against the same data, and its list
+includes destructive actions — clear open trades, clear history, the killswitch
+— which must not be walked against real `data/`. It needs a decision about
+where it runs before it can run at all.
+
+Nothing here is blocked on code. What B1 removes from it is only the question
+"is anything unmapped"; every control still has to be exercised, plus the
+browser half of A5's 1280px check.
+
+## B3 — 2c degraded mode — NOT DONE
+
+Same reason: it is a browser check against a running pair. The unit-level half
+exists (`event-stream.spec.ts`, `connection.store.ts` and the shell's
+`connection-status.ts` all model the degraded state, and those specs pass in
+B4), but 2c asks whether every *workspace* stays correct with `/api/v1/events`
+blocked, and that is not a question a unit test answers.
+
+## B4 — 2d suite green — PASS, both suites
+
+```
+python scripts/testrun.py full   →  1537 passed, 136 skipped, 1 xfailed  in 84.5s
+```
+
+`0 failed`. The quarantined `test_flag_on_polls_open_plans` behaved as
+`CLAUDE.md` documents. Note the pass count: `CLAUDE.md`'s reference baseline of
+~1015 is the `main` figure and this branch is 500-odd tests above it, which is
+the migration's own test mass, not drift. **NG57 must record the post-deletion
+baseline**, as its checklist already says.
+
+### The frontend suite, which 2d does not name — run anyway
+
+`ng test` (Vitest, jsdom): **294 passed across 18 files.** Decision 2d predates
+the frontend existing; a gate on an Angular cutover that never runs the Angular
+tests is a gap in the gate, not in the suite.
+
+It passed *with 7 unhandled rejections*, all "this._window.matchMedia is not a
+function" out of `fancy-canvas`, which `lightweight-charts` calls to watch the
+device pixel ratio the moment a chart is created — jsdom 28 implements no
+`matchMedia` at all. They failed nothing, which is the argument for fixing them
+rather than living with them: seven errors permanently in the output are seven
+errors nobody reads, and the eighth will be real. Fixed with
+`testing/match-media-polyfill.ts`, in the same shape as the existing
+`dialog-polyfill.ts`, installed by `app.routes.spec.ts` — the only spec that
+routes into the chart-bearing detail views. Re-run: 294 passed, **no errors**.
+
+Deliberately not fixed: jsdom's `HTMLCanvasElement.getContext` notices. Silencing
+those means adding the native `canvas` package as a dev dependency to satisfy a
+chart nothing asserts against, which is a worse trade than a console notice.
+
+## B5 — Gate status
+
+| Item | Result |
+|---|---|
+| 2a route coverage | **PASS** — nothing unmapped; `/dashboard` added to A1; method changed to the live url_map |
+| 2b behaviour parity | **NOT DONE** — needs a running pair and a safe data story |
+| 2c degraded mode | **NOT DONE** — browser check, same prerequisite |
+| 2d suite green | **PASS** — 1537 Python, 294 frontend, 0 failed, 0 errors |
+
+**Do not ship Release A (NG55).** Two of four are owed.
