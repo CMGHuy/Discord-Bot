@@ -1,5 +1,6 @@
 state.json
 trades.json
+plans.json
 account.json
 watchlist.json
 ticker_meta_cache.json

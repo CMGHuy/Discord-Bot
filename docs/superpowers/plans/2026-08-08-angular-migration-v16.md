@@ -596,11 +596,17 @@ Spec v12 Decision 2 — load-bearing, so check rather than assume.
 Spec v15 Decision 2. Do not ship Release A until every item passes.
 
 - [x] Re-derive route coverage — nothing unmapped. Done from the live `app.url_map`, not the grep, which cannot see `spa.py`'s `add_url_rule` routes; one route (`GET /dashboard`, NG53) had appeared since the NG52 audit. Spec Appendix B1.
-- [ ] Walk every Jinja page against the SPA: settings round trip (export→edit→import→SIGHUP), bot restart without the Docker socket, all destructive actions, all four scan controls **and the flag files they leave**, manual-price close incl. `manual_close_notify.json`, CSV byte-compare
-- [ ] Degraded mode: block `/api/v1/events`, confirm every workspace stays correct
+- [x] Walk every Jinja page against the SPA — walked in a browser on synthetic fixtures. Found the SPA did not load at all (`<base href="/">` vs the `/app/` mount; fixed + regression test) and two open defects: five of six status chips return nothing, and the Export CSV link carries a query the endpoint ignores. Settings round trip, bot restart, destructive actions, all four scan controls' flag files and the CSV byte-compare all pass. Manual-price close does not exist in this codebase. Spec Appendix B2.
+- [x] Degraded mode: block `/api/v1/events`, confirm every workspace stays correct — all six correct; indicator escalates LIVE → CONNECTING → POLLING in ~7.5s. Spec Appendix B3.
 - [x] `python scripts/testrun.py full` → `0 failed` — 1537 passed, 136 skipped, 1 xfailed. Frontend too (not named in the gate, run anyway): 294 passed, and 7 pre-existing unhandled rejections fixed. Spec Appendix B4.
 
 ### Task NG55: Release A
+
+**Blocked by NG54's two open defects** — the status chips and the Export CSV
+query (spec Appendix B2). Both are decisions, not typos; neither was fixed
+under Phase 5's "Adding nothing" rule. Re-run the live-`url_map` route
+derivation immediately before shipping: NG54 found one route (`/dashboard`)
+had appeared in the five days since the NG52 audit.
 
 **Files:** `VERSION.json`
 

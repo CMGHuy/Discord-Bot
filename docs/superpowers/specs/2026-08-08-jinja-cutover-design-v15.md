@@ -565,24 +565,199 @@ assuming the same thing happens again between here and Release A, and re-running
 the live-map derivation immediately before NG55 rather than trusting this
 appendix.
 
-## B2 — 2b behaviour parity, walked — NOT DONE
+## B2 — 2b behaviour parity, walked — WALKED. One blocker, two defects.
 
-Not attempted. It needs both UIs running against the same data, and its list
-includes destructive actions — clear open trades, clear history, the killswitch
-— which must not be walked against real `data/`. It needs a decision about
-where it runs before it can run at all.
+Walked 2026-08-13 in a real browser (Playwright) against a single server
+serving both UIs, on synthetic fixtures built by
+`scripts/seed_parity_fixtures.py`. The fixtures matter to the result, so they
+are described first.
 
-Nothing here is blocked on code. What B1 removes from it is only the question
-"is anything unmapped"; every control still has to be exercised, plus the
-browser half of A5's 1280px check.
+### Where it ran
 
-## B3 — 2c degraded mode — NOT DONE
+`config.DATA_DIR` is derived from the checkout root and is deliberately not
+env-driven, so the `angular-migration` worktree already has a `data/` of its
+own, separate from the main checkout's. That is where this ran, which is what
+made it safe to walk the destructive half for real rather than reasoning about
+it. The seeder additionally refuses to write any directory holding `backups/`,
+`backtest_cache/` or `market_data_state.json`.
 
-Same reason: it is a browser check against a running pair. The unit-level half
-exists (`event-stream.spec.ts`, `connection.store.ts` and the shell's
-`connection-status.ts` all model the degraded state, and those specs pass in
-B4), but 2c asks whether every *workspace* stays correct with `/api/v1/events`
-blocked, and that is not a question a unit test answers.
+The fixture set is five plans (one per status: PENDING, ACTIVE, PARTIAL,
+CANCELLED, CLOSED), five trades (three plan-linked, two legacy), and two
+journal entries. It is built around the overlap between the two stores: a
+filled plan stays in plans.json as ACTIVE *and* gets a row in trades.json, so
+the list must join rather than concatenate. **Observed: 7 rows, not 10.** The
+join holds.
+
+### BLOCKER — the SPA did not load at all
+
+The very first page load was blank, with four 404s in the console. The built
+`index.html` carries `<base href="/">` and relative asset URLs, so the browser
+asked for `/main-<hash>.js`; `spa.py` serves the bundle from `/app/`. Every
+asset 404ed. `ADMIN_UI=spa` served a black screen, and the Dockerfile runs the
+same `npm run build`, so a deploy would have done the same.
+
+Both suites were green over this. The Python tests write a *fake* index.html
+into `static/app/`, so they never see the real one; the Angular tests never
+load index.html at all. **This is the finding that justifies 2b as a gate
+item** — no amount of unit testing was going to catch it, and it was fatal.
+
+Fixed by building with `baseHref: "/app/"` (in `angular.json`, not as a CLI
+flag, because the Dockerfile just runs `npm run build`) and providing
+`APP_BASE_HREF: '/'` in `app.config.ts`. The split is the point: `<base href>`
+is read both by the browser resolving assets and by the router deciding what a
+route path means, and only the first wants `/app/`. A router that inherited
+`/app/` would build every link as `/app/cockpit` and 404 on the first click.
+Regression test:
+`test_the_build_base_href_matches_where_flask_serves_the_bundle`.
+
+### DEFECT 1 — five of the six status chips return nothing
+
+The chips send the legacy vocabulary (`open`, `win`, `loss`, `cancelled`,
+`expired`, from `trades.columns.ts:STATUS_CHIPS`). The v1 collection normalises
+every row to the plan vocabulary and filters against *that*:
+
+| chip sends | rows returned | what the API accepts |
+|---|---|---|
+| `open` | **0** | `ACTIVE` (2), `PARTIAL` (1) |
+| `win` | **0** | not a status; both wins and losses are `CLOSED` |
+| `loss` | **0** | as above |
+| `cancelled` | **0** | `CANCELLED` (1) |
+| `expired` | **0** | `EXPIRED` |
+| (none / "All") | 7 | — |
+
+Only "All" works. Two separate problems are tangled here and they do not have
+the same fix:
+
+1. **Case and naming.** `cancelled` vs `CANCELLED`, and `open` vs the two
+   statuses that both mean open (`ACTIVE` and `PARTIAL`). Mechanical.
+2. **Win and Loss are not statuses.** Both normalise to `CLOSED`; the
+   distinction survives only in `pnl_pct` / `r_multiple`. A working Win chip
+   needs an outcome concept the v1 collection does not have.
+
+This also breaks a mapping A1 asserted: `GET /plans` → "`/trades` with the
+status chip". There is no Pending chip, and `PENDING` is unreachable from the
+chip row — so the Jinja plans page has no working SPA equivalent today. A1 was
+right that the *route* is covered and wrong that the *control* is.
+
+**Not fixed here.** Phase 5's "Adding nothing" rule and the Win/Loss question
+make this a decision, not a typo.
+
+### DEFECT 2 — Export CSV carries a query the endpoint ignores
+
+The link is built with the current query (`…/export.csv?page=1&per_page=25`,
+plus the ticker/status/direction filters when set). The endpoint ignores all
+of it:
+
+```
+export.csv                    -> 6 lines
+export.csv?ticker=AAPL        -> 6 lines
+export.csv?status=PENDING     -> 6 lines
+export.csv?per_page=1&page=1  -> 6 lines
+```
+
+The export itself is *correct by parity* — byte-identical to the Jinja route,
+which is what 2b asks for, and both export trades.json rather than the joined
+list. The defect is the SPA presenting it as filtered when it is not. Filter
+to one ticker, click Export, get everything, with nothing on screen saying so.
+Note that A2 was careful to spell exactly this out in the *clear* dialogs
+("the filter on screen does not narrow either") — and then the Export link
+sitting beside them quietly implies the opposite.
+
+**Not fixed here** — same reason: either the link stops carrying the query or
+the endpoint starts honouring it, and that is a decision.
+
+### What passed
+
+- **Destructive actions destroy exactly what the old UI destroyed.** Close,
+  delete, clear-open and clear-history each run against a freshly re-seeded
+  fixture set through one UI and then the other, compared on resulting row
+  counts across plans/trades/journal and on the notify queue. All four
+  identical. (Worth knowing: clear-open clears open *trades*, not ACTIVE
+  *plans* — in both UIs.)
+- **All four scan controls leave identical flag files.** trigger →
+  `trigger_check.flag`, pause → `scan_paused.flag`, resume → removes it,
+  stop → `stop_scan.flag`. This was the spec's loudest worry ("a wrong flag
+  name is invisible in the UI and breaks scanning") and it is structurally
+  safe: v1 imports `TRIGGER_FILE`/`PAUSE_FILE` from `app.py` and calls the
+  engine's own `request_stop()`, so there is one definition of each, not two.
+- **Settings round trip.** Export is byte-identical between the two UIs.
+  Export → edit `SCAN_INTERVAL_MINUTES` → import returned
+  `{"applied": 87, "unknown_keys": []}`, and `config.reload()` — what the
+  SIGHUP handler calls — then read `47`. Secrets come back masked (`•••`).
+- **Bot restart without the Docker socket** reports
+  `{"error": {"code": "unavailable", …}}` with the container name in the
+  message. Reported, not crashed, as required.
+- **CSV byte-compare**: `/trades/export.csv` and `/api/v1/trades/export.csv`
+  are byte-identical (866 bytes).
+
+### Not walked
+
+- **Manual-price close does not exist.** 2b asks for "trade close with a
+  manual price"; `TradeLog.close_trade_manual(trade_id, reason)` takes no
+  price, and `app.py`'s own comment says "(no exit price — just status
+  change)". The gate asks to walk a capability the product never had. The
+  `manual_close_notify.json` half *was* walked — see below.
+- **The 1280px browser check (A5).** Font fallback and the three wide
+  surfaces are still owed.
+
+### A fourth finding, from the fixtures rather than the UI
+
+The first version of the seeder wrote `balance_history` entries keyed `date`
+instead of `ts`, and **five tests in `test_engine_v2_plans.py` started
+failing** with `KeyError: 'ts'` — because those tests read the real
+`config.DATA_DIR` rather than a `tmp_path`. The gap is already known (it is
+why `data/scan_telemetry.jsonl` had to be gitignored), but it was known as
+"those tests *write* real rows". They also *read* them, which is the more
+dangerous half: it makes the suite's result depend on whatever is sitting in
+`data/`, so the same commit passes on one machine and fails on another.
+
+Two things follow, neither in this sub-project's scope:
+
+- `account.py:balance_series` does `entry["ts"]` unguarded, so a malformed
+  history entry is a `KeyError` inside the scan loop rather than a gap in a
+  chart.
+- `test_engine_v2_plans.py` should get the `tmp_path` isolation
+  `tests/admin/conftest.py` already applies to every admin test.
+
+The seeder now writes the correct key and the full suite is green with the
+fixtures in place (1538 passed), so this is recorded rather than left as a
+trap for whoever runs the seeder next.
+
+### One divergence that is inert, and worth writing down anyway
+
+Closing a plan-backed position queues different payloads: Jinja writes the
+whole plan (32 keys), v1 writes four (`kind`, `plan_id`, `ticker`, `status`).
+Both are then dropped by the same guard in `notify_closed_trades`, which skips
+any entry whose `status` is not `win|loss|closed` — and a plan's is `CLOSED`.
+So behaviour is identical today *because of a pre-existing bug the Jinja code
+already documents in its own docstring*. If anyone ever fixes that consumer,
+v1's four keys will not be enough to build the embed. Legacy (non-plan) closes
+write identical 33-key entries through both UIs.
+
+## B3 — 2c degraded mode — PASS
+
+`/api/v1/events` aborted at the network layer with everything else left
+working, so this tests *degraded* and not *server down*.
+
+All six workspaces render correct data with the stream dead. Reaching Risk
+requires clicking the nav link rather than hard-loading `/risk` — a hard load
+lands on the Jinja page, which is `spa.py:register()`'s documented collision
+behaving as designed, not a degraded-mode failure. **It is however a real
+Release A caveat:** for the two weeks both UIs are mounted, a bookmark or a
+refresh on `/risk` or on a trade detail silently serves the old page. It
+self-heals when NG57 deletes those routes.
+
+The indicator escalates honestly, which is the whole point of 2c:
+
+```
+t+2.5s   CONNECTING   "Opening the event stream…"
+t+7.5s   POLLING      "Event stream unavailable — refreshing every 5 seconds instead."
+```
+
+Three failures in a 60-second window trip `degrade()`, which closes the
+EventSource and starts the 5-second poll. The UI does not claim to be live
+while it is not, and it does not freeze — the numbers keep updating off the
+poll.
 
 ## B4 — 2d suite green — PASS, both suites
 
@@ -621,8 +796,33 @@ chart nothing asserts against, which is a worse trade than a console notice.
 | Item | Result |
 |---|---|
 | 2a route coverage | **PASS** — nothing unmapped; `/dashboard` added to A1; method changed to the live url_map |
-| 2b behaviour parity | **NOT DONE** — needs a running pair and a safe data story |
-| 2c degraded mode | **NOT DONE** — browser check, same prerequisite |
+| 2b behaviour parity | **WALKED** — one blocker (fixed), two defects (open), A5's browser half still owed |
+| 2c degraded mode | **PASS** |
 | 2d suite green | **PASS** — 1537 Python, 294 frontend, 0 failed, 0 errors |
 
-**Do not ship Release A (NG55).** Two of four are owed.
+**Do not ship Release A (NG55) yet.** The blocker is fixed and the gate is
+mostly green, but two defects found by 2b are open and both are decisions
+rather than typos:
+
+1. **Status chips** — five of six return nothing. Fixing "Open", "Cancelled"
+   and "Expired" is mechanical; "Win" and "Loss" need an outcome concept the
+   v1 collection does not have. There is also no "Pending" chip, which leaves
+   `GET /plans` without a working equivalent.
+2. **Export CSV** — the link carries the on-screen query and the endpoint
+   ignores it. Either the link stops carrying it or the endpoint starts
+   honouring it.
+
+Both were left alone deliberately: Phase 5's "Adding nothing" rule means a
+gate finding is written down and decided on, not fixed on the way past. The
+one thing that *was* fixed is the blocker, because a UI that does not load
+cannot be walked at all.
+
+### What this gate bought
+
+Worth recording, because the cost of 2b is the argument against ever doing it
+again: **every one of the three findings was invisible to both test suites**,
+and the worst of them was fatal. 1537 Python tests and 294 Angular tests were
+green on a bundle that rendered a black screen in a browser. The Python tests
+write a fake `index.html`; the Angular tests never load one. Neither suite has
+a way to notice, and neither was wrong to be green — they test what they test.
+A gate item that says "open it in a browser" is not ceremony.

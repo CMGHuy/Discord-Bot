@@ -5,6 +5,7 @@ import {
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
+import { APP_BASE_HREF } from '@angular/common';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 
@@ -25,6 +26,20 @@ export const appConfig: ApplicationConfig = {
     // loudly if someone reintroduces zone.js, which would otherwise
     // silently restore the change detection this design does not want.
     provideZonelessChangeDetection(),
+    // The bundle is built with `--base-href=/app/` because spa.py serves its
+    // files from /app/ -- deliberately, so they cannot collide with the Jinja
+    // UI's /static/. But `<base href>` is read by TWO things: the browser,
+    // resolving asset URLs, and the router, deciding what a route path means.
+    // Only the first one wants /app/. The workspaces live at /cockpit,
+    // /trades and so on, which is what spa.py registers and what a user
+    // bookmarks; a router that inherited /app/ would build every link as
+    // /app/cockpit and 404 on the first navigation.
+    //
+    // APP_BASE_HREF is the override for exactly that split. It must stay in
+    // step with the --base-href in angular.json: assets under /app/, routes
+    // under /. Without it the app loads and then breaks on the first click,
+    // which is a worse failure than not loading at all.
+    { provide: APP_BASE_HREF, useValue: '/' },
     // withComponentInputBinding: :id and :symbol arrive as input() signals
     // rather than through ActivatedRoute, which keeps a detail component
     // testable without standing up a router.

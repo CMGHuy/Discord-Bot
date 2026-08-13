@@ -158,3 +158,48 @@ def test_an_unbuilt_spa_404s_rather_than_pretending(client):
 
     assert client.get("/cockpit").status_code == 404
     assert client.get("/app/main-ABCD1234.js").status_code == 404
+
+
+# --------------------------------------------------------------------------
+# The build's base href, which is not a unit-testable thing but breaks
+# everything when it is wrong
+# --------------------------------------------------------------------------
+
+def test_the_build_base_href_matches_where_flask_serves_the_bundle():
+    """NG54. The one failure that no other test in this repo could see.
+
+    `asset()` above serves the bundle from `/app/`, deliberately, so it
+    cannot collide with the Jinja UI's `/static/`. But index.html's asset
+    URLs are relative and resolve against whatever `<base href>` the build
+    stamped in. Angular's default is `/`, so the default build produces a
+    page that asks for `/main-<hash>.js` while Flask only answers at
+    `/app/main-<hash>.js`: every asset 404s and the SPA is a black screen.
+
+    Nothing caught it. The Python tests write a FAKE index.html, so they
+    never see the real one; the Angular tests never load index.html at all;
+    and both suites passed on a bundle that could not boot. It took opening
+    the page in a browser, which is exactly the argument for spec v15's
+    Decision 2b existing.
+
+    So this test reads the two values that must agree and compares them --
+    the closest a test can get to the browser check without a browser.
+    `APP_BASE_HREF` in app.config.ts then puts the ROUTER back at `/`; that
+    half is covered by app.routes.spec.ts, which routes to /cockpit.
+    """
+    import json
+
+    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    angular_json = os.path.join(here, "frontend", "angular.json")
+    if not os.path.isfile(angular_json):
+        pytest.skip("no frontend/ in this checkout")
+
+    with open(angular_json, encoding="utf-8") as fh:
+        config = json.load(fh)
+    project = next(iter(config["projects"].values()))
+    base_href = project["architect"]["build"]["options"].get("baseHref")
+
+    assert base_href == "/app/", (
+        f"angular.json baseHref is {base_href!r}, but spa.py serves the bundle "
+        f"from /app/. A mismatch means every asset 404s and the SPA renders a "
+        f"black screen -- with both test suites still green."
+    )
