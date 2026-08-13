@@ -1,5 +1,28 @@
 # Angular admin UI migration — Implementation Plan (v16)
 
+> ## ✅ COMPLETE — closed 2026-08-13
+>
+> The Angular SPA is built, deployed and serving production as of Release A
+> (2026-08-13, `ui` 1.1.0). NG1–NG55 are done; the acceptance gate passed and
+> is recorded in spec Appendix B.
+>
+> **NG57 (deleting the Jinja UI) is NOT part of this plan any more.** It has
+> been handed to a separate plan, deliberately: it is the one irreversible
+> step here, it is gated on live-session time rather than on engineering, and
+> keeping it open would leave this plan permanently 98% done. Everything a
+> future plan needs to execute it — the verified chart-route prerequisite, the
+> triage of all 23 affected test files, and the corrected verify command — is
+> written up in **spec Appendix C**.
+>
+> **The Jinja UI stays live and untouched until that plan runs.** Both UIs are
+> mounted; `ADMIN_UI` chooses which answers `/`. Do not delete Jinja code as a
+> side effect of unrelated work.
+>
+> Unchecked boxes below are not a to-do list. Sessions committed work without
+> ticking them (NG8–NG53 read as unstarted while their code is in the git log),
+> so **derive status from the git history and each task's outcome note**, never
+> from the checkboxes.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order NG1→NG57.
 
 **Goal:** Replace the Flask/Jinja admin UI with an Angular SPA, without the bot process changing and without the existing UI breaking at any point before cutover.
@@ -23,19 +46,23 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 
 ## Progress
 
-> Updated by the executing session after each task. Resume from the first unchecked task.
+> **Plan closed 2026-08-13.** Nothing here is waiting on an executing session.
 >
 > - **Branch:** `worktree-angular-migration`, **merged to `main` 2026-08-13**.
 > - **Completed:** NG1–NG55. The checkboxes below are unreliable — earlier
 >   sessions committed work without ticking them, so derive status from the
 >   git log and the task outcome notes, not from `[ ]`.
-> - **Release A shipped 2026-08-13** (NG55). `ui` 1.0.9 → 1.1.0. The two-week
->   soak (NG56) therefore ends no earlier than **2026-08-27**, and NG57 —
->   deleting Jinja, the one irreversible step — must not start before then.
-> - **Rollback is a restart:** set `ADMIN_UI=jinja` in the server's `.env` and
->   `docker compose restart admin`. No rebuild, no revert. Record here anything
->   that forced a flip back, per NG56.
-> - **Next:** NG56 — two weeks of live sessions, watching. Not a code task.
+> - **Release A shipped 2026-08-13** (NG55). `ui` 1.0.9 → 1.1.0. Deployed and
+>   verified live: `scripts/smoke_spa.py` passed 16/16 on the server, including
+>   every asset the built `index.html` asks for.
+> - **NG56 / NG57 are out of scope for this plan.** The soak is an operational
+>   matter, and the deletion belongs to a separate plan — see the banner at the
+>   top and spec Appendix C for the handover.
+> - **The Jinja UI stays.** Both UIs are mounted; `ADMIN_UI` picks which
+>   answers `/`, defaulting to `spa`. Rollback is `ADMIN_UI=jinja` in the
+>   server's `.env` plus `docker compose restart admin` — no rebuild, no
+>   revert. That rollback exists precisely because Jinja has not been deleted,
+>   and it stops working the day it is.
 
 ## Global Constraints
 
@@ -630,7 +657,7 @@ Two things to do rather than assume, both from what NG54 found:
 - [x] Deploy; **write down the date**. Release B is ≥ 2 weeks of live sessions later. — **2026-08-13**, by merging to `main`, which triggers `deploy.yml`.
 - [x] Update the Progress block with that date — soak ends **2026-08-27** at the earliest.
 
-### Task NG56: Wait, and watch — IN PROGRESS, ends 2026-08-27 at the earliest
+### Task NG56: Wait, and watch — MOVED OUT OF THIS PLAN
 
 **Not a code task**, and not one that can be finished early. The two weeks are
 the mitigation, and they will feel unnecessary by day three. Started
@@ -646,7 +673,28 @@ arrives.
 - [ ] Record anything that required a flip back to `jinja`
 - [ ] Do not proceed early. Slow-horizon behaviour (TP2, weekly rollovers, a tuning cycle) does not occur in a few days.
 
-### Task NG57: Release B — delete Jinja
+### Task NG57: Release B — delete Jinja — MOVED OUT OF THIS PLAN
+
+**Do not execute this from here.** It is owned by a separate plan now, for
+three reasons that all point the same way: it is the only irreversible step in
+this document, it is gated on live-session time rather than on any engineering
+being finished, and leaving it open would keep a plan that is otherwise
+complete permanently at 98%.
+
+The checklist below is kept verbatim as the handover, and spec **Appendix C**
+holds the work already done for it: the chart-route prerequisite verified, all
+23 affected test files triaged, and the verify command corrected (the grep this
+task names is blind to `spa.py`'s `add_url_rule` routes and would pass on a
+broken build).
+
+One correction the future plan needs, found while attempting it: **deleting
+`pages.py` outright breaks the SPA.** `api_v1` imports eight helpers from it —
+`_registry_rows`, `_strategy_horizon_heatmap`, `_rolling_win_rate_series`,
+`_load_result`, `_list_proposals`, `_JOB_ID_RE`, `_PROPOSAL_FILENAME_RE`,
+`TUNING_PROPOSALS_DIR_NAME` — none of which have anything to do with Jinja;
+they merely live beside the routes. They have to move somewhere neutral before
+the module can go. The wording below ("the HTML routes and the `pages`
+blueprint") reads as though the file is disposable, and it is not.
 
 **Irreversible.** Everything before this point is not.
 
