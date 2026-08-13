@@ -630,9 +630,17 @@ Two things to do rather than assume, both from what NG54 found:
 - [x] Deploy; **write down the date**. Release B is ≥ 2 weeks of live sessions later. — **2026-08-13**, by merging to `main`, which triggers `deploy.yml`.
 - [x] Update the Progress block with that date — soak ends **2026-08-27** at the earliest.
 
-### Task NG56: Wait, and watch
+### Task NG56: Wait, and watch — IN PROGRESS, ends 2026-08-27 at the earliest
 
-**Not a code task.** The two weeks are the mitigation, and they will feel unnecessary by day three.
+**Not a code task**, and not one that can be finished early. The two weeks are
+the mitigation, and they will feel unnecessary by day three. Started
+2026-08-13 with Release A.
+
+Everything NG57 asks for that is *not* the irreversible deletion has been done
+in advance and is recorded in spec Appendix C: the chart-route prerequisite is
+verified, the test triage is inventoried across all 23 affected files, and the
+verify command is corrected. Release B should be mechanical when the date
+arrives.
 
 - [ ] Two weeks of live trading sessions on `ADMIN_UI=spa`
 - [ ] Record anything that required a flip back to `jinja`
@@ -643,13 +651,13 @@ Two things to do rather than assume, both from what NG54 found:
 **Irreversible.** Everything before this point is not.
 
 - [ ] Delete: 20 templates · the HTML routes and the `pages` blueprint · `api.py` and the 10 legacy `/api/*` routes · `dashboard.js`, `chart-init.js`, `style.css` · vendored `lightweight-charts` 4.2.3 · the `ADMIN_UI` flag
-- [ ] Delete `/trades/<id>/chart.png` and `/plans/<id>/chart.png` — **first verify no bot path reaches chart generation through the admin HTTP layer**
+- [ ] Delete `/trades/<id>/chart.png` and `/plans/<id>/chart.png` — **prerequisite VERIFIED 2026-08-13** (spec C1): the only admin importer of `generate_trade_chart` is `pages.py` itself, every bot caller imports `core/charts/*` directly, and no bot path touches the admin HTTP layer. Safe to delete.
 - [ ] **Keep:** `tokens.css`, `chart_style.THEME` and their sync test (the bot's Discord charts need them); vendored Inter and JetBrains Mono
-- [ ] Apply NG19's test triage: delete HTML-structure tests, keep builder-level ones untouched
+- [ ] Apply NG19's test triage: delete HTML-structure tests, keep builder-level ones untouched — **inventory of all 23 affected files is in spec C2**, with five marked *check* because they mix Jinja rendering with logic that has no other coverage
 - [ ] Record the **new test baseline** in `CLAUDE.md` in this same commit — an unexplained drop is indistinguishable from lost coverage
 - [ ] Update `README.md` (Admin UI section), `CLAUDE.md`, `docs/claude/architecture.md`, `DOCKER.md`, `DEPLOY_HETZNER.md`, `docs/claude/known-traps.md`
 - [ ] `ui` patch bump
-- [ ] **Verify:** `grep -rn "\.route(" swingbot/admin/*.py` returns only `/api/v1/*` and the SPA-serving routes; `python scripts/testrun.py full` green
+- [ ] **Verify:** use the live `app.url_map` dump in spec C3, **not** the grep this line used to name — the grep cannot see `spa.py`'s `add_url_rule` routes and would pass on a broken build. Must show only `/api/v1/*`, the SPA routes and Flask's `static`; `python scripts/testrun.py full` green
 
 ---
 

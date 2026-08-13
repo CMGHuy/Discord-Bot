@@ -949,3 +949,93 @@ never does — building the SPA and putting real data in `data/`:
 None of these were wrong when written. They are the ordinary drift of a suite
 that has only ever run in one shape of environment, and the reason the gate
 asks for a walk rather than a re-run.
+
+---
+
+# Appendix C — NG57 readiness
+
+Written 2026-08-13, the day Release A shipped. **NG57 must not run before
+2026-08-27** (Decision 1: two weeks of live trading sessions). What follows is
+everything NG57 asks for that is *not* the irreversible deletion, done now so
+that Release B is mechanical rather than exploratory.
+
+## C1 — The PNG chart routes: safe to delete — VERIFIED
+
+NG57's checklist says to delete `/trades/<id>/chart.png` and
+`/plans/<id>/chart.png` but to **"first verify no bot path reaches chart
+generation through the admin HTTP layer."** Done:
+
+- The only importer of `generate_trade_chart` outside `core/charts/` is
+  `swingbot/admin/pages.py` — the file being deleted.
+- Every bot-side caller imports the chart functions **directly** from
+  `swingbot.core.charts.*` (`commands/info.py`, `commands/stats.py`,
+  `commands/growth.py`, `commands/scanning.py`). None goes through HTTP.
+- No module under `swingbot/commands/` or `swingbot/core/` references the
+  admin app, `localhost:1234`, or either route name. The `urllib` imports in
+  `core/data.py` and `core/fmp_client.py` are market-data clients.
+- The only other references to the routes are the two Jinja templates that
+  embed them, both of which die in the same commit.
+
+**Conclusion: deleting the two routes cannot affect the Discord charts.** The
+generation code stays; only the HTTP wrappers go.
+
+## C2 — Test triage, inventory
+
+NG19 asked for triage and only three files carry a `NG19 TRIAGE:` marker, so
+NG57 would otherwise be deciding 23 files' fate from memory. The scan (files
+that call a non-`/api/v1` route or assert on HTML):
+
+| File | Jinja routes | HTML asserts | Fate |
+|---|---:|---:|---|
+| `tests/admin/test_pages.py` | 19 | 7 | **delete** — Jinja pages only |
+| `tests/admin/test_api.py` | 8 | 0 | **delete** — the legacy `/api/*` blueprint |
+| `tests/admin/test_perf_headers.py` | 7 | 0 | **delete** — headers on Jinja pages |
+| `tests/test_admin_api_ohlcv.py` | 7 | 0 | **delete** — legacy `/api/ohlcv` |
+| `tests/admin/test_login.py` | 4 | 0 | **delete** — Jinja login; `/api/v1/session` is covered separately |
+| `tests/admin/test_dashboard_v2.py` | 4 | 1 | **check** — may hold builder-level cases worth keeping |
+| `tests/admin/test_trade_history_paging.py` | 4 | 6 | **check** — the paging/filter logic is builder-level and should survive |
+| `tests/test_admin_pages.py` | 3 | 5 | **delete** — renders Jinja pages |
+| `tests/admin/test_dashboard_builders.py` | 2 | 1 | **keep** — builder-level by name and content |
+| `tests/admin/test_settings_v2.py` | 2 | 0 | **check** |
+| `tests/admin/test_jobs.py` | 2 | 1 | **check** |
+| `tests/admin/test_risk_panel.py` | 1 | 3 | **check** |
+| `tests/admin/test_admin_ui_flag.py` | 1 | 2 | **delete** — already marked; the flag goes with it |
+| `tests/admin/test_template_endpoints.py` | 0 | 1 | **delete** — already marked; it scans the templates |
+| `tests/admin/test_spa_serving.py` | 4 | 8 | **keep** — already marked; outlives the cutover |
+
+"**check**" means *read it before deleting* — the file mixes Jinja rendering
+with logic that has no other coverage. Deleting those wholesale is how a
+cutover loses real tests, which is exactly what NG19's triage exists to
+prevent. The rule NG57 states is the right one: delete HTML-structure tests,
+keep builder-level ones untouched.
+
+## C3 — The verify step should not use the grep it names
+
+NG57's final checklist says to confirm with
+`grep -rn "\.route(" swingbot/admin/*.py`. **Do not.** B1 established that
+this grep is blind to `add_url_rule`, which is how `spa.py` mounts all twelve
+workspace routes — so it would report success on a build where the Jinja
+routes were deleted but some other caller still served HTML. Use the live map:
+
+```bash
+python -c "
+import os; os.environ.setdefault('ADMIN_PASSWORD','x')
+from swingbot.admin.app import app
+for r in sorted(app.url_map.iter_rules(), key=lambda r: r.rule):
+    print(r.rule, sorted(r.methods - {'HEAD','OPTIONS'}), r.endpoint)"
+```
+
+After NG57 this must show only `/api/v1/*`, the SPA's own routes, and Flask's
+`static` — nothing else.
+
+## C4 — What Release B still needs from a human
+
+- **The soak itself.** NG56 is not a code task and cannot be shortened. Its
+  value is the slow-horizon behaviour — a trade reaching TP2, a weekly
+  analytics rollover, a tuning cycle — none of which happens in a few days.
+- **The record of anything that forced `ADMIN_UI=jinja`.** If nothing did, say
+  so explicitly in the Progress block; "no rollbacks" is a result, and an
+  empty section is indistinguishable from an unwatched fortnight.
+- **A rebuild-and-look before deleting.** The bundle is built only inside the
+  image, so the artifact that ships has never been seen by a test suite. That
+  is what `scripts/smoke_spa.py` is for, and it now runs after every deploy.
