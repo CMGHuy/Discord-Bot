@@ -326,11 +326,27 @@ symptom of drift is a single frame of the old colour on a cold load.
 
 ## Phase 0 gate
 
-- [ ] `python scripts/testrun.py full` → `0 failed`
-- [ ] `cd frontend && npx ng test` → green
-- [ ] `npx ng build` → succeeds
-- [ ] Load the SPA, click every nav entry, confirm no 404 and the new palette is live
+- [x] `python scripts/testrun.py full` → `0 failed` — 1679 passed
+- [x] `cd frontend && npx ng test` → green — 336 passed across 20 files
+- [x] `npx ng build` → succeeds — 313 kB initial, `<base href="/app/">` intact
+- [x] Load the SPA, click every nav entry, confirm no 404 and the new palette is live — all six render, zero console errors, zero 4xx; `--bg` resolves to `#0a0b10` and Inter is loading. `scripts/smoke_spa.py` passes 23/23 against a real server on the built bundle, including all five favicons resolving from `/app/`.
 - [ ] Merge `worktree-spa-refresh` → `main` (check main-tree `git status` first)
+
+**Two things the walk found, both in the verification rather than the app:**
+
+`scripts/smoke_spa.py` had gone stale in two places the moment SR4/SR5 landed.
+Its workspace list still read `cockpit`/`universe`, so it kept passing while
+testing neither `/dashboard` nor `/watchlist` — the two routes those tasks
+created. And it asserted `/` redirects to `/cockpit`, which the app had
+correctly changed to `/dashboard`. Both fixed: the list now covers the new
+names plus the legacy ones (dropping those 404s an old bookmark before Angular
+can redirect it), and the front-door check now asserts the *property* — that
+`/` redirects and wherever it lands serves the app — rather than a hardcoded
+destination that goes stale on the next rename.
+
+A hard load of `/risk` renders empty. That is `spa.py:register`'s documented
+collision — Jinja owns `/risk` until NG57 — not a regression. In-app
+navigation to Risk works. It self-heals when the Jinja routes go.
 
 ---
 
