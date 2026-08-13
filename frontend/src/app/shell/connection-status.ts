@@ -24,7 +24,7 @@ import { ConnectionState } from '../stores/connection.store';
   selector: 'sb-connection-status',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="status" [title]="hint()">
+    <div class="status" [class]="state()" [title]="hint()">
       <span class="dot" [class]="state()"></span>
       <span class="label">{{ label() }}</span>
       @if (botAlive() === false) {
@@ -51,10 +51,20 @@ import { ConnectionState } from '../stores/connection.store';
     /* The blinking dot survives from the current UI; the card-flash does
        not. With push, "something changed" is continuous rather than a
        5-second event, so a flash would be a permanent flicker. */
-    .dot.live { background: var(--pos); animation: pulse 2s ease-out infinite; }
+    /* Greyscale and amber, never green or red: connection state is not
+       money (NG52's colour review). Green here made "the stream is up" and
+       "this position is in profit" the same colour in the same chrome, and
+       red made a fallback to polling look like a loss. Live is the bright
+       end of the ramp plus the pulse; degraded and dead are both amber
+       because both mean the same caution — what you are reading may be
+       stale — and the label is what tells them apart. */
+    .dot.live { background: var(--text); animation: pulse 2s ease-out infinite; }
     .dot.degraded { background: var(--warn); }
-    .dot.dead { background: var(--neg); }
+    .dot.dead { background: var(--warn); }
     .dot.connecting { background: var(--text-faint); }
+    /* Dead is the more serious of the two, so it takes the whole label with
+       it rather than relying on a 6px dot to carry the difference. */
+    .status.dead { color: var(--warn); }
     .bot { color: var(--warn); }
     @keyframes pulse { 50% { opacity: 0.35; } }
     @media (prefers-reduced-motion: reduce) {

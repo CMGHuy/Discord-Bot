@@ -90,6 +90,11 @@ workspace), *deliberately dropped* (with the reason), or **unmapped — which
 blocks the cutover.** Routes added after 2026-08-08 will not be in that table,
 and they are exactly the ones most likely to be forgotten.
 
+That re-derivation was done at the end of Phase 4 and is recorded in
+**Appendix A** at the end of this document, along with the colour, table and
+1280px reviews. It found nothing unmapped and two mapped routes with no SPA
+control — see A2, which is the part of this gate still open.
+
 ### 2b. Behaviour parity, walked
 
 Every Jinja page opened, every control exercised, against the SPA. Not a code
@@ -275,3 +280,191 @@ None blocking.
    not happen. Lean `spa` — the flag's value is the rollback, not the opt-in.
 2. Whether `tests/admin/` is worth restructuring at Release B, once it is
    entirely API-level. Probably; decide when the triage shows what survives.
+
+---
+
+# Appendix A — the NG52 parity audit
+
+Recorded 2026-08-13, at the end of Phase 4. This is the mapping Decision 2a
+asks for, re-derived from `grep -rn "\.route(" swingbot/admin/*.py` rather than
+copied from sub-project 1, plus the three reviews the plan's NG52 names.
+
+**It is not the acceptance gate.** 2b (a walk-through of every control against a
+running pair of UIs) and 2c (degraded mode) are still owed, and so is the
+browser half of the 1280px check below. What this appendix does is remove the
+question "is anything unmapped" from that walk-through, and name the two things
+that are.
+
+## A1 — Route coverage
+
+Every non-`/api/v1` route in `swingbot/admin/`, classified. `pages.py` routes
+are marked *(pages)*, `api.py` — the legacy JSON API the Jinja pages' own
+JavaScript calls — *(legacy JSON)*.
+
+### Pages, replaced
+
+| Jinja route | v1 endpoint | Angular successor |
+|---|---|---|
+| `GET /` (dashboard) | `GET /cockpit`, `GET /trades` | `/cockpit` |
+| `GET /dashboard/fragment` | — | none needed: the fragment poll is what the event stream replaces |
+| `GET /plans` *(pages)* | `GET /trades?status=planned` | `/trades` with the status chip |
+| `GET /plans/fragment` *(pages)* | — | as above; no fragment polling in the SPA |
+| `GET /plans/<id>` *(pages)* | `GET /trades/<id>` | `/trades/:id` |
+| `GET /trades/<id>` | `GET /trades/<id>` | `/trades/:id` |
+| `GET /journal` *(pages)* | `GET /trades?has_note=true` | `/trades`, and the detail's Notes tab |
+| `GET /performance` | `GET /analytics/performance` | `/analytics?tab=performance` |
+| `GET /strategies` *(pages)* | `GET /analytics/strategies` | `/analytics?tab=strategies` |
+| `GET /calibration` *(pages)* | `GET /analytics/calibration` | `/analytics?tab=calibration` |
+| `GET /tuning` *(pages)* | `GET /analytics/tuning/proposals`, `GET /jobs` | `/analytics?tab=tuning` |
+| `GET /watchlist` | `GET /universe/tickers` | `/universe` |
+| `GET /risk` | `GET /risk` | `/risk` |
+| `GET /settings` | `GET /system/settings` | `/system?tab=settings` |
+| `GET /logs` | `GET /system/logs` | `/system?tab=logs` |
+| `GET /login`, `POST /login`, `POST /logout` | `GET/POST/DELETE /session` | the shell's login form |
+
+### Commands, replaced
+
+| Jinja route | v1 endpoint | Where it is in the SPA |
+|---|---|---|
+| `POST /trades/<id>/close` | `POST /trades/<id>/close` | Trades row action, detail Live tab |
+| `POST /trades/<id>/delete` | `DELETE /trades/<id>` | same |
+| `POST /plans/<id>/cancel` *(pages)* | `POST /trades/<id>/cancel` | same |
+| `POST /plans/<id>/close` *(pages)* | `POST /trades/<id>/close` | same |
+| `POST /trades/clear-open` | `POST /trades/clear-open` | **nothing — see A2** |
+| `POST /trades/history/clear` | `POST /trades/clear-history` | **nothing — see A2** |
+| `GET /trades/export.csv` | `GET /trades/export.csv` | **no control — see A2** |
+| `POST /watchlist/add` | `POST /universe/tickers` | Universe add box |
+| `POST /watchlist/bulk_add` | `POST /universe/tickers` | the same box: one endpoint absorbs both |
+| `POST /watchlist/remove` | `DELETE /universe/tickers/<symbol>` | Universe row action |
+| `GET /watchlist/suggest` | `GET /universe/suggest` | Universe add box |
+| `POST /risk/killswitch` | `POST /risk/killswitch` | Risk, `ConfirmDialog`-gated |
+| `POST /settings/preview` | `POST /system/settings/preview` | System, Settings tab |
+| `POST /settings/save` | `PUT /system/settings` | same |
+| `GET /settings/export` | `GET /system/settings/export` | same, as a download link |
+| `POST /settings/import` | `POST /system/settings/import` | same, paste-to-import |
+| `POST /bot/restart` | `POST /system/bot/restart` | System, Scan tab |
+| `POST /logs/clear` | `DELETE /system/logs` | System, Logs tab |
+| `GET /logs/raw` | `GET /system/logs/raw` | System, Logs tab, "Raw" link |
+| `POST /scan/{trigger,stop,pause,resume}` | `POST /system/scan/*` | System, Scan tab |
+| `GET /scan/status` | `GET /system/scan` | same |
+| `POST /tuning/propose` *(pages)* | `POST /analytics/tuning/proposals` | Analytics, Tuning tab |
+| `POST /tuning/proposals/<f>/delete` *(pages)* | `DELETE /analytics/tuning/proposals/<f>` | same |
+| `POST /journal/<id>/note` *(legacy JSON)* | `PUT /trades/<id>/note` | detail Notes tab |
+
+### Legacy JSON, replaced
+
+`GET /api/trade-history` maps to `GET /trades`; `GET /api/ohlcv/<ticker>` to
+`GET /market/ohlcv/<ticker>`; and `/stats`, `/plans`, `/journal`,
+`/calibration`, `/registry`, `/jobs`, `/jobs/<id>`, `/jobs/tune` and `/health`
+*(all legacy JSON)* to their `/api/v1` namesakes. These have no UI of their
+own; they die with the templates whose JavaScript calls them.
+
+### Deliberately dropped
+
+| Route | Why |
+|---|---|
+| `GET /trades/<id>/chart.png`, `GET /plans/<id>/chart.png` *(pages)* | Decision 3 already decided this: the SPA draws charts client-side from `/market/ohlcv`. The PNG route survives Release B for Discord only, not for any UI. |
+| `GET /dashboard/fragment`, `GET /plans/fragment` *(pages)* | Fragment polling is the thing sub-project 2 replaced. There is nothing to port. |
+
+### Not a Jinja route
+
+`GET /app/<path:filename>` and the six workspace prefixes in `spa.py` serve the
+SPA itself.
+
+**Unmapped: none.** Two mapped routes have no SPA control, which is a different
+finding and is A2.
+
+## A2 — Gaps that block the cutover
+
+**1. `clear-open` and `clear-history` have no SPA control.** Both endpoints
+exist (`api_v1/trade_commands.py`), and `ApiClient` has `clearOpenTrades()` and
+`clearTradeHistory()` — with no call site anywhere in `frontend/src`. The Jinja
+dashboard has both buttons. Either the Trades workspace grows them behind
+`ConfirmDialog` (they are the two most destructive actions in the product), or
+they are dropped on purpose and this document says so. Right now they are
+neither, which is the state Decision 2a calls blocking.
+
+**2. CSV export has no SPA control.** `ApiClient.tradesExportUrl()` exists and
+is tested; nothing links to it. Decision 2b lists CSV export as a parity item to
+walk, so it needs a link on the Trades workspace — a plain anchor, as the
+method's own docstring explains.
+
+Neither is a task in the Phase 4 plan, which is how both were missed: NG42
+listed the row actions, and NG52 is the first task that counts what is *not*
+there.
+
+## A3 — Colour review
+
+Against spec 3's rules: green and red mean P&L direction only, amber means
+caution, blue means interactive and is never applied to data.
+
+**One violation found and fixed.** `ConnectionStatus` painted the live dot
+`--pos` and the dead dot `--neg`, so in one strip of chrome green meant both
+"this position is in profit" and "the event stream is up", and a fallback to
+polling looked like a loss. Live is now `--text` — the pulse is what carries
+"live", and it is the one motion spec 3 keeps — while degraded and dead are both
+`--warn`, told apart by the label, with dead taking the whole label amber.
+
+**Green now appears in exactly four components, all money:** `MetricCard`,
+`MetricChip`, `Sparkline`, and `StatusIndicator`'s settled-win dot and SL→TP
+fill — plus the `.pos`/`.neg` pairs the five workspaces apply to P&L columns.
+
+**Red has two sanctioned non-money uses, recorded here rather than left to be
+rediscovered:**
+
+- The `danger` button variant, and the killswitch's ENGAGED state which matches
+  it. `ui/button.ts` documents why: an irreversible control that does not look
+  dangerous is worse than a colour rule kept perfectly.
+- Failure text — a save that did not save, a command that did not run, a note
+  that is not stored. Amber is wrong for these because amber already means
+  "stale but correct", and a failed write is not stale. This is the same
+  "something is wrong" red as the danger button rather than a status colour.
+
+**Blue is interactive everywhere it appears:** links, row links, the active nav
+and tab indicators, focus rings, the primary button, the sort arrow, the column
+picker, the checkbox, and the chart's loading spinner. Two uses are worth naming
+because they sit closest to the line — the settings form's edited-field marker
+(`.changed`), which is selection state on a control rather than colour on a
+value, and the spinner, which is system feedback rather than data. Neither
+colours a number.
+
+## A4 — One table, six call sites
+
+`DataTableComponent` is used by Trades, Analytics (the strategy, confidence,
+decile and drift tables), the Cockpit's open positions, Risk's exposure,
+Universe's watchlist and the ticker detail's trade list. Spec v14's definition
+of done says "four call sites"; it is six, because spec 3 added the Cockpit
+summary table (NG47) and Decision 9 requires the ticker detail to reuse the same
+component (NG51). More reuse of one component is not the failure that clause
+guards against.
+
+**No second grid exists.** Two kinds of hand-written `<table>` do: Analytics'
+win-rate heatmap (a matrix with a header column, no sorting, no paging, no rows
+in the grid sense) and the two three-column diffs — Analytics' tuning proposal
+parameters and the System settings preview. A diff is a fixed pair of columns
+over a handful of rows; routing it through a component carrying sorting, paging,
+a column picker and row expansion would be more machinery, not less. Recorded so
+a later reader does not read them as drift.
+
+## A5 — The 1280px check
+
+The layout is committed to 1280px (spec 3). The geometry, computed rather than
+eyeballed:
+
+- Viewport 1280, less the 168px sidebar and 2×20px workspace padding, leaves
+  **1072px** of content — and less the panel's 2×1px border and the expansion's
+  2×14px padding, **1042px** for the expansion grid.
+- The expansion is `repeat(auto-fit, minmax(160px, 1fr))` over four groups with
+  20px gaps: 4×160 + 3×20 = **700px** minimum. It fits on one row with room to
+  spare, at roughly 245px per column.
+- The widest cell in any group is a label plus a mono number: "Unrealised"
+  (~60px at 11px Inter) + a 10px gap + eight mono digits (8 × 0.6em × 11px ≈
+  53px) ≈ **123px**, well inside 245px. Spec 3's warning that mono digits are
+  wide holds for the *table* columns, not for these two-column groups.
+
+**Still owed: the browser half.** Font fallback (if Inter or JetBrains Mono
+fails to load, both metrics above change), real values rather than assumed digit
+counts, and the three surfaces wider than the expansion — Trades with all
+eighteen columns picked, Analytics' strategy registry, and the heatmap at ten
+horizons. Those belong to 2b's walk-through, at 1280px, and this appendix does
+not claim them.
