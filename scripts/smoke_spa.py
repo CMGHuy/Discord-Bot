@@ -110,7 +110,14 @@ class Smoke:
 
     def health(self) -> None:
         status, body, _ = self.get("/api/v1/health")
-        if not self.check(status == 200, "GET /api/v1/health", f"HTTP {status}"):
+        detail = f"HTTP {status}"
+        if status == 401:
+            # Worth naming, because every later check fails the same way and
+            # the result looks like a broken UI rather than a wrong password.
+            detail += (" -- credentials rejected. Check ADMIN_USERNAME /"
+                       " ADMIN_PASSWORD, including a trailing \r from a"
+                       " CRLF .env.")
+        if not self.check(status == 200, "GET /api/v1/health", detail):
             return
         try:
             json.loads(body)

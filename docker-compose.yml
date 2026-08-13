@@ -32,6 +32,27 @@ services:
       - .env
     volumes:
       - .:/app
+      # Keep the SPA bundle that lives INSIDE the image.
+      #
+      # `.:/app` above replaces the whole of /app with the host directory, and
+      # the host has no swingbot/admin/static/app -- it is gitignored and
+      # built only by the Dockerfile's frontend stage. So the bind mount was
+      # hiding the bundle the image had correctly built, `spa.is_built()`
+      # returned False, and every workspace URL 404ed. The site did not go
+      # down (spa.py falls back to the Jinja UI, deliberately) but Release A
+      # silently did not take effect.
+      #
+      # An anonymous volume at this path is initialised from the image and
+      # takes precedence over the bind mount underneath it -- the same trick
+      # used to keep a container's node_modules. Nothing needs to be built on
+      # the host, which is the point.
+      #
+      # Worth knowing: CI could not catch this. container-healthcheck uses
+      # plain `docker run` with no bind mount, so the bundle was visible there
+      # and the SPA smoke test passed on an image that behaves differently
+      # under compose. The post-deploy verification in deploy/deploy.sh is
+      # what found it.
+      - /app/swingbot/admin/static/app
     # Chart generation (matplotlib/mplfinance) is CPU-only and headless;
     # no GPU or display needed.
     #
@@ -67,6 +88,27 @@ services:
       BOT_CONTAINER_NAME: swing-bot
     volumes:
       - .:/app
+      # Keep the SPA bundle that lives INSIDE the image.
+      #
+      # `.:/app` above replaces the whole of /app with the host directory, and
+      # the host has no swingbot/admin/static/app -- it is gitignored and
+      # built only by the Dockerfile's frontend stage. So the bind mount was
+      # hiding the bundle the image had correctly built, `spa.is_built()`
+      # returned False, and every workspace URL 404ed. The site did not go
+      # down (spa.py falls back to the Jinja UI, deliberately) but Release A
+      # silently did not take effect.
+      #
+      # An anonymous volume at this path is initialised from the image and
+      # takes precedence over the bind mount underneath it -- the same trick
+      # used to keep a container's node_modules. Nothing needs to be built on
+      # the host, which is the point.
+      #
+      # Worth knowing: CI could not catch this. container-healthcheck uses
+      # plain `docker run` with no bind mount, so the bundle was visible there
+      # and the SPA smoke test passed on an image that behaves differently
+      # under compose. The post-deploy verification in deploy/deploy.sh is
+      # what found it.
+      - /app/swingbot/admin/static/app
       # Optional: lets the admin UI's "Restart bot container" button
       # actually restart the bot service via the Docker API. Remove this
       # line if you'd rather not grant the admin container access to the

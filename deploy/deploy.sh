@@ -72,6 +72,15 @@ docker compose ps
 echo "==> Verifying the admin UI actually serves a working SPA"
 # shellcheck disable=SC1091
 set -a; . ./.env; set +a
+# Strip a trailing carriage return from each value. A .env written on Windows
+# carries CRLF, and sourcing it leaves a CR on the end of every value -- so the
+# password sent is "secret" plus a CR, and the server answers 401 for a
+# password that looks perfectly correct in the file. Cheap to do, and the
+# failure it prevents is a deploy that reports a broken UI when the UI is fine.
+ADMIN_USERNAME="${ADMIN_USERNAME%$'\r'}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD%$'\r'}"
+ADMIN_PORT="${ADMIN_PORT%$'\r'}"
+ADMIN_UI="${ADMIN_UI%$'\r'}"
 if docker compose exec -T admin python scripts/smoke_spa.py \
       --url "http://127.0.0.1:${ADMIN_PORT:-1234}" \
       --user "${ADMIN_USERNAME:-admin}" \
