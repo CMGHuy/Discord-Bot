@@ -59,6 +59,7 @@ const ROWS: Row[] = [
       [expansion]="withExpansion() ? expansionTemplate() : null"
       [emptyState]="emptyState()"
       [pinned]="pinned()"
+      [cardsAt]="cardsAt()"
       (sortChange)="lastSort = $event"
       (pageChange)="pages.push($event)"
       (rowActivate)="activated.push($event)"
@@ -75,6 +76,7 @@ class Host {
   readonly emptyState = signal<EmptyState | null>(null);
   readonly withExpansion = signal(false);
   readonly pinned = signal<string[]>([]);
+  readonly cardsAt = signal<boolean | null>(null);
 
   readonly expansionTemplate =
     viewChild.required<TemplateRef<RowContext<Row>>>('expansion');
@@ -479,5 +481,80 @@ describe('DataTable reordering', () => {
   it('gives a keyboard user something to focus and a hint about it', () => {
     expect(ths()[0].getAttribute('tabindex')).toBe('0');
     expect(ths()[0].getAttribute('aria-label')).toContain('arrow keys to reorder');
+  });
+});
+
+// --- SR24: card mode below 640px ------------------------------------------
+// Forced through `cardsAt` rather than by resizing: jsdom does not lay out,
+// so driving this with a real width would assert nothing.
+
+describe('DataTable card mode', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.visible.set(['ticker', 'pnl', 'held']);
+    host.pinned.set(['actions']);
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const cards = () => [...el().querySelectorAll('.card')];
+
+  function asCards() {
+    host.cardsAt.set(true);
+    fixture.detectChanges();
+  }
+
+  it('renders a table by default', () => {
+    expect(el().querySelector('table')).not.toBeNull();
+    expect(cards()).toHaveLength(0);
+  });
+
+  it('renders one card per row and no table below the breakpoint', () => {
+    asCards();
+    expect(el().querySelector('table')).toBeNull();
+    expect(cards()).toHaveLength(ROWS.length);
+  });
+
+  it('heads each card with the identifying columns', () => {
+    asCards();
+    expect(cards()[0].querySelector('.card-head')!.textContent).toContain('AAPL');
+  });
+
+  it('renders the rest as label/value pairs', () => {
+    asCards();
+    const body = cards()[0].querySelector('.card-body')!;
+    expect([...body.querySelectorAll('dt')].map((d) => d.textContent!.trim()))
+      .toEqual(['P&L %', 'Held']);
+  });
+
+  it('gives pinned columns their own full-width block', () => {
+    // A 24px icon button is not a phone target.
+    asCards();
+    expect(cards()[0].querySelector('.card-actions')).not.toBeNull();
+  });
+
+  it('still activates a row', () => {
+    asCards();
+    (cards()[1] as HTMLElement).click();
+    expect(host.activated.map((r) => r.ticker)).toEqual(['MSFT']);
+  });
+
+  it('keeps pagination working', () => {
+    host.pagination.set({ page: 1, perPage: 2, total: 9 });
+    asCards();
+    expect(el().querySelector('sb-pagination')).not.toBeNull();
+  });
+
+  it('returns to the table above the breakpoint', () => {
+    asCards();
+    host.cardsAt.set(false);
+    fixture.detectChanges();
+    expect(el().querySelector('table')).not.toBeNull();
+    expect(cards()).toHaveLength(0);
   });
 });

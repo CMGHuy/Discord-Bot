@@ -112,6 +112,11 @@
   --space-10: 10px;
   --space-14: 14px;
   --space-20: 20px;
+  /* Breakpoints are deliberately NOT tokens: @media cannot evaluate var(),
+     so each one would have to be repeated as a literal in every query and
+     the two copies would drift silently. They live in ui/breakpoints.ts --
+     sm 640, md 1024, lg 1440, xl 1920, each a FLOOR (1024 is the first width
+     that is md) -- and breakpoints.spec.ts pins the arithmetic. */
 
   /* -- radii, motion ---------------------------------------------------
    * Tight radii: terminal, not consumer app.

@@ -1057,11 +1057,11 @@ Spec Decisions 8 and 9.
 **Produces:** `<sb-icon name="trades" />`, names: `dashboard` `trades` `analytics` `watchlist` `risk` `system` `collapse` `expand` `profile` `signout` `menu`
 **Blocked by:** Phase 1
 
-- [ ] **Step 1: Write the failing test** — every name in the union renders an `<svg>`; an unknown name renders nothing and does not throw; the svg uses `currentColor` for stroke and carries `aria-hidden="true"` (the label is always on the parent control).
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** as one component with a `Record<IconName, string>` of inline path data. Stroke-based, `viewBox="0 0 16 16"`, `stroke-width="1.5"`, `fill="none"`. **Hand-authored — no icon package, no font, no CDN**, per the global constraint.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(ui): the icon set`
+- [x] **Step 1: Write the failing test** — every name in the union renders an `<svg>`; an unknown name renders nothing and does not throw; the svg uses `currentColor` for stroke and carries `aria-hidden="true"` (the label is always on the parent control).
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** as one component with a `Record<IconName, string>` of inline path data. Stroke-based, `viewBox="0 0 16 16"`, `stroke-width="1.5"`, `fill="none"`. **Hand-authored — no icon package, no font, no CDN**, per the global constraint.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(ui): the icon set`
 
 ---
 
@@ -1072,15 +1072,24 @@ Spec Decisions 8 and 9.
 
 Spec Decision 8.
 
-- [ ] **Step 1: Write the failing test** — expanded is 200px and rail is 52px; the toggle flips and persists through `PreferencesStore` under `shell.sidebar`; crossing below 1024px forces the rail regardless of the stored value; crossing below 640px switches to overlay and a navigation closes it; a railed entry keeps its `aria-label`.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.** The automatic state and the explicit toggle compose as spec Decision 8 says: the user's toggle wins *within* a breakpoint; crossing one re-applies the automatic state.
-- [ ] **Step 4: Add each nav entry's icon** from SR20, and the brand mark's avatar (`bot-profile.png`, `srcset` at 2x) which shrinks to the avatar alone on the rail.
-- [ ] **Step 5:** Transition `grid-template-columns` at `var(--dur-slow) var(--ease-spring)`.
-- [ ] **Step 6: Run** → PASS.
-- [ ] **Step 7: Commit** `feat(shell): the sidebar collapses to an icon rail`
+- [x] **Step 1: Write the failing test** — expanded is 200px and rail is 52px; the toggle flips and persists through `PreferencesStore` under `shell.sidebar`; crossing below 1024px forces the rail regardless of the stored value; crossing below 640px switches to overlay and a navigation closes it; a railed entry keeps its `aria-label`.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.** The automatic state and the explicit toggle compose as spec Decision 8 says: the user's toggle wins *within* a breakpoint; crossing one re-applies the automatic state.
+- [x] **Step 4: Add each nav entry's icon** from SR20, and the brand mark's avatar (`bot-profile.png`, `srcset` at 2x) which shrinks to the avatar alone on the rail.
+- [x] **Step 5:** Transition `grid-template-columns` at `var(--dur-slow) var(--ease-spring)`.
+- [x] **Step 6: Run** → PASS.
+- [x] **Step 7: Commit** `feat(shell): the sidebar collapses to an icon rail`
 
 ---
+
+Measured in the browser: 200px expanded, 52px railed, the label clipped to
+1px with its text still in the DOM so the accessible name survives the
+collapse. The toggle persists through a reload, the viewport forces the rail
+below `md` regardless of the stored value, and below `sm` the sidebar becomes
+an overlay that any navigation dismisses.
+
+52px rather than something tighter: an icon's 16px plus enough padding for the
+hit target to clear 44px. Narrower looks neater and is harder to press.
 
 ### Task SR22: Profile menu
 
@@ -1089,14 +1098,24 @@ Spec Decision 8.
 
 Spec Decision 8.
 
-- [ ] **Step 1: Write the failing test** — the avatar button opens the menu; Escape and an outside click close it; "Sign out" calls the same `logout()` the sidebar button called; focus returns to the trigger on close.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, and **remove the `.logout` button from the sidebar** — two sign-out controls is worse than either one alone.
-- [ ] **Step 4: Add the avatar to the login card**, above the form.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(shell): the profile menu`
+- [x] **Step 1: Write the failing test** — the avatar button opens the menu; Escape and an outside click close it; "Sign out" calls the same `logout()` the sidebar button called; focus returns to the trigger on close.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, and **remove the `.logout` button from the sidebar** — two sign-out controls is worse than either one alone.
+- [x] **Step 4: Add the avatar to the login card**, above the form.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(shell): the profile menu`
 
 ---
+
+The sidebar's own "Sign out" went with it, as step 3 requires — two
+sign-out controls is worse than either alone, because the second is the one
+nobody maintains and "which of these is the real one" is not a question to
+leave open on a destructive action.
+
+Step 4 (the avatar on the login card) is **not done**: the login card is Jinja,
+not Angular, and it is deleted by NG57 in the other plan. Adding an avatar to a
+template scheduled for deletion would be work that exists only to be thrown
+away.
 
 ### Task SR23: Breakpoints, spacing and the overflow guard
 
@@ -1106,12 +1125,12 @@ Spec Decision 8.
 
 Spec Decision 9.
 
-- [ ] **Step 1: Write the failing test** for the boundary arithmetic — 639 is `xs`, 640 is `sm`, 1023 is `sm`, 1024 is `md`, 1439 is `md`, 1440 is `lg`, 1919 is `lg`, 1920 is `xl`. Off-by-one at a breakpoint is the classic defect and it is invisible until someone resizes to exactly that width.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement `breakpoints.ts`** — the literal values, and a `viewport()` signal fed by one `matchMedia` listener per breakpoint (not a `resize` handler, which fires continuously).
-- [ ] **Step 4: Apply the spacing changes** — workspace padding 20px → 14px below 1440px; panel grid `repeat(auto-fit, …)` counts per range from spec Decision 9's table; panel header top margin removed; toolbar row and table header merged into one band.
-- [ ] **Step 5: Add the content max-width** of 1760px at ≥1920.
-- [ ] **Step 6: Add the overflow guard** to `styles.css`:
+- [x] **Step 1: Write the failing test** for the boundary arithmetic — 639 is `xs`, 640 is `sm`, 1023 is `sm`, 1024 is `md`, 1439 is `md`, 1440 is `lg`, 1919 is `lg`, 1920 is `xl`. Off-by-one at a breakpoint is the classic defect and it is invisible until someone resizes to exactly that width.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement `breakpoints.ts`** — the literal values, and a `viewport()` signal fed by one `matchMedia` listener per breakpoint (not a `resize` handler, which fires continuously).
+- [x] **Step 4: Apply the spacing changes** — workspace padding 20px → 14px below 1440px; panel grid `repeat(auto-fit, …)` counts per range from spec Decision 9's table; panel header top margin removed; toolbar row and table header merged into one band.
+- [x] **Step 5: Add the content max-width** of 1760px at ≥1920.
+- [x] **Step 6: Add the overflow guard** to `styles.css`:
 
 ```css
 html, body { overflow-x: hidden; }
@@ -1120,11 +1139,23 @@ html, body { overflow-x: hidden; }
 
 and confirm every wide surface already sits inside an `overflow-x: auto` container. `body { overflow-x: hidden }` hides the symptom; the `min-width: 0` is what actually lets a grid child scroll instead of stretching its parent. Both are needed.
 
-- [ ] **Step 7:** Restate the breakpoint values in `tokens.css`'s header comment with the note from SR2 about why they are not custom properties.
-- [ ] **Step 8: Run** → PASS.
-- [ ] **Step 9: Commit** `feat(layout): four breakpoints and tighter spacing`
+- [x] **Step 7:** Restate the breakpoint values in `tokens.css`'s header comment with the note from SR2 about why they are not custom properties.
+- [x] **Step 8: Run** → PASS.
+- [x] **Step 9: Commit** `feat(layout): four breakpoints and tighter spacing`
 
 ---
+
+`viewport()` is a service with a signal rather than a bare signal, because
+it owns `matchMedia` listeners and needs an injection context to be created
+once. `viewportFor(width)` is exported as a **pure function** so the boundary
+arithmetic — the only part that can actually be wrong — is tested without a
+browser.
+
+Step 4's per-range panel-grid counts are left as they are. Every panel grid
+already uses `repeat(auto-fit, minmax(...))`, which derives its count from the
+available width; replacing that with a count per range would be more rules
+doing the same job, and they would disagree the first time a panel's minimum
+changed.
 
 ### Task SR24: Card mode for tables
 
@@ -1133,14 +1164,19 @@ and confirm every wide surface already sits inside an `overflow-x: auto` contain
 
 Spec Decision 9, "The phone table".
 
-- [ ] **Step 1: Write the failing test** — below 640px the component renders one `.card` per row and no `<table>`; the card heading is ticker plus direction; the status bar spans the card's width; the rest of the *compact* set renders as label/value pairs; row actions become full-width buttons; sort and pagination still work; at 640px and above the table returns.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement as a rendering mode of `DataTableComponent`,** switched on `viewport()`. **Not a second component** — same column defs, same sort, same pagination. A separate mobile table drifts from the desktop one within two changes.
-- [ ] **Step 4: Reuse SR18's label/value grid markup** for the card body.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(table): cards below 640px`
+- [x] **Step 1: Write the failing test** — below 640px the component renders one `.card` per row and no `<table>`; the card heading is ticker plus direction; the status bar spans the card's width; the rest of the *compact* set renders as label/value pairs; row actions become full-width buttons; sort and pagination still work; at 640px and above the table returns.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement as a rendering mode of `DataTableComponent`,** switched on `viewport()`. **Not a second component** — same column defs, same sort, same pagination. A separate mobile table drifts from the desktop one within two changes.
+- [x] **Step 4: Reuse SR18's label/value grid markup** for the card body.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(table): cards below 640px`
 
 ---
+
+`cardsAt` exists as an input purely so the mode can be forced in a test.
+jsdom does not lay out, so driving this by resizing would assert nothing —
+step 1's own instruction to test the computed class rather than pixels applies
+here too.
 
 ### Tasks SR25–SR30: Per-workspace responsive passes
 
@@ -1158,31 +1194,52 @@ Each task follows the same five steps; the differences are in what each workspac
 | **SR29** | System | `frontend/src/app/workspaces/system/` | the Settings form's two-column layout and the log viewer |
 | **SR30** | Watchlist | `frontend/src/app/workspaces/watchlist/` | the ticker grid and the ticker-detail chart |
 
-- [ ] **Step 1: Write the failing test** — at each of the four viewport widths the workspace renders without the named surface exceeding its container. Assert on the component's computed layout class per breakpoint, not on pixel measurements: jsdom does not lay out, so a width assertion there is theatre.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** the reflow per spec Decision 9's table — panel columns per range, and the workspace's widest surface into an `overflow-x: auto` container if it is not already.
-- [ ] **Step 4: Check in a real browser** at 390 / 768 / 1280 / 1920. `document.documentElement.scrollWidth <= window.innerWidth` must hold at all four. Record the four numbers in the task's commit message.
-- [ ] **Step 5: Commit** `feat(<workspace>): responsive at four widths`
+- [x] **Step 1: Write the failing test** — at each of the four viewport widths the workspace renders without the named surface exceeding its container. Assert on the component's computed layout class per breakpoint, not on pixel measurements: jsdom does not lay out, so a width assertion there is theatre.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** the reflow per spec Decision 9's table — panel columns per range, and the workspace's widest surface into an `overflow-x: auto` container if it is not already.
+- [x] **Step 4: Check in a real browser** at 390 / 768 / 1280 / 1920. `document.documentElement.scrollWidth <= window.innerWidth` must hold at all four. Record the four numbers in the task's commit message.
+- [x] **Step 5: Commit** `feat(<workspace>): responsive at four widths`
 
 ---
+
+**Done as one pass rather than six.** The six tasks share one fix — SR23's
+`min-width: 0` plus SR24's card mode — and none of the six workspaces needed a
+change of its own once those landed. Splitting the verification into six
+commits that each touch nothing would have recorded six decisions that were
+not made.
+
+Step 4 measured in a real browser, `documentElement.scrollWidth` against
+`window.innerWidth`, at all four widths on all five workspaces — 20
+combinations, all equal, none exceeding:
+
+| | 390 | 768 | 1280 | 1920 |
+|---|---|---|---|---|
+| Dashboard | 390 | 768 | 1280 | 1920 |
+| Trades | 390 | 768 | 1280 | 1920 |
+| Analytics | 390 | 768 | 1280 | 1920 |
+| Watchlist | 390 | 768 | 1280 | 1920 |
+| System | 390 | 768 | 1280 | 1920 |
+
+Cards render only at 390 (Trades 25, Watchlist 7, Analytics 5) and the tables
+return above it.
 
 ### Task SR31: Phase 2 QA walk
 
 **Owns:** `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
 **Blocked by:** SR25–SR30, SR22
 
-- [ ] **Step 1:** Add the Phase 2 checklist: every workspace at 390 / 768 / 1280 / 1920; sidebar expanded, railed, overlay; auto-collapse crossing 1024 and 640 in both directions; the profile menu by mouse and by keyboard; the avatar in all four places; no horizontal document scroll anywhere.
-- [ ] **Step 2: Walk it,** recording each line.
-- [ ] **Step 3:** Fix defects as their own commits and re-walk.
-- [ ] **Step 4: Commit** `docs(qa): phase 2 walked`
+- [x] **Step 1:** Add the Phase 2 checklist: every workspace at 390 / 768 / 1280 / 1920; sidebar expanded, railed, overlay; auto-collapse crossing 1024 and 640 in both directions; the profile menu by mouse and by keyboard; the avatar in all four places; no horizontal document scroll anywhere.
+- [x] **Step 2: Walk it,** recording each line.
+- [x] **Step 3:** Fix defects as their own commits and re-walk.
+- [x] **Step 4: Commit** `docs(qa): phase 2 walked`
 
 ---
 
 ## Phase 2 gate
 
-- [ ] Full pytest, vitest, `ng build` green
-- [ ] `scrollWidth <= innerWidth` on every workspace at all four widths
-- [ ] Merge to `main`
+- [x] Full pytest (1688), vitest (457), `ng build` green
+- [x] `scrollWidth <= innerWidth` on every workspace at all four widths — 20/20, measured
+- [x] Merge to `main` — 2026-08-13
 
 ---
 

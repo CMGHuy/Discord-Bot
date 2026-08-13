@@ -4,6 +4,7 @@ import {
   Component,
   TemplateRef,
   computed,
+  inject,
   input,
   output,
   signal,
@@ -11,6 +12,7 @@ import {
 
 import { EmptyStateComponent } from '../empty-state';
 import { PaginationComponent } from '../pagination';
+import { ViewportService } from '../breakpoints';
 import {
   ColumnDef,
   EmptyState,
@@ -53,6 +55,63 @@ import {
   imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
   template: `
     <div class="wrap" [attr.aria-busy]="loading()">
+      @if (cards()) {
+        <!-- SR24. A rendering MODE of this component, not a second component:
+             same column defs, same sort, same pagination. A separate mobile
+             table drifts from the desktop one within two changes, and then
+             every column added to one is missing from the other. -->
+        <ul class="cards">
+          @for (row of rows(); track rowKey()(row)) {
+            <li class="card" (click)="activate(row, $event)">
+              <div class="card-head">
+                @for (col of headlineColumns(); track col.key) {
+                  <span class="head-cell">
+                    @if (col.cell; as cellTemplate) {
+                      <ng-container
+                        [ngTemplateOutlet]="cellTemplate"
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      />
+                    } @else {
+                      {{ text(col, row) }}
+                    }
+                  </span>
+                }
+              </div>
+
+              <!-- The same label/value grid the expansion uses (SR18), so the
+                   card and the expanded row cannot drift apart. -->
+              <dl class="card-body">
+                @for (col of bodyColumns(); track col.key) {
+                  <div>
+                    <dt>{{ col.header }}</dt>
+                    <dd [class.num]="col.numeric">
+                      @if (col.cell; as cellTemplate) {
+                        <ng-container
+                          [ngTemplateOutlet]="cellTemplate"
+                          [ngTemplateOutletContext]="{ $implicit: row }"
+                        />
+                      } @else {
+                        {{ text(col, row) }}
+                      }
+                    </dd>
+                  </div>
+                }
+              </dl>
+
+              @for (col of pinnedColumns(); track col.key) {
+                @if (col.cell; as cellTemplate) {
+                  <div class="card-actions">
+                    <ng-container
+                      [ngTemplateOutlet]="cellTemplate"
+                      [ngTemplateOutletContext]="{ $implicit: row }"
+                    />
+                  </div>
+                }
+              }
+            </li>
+          }
+        </ul>
+      } @else {
       <div class="scroller" tabindex="0">
       <table>
         <thead>
@@ -134,6 +193,7 @@ import {
         </tbody>
       </table>
       </div>
+      }
 
       @if (showEmptyState(); as state) {
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
@@ -150,6 +210,28 @@ import {
     </div>
   `,
   styles: `
+    .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-10); }
+    .card {
+      padding: var(--space-14);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: grid;
+      gap: var(--space-10);
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-10);
+      font-size: var(--text-subhead);
+    }
+    .card-body { margin: 0; display: grid; gap: var(--space-6); }
+    .card-body > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    .card-body dt { color: var(--text-secondary); font-size: var(--text-chip); }
+    .card-body dd { margin: 0; }
+    /* Full width, because a 24px icon button is not a phone target. */
+    .card-actions { display: grid; gap: var(--space-6); }
+    .card-actions button { width: 100%; }
     th[draggable='true'] { cursor: grab; }
     th.dragging { opacity: 0.5; }
     th:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
@@ -293,6 +375,39 @@ export class DataTable<T> {
       .map((key) => byKey.get(key))
       .filter((column): column is ColumnDef<T> => column !== undefined);
   });
+
+  /**
+   * Cards instead of a table, below `sm` — spec v18 Decision 9.
+   *
+   * Driven by the viewport rather than by an input, so no call site has to
+   * remember to ask for it. `cardsAt` exists only so a test can force the
+   * mode without a layout engine: jsdom does not lay out, so asserting on
+   * widths there would be theatre.
+   */
+  private readonly viewportService = inject(ViewportService);
+  readonly cardsAt = input<boolean | null>(null);
+  protected readonly cards = computed(
+    () => this.cardsAt() ?? this.viewportService.isPhone(),
+  );
+
+  /** Ticker and direction: what identifies the row at a glance. Falls back to
+   *  the first two visible columns for a table with neither. */
+  protected readonly headlineColumns = computed(() => {
+    const shown = this.renderedColumns();
+    const preferred = shown.filter((c) => ['ticker', 'direction'].includes(c.key));
+    return preferred.length ? preferred : shown.slice(0, 2);
+  });
+
+  /** Everything else in the visible set, as label/value pairs. */
+  protected readonly bodyColumns = computed(() => {
+    const headline = new Set(this.headlineColumns().map((c) => c.key));
+    return this.renderedColumns().filter((c) => !headline.has(c.key));
+  });
+
+  /** Pinned columns become full-width controls under the card body. */
+  protected readonly pinnedColumns = computed(() =>
+    this.columns().filter((c) => this.pinnedSet().has(c.key)),
+  );
 
   /** Keys the table pins in place — not draggable, not a drop target. */
   private readonly pinnedSet = computed(() => new Set(this.pinned()));
