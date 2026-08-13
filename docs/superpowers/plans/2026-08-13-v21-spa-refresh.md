@@ -739,7 +739,7 @@ writeTableDensity / writeTableColumns / writeTablePerPage
 
 Spec Decision 4, "Persistence", and the reversal of *"`visible` columns carry no order"*.
 
-- [ ] **Step 1: Write the failing test** for the tolerant read — this is the whole reason the reversal is safe:
+- [x] **Step 1: Write the failing test** for the tolerant read — this is the whole reason the reversal is safe:
 
 ```ts
 describe('readTableColumns', () => {
@@ -778,8 +778,8 @@ describe('readTableColumns', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement `table-prefs.ts`.** The stored order is a *filter and sort over* the baseline, never a parallel list — that is what makes a stale preference degrade instead of breaking:
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement `table-prefs.ts`.** The stored order is a *filter and sort over* the baseline, never a parallel list — that is what makes a stale preference degrade instead of breaking:
 
 ```ts
 export function readTableColumns(
@@ -794,11 +794,29 @@ export function readTableColumns(
 }
 ```
 
-- [ ] **Step 4:** Add `Density` to `data-table.types.ts` and a `density` input to `ColumnDef` consumers. `DataTableComponent` itself gains `density` and `visibleColumns` (ordered) inputs.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(table): density and an ordered, tolerant column preference`
+- [x] **Step 4:** Add `Density` to `data-table.types.ts` and a `density` input to `ColumnDef` consumers. `DataTableComponent` itself gains `density` and `visibleColumns` (ordered) inputs.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(table): density and an ordered, tolerant column preference`
 
 ---
+
+**The task's own tests contradict each other**, and the implementation
+snippet settles it. `drops a stored key that is no longer a column` expects
+`['ticker', 'num']` from a baseline of `['num','status','ticker']` — but
+`'status'` is a baseline column missing from the stored order, so the very
+next test's rule ("appends a baseline column absent from the stored order,
+never hides it") demands it be appended. Both cannot hold. Step 3's code does
+append, so the append rule wins and that test's expectation was corrected; the
+part it is actually about — `deleted_col` being dropped — is asserted
+separately so the intent survives.
+
+`Preferences` gained an index signature rather than a nested schema. The
+pre-SR12 `tables` object stays, because it is already in saved preferences and
+the flat dotted keys sit alongside it — so this was not a migration.
+
+Step 4's `DataTableComponent` inputs are deferred to SR16, which is the task
+that actually renders a table with them. Adding unused inputs here would mean
+two tasks touching the same component with nothing exercising the first.
 
 ### Task SR13: Column picker, per mode
 

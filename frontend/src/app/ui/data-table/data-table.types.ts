@@ -12,6 +12,16 @@ import { TemplateRef } from '@angular/core';
 /** Which way a column is sorted. Structured rather than the API's `-field`
  *  string: the table must not know how the wire format spells a sort, and a
  *  store that translates one to the other is the only place that should. */
+/**
+ * How much room a row gets — spec v18 Decision 4.
+ *
+ * `compact` is the default: the table exists to show many rows at once. Kept
+ * as a two-value union rather than a number so the two modes can differ in
+ * WHICH columns they show, not merely in padding — which is the whole reason
+ * column preferences are stored per density.
+ */
+export type Density = 'compact' | 'full';
+
 export interface SortSpec {
   key: string;
   direction: 'asc' | 'desc';
