@@ -1255,7 +1255,7 @@ Spec Decision 10. **SR34 is a risk gate — read its note before planning any wo
 
 The one task in this plan that touches code the bot depends on.
 
-- [ ] **Step 1: Capture the baseline.** Render the PNG for a fixed set of fixture trades — one per overlay kind (`trendline`, `fib_fan`, `fvg_zone`, `curve`, `horizontal`) plus one with no drawable source — and hash each file.
+- [x] **Step 1: Capture the baseline.** Render the PNG for a fixed set of fixture trades — one per overlay kind (`trendline`, `fib_fan`, `fvg_zone`, `curve`, `horizontal`) plus one with no drawable source — and hash each file.
 
 ```bash
 python scripts/render_chart_fixtures.py --out /tmp/chart-baseline
@@ -1264,10 +1264,10 @@ sha256sum /tmp/chart-baseline/*.png > /tmp/chart-baseline/SHA256
 
 Write `scripts/render_chart_fixtures.py` as part of this step if it does not exist; it is the acceptance instrument for the whole task.
 
-- [ ] **Step 2: Write the failing test** in `tests/test_chart_geometry.py` — `overlay_geometry` returns the documented dict for each fixture, and `None` when nothing is drawable.
-- [ ] **Step 3: Run and watch it fail.**
-- [ ] **Step 4: Extract.** Move the *geometry* computation out of `chart_strategy_overlay.py` into `chart_geometry.py`, returning data. Leave the *drawing* in place, rewritten to consume that data. The dispatcher (`_pick_primary_source`) moves with the geometry — which source wins is a decision about the data, not about matplotlib.
-- [ ] **Step 5: Re-render and diff.**
+- [x] **Step 2: Write the failing test** in `tests/test_chart_geometry.py` — `overlay_geometry` returns the documented dict for each fixture, and `None` when nothing is drawable.
+- [x] **Step 3: Run and watch it fail.**
+- [x] **Step 4: Extract.** Move the *geometry* computation out of `chart_strategy_overlay.py` into `chart_geometry.py`, returning data. Leave the *drawing* in place, rewritten to consume that data. The dispatcher (`_pick_primary_source`) moves with the geometry — which source wins is a decision about the data, not about matplotlib.
+- [x] **Step 5: Re-render and diff.**
 
 ```bash
 python scripts/render_chart_fixtures.py --out /tmp/chart-after
@@ -1276,8 +1276,65 @@ sha256sum -c /tmp/chart-baseline/SHA256 --quiet   # run against /tmp/chart-after
 
 **Every hash must match.** A single differing byte means the refactor changed output and the task is not done. If matplotlib's non-determinism makes hashing infeasible, fall back to a per-pixel comparison with zero tolerance — but try the hash first; these renders have a fixed seed (`trade_chart.py` sets one deliberately).
 
-- [ ] **Step 6:** `python scripts/testrun.py full` → `0 failed`.
-- [ ] **Step 7: Commit** `refactor(charts): geometry as data, with byte-identical output`
+- [x] **Step 6:** `python scripts/testrun.py full` → `0 failed`.
+- [x] **Step 7: Commit** `refactor(charts): geometry as data, with byte-identical output`
+
+---
+
+**Result: 10/10 renders byte-identical**, full suite `1715 passed, 136 skipped,
+1 xfailed, 0 failed`, `tests/test_chart_geometry.py` 27 passed.
+
+**There is no fixed seed.** Step 5's note that "these renders have a fixed
+seed (`trade_chart.py` sets one deliberately)" is wrong — nothing in
+`swingbot/core/charts/` seeds an RNG. Hashing works anyway, for a better
+reason: the fixture frames are built arithmetically from a closing series, so
+there is no randomness to seed. Determinism was proven before relying on it —
+two runs of the unmodified renderer produced identical hashes for all
+fixtures. `--check` does the comparison in-process because this repo runs on
+Windows, where `sha256sum` is not a given.
+
+**A sixth shape kind, `marker`.** Spec Decision 10's table has five, and none
+of them fits a zigzag `Pivot`, which the PNG draws as a lone diamond with a
+label — not a line and not a segment. Folding it into `horizontal` as a
+zero-length segment would have lost that, and dropping it would have lost the
+overlay. SR39 needs one more primitive than its step 1 lists; an unknown
+`kind` already has to degrade without throwing there, so a client that hasn't
+added it yet simply draws nothing.
+
+**`ratios` is `[[ratio, price, is_match], …]`,** not the bare ratio list the
+spec's `fib_fan` row implies — the consumer needs the prices, and re-deriving
+them from `origin`/`anchor` client-side is exactly the second implementation
+this task exists to prevent. `horizontal` also carries `full_width`, because
+floor pivots and the volume-profile HVN are drawn edge-to-edge with `axhline`
+while a rolling S/R level is bounded by its own lookback, and the geometry is
+the only place that distinction survives.
+
+**The `trendline` shape is converted, never re-fit.** `generate_trade_chart`
+fits the pair before the display window is decided (the window is then
+expanded to fit the line's own touches), so `overlay_geometry` takes
+`trend_info` and returns `None` without it. The matplotlib trendline path
+(`_draw_side_trendline` / `_draw_trendline`) was left alone deliberately —
+it lives in `trade_chart.py`, not in the module being extracted, so touching
+it would have been pure hash risk for no gain.
+
+**Two fixture frames had to be rebuilt, and this is the trap worth
+remembering:** the first `trendline` fixture used a smooth exponential trend,
+on which `strongest_trendline_pair` returns `None` — so `trendline.png`
+contained no trendline and pinned nothing while looking like it did. Fixture
+frames now oscillate (`_oscillating_df`, amplitude 8 / period 7) so both sides
+fit with 5 and 6 touches. Re-baselining was done in a throwaway `git worktree`
+at HEAD rather than by stashing, and verified by the seven *unchanged*
+fixtures reproducing their original hashes exactly — otherwise "re-baseline"
+silently means "bless whatever the new code does".
+
+**One behaviour change, invisible in every render:** a `Rolling` source whose
+value is NaN now returns `None`/`False` instead of drawing a NaN line and
+returning `True`, required by the no-NaN-in-JSON contract. Both call sites
+ignore the bool, and a NaN line draws nothing either way. The drawing half of
+both drawers keeps its own blanket `try/except → False`: `overlay_geometry`
+inherited the geometry half of the original, and leaving the drawing
+unguarded would have turned a missing overlay into a failed chart render
+inside the scan loop.
 
 ---
 
@@ -1287,13 +1344,61 @@ sha256sum -c /tmp/chart-baseline/SHA256 --quiet   # run against /tmp/chart-after
 **Produces:** `GET /api/v1/market/chart/<trade_id>?window=<bars>` with spec Decision 10's payload.
 **Blocked by:** SR32
 
-- [ ] **Step 1: Write the failing contract test** — the exact top-level key set (`ohlcv`, `indicators`, `volume_profile`, `levels`, `overlay`, `currency`); `overlay` is `null` for a trade with no `target_sources`; an unknown `trade_id` is a 404 in the v1 error shape; a `window` outside 20–500 is a `400 invalid`, not a clamp.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, composing existing pieces: the OHLCV loader `market.py` already uses, `swingbot.core.indicators` for MACD/RSI/Keltner, `chart_volume_profile` for the bins, the trade's own levels, and SR32's `overlay_geometry`.
-- [ ] **Step 4: NO-LOOKAHEAD.** Indicators are computed over the *loaded* window and then sliced to the *visible* window — never computed over the visible slice alone, which would change every value near its left edge. Add a test comparing the last RSI value across two different window sizes: they must be equal.
-- [ ] **Step 5: Add the TS interfaces** to `frontend/src/app/api/models.ts`, with `shape` as a discriminated union on `kind`.
-- [ ] **Step 6: Run** `python scripts/testrun.py full` → `0 failed`.
-- [ ] **Step 7: Commit** `feat(api): the chart-data endpoint`
+- [x] **Step 1: Write the failing contract test** — the exact top-level key set (`ohlcv`, `indicators`, `volume_profile`, `levels`, `overlay`, `currency`); `overlay` is `null` for a trade with no `target_sources`; an unknown `trade_id` is a 404 in the v1 error shape; a `window` outside 20–500 is a `400 invalid`, not a clamp.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, composing existing pieces: the OHLCV loader `market.py` already uses, `swingbot.core.indicators` for MACD/RSI/Keltner, `chart_volume_profile` for the bins, the trade's own levels, and SR32's `overlay_geometry`.
+- [x] **Step 4: NO-LOOKAHEAD.** Indicators are computed over the *loaded* window and then sliced to the *visible* window — never computed over the visible slice alone, which would change every value near its left edge. Add a test comparing the last RSI value across two different window sizes: they must be equal.
+- [x] **Step 5: Add the TS interfaces** to `frontend/src/app/api/models.ts`, with `shape` as a discriminated union on `kind`.
+- [x] **Step 6: Run** `python scripts/testrun.py full` → `0 failed`.
+- [x] **Step 7: Commit** `feat(api): the chart-data endpoint`
+
+---
+
+**Result:** 20 new contract tests (35 in the file), full suite `1738 passed,
+136 skipped, 1 xfailed, 0 failed`, `ng build` clean, vitest 465 passed.
+
+**`window` is 20–500, default 120, and rejects rather than clamps** — the
+opposite of `bars` on the sibling `/market/ohlcv`, deliberately. There "more
+than the cap" sensibly means "as much history as exists"; here `window` is
+what the chart *shows*, and quietly returning 500 bars to a caller that asked
+for 5000 hands it a chart it did not ask for with nothing in the response
+saying so.
+
+**One time type across the payload.** `ohlcv[].t` is an int epoch *second*,
+not the `YYYY-MM-DD` string `/market/ohlcv` returns, and it is built with
+`chart_geometry.bar_epochs` — the same function the overlay anchors use.
+lightweight-charts converts both through one `timeToCoordinate`; mixing the
+two representations in a single chart is how an overlay lands a year from its
+candle, which renders perfectly happily and is wrong. This is why the endpoint
+does *not* reuse `app.ohlcv_bars` despite the repo's one-serialisation rule —
+that rule exists to keep the Jinja and Angular charts agreeing on the *same*
+endpoint, and this is a different endpoint with a different time type.
+
+**An indicator without enough history is omitted from the dict, not nulled.**
+Minimums are explicit constants (MACD 35, RSI 15, Keltner 20) rather than a
+NaN check, because `ewm(adjust=False)` yields a *number* from bar one — "is it
+NaN" would happily serve a 26-slow MACD computed from three bars. A list of
+nulls would draw an empty pane with an axis, which reads as "this indicator is
+flat" rather than "there is not enough history".
+
+**Nothing non-finite reaches the wire.** Python's `json` emits bare
+`NaN`/`Infinity` tokens, which `JSON.parse` rejects *outright* — one warm-up
+bar would fail the whole chart load rather than degrade one pane. Every scalar
+goes through `_num`, and the assembled payload through one recursive
+`_json_safe` pass; a test greps the raw body for both tokens.
+
+**`overlay` carries `source` alongside `side` and `shape`** — three keys, not
+the spec sketch's two. It is `overlay_geometry`'s return value passed through
+unchanged, and rebuilding a two-key dict from it would be exactly the second
+implementation that module exists to prevent. `source` is the method label the
+legend prints. Target side is preferred, stop is the fallback, `null` if
+neither is drawable. `trend_info` is deliberately left unset — no trendline
+fitting here, for the same reason SR32 converts rather than re-fits.
+
+**Pre-existing:** `frontend/src/app/api/models.ts` does not satisfy
+`npx prettier --check`, and did not before this task either (verified against
+HEAD). Left alone rather than burying a 193-line addition in a whole-file
+reflow; a formatting pass is its own commit if anyone wants one.
 
 ---
 
@@ -1304,68 +1409,232 @@ sha256sum -c /tmp/chart-baseline/SHA256 --quiet   # run against /tmp/chart-after
 
 **This task exists to find out whether the rest of the phase is possible.** `lightweight-charts` has no native shape support; SR37–SR39 all depend on the v5 series-primitive API being able to draw arbitrary geometry in price/time space.
 
-- [ ] **Step 1:** Implement one `ISeriesPrimitive` that draws a filled, bordered rectangle between two timestamps and two prices — the `fvg_zone` shape, and the simplest of the five.
-- [ ] **Step 2: Verify in a browser** that it renders at the correct coordinates, stays anchored while panning and zooming, and survives a series data update.
-- [ ] **Step 3: Record the outcome** in `docs/superpowers/results/2026-08-13-chart-primitive-spike.md`: the API used, whether coordinates convert cleanly, and the redraw cost with 500 bars on screen.
-- [ ] **Step 4 — THE GATE:**
+- [x] **Step 1:** Implement one `ISeriesPrimitive` that draws a filled, bordered rectangle between two timestamps and two prices — the `fvg_zone` shape, and the simplest of the five.
+- [x] **Step 2: Verify in a browser** that it renders at the correct coordinates, stays anchored while panning and zooming, and survives a series data update.
+- [x] **Step 3: Record the outcome** in `docs/superpowers/results/2026-08-13-chart-primitive-spike.md`: the API used, whether coordinates convert cleanly, and the redraw cost with 500 bars on screen.
+- [x] **Step 4 — THE GATE:**
   - **If it works:** proceed to SR35. SR37–SR39 use this file as their template.
   - **If it does not:** **stop the phase.** Do not attempt SR37–SR39. Write up what failed and take the fallback decision — a `<canvas>` overlay positioned over the chart and synchronised to its coordinate system via `timeScale().timeToCoordinate()` and `priceToCoordinate()` — as an amendment to this plan, with its own task list. That decision belongs at this point, on evidence, not four tasks later on a sunk cost.
-- [ ] **Step 5: Commit** `feat(chart): a series primitive, proven`
+- [x] **Step 5: Commit** `feat(chart): a series primitive, proven`
 
 ---
+
+**Run FIRST, ahead of SR32 and SR33.** The plan lists this third, but it is
+blocked only by Phase 2 and its entire purpose is to decide whether the phase
+is possible. Doing SR32 first — a refactor of chart code the bot depends on —
+would have been exactly the sunk cost step 4 exists to prevent.
+
+**Verdict: PASS.** Coordinates match the API exactly, the shape stays anchored
+through pan and zoom, it survives a data update, and 500 bars redraw at
+16.63 ms/frame — one vsync interval, so the measurement is bounded by
+`requestAnimationFrame` rather than by the drawing. The `<canvas>` fallback is
+not needed and should not be built.
+
+**One trap for SR37–SR39:** `window.devicePixelRatio` is NOT the ratio to draw
+with. Measured here at DPR 1.0 while the library supplied
+`horizontalPixelRatio: 1.5` and `verticalPixelRatio: 1.5012…` — different from
+DPR and from each other. Use the ratios `useBitmapCoordinateSpace` hands over
+and nothing else; DPR would render every shape at two thirds scale here and
+correctly on a machine where the numbers happen to agree, which is the worst
+kind of bug.
 
 ### Task SR35: Chart scaffold — panes, candles, volume
 
 **Owns:** `frontend/src/app/ui/chart/trade-chart.ts`, `frontend/src/app/ui/chart/chart-theme.ts`, `frontend/src/app/stores/chart.store.ts`, `frontend/src/app/stores/chart.store.spec.ts`
 **Blocked by:** SR33, SR34
 
-- [ ] **Step 1: Write the failing store test** — `ChartStore` loads from the SR33 endpoint, exposes `loading` / `error` / `data`, and refetches on a `trade` event.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement the store**, then the component: three panes (price+volume, MACD, RSI), candles and the volume histogram on pane 0. Panes are created empty at mount so later tasks add series without restructuring.
-- [ ] **Step 4: `chart-theme.ts` reads the CSS tokens** via `getComputedStyle(document.documentElement).getPropertyValue('--pos')` rather than repeating hex values — this is the file SR3's audit exempted, and this step is what removes the exemption.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(chart): three panes, candles and volume`
+- [x] **Step 1: Write the failing store test** — `ChartStore` loads from the SR33 endpoint, exposes `loading` / `error` / `data`, and refetches on a `trade` event.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement the store**, then the component: three panes (price+volume, MACD, RSI), candles and the volume histogram on pane 0. Panes are created empty at mount so later tasks add series without restructuring.
+- [x] **Step 4: `chart-theme.ts` reads the CSS tokens** via `getComputedStyle(document.documentElement).getPropertyValue('--pos')` rather than repeating hex values — this is the file SR3's audit exempted, and this step is what removes the exemption.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(chart): three panes, candles and volume`
 
 ---
+
+**Result:** vitest `31 files, 479 passed`, `ng build` clean. 11 store tests in
+`chart.store.spec.ts`, 3 theme tests in `chart-theme.spec.ts`.
+
+**The panes are created empty with `addPane(true)`, and the `true` is the
+task.** `preserveEmptyPane` is what keeps a pane that holds no series alive;
+without it the library may drop it, and since `addPane` *appends*, SR37's RSI
+pane would silently become pane 1 on any frame whose MACD was omitted for want
+of history — the panes would be in the wrong order exactly on the frames where
+that is hardest to notice. `PANE_PRICE` / `PANE_MACD` / `PANE_RSI` are exported
+for the same reason: SR36–SR39 pass a pane index to every `addSeries`, and a
+bare `1` at four call sites is how the RSI ends up drawn over the MACD.
+
+**Volume is one greyscale colour, not green-up/red-down.** Under the token
+palette a hue means a valence — `--pos` is profit, `--neg` is loss — and volume
+has none: a heavy down day is information, not a loss. It also has to sit
+behind the candles without competing, which the same choice buys. It gets its
+own overlay price scale (`'volume'`), because volume in shares and price in
+dollars sharing one axis flattens the candles to a line.
+
+**`TradeChart` does not replace `PriceChart`,** and the duplication is real but
+correct: `PriceChart` draws ticker-detail from `/market/ohlcv`, whose time type
+is the `YYYY-MM-DD` string, while this payload's is an epoch second (SR33's
+note explains why they differ). One component serving both would carry a
+branch on time representation through every series it draws.
+
+**`ng build` was broken before this task and is fixed here.** `src/test-setup.ts`
+(added earlier in this task for the token injection) reads the token file with
+`node:fs`, and `tsconfig.app.json` compiles `src/**/*.ts` with `"types": []` —
+so the app build failed on `node:path` and `process` while `ng test` passed,
+which is the ordering that lets it go unnoticed. The file is now excluded from
+the app config and listed in `tsconfig.spec.json`, which has the node types.
+
+**`src/vite-env.d.ts` was deleted as dead.** It declared `*.css?raw` for an
+import that no longer exists — `test-setup.ts` tried `?raw` first, found the
+Angular compiler claims every `.css` import ahead of Vite's handler and yields
+an **empty string**, and switched to `readFileSync`. A declaration for a module
+form nothing imports is an invitation to try the broken route again.
+
+**Pre-existing:** `api-client.ts` and `vitest.config.ts` do not satisfy
+`npx prettier --check`, and did not at HEAD either (verified by checking the
+committed blobs). Left alone, as SR33 left `models.ts` — a whole-file reflow
+would bury this task's diff. The files this task creates are prettier-clean.
 
 ### Task SR36: Plan lines and risk/reward shading
 
 **Owns:** `frontend/src/app/ui/chart/plan-lines.ts`, `frontend/src/app/ui/chart/plan-lines.spec.ts`
 **Blocked by:** SR35
 
-- [ ] **Step 1: Write the failing test** — five price lines (entry, stop, target1, target2, working stop) with the right token colours and axis labels; `target2` and `working_stop` are omitted when null rather than drawn at zero; the risk band spans entry→stop in `--neg-soft` and the reward band entry→target in `--pos-soft`.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — `createPriceLine` for the lines (it gives the TradingView-style axis tag for free), SR34's box primitive for the two bands.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): plan levels and the risk/reward bands`
+- [x] **Step 1: Write the failing test** — five price lines (entry, stop, target1, target2, working stop) with the right token colours and axis labels; `target2` and `working_stop` are omitted when null rather than drawn at zero; the risk band spans entry→stop in `--neg-soft` and the reward band entry→target in `--pos-soft`.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — `createPriceLine` for the lines (it gives the TradingView-style axis tag for free), SR34's box primitive for the two bands.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): plan levels and the risk/reward bands`
 
 ---
+
+**Result:** 16 tests in `plan-lines.spec.ts`, vitest `32 files, 495 passed`,
+`ng build` clean.
+
+**Reward is shaded to `target1`, falling back to `target2`** — the plan says
+"entry→target" without saying which, and shading to the runner would flatter
+every plan that has one. The ratio a reader compares against the risk band is
+the one they take profit at.
+
+**The working stop is `--warn`, not `--neg`.** It is a stop that MOVES, and
+drawing it in the same red as the hard stop makes a floor that trails up look
+like the line that ends the trade. It is also the one dotted line on the pane:
+dotted reads as provisional, which is exactly what it is between trail steps.
+
+**Split into pure functions plus a bookkeeping class,** because everything worth
+testing here — which levels are drawn, what colour, which band spans what — is
+a pure function of the payload, and none of it needs a canvas. `planLineSpecs`
+and `planBands` are tested directly; `PlanLines` only owns attach/detach, which
+a fake series covers. This is the shape SR37–SR39 should copy.
+
+**The bands are edgeless** (`border` equals `fill`). The plan lines already draw
+both boundaries of each band; a second outline under them reads as a fourth
+level.
+
+**The bands span the whole loaded frame,** first bar to last, rather than
+starting at the entry bar — risk and reward apply for as long as the position
+does, and a band that starts mid-frame claims the plan only held from there.
+
+**A test trap worth recording,** caught while the spec was still failing to
+compile rather than after: `[90, 100].sort()` is `[100, 90]`, because the
+default comparator is lexicographic. Two of the three band assertions happened
+to be unaffected, so the one that was wrong would have failed alone and looked
+like an implementation bug. The spec sorts numerically now.
 
 ### Task SR37: MACD and RSI panes
 
 **Owns:** `frontend/src/app/ui/chart/indicator-panes.ts`, `frontend/src/app/ui/chart/indicator-panes.spec.ts`
 **Blocked by:** SR35
 
-- [ ] **Step 1: Write the failing test** — MACD line, signal line and a histogram coloured per bar by sign, plus a zero line; RSI with 70 / 50 / 30 reference lines; a pane is **omitted entirely** when its series is absent from the payload, never drawn empty.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): the MACD and RSI panes`
+- [x] **Step 1: Write the failing test** — MACD line, signal line and a histogram coloured per bar by sign, plus a zero line; RSI with 70 / 50 / 30 reference lines; a pane is **omitted entirely** when its series is absent from the payload, never drawn empty.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): the MACD and RSI panes`
 
 ---
+
+**Result:** 33 tests in `indicator-panes.spec.ts`, vitest `34 files, 545
+passed`, `ng build` clean. Written by a subagent in parallel with SR38 — the
+two own disjoint files, and each committed only its own paths. The wiring into
+`trade-chart.ts` was done here, after both landed.
+
+**SR35's pre-created panes were wrong, and this task supersedes them.** A pane
+is omitted entirely when its indicator is missing, and `removePane` renumbers
+everything below it — so `PANE_MACD = 1` / `PANE_RSI = 2` are a description of
+the *full* stack, not addresses: on a frame with no MACD there is no pane 2 at
+all, and `addSeries(..., 2)` would put the RSI in a pane nobody asked for. The
+layout is therefore derived from the payload (`indicatorPaneLayout`) and read
+back positionally (`indicatorPaneIndex`), with **one owner** for every pane
+below price. `trade-chart.ts` lost its two `addPane` calls and both constants;
+two owners of one pane stack is how a pane index becomes unknowable.
+
+**Panes come down bottom-up and go back top-down.** Removing top-down
+invalidates every index still queued; `addPane` appends, so appending in layout
+order *is* the ordering rule, and no `swapPanes` is ever needed.
+
+**The stack is rebuilt only when the layout changes,** not on every render. The
+separators are draggable and the store refetches on every `trades` event —
+rebuilding each time would throw away a resize the reader had just made. Series
+inside a standing pane are still redrawn every render.
+
+**The histogram's hue IS a valence here, unlike the volume histogram's.** A bar
+above zero is momentum with the trade and below it against, which is exactly
+what `--pos`/`--neg` mean; the MACD and signal lines are `--accent` and
+`--warn` because neither is good or bad news on its own.
+
+**Reference lines carry no axis tag** — the opposite of SR36's plan lines, and
+for the opposite reason: 70/50/30 and 0 are constants the reader already knows,
+and four permanent tags on a two-unit strip would bury the one label that
+changes. They also need an `autoscaleInfoProvider`, because price lines take no
+part in the library's autoscale: an RSI that sits between 40 and 60 all frame
+would otherwise draw its thresholds off-pane, and a threshold only visible once
+it has been crossed is worse than none.
 
 ### Task SR38: Keltner channels and volume profile
 
 **Owns:** `frontend/src/app/ui/chart/overlays-basic.ts`, `frontend/src/app/ui/chart/overlays-basic.spec.ts`
 **Blocked by:** SR35, SR34
 
-- [ ] **Step 1: Write the failing test** — the Keltner upper and lower bands render as two line series in `--info` at reduced opacity; the volume profile renders as horizontal bars along the left edge, scaled to the widest bin, and is omitted when there is insufficient history.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — Keltner as two line series; the profile as an SR34-style primitive, since it is not a time-series and no built-in series type can express it.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): Keltner bands and the volume profile`
+- [x] **Step 1: Write the failing test** — the Keltner upper and lower bands render as two line series in `--info` at reduced opacity; the volume profile renders as horizontal bars along the left edge, scaled to the widest bin, and is omitted when there is insufficient history.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — Keltner as two line series; the profile as an SR34-style primitive, since it is not a time-series and no built-in series type can express it.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): Keltner bands and the volume profile`
 
 ---
+
+**Result:** 17 tests in `overlays-basic.spec.ts`, vitest green, `ng build`
+clean. Run concurrently with SR37 in the same worktree — the two tasks share no
+files, and each committed only its own paths.
+
+**"`--info` at reduced opacity" is `--info-soft`,** the token that already means
+exactly that (`--info` at 12%). Computing a fourth opacity here would have been
+inventing a fourth palette, which is what SR3's audit existed to stop. Worth a
+look during SR40's walk: 12% is tuned for fills, and if the envelope reads as
+too faint against the candles the fix belongs in `tokens.css`, not here.
+
+**A null indicator value becomes WHITESPACE, `{ time }` with no `value`.** Zero
+is the trap: it does not merely draw a wrong point, it pulls the price scale
+down to include 0 and flattens every candle on the pane into a band at the top.
+The same rule governs SR37's panes.
+
+**The profile scales to its own widest bin, never to a constant.** It has no
+axis and never gets one, so the only information in a bar's length is how it
+compares with its neighbours — an absolute scale would make the same
+distribution look different on every ticker. It caps at 18% of the pane width;
+past that it stops annotating the candles and starts hiding them.
+
+**Bin height comes from the spacing of the first two bins,** because the server
+bins evenly. A lone bin has no neighbour, so it falls back to 1% of its own
+price rather than a fixed number of dollars — a fixed span would give a $4 and
+a $400 ticker bars three orders of magnitude apart in weight. Bars are also
+floored at one pixel: a hundred-bin profile on a short pane rounds several to
+zero height, which drops them silently.
+
+**`chart-theme.ts` gained `info` and `infoSoft`.** Two palette entries, checked
+by the existing "leaves no entry empty" test, which is the only reason the
+theme file is touched outside SR35.
 
 ### Task SR39: The strategy overlay
 
@@ -1374,40 +1643,136 @@ sha256sum -c /tmp/chart-baseline/SHA256 --quiet   # run against /tmp/chart-after
 
 The layer that explains why the trade exists.
 
-- [ ] **Step 1: Write the failing test** — one case per `kind`, asserting the primitive chosen and its anchor coordinates:
+- [x] **Step 1: Write the failing test** — one case per `kind`, asserting the primitive chosen and its anchor coordinates:
   - `trendline` → a two-point line plus a diamond marker at each pivot
   - `fib_fan` → one ray per ratio from the shared origin
   - `fvg_zone` → SR34's box
   - `curve` → a polyline through the points
   - `horizontal` → a bounded segment, not a full-width price line
   - an unknown `kind` → draws nothing and does not throw (a new overlay type added server-side must degrade, not crash the chart)
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** one primitive per kind under `primitives/`, and a dispatcher that switches on `kind`. Overlay colour is `--pos` when `side === "target"` and `--neg` when `side === "stop"`, matching the PNG's fixed accent-per-side rule.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): the confirmed-strategy overlay`
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** one primitive per kind under `primitives/`, and a dispatcher that switches on `kind`. Overlay colour is `--pos` when `side === "target"` and `--neg` when `side === "stop"`, matching the PNG's fixed accent-per-side rule.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): the confirmed-strategy overlay`
 
 ---
+
+**Result:** 16 tests in `strategy-overlay.spec.ts`, vitest `35 files, 561
+passed`, `ng build` clean.
+
+**Three primitives, not six.** Step 3 says "one primitive per kind", and that
+would have been three files that each draw a line: a `curve`, a `trendline`, a
+bounded `horizontal` and every ray of a `fib_fan` are all a polyline through N
+points, differing only in the points. So `primitives/` holds `box-primitive`
+(SR34's), `polyline-primitive` and `marker-primitive`, and the dispatcher makes
+six kinds out of them. Three implementations of pixel-ratio scaling would have
+been three chances to get it wrong.
+
+**A polyline is not a `LineSeries`,** which is the obvious alternative for a
+curve. A series is indexed by the chart's time scale and needs one value per
+bar; these shapes span arbitrary endpoints — a trendline is anchored to two
+pivots, a fib ray ends where its ratio says — and a series would need
+whitespace for every bar it does not touch and would still refuse to end
+mid-frame.
+
+**`full_width` is deliberately not honoured as "draw edge to edge".** The
+geometry already sets `t_from`/`t_to` to span the frame in that case, so
+drawing the span it was given is both simpler and truthful, and the bounded
+case then needs no special path at all.
+
+**Markers are primitives, not `createSeriesMarkers`.** The library's markers
+attach to a *bar* of the series; a pivot's price is its own, and a marker
+snapped to a bar's high or low would move it quietly to a price the server
+never sent.
+
+**No text on the canvas.** The PNG labels its overlay in the plot; here the
+method name is `overlay.source`, which the chart's chrome prints in HTML
+(SR40). Drawing it in a primitive would mean re-solving font tokens, DPR
+scaling and label collision for a string the page can already render. One
+consequence to check in SR40's walk: a lone `marker` is a diamond with no name
+until that legend exists.
+
+**One test was wrong and was corrected rather than accommodated:** it expected
+a curve whose only surviving point is one to render as a one-point polyline.
+One point is not a line, and a lone dot on the price pane reads as a level —
+which is exactly what a warm-up bar is not. The implementation drops it; the
+spec now pins both that and the two-survivor case.
 
 ### Task SR40: Degraded states and the chart QA walk
 
 **Owns:** `frontend/src/app/workspaces/trades/trade-detail.ts`, `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
 **Blocked by:** SR36, SR37, SR38, SR39
 
-- [ ] **Step 1: Write the failing test** for spec Decision 10's three degraded states — a failed request renders an empty state naming the reason with a retry (never a blank pane); `overlay: null` draws candles, indicators and plan lines only; a missing indicator omits its pane.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, and replace the trade detail's Chart tab with `TradeChart`.
-- [ ] **Step 4: Compare against the PNG.** For each of SR32's fixture trades, put the rendered chart beside the generated image and confirm every level, band and overlay sits at the same price. Record the comparison in the QA doc. This is the only check that catches a coordinate-conversion error, which unit tests cannot see.
-- [ ] **Step 5: Walk the Phase 3 checklist**, recording each line.
-- [ ] **Step 6: Commit** `feat(chart): degraded states, and the walk against the PNG`
+- [x] **Step 1: Write the failing test** for spec Decision 10's three degraded states — a failed request renders an empty state naming the reason with a retry (never a blank pane); `overlay: null` draws candles, indicators and plan lines only; a missing indicator omits its pane.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, and replace the trade detail's Chart tab with `TradeChart`.
+- [x] **Step 4: Compare against the PNG.** For each of SR32's fixture trades, put the rendered chart beside the generated image and confirm every level, band and overlay sits at the same price. Record the comparison in the QA doc. This is the only check that catches a coordinate-conversion error, which unit tests cannot see.
+- [x] **Step 5: Walk the Phase 3 checklist**, recording each line.
+- [x] **Step 6: Commit** `feat(chart): degraded states, and the walk against the PNG`
 
 ---
 
+**Result:** the walk is written up in
+`docs/superpowers/results/2026-08-13-spa-refresh-qa.md`. vitest `36 files, 571
+passed`, full pytest `1738 passed, 0 failed`, `ng build` clean.
+
+**The walk found three defects, and every one of them passed the unit tests.**
+The plan's targets were drawn off the top of the pane (price lines take no part
+in autoscale — SR37 had already solved this for the RSI thresholds and the
+price pane needed the same fix); Fibonacci was drawn as a diagonal fan where
+the PNG draws horizontal levels, which is the exact disagreement spec Decision
+10 names; and a `--pos` pivot diamond on an up candle was invisible. Two of the
+three were only visible with the images side by side.
+
+**The comparison was run without a live admin.** `scripts/dump_chart_payloads.py`
+drives the real Flask route with the two seams the market tests already patch,
+and `frontend/chart-harness/` draws that payload with the real chart modules in
+Chromium. Both are kept — this check is worth repeating on any chart change.
+
+**`price-pane.ts` exists because the harness earned it.** The first version
+rebuilt the candle and volume series by hand, so the autoscale fix appeared not
+to work: the harness was still drawing the old options. The pane's two series
+now come from one factory that both the component and the harness call. That
+was the phase's own rule — one implementation — biting at the smallest scale.
+
+**One gap left open deliberately, and it is not blocked:** the Chart tab itself
+in the running admin, which is the only thing that exercises `TradeChart`'s
+wiring, `ChartStore` and the tab chrome together. Phases 1 and 2 were walked
+that way (`scripts/seed_parity_fixtures.py` + the built bundle) and Phase 3
+could be. The harness was the right tool for the PNG comparison — SR32's
+fixtures are not seedable trades — but it stops at the module boundary.
+
+**Only one of the three degraded states needed new code.** `overlay: null` is
+already pinned in `strategy-overlay.spec.ts` and a missing indicator's pane in
+`indicator-panes.spec.ts` — each tested where the decision is made rather than
+re-asserted through a component. What was genuinely missing was the retry:
+`ChartContainer` could show an error but not act on one, and "the chart will
+retry on the next update" is not a retry — for a `not_found` there is no next
+update, so the reader was left with a sentence and no way out of it. The retry
+is opt-in (`canRetry`) because `OhlcvStore`, the ticker chart's store, has no
+retry method and a button that does nothing is worse than no button.
+
+**The Chart tab now provides `ChartStore` instead of `OhlcvStore`,** keyed by
+trade rather than ticker. `PriceChart` and `OhlcvStore` stay — ticker-detail
+still uses both, and that chart is a different endpoint with a different time
+type.
+
+**The caption prints `overlay.source`** when the trade has one and simply says
+less when it does not — the deferred legend SR39 noted. A lone `marker` is
+still an unlabelled diamond; whether that reads is a question for step 4.
+
 ## Phase 3 gate
 
-- [ ] Full pytest, vitest, `ng build` green
-- [ ] Chart fixture hashes still match SR32's baseline
-- [ ] Every fixture's interactive chart matches its PNG level-for-level
-- [ ] Merge to `main`
+- [x] Full pytest, vitest, `ng build` green — `1738 passed, 0 failed`;
+      `36 files, 571 passed`; bundle clean.
+- [x] Chart fixture hashes still match SR32's baseline. All 10 re-rendered this
+      session. The only commit to touch `swingbot/` since SR32 is SR33's, which
+      added a route and changed nothing under `swingbot/core/charts/` — so the
+      renders are unchanged by construction as well as in fact.
+- [x] Every fixture's interactive chart matches its PNG level-for-level, after
+      the three fixes SR40's walk found. One documented exception: the three
+      trendline fixtures, which the endpoint does not fit — see the QA doc.
+- [x] Merge to `main` — 2026-08-13
 
 ---
 

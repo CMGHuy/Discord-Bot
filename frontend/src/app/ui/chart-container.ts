@@ -4,6 +4,7 @@ import {
   ElementRef,
   computed,
   input,
+  output,
   viewChild,
 } from '@angular/core';
 
@@ -59,7 +60,16 @@ import { EmptyStateComponent } from './empty-state';
         }
         @case ('error') {
           <div class="overlay">
-            <sb-empty-state [title]="error()!" hint="The chart will retry on the next update." />
+            <sb-empty-state
+              [title]="error()!"
+              [hint]="canRetry() ? '' : 'The chart will retry on the next update.'"
+            />
+            @if (canRetry()) {
+              <!-- Inside the overlay rather than in the empty state, because the
+                   empty state is used all over the app and none of the others
+                   has an action. -->
+              <button type="button" class="retry" (click)="retry.emit()">Retry</button>
+            }
           </div>
         }
         @case ('empty') {
@@ -88,15 +98,36 @@ import { EmptyStateComponent } from './empty-state';
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
-    .surface { flex: 1; min-height: 0; }
+    .surface {
+      flex: 1;
+      min-height: 0;
+    }
     /* Hidden rather than removed, so the element keeps its measured size. */
-    .hidden { visibility: hidden; }
+    .hidden {
+      visibility: hidden;
+    }
 
     .overlay {
       position: absolute;
       inset: 0;
       display: grid;
       place-items: center;
+      align-content: center;
+      gap: var(--space-10);
+    }
+    .retry {
+      padding: var(--space-6) var(--space-14);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--surface-raised);
+      color: var(--text);
+      font: inherit;
+      font-size: var(--text-table);
+      cursor: pointer;
+    }
+    .retry:hover {
+      border-color: var(--accent);
+      color: var(--accent);
     }
     .spinner {
       width: 18px;
@@ -106,9 +137,15 @@ import { EmptyStateComponent } from './empty-state';
       border-radius: 50%;
       animation: spin 700ms linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
     @media (prefers-reduced-motion: reduce) {
-      .spinner { animation-duration: 2.4s; }
+      .spinner {
+        animation-duration: 2.4s;
+      }
     }
   `,
 })
@@ -120,6 +157,14 @@ export class ChartContainer {
   readonly hasData = input(true);
   readonly height = input(320);
   readonly caption = input<string | null>(null);
+  /** Whether the failure is worth offering a retry for. Opt-in, because not
+   *  every store has one — `OhlcvStore` refetches on its own signals and has no
+   *  retry method, and a button that does nothing is worse than no button. */
+  readonly canRetry = input(false);
+
+  /** Pressed retry. The container knows nothing about what failed, so the
+   *  decision of what to re-issue stays with the store that issued it. */
+  readonly retry = output<void>();
 
   /** Kept for anything that needs to measure the drawing area. The chart
    *  itself arrives by projection and does not need this. */

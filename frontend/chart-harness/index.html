@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SR40 chart harness</title>
+    <link rel="stylesheet" href="../src/styles/tokens.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg, #0b0e16);
+        color: var(--text, #e6e9f0);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      #caption {
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--text-secondary, #9aa3b8);
+      }
+      #chart {
+        width: 1100px;
+        height: 700px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="caption">loading…</div>
+    <div id="chart"></div>
+    <script type="module" src="./bundle.js"></script>
+  </body>
+</html>

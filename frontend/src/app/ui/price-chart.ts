@@ -17,7 +17,7 @@ import {
 } from 'lightweight-charts';
 
 import { Candle, TradeLevels } from '../api/models';
-import { chartOptions, chartPalette } from './chart-theme';
+import { chartOptions, chartPalette } from './chart/chart-theme';
 
 /**
  * The candlestick chart itself — lightweight-charts **5.x**, imperative state

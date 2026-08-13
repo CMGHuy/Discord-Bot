@@ -211,7 +211,7 @@ RUNNER_BAND_ALPHA = 0.06
 
 # Priority order used to pick ONE confirming method to actually draw
 # when a scenario's target/stop level was confirmed by several at once
-# (see chart_drawing._pick_primary_source) -- most visually distinctive /
+# (see chart_geometry._pick_primary_source) -- most visually distinctive /
 # structurally informative first. A flat generic source (Rolling S/R, floor
 # pivots, a lone swing high/low) barely differs from the horizontal
 # target/stop line already on the chart, so it's only drawn if nothing more

@@ -10,6 +10,11 @@
     "src/**/*.ts"
   ],
   "exclude": [
-    "src/**/*.spec.ts"
+    "src/**/*.spec.ts",
+    /* Test-only, and it reads the token file off disk with `node:fs`. The app
+     * build compiles with `"types": []`, so leaving it in `include` fails the
+     * build on `node:path` and `process` — it belongs to tsconfig.spec.json,
+     * which has the node types, and is listed there. */
+    "src/test-setup.ts"
   ]
 }

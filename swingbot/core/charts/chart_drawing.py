@@ -1,14 +1,19 @@
 """
 Small, self-contained drawing/geometry helpers shared by trade_chart.py's
 generate_trade_chart() -- label placement, the two-part branch arrows,
-diagonal trendline rendering, and picking which confirming source is
-"primary" for a scenario. Split out of trade_chart.py because these are
-generic building blocks with no dependency on the rest of that module's
-much larger chart-assembly logic.
+diagonal trendline rendering, and the two price-level helpers (floor
+pivots, Fibonacci anchor bars) the window-expansion logic needs. Split
+out of trade_chart.py because these are generic building blocks with no
+dependency on the rest of that module's much larger chart-assembly logic.
+
+Picking WHICH confirming source is "primary" for a scenario used to live
+here too; it moved to chart_geometry._pick_primary_source, since the API
+that serves the same overlay to the SPA has to make an identical choice
+and must not import a drawing module to do it.
 """
 import pandas as pd
 
-from .chart_style import MIN_LABEL_GAP_FRAC, METHOD_PRIORITY, _label_bbox
+from .chart_style import MIN_LABEL_GAP_FRAC, _label_bbox
 
 
 def _spread_labels(items: list, ylim: tuple) -> list:
@@ -174,34 +179,6 @@ def _draw_trendline(ax, recent_len: int, window_bars: int, slope: float, interce
         ys = [price for _x, price in touch_points]
         ax.scatter(xs, ys, color=color, s=55, marker="D", zorder=6, edgecolors="white", linewidths=0.8)
     _place_strategy_label(ax, x1, y1, label_x, color, label, occupied=occupied, min_gap=min_gap)
-
-
-def _pick_primary_source(sources: list) -> str | None:
-    """
-    Picks the single most visually informative confirming method from a
-    scenario's target_sources/stop_sources to actually draw on the
-    chart (see METHOD_PRIORITY) -- drawing every clustered source at
-    once would be unreadable, and flat generic sources add little over
-    the horizontal target/stop line already shown. Bonus, non-level
-    sources confidence.py may have appended (a candlestick pattern
-    name, "Bollinger Squeeze Breakout") aren't real price levels and
-    are never picked. Returns None if nothing drawable is present, so
-    the caller can fall back to the old plain-trendline behavior.
-    """
-    if not sources:
-        return None
-
-    def _rank(label):
-        for i, key in enumerate(METHOD_PRIORITY):
-            if label.startswith(key):
-                return i
-        return None
-
-    ranked = [(r, s) for s in sources for r in [_rank(s)] if r is not None]
-    if not ranked:
-        return None
-    ranked.sort(key=lambda t: t[0])
-    return ranked[0][1]
 
 
 def _floor_pivot_prices(df: pd.DataFrame) -> dict:

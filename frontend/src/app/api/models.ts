@@ -516,6 +516,199 @@ export interface OhlcvResponse {
   levels?: TradeLevels;
 }
 
+/* -- market: the interactive trade chart (SR33) -------------------------- */
+
+/** A bar in `GET /market/chart/:tradeId`.
+ *
+ *  Note `t` -- an int Unix epoch in SECONDS, NOT the `YYYY-MM-DD` string
+ *  `Candle` carries. One time type across this whole payload: the overlay
+ *  shapes below carry epochs too, and lightweight-charts converts both
+ *  through the same `timeToCoordinate`. Mixing the two representations in
+ *  one chart is how an overlay lands a year away from its candle, which
+ *  renders perfectly happily and is wrong. */
+export interface ChartBar {
+  /** Unix epoch, SECONDS. */
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+/** A point on an overlay shape: `[epochSeconds, price]`.
+ *
+ *  The price is nullable because a rolling window's warm-up bars have no
+ *  value (a Donchian channel shifts a 20-bar window). The server carries
+ *  those as `null` rather than NaN -- `JSON.parse` rejects a bare `NaN`
+ *  token outright, which would fail the entire chart load. */
+export type ChartPoint = [number, number | null];
+
+/** An indicator line, computed over the full loaded frame and then sliced to
+ *  the visible window -- so its last value does not move when the window
+ *  changes. `null` is a warm-up bar with no value, not zero. */
+export type ChartSeries = (number | null)[];
+
+/** The indicator panes. **Every key is optional**: an indicator the frame is
+ *  too short for is omitted from the object entirely rather than sent as a
+ *  list of nulls, and the client omits the pane in turn (spec Decision 10's
+ *  third degraded state). An empty pane with an axis and no line would read
+ *  as "this indicator is flat" instead of "there is not enough history". */
+export interface ChartIndicators {
+  macd?: {
+    line: ChartSeries;
+    signal: ChartSeries;
+    /** MACD minus signal. */
+    hist: ChartSeries;
+  };
+  rsi?: ChartSeries;
+  /** Keltner envelope. The middle band is the 20-EMA the price pane can
+   *  already draw as an overlay, so only the envelope is carried. */
+  kc?: {
+    upper: ChartSeries;
+    lower: ChartSeries;
+  };
+}
+
+/** One bin of the horizontal volume histogram. `price` is the bin's CENTRE,
+ *  not an edge. Empty when there is not enough history -- unlike an
+ *  indicator this is an overlay on the price pane, so there is no pane to
+ *  omit. */
+export interface VolumeProfileBin {
+  price: number;
+  volume: number;
+}
+
+/** The plan lines. Decision 10's names, NOT `TradeLevels`' `tp1`/`tp2`:
+ *  these feed price lines whose axis tags read "target 1", and
+ *  `working_stop` (the live breakeven/trail floor) has no equivalent there
+ *  at all. A missing level is `null` and must stay undrawn -- rendering it
+ *  at 0 rescales the whole price axis and reads as a real level. */
+export interface ChartLevels {
+  entry: number | null;
+  stop: number | null;
+  target1: number | null;
+  target2: number | null;
+  working_stop: number | null;
+}
+
+/* The overlay's geometry, mirroring `swingbot/core/charts/chart_geometry.py`
+ * shape by shape. That module is the ONE implementation, shared with the PNG
+ * the bot posts to Discord, so the browser and the image cannot disagree
+ * about where a level sits -- these types describe its output and must never
+ * grow a field the Python does not emit. */
+
+/** An indicator line: an EMA, VWAP, a Bollinger or Donchian band. */
+export interface CurveShape {
+  kind: 'curve';
+  label: string;
+  points: ChartPoint[];
+}
+
+/** A Fibonacci retracement fan. The whole fan is drawn faintly with the
+ *  matching member bolder, because a lone horizontal line at 61.8% says
+ *  nothing about the swing it was measured from.
+ *
+ *  `ratios` is `[ratio, price, isMatch]`. `matched` may name a ratio label
+ *  (`"Fib 61.8%"`), an anchor (`"Swing high"`/`"Swing low"`), or be null for
+ *  a Fib label matching no ratio at all -- the fan is still drawn. */
+export interface FibFanShape {
+  kind: 'fib_fan';
+  /** The 0% anchor: `[epochSeconds, price]`. */
+  origin: ChartPoint;
+  /** The 100% anchor: `[epochSeconds, price]`. */
+  anchor: ChartPoint;
+  ratios: [number, number | null, boolean][];
+  matched: string | null;
+  matched_price: number | null;
+}
+
+/** An unfilled fair value gap, as a rectangle running from the third candle
+ *  of the 3-bar pattern that opened it to the right edge -- an unfilled gap
+ *  is still unfilled today, which is the point of drawing it. */
+export interface FvgZoneShape {
+  kind: 'fvg_zone';
+  t_from: number;
+  t_to: number;
+  price_low: number | null;
+  price_high: number | null;
+  mid: number | null;
+  label: string;
+}
+
+/** A price level. `full_width` false means a BOUNDED segment: a rolling S/R
+ *  level is only meaningful over the bars it was measured across, so drawing
+ *  it as a full-width line would claim history it never described. */
+export interface HorizontalShape {
+  kind: 'horizontal';
+  price: number;
+  t_from: number;
+  t_to: number;
+  label: string;
+  full_width: boolean;
+}
+
+/** A zigzag pivot: one point in time, drawn as a lone diamond. Its own kind
+ *  rather than a zero-length `horizontal`, which would lose that it is not a
+ *  level extending anywhere. */
+export interface MarkerShape {
+  kind: 'marker';
+  t: number;
+  price: number;
+  label: string;
+  pivot_kind: 'high' | 'low';
+}
+
+/** A diagonal support/resistance line, with the pivots it was fitted
+ *  through. Only ever present when the caller supplied an existing fit --
+ *  `/market/chart` does not fit trendlines, so it never returns this. */
+export interface TrendlineShape {
+  kind: 'trendline';
+  p1: ChartPoint;
+  p2: ChartPoint;
+  pivots: ChartPoint[];
+  label: string;
+}
+
+/** Discriminated on `kind`, so a `switch` over it is exhaustive and adding a
+ *  shape on the Python side becomes a compile error here rather than a
+ *  silently undrawn overlay. */
+export type ChartShape =
+  | CurveShape
+  | FibFanShape
+  | FvgZoneShape
+  | HorizontalShape
+  | MarkerShape
+  | TrendlineShape;
+
+/** The ONE confirming method drawn for this trade. Target side preferred --
+ *  it is the side the trade aims at -- falling back to the stop side, and
+ *  `null` when neither has anything drawable (an older trade with no
+ *  recorded sources, or one confirmed only by a candlestick pattern). */
+export interface ChartOverlay {
+  side: 'target' | 'stop';
+  /** The confirming-method label the legend prints, e.g. `"EMA20"`. */
+  source: string;
+  shape: ChartShape;
+}
+
+/** `GET /market/chart/:tradeId?window=<bars>`.
+ *
+ *  Everything the interactive chart draws, in one request, computed by the
+ *  same Python that draws the PNG posted to Discord (spec Decision 10).
+ *  `window` defaults to 120 and must be 20-500 -- out of range is a 400, NOT
+ *  a clamp, so a caller asking for 5000 bars finds out rather than silently
+ *  receiving a chart it did not ask for. */
+export interface ChartResponse {
+  ohlcv: ChartBar[];
+  indicators: ChartIndicators;
+  volume_profile: VolumeProfileBin[];
+  levels: ChartLevels;
+  overlay: ChartOverlay | null;
+  /** The symbol this ticker actually trades in (`$`, `€`, ...). */
+  currency: string;
+}
+
 /* -- preferences -------------------------------------------------------- */
 
 /** Per-user UI state. Opaque to the server on purpose -- it is UI state, and
