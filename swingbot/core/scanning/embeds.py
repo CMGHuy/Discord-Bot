@@ -1032,14 +1032,21 @@ async def notify_plan_events(bot, events):
     """Route fills to the alerts channel, everything else to history --
     same split notify_closed_trades already uses."""
     from swingbot.core.plan_store import PlanStore
+    from swingbot.core.silent_channel import silence
     store = PlanStore()
     for event in events:
         plan = store.get(event.plan_id)
         if plan is None:
             continue
+        is_fill = event.transition == "filled"
         channel_id = (config.DISCORD_CHANNEL_TRADES_ID
-                      if event.transition == "filled"
+                      if is_fill
                       else config.DISCORD_CHANNEL_TRADES_HISTORY_ID)
         channel = bot.get_channel(int(channel_id)) if channel_id else None
+        if is_fill:
+            # Alerts channel -> never notifies (silent_channel.py). The
+            # history channel keeps its notification: a closed trade is a
+            # result you want pushed, not something you'll scroll back for.
+            channel = silence(channel)
         if channel is not None:
             await channel.send(embed=build_plan_event_embed(plan, event))

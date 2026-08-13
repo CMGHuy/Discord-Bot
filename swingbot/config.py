@@ -99,10 +99,14 @@ FIELDS: list[Field] = [
           help="From the Discord Developer Portal. Changing this requires a full bot restart -- "
                "the Gateway connection can't be swapped to a new token live."),
     Field("DISCORD_CHANNEL_TRADES_ID", "DISCORD_CHANNEL_TRADES_ID", "Discord Connection", "Alerts channel ID",
-          help="Channel where new trade alerts are posted."),
+          help="Channel where new trade alerts are posted. Everything the bot posts here is sent with "
+               "Discord's @silent flag: delivered and rendered in full, marks the channel unread, but "
+               "raises no push or desktop notification. Use the simple-alerts channel below if you want "
+               "to be pinged."),
     Field("DISCORD_CHANNEL_TRADES_SIMPLE_ID", "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "Discord Connection", "Simple-alerts channel ID",
           help="Mirrors every alert from the alerts channel as a short text message -- ticker, direction, "
-               "confidence, horizon, setup, entry, TP1, TP2, SL -- with no chart image. Empty = off."),
+               "confidence, horizon, setup, entry, TP1, TP2, SL -- with no chart image. This is the channel "
+               "that notifies, since the main alerts channel is always silent. Empty = off."),
     Field("DISCORD_CHANNEL_TRADES_HISTORY_ID", "DISCORD_CHANNEL_TRADES_HISTORY_ID", "Discord Connection", "Closed-trades channel ID",
           help="Channel for WIN/LOSS and near-SL/TP notifications. Separate from the alerts channel so results don't get lost among new signals."),
     Field("DISCORD_CHANNEL_RETROSPECTIVE_ID", "DISCORD_CHANNEL_RETROSPECTIVE_ID", "Discord Connection", "Daily retrospective channel ID",

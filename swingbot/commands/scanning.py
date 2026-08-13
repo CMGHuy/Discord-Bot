@@ -17,6 +17,7 @@ from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_s
 from swingbot.core.account import load_account_config
 from swingbot.core.data import get_current_price
 from swingbot.core.performance import TradeLog
+from swingbot.core.silent_channel import silence
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.watchlist import load_watchlist
 
@@ -331,13 +332,17 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
     """alerts: list of (embed, chart_path, plan_or_none, simple_text_or_none)
     tuples; the 4th element is optional (see the unpack below).
 
-    Notification policy: exactly one ping per signal, raised by the simple
-    channel. Whenever an alert is successfully mirrored to
-    DISCORD_CHANNEL_TRADES_SIMPLE_ID, the full embed is posted with
-    silent=True -- it is still delivered and still rendered in full, it just
-    does not notify. With no simple channel configured (or a mirror that
-    failed) the full alert keeps its notification, so silencing can never
-    leave a signal unannounced.
+    Notification policy: the alerts channel (DISCORD_CHANNEL_TRADES_ID)
+    never notifies at all -- it is resolved through silence()
+    (swingbot/core/silent_channel.py), which forces silent=True on every
+    send regardless of the `silent` kwarg built below. Alerts are still
+    delivered and still rendered in full there; they just don't ping.
+
+    The `mirrored` flag below therefore only governs destinations that are
+    NOT the alerts channel -- the firehose, and the `ctx` a user ran
+    `!check` in: those are silenced only once the signal has actually been
+    mirrored to DISCORD_CHANNEL_TRADES_SIMPLE_ID, so a missing or failed
+    mirror can never leave a signal unannounced everywhere at once.
 
     Every plan-carrying alert gets a PlanActionView(plan.plan_id,
     author_id=None) attached (any user may click); legacy (no-plan) alerts
@@ -421,8 +426,10 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
         view = PlanActionView(plan.plan_id, author_id=None) if plan is not None else None
         # silent=True sets Discord's SUPPRESS_NOTIFICATIONS flag (the `@silent`
         # feature): the message posts and renders exactly as before, it just
-        # raises no push/desktop notification. Only ever set once the mirror
-        # has actually landed.
+        # raises no push/desktop notification. For a non-alerts destination
+        # (firehose, or the ctx of a manual !check) it is only set once the
+        # mirror has actually landed; the alerts channel overrides this to
+        # True unconditionally on its way through SilentChannel.send().
         kwargs = {"embed": embed, "silent": mirrored}
         if chart_path:
             kwargs["file"] = discord.File(chart_path, filename=os.path.basename(chart_path))
@@ -635,7 +642,11 @@ async def _session_scan_tick():
     # exactly as before.
     channel = None
     if config.DISCORD_CHANNEL_TRADES_ID:
-        channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
+        # silence() -> nothing posted to the alerts channel notifies; see
+        # swingbot/core/silent_channel.py. Wrapped here, at the single place
+        # this tick resolves the channel, so the session transition, the
+        # healthcheck and every alert below inherit it.
+        channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
     if channel is not None:
         await _check_session_transition(channel)
 
@@ -866,7 +877,7 @@ async def config_watcher():
             ),
         }
         if config.DISCORD_CHANNEL_TRADES_ID:
-            channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
+            channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
             if channel:
                 for attr_key, fmt_fn in _notify_keys.items():
                     if attr_key in changed:
@@ -907,10 +918,10 @@ async def config_watcher():
             if not config.DISCORD_CHANNEL_TRADES_ID:
                 log.warning("CHANNEL_ID not set; cannot post scan results.")
                 return
-            channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
+            channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
             if channel is None:
                 try:
-                    channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
+                    channel = silence(await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
                 except Exception as _ce:
                     log.warning("Could not resolve channel %s for triggered scan: %s", config.DISCORD_CHANNEL_TRADES_ID, _ce)
                     return
@@ -1410,7 +1421,7 @@ async def on_ready():
     # Post a startup notice to the alerts channel so there's a visible
     # timestamp in Discord for when the bot came (back) online.
     if config.DISCORD_CHANNEL_TRADES_ID:
-        channel = bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID))
+        channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))
         if channel:
             open_count = trade_log.get_stats()["open"]
             await channel.send(
