@@ -1228,18 +1228,18 @@ return above it.
 **Owns:** `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
 **Blocked by:** SR25–SR30, SR22
 
-- [ ] **Step 1:** Add the Phase 2 checklist: every workspace at 390 / 768 / 1280 / 1920; sidebar expanded, railed, overlay; auto-collapse crossing 1024 and 640 in both directions; the profile menu by mouse and by keyboard; the avatar in all four places; no horizontal document scroll anywhere.
-- [ ] **Step 2: Walk it,** recording each line.
-- [ ] **Step 3:** Fix defects as their own commits and re-walk.
-- [ ] **Step 4: Commit** `docs(qa): phase 2 walked`
+- [x] **Step 1:** Add the Phase 2 checklist: every workspace at 390 / 768 / 1280 / 1920; sidebar expanded, railed, overlay; auto-collapse crossing 1024 and 640 in both directions; the profile menu by mouse and by keyboard; the avatar in all four places; no horizontal document scroll anywhere.
+- [x] **Step 2: Walk it,** recording each line.
+- [x] **Step 3:** Fix defects as their own commits and re-walk.
+- [x] **Step 4: Commit** `docs(qa): phase 2 walked`
 
 ---
 
 ## Phase 2 gate
 
-- [ ] Full pytest, vitest, `ng build` green
-- [ ] `scrollWidth <= innerWidth` on every workspace at all four widths
-- [ ] Merge to `main`
+- [x] Full pytest (1688), vitest (457), `ng build` green
+- [x] `scrollWidth <= innerWidth` on every workspace at all four widths — 20/20, measured
+- [x] Merge to `main` — 2026-08-13
 
 ---
 

@@ -86,3 +86,76 @@ right and did nothing, or did something and looked wrong.
 - **A second browser.** Preferences are server-side, so a reload in one browser
   exercises the same path a second browser would; a genuinely concurrent check
   belongs with the multi-session work, not here.
+
+---
+
+## Phase 2 — Shell and responsive (SR20–SR31)
+
+Walked 2026-08-13, same server and bundle.
+
+### Every workspace at four widths
+
+`document.documentElement.scrollWidth` vs `window.innerWidth`, measured rather
+than eyeballed. Twenty combinations, every one equal:
+
+| | 390 | 768 | 1280 | 1920 |
+|---|---|---|---|---|
+| Dashboard | 390 | 768 | 1280 | 1920 |
+| Trades | 390 | 768 | 1280 | 1920 |
+| Analytics | 390 | 768 | 1280 | 1920 |
+| Watchlist | 390 | 768 | 1280 | 1920 |
+| System | 390 | 768 | 1280 | 1920 |
+
+**PASS** — no horizontal document scroll anywhere. Cards render only at 390
+(Trades 25, Watchlist 7, Analytics 5); the tables return above it.
+
+### The sidebar
+
+| Line | Result |
+|---|---|
+| Expanded is 200px, rail is 52px | **PASS** — measured |
+| Toggle flips it | **PASS**, after the defect below |
+| Toggle persists through a reload | **PASS** |
+| Labels survive the collapse | **PASS** — clipped to 1px, text still in the DOM, `aria-label` intact |
+| 1024 forces the rail, descending | **PASS** — 1024 expanded, 1023 railed |
+| 1024 restores it, ascending | **PASS** — with no stored preference |
+| 640 switches to overlay | **PASS** — 640 no overlay, 639 overlay |
+| A navigation closes the overlay | **PASS** |
+| Scrim dismisses it | **PASS** |
+
+### The profile menu
+
+| Line | Result |
+|---|---|
+| Opens on the avatar | **PASS** |
+| Opens by keyboard | **PASS** — focus the trigger, Enter |
+| Escape closes | **PASS** |
+| Outside click closes | **PASS** |
+| A click inside does not close it | **PASS** |
+| Focus returns to the trigger | **PASS** |
+| The sidebar's own Sign out is gone | **PASS** |
+
+### The avatar
+
+Sidebar mark, profile trigger (with a 2× `srcset`), and the favicon set —
+**PASS**. Not on the login card: that card is Jinja and NG57 deletes it, so an
+avatar there would be added only to be removed.
+
+### Defect found and fixed
+
+**The sidebar toggle did nothing.** The handler computed the new state and
+then wrote its own inverse, so the two cancelled and the class never changed.
+The composition rule the unit tests check was correct the whole time — the
+handler feeding it was not, which is exactly the gap a walk exists to cover.
+
+### An ambiguity, resolved and recorded
+
+SR21's prose says crossing a breakpoint "re-applies the automatic state",
+which read strictly would discard a user's explicit collapse the moment they
+resized. Its own step 1 test list says only that crossing below 1024 "forces
+the rail regardless of the stored value" — and says nothing about ascending.
+The implementation follows the test list: below `md` the rail is forced; above
+it the stored preference applies if there is one, and the automatic state if
+there is not. Both readings agree on everything the checklist actually names;
+they differ only for a user who collapsed deliberately and then resized, and
+silently discarding that choice is the worse of the two.
