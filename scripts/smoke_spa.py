@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -219,6 +220,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="Base URL of the running admin UI.")
     parser.add_argument("--user", help="Basic-auth username.")
     parser.add_argument("--password", help="Basic-auth password.")
+    parser.add_argument(
+        "--from-config", action="store_true",
+        help="Read credentials and the expected UI from swingbot.config "
+             "instead of the command line. Only valid when running inside "
+             "the app's own container.",
+    )
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument(
         "--expect", choices=("spa", "jinja"), default="spa",
@@ -226,8 +233,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    smoke = Smoke(args.url, args.user, args.password, args.timeout)
-    return smoke.run(expect_spa=args.expect == "spa")
+    user, password, expect = args.user, args.password, args.expect
+    if args.from_config:
+        # Read what the SERVER reads, from the same parser, in the same
+        # process space. The alternative -- sourcing .env in bash and passing
+        # the values in -- looks equivalent and is not: `.` runs the file
+        # through the shell, so a password containing `$`, a backtick or `!`
+        # is expanded or mangled on the way, and a .env written on Windows
+        # adds a trailing CR to every value. Both produce a 401 for a password
+        # that is perfectly correct in the file, and both bit this script on
+        # a real deploy before it read the config directly.
+        import sys as _sys
+        _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from swingbot import config
+
+        user = getattr(config, "ADMIN_USERNAME", None) or user
+        password = getattr(config, "ADMIN_PASSWORD", None) or password
+        expect = getattr(config, "ADMIN_UI", None) or expect
+        if "--url" not in (argv if argv is not None else sys.argv[1:]):
+            # 127.0.0.1, not localhost: inside the container `localhost` can
+            # resolve to ::1 first while Flask binds IPv4, which failed on one
+            # container and succeeded on another from the same image.
+            port = getattr(config, "ADMIN_PORT", None) or 1234
+            args.url = f"http://127.0.0.1:{port}"
+
+    smoke = Smoke(args.url, user, password, args.timeout)
+    return smoke.run(expect_spa=expect == "spa")
 
 
 if __name__ == "__main__":

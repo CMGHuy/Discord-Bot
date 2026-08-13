@@ -60,38 +60,21 @@ docker compose ps
 # is gitignored and built only inside the image, so the artifact that deploys
 # has never been exercised until this moment.
 #
-# So: fetch the real index.html and follow every asset URL it declares.
-# Inside the admin container, against its own localhost, using the
-# credentials already in .env -- no new secrets, and it works identically
-# for a manual deploy.
-#
-# 127.0.0.1, NOT localhost: inside the container `localhost` can resolve to
-# ::1 first while Flask binds IPv4. Observed failing on one container and
-# succeeding on another from the SAME image, which is the worst version of
-# this bug -- an intermittently failing deploy check is one that gets ignored.
+# So: fetch the real index.html and follow every asset URL it declares, from
+# inside the admin container, against its own loopback. No new secrets, and it
+# behaves identically for a manual deploy.
 echo "==> Verifying the admin UI actually serves a working SPA"
-# shellcheck disable=SC1091
-set -a; . ./.env; set +a
-# Strip a trailing carriage return from each value. A .env written on Windows
-# carries CRLF, and sourcing it leaves a CR on the end of every value -- so the
-# password sent is "secret" plus a CR, and the server answers 401 for a
-# password that looks perfectly correct in the file. Cheap to do, and the
-# failure it prevents is a deploy that reports a broken UI when the UI is fine.
+# --from-config supplies the port, the credentials and the expected UI by
+# reading the app's own config in the app's own container, so it cannot
+# disagree with the server about any of them.
 #
-# The `-` in ${VAR-} matters: `set -u` is on, and a .env is not required to
-# define all four. ADMIN_UI in particular is usually absent, since `spa` is
-# the default -- referencing it bare aborted the verification with "unbound
-# variable" on the very deploy that was meant to prove the fix. Defaults are
-# applied at the call below, so empty here is correct.
-ADMIN_USERNAME="${ADMIN_USERNAME-}"; ADMIN_USERNAME="${ADMIN_USERNAME%$'\r'}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD-}"; ADMIN_PASSWORD="${ADMIN_PASSWORD%$'\r'}"
-ADMIN_PORT="${ADMIN_PORT-}";         ADMIN_PORT="${ADMIN_PORT%$'\r'}"
-ADMIN_UI="${ADMIN_UI-}";             ADMIN_UI="${ADMIN_UI%$'\r'}"
-if docker compose exec -T admin python scripts/smoke_spa.py \
-      --url "http://127.0.0.1:${ADMIN_PORT:-1234}" \
-      --user "${ADMIN_USERNAME:-admin}" \
-      --password "${ADMIN_PASSWORD:-admin}" \
-      --expect "${ADMIN_UI:-spa}"; then
+# The rejected alternative was sourcing .env here and passing the values in.
+# `.` runs the file through the shell, so a password containing `$`, a
+# backtick or `!` is expanded on the way through, and a .env written on
+# Windows leaves a trailing CR on every value. Both give a 401 for a password
+# that is perfectly correct in the file, and both did exactly that on a real
+# deploy before this used --from-config.
+if docker compose exec -T admin python scripts/smoke_spa.py --from-config; then
   echo "==> Admin UI verified."
 else
   echo "" >&2
