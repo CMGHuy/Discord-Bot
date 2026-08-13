@@ -641,7 +641,7 @@ protected readonly band = computed(() => {
 
 Spec Decision 5. Three parts: dot, bar with entry tick, percentage.
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
 ```ts
 describe('StatusCell', () => {
@@ -681,8 +681,8 @@ describe('StatusCell', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.** The bar fill interpolates between the band's two tokens — this is the client-side half of spec Decision 5's refinement:
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.** The bar fill interpolates between the band's two tokens — this is the client-side half of spec Decision 5's refinement:
 
 ```css
 .fill {
@@ -703,11 +703,23 @@ describe('StatusCell', () => {
 
 with `--blink` bound from `blink_seconds` as an inline style, and the dot's `color` set to the band's token.
 
-- [ ] **Step 4:** The four degraded states from spec Decision 5's table each render the existing `StatusIndicator` chip. Import it; do not reimplement it.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(ui): the SL→TP status cell`
+- [x] **Step 4:** The four degraded states from spec Decision 5's table each render the existing `StatusIndicator` chip. Import it; do not reimplement it.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(ui): the SL→TP status cell`
 
 ---
+
+**The hint is derived from `status`, not matched against `status_label`.**
+The task's own test spreads a live fixture and nulls only the progress fields,
+leaving the label reading "Trending toward target" — so a component keyed off
+the label string shows no hint and fails. Keying off the status set is both
+what the test wants and the better design: matching a behaviour against
+human-readable text means the day someone improves the wording, the hint
+silently stops appearing.
+
+Also added beyond the task: `prefers-reduced-motion` disables the pulse and the
+bar transition. The pulse exists to say "this is live right now", which is
+exactly the motion a vestibular-sensitive user has asked the OS to stop.
 
 ### Task SR12: Density model and preference keys
 
