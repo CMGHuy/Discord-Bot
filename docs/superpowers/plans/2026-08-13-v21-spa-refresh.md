@@ -1650,12 +1650,53 @@ The layer that explains why the trade exists.
   - `curve` → a polyline through the points
   - `horizontal` → a bounded segment, not a full-width price line
   - an unknown `kind` → draws nothing and does not throw (a new overlay type added server-side must degrade, not crash the chart)
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** one primitive per kind under `primitives/`, and a dispatcher that switches on `kind`. Overlay colour is `--pos` when `side === "target"` and `--neg` when `side === "stop"`, matching the PNG's fixed accent-per-side rule.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): the confirmed-strategy overlay`
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** one primitive per kind under `primitives/`, and a dispatcher that switches on `kind`. Overlay colour is `--pos` when `side === "target"` and `--neg` when `side === "stop"`, matching the PNG's fixed accent-per-side rule.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): the confirmed-strategy overlay`
 
 ---
+
+**Result:** 16 tests in `strategy-overlay.spec.ts`, vitest `35 files, 561
+passed`, `ng build` clean.
+
+**Three primitives, not six.** Step 3 says "one primitive per kind", and that
+would have been three files that each draw a line: a `curve`, a `trendline`, a
+bounded `horizontal` and every ray of a `fib_fan` are all a polyline through N
+points, differing only in the points. So `primitives/` holds `box-primitive`
+(SR34's), `polyline-primitive` and `marker-primitive`, and the dispatcher makes
+six kinds out of them. Three implementations of pixel-ratio scaling would have
+been three chances to get it wrong.
+
+**A polyline is not a `LineSeries`,** which is the obvious alternative for a
+curve. A series is indexed by the chart's time scale and needs one value per
+bar; these shapes span arbitrary endpoints — a trendline is anchored to two
+pivots, a fib ray ends where its ratio says — and a series would need
+whitespace for every bar it does not touch and would still refuse to end
+mid-frame.
+
+**`full_width` is deliberately not honoured as "draw edge to edge".** The
+geometry already sets `t_from`/`t_to` to span the frame in that case, so
+drawing the span it was given is both simpler and truthful, and the bounded
+case then needs no special path at all.
+
+**Markers are primitives, not `createSeriesMarkers`.** The library's markers
+attach to a *bar* of the series; a pivot's price is its own, and a marker
+snapped to a bar's high or low would move it quietly to a price the server
+never sent.
+
+**No text on the canvas.** The PNG labels its overlay in the plot; here the
+method name is `overlay.source`, which the chart's chrome prints in HTML
+(SR40). Drawing it in a primitive would mean re-solving font tokens, DPR
+scaling and label collision for a string the page can already render. One
+consequence to check in SR40's walk: a lone `marker` is a diamond with no name
+until that legend exists.
+
+**One test was wrong and was corrected rather than accommodated:** it expected
+a curve whose only surviving point is one to render as a one-point polyline.
+One point is not a line, and a lone dot on the price pane reads as a level —
+which is exactly what a warm-up bar is not. The implementation drops it; the
+spec now pins both that and the two-survivor case.
 
 ### Task SR40: Degraded states and the chart QA walk
 

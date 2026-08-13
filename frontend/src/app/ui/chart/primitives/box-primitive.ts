@@ -139,6 +139,12 @@ export class BoxPrimitive implements ISeriesPrimitive<Time> {
   private series: ISeriesApi<SeriesType> | null = null;
   private readonly views: BoxPaneView[];
 
+  /** Public because it IS the geometry — SR39's dispatcher is asserted against
+   *  it, and SR40 compares these numbers with the PNG's. */
+  get spec(): BoxSpec {
+    return this.box;
+  }
+
   constructor(private readonly box: BoxSpec) {
     this.views = [
       new BoxPaneView(

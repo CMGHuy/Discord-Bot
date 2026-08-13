@@ -23,6 +23,7 @@ import { ChartPalette, chartOptions, chartPalette } from './chart-theme';
 import { IndicatorPanes } from './indicator-panes';
 import { BasicOverlays } from './overlays-basic';
 import { PlanLines } from './plan-lines';
+import { StrategyOverlay } from './strategy-overlay';
 
 /**
  * The interactive trade chart — the scaffold (SR35).
@@ -106,6 +107,7 @@ export class TradeChart {
   private planLines: PlanLines | null = null;
   private overlays: BasicOverlays | null = null;
   private panes: IndicatorPanes | null = null;
+  private strategy: StrategyOverlay | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -130,6 +132,7 @@ export class TradeChart {
       this.planLines = null;
       this.overlays = null;
       this.panes = null;
+      this.strategy = null;
     });
   }
 
@@ -164,6 +167,7 @@ export class TradeChart {
     this.planLines = new PlanLines(this.candles);
     this.overlays = new BasicOverlays(chart, this.candles);
     this.panes = new IndicatorPanes(chart);
+    this.strategy = new StrategyOverlay(this.candles);
   }
 
   /** One colour for every bar, not green-up/red-down.
@@ -207,6 +211,7 @@ export class TradeChart {
       this.planLines?.detach();
       this.overlays?.detach();
       this.panes?.detach();
+      this.strategy?.detach();
       return;
     }
 
@@ -227,6 +232,7 @@ export class TradeChart {
 
     this.panes?.render(data.indicators, data.ohlcv, chartPalette());
     this.overlays?.render(data, chartPalette());
+    this.strategy?.render(data.overlay, chartPalette());
     this.renderPlan(data);
     this.chart?.timeScale().fitContent();
   }
@@ -241,6 +247,7 @@ export class TradeChart {
       this.planLines?.detach();
       this.overlays?.detach();
       this.panes?.detach();
+      this.strategy?.detach();
       return;
     }
     this.planLines?.render(
