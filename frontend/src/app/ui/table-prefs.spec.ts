@@ -192,3 +192,28 @@ describe('perPageForApi', () => {
     expect(perPageForApi(25)).toBe(25);
   });
 });
+
+// --- SR17: shared definitions, separate preferences -----------------------
+
+describe('Dashboard and Trades share columns but not preferences', () => {
+  const baseline = ['num', 'status', 'ticker'];
+
+  it('arranging one table does not rearrange the other', () => {
+    // Spec v18 Decision 6 reverses workspaces v14 Decision 5: the two panels
+    // render the same column DEFINITIONS, so they cannot drift -- but they
+    // are read for different reasons, at a glance and in depth, so a layout
+    // that suits one is not a layout that suits the other.
+    const prefs = writeTableColumns({}, 'dashboard', 'compact', ['ticker', 'num']);
+
+    expect(readTableColumns(prefs, 'dashboard', 'compact', baseline))
+      .toEqual(['ticker', 'num', 'status']);
+    expect(readTableColumns(prefs, 'trades', 'compact', baseline)).toEqual(baseline);
+  });
+
+  it('keeps their densities apart too', () => {
+    const prefs = writeTableDensity({}, 'dashboard', 'full');
+
+    expect(readTableDensity(prefs, 'dashboard')).toBe('full');
+    expect(readTableDensity(prefs, 'trades')).toBe('compact');
+  });
+});

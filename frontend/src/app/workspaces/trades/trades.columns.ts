@@ -57,8 +57,14 @@ export const FULL_COLUMNS = [
  */
 export const PINNED_COLUMNS = ['actions'];
 
-/** Persistence key for the column preference. Stable across releases. */
+/** Persistence keys for the column preferences. Stable across releases.
+ *
+ *  Two ids over one set of definitions: the Dashboard and Trades render the
+ *  same columns and must not share an arrangement. They are read for
+ *  different reasons — one at a glance, one in depth — so a layout that suits
+ *  one is not a layout that suits the other. */
 export const TRADES_TABLE_ID = 'trades';
+export const DASHBOARD_TABLE_ID = 'dashboard';
 
 /**
  * Every column the Trades table can show.

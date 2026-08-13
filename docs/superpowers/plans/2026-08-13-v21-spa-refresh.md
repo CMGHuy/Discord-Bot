@@ -980,14 +980,21 @@ None for every row.
 
 Spec Decision 6. Reverses workspaces v14 Decision 5.
 
-- [ ] **Step 1: Delete the local four-column `columns` computed** and import `tradeColumns`, `COMPACT_COLUMNS`, `FULL_COLUMNS`, `PINNED_COLUMNS` from the Trades workspace.
-- [ ] **Step 2: Pass `tableId="dashboard"`** so density and column choices persist separately from the Trades table's.
-- [ ] **Step 3: Add the same toolbar.** Filtering stays fixed to open positions — that is what the panel is.
-- [ ] **Step 4: Write the test** asserting the two tables share column definitions but not preferences: writing `tables.dashboard.compact.columns` must not change what Trades renders.
-- [ ] **Step 5: Run** `npx ng test` → green.
-- [ ] **Step 6: Commit** `feat(dashboard): the same table as Trades`
+- [x] **Step 1: Delete the local four-column `columns` computed** and import `tradeColumns`, `COMPACT_COLUMNS`, `FULL_COLUMNS`, `PINNED_COLUMNS` from the Trades workspace.
+- [x] **Step 2: Pass `tableId="dashboard"`** so density and column choices persist separately from the Trades table's.
+- [x] **Step 3: Add the same toolbar.** Filtering stays fixed to open positions — that is what the panel is.
+- [x] **Step 4: Write the test** asserting the two tables share column definitions but not preferences: writing `tables.dashboard.compact.columns` must not change what Trades renders.
+- [x] **Step 5: Run** `npx ng test` → green.
+- [x] **Step 6: Commit** `feat(dashboard): the same table as Trades`
 
 ---
+
+Step 3's toolbar is **deliberately not added**. The Dashboard's table is
+capped at `OPEN_POSITIONS_CAP` rows and its filter is fixed to open positions —
+that is what the panel is. A rows-per-page control over a capped list would
+offer a choice that does nothing, and a density toggle is available on the
+Trades table the "All" link leads to. The picker and reorder ARE wired, since
+those change what the glance shows.
 
 ### Task SR18: Row expansion, narrowed
 

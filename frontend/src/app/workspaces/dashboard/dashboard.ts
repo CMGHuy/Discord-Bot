@@ -4,15 +4,34 @@ import {
   TemplateRef,
   computed,
   inject,
+  signal,
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
 import { TradeRow } from '../../api/models';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { TradesStore } from '../../stores/trades.store';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
+import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
+import { ConfidenceCell } from '../../ui/confidence-cell';
+import { DirectionArrow } from '../../ui/direction-arrow';
+import { PlanCell } from '../../ui/plan-cell';
+import { StatusCell } from '../../ui/status-cell';
+import {
+  readTableColumns,
+  readTableDensity,
+  writeTableColumns,
+  writeTableDensity,
+} from '../../ui/table-prefs';
+import {
+  COMPACT_COLUMNS,
+  DASHBOARD_TABLE_ID,
+  FULL_COLUMNS,
+  PINNED_COLUMNS,
+  tradeColumns,
+} from '../trades/trades.columns';
 import { held, num, pct } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
@@ -58,7 +77,10 @@ export const OPEN_POSITIONS_CAP = 6;
  */
 @Component({
   selector: 'sb-dashboard',
-  imports: [RouterLink, MetricCard, MetricChip, Sparkline, Panel, DataTable],
+  imports: [
+    RouterLink, MetricCard, MetricChip, Sparkline, Panel, DataTable,
+    StatusCell, DirectionArrow, PlanCell, ConfidenceCell,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the stores are created on entry and
   // destroyed on exit, so a workspace does not hold stale state while you
@@ -147,13 +169,28 @@ export const OPEN_POSITIONS_CAP = 6;
       <sb-data-table
         [rows]="openPositions()"
         [columns]="columns()"
-        [visible]="visible"
+        [visible]="visible()"
+        [pinned]="pinned"
         [rowKey]="rowKey"
         [loading]="trades.loading()"
         [emptyState]="emptyState"
         (rowActivate)="open($event)"
+        (reorder)="onReorder($event)"
       />
     </sb-panel>
+
+    <ng-template #statusCell let-row>
+      <sb-status-cell [row]="row" />
+    </ng-template>
+    <ng-template #directionCell let-row>
+      <sb-direction-arrow [direction]="row.direction" />
+    </ng-template>
+    <ng-template #planCell let-row>
+      <sb-plan-cell [entry]="row.entry" [target]="row.target" [stop]="row.stop_loss" />
+    </ng-template>
+    <ng-template #confidenceCell let-row>
+      <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
+    </ng-template>
 
     <!-- cells ---------------------------------------------------------- -->
 
@@ -274,17 +311,77 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
   private readonly pnlCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('pnlCell');
+  private readonly statusCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('statusCell');
+  private readonly directionCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('directionCell');
+  private readonly planCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('planCell');
+  private readonly confidenceCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('confidenceCell');
+  private readonly preferences = inject(PreferencesStore);
 
-  /** Four columns, and no column picker: this is a summary, and every field
-   *  it omits is one click away in Trades with the picker attached. */
-  protected readonly visible = ['ticker', 'now', 'pnl_pct', 'held'];
+  protected readonly tableId = DASHBOARD_TABLE_ID;
+  protected readonly pinned = PINNED_COLUMNS;
 
-  protected readonly columns = computed<ColumnDef<TradeRow>[]>(() => [
-    { key: 'ticker', header: 'Ticker', cell: this.tickerCell() },
-    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true },
-    { key: 'pnl_pct', header: 'P&L %', numeric: true, cell: this.pnlCell() },
-    { key: 'held', header: 'Held', value: (row) => held(row.held_hours), numeric: true },
-  ]);
+  /** Its own density and its own columns, under its own table id.
+   *
+   *  Same DEFINITIONS as Trades, separate PREFERENCES — spec v18 Decision 6
+   *  reverses workspaces v14 Decision 5, which had this panel keep a private
+   *  four-column list. Sharing the definitions is what stops the two tables
+   *  drifting; sharing the preferences would mean arranging one silently
+   *  rearranged the other, and these two are looked at for different reasons.
+   */
+  protected readonly density = signal<Density>(
+    readTableDensity(this.preferences.values(), DASHBOARD_TABLE_ID),
+  );
+
+  protected readonly defaultColumns = computed(() =>
+    this.density() === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS,
+  );
+
+  protected readonly visible = signal<string[]>(
+    readTableColumns(
+      this.preferences.values(),
+      DASHBOARD_TABLE_ID,
+      readTableDensity(this.preferences.values(), DASHBOARD_TABLE_ID),
+      readTableDensity(this.preferences.values(), DASHBOARD_TABLE_ID) === 'full'
+        ? FULL_COLUMNS
+        : COMPACT_COLUMNS,
+    ),
+  );
+
+  protected setDensity(next: Density): void {
+    if (next === this.density()) return;
+    this.density.set(next);
+    this.preferences.update((prefs) => writeTableDensity(prefs, DASHBOARD_TABLE_ID, next));
+    this.visible.set(
+      readTableColumns(this.preferences.values(), DASHBOARD_TABLE_ID, next,
+                       next === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+    );
+  }
+
+  protected onReorder(order: string[]): void {
+    this.visible.set(order);
+    this.preferences.update((prefs) =>
+      writeTableColumns(prefs, DASHBOARD_TABLE_ID, this.density(), order),
+    );
+  }
+
+  /** The shared definitions, with this panel's own cells attached. */
+  protected readonly columns = computed<ColumnDef<TradeRow>[]>(() => {
+    const cells: Record<string, TemplateRef<RowContext<TradeRow>>> = {
+      ticker: this.tickerCell(),
+      pnl_pct: this.pnlCell(),
+      status: this.statusCell(),
+      direction: this.directionCell(),
+      plan: this.planCell(),
+      confidence_level: this.confidenceCell(),
+    };
+    return tradeColumns().map((column) =>
+      cells[column.key] ? { ...column, cell: cells[column.key] } : column,
+    );
+  });
 
   /** Belt and braces over the server's `per_page`: if the API ever ignores or
    *  raises the cap, the Dashboard still shows a glanceable list rather than
