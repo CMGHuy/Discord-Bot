@@ -42,7 +42,7 @@ jobs:
       # parallel instead of pip's one-at-a-time fetch. The cache key is the
       # pinned requirements file, so a run that changes no dependency
       # reinstalls nothing from the network.
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
           cache-dependency-glob: requirements.txt
