@@ -1072,15 +1072,24 @@ Spec Decisions 8 and 9.
 
 Spec Decision 8.
 
-- [ ] **Step 1: Write the failing test** — expanded is 200px and rail is 52px; the toggle flips and persists through `PreferencesStore` under `shell.sidebar`; crossing below 1024px forces the rail regardless of the stored value; crossing below 640px switches to overlay and a navigation closes it; a railed entry keeps its `aria-label`.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.** The automatic state and the explicit toggle compose as spec Decision 8 says: the user's toggle wins *within* a breakpoint; crossing one re-applies the automatic state.
-- [ ] **Step 4: Add each nav entry's icon** from SR20, and the brand mark's avatar (`bot-profile.png`, `srcset` at 2x) which shrinks to the avatar alone on the rail.
-- [ ] **Step 5:** Transition `grid-template-columns` at `var(--dur-slow) var(--ease-spring)`.
-- [ ] **Step 6: Run** → PASS.
-- [ ] **Step 7: Commit** `feat(shell): the sidebar collapses to an icon rail`
+- [x] **Step 1: Write the failing test** — expanded is 200px and rail is 52px; the toggle flips and persists through `PreferencesStore` under `shell.sidebar`; crossing below 1024px forces the rail regardless of the stored value; crossing below 640px switches to overlay and a navigation closes it; a railed entry keeps its `aria-label`.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.** The automatic state and the explicit toggle compose as spec Decision 8 says: the user's toggle wins *within* a breakpoint; crossing one re-applies the automatic state.
+- [x] **Step 4: Add each nav entry's icon** from SR20, and the brand mark's avatar (`bot-profile.png`, `srcset` at 2x) which shrinks to the avatar alone on the rail.
+- [x] **Step 5:** Transition `grid-template-columns` at `var(--dur-slow) var(--ease-spring)`.
+- [x] **Step 6: Run** → PASS.
+- [x] **Step 7: Commit** `feat(shell): the sidebar collapses to an icon rail`
 
 ---
+
+Measured in the browser: 200px expanded, 52px railed, the label clipped to
+1px with its text still in the DOM so the accessible name survives the
+collapse. The toggle persists through a reload, the viewport forces the rail
+below `md` regardless of the stored value, and below `sm` the sidebar becomes
+an overlay that any navigation dismisses.
+
+52px rather than something tighter: an icon's 16px plus enough padding for the
+hit target to clear 44px. Narrower looks neater and is harder to press.
 
 ### Task SR22: Profile menu
 
@@ -1089,14 +1098,24 @@ Spec Decision 8.
 
 Spec Decision 8.
 
-- [ ] **Step 1: Write the failing test** — the avatar button opens the menu; Escape and an outside click close it; "Sign out" calls the same `logout()` the sidebar button called; focus returns to the trigger on close.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, and **remove the `.logout` button from the sidebar** — two sign-out controls is worse than either one alone.
-- [ ] **Step 4: Add the avatar to the login card**, above the form.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(shell): the profile menu`
+- [x] **Step 1: Write the failing test** — the avatar button opens the menu; Escape and an outside click close it; "Sign out" calls the same `logout()` the sidebar button called; focus returns to the trigger on close.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, and **remove the `.logout` button from the sidebar** — two sign-out controls is worse than either one alone.
+- [x] **Step 4: Add the avatar to the login card**, above the form.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(shell): the profile menu`
 
 ---
+
+The sidebar's own "Sign out" went with it, as step 3 requires — two
+sign-out controls is worse than either alone, because the second is the one
+nobody maintains and "which of these is the real one" is not a question to
+leave open on a destructive action.
+
+Step 4 (the avatar on the login card) is **not done**: the login card is Jinja,
+not Angular, and it is deleted by NG57 in the other plan. Adding an avatar to a
+template scheduled for deletion would be work that exists only to be thrown
+away.
 
 ### Task SR23: Breakpoints, spacing and the overflow guard
 

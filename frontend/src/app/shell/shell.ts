@@ -1,10 +1,21 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
 import { PreferencesStore } from '../stores/preferences.store';
+import { ViewportService } from '../ui/breakpoints';
+import { Icon, IconName } from '../ui/icon';
+import { ProfileMenu } from './profile-menu';
 import { SessionStore } from '../stores/session.store';
 import { ConnectionStatus } from './connection-status';
 import { ToastHost } from './toast-host';
@@ -12,6 +23,7 @@ import { ToastHost } from './toast-host';
 interface NavEntry {
   path: string;
   label: string;
+  icon: IconName;
 }
 
 /**
@@ -27,7 +39,10 @@ interface NavEntry {
  */
 @Component({
   selector: 'sb-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost],
+  imports: [
+    RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
+    Icon, ProfileMenu,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
   styleUrl: './shell.css',
@@ -38,17 +53,68 @@ export class Shell {
   protected readonly session = inject(SessionStore);
   protected readonly connection = inject(ConnectionStore);
   private readonly preferences = inject(PreferencesStore);
+  private readonly viewport = inject(ViewportService);
 
   /** The six workspaces, in the IA's order: what is true now, then the
    *  entities, then the analysis, then the two administrative ones. */
   protected readonly nav: NavEntry[] = [
-    { path: '/dashboard', label: 'Dashboard' },
-    { path: '/trades', label: 'Trades' },
-    { path: '/analytics', label: 'Analytics' },
-    { path: '/watchlist', label: 'Watchlist' },
-    { path: '/risk', label: 'Risk' },
-    { path: '/system', label: 'System' },
+    { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { path: '/trades', label: 'Trades', icon: 'trades' },
+    { path: '/analytics', label: 'Analytics', icon: 'analytics' },
+    { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
+    { path: '/risk', label: 'Risk', icon: 'risk' },
+    { path: '/system', label: 'System', icon: 'system' },
   ];
+
+  /**
+   * Whether the sidebar is collapsed to its icon rail — spec v18 Decision 8.
+   *
+   * Two things decide this and they compose rather than compete: the viewport
+   * forces the rail below `md`, and the user's toggle wins WITHIN a
+   * breakpoint. Crossing a boundary re-applies the automatic state, which is
+   * why the stored value is a preference and not the answer.
+   */
+  private readonly userCollapsed = signal<boolean | null>(null);
+
+  protected readonly railed = computed(
+    () => this.viewport.isNarrow() || (this.userCollapsed() ?? false),
+  );
+
+  /** Below `sm` the rail becomes an overlay that a navigation dismisses. */
+  protected readonly overlay = computed(() => this.viewport.isPhone());
+  protected readonly overlayOpen = signal(false);
+
+  protected toggleSidebar(): void {
+    // The new state is the opposite of what is on screen now. Written even
+    // when the viewport is currently forcing the rail: the choice is about
+    // how the user wants it, and it should be waiting for them when they
+    // widen the window again.
+    const collapsed = !this.railed();
+    this.userCollapsed.set(collapsed);
+    this.preferences.update((prefs) => ({
+      ...prefs,
+      'shell.sidebar': collapsed ? 'rail' : 'expanded',
+    }));
+  }
+
+  protected openOverlay(): void {
+    this.overlayOpen.set(true);
+  }
+
+  /** Any navigation closes the overlay — leaving it over the page someone
+   *  just chose is the classic mobile-nav bug. */
+  protected closeOverlay(): void {
+    this.overlayOpen.set(false);
+  }
+
+  private readonly applyStoredSidebar = effect(() => {
+    if (!this.preferences.isLoaded()) return;
+    const stored = this.preferences.values()['shell.sidebar'];
+    untracked(() => {
+      if (stored === 'rail') this.userCollapsed.set(true);
+      else if (stored === 'expanded') this.userCollapsed.set(false);
+    });
+  });
 
   /**
    * Killswitch state, owned by the shell rather than by RiskStore.

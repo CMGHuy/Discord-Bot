@@ -2,8 +2,90 @@
   display: grid;
   /* Fixed sidebar: the nav is six fixed labels and never needs to grow, and
      a fluid one would move the workspace's left edge between routes. */
-  grid-template-columns: 168px 1fr;
+  grid-template-columns: 200px 1fr;
   min-height: 100vh;
+  /* SR21. The width is the only thing that animates; the contents just stop
+     being laid out beside their icons. Slow + spring because this is a
+     deliberate, occasional gesture rather than feedback on a value. */
+  transition: grid-template-columns var(--dur-slow) var(--ease-spring);
+}
+
+/* 52px: an icon's 16px plus enough padding that the hit target clears the
+   44px minimum. Narrower looks tidier and is harder to hit. */
+.shell.railed { grid-template-columns: 52px 1fr; }
+
+/* Below sm the rail stops taking a column at all and slides over the page. */
+.shell.overlay { grid-template-columns: 1fr; }
+.shell.overlay .sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 200px;
+  z-index: 30;
+  transform: translateX(-100%);
+  transition: transform var(--dur-slow) var(--ease-spring);
+}
+.shell.overlay.overlay-open .sidebar { transform: translateX(0); }
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.menu-button {
+  position: fixed;
+  top: var(--space-10);
+  left: var(--space-10);
+  z-index: 20;
+  display: inline-flex;
+  padding: var(--space-6);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* On the rail: icons only, centred, labels hidden but still in the DOM so
+   the accessible name survives. */
+.shell.railed:not(.overlay) .sidebar .label,
+.shell.railed:not(.overlay) .mark .name,
+.shell.railed:not(.overlay) .mark .tag {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.shell.railed:not(.overlay) .sidebar { padding-inline: var(--space-10); }
+.shell.railed:not(.overlay) .nav a { justify-content: center; }
+
+.mark .avatar { border-radius: 50%; display: block; flex: none; }
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+}
+
+.collapse {
+  margin-top: auto;
+  display: inline-flex;
+  align-self: flex-start;
+  padding: var(--space-6);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.collapse:hover { color: var(--text); background: var(--surface-raised); }
+.collapse:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shell, .shell.overlay .sidebar { transition: none; }
 }
 
 .sidebar {
@@ -17,7 +99,7 @@
 
 .mark {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-6);
 }
 
@@ -70,23 +152,7 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.logout {
-  margin-top: auto;
-  padding: var(--space-6);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--text-table);
-  cursor: pointer;
-  transition: color var(--transition), border-color var(--transition);
-}
 
-.logout:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-}
 
 .main {
   display: flex;
