@@ -267,6 +267,42 @@ export interface Ticker {
   closed_trades: number;
 }
 
+/** `GET /universe/tickers`. A plain list, NOT a `Collection` — the watchlist
+ *  is not paginated and the endpoint ships no envelope. This was typed
+ *  `Collection<Ticker>`, which compiled and would have handed the store
+ *  `undefined` at runtime; `tests/admin/test_api_v1_universe.py` asserts
+ *  `body["tickers"]`, the same trap `OhlcvResponse` records. */
+export interface TickerList {
+  tickers: Ticker[];
+}
+
+/** `POST /universe/tickers`. One endpoint for single and bulk add, which is
+ *  why the result is per-symbol: pasting thirty symbols with one typo adds
+ *  twenty-nine and names the one, rather than failing the batch. */
+export interface TickerAddResult {
+  added: string[];
+  already_present: string[];
+  invalid: string[];
+  /** The watchlist size after the add. */
+  total: number;
+}
+
+export interface TickerRemoveResult {
+  removed: string;
+  total: number;
+}
+
+/** One `GET /universe/suggest` hit. `name` here, not `company_name` — it
+ *  comes from the ticker directory rather than from the watchlist row. */
+export interface TickerSuggestion {
+  symbol: string;
+  name: string;
+}
+
+export interface TickerSuggestions {
+  results: TickerSuggestion[];
+}
+
 /* -- risk --------------------------------------------------------------- */
 
 export interface RiskHeat {
