@@ -9,42 +9,25 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  # ── 1. Fast fail: does the code even import? ───────────────────────────────
-  # Catches a forgotten syntax error or a missing dependency in
-  # requirements.txt before ever touching the server or waiting for a
-  # Docker build.
-  sanity-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Import every module (no Discord token needed for this)
-        run: |
-          python -c "
-          from swingbot import config
-          from swingbot.core import (levels, confidence, volatility, strategy, indicators,
-                                      trade_plan, account, backtest, data, data_store, events,
-                                      explain, export_data, market_events, performance, regime,
-                                      state, ticker_utils, watchlist, scan_engine, retrospective)
-          from swingbot.core.charts import trade_chart
-          from swingbot.core.scanning import embeds, engine, confidence as scan_conf
-          import swingbot.bot_core
-          from swingbot.commands import scanning, watchlist as wl, info, trades, backtest as bt, account as acct, data as dc
-          from swingbot.admin import app
-          print('All modules import cleanly.')
-          "
-
-  # ── 2. Structural tests ────────────────────────────────────────────────────
-  # Deeper than a plain import: catches truncated files, missing symbols,
-  # renamed config keys, and Flask routes referenced in templates that
-  # were never registered.
+  # ── 1. Python: compile, then the actual test suite ─────────────────────────
+  #
+  # This job replaced two (`sanity-check` and `test`) that each did their own
+  # full `pip install -r requirements.txt` — pandas, numpy, matplotlib, scipy,
+  # discord.py — uncached, from scratch, in parallel, for the same result.
+  # Installing the dependency set once is the single biggest saving available
+  # here; everything the old sanity-check proved (does it import?) is proved
+  # more thoroughly by the suite below failing at collection.
+  #
+  # It also dropped three hardcoded-list checks that had quietly stopped
+  # earning their keep:
+  #   - a "required symbol" list, subsumed by 1549 tests that call those
+  #     symbols rather than merely assert they exist;
+  #   - a "config key" list, subsumed by tests/admin/test_config_flags.py;
+  #   - a "Flask route coverage" list of 23 endpoint names, which had drifted
+  #     badly — the templates reference 44, and every `pages.*` one was
+  #     missing, so it was passing while covering half of what it claimed.
+  #     Now tests/admin/test_template_endpoints.py, which DERIVES the list
+  #     from the templates and therefore cannot drift.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -54,169 +37,30 @@ jobs:
         with:
           python-version: "3.11"
 
+      # uv, with its cache persisted between runs. Same installer the
+      # Dockerfile uses, for the same reason: it resolves and downloads in
+      # parallel instead of pip's one-at-a-time fetch. The cache key is the
+      # pinned requirements file, so a run that changes no dependency
+      # reinstalls nothing from the network.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv pip install --system -r requirements.txt
 
-      - name: AST syntax check (catches truncated / corrupted .py files)
-        run: |
-          python - << 'PYEOF'
-          import ast, sys, pathlib
-          errors = []
-          files = list(pathlib.Path('.').rglob('*.py'))
-          for f in files:
-              try:
-                  ast.parse(f.read_text(encoding='utf-8', errors='replace'))
-              except SyntaxError as e:
-                  errors.append(f"{f}:{e.lineno}: {e.msg}")
-          if errors:
-              print("SYNTAX ERRORS FOUND:")
-              print('\n'.join(errors))
-              sys.exit(1)
-          print(f"AST OK — {len(files)} files parsed without errors.")
-          PYEOF
+      # Catches truncated or corrupted files anywhere in the tree, including
+      # modules nothing imports — which is the one thing the suite cannot do,
+      # since it only reaches what it imports. Replaces a 15-line inline
+      # heredoc that did the same thing with ast.parse.
+      - name: Compile every module
+        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
 
-      - name: Required symbol check (catches missing main(), dropped functions)
-        run: |
-          python - << 'PYEOF'
-          import sys, importlib
-
-          checks = [
-              # (module, symbol, kind)  kind: 'callable' or 'any'
-              ("swingbot.admin.app",              "main",                       "callable"),
-              ("swingbot.admin.app",              "app",                        "any"),
-              ("swingbot.core.data",              "get_current_price",          "callable"),
-              ("swingbot.core.data",              "is_us_market_active",        "callable"),
-              ("swingbot.core.performance",       "TradeLog",                   "any"),
-              ("swingbot.core.performance",       "TradeLog.get_chart_data",    "any"),
-              ("swingbot.core.scanning.embeds",   "notify_closed_trades",       "callable"),
-              ("swingbot.core.scanning.engine",   "get_all_unrealized_pnl",     "callable"),
-              ("swingbot.core.retrospective",     "build_daily_retrospective",  "callable"),
-          ]
-
-          errors = []
-          for mod_name, sym, kind in checks:
-              # Support dotted attribute paths like "TradeLog.get_chart_data"
-              parts = sym.split('.')
-              try:
-                  mod = importlib.import_module(mod_name)
-              except Exception as e:
-                  errors.append(f"  Cannot import {mod_name}: {e}")
-                  continue
-              obj = mod
-              for part in parts:
-                  obj = getattr(obj, part, None)
-                  if obj is None:
-                      errors.append(f"  {mod_name}.{sym} — NOT FOUND")
-                      break
-              else:
-                  if kind == "callable" and not callable(obj):
-                      errors.append(f"  {mod_name}.{sym} — exists but is not callable")
-
-          if errors:
-              print("MISSING SYMBOLS:")
-              print('\n'.join(errors))
-              sys.exit(1)
-          print(f"Symbol check OK — {len(checks)} symbols verified.")
-          PYEOF
-
-      - name: Config key check (catches renamed .env variables)
-        run: |
-          python - << 'PYEOF'
-          import sys
-          from swingbot import config
-
-          # Every config attribute the codebase reads.
-          # Update this list whenever a Field is added or renamed.
-          required_attrs = [
-              "TOKEN",
-              "DISCORD_CHANNEL_TRADES_ID",
-              "DISCORD_CHANNEL_TRADES_SIMPLE_ID",
-              "DISCORD_CHANNEL_TRADES_HISTORY_ID",
-              "DISCORD_CHANNEL_RETROSPECTIVE_ID",
-              "SESSION_START_HOUR",
-              "SESSION_END_HOUR",
-              "SCAN_INTERVAL_MINUTES",
-              "SIGNAL_CONFIRMATION_SCANS",
-              "MIN_REWARD_PCT",
-              "MIN_STOP_DISTANCE_PCT",
-              "MAX_STOP_LOSS_PCT",
-              "MIN_RISK_REWARD_RATIO",
-              "MIN_TARGET_CONFLUENCE_COUNT",
-              "MIN_ALERT_CONFIDENCE_LEVEL",
-              "NEAR_CLOSE_THRESHOLD_PCT",
-              "HTF_CONFLUENCE_ENABLED",
-              "HTF_COUNTER_TREND_PENALTY",
-          ]
-
-          errors = []
-          for attr in required_attrs:
-              if not hasattr(config, attr):
-                  errors.append(f"  config.{attr} — NOT FOUND (Field missing or renamed?)")
-
-          if errors:
-              print("MISSING CONFIG ATTRS:")
-              print('\n'.join(errors))
-              sys.exit(1)
-          print(f"Config check OK — {len(required_attrs)} attributes verified.")
-          PYEOF
-
-      # The suite itself. Everything else in this job is a structural proxy
-      # for it -- AST parses, symbol lookups, config keys -- written before
-      # there were 1500 tests to run. Those proxies stay because they fail
-      # fast and name the cause precisely, but running none of the real tests
-      # in CI meant a green pipeline said nothing about behaviour.
-      #
-      # NOT piped into anything: `testrun.py full` exits 1 on failure, and a
-      # pipe would replace that with the exit status of whatever it fed.
+      # Not piped: testrun.py exits 1 on failure, and a pipe would substitute
+      # the exit status of whatever it fed.
       - name: Test suite
         run: python scripts/testrun.py full
-
-      - name: Flask route coverage (catches url_for() endpoints missing from app)
-        run: |
-          python - << 'PYEOF'
-          import sys
-          from swingbot.admin.app import app
-
-          registered = {rule.endpoint for rule in app.url_map.iter_rules()}
-
-          # Every endpoint referenced via url_for() across all templates.
-          # Update this list whenever a new url_for() call is added to a template.
-          required = [
-              "index",
-              "dashboard_fragment",
-              "trigger_scan",
-              "stop_scan",
-              "scan_status",
-              "pause_scan",
-              "resume_scan",
-              "trade_detail",
-              "trade_chart_image",
-              "close_trade",
-              "export_trades_csv",
-              "clear_open_trades",
-              "clear_trade_history",
-              "delete_single_trade",
-              "logs_page",
-              "logs_raw",
-              "logs_clear",
-              "save_settings",
-              "restart_bot",
-              "watchlist_add",
-              "watchlist_remove",
-              "watchlist_suggest",
-              "stats_page",
-              "static",
-          ]
-
-          missing = [e for e in required if e not in registered]
-          if missing:
-              print("MISSING FLASK ROUTES:")
-              for e in missing:
-                  print(f"  endpoint '{e}' is referenced in a template but not registered in app.py")
-              print(f"\nRegistered endpoints: {sorted(registered)}")
-              sys.exit(1)
-          print(f"Route check OK — all {len(required)} required endpoints registered.")
-          PYEOF
 
   # ── 2b. The frontend ───────────────────────────────────────────────────────
   # The Angular suite and a real production build. The build is not redundant
@@ -280,7 +124,7 @@ jobs:
   #     to /login, not serve the dashboard; wrong credentials still 401).
   #   - Any route returning 5xx instead of 200.
   container-healthcheck:
-    needs: [sanity-check, test, frontend]
+    needs: [test, frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

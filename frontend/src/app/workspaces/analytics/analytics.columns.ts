@@ -31,14 +31,16 @@ export function rate(value: number | null | undefined): string {
   return value === null || value === undefined ? ABSENT : `${value.toFixed(1)}%`;
 }
 
-/** A signed difference in percentage points. */
-export function delta(value: number | null | undefined): string {
+/** Expectancy in R. Three decimals, because it is typically a fraction of a
+ *  risk unit and two would round most strategies to the same number. */
+/** A signed difference in percentage points. Local to this file -- knip
+ *  reports it as an "unused export" because nothing IMPORTS it, which is not
+ *  the same as unused: the win-rate delta column below calls it. */
+function delta(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
 }
 
-/** Expectancy in R. Three decimals, because it is typically a fraction of a
- *  risk unit and two would round most strategies to the same number. */
 export function expectancy(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   return `${value > 0 ? '+' : ''}${value.toFixed(3)}`;

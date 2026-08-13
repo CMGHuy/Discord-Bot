@@ -31,10 +31,6 @@ export interface Collection<T> {
 
 /** The one error body. `code` is stable and may be branched on; `message` is
  *  for humans and may change freely. */
-export interface ApiErrorBody {
-  error: { code: string; message: string };
-}
-
 /* -- session ------------------------------------------------------------ */
 
 export interface Identity {

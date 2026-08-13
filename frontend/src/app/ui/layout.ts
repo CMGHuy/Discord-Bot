@@ -140,38 +140,6 @@ export class TabBar {
   }
 }
 
-/**
- * Two panes side by side, collapsing to stacked on a narrow viewport.
- *
- * The ratio is a fraction of the width given to the first pane. Fixed rather
- * than draggable: spec 3 put a resizable splitter out of scope, and a stored
- * drag position is one more piece of per-user state to persist and migrate.
- */
-@Component({
-  selector: 'sb-split-view',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="split" [style.--split-ratio]="ratio()">
-      <div class="pane"><ng-content select="[split-primary]" /></div>
-      <div class="pane"><ng-content select="[split-secondary]" /></div>
-    </div>
-  `,
-  styles: `
-    .split {
-      display: grid;
-      gap: var(--space-14);
-      grid-template-columns: calc(var(--split-ratio) * 100%) 1fr;
-    }
-    /* 1280px is the width the workspaces are checked at (NG52); below it the
-       two panes stack rather than both becoming unusably narrow. */
-    @media (max-width: 1000px) {
-      .split { grid-template-columns: 1fr; }
-    }
-  `,
-})
-export class SplitView {
-  readonly ratio = input(0.6);
-}
 
 /**
  * A panel that slides in from the right — row detail that is too big to

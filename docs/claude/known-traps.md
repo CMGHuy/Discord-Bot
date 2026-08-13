@@ -29,10 +29,14 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   1m ~30 days. "Since IPO" hourly data does not exist from this source at any
   tier — only daily and coarser reach the listing date. Do not write a task
   that assumes otherwise.
-- **Legacy shims that are not the real module.** `core/scan_engine.py` and
-  `core/scan_embeds.py` are `import *` shims over `core/scanning/engine.py`
-  and `core/scanning/embeds.py`. `core/trade_plan.py` is a deprecated adapter
-  over `plan_engine.build_strategy_plan`. Edit the real module.
+- **Legacy shims that are not the real module.** `core/scan_engine.py` is an
+  `import *` shim over `core/scanning/engine.py`; `core/trade_plan.py` is a
+  deprecated adapter over `plan_engine.build_strategy_plan`. Edit the real
+  module.
+  (`core/scan_embeds.py`, `core/confidence.py` and `core/regime.py` were the
+  same thing and are **gone** — nothing imported them, so they were only ever
+  a way to edit the wrong file. `scan_engine.py` stays because it still has
+  real callers.)
 - **Sizing and embed-building happen in `core/scanning/engine.py`'s
   alert-building loop**, right before `build_embed()` — *not* in
   `commands/scanning.py::_send_alerts`, which only posts already-built
