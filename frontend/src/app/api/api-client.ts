@@ -8,6 +8,7 @@ import {
   AnalyticsRegistry,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  BotRestartResult,
   OhlcvResponse,
   Cockpit,
   Collection,
@@ -17,6 +18,7 @@ import {
   JobList,
   JobStarted,
   KillswitchResult,
+  LogClearResult,
   Logs,
   Preferences,
   Proposal,
@@ -25,6 +27,9 @@ import {
   ScanCommandResult,
   ScanStatus,
   Settings,
+  SettingsImportResult,
+  SettingsPreview,
+  SettingsSaveResult,
   Ticker,
   TradeDetail,
   TradeNote,
@@ -221,12 +226,22 @@ export class ApiClient {
     return this.http.get<Settings>(`${this.base}/system/settings`);
   }
 
-  previewSettings(values: Record<string, unknown>): Observable<unknown> {
-    return this.http.post(`${this.base}/system/settings/preview`, values);
+  /** Both take the CHANGED fields only, wrapped in `settings` — the server
+   *  overlays them on what is on disk before diffing, so a partial body is
+   *  the expected shape rather than a shortcut. The wrapper is added here
+   *  and not by callers: a body posted bare is a 400 that reads like a
+   *  validation error. */
+  previewSettings(settings: Record<string, unknown>): Observable<SettingsPreview> {
+    return this.http.post<SettingsPreview>(
+      `${this.base}/system/settings/preview`,
+      { settings },
+    );
   }
 
-  saveSettings(values: Record<string, unknown>): Observable<Settings> {
-    return this.http.put<Settings>(`${this.base}/system/settings`, values);
+  /** Returns the diff that was written, NOT the settings document — the
+   *  form reloads through `settings()` so it re-reads what is on disk. */
+  saveSettings(settings: Record<string, unknown>): Observable<SettingsSaveResult> {
+    return this.http.put<SettingsSaveResult>(`${this.base}/system/settings`, { settings });
   }
 
   /** A URL, not a request -- same reason as the CSV export. */
@@ -234,8 +249,13 @@ export class ApiClient {
     return `${this.base}/system/settings/export`;
   }
 
-  importSettings(body: FormData | Record<string, unknown>): Observable<Settings> {
-    return this.http.post<Settings>(`${this.base}/system/settings/import`, body);
+  importSettings(
+    body: FormData | Record<string, unknown>,
+  ): Observable<SettingsImportResult> {
+    return this.http.post<SettingsImportResult>(
+      `${this.base}/system/settings/import`,
+      body,
+    );
   }
 
   logs(source?: string, lines?: number): Observable<Logs> {
@@ -249,8 +269,10 @@ export class ApiClient {
     return `${this.base}/system/logs/raw${params ? `?${params}` : ''}`;
   }
 
-  clearLogs(source?: string): Observable<unknown> {
-    return this.http.delete(`${this.base}/system/logs`, { params: toParams({ source }) });
+  clearLogs(source?: string): Observable<LogClearResult> {
+    return this.http.delete<LogClearResult>(`${this.base}/system/logs`, {
+      params: toParams({ source }),
+    });
   }
 
   scanStatus(): Observable<ScanStatus> {
@@ -273,8 +295,11 @@ export class ApiClient {
     return this.http.post<ScanCommandResult>(`${this.base}/system/scan/resume`, {});
   }
 
-  restartBot(): Observable<unknown> {
-    return this.http.post(`${this.base}/system/bot/restart`, {});
+  /** 503 `unavailable` when the Docker socket is not mounted. That is not a
+   *  failure to restart -- it is a deployment that cannot, which the caller
+   *  must tell apart from a restart that went wrong. */
+  restartBot(): Observable<BotRestartResult> {
+    return this.http.post<BotRestartResult>(`${this.base}/system/bot/restart`, {});
   }
 
   preferences(): Observable<{ preferences: Preferences }> {

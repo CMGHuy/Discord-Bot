@@ -1,13 +1,106 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+} from '@angular/core';
+import { Router } from '@angular/router';
 
-/** Placeholder. The real workspace is NG50. */
+import { SYSTEM_TABS, SystemStore, SystemTab } from '../../stores/system.store';
+import { Tab, TabBar } from '../../ui/layout';
+import { LogsTab } from './logs-tab';
+import { ScanTab } from './scan-tab';
+import { SettingsTab } from './settings-tab';
+
+/** Settings · Logs · Scan — spec v14 Decision 8, in its order. */
+const TABS: Tab[] = [
+  { id: 'settings', label: 'Settings' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'scan', label: 'Scan' },
+];
+
+const TAB_IDS = new Set<string>(SYSTEM_TABS);
+
+/**
+ * System — the administrative workspace: configuration, logs, scan control.
+ *
+ * A shell over three tab components that each read `SystemStore`. Split by
+ * file rather than by store because they share one refetch story and one
+ * `settings`/`scan`/`bot` event wiring; splitting the store as well would
+ * mean three subscriptions to the same events.
+ *
+ * **The active tab is a query parameter**, as on Analytics and for the same
+ * reason: a tab held in component state cannot be linked to, does not
+ * survive a reload, and makes the back button skip the whole workspace.
+ *
+ * The tab bodies are rendered with `@switch` rather than kept alive hidden.
+ * The one piece of state that must survive switching away is the settings
+ * draft, and it lives in the store — which is what makes leaving the tab to
+ * check a log safe mid-edit.
+ */
 @Component({
   selector: 'sb-system',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<h1>System</h1><p class="todo">NG50</p>`,
+  imports: [TabBar, SettingsTab, LogsTab, ScanTab],
+  providers: [SystemStore],
+  template: `
+    <header class="head">
+      <h1>System</h1>
+      @if (store.dirty()) {
+        <!-- Visible from every tab: the draft survives switching away, and
+             unsaved configuration you have forgotten about is worse than
+             the reminder. -->
+        <span class="dirty" role="status">Unsaved settings</span>
+      }
+    </header>
+
+    <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
+
+    @switch (activeTab()) {
+      @case ('logs') {
+        <sb-logs-tab />
+      }
+      @case ('scan') {
+        <sb-scan-tab />
+      }
+      @default {
+        <sb-settings-tab />
+      }
+    }
+  `,
   styles: `
+    :host { display: grid; gap: var(--space-20); }
+    .head { display: flex; align-items: baseline; gap: var(--space-14); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
-    .todo { color: var(--text-faint); font-size: var(--text-table); }
+    .dirty { color: var(--warn); font-size: var(--text-table); }
   `,
 })
-export class System {}
+export class System {
+  private readonly router = inject(Router);
+  protected readonly store = inject(SystemStore);
+
+  /** Arrives through `withComponentInputBinding`, so this component is
+   *  testable without standing up a router. */
+  readonly tab = input<string>();
+
+  protected readonly tabs = TABS;
+
+  /** An unknown or absent `?tab=` falls back to Settings rather than
+   *  rendering nothing, so a hand-edited URL still shows something. */
+  protected readonly activeTab = computed<SystemTab>(() => {
+    const requested = this.tab();
+    return requested && TAB_IDS.has(requested) ? (requested as SystemTab) : 'settings';
+  });
+
+  protected goToTab(tab: string): void {
+    // Matching Analytics: `replaceUrl` so flipping tabs does not fill the
+    // history, `merge` so nothing else in the URL is dropped, and the
+    // default tab drops the parameter rather than pinning `?tab=settings`.
+    void this.router.navigate([], {
+      queryParams: { tab: tab === 'settings' ? null : tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+}

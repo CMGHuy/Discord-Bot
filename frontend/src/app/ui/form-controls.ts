@@ -88,6 +88,9 @@ export class Select {
         [value]="value()"
         [placeholder]="placeholder()"
         [disabled]="disabled()"
+        [attr.min]="min()"
+        [attr.max]="max()"
+        [attr.step]="step()"
         [attr.aria-label]="label() ? null : ariaLabel()"
         (input)="value.set($any($event.target).value)"
       />
@@ -120,11 +123,28 @@ export class TextInput {
   readonly label = input<string | null>(null);
   readonly ariaLabel = input('');
   readonly placeholder = input('');
-  /** `search` gets the browser's clear affordance; `number` is deliberately
-   *  absent, because every numeric field here is a price or a percentage that
-   *  wants its own formatting rather than a spinner. */
-  readonly type = input<'text' | 'search'>('text');
+  /**
+   * `search` gets the browser's clear affordance.
+   *
+   * `number` was deliberately excluded here, on the grounds that every
+   * numeric field in the app is a price or a percentage that wants its own
+   * formatting rather than a spinner. NG50 is the exception that reopened
+   * it: the System settings form renders from `config.py`'s schema, where a
+   * `number` field arrives with its own `min`, `max` and `step` and the
+   * browser's range check is exactly the right one. Adding a second input
+   * component for that one case would be worse than widening this one.
+   *
+   * The value stays a string either way — `<input type="number">` reports
+   * one, and the settings API takes one.
+   */
+  readonly type = input<'text' | 'search' | 'number' | 'password'>('text');
   readonly disabled = input(false);
+
+  /** Passed through to the element for `number` fields, straight from the
+   *  schema. Null on everything else, which removes the attribute. */
+  readonly min = input<number | null>(null);
+  readonly max = input<number | null>(null);
+  readonly step = input<number | null>(null);
 }
 
 @Component({

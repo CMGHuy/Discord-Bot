@@ -355,11 +355,57 @@ export interface Settings {
   restart_available: boolean;
 }
 
+/** One changed setting, as both the preview and the save report it — the
+ *  server builds them from the same `settings_diff`, so what was approved
+ *  and what was written cannot disagree. `old`/`new` are already `•••` on
+ *  both sides for a sensitive field. */
+export interface SettingsDiffRow {
+  key: string;
+  label: string;
+  old: string;
+  new: string;
+  sensitive: boolean;
+}
+
+export interface SettingsPreview {
+  diff: SettingsDiffRow[];
+  /** LABELS, not keys, of changed fields the bot cannot pick up on SIGHUP.
+   *  Empty is the normal case. */
+  restart_required: string[];
+}
+
+export interface SettingsSaveResult extends SettingsPreview {
+  /** The write succeeded even when this did not: `ok: false` means only
+   *  that the signal telling the bot to re-read `.env` failed, which is
+   *  routine outside Docker. */
+  hot_reload: { ok: boolean; message: string };
+}
+
+/** `applied` is a COUNT of recognised keys. Import is lenient where PUT is
+ *  strict — the body is a pasted file, possibly from an older build. */
+export interface SettingsImportResult {
+  applied: number;
+  unknown_keys: string[];
+}
+
 export interface Logs {
   source: string;
   lines: number;
   path: string;
   content: string;
+}
+
+export interface LogClearResult {
+  source: string;
+  /** False with a reason when there was no file to clear. Not a failure:
+   *  there was nothing to delete and nothing went wrong. */
+  ok: boolean;
+  message: string;
+}
+
+export interface BotRestartResult {
+  ok: boolean;
+  message: string;
 }
 
 export interface ScanStatus {
