@@ -256,30 +256,35 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     <!-- expansion: the four groups spec 3 names ------------------------- -->
 
     <ng-template #expansion let-row>
+      <!-- Label/value grid. SR24 reuses this markup verbatim for the phone
+           card, so its shape has a second consumer -- change it here and the
+           card changes with it. -->
       <div class="groups">
         <dl>
-          <dt class="group">Plan levels</dt>
-          <div><dt>Entry</dt><dd class="num">{{ fmtNum(row.entry) }}</dd></div>
-          <div><dt>Stop</dt><dd class="num">{{ fmtNum(row.stop_loss) }}</dd></div>
-          <div><dt>Target</dt><dd class="num">{{ fmtNum(row.target) }}</dd></div>
-          <div><dt>R:R</dt><dd class="num">{{ fmtNum(row.risk_reward) }}</dd></div>
+          <dt class="group">Hidden in this view</dt>
+          @for (field of hiddenFields(); track field.key) {
+            <div>
+              <dt>{{ field.header }}</dt>
+              <dd [class.num]="field.numeric">{{ field.render(row) }}</dd>
+            </div>
+          } @empty {
+            <div><dd class="none">Every column is showing.</dd></div>
+          }
         </dl>
         <dl>
-          <dt class="group">Setup</dt>
-          <div><dt>Strategy</dt><dd>{{ fmtText(row.strategy) }}</dd></div>
-          <div><dt>Horizon</dt><dd>{{ fmtText(row.horizon) }}</dd></div>
-          <div><dt>Confidence</dt><dd class="num">{{ fmtNum(row.confidence_level, 0) }}</dd></div>
-          <div><dt>Score</dt><dd class="num">{{ fmtNum(row.confidence_score, 0) }}</dd></div>
-        </dl>
-        <dl>
-          <dt class="group">Sizing</dt>
-          <div><dt>Shares</dt><dd class="num">{{ fmtNum(row.shares, 0) }}</dd></div>
-          <div><dt>Deployed</dt><dd class="num">{{ fmtNum(row.position_value) }}</dd></div>
-          <div><dt>Unrealised</dt><dd class="num">{{ fmtNum(row.realized_pnl_amount) }}</dd></div>
-        </dl>
-        <dl>
-          <dt class="group">Opened</dt>
-          <div><dt>At</dt><dd>{{ fmtDate(row.opened_at) }}</dd></div>
+          <!-- Never columns at any density, so the expansion is the only
+               place they can live.
+               The task names target sources, the leg breakdown and the note.
+               None of the three is on TradeRow -- they are TradeDetail
+               fields, and this template renders a row. Showing them would
+               mean a fetch per expanded row. These are the row's own
+               never-column fields; the rest stay one click away in the
+               detail view, which is where the row already links to. -->
+          <dt class="group">Detail</dt>
+          <div><dt>Tier</dt><dd>{{ fmtText(row.tier) }}</dd></div>
+          <div><dt>Badge</dt><dd>{{ fmtText(row.badge) }}</dd></div>
+          <div><dt>Quality</dt><dd class="num">{{ fmtNum(row.quality_score, 0) }}</dd></div>
+          <div><dt>Note</dt><dd>{{ row.has_note ? 'Yes' : 'No' }}</dd></div>
         </dl>
       </div>
     </ng-template>
@@ -488,6 +493,29 @@ export class Trades {
     return tradeColumns().map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
     );
+  });
+
+  /**
+   * What the current density hides.
+   *
+   * Computed from the visible set rather than fixed, so the expansion is
+   * always the complement of what is on screen: switching to Full empties it
+   * of everything Full now shows, which is the behaviour that makes the
+   * expansion worth opening at all.
+   */
+  protected readonly hiddenFields = computed(() => {
+    const shown = new Set(this.visible());
+    return this.allColumns()
+      .filter((column) => !shown.has(column.key) && !PINNED_COLUMNS.includes(column.key))
+      .map((column) => ({
+        key: column.key,
+        header: column.header || column.key,
+        numeric: !!column.numeric,
+        render: (row: TradeRow): string => {
+          const value = column.value ? column.value(row) : (row as never)[column.key];
+          return value === null || value === undefined ? '—' : String(value);
+        },
+      }));
   });
 
   protected readonly emptyState = computed(() =>

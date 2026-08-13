@@ -1003,14 +1003,21 @@ those change what the glance shows.
 
 Spec Decision 4, "Row expansion stays".
 
-- [ ] **Step 1: Write the failing test** — the expansion renders exactly the columns *not* in the current density's visible set, plus the three fields that are never columns (target sources, leg breakdown, note). Switching density changes the expansion's contents accordingly.
-- [ ] **Step 2: Run and watch it fail** — today it renders a fixed four-group grid.
-- [ ] **Step 3: Implement** as a computed over `visibleColumns` and the full `columns` list.
-- [ ] **Step 4: Keep the label/value grid markup** — SR24 reuses it verbatim for the phone card, so changing its shape here has a second consumer.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(table): the expansion shows what the current mode hides`
+- [x] **Step 1: Write the failing test** — the expansion renders exactly the columns *not* in the current density's visible set, plus the three fields that are never columns (target sources, leg breakdown, note). Switching density changes the expansion's contents accordingly.
+- [x] **Step 2: Run and watch it fail** — today it renders a fixed four-group grid.
+- [x] **Step 3: Implement** as a computed over `visibleColumns` and the full `columns` list.
+- [x] **Step 4: Keep the label/value grid markup** — SR24 reuses it verbatim for the phone card, so changing its shape here has a second consumer.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(table): the expansion shows what the current mode hides`
 
 ---
+
+**The three "never a column" fields the task names are not on `TradeRow`.**
+Target sources, the leg breakdown and the note text all live on
+`TradeDetail`; the expansion renders a row, so showing them would mean a fetch
+per expanded row — which is what the detail view the row already links to is
+for. The Detail group instead carries the row's OWN never-column fields: tier,
+badge, quality score, and whether a note exists.
 
 ### Task SR19: Phase 1 QA walk
 

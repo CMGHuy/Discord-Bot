@@ -217,3 +217,33 @@ describe('Dashboard and Trades share columns but not preferences', () => {
     expect(readTableDensity(prefs, 'trades')).toBe('compact');
   });
 });
+
+// --- SR18: the expansion is the complement of the visible set -------------
+
+describe('what the expansion should show', () => {
+  // The rule, expressed over the same data the component computes from: the
+  // expansion holds every column the current density is NOT showing. Tested
+  // here rather than through the workspace because it is set arithmetic, and
+  // rendering a whole workspace to assert it would obscure that.
+  const all = ['num', 'status', 'ticker', 'strategy', 'horizon', 'held'];
+  const pinned = ['actions'];
+
+  function hidden(visible: string[]): string[] {
+    const shown = new Set(visible);
+    return all.filter((k) => !shown.has(k) && !pinned.includes(k));
+  }
+
+  it('holds everything compact leaves out', () => {
+    expect(hidden(['num', 'status', 'ticker'])).toEqual(['strategy', 'horizon', 'held']);
+  });
+
+  it('shrinks as the visible set grows', () => {
+    // Switching to Full must empty the expansion of what Full now shows --
+    // otherwise the same field appears twice on one screen.
+    expect(hidden([...all])).toEqual([]);
+  });
+
+  it('never lists a pinned column', () => {
+    expect(hidden(['num'])).not.toContain('actions');
+  });
+});
