@@ -20,6 +20,7 @@ import {
 
 import { ChartResponse } from '../../api/models';
 import { ChartPalette, chartOptions, chartPalette } from './chart-theme';
+import { PlanLines } from './plan-lines';
 
 /**
  * The interactive trade chart — the scaffold (SR35).
@@ -103,6 +104,7 @@ export class TradeChart {
   private chart: IChartApi | null = null;
   private candles: ISeriesApi<'Candlestick'> | null = null;
   private volume: ISeriesApi<'Histogram'> | null = null;
+  private planLines: PlanLines | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -124,6 +126,7 @@ export class TradeChart {
       this.chart = null;
       this.candles = null;
       this.volume = null;
+      this.planLines = null;
     });
   }
 
@@ -159,6 +162,7 @@ export class TradeChart {
     this.candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.26 } });
 
     this.volume = this.createVolume(chart, palette);
+    this.planLines = new PlanLines(this.candles);
   }
 
   /** One colour for every bar, not green-up/red-down.
@@ -199,6 +203,7 @@ export class TradeChart {
     if (!data) {
       candles.setData([]);
       volume.setData([]);
+      this.planLines?.detach();
       return;
     }
 
@@ -217,6 +222,25 @@ export class TradeChart {
     );
     volume.setData(data.ohlcv.map((bar) => ({ time: bar.t as UTCTimestamp, value: bar.v })));
 
+    this.renderPlan(data);
     this.chart?.timeScale().fitContent();
+  }
+
+  /** The bands span the whole loaded frame, first bar to last, because risk and
+   *  reward apply for as long as the position does — a band bounded by
+   *  something narrower would claim the plan only held over those bars. */
+  private renderPlan(data: ChartResponse): void {
+    const first = data.ohlcv[0];
+    const last = data.ohlcv[data.ohlcv.length - 1];
+    if (!first || !last) {
+      this.planLines?.detach();
+      return;
+    }
+    this.planLines?.render(
+      data.levels,
+      chartPalette(),
+      first.t as UTCTimestamp,
+      last.t as UTCTimestamp,
+    );
   }
 }

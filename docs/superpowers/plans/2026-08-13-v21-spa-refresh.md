@@ -1500,13 +1500,46 @@ would bury this task's diff. The files this task creates are prettier-clean.
 **Owns:** `frontend/src/app/ui/chart/plan-lines.ts`, `frontend/src/app/ui/chart/plan-lines.spec.ts`
 **Blocked by:** SR35
 
-- [ ] **Step 1: Write the failing test** — five price lines (entry, stop, target1, target2, working stop) with the right token colours and axis labels; `target2` and `working_stop` are omitted when null rather than drawn at zero; the risk band spans entry→stop in `--neg-soft` and the reward band entry→target in `--pos-soft`.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — `createPriceLine` for the lines (it gives the TradingView-style axis tag for free), SR34's box primitive for the two bands.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): plan levels and the risk/reward bands`
+- [x] **Step 1: Write the failing test** — five price lines (entry, stop, target1, target2, working stop) with the right token colours and axis labels; `target2` and `working_stop` are omitted when null rather than drawn at zero; the risk band spans entry→stop in `--neg-soft` and the reward band entry→target in `--pos-soft`.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — `createPriceLine` for the lines (it gives the TradingView-style axis tag for free), SR34's box primitive for the two bands.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): plan levels and the risk/reward bands`
 
 ---
+
+**Result:** 16 tests in `plan-lines.spec.ts`, vitest `32 files, 495 passed`,
+`ng build` clean.
+
+**Reward is shaded to `target1`, falling back to `target2`** — the plan says
+"entry→target" without saying which, and shading to the runner would flatter
+every plan that has one. The ratio a reader compares against the risk band is
+the one they take profit at.
+
+**The working stop is `--warn`, not `--neg`.** It is a stop that MOVES, and
+drawing it in the same red as the hard stop makes a floor that trails up look
+like the line that ends the trade. It is also the one dotted line on the pane:
+dotted reads as provisional, which is exactly what it is between trail steps.
+
+**Split into pure functions plus a bookkeeping class,** because everything worth
+testing here — which levels are drawn, what colour, which band spans what — is
+a pure function of the payload, and none of it needs a canvas. `planLineSpecs`
+and `planBands` are tested directly; `PlanLines` only owns attach/detach, which
+a fake series covers. This is the shape SR37–SR39 should copy.
+
+**The bands are edgeless** (`border` equals `fill`). The plan lines already draw
+both boundaries of each band; a second outline under them reads as a fourth
+level.
+
+**The bands span the whole loaded frame,** first bar to last, rather than
+starting at the entry bar — risk and reward apply for as long as the position
+does, and a band that starts mid-frame claims the plan only held from there.
+
+**A test trap worth recording,** caught while the spec was still failing to
+compile rather than after: `[90, 100].sort()` is `[100, 90]`, because the
+default comparator is lexicographic. Two of the three band assertions happened
+to be unaffected, so the one that was wrong would have failed alone and looked
+like an implementation bug. The spec sorts numerically now.
 
 ### Task SR37: MACD and RSI panes
 
