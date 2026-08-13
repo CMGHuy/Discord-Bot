@@ -1344,13 +1344,61 @@ inside the scan loop.
 **Produces:** `GET /api/v1/market/chart/<trade_id>?window=<bars>` with spec Decision 10's payload.
 **Blocked by:** SR32
 
-- [ ] **Step 1: Write the failing contract test** — the exact top-level key set (`ohlcv`, `indicators`, `volume_profile`, `levels`, `overlay`, `currency`); `overlay` is `null` for a trade with no `target_sources`; an unknown `trade_id` is a 404 in the v1 error shape; a `window` outside 20–500 is a `400 invalid`, not a clamp.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, composing existing pieces: the OHLCV loader `market.py` already uses, `swingbot.core.indicators` for MACD/RSI/Keltner, `chart_volume_profile` for the bins, the trade's own levels, and SR32's `overlay_geometry`.
-- [ ] **Step 4: NO-LOOKAHEAD.** Indicators are computed over the *loaded* window and then sliced to the *visible* window — never computed over the visible slice alone, which would change every value near its left edge. Add a test comparing the last RSI value across two different window sizes: they must be equal.
-- [ ] **Step 5: Add the TS interfaces** to `frontend/src/app/api/models.ts`, with `shape` as a discriminated union on `kind`.
-- [ ] **Step 6: Run** `python scripts/testrun.py full` → `0 failed`.
-- [ ] **Step 7: Commit** `feat(api): the chart-data endpoint`
+- [x] **Step 1: Write the failing contract test** — the exact top-level key set (`ohlcv`, `indicators`, `volume_profile`, `levels`, `overlay`, `currency`); `overlay` is `null` for a trade with no `target_sources`; an unknown `trade_id` is a 404 in the v1 error shape; a `window` outside 20–500 is a `400 invalid`, not a clamp.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, composing existing pieces: the OHLCV loader `market.py` already uses, `swingbot.core.indicators` for MACD/RSI/Keltner, `chart_volume_profile` for the bins, the trade's own levels, and SR32's `overlay_geometry`.
+- [x] **Step 4: NO-LOOKAHEAD.** Indicators are computed over the *loaded* window and then sliced to the *visible* window — never computed over the visible slice alone, which would change every value near its left edge. Add a test comparing the last RSI value across two different window sizes: they must be equal.
+- [x] **Step 5: Add the TS interfaces** to `frontend/src/app/api/models.ts`, with `shape` as a discriminated union on `kind`.
+- [x] **Step 6: Run** `python scripts/testrun.py full` → `0 failed`.
+- [x] **Step 7: Commit** `feat(api): the chart-data endpoint`
+
+---
+
+**Result:** 20 new contract tests (35 in the file), full suite `1738 passed,
+136 skipped, 1 xfailed, 0 failed`, `ng build` clean, vitest 465 passed.
+
+**`window` is 20–500, default 120, and rejects rather than clamps** — the
+opposite of `bars` on the sibling `/market/ohlcv`, deliberately. There "more
+than the cap" sensibly means "as much history as exists"; here `window` is
+what the chart *shows*, and quietly returning 500 bars to a caller that asked
+for 5000 hands it a chart it did not ask for with nothing in the response
+saying so.
+
+**One time type across the payload.** `ohlcv[].t` is an int epoch *second*,
+not the `YYYY-MM-DD` string `/market/ohlcv` returns, and it is built with
+`chart_geometry.bar_epochs` — the same function the overlay anchors use.
+lightweight-charts converts both through one `timeToCoordinate`; mixing the
+two representations in a single chart is how an overlay lands a year from its
+candle, which renders perfectly happily and is wrong. This is why the endpoint
+does *not* reuse `app.ohlcv_bars` despite the repo's one-serialisation rule —
+that rule exists to keep the Jinja and Angular charts agreeing on the *same*
+endpoint, and this is a different endpoint with a different time type.
+
+**An indicator without enough history is omitted from the dict, not nulled.**
+Minimums are explicit constants (MACD 35, RSI 15, Keltner 20) rather than a
+NaN check, because `ewm(adjust=False)` yields a *number* from bar one — "is it
+NaN" would happily serve a 26-slow MACD computed from three bars. A list of
+nulls would draw an empty pane with an axis, which reads as "this indicator is
+flat" rather than "there is not enough history".
+
+**Nothing non-finite reaches the wire.** Python's `json` emits bare
+`NaN`/`Infinity` tokens, which `JSON.parse` rejects *outright* — one warm-up
+bar would fail the whole chart load rather than degrade one pane. Every scalar
+goes through `_num`, and the assembled payload through one recursive
+`_json_safe` pass; a test greps the raw body for both tokens.
+
+**`overlay` carries `source` alongside `side` and `shape`** — three keys, not
+the spec sketch's two. It is `overlay_geometry`'s return value passed through
+unchanged, and rebuilding a two-key dict from it would be exactly the second
+implementation that module exists to prevent. `source` is the method label the
+legend prints. Target side is preferred, stop is the fallback, `null` if
+neither is drawable. `trend_info` is deliberately left unset — no trendline
+fitting here, for the same reason SR32 converts rather than re-fits.
+
+**Pre-existing:** `frontend/src/app/api/models.ts` does not satisfy
+`npx prettier --check`, and did not before this task either (verified against
+HEAD). Left alone rather than burying a 193-line addition in a whole-file
+reflow; a formatting pass is its own commit if anyone wants one.
 
 ---
 
