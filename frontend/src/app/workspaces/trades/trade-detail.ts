@@ -361,7 +361,9 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .note {
       width: 100%;
       padding: var(--space-8);
-      background: var(--surface-sunken);
+      /* --bg, not --surface: the field sits ON a surface, and the darkest
+         token is what makes it read as inset rather than as another card. */
+      background: var(--bg);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -374,7 +376,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .note-state {
       margin-top: var(--space-6);
       color: var(--text-faint);
-      font-size: var(--text-meta);
+      font-size: var(--text-chip);
     }
     /* The one state the reader must not miss: text they typed is not stored. */
     .note-state-bad { color: var(--neg); }

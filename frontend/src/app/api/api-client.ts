@@ -16,6 +16,7 @@ import {
   Job,
   JobList,
   JobStarted,
+  KillswitchResult,
   Logs,
   Preferences,
   Proposal,
@@ -203,8 +204,15 @@ export class ApiClient {
     return this.http.get<Risk>(`${this.base}/risk`);
   }
 
-  setKillswitch(on: boolean, reason?: string): Observable<Risk> {
-    return this.http.post<Risk>(`${this.base}/risk/killswitch`, { on, reason });
+  /** Returns the killswitch alone, not the whole risk resource: rebuilding
+   *  that server-side means re-clustering open positions, which fetches
+   *  daily history per ticker. The `risk` event that follows is what brings
+   *  the rest of the page up to date. */
+  setKillswitch(on: boolean, reason?: string): Observable<KillswitchResult> {
+    return this.http.post<KillswitchResult>(`${this.base}/risk/killswitch`, {
+      on,
+      reason,
+    });
   }
 
   /* -- system ---------------------------------------------------------- */

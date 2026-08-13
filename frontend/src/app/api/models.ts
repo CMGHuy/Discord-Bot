@@ -307,6 +307,12 @@ export interface ScanHealth {
   slowdown: boolean;
 }
 
+/** `POST /risk/killswitch`'s body. The toggle deliberately does NOT return
+ *  the whole risk resource — see `ApiClient.setKillswitch`. */
+export interface KillswitchResult {
+  killswitch: Killswitch;
+}
+
 export interface Risk {
   heat: RiskHeat;
   positions: RiskPosition[];
