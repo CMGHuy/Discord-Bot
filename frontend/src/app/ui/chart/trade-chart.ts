@@ -20,6 +20,7 @@ import {
 
 import { ChartResponse } from '../../api/models';
 import { ChartPalette, chartOptions, chartPalette } from './chart-theme';
+import { IndicatorPanes } from './indicator-panes';
 import { BasicOverlays } from './overlays-basic';
 import { PlanLines } from './plan-lines';
 
@@ -31,20 +32,19 @@ import { PlanLines } from './plan-lines';
  * and the strategy overlay (SR39) are added on top of this frame; every one of
  * them draws into a pane this file has already created.
  *
- * **The panes are created empty at mount, and that is the whole point of doing
- * it here.** `addPane` appends, so a pane created later is a pane at the
- * bottom — an RSI pane built before MACD would leave the two in the wrong
- * order, and re-ordering panes after the fact means `swapPanes` calls whose
- * correctness depends on how many series happened to have arrived. Creating
- * all three up front makes the later tasks pure `addSeries(..., PANE_MACD)`
- * with no restructuring, which is what "blocked by SR35" is supposed to buy
- * them. `addPane(true)` — `preserveEmptyPane` — is what keeps a pane alive
- * while it holds no series; without it the library is free to drop it, and
- * SR37's pane would silently become pane 1 on a frame with no MACD.
+ * **This component owns pane 0 and nothing else.** SR35 created all three panes
+ * here so that later tasks would not have to restructure; SR37 replaced that
+ * with something better and this file was trimmed to match. The oscillator
+ * panes cannot be pre-created, because a pane is omitted entirely when its
+ * indicator is missing and `removePane` renumbers everything below it — so the
+ * stack has to be derived from the payload, by one owner, which is
+ * `IndicatorPanes`. Two owners of one pane stack is how a pane index becomes
+ * unknowable.
  *
- * **An indicator absent from the payload leaves its pane empty rather than
- * absent** at this stage. SR37 owns the decision to omit a pane entirely when
- * its series is missing — that is its test, not this one's.
+ * `PANE_PRICE` survives as an export because the overlays that draw on the
+ * price pane pass it to `addSeries`; there are deliberately no constants for
+ * the panes below it, since their indices are a property of the payload rather
+ * than of the design.
  *
  * The imperative-canvas discipline is `PriceChart`'s, for the same three
  * reasons, and this component does not replace it: `PriceChart` draws the
@@ -63,16 +63,14 @@ import { PlanLines } from './plan-lines';
  * projected into — see `ui/chart-container.ts`. Nothing here renders a state.
  */
 
-/** Pane indices, exported because SR36–SR39 add series into these panes and a
- *  bare `1` at four call sites is how the RSI ends up in the MACD pane. */
+/** The price pane, exported because every overlay that draws on it passes this
+ *  to `addSeries`. The oscillator panes have no constant on purpose — see the
+ *  component's docstring, and `indicator-panes.ts`. */
 export const PANE_PRICE = 0;
-export const PANE_MACD = 1;
-export const PANE_RSI = 2;
 
-/** Relative pane heights. The price pane carries the candles, the volume, the
- *  plan lines and the overlay; the two oscillators are read for shape and sign
- *  rather than for a value, so they get a strip each. */
-const STRETCH = [6, 2, 2];
+/** The price pane's share of the height. `IndicatorPanes` gives each of its own
+ *  panes 2, so a full stack is the 6:2:2 SR35 set. */
+const PRICE_STRETCH = 6;
 
 /** The volume histogram's own price scale. An overlay scale (a non-empty id
  *  that is neither `left` nor `right`) rather than the price scale: volume in
@@ -107,6 +105,7 @@ export class TradeChart {
   private volume: ISeriesApi<'Histogram'> | null = null;
   private planLines: PlanLines | null = null;
   private overlays: BasicOverlays | null = null;
+  private panes: IndicatorPanes | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -130,6 +129,7 @@ export class TradeChart {
       this.volume = null;
       this.planLines = null;
       this.overlays = null;
+      this.panes = null;
     });
   }
 
@@ -140,11 +140,7 @@ export class TradeChart {
     const chart = createChart(element, chartOptions(palette));
     this.chart = chart;
 
-    // Pane 0 exists already; the other two do not. `true` preserves them while
-    // they are empty, which they are until SR37 fills them.
-    chart.addPane(true);
-    chart.addPane(true);
-    chart.panes().forEach((pane, index) => pane.setStretchFactor(STRETCH[index] ?? 1));
+    chart.panes()[PANE_PRICE]?.setStretchFactor(PRICE_STRETCH);
 
     this.candles = chart.addSeries(
       CandlestickSeries,
@@ -167,6 +163,7 @@ export class TradeChart {
     this.volume = this.createVolume(chart, palette);
     this.planLines = new PlanLines(this.candles);
     this.overlays = new BasicOverlays(chart, this.candles);
+    this.panes = new IndicatorPanes(chart);
   }
 
   /** One colour for every bar, not green-up/red-down.
@@ -209,6 +206,7 @@ export class TradeChart {
       volume.setData([]);
       this.planLines?.detach();
       this.overlays?.detach();
+      this.panes?.detach();
       return;
     }
 
@@ -227,6 +225,7 @@ export class TradeChart {
     );
     volume.setData(data.ohlcv.map((bar) => ({ time: bar.t as UTCTimestamp, value: bar.v })));
 
+    this.panes?.render(data.indicators, data.ohlcv, chartPalette());
     this.overlays?.render(data, chartPalette());
     this.renderPlan(data);
     this.chart?.timeScale().fitContent();
@@ -241,6 +240,7 @@ export class TradeChart {
     if (!first || !last) {
       this.planLines?.detach();
       this.overlays?.detach();
+      this.panes?.detach();
       return;
     }
     this.planLines?.render(

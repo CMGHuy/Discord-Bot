@@ -1546,13 +1546,50 @@ like an implementation bug. The spec sorts numerically now.
 **Owns:** `frontend/src/app/ui/chart/indicator-panes.ts`, `frontend/src/app/ui/chart/indicator-panes.spec.ts`
 **Blocked by:** SR35
 
-- [ ] **Step 1: Write the failing test** — MACD line, signal line and a histogram coloured per bar by sign, plus a zero line; RSI with 70 / 50 / 30 reference lines; a pane is **omitted entirely** when its series is absent from the payload, never drawn empty.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): the MACD and RSI panes`
+- [x] **Step 1: Write the failing test** — MACD line, signal line and a histogram coloured per bar by sign, plus a zero line; RSI with 70 / 50 / 30 reference lines; a pane is **omitted entirely** when its series is absent from the payload, never drawn empty.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): the MACD and RSI panes`
 
 ---
+
+**Result:** 33 tests in `indicator-panes.spec.ts`, vitest `34 files, 545
+passed`, `ng build` clean. Written by a subagent in parallel with SR38 — the
+two own disjoint files, and each committed only its own paths. The wiring into
+`trade-chart.ts` was done here, after both landed.
+
+**SR35's pre-created panes were wrong, and this task supersedes them.** A pane
+is omitted entirely when its indicator is missing, and `removePane` renumbers
+everything below it — so `PANE_MACD = 1` / `PANE_RSI = 2` are a description of
+the *full* stack, not addresses: on a frame with no MACD there is no pane 2 at
+all, and `addSeries(..., 2)` would put the RSI in a pane nobody asked for. The
+layout is therefore derived from the payload (`indicatorPaneLayout`) and read
+back positionally (`indicatorPaneIndex`), with **one owner** for every pane
+below price. `trade-chart.ts` lost its two `addPane` calls and both constants;
+two owners of one pane stack is how a pane index becomes unknowable.
+
+**Panes come down bottom-up and go back top-down.** Removing top-down
+invalidates every index still queued; `addPane` appends, so appending in layout
+order *is* the ordering rule, and no `swapPanes` is ever needed.
+
+**The stack is rebuilt only when the layout changes,** not on every render. The
+separators are draggable and the store refetches on every `trades` event —
+rebuilding each time would throw away a resize the reader had just made. Series
+inside a standing pane are still redrawn every render.
+
+**The histogram's hue IS a valence here, unlike the volume histogram's.** A bar
+above zero is momentum with the trade and below it against, which is exactly
+what `--pos`/`--neg` mean; the MACD and signal lines are `--accent` and
+`--warn` because neither is good or bad news on its own.
+
+**Reference lines carry no axis tag** — the opposite of SR36's plan lines, and
+for the opposite reason: 70/50/30 and 0 are constants the reader already knows,
+and four permanent tags on a two-unit strip would bury the one label that
+changes. They also need an `autoscaleInfoProvider`, because price lines take no
+part in the library's autoscale: an RSI that sits between 40 and 60 all frame
+would otherwise draw its thresholds off-pane, and a threshold only visible once
+it has been crossed is worse than none.
 
 ### Task SR38: Keltner channels and volume profile
 
