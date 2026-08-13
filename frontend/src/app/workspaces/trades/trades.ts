@@ -97,6 +97,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
         </button>
         <sb-column-picker
           [tableId]="tableId"
+          density="compact"
           [columns]="allColumns()"
           [defaults]="defaultColumns"
           [visible]="visible()"

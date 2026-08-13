@@ -68,6 +68,26 @@ export const PreferencesStore = signalStore(
         });
       },
 
+      /** The whole preferences map, for the pure readers in `ui/table-prefs`.
+       *
+       *  Exposed rather than adding a store method per preference: the
+       *  readers are pure functions over this object precisely so they can be
+       *  tested without a store, and a method per key would be a second place
+       *  to keep the key names correct. */
+      values(): Preferences {
+        return store.values();
+      },
+
+      /** Apply a pure updater from `ui/table-prefs` and schedule the write.
+       *
+       *  Takes a function rather than a key and a value so the caller cannot
+       *  invent a key spelling — the updaters own the key format, and this
+       *  only owns when the result is persisted. */
+      update(mutate: (prefs: Preferences) => Preferences): void {
+        patchState(store, (state) => ({ values: mutate(state.values) }));
+        scheduleWrite();
+      },
+
       /** Visible column ids for a table, or null for "the table's default".
        *
        *  Null rather than an empty array: a table the user has never

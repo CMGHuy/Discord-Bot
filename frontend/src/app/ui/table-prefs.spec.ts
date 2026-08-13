@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Preferences } from '../api/models';
 import {
   PER_PAGE_OPTIONS,
+  clearTableColumns,
   readTableColumns,
   readTableDensity,
   readTablePerPage,
@@ -140,5 +141,30 @@ describe('the writers', () => {
     const prefs: Preferences = { 'tables.dashboard.density': 'full' };
     const next = writeTableDensity(prefs, 'trades', 'compact');
     expect(next['tables.dashboard.density']).toBe('full');
+  });
+});
+
+describe('clearTableColumns', () => {
+  it('forgets one density and leaves the other alone', () => {
+    let prefs: Preferences = {};
+    prefs = writeTableColumns(prefs, 'trades', 'compact', ['ticker']);
+    prefs = writeTableColumns(prefs, 'trades', 'full', ['num']);
+
+    const next = clearTableColumns(prefs, 'trades', 'compact');
+
+    // Compact reverted to the baseline order; full kept its arrangement,
+    // with the unlisted baseline column appended as always.
+    expect(next['tables.trades.compact.columns']).toBeUndefined();
+    expect(next['tables.trades.full.columns']).toEqual(['num']);
+    expect(readTableColumns(next, 'trades', 'full', ['ticker', 'num']))
+      .toEqual(['num', 'ticker']);
+  });
+
+  it('deletes rather than storing the baseline as a choice', () => {
+    // Storing today's defaults would stop the table ever picking up
+    // tomorrow's.
+    const prefs = writeTableColumns({}, 'trades', 'compact', ['ticker']);
+    expect(clearTableColumns(prefs, 'trades', 'compact'))
+      .not.toHaveProperty('tables.trades.compact.columns');
   });
 });

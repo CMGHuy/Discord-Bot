@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PreferencesStore } from '../stores/preferences.store';
 import { ColumnPickerComponent, PickableColumn } from './column-picker';
+import { Density } from './data-table/data-table.types';
+import { readTableColumns } from './table-prefs';
 
 /* NG39 — the column picker.
  *
@@ -25,11 +27,13 @@ const COLUMNS: PickableColumn[] = [
 ];
 
 const DEFAULTS = ['num', 'status', 'ticker'];
+const ALL_KEYS = COLUMNS.map((c) => c.key);
 
 @Component({
   imports: [ColumnPickerComponent],
   template: `
     <sb-column-picker
+      [density]="density"
       tableId="trades"
       [columns]="columns"
       [defaults]="defaults"
@@ -41,6 +45,7 @@ const DEFAULTS = ['num', 'status', 'ticker'];
 class Host {
   readonly columns = COLUMNS;
   readonly defaults = DEFAULTS;
+  readonly density: Density = 'compact';
   readonly visible = signal<string[]>([...DEFAULTS]);
   readonly emitted: string[][] = [];
 }
@@ -104,8 +109,14 @@ describe('ColumnPickerComponent', () => {
     boxes()[3].click();
     fixture.detectChanges();
 
-    expect(preferences.columns('trades')).toEqual(['num', 'status', 'ticker', 'pnl']);
-    expect(preferences.columns('watchlist')).toBeNull();
+    // Read through the SR12 helper, not the pre-SR12 store method: the
+    // picker now stores per density, so 'what did trades save' is a question
+    // about a (table, density) pair.
+    expect(readTableColumns(preferences.values(), 'trades', 'compact', ALL_KEYS))
+      .toEqual(['num', 'status', 'ticker', 'pnl']);
+    // A table nobody touched still reports its baseline.
+    expect(readTableColumns(preferences.values(), 'watchlist', 'compact', ALL_KEYS))
+      .toEqual(ALL_KEYS);
   });
 
   it('will not let the last visible column be unchecked', () => {
@@ -146,12 +157,12 @@ describe('ColumnPickerComponent', () => {
     // ever pressed reset.
     boxes()[3].click();
     fixture.detectChanges();
-    expect(preferences.columns('trades')).not.toBeNull();
+    expect(preferences.values()['tables.trades.compact.columns']).toBeDefined();
 
     (el().querySelector('.reset') as HTMLButtonElement).click();
     fixture.detectChanges();
 
-    expect(preferences.columns('trades')).toBeNull();
+    expect(preferences.values()['tables.trades.compact.columns']).toBeUndefined();
   });
 
   it('reports how many of the columns are showing', () => {

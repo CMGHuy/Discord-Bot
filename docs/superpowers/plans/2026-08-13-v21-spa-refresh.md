@@ -823,13 +823,27 @@ two tasks touching the same component with nothing exercising the first.
 **Owns:** `frontend/src/app/ui/column-picker.ts`, `frontend/src/app/ui/column-picker.spec.ts`
 **Blocked by:** SR12
 
-- [ ] **Step 1: Write the failing test** — editing the visible set while in Compact must not change what Full shows; "Reset to default" restores that mode's baseline only; a column pinned by the table (`actions`) never appears in the picker at all.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — the picker takes `density` and writes through `writeTableColumns(…, density, …)`.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(table): the picker edits one density at a time`
+- [x] **Step 1: Write the failing test** — editing the visible set while in Compact must not change what Full shows; "Reset to default" restores that mode's baseline only; a column pinned by the table (`actions`) never appears in the picker at all.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — the picker takes `density` and writes through `writeTableColumns(…, density, …)`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(table): the picker edits one density at a time`
 
 ---
+
+Pinned columns are **omitted from the list**, not shown disabled. An
+unexplained disabled checkbox reads as a bug; a column that simply is not
+offered reads as "not yours to hide", which is what it is.
+
+Toggling now **preserves the existing order** instead of re-deriving it from
+`columns`. The old behaviour was correct when order was meaningless; since
+SR14 makes it meaningful, re-deriving would silently undo a drag-reorder every
+time a column was toggled.
+
+`PreferencesStore` gained `values()` and `update(mutate)` rather than a method
+per preference — the SR12 readers are pure functions over that object
+precisely so they can be tested without a store, and a method per key would be
+a second place to keep key spellings correct.
 
 ### Task SR14: Drag-to-reorder
 

@@ -95,3 +95,21 @@ export function writeTablePerPage(
 ): Preferences {
   return { ...prefs, [`tables.${tableId}.per_page`]: perPage };
 }
+
+/**
+ * Forget a table's saved columns for one density, so its baseline applies
+ * again.
+ *
+ * Deleting the key rather than storing the baseline as a choice: a table
+ * whose designed columns change later should pick the new ones up, and a
+ * stored copy of March's defaults would quietly prevent that forever.
+ */
+export function clearTableColumns(
+  prefs: Preferences,
+  tableId: string,
+  density: Density,
+): Preferences {
+  const next = { ...prefs };
+  delete next[key(tableId, density, 'columns')];
+  return next;
+}
