@@ -1703,14 +1703,39 @@ spec now pins both that and the two-survivor case.
 **Owns:** `frontend/src/app/workspaces/trades/trade-detail.ts`, `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
 **Blocked by:** SR36, SR37, SR38, SR39
 
-- [ ] **Step 1: Write the failing test** for spec Decision 10's three degraded states — a failed request renders an empty state naming the reason with a retry (never a blank pane); `overlay: null` draws candles, indicators and plan lines only; a missing indicator omits its pane.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, and replace the trade detail's Chart tab with `TradeChart`.
+- [x] **Step 1: Write the failing test** for spec Decision 10's three degraded states — a failed request renders an empty state naming the reason with a retry (never a blank pane); `overlay: null` draws candles, indicators and plan lines only; a missing indicator omits its pane.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, and replace the trade detail's Chart tab with `TradeChart`.
 - [ ] **Step 4: Compare against the PNG.** For each of SR32's fixture trades, put the rendered chart beside the generated image and confirm every level, band and overlay sits at the same price. Record the comparison in the QA doc. This is the only check that catches a coordinate-conversion error, which unit tests cannot see.
 - [ ] **Step 5: Walk the Phase 3 checklist**, recording each line.
 - [ ] **Step 6: Commit** `feat(chart): degraded states, and the walk against the PNG`
 
 ---
+
+**Steps 1–3 done; steps 4–6 are open.** vitest `36 files, 567 passed`,
+`ng build` clean. **Steps 4 and 5 need a running admin and a browser** — the
+PNG comparison is the only check that catches a coordinate-conversion error,
+and it cannot be faked from unit tests, so it is deliberately left rather than
+signed off.
+
+**Only one of the three degraded states needed new code.** `overlay: null` is
+already pinned in `strategy-overlay.spec.ts` and a missing indicator's pane in
+`indicator-panes.spec.ts` — each tested where the decision is made rather than
+re-asserted through a component. What was genuinely missing was the retry:
+`ChartContainer` could show an error but not act on one, and "the chart will
+retry on the next update" is not a retry — for a `not_found` there is no next
+update, so the reader was left with a sentence and no way out of it. The retry
+is opt-in (`canRetry`) because `OhlcvStore`, the ticker chart's store, has no
+retry method and a button that does nothing is worse than no button.
+
+**The Chart tab now provides `ChartStore` instead of `OhlcvStore`,** keyed by
+trade rather than ticker. `PriceChart` and `OhlcvStore` stay — ticker-detail
+still uses both, and that chart is a different endpoint with a different time
+type.
+
+**The caption prints `overlay.source`** when the trade has one and simply says
+less when it does not — the deferred legend SR39 noted. A lone `marker` is
+still an unlabelled diamond; whether that reads is a question for step 4.
 
 ## Phase 3 gate
 

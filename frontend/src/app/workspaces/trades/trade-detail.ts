@@ -12,13 +12,13 @@ import {
 import { Router, RouterLink } from '@angular/router';
 
 import { ApiClient } from '../../api/api-client';
-import { OhlcvStore } from '../../stores/ohlcv.store';
+import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { Button } from '../../ui/button';
 import { QualityChip } from '../../ui/chip';
 import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { PriceChart } from '../../ui/price-chart';
+import { TradeChart } from '../../ui/chart/trade-chart';
 import { dateTime, held, num, pct, text } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
@@ -57,8 +57,18 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 @Component({
   selector: 'sb-trade-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [TradeDetailStore, OhlcvStore],
-  imports: [RouterLink, TabBar, Panel, StatusIndicator, QualityChip, Button, ConfirmDialog, ChartContainer, PriceChart],
+  providers: [TradeDetailStore, ChartStore],
+  imports: [
+    RouterLink,
+    TabBar,
+    Panel,
+    StatusIndicator,
+    QualityChip,
+    Button,
+    ConfirmDialog,
+    ChartContainer,
+    TradeChart,
+  ],
   template: `
     <header class="head">
       <a class="back" routerLink="/trades">← Trades</a>
@@ -106,7 +116,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           <div class="panels">
             <sb-panel heading="Levels">
               <dl>
-                <div><dt>Entry</dt><dd class="num">{{ fmt(trade.entry) }}</dd></div>
+                <div>
+                  <dt>Entry</dt>
+                  <dd class="num">{{ fmt(trade.entry) }}</dd>
+                </div>
                 <div>
                   <dt>Stop</dt>
                   <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
@@ -119,23 +132,44 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                   <dt>Target 2</dt>
                   <dd class="num pos">{{ fmt(trade.target2) }}</dd>
                 </div>
-                <div><dt>R:R</dt><dd class="num">{{ fmt(trade.risk_reward) }}</dd></div>
+                <div>
+                  <dt>R:R</dt>
+                  <dd class="num">{{ fmt(trade.risk_reward) }}</dd>
+                </div>
               </dl>
             </sb-panel>
 
             <sb-panel heading="Per share">
               <dl>
-                <div><dt>Risk</dt><dd class="num">{{ fmt(store.riskPerShare()) }}</dd></div>
-                <div><dt>Reward</dt><dd class="num">{{ fmt(store.rewardPerShare()) }}</dd></div>
-                <div><dt>Direction</dt><dd>{{ fmtText(trade.direction) }}</dd></div>
-                <div><dt>Origin</dt><dd>{{ fmtText(trade.origin) }}</dd></div>
+                <div>
+                  <dt>Risk</dt>
+                  <dd class="num">{{ fmt(store.riskPerShare()) }}</dd>
+                </div>
+                <div>
+                  <dt>Reward</dt>
+                  <dd class="num">{{ fmt(store.rewardPerShare()) }}</dd>
+                </div>
+                <div>
+                  <dt>Direction</dt>
+                  <dd>{{ fmtText(trade.direction) }}</dd>
+                </div>
+                <div>
+                  <dt>Origin</dt>
+                  <dd>{{ fmtText(trade.origin) }}</dd>
+                </div>
               </dl>
             </sb-panel>
 
             <sb-panel heading="Sizing">
               <dl>
-                <div><dt>Shares</dt><dd class="num">{{ fmt(trade.shares, 0) }}</dd></div>
-                <div><dt>Deployed</dt><dd class="num">{{ fmt(trade.position_value) }}</dd></div>
+                <div>
+                  <dt>Shares</dt>
+                  <dd class="num">{{ fmt(trade.shares, 0) }}</dd>
+                </div>
+                <div>
+                  <dt>Deployed</dt>
+                  <dd class="num">{{ fmt(trade.position_value) }}</dd>
+                </div>
                 <div>
                   <dt>Sizing mode</dt>
                   <dd>{{ fmtText(store.detail()?.sizing_mode ?? null) }}</dd>
@@ -149,10 +183,22 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 
             <sb-panel heading="Opened">
               <dl>
-                <div><dt>At</dt><dd>{{ fmtDate(trade.opened_at) }}</dd></div>
-                <div><dt>Closed</dt><dd>{{ fmtDate(trade.closed_at) }}</dd></div>
-                <div><dt>Entry type</dt><dd>{{ fmtText(store.detail()?.entry_type ?? null) }}</dd></div>
-                <div><dt>P&L</dt><dd class="num">{{ fmtPct(trade.pnl_pct) }}</dd></div>
+                <div>
+                  <dt>At</dt>
+                  <dd>{{ fmtDate(trade.opened_at) }}</dd>
+                </div>
+                <div>
+                  <dt>Closed</dt>
+                  <dd>{{ fmtDate(trade.closed_at) }}</dd>
+                </div>
+                <div>
+                  <dt>Entry type</dt>
+                  <dd>{{ fmtText(store.detail()?.entry_type ?? null) }}</dd>
+                </div>
+                <div>
+                  <dt>P&L</dt>
+                  <dd class="num">{{ fmtPct(trade.pnl_pct) }}</dd>
+                </div>
               </dl>
             </sb-panel>
           </div>
@@ -163,7 +209,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           <div class="panels">
             <sb-panel heading="Now">
               <dl>
-                <div><dt>Price</dt><dd class="num">{{ fmt(trade.current_price) }}</dd></div>
+                <div>
+                  <dt>Price</dt>
+                  <dd class="num">{{ fmt(trade.current_price) }}</dd>
+                </div>
                 <div>
                   <dt>Unrealised</dt>
                   <dd class="num" [class]="pnlClass(trade.pnl_pct)">{{ fmtPct(trade.pnl_pct) }}</dd>
@@ -174,7 +223,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                     {{ fmt(trade.realized_pnl_amount) }}
                   </dd>
                 </div>
-                <div><dt>Held</dt><dd class="num">{{ fmtHeld(trade.held_hours) }}</dd></div>
+                <div>
+                  <dt>Held</dt>
+                  <dd class="num">{{ fmtHeld(trade.held_hours) }}</dd>
+                </div>
               </dl>
             </sb-panel>
 
@@ -189,9 +241,18 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                 />
               </div>
               <dl>
-                <div><dt>Stop</dt><dd class="num neg">{{ fmt(trade.stop_loss) }}</dd></div>
-                <div><dt>Entry</dt><dd class="num">{{ fmt(trade.entry) }}</dd></div>
-                <div><dt>Target</dt><dd class="num pos">{{ fmt(trade.target) }}</dd></div>
+                <div>
+                  <dt>Stop</dt>
+                  <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
+                </div>
+                <div>
+                  <dt>Entry</dt>
+                  <dd class="num">{{ fmt(trade.entry) }}</dd>
+                </div>
+                <div>
+                  <dt>Target</dt>
+                  <dd class="num pos">{{ fmt(trade.target) }}</dd>
+                </div>
               </dl>
             </sb-panel>
 
@@ -217,11 +278,13 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           <sb-chart-container
             [loading]="chart.loading()"
             [error]="chart.error()"
-            [hasData]="!chart.isEmpty()"
-            [height]="420"
+            [hasData]="!chartEmpty()"
+            [height]="520"
             [caption]="chartCaption()"
+            [canRetry]="true"
+            (retry)="chart.retry()"
           >
-            <sb-price-chart [bars]="chart.bars()" [levels]="chart.levels()" />
+            <sb-trade-chart [data]="chart.data()" />
           </sb-chart-container>
         </div>
       }
@@ -233,8 +296,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                  plainly beats a textarea that silently discards what is
                  typed into it. -->
             <p class="not-journaled">
-              This position has no journal entry yet. Notes attach when a trade
-              closes.
+              This position has no journal entry yet. Notes attach when a trade closes.
             </p>
           }
 
@@ -252,11 +314,21 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 
           <p class="note-state" [class.note-state-bad]="store.noteStatus() === 'error'">
             @switch (store.noteStatus()) {
-              @case ('saving') { Saving… }
-              @case ('unsaved') { Unsaved changes }
-              @case ('error') { {{ store.noteError() }} }
-              @case ('unjournaled') { Not journaled yet }
-              @default { Saved }
+              @case ('saving') {
+                Saving…
+              }
+              @case ('unsaved') {
+                Unsaved changes
+              }
+              @case ('error') {
+                {{ store.noteError() }}
+              }
+              @case ('unjournaled') {
+                Not journaled yet
+              }
+              @default {
+                Saved
+              }
             }
           </p>
         </div>
@@ -272,23 +344,49 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                  the place to change a strategy's numbers is a validation run,
                  not a trade. -->
             <dl>
-              <div><dt>Strategy</dt><dd>{{ row.strategy }}</dd></div>
-              <div><dt>Status</dt><dd>{{ row.status }}</dd></div>
-              <div><dt>OOS sample</dt><dd>{{ fmt(row.n) }}</dd></div>
-              <div><dt>OOS win rate</dt><dd>{{ fmtPct(row.win_rate) }}</dd></div>
-              <div><dt>OOS expectancy</dt><dd>{{ fmt(row.expectancy_r) }}R</dd></div>
-              <div><dt>Live sample</dt><dd>{{ fmt(row.live_n) }}</dd></div>
-              <div><dt>Live win rate</dt><dd>{{ fmtPct(row.live_wr) }}</dd></div>
-              <div><dt>Live vs OOS</dt><dd>{{ fmtPct(row.delta_vs_oos) }}</dd></div>
-              <div><dt>Window</dt><dd>{{ fmtText(row.window) }}</dd></div>
+              <div>
+                <dt>Strategy</dt>
+                <dd>{{ row.strategy }}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{{ row.status }}</dd>
+              </div>
+              <div>
+                <dt>OOS sample</dt>
+                <dd>{{ fmt(row.n) }}</dd>
+              </div>
+              <div>
+                <dt>OOS win rate</dt>
+                <dd>{{ fmtPct(row.win_rate) }}</dd>
+              </div>
+              <div>
+                <dt>OOS expectancy</dt>
+                <dd>{{ fmt(row.expectancy_r) }}R</dd>
+              </div>
+              <div>
+                <dt>Live sample</dt>
+                <dd>{{ fmt(row.live_n) }}</dd>
+              </div>
+              <div>
+                <dt>Live win rate</dt>
+                <dd>{{ fmtPct(row.live_wr) }}</dd>
+              </div>
+              <div>
+                <dt>Live vs OOS</dt>
+                <dd>{{ fmtPct(row.delta_vs_oos) }}</dd>
+              </div>
+              <div>
+                <dt>Window</dt>
+                <dd>{{ fmtText(row.window) }}</dd>
+              </div>
             </dl>
             @if (row.decayed) {
               <!-- The pre-registered decay rule fired. This belongs on the
                    trade, not only on the Analytics page: it is the reason to
                    distrust this position's edge. -->
               <p class="decayed">
-                Live results have decayed against this strategy's out-of-sample
-                record.
+                Live results have decayed against this strategy's out-of-sample record.
               </p>
             }
           } @else {
@@ -311,9 +409,18 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     />
   `,
   styles: `
-    .head { display: grid; gap: var(--space-8); }
-    .back { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
-    .back:hover { text-decoration: underline; }
+    .head {
+      display: grid;
+      gap: var(--space-8);
+    }
+    .back {
+      color: var(--accent);
+      font-size: var(--text-table);
+      text-decoration: none;
+    }
+    .back:hover {
+      text-decoration: underline;
+    }
 
     h1 {
       display: flex;
@@ -322,10 +429,19 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       font-size: var(--text-title);
       font-weight: 600;
     }
-    .ticker { font-family: var(--font-mono); }
-    .skeleton { color: var(--text-faint); }
+    .ticker {
+      font-family: var(--font-mono);
+    }
+    .skeleton {
+      color: var(--text-faint);
+    }
 
-    .tags { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
+    .tags {
+      display: flex;
+      align-items: center;
+      gap: var(--space-6);
+      flex-wrap: wrap;
+    }
     .tag {
       padding: 1px var(--space-6);
       border: 1px solid var(--border-strong);
@@ -340,18 +456,46 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       gap: var(--space-14);
       margin-top: var(--space-14);
     }
-    dl { display: grid; gap: var(--space-6); }
-    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
-    dt { color: var(--text-secondary); font-size: var(--text-table); }
-    dd { color: var(--text); font-size: var(--text-table); }
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
+    dl {
+      display: grid;
+      gap: var(--space-6);
+    }
+    dl > div {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-10);
+    }
+    dt {
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
+    dd {
+      color: var(--text);
+      font-size: var(--text-table);
+    }
+    .pos {
+      color: var(--pos);
+    }
+    .neg {
+      color: var(--neg);
+    }
 
-    .chart { margin-top: var(--space-14); }
-    .progress { margin-bottom: var(--space-10); }
-    .commands { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+    .chart {
+      margin-top: var(--space-14);
+    }
+    .progress {
+      margin-bottom: var(--space-10);
+    }
+    .commands {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-8);
+    }
 
-    .notes, .strategy { margin-top: var(--space-14); }
+    .notes,
+    .strategy {
+      margin-top: var(--space-14);
+    }
     .note-label {
       display: block;
       margin-bottom: var(--space-6);
@@ -371,30 +515,46 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       font-size: var(--text-table);
       resize: vertical;
     }
-    .note:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-    .note:disabled { color: var(--text-faint); cursor: not-allowed; }
+    .note:focus-visible {
+      outline: 1px solid var(--accent);
+      outline-offset: -1px;
+    }
+    .note:disabled {
+      color: var(--text-faint);
+      cursor: not-allowed;
+    }
     .note-state {
       margin-top: var(--space-6);
       color: var(--text-faint);
       font-size: var(--text-chip);
     }
     /* The one state the reader must not miss: text they typed is not stored. */
-    .note-state-bad { color: var(--neg); }
+    .note-state-bad {
+      color: var(--neg);
+    }
     .not-journaled {
       margin-bottom: var(--space-10);
       color: var(--text-secondary);
       font-size: var(--text-table);
     }
-    .decayed { margin-top: var(--space-10); color: var(--warn); font-size: var(--text-table); }
+    .decayed {
+      margin-top: var(--space-10);
+      color: var(--warn);
+      font-size: var(--text-table);
+    }
 
-    .todo { margin-top: var(--space-14); color: var(--text-faint); font-size: var(--text-table); }
+    .todo {
+      margin-top: var(--space-14);
+      color: var(--text-faint);
+      font-size: var(--text-table);
+    }
   `,
 })
 export class TradeDetail {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
-  protected readonly chart = inject(OhlcvStore);
+  protected readonly chart = inject(ChartStore);
 
   readonly id = input.required<string>();
   /** The active tab, as a query parameter. */
@@ -440,8 +600,18 @@ export class TradeDetail {
 
   protected readonly chartCaption = computed(() => {
     const trade = this.store.trade();
-    return trade ? `${trade.ticker} — daily, with this plan's levels` : null;
+    if (!trade) return null;
+    // The confirming method, when the trade has one. `overlay: null` is an
+    // ordinary state — an older trade with no recorded sources — so the caption
+    // simply says less rather than announcing an absence.
+    const source = this.chart.data()?.overlay?.source;
+    const base = `${trade.ticker} — daily, with this plan's levels`;
+    return source ? `${base} · ${source}` : base;
   });
+
+  /** No bars is distinct from an error and from still loading: the request
+   *  succeeded and the window is empty. */
+  protected readonly chartEmpty = computed(() => (this.chart.data()?.ohlcv.length ?? 0) === 0);
 
   /** Autosave delay. Long enough that ordinary typing does not generate a
    *  request per word, short enough that the note is stored before attention
@@ -489,12 +659,11 @@ export class TradeDetail {
       this.noteTimer = null;
     });
 
-    // The chart follows the trade, and carries its id so the endpoint returns
-    // this plan's levels rather than a bare price chart. Only once the trade
-    // has loaded: the ticker is not known before that.
+    // Keyed by TRADE, not by ticker: the plan lines, the working stop and the
+    // overlay only exist relative to a position. Only once the trade has
+    // loaded — `/chart/null` is a 404 the reader would take for a broken chart.
     effect(() => {
-      const trade = this.store.trade();
-      this.chart.setTarget(trade?.ticker ?? null, trade?.id ?? null);
+      this.chart.setTrade(this.store.trade()?.id ?? null);
     });
   }
 
