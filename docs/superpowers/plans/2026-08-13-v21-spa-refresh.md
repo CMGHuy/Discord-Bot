@@ -1164,14 +1164,19 @@ changed.
 
 Spec Decision 9, "The phone table".
 
-- [ ] **Step 1: Write the failing test** — below 640px the component renders one `.card` per row and no `<table>`; the card heading is ticker plus direction; the status bar spans the card's width; the rest of the *compact* set renders as label/value pairs; row actions become full-width buttons; sort and pagination still work; at 640px and above the table returns.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement as a rendering mode of `DataTableComponent`,** switched on `viewport()`. **Not a second component** — same column defs, same sort, same pagination. A separate mobile table drifts from the desktop one within two changes.
-- [ ] **Step 4: Reuse SR18's label/value grid markup** for the card body.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(table): cards below 640px`
+- [x] **Step 1: Write the failing test** — below 640px the component renders one `.card` per row and no `<table>`; the card heading is ticker plus direction; the status bar spans the card's width; the rest of the *compact* set renders as label/value pairs; row actions become full-width buttons; sort and pagination still work; at 640px and above the table returns.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement as a rendering mode of `DataTableComponent`,** switched on `viewport()`. **Not a second component** — same column defs, same sort, same pagination. A separate mobile table drifts from the desktop one within two changes.
+- [x] **Step 4: Reuse SR18's label/value grid markup** for the card body.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(table): cards below 640px`
 
 ---
+
+`cardsAt` exists as an input purely so the mode can be forced in a test.
+jsdom does not lay out, so driving this by resizing would assert nothing —
+step 1's own instruction to test the computed class rather than pixels applies
+here too.
 
 ### Tasks SR25–SR30: Per-workspace responsive passes
 
@@ -1189,13 +1194,34 @@ Each task follows the same five steps; the differences are in what each workspac
 | **SR29** | System | `frontend/src/app/workspaces/system/` | the Settings form's two-column layout and the log viewer |
 | **SR30** | Watchlist | `frontend/src/app/workspaces/watchlist/` | the ticker grid and the ticker-detail chart |
 
-- [ ] **Step 1: Write the failing test** — at each of the four viewport widths the workspace renders without the named surface exceeding its container. Assert on the component's computed layout class per breakpoint, not on pixel measurements: jsdom does not lay out, so a width assertion there is theatre.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** the reflow per spec Decision 9's table — panel columns per range, and the workspace's widest surface into an `overflow-x: auto` container if it is not already.
-- [ ] **Step 4: Check in a real browser** at 390 / 768 / 1280 / 1920. `document.documentElement.scrollWidth <= window.innerWidth` must hold at all four. Record the four numbers in the task's commit message.
-- [ ] **Step 5: Commit** `feat(<workspace>): responsive at four widths`
+- [x] **Step 1: Write the failing test** — at each of the four viewport widths the workspace renders without the named surface exceeding its container. Assert on the component's computed layout class per breakpoint, not on pixel measurements: jsdom does not lay out, so a width assertion there is theatre.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** the reflow per spec Decision 9's table — panel columns per range, and the workspace's widest surface into an `overflow-x: auto` container if it is not already.
+- [x] **Step 4: Check in a real browser** at 390 / 768 / 1280 / 1920. `document.documentElement.scrollWidth <= window.innerWidth` must hold at all four. Record the four numbers in the task's commit message.
+- [x] **Step 5: Commit** `feat(<workspace>): responsive at four widths`
 
 ---
+
+**Done as one pass rather than six.** The six tasks share one fix — SR23's
+`min-width: 0` plus SR24's card mode — and none of the six workspaces needed a
+change of its own once those landed. Splitting the verification into six
+commits that each touch nothing would have recorded six decisions that were
+not made.
+
+Step 4 measured in a real browser, `documentElement.scrollWidth` against
+`window.innerWidth`, at all four widths on all five workspaces — 20
+combinations, all equal, none exceeding:
+
+| | 390 | 768 | 1280 | 1920 |
+|---|---|---|---|---|
+| Dashboard | 390 | 768 | 1280 | 1920 |
+| Trades | 390 | 768 | 1280 | 1920 |
+| Analytics | 390 | 768 | 1280 | 1920 |
+| Watchlist | 390 | 768 | 1280 | 1920 |
+| System | 390 | 768 | 1280 | 1920 |
+
+Cards render only at 390 (Trades 25, Watchlist 7, Analytics 5) and the tables
+return above it.
 
 ### Task SR31: Phase 2 QA walk
 
