@@ -6,13 +6,31 @@
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
+  <!-- SVG first: a browser that understands it takes it and stops, so the
+       raster fallbacks below are only fetched by browsers that need them.
+       favicon.png (the 1.9 MB master these were all generated from) is
+       deliberately NOT here and not in public/ -- it is a source asset, the
+       Jinja templates are its only consumer, and shipping it would put five
+       times the app's own initial bundle into the output unreferenced. -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <!-- No font <link> here: the faces are declared in src/styles/fonts.css and
        the .woff2 files are served by Flask from /static/vendor/. See that
        file for why they are not bundled and not linked. -->
-  <!-- Painted before the bundle parses, so a slow load is a black screen
-       rather than a white flash on a UI that is dark by definition. -->
-  <style>html, body { background: #000000; }</style>
+  <!-- Painted before the bundle parses, so a slow load shows the app's own
+       ground colour rather than a white flash on a UI that is dark by
+       definition.
+
+       This hex is the ONE colour literal SR3's audit deliberately leaves in
+       place: it has to be inline and it has to work before any stylesheet
+       loads, so it cannot read `--bg`. It is therefore a copy, and copies
+       drift -- if `--bg` in styles/tokens.css changes, change it here too.
+       The symptom of forgetting is a one-frame flash of the old colour on a
+       cold load, which is easy to miss and easy to explain once seen. -->
+  <style>html, body { background: #0a0b10; }</style>
 </head>
 <body>
   <sb-root></sb-root>

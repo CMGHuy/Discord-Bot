@@ -288,13 +288,13 @@ Spec Decision 7. Same steps as SR4 with `universe`→`watchlist`, `UniverseStore
 
 Spec Decision 8.
 
-- [ ] **Step 1: Copy** — not move; Jinja still serves its own copies until NG57.
+- [x] **Step 1: Copy** — not move; Jinja still serves its own copies until NG57. **`favicon.png` deliberately excluded** — see the note under step 6.
 
 ```bash
 cp swingbot/admin/static/images/{favicon.svg,favicon.png,favicon.ico,favicon-16.png,favicon-32.png,apple-touch-icon.png,bot-profile.png,bot-profile@2x.png} frontend/public/
 ```
 
-- [ ] **Step 2: Replace the `<link rel="icon">` line** in `frontend/src/index.html` with the full set, SVG first:
+- [x] **Step 2: Replace the `<link rel="icon">` line** in `frontend/src/index.html` with the full set, SVG first:
 
 ```html
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -304,10 +304,23 @@ cp swingbot/admin/static/images/{favicon.svg,favicon.png,favicon.ico,favicon-16.
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
 ```
 
-- [ ] **Step 3:** Update the inline `<style>` fallback background from `#000000` to `#0a0b10` so a slow bundle load paints the new ground colour, not the old one.
-- [ ] **Step 4:** Confirm `angular.json`'s `assets` block copies all of `public/` into the build output. It does by default in Angular 21; verify rather than assume, because a missing favicon fails silently.
-- [ ] **Step 5: Verify** `cd frontend && npx ng build` then `ls dist/*/browser/favicon.svg` exists.
-- [ ] **Step 6: Commit** `feat(frontend): the guinea pig comes back`
+- [x] **Step 3:** Update the inline `<style>` fallback background from `#000000` to `#0a0b10` so a slow bundle load paints the new ground colour, not the old one.
+- [x] **Step 4:** Confirm `angular.json`'s `assets` block copies all of `public/` into the build output. It does by default in Angular 21; verify rather than assume, because a missing favicon fails silently.
+- [x] **Step 5: Verify** `cd frontend && npx ng build` then `ls dist/*/browser/favicon.svg` exists.
+- [x] **Step 6: Commit** `feat(frontend): the guinea pig comes back`
+
+**Deviation from step 1, on purpose.** The `cp` list above includes
+`favicon.png`, and it should not: that file is the **1.9 MB master** every
+other size was generated from, the SPA's `<link>` set never references it, and
+only the Jinja templates consume it. Copying it would have put five times the
+app's entire initial bundle (313 kB) into `dist/` to be downloaded by nobody.
+It stays in `swingbot/admin/static/images/`, where its consumers are. The
+built output was checked for its absence, not just for the others' presence.
+
+The inline `#0a0b10` in `index.html` is now the one colour literal SR3's audit
+leaves standing — it must paint before any stylesheet exists, so it cannot
+read `--bg`. Commented as a copy that has to be kept in sync, since the
+symptom of drift is a single frame of the old colour on a cold load.
 
 ---
 
