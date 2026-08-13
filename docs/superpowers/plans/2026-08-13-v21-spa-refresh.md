@@ -1772,7 +1772,7 @@ still an unlabelled diamond; whether that reads is a question for step 4.
 - [x] Every fixture's interactive chart matches its PNG level-for-level, after
       the three fixes SR40's walk found. One documented exception: the three
       trendline fixtures, which the endpoint does not fit — see the QA doc.
-- [ ] Merge to `main`
+- [x] Merge to `main` — 2026-08-13
 
 ---
 
