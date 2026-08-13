@@ -1057,11 +1057,11 @@ Spec Decisions 8 and 9.
 **Produces:** `<sb-icon name="trades" />`, names: `dashboard` `trades` `analytics` `watchlist` `risk` `system` `collapse` `expand` `profile` `signout` `menu`
 **Blocked by:** Phase 1
 
-- [ ] **Step 1: Write the failing test** — every name in the union renders an `<svg>`; an unknown name renders nothing and does not throw; the svg uses `currentColor` for stroke and carries `aria-hidden="true"` (the label is always on the parent control).
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** as one component with a `Record<IconName, string>` of inline path data. Stroke-based, `viewBox="0 0 16 16"`, `stroke-width="1.5"`, `fill="none"`. **Hand-authored — no icon package, no font, no CDN**, per the global constraint.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(ui): the icon set`
+- [x] **Step 1: Write the failing test** — every name in the union renders an `<svg>`; an unknown name renders nothing and does not throw; the svg uses `currentColor` for stroke and carries `aria-hidden="true"` (the label is always on the parent control).
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** as one component with a `Record<IconName, string>` of inline path data. Stroke-based, `viewBox="0 0 16 16"`, `stroke-width="1.5"`, `fill="none"`. **Hand-authored — no icon package, no font, no CDN**, per the global constraint.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(ui): the icon set`
 
 ---
 
