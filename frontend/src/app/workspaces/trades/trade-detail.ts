@@ -1,11 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   effect,
   inject,
   input,
   signal,
+  untracked,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
@@ -223,8 +225,78 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
           </sb-chart-container>
         </div>
       }
-      @default {
-        <p class="todo">{{ placeholder() }}</p>
+      @case ('notes') {
+        <div class="notes">
+          @if (store.noteStatus() === 'unjournaled') {
+            <!-- Not an error. Journal entries are written at close, so an
+                 open position has none and cannot take a note yet. Saying so
+                 plainly beats a textarea that silently discards what is
+                 typed into it. -->
+            <p class="not-journaled">
+              This position has no journal entry yet. Notes attach when a trade
+              closes.
+            </p>
+          }
+
+          <label class="note-label" for="trade-note">Note</label>
+          <textarea
+            id="trade-note"
+            class="note"
+            rows="10"
+            [value]="store.noteText()"
+            [disabled]="store.noteStatus() === 'unjournaled'"
+            (input)="onNoteInput($event)"
+            (blur)="flushNote()"
+            placeholder="Why this trade, what happened, what to do differently."
+          ></textarea>
+
+          <p class="note-state" [class.note-state-bad]="store.noteStatus() === 'error'">
+            @switch (store.noteStatus()) {
+              @case ('saving') { Saving… }
+              @case ('unsaved') { Unsaved changes }
+              @case ('error') { {{ store.noteError() }} }
+              @case ('unjournaled') { Not journaled yet }
+              @default { Saved }
+            }
+          </p>
+        </div>
+      }
+      @case ('strategy') {
+        <div class="strategy">
+          @if (store.strategiesError()) {
+            <p class="not-journaled">{{ store.strategiesError() }}</p>
+          } @else if (!store.trade()?.strategy) {
+            <p class="not-journaled">This position has no strategy recorded.</p>
+          } @else if (store.strategyRow(); as row) {
+            <!-- Read-only on purpose: this is a window into the registry, and
+                 the place to change a strategy's numbers is a validation run,
+                 not a trade. -->
+            <dl>
+              <div><dt>Strategy</dt><dd>{{ row.strategy }}</dd></div>
+              <div><dt>Status</dt><dd>{{ row.status }}</dd></div>
+              <div><dt>OOS sample</dt><dd>{{ fmt(row.n) }}</dd></div>
+              <div><dt>OOS win rate</dt><dd>{{ fmtPct(row.win_rate) }}</dd></div>
+              <div><dt>OOS expectancy</dt><dd>{{ fmt(row.expectancy_r) }}R</dd></div>
+              <div><dt>Live sample</dt><dd>{{ fmt(row.live_n) }}</dd></div>
+              <div><dt>Live win rate</dt><dd>{{ fmtPct(row.live_wr) }}</dd></div>
+              <div><dt>Live vs OOS</dt><dd>{{ fmtPct(row.delta_vs_oos) }}</dd></div>
+              <div><dt>Window</dt><dd>{{ fmtText(row.window) }}</dd></div>
+            </dl>
+            @if (row.decayed) {
+              <!-- The pre-registered decay rule fired. This belongs on the
+                   trade, not only on the Analytics page: it is the reason to
+                   distrust this position's edge. -->
+              <p class="decayed">
+                Live results have decayed against this strategy's out-of-sample
+                record.
+              </p>
+            }
+          } @else {
+            <p class="not-journaled">
+              The registry has no entry for {{ fmtText(store.trade()?.strategy) }}.
+            </p>
+          }
+        </div>
       }
     }
 
@@ -278,6 +350,40 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .chart { margin-top: var(--space-14); }
     .progress { margin-bottom: var(--space-10); }
     .commands { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+
+    .notes, .strategy { margin-top: var(--space-14); }
+    .note-label {
+      display: block;
+      margin-bottom: var(--space-6);
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
+    .note {
+      width: 100%;
+      padding: var(--space-8);
+      background: var(--surface-sunken);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font: inherit;
+      font-size: var(--text-table);
+      resize: vertical;
+    }
+    .note:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+    .note:disabled { color: var(--text-faint); cursor: not-allowed; }
+    .note-state {
+      margin-top: var(--space-6);
+      color: var(--text-faint);
+      font-size: var(--text-meta);
+    }
+    /* The one state the reader must not miss: text they typed is not stored. */
+    .note-state-bad { color: var(--neg); }
+    .not-journaled {
+      margin-bottom: var(--space-10);
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
+    .decayed { margin-top: var(--space-10); color: var(--warn); font-size: var(--text-table); }
 
     .todo { margin-top: var(--space-14); color: var(--text-faint); font-size: var(--text-table); }
   `,
@@ -335,16 +441,51 @@ export class TradeDetail {
     return trade ? `${trade.ticker} — daily, with this plan's levels` : null;
   });
 
-  protected readonly placeholder = computed(
-    () =>
-      ({
-        notes: 'Notes — NG46',
-        strategy: 'Strategy — NG46',
-      })[this.activeTab()] ?? '',
-  );
+  /** Autosave delay. Long enough that ordinary typing does not generate a
+   *  request per word, short enough that the note is stored before attention
+   *  moves on. Blur flushes, so the wait is never the last word on it. */
+  private static readonly NOTE_DEBOUNCE_MS = 800;
+
+  private noteTimer: ReturnType<typeof setTimeout> | null = null;
+
+  protected onNoteInput(event: Event): void {
+    this.store.editNote((event.target as HTMLTextAreaElement).value);
+
+    if (this.noteTimer !== null) clearTimeout(this.noteTimer);
+    this.noteTimer = setTimeout(() => {
+      this.noteTimer = null;
+      this.store.saveNote();
+    }, TradeDetail.NOTE_DEBOUNCE_MS);
+  }
+
+  /** Save now rather than at the end of the debounce. Leaving the field is a
+   *  stronger signal that the thought is finished than any timer. */
+  protected flushNote(): void {
+    if (this.noteTimer === null) return;
+    clearTimeout(this.noteTimer);
+    this.noteTimer = null;
+    if (this.store.noteDirty()) this.store.saveNote();
+  }
 
   constructor() {
     effect(() => this.store.setId(this.id()));
+
+    // The registry is only needed by one tab, and it is the same request for
+    // every trade -- so it is fetched on first arrival at the tab rather than
+    // with the trade.
+    effect(() => {
+      if (this.activeTab() === 'strategy' && this.store.strategies() === null) {
+        untracked(() => this.store.loadStrategies());
+      }
+    });
+
+    // A pending autosave must not outlive the component: the timer would fire
+    // against a destroyed store and the last edit would be lost either way.
+    inject(DestroyRef).onDestroy(() => {
+      if (this.noteTimer === null) return;
+      clearTimeout(this.noteTimer);
+      this.noteTimer = null;
+    });
 
     // The chart follows the trade, and carries its id so the endpoint returns
     // this plan's levels rather than a bare price chart. Only once the trade
