@@ -1,4 +1,8 @@
-/* Design tokens — spec `2026-08-08-v20-admin-design-system-design.md`, Decision 3.
+/* Design tokens — spec `2026-08-13-v18-spa-refresh-design.md`, Decisions 2 and 3.
+ *
+ * Supersedes the palette and motion rules of
+ * `2026-08-08-v20-admin-design-system-design.md` Decision 3, which are marked
+ * as superseded in that document rather than deleted from it.
  *
  * **Dark only. There is no light theme and there is not going to be one**, so
  * there is no `prefers-color-scheme` block here and no `[data-theme]` hook to
@@ -7,48 +11,75 @@
  * revisiting the spec, not adding a media query.
  *
  * This file is NOT `swingbot/admin/static/tokens.css`. That one still drives
- * the Jinja UI *and* the bot's Discord chart colours, and changing it is its
- * own task (NG38) with its own blast radius. Until then the two coexist and
- * this is the SPA's only palette.
+ * the Jinja UI *and* the bot's Discord chart colours. The two coexist until
+ * Jinja is deleted, and this is the SPA's only palette.
  */
 
 :root {
   /* -- colour ----------------------------------------------------------
-   * Three rules, enforced by review, and the single biggest fix for the
-   * "inconsistent" complaint the design system exists to answer:
+   * **One colour, one VALENCE.** Not one colour, one domain — that was the
+   * previous rule, and binding each hue to a single data type left no colour
+   * available for anything that was neither money nor interactive, which is
+   * how confidence and tier ended up deliberately greyscale and unscannable.
    *
-   *   green/red  P&L DIRECTION only. Never decoration, never a status that
-   *              is not money.
-   *   amber      caution -- risk near cap, scanning paused, data stale.
-   *   blue       interactive only -- links, focus, selection. Never data.
+   * A hue now means a *meaning*, and that meaning holds in every domain:
    *
-   * Everything else is greyscale. The current UI uses blue for both values
-   * and links, and green for both profit and generic success; that is what
-   * these rules exist to stop.
+   *   --pos     good        gain, long, target
+   *   --neg     bad         loss, short, stop
+   *   --warn    caution     stale data, risk near cap, paused, ageing trade
+   *   --accent  interactive links, focus, selection, active nav, brand
+   *   --info    neutral     horizon pills, strategy tags, counts
+   *
+   * Everything else is greyscale — structure and secondary text. A sixth hue
+   * is a review defect.
+   *
+   * The one recorded exception is direction: LONG uses --pos and SHORT uses
+   * --neg, though a short is not "bad". The glyph (▲/▼) is the primary
+   * signal there and the colour only reinforces it, and every trading
+   * platform renders direction this way — breaking the convention to satisfy
+   * an internal rule would be worse, not more consistent.
    */
-  --bg: #000000;
-  --surface: #0a0a0a;
-  --surface-raised: #121212;
-  --border: #1c1c1c;
-  --border-strong: #2a2a2a;
+  --bg: #0a0b10;
+  --surface: #10121a;
+  --surface-raised: #171a25;
+  --surface-overlay: #1e2230;
+  --border: #232838;
+  --border-strong: #333a4f;
 
-  --text: #f0f0f0;
-  --text-secondary: #888888;
-  --text-muted: #666666;
-  --text-faint: #444444;
+  --text: #e9ebf5;
+  --text-secondary: #9ba3bd;
+  --text-muted: #6d7590;
+  --text-faint: #464d63;
 
-  --pos: #00d26a;
-  --neg: #ff4d4d;
-  --warn: #ffb020;
-  --accent: #4d9fff;
+  --pos: #17c98e;
+  --neg: #ff5470;
+  --warn: #ffb43d;
+  --accent: #7b5cfa;
+  --info: #46c2ff;
 
-  /* Quality is not money, so confidence/tier chips take a greyscale ramp
-   * with amber reserved for the weakest band. Leaving them green/amber/red
-   * would make green mean two different things in adjacent columns of the
-   * same row -- worse than not applying the colour rule at all. */
-  --quality-high: var(--text);
-  --quality-mid: var(--text-secondary);
-  --quality-low: var(--warn);
+  /* 12% tints, for cell and chip backgrounds, hover states and the chart's
+   * risk/reward bands. Literal rgba rather than colour-mix() so the values
+   * survive without a fallback path. */
+  --pos-soft: rgba(23, 201, 142, 0.12);
+  --neg-soft: rgba(255, 84, 112, 0.12);
+  --warn-soft: rgba(255, 180, 61, 0.12);
+  --accent-soft: rgba(123, 92, 250, 0.12);
+  --info-soft: rgba(70, 194, 255, 0.12);
+
+  /* Quality ramp — confidence Lv1-5 and tier A/B/C.
+   *
+   * These used to be greyscale on the grounds that quality is not money and
+   * green must mean money. Under the valence rule a low confidence level
+   * genuinely IS bad, so it takes --neg without ambiguity, and the ramp is
+   * scannable down a column again — which is the entire reason the column
+   * was asked for back. Indexed 1-5 so a component maps level to token by
+   * number, never by string-interpolating a token name (a level outside 1-5
+   * would resolve to nothing and render invisible text). */
+  --quality-1: var(--neg);
+  --quality-2: var(--warn);
+  --quality-3: var(--text-secondary);
+  --quality-4: var(--info);
+  --quality-5: var(--pos);
 
   /* -- type ------------------------------------------------------------
    * Named by role, not by size: the scale is closed (9/10/11/12/14/18/23)
@@ -71,6 +102,9 @@
    * (--space-3 = 8px) is one more thing to remember and makes an
    * off-scale value look plausible; --space-8 cannot be mistyped into
    * something that is not on the scale.
+   *
+   * --space-28 was removed in v18: it was unused at every breakpoint, and
+   * the responsive pass tightens workspace padding rather than widening it.
    */
   --space-4: 4px;
   --space-6: 6px;
@@ -78,18 +112,58 @@
   --space-10: 10px;
   --space-14: 14px;
   --space-20: 20px;
-  --space-28: 28px;
 
   /* -- radii, motion ---------------------------------------------------
-   * Tight radii: terminal, not consumer app. 120ms on state change and
-   * nothing on entrance -- with real-time push, "something changed" is
-   * continuous rather than a 5-second event, so the old card-flash would
-   * now be a permanent flicker.
+   * Tight radii: terminal, not consumer app.
+   *
+   * Three durations, replacing the single 120ms. The previous rule was
+   * "120ms on state change and nothing on entrance", on the reasoning that
+   * with real-time push "something changed" is continuous and an entrance
+   * animation becomes a permanent flicker. That reasoning still holds for
+   * the thing it actually ruled out — a CARD flash on every push event —
+   * and that stays ruled out. What it wrongly excluded was motion scoped to
+   * the specific cell whose value changed, which is feedback rather than
+   * noise.
+   *
+   *   --dur-instant  hover, press, focus ring
+   *   --dur-base     state change, value flash, bar easing
+   *   --dur-slow     layout: sidebar, panel reflow, route transition
    */
   --radius: 4px;
   --radius-chip: 3px;
 
-  --duration: 120ms;
-  --easing: ease-out;
-  --transition: var(--duration) var(--easing);
+  --dur-instant: 90ms;
+  --dur-base: 160ms;
+  --dur-slow: 260ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Alias, so existing `transition: var(--transition)` call sites keep
+   * working. New code names the duration it wants. */
+  --transition: var(--dur-base) var(--ease-out);
+}
+
+/* Breakpoints are 640 / 1024 / 1440 / 1920.
+ *
+ * They are NOT tokens, deliberately. A CSS custom property cannot be used in
+ * a media-query condition — `@media (min-width: var(--bp-md))` never matches,
+ * silently — so a `--bp-*` token would look usable and would not be. The
+ * literals live in the media queries; the canonical list also lives in
+ * `src/app/ui/breakpoints.ts` for the TS side. */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }

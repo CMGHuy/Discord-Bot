@@ -402,7 +402,7 @@ interface ProposalView extends ProposalRow {
            and green means P&L direction and nothing else. -->
       <sb-chip
         [label]="row.status"
-        [tone]="row.status === 'VALIDATED' ? 'quality-high' : 'quality-low'"
+        [tone]="row.status === 'VALIDATED' ? 'q5' : 'q2'"
       />
     </ng-template>
 
@@ -422,13 +422,13 @@ interface ProposalView extends ProposalRow {
       } @else if (row.ok) {
         <span>In band</span>
       } @else {
-        <sb-chip label="Off band" tone="quality-low" />
+        <sb-chip label="Off band" tone="q2" />
       }
     </ng-template>
 
     <ng-template #decayCell let-row>
       @if (row.drift_alert) {
-        <sb-chip label="DECAY" tone="quality-low" />
+        <sb-chip label="DECAY" tone="q2" />
       } @else {
         <span class="muted">—</span>
       }

@@ -8,33 +8,34 @@ import { MetricChip } from './metric-chip';
 import { Sparkline, sparklinePath } from './sparkline';
 import { StatusIndicator, slToTpProgress } from './status-indicator';
 
-/* NG40 — the display components.
+/* NG40 — the display components. Colour rules updated by SR2 (spec v18).
  *
- * The colour rules are the point of most of these assertions. Spec 3 makes
- * green and red mean P&L direction and nothing else, and the failure mode it
- * exists to prevent is subtle: a chip that goes green for "high confidence"
- * beside a cell that goes green for "in profit" makes both meaningless. So the
- * tests check which class is applied, not merely that something rendered.
+ * The colour rules are still the point of most of these assertions, but the
+ * rule itself changed. Spec v20 made green and red mean P&L direction and
+ * nothing else, so a quality chip had to be greyscale — green for "high
+ * confidence" beside green for "in profit" made both meaningless.
+ *
+ * Spec v18 replaces that with *one colour, one valence*: green means good in
+ * every domain, red means bad in every domain. A high-confidence chip and a
+ * profitable cell are then both saying "good", which is coherent rather than
+ * ambiguous. So these tests still check which class is applied — that has not
+ * changed — but the band a value earns is no longer constrained to grey.
  */
 
 describe('qualityTone', () => {
-  it('puts the strong bands on the bright grey', () => {
-    expect(qualityTone(5)).toBe('quality-high');
-    expect(qualityTone(4)).toBe('quality-high');
-    expect(qualityTone('A')).toBe('quality-high');
+  it('maps a confidence level straight onto its band', () => {
+    expect(qualityTone(1)).toBe('q1');
+    expect(qualityTone(2)).toBe('q2');
+    expect(qualityTone(3)).toBe('q3');
+    expect(qualityTone(4)).toBe('q4');
+    expect(qualityTone(5)).toBe('q5');
   });
 
-  it('puts the middle band on the secondary grey', () => {
-    expect(qualityTone(3)).toBe('quality-mid');
-    expect(qualityTone('B')).toBe('quality-mid');
-  });
-
-  it('puts the weakest band on amber, never on red', () => {
-    // Amber is caution. A low-confidence setup is a caution, not a loss, and
-    // red here would collide with the colour that means money lost.
-    expect(qualityTone(1)).toBe('quality-low');
-    expect(qualityTone(2)).toBe('quality-low');
-    expect(qualityTone('C')).toBe('quality-low');
+  it('folds the three-step tier scale onto the five-step ramp', () => {
+    // C is amber rather than red: a weak tier is a caution, not a loss.
+    expect(qualityTone('A')).toBe('q5');
+    expect(qualityTone('B')).toBe('q3');
+    expect(qualityTone('C')).toBe('q2');
   });
 
   it('treats an unrated value as neutral rather than as the worst band', () => {
@@ -44,8 +45,15 @@ describe('qualityTone', () => {
     expect(qualityTone('unrated')).toBe('neutral');
   });
 
+  it('treats a level outside 1-5 as neutral, not as a token that does not exist', () => {
+    // `q9` would render as var(--quality-9) -> nothing -> invisible text.
+    expect(qualityTone(0)).toBe('neutral');
+    expect(qualityTone(9)).toBe('neutral');
+    expect(qualityTone(Number.NaN)).toBe('neutral');
+  });
+
   it('is case- and whitespace-insensitive about tiers', () => {
-    expect(qualityTone(' b ')).toBe('quality-mid');
+    expect(qualityTone(' b ')).toBe('q3');
   });
 });
 
@@ -197,12 +205,12 @@ describe('display components', () => {
     expect(el().querySelector('[role=progressbar]')).toBeNull();
   });
 
-  it('renders a quality chip on the greyscale ramp, never on green', () => {
-    expect(el().querySelector('.chip')!.className).toContain('quality-high');
+  it('renders a quality chip on the band its value earns', () => {
+    expect(el().querySelector('.chip')!.className).toContain('q5');
 
     host.quality.set('C');
     fixture.detectChanges();
-    expect(el().querySelector('.chip')!.className).toContain('quality-low');
+    expect(el().querySelector('.chip')!.className).toContain('q2');
   });
 
   it('colours a sparkline by its net direction', () => {

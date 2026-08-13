@@ -1,44 +1,52 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /**
- * How a chip is coloured. Note what is missing: there is no `good`/`bad` pair
- * and no way to ask for green or red. Those two colours mean P&L direction and
- * nothing else, and a chip never carries P&L.
+ * How a chip is coloured: one of the five quality bands, or neutral.
+ *
+ * `q1`…`q5` rather than `high`/`mid`/`low` because the ramp has five steps
+ * now and the names must not imply three. They map to `--quality-1`…`5`
+ * positionally, which is what lets a component pick a band by number instead
+ * of string-building a token name — `var(--quality-9)` resolves to nothing and
+ * renders invisible text.
  */
-export type ChipTone = 'neutral' | 'quality-high' | 'quality-mid' | 'quality-low';
+export type ChipTone = 'neutral' | 'q1' | 'q2' | 'q3' | 'q4' | 'q5';
 
 /**
- * Maps a confidence level (1–5) or a tier (`A`/`B`/`C`) onto the greyscale
- * quality ramp — spec 3 Decision 3.
+ * Maps a confidence level (1–5) or a tier (`A`/`B`/`C`) onto the quality ramp
+ * — spec v18 Decision 2.
  *
- * This function exists so the mapping is in exactly one place. Confidence and
- * tier chips are currently green/amber/red by value, which the colour rules
- * forbid: they are QUALITY, not money. Leaving them coloured while applying
- * the rules elsewhere would be worse than not applying the rules at all,
- * because green would then mean two different things in adjacent columns of
- * the same row.
+ * This function exists so the mapping is in exactly one place.
  *
- * `Lv5/A` → `--text`, `Lv3/B` → `--text-secondary`, `Lv1/C` → `--warn`, with
- * `Lv4`/`Lv2` folding into the band next to them. Amber is the weakest band
- * rather than red because amber means caution, and a low-confidence setup is a
- * caution rather than a loss.
+ * **These chips used to be greyscale on purpose** (spec v20 Decision 3): the
+ * old rule was that green means money and nothing else, so quality could not
+ * be coloured without green meaning two things in adjacent columns. v18
+ * replaces that with *one colour, one valence* — green means good in every
+ * domain — which is what makes the ramp legitimate here. It is also the whole
+ * reason the confidence column was asked for back: a greyscale ramp is not
+ * scannable down a column, which is the only way this field is ever read.
+ *
+ * Confidence maps straight through, `Lv1`→`q1` … `Lv5`→`q5`. Tier is a
+ * three-step scale onto the same five-step ramp: `A`→`q5` (good), `B`→`q3`
+ * (neutral), `C`→`q2` (caution). `C` is amber rather than red because a weak
+ * tier is a caution, not a loss — that much of the old reasoning survives.
  */
 export function qualityTone(value: number | string | null | undefined): ChipTone {
   if (value === null || value === undefined || value === '') return 'neutral';
 
   if (typeof value === 'number') {
-    if (value >= 4) return 'quality-high';
-    if (value === 3) return 'quality-mid';
-    return 'quality-low';
+    if (!Number.isFinite(value)) return 'neutral';
+    const band = Math.round(value);
+    if (band < 1 || band > 5) return 'neutral';
+    return `q${band}` as ChipTone;
   }
 
   switch (value.trim().toUpperCase()) {
     case 'A':
-      return 'quality-high';
+      return 'q5';
     case 'B':
-      return 'quality-mid';
+      return 'q3';
     case 'C':
-      return 'quality-low';
+      return 'q2';
     default:
       return 'neutral';
   }
@@ -66,9 +74,11 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
       white-space: nowrap;
     }
     .neutral { color: var(--text-secondary); }
-    .quality-high { color: var(--quality-high); border-color: var(--text-faint); }
-    .quality-mid { color: var(--quality-mid); }
-    .quality-low { color: var(--quality-low); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+    .q1 { color: var(--quality-1); border-color: color-mix(in srgb, var(--neg) 35%, transparent); }
+    .q2 { color: var(--quality-2); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+    .q3 { color: var(--quality-3); }
+    .q4 { color: var(--quality-4); border-color: color-mix(in srgb, var(--info) 35%, transparent); }
+    .q5 { color: var(--quality-5); border-color: color-mix(in srgb, var(--pos) 35%, transparent); }
   `,
 })
 export class Chip {
