@@ -20,6 +20,7 @@ import {
 
 import { ChartResponse } from '../../api/models';
 import { ChartPalette, chartOptions, chartPalette } from './chart-theme';
+import { BasicOverlays } from './overlays-basic';
 import { PlanLines } from './plan-lines';
 
 /**
@@ -105,6 +106,7 @@ export class TradeChart {
   private candles: ISeriesApi<'Candlestick'> | null = null;
   private volume: ISeriesApi<'Histogram'> | null = null;
   private planLines: PlanLines | null = null;
+  private overlays: BasicOverlays | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -127,6 +129,7 @@ export class TradeChart {
       this.candles = null;
       this.volume = null;
       this.planLines = null;
+      this.overlays = null;
     });
   }
 
@@ -163,6 +166,7 @@ export class TradeChart {
 
     this.volume = this.createVolume(chart, palette);
     this.planLines = new PlanLines(this.candles);
+    this.overlays = new BasicOverlays(chart, this.candles);
   }
 
   /** One colour for every bar, not green-up/red-down.
@@ -204,6 +208,7 @@ export class TradeChart {
       candles.setData([]);
       volume.setData([]);
       this.planLines?.detach();
+      this.overlays?.detach();
       return;
     }
 
@@ -222,6 +227,7 @@ export class TradeChart {
     );
     volume.setData(data.ohlcv.map((bar) => ({ time: bar.t as UTCTimestamp, value: bar.v })));
 
+    this.overlays?.render(data, chartPalette());
     this.renderPlan(data);
     this.chart?.timeScale().fitContent();
   }
@@ -234,6 +240,7 @@ export class TradeChart {
     const last = data.ohlcv[data.ohlcv.length - 1];
     if (!first || !last) {
       this.planLines?.detach();
+      this.overlays?.detach();
       return;
     }
     this.planLines?.render(

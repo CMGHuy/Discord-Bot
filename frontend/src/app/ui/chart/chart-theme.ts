@@ -67,10 +67,15 @@ export interface ChartPalette {
   /** Hover state of that rule — `--accent`, the interactive token, so it
    *  announces itself as draggable rather than merely brightening. */
   separatorHover: string;
+  /** The neutral hue, for overlays that carry no valence — the Keltner
+   *  envelope is neither good nor bad news, it is a measure of calm. */
+  info: string;
   /** 12% tints, for the risk and reward bands SR36 fills between the plan
-   *  lines. Soft enough to sit under candles without hiding a wick. */
+   *  lines, and for SR38's envelope lines. Soft enough to sit under candles
+   *  without hiding a wick. */
   posSoft: string;
   negSoft: string;
+  infoSoft: string;
 }
 
 export function chartPalette(): ChartPalette {
@@ -86,8 +91,10 @@ export function chartPalette(): ChartPalette {
     volume: token('--text-faint'),
     separator: token('--border-strong'),
     separatorHover: token('--accent'),
+    info: token('--info'),
     posSoft: token('--pos-soft'),
     negSoft: token('--neg-soft'),
+    infoSoft: token('--info-soft'),
   };
 }
 

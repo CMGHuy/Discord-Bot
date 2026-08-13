@@ -42,8 +42,10 @@ describe('chartPalette', () => {
     expect(palette.volume).toBe(tokenValue('--text-faint'));
     expect(palette.separator).toBe(tokenValue('--border-strong'));
     expect(palette.separatorHover).toBe(tokenValue('--accent'));
+    expect(palette.info).toBe(tokenValue('--info'));
     expect(palette.posSoft).toBe(tokenValue('--pos-soft'));
     expect(palette.negSoft).toBe(tokenValue('--neg-soft'));
+    expect(palette.infoSoft).toBe(tokenValue('--info-soft'));
   });
 
   it('leaves no entry empty', () => {

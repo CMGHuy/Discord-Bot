@@ -29,8 +29,10 @@ const PALETTE: ChartPalette = {
   volume: 'volume-colour',
   separator: 'separator-colour',
   separatorHover: 'separator-hover-colour',
+  info: 'info-colour',
   posSoft: 'pos-soft-colour',
   negSoft: 'neg-soft-colour',
+  infoSoft: 'info-soft-colour',
 };
 
 const FULL: ChartLevels = {

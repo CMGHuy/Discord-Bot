@@ -1559,13 +1559,45 @@ like an implementation bug. The spec sorts numerically now.
 **Owns:** `frontend/src/app/ui/chart/overlays-basic.ts`, `frontend/src/app/ui/chart/overlays-basic.spec.ts`
 **Blocked by:** SR35, SR34
 
-- [ ] **Step 1: Write the failing test** — the Keltner upper and lower bands render as two line series in `--info` at reduced opacity; the volume profile renders as horizontal bars along the left edge, scaled to the widest bin, and is omitted when there is insufficient history.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — Keltner as two line series; the profile as an SR34-style primitive, since it is not a time-series and no built-in series type can express it.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(chart): Keltner bands and the volume profile`
+- [x] **Step 1: Write the failing test** — the Keltner upper and lower bands render as two line series in `--info` at reduced opacity; the volume profile renders as horizontal bars along the left edge, scaled to the widest bin, and is omitted when there is insufficient history.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — Keltner as two line series; the profile as an SR34-style primitive, since it is not a time-series and no built-in series type can express it.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(chart): Keltner bands and the volume profile`
 
 ---
+
+**Result:** 17 tests in `overlays-basic.spec.ts`, vitest green, `ng build`
+clean. Run concurrently with SR37 in the same worktree — the two tasks share no
+files, and each committed only its own paths.
+
+**"`--info` at reduced opacity" is `--info-soft`,** the token that already means
+exactly that (`--info` at 12%). Computing a fourth opacity here would have been
+inventing a fourth palette, which is what SR3's audit existed to stop. Worth a
+look during SR40's walk: 12% is tuned for fills, and if the envelope reads as
+too faint against the candles the fix belongs in `tokens.css`, not here.
+
+**A null indicator value becomes WHITESPACE, `{ time }` with no `value`.** Zero
+is the trap: it does not merely draw a wrong point, it pulls the price scale
+down to include 0 and flattens every candle on the pane into a band at the top.
+The same rule governs SR37's panes.
+
+**The profile scales to its own widest bin, never to a constant.** It has no
+axis and never gets one, so the only information in a bar's length is how it
+compares with its neighbours — an absolute scale would make the same
+distribution look different on every ticker. It caps at 18% of the pane width;
+past that it stops annotating the candles and starts hiding them.
+
+**Bin height comes from the spacing of the first two bins,** because the server
+bins evenly. A lone bin has no neighbour, so it falls back to 1% of its own
+price rather than a fixed number of dollars — a fixed span would give a $4 and
+a $400 ticker bars three orders of magnitude apart in weight. Bars are also
+floored at one pixel: a hundred-bin profile on a short pane rounds several to
+zero height, which drops them silently.
+
+**`chart-theme.ts` gained `info` and `infoSoft`.** Two palette entries, checked
+by the existing "leaves no entry empty" test, which is the only reason the
+theme file is touched outside SR35.
 
 ### Task SR39: The strategy overlay
 
