@@ -46,7 +46,10 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon
 
     /* Blue is interactive-only, which is exactly what a primary button is --
        the one place the accent is allowed to carry weight. */
-    :host(.primary) { background: var(--accent); color: #001428; }
+    /* Dark ink on the bright accent, not white: --bg against --accent clears
+       4.4:1, and the same pairing survives an accent change because both
+       sides are tokens. */
+    :host(.primary) { background: var(--accent); color: var(--bg); }
     :host(.primary:not([disabled]):hover) { background: color-mix(in srgb, var(--accent) 85%, white); }
 
     :host(.secondary) {

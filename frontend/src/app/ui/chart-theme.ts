@@ -34,16 +34,23 @@ export interface ChartPalette {
   surface: string;
 }
 
+/* The eight fallbacks below are the only hex literals outside `tokens.css`
+ * that SR3's audit permits, and they are permitted on one condition: they must
+ * equal the tokens they stand in for. They were the v20 palette until SR2
+ * changed it, which is the failure mode worth naming — a stale fallback does
+ * not throw and does not look broken; it silently paints the previous design
+ * in whatever context the token read fails. If `tokens.css` changes one of
+ * these eight values, change it here in the same commit. */
 export function chartPalette(): ChartPalette {
   return {
-    up: token('--pos', '#00d26a'),
-    down: token('--neg', '#ff4d4d'),
-    accent: token('--accent', '#4d9fff'),
-    warn: token('--warn', '#ffb020'),
-    text: token('--text', '#f0f0f0'),
-    textMuted: token('--text-muted', '#666666'),
-    border: token('--border', '#1c1c1c'),
-    surface: token('--surface', '#0a0a0a'),
+    up: token('--pos', '#17c98e'),
+    down: token('--neg', '#ff5470'),
+    accent: token('--accent', '#7b5cfa'),
+    warn: token('--warn', '#ffb43d'),
+    text: token('--text', '#e9ebf5'),
+    textMuted: token('--text-muted', '#6d7590'),
+    border: token('--border', '#232838'),
+    surface: token('--surface', '#10121a'),
   };
 }
 
