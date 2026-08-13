@@ -11,7 +11,7 @@ import {
   BotRestartResult,
   OhlcvResponse,
   ClearResult,
-  Cockpit,
+  Dashboard,
   Collection,
   Health,
   Identity,
@@ -82,10 +82,10 @@ export class ApiClient {
     return this.http.get<Health>(`${this.base}/health`);
   }
 
-  /* -- cockpit --------------------------------------------------------- */
+  /* -- dashboard --------------------------------------------------------- */
 
-  cockpit(): Observable<Cockpit> {
-    return this.http.get<Cockpit>(`${this.base}/cockpit`);
+  dashboard(): Observable<Dashboard> {
+    return this.http.get<Dashboard>(`${this.base}/dashboard`);
   }
 
   /* -- trades ---------------------------------------------------------- */

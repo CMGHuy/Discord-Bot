@@ -173,14 +173,14 @@ export const TRADE_SORTABLE = [
   'entry', 'exit_price', 'held_hours', 'realized_pnl_amount',
 ] as const;
 
-/* -- cockpit ------------------------------------------------------------ */
+/* -- dashboard ------------------------------------------------------------ */
 
 export interface EquitySeries {
   points: unknown[];
   change_pct: number | null;
 }
 
-export interface Cockpit {
+export interface Dashboard {
   account_balance: number | null;
   open_pnl_pct: number | null;
   risk_used_pct: number | null;

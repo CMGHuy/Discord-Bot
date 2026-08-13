@@ -90,7 +90,7 @@ def test_risk_shape(logged_in, killswitch_file):
 
 def test_heat_carries_the_cap_it_is_measured_against(logged_in, killswitch_file):
     """A heat figure without its cap says nothing about whether you are near
-    the limit -- the same reason the Cockpit ships risk_cap_pct."""
+    the limit -- the same reason the Dashboard ships risk_cap_pct."""
     heat = logged_in.get("/api/v1/risk").get_json()["heat"]
     assert heat["cap_pct"] > 0
 

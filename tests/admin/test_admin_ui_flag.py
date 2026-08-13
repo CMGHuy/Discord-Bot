@@ -46,7 +46,7 @@ def test_spa_mode_sends_the_root_to_the_spa(client, auth, built, spa_mode):
     response = client.get("/", headers=auth)
 
     assert response.status_code in (301, 302, 308)
-    assert response.headers["Location"].endswith("/cockpit")
+    assert response.headers["Location"].endswith("/dashboard")
 
 
 def test_jinja_mode_serves_the_dashboard_at_the_root(client, auth, built, jinja_mode):
@@ -90,7 +90,7 @@ def test_every_jinja_page_stays_reachable_in_both_modes(
     """
     monkeypatch.setattr(config, "ADMIN_UI", mode, raising=False)
 
-    for path in ("/dashboard", "/plans", "/journal", "/performance",
+    for path in ("/jinja/dashboard", "/plans", "/journal", "/performance",
                  "/strategies", "/calibration", "/tuning", "/watchlist",
                  "/risk", "/settings", "/logs"):
         response = client.get(path, headers=auth)

@@ -68,7 +68,7 @@ interface ProposalView extends ProposalRow {
  *
  * Three things here are load-bearing and easy to lose in a later edit:
  *
- * **The six relocated Cockpit metrics are on the Performance tab.** Spec 3
+ * **The six relocated Dashboard metrics are on the Performance tab.** Spec 3
  * accepted the cost of moving wins, losses, average realised P&L, best trade,
  * worst trade and average holding period one click away from the header —
  * *not* the cost of losing them. They are rendered from
@@ -89,7 +89,7 @@ interface ProposalView extends ProposalRow {
 @Component({
   selector: 'sb-analytics',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // Provided here rather than in root, matching Cockpit and Trades: the store
+  // Provided here rather than in root, matching Dashboard and Trades: the store
   // is created on entry and destroyed on exit, so this workspace never holds
   // stale analytics while you are looking at another one.
   providers: [AnalyticsStore],
@@ -122,12 +122,12 @@ interface ProposalView extends ProposalRow {
       @case ('performance') {
         @if (store.missingRelocated(); as missing) {
           @if (missing.length) {
-            <!-- The relocation's own alarm. These six moved off the Cockpit
+            <!-- The relocation's own alarm. These six moved off the Dashboard
                  header on the promise that they would appear here; a missing
                  one otherwise looks exactly like a metric with no value yet. -->
             <p class="alert" role="alert">
               Not returned by the API: {{ missing.join(', ') }}. These metrics
-              moved here from the Cockpit and should be present.
+              moved here from the Dashboard and should be present.
             </p>
           }
         }

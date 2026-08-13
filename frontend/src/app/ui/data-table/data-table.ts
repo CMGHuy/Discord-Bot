@@ -43,7 +43,7 @@ import {
  *     store exists.
  *
  * The pager and the empty state are `PaginationComponent` and
- * `EmptyStateComponent` (NG39). They live outside this file because Cockpit
+ * `EmptyStateComponent` (NG39). They live outside this file because Dashboard
  * and the Analytics panels need an empty state without a table, but the table
  * still owns *when* they appear — a caller cannot forget to render the pager.
  */

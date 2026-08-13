@@ -138,7 +138,7 @@ export interface ProposalRow {
 /* -- the six relocated metrics ------------------------------------------ */
 
 /**
- * The six figures spec 3 moved out of the Cockpit header and spec v14
+ * The six figures spec 3 moved out of the Dashboard header and spec v14
  * Decision 6 puts on Analytics → Performance.
  *
  * **This constant is the whole point of the relocation being auditable.**
@@ -222,10 +222,10 @@ interface AnalyticsSlice {
  * Analytics — Performance, Strategies, Calibration and Tuning behind one
  * `TabBar` (spec v14 Decision 6).
  *
- * Follows `CockpitStore`'s shape: one server response per concern in, all
+ * Follows `DashboardStore`'s shape: one server response per concern in, all
  * derivation in `withComputed`, and a `withHooks` effect whose first run IS
  * the initial load. Two things are specific to this workspace and are the
- * reason it is not just four copies of the Cockpit store:
+ * reason it is not just four copies of the Dashboard store:
  *
  * **Only the open tab is fetched.** Spec v12's taxonomy says an `analytics`
  * event means "refetch the open Analytics view", not "refetch all four". The

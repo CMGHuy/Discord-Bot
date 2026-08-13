@@ -11,10 +11,10 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { Cockpit } from '../api/models';
+import { Dashboard } from '../api/models';
 
-interface CockpitSlice {
-  data: Cockpit | null;
+interface DashboardSlice {
+  data: Dashboard | null;
   loading: boolean;
   error: string | null;
 }
@@ -22,7 +22,7 @@ interface CockpitSlice {
 /**
  * Pulls one finite number out of a loosely typed server bag.
  *
- * Two of the Cockpit's fields are `unknown[]` / `Record<string, unknown>` in
+ * Two of the Dashboard's fields are `unknown[]` / `Record<string, unknown>` in
  * `models.ts` on purpose: their shape is decided by the Python side
  * (`build_sizing_note`, the equity snapshot) and pinning a TypeScript
  * interface to it would make every backend tweak a compile error in the
@@ -40,7 +40,7 @@ function finiteNumber(value: unknown): number | null {
 }
 
 /**
- * The Cockpit's nine metrics.
+ * The Dashboard's nine metrics.
  *
  * **This is the reference shape.** Every workspace store in Phase 4 copies
  * it: `withState` for what the server said, `withComputed` for anything
@@ -65,8 +65,8 @@ function finiteNumber(value: unknown): number | null {
  * showing slightly stale numbers next to a warning, especially when the
  * event stream reconnects seconds later.
  */
-export const CockpitStore = signalStore(
-  withState<CockpitSlice>({ data: null, loading: false, error: null }),
+export const DashboardStore = signalStore(
+  withState<DashboardSlice>({ data: null, loading: false, error: null }),
   withComputed(({ data }) => ({
     /** True until the first response, and never again. Distinguishes "no
      *  data yet" from "a refetch is in flight", which want different UI:
@@ -136,7 +136,7 @@ export const CockpitStore = signalStore(
   withMethods((store, api = inject(ApiClient)) => ({
     load(): void {
       patchState(store, { loading: true });
-      api.cockpit().subscribe({
+      api.dashboard().subscribe({
         next: (data) => patchState(store, { data, loading: false, error: null }),
         error: (error: ApiError) =>
           patchState(store, {

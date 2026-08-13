@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { MetricTone } from './metric-card';
 
 /**
- * One number with a label, compact. The Cockpit's secondary tier.
+ * One number with a label, compact. The Dashboard's secondary tier.
  *
  * The same data as `MetricCard` in a fraction of the space — hierarchy comes
  * from size rather than from culling (design system Decision 2). Three cards

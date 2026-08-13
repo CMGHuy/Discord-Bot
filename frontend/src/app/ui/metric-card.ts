@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 export type MetricTone = 'plain' | 'pnl' | 'caution';
 
 /**
- * One large number with a label. The Cockpit's primary tier.
+ * One large number with a label. The Dashboard's primary tier.
  *
  * Hierarchy comes from size rather than from culling (design system
  * Decision 2): nine equal cards is what made the old dashboard unreadable,
