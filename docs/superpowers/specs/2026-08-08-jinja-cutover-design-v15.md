@@ -374,7 +374,19 @@ SPA itself.
 **Unmapped: none.** Two mapped routes have no SPA control, which is a different
 finding and is A2.
 
-## A2 — Gaps that block the cutover
+## A2 — Gaps that block the cutover — CLOSED 2026-08-13
+
+Both were closed in the commit after this audit, in the Trades workspace:
+"Export CSV" is a plain anchor carrying the current query, and "Clear open"
+and "Clear history" are `ConfirmDialog`-gated with consequences that name
+what goes, what stays, and that the filter on screen does not narrow either
+command. The clears report their row count rather than a bare
+acknowledgement — "cleared 0" and "cleared 40" are different answers — and a
+refused command says so instead of being swallowed the way a row action's
+error is.
+
+The finding is left below as written, because how they came to be missing is
+the part worth keeping.
 
 **1. `clear-open` and `clear-history` have no SPA control.** Both endpoints
 exist (`api_v1/trade_commands.py`), and `ApiClient` has `clearOpenTrades()` and

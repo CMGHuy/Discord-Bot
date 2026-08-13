@@ -146,6 +146,14 @@ export interface TradeNote {
 /** Filters the list endpoint accepts. A parameter it does not know is a 400,
  *  not a silent no-op -- a silently ignored filter is how a filter that has
  *  stopped working survives to production. */
+/** `POST /trades/clear-open` and `POST /trades/clear-history`. The count is
+ *  the only thing either returns, and it is what the confirmation reports —
+ *  "cleared" without a number cannot be told from "there was nothing to
+ *  clear". */
+export interface ClearResult {
+  removed: number;
+}
+
 export interface TradeQuery {
   page?: number;
   per_page?: number;

@@ -10,6 +10,7 @@ import {
   AnalyticsStrategies,
   BotRestartResult,
   OhlcvResponse,
+  ClearResult,
   Cockpit,
   Collection,
   Health,
@@ -115,12 +116,12 @@ export class ApiClient {
     return this.http.delete<void>(`${this.base}/trades/${encodeURIComponent(id)}`);
   }
 
-  clearOpenTrades(): Observable<unknown> {
-    return this.http.post(`${this.base}/trades/clear-open`, {});
+  clearOpenTrades(): Observable<ClearResult> {
+    return this.http.post<ClearResult>(`${this.base}/trades/clear-open`, {});
   }
 
-  clearTradeHistory(): Observable<unknown> {
-    return this.http.post(`${this.base}/trades/clear-history`, {});
+  clearTradeHistory(): Observable<ClearResult> {
+    return this.http.post<ClearResult>(`${this.base}/trades/clear-history`, {});
   }
 
   setTradeNote(id: string, note: string): Observable<TradeNote> {

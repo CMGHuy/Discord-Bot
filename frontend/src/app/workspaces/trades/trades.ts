@@ -75,14 +75,36 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   template: `
     <header class="head">
       <h1>Trades</h1>
-      <sb-column-picker
-        [tableId]="tableId"
-        [columns]="allColumns()"
-        [defaults]="defaultColumns"
-        [visible]="visible()"
-        (visibleChange)="visible.set($event)"
-      />
+      <div class="head-actions">
+        <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
+             the server's filename, both of which an XHR throws away. It
+             carries the current query, so the file matches the list on
+             screen rather than the whole book. -->
+        <a class="export" [href]="store.exportUrl()" download>Export CSV</a>
+        <button sb-button variant="ghost" type="button" (click)="bulk.set('open')">
+          Clear open
+        </button>
+        <button sb-button variant="ghost" type="button" (click)="bulk.set('history')">
+          Clear history
+        </button>
+        <sb-column-picker
+          [tableId]="tableId"
+          [columns]="allColumns()"
+          [defaults]="defaultColumns"
+          [visible]="visible()"
+          (visibleChange)="visible.set($event)"
+        />
+      </div>
     </header>
+
+    @if (store.clearResult(); as message) {
+      <!-- The count, not just "done": "cleared 0" and "cleared 40" are
+           different answers and want different reactions. -->
+      <p class="cleared" role="status">{{ message }}</p>
+    }
+    @if (store.clearError(); as message) {
+      <p class="command-error" role="alert">{{ message }}</p>
+    }
 
     <sb-filter-chips
       [chips]="statusChips"
@@ -219,6 +241,20 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       (confirmed)="runPending()"
       (cancelled)="pending.set(null)"
     />
+
+    <!-- Its own dialog rather than a widened pending action: the row
+         actions act on a named trade and these act on all of them, and one
+         dialog serving both would have to describe "the selected trade, or
+         every trade" in a single sentence. -->
+    <sb-confirm-dialog
+      [open]="bulk() !== null"
+      [title]="bulkTitle()"
+      [consequence]="bulkConsequence()"
+      confirmLabel="Clear"
+      [working]="store.clearing() !== null"
+      (confirmed)="runBulk()"
+      (cancelled)="bulk.set(null)"
+    />
   `,
   styles: `
     .head {
@@ -228,6 +264,15 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       gap: var(--space-10);
     }
     h1 { font-size: var(--text-title); font-weight: 600; }
+    .head-actions { display: flex; align-items: center; gap: var(--space-8); }
+    .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
+    .export:hover { text-decoration: underline; }
+
+    .cleared { color: var(--text-secondary); font-size: var(--text-table); }
+    /* Red rather than the amber error style above: that one means "a poll
+       failed, these numbers are stale", and this one means "the thing you
+       asked for did not happen". */
+    .command-error { color: var(--neg); font-size: var(--text-table); }
 
     .error {
       padding: var(--space-8) var(--space-10);
@@ -302,6 +347,9 @@ export class Trades {
 
   protected readonly pending = signal<PendingAction>(null);
   protected readonly working = signal(false);
+
+  /** Which bulk clear is awaiting confirmation. */
+  protected readonly bulk = signal<'open' | 'history' | null>(null);
 
   private readonly numCell = viewChild.required<TemplateRef<unknown>>('numCell');
   private readonly statusCell = viewChild.required<TemplateRef<unknown>>('statusCell');
@@ -444,6 +492,28 @@ export class Trades {
     const action = this.pending();
     return action ? actionConsequence(action.kind, action.row) : '';
   });
+
+  protected readonly bulkTitle = computed(() =>
+    this.bulk() === 'history' ? 'Clear trade history' : 'Clear open positions',
+  );
+
+  /** Names what goes and what stays, per spec v14 — these are the two widest
+   *  destructive actions in the product, and "are you sure?" is answered yes
+   *  reflexively. The counts are deliberately not quoted from the table:
+   *  it is one filtered page, and these commands ignore the filter. */
+  protected readonly bulkConsequence = computed(() =>
+    this.bulk() === 'history'
+      ? 'Every closed trade is deleted permanently, along with its notes — the whole history, not just this page or this filter. Open positions are untouched. This cannot be undone.'
+      : 'Every open position is deleted permanently — the whole book, not just this page or this filter. Closed history is untouched, and nothing is closed at a price: the records simply go. This cannot be undone.',
+  );
+
+  protected runBulk(): void {
+    const kind = this.bulk();
+    if (!kind) return;
+    if (kind === 'history') this.store.clearHistory();
+    else this.store.clearOpen();
+    this.bulk.set(null);
+  }
 
   protected runPending(): void {
     const action = this.pending();

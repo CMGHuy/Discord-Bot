@@ -21,6 +21,15 @@ interface TradesSlice {
   query: TradeQuery;
   loading: boolean;
   error: string | null;
+
+  /** Which bulk clear is in flight, so one button locks rather than both. */
+  clearing: 'open' | 'history' | null;
+  /** The outcome of the last bulk clear, held until the next one. These two
+   *  commands delete paper-trade history with no undo and no backup, so
+   *  "did it work, and how much went" must be answered on screen rather
+   *  than inferred from the table redrawing. */
+  clearResult: string | null;
+  clearError: string | null;
 }
 
 /** The API spells a sort `field` or `-field`. The table speaks `SortSpec`.
@@ -64,6 +73,9 @@ export const TradesStore = signalStore(
     query: { page: 1, per_page: DEFAULT_PER_PAGE },
     loading: false,
     error: null,
+    clearing: null,
+    clearResult: null,
+    clearError: null,
   }),
   withComputed(({ data, query }) => ({
     rows: computed(() => data()?.items ?? []),
@@ -118,6 +130,59 @@ export const TradesStore = signalStore(
           }),
       });
     },
+
+    /**
+     * The two bulk clears the Jinja dashboard has — NG52's A2 gap.
+     *
+     * No refetch on success: both change trades, the server emits `trades`,
+     * and the effect below reissues the current query. What is kept is the
+     * COUNT, because these delete paper-trade history with no undo and no
+     * backup: "cleared" without a number cannot be told from "there was
+     * nothing to clear", and those two need different reactions.
+     *
+     * A failure is kept too, and not swallowed the way a row action's is.
+     * Believing history is gone when it is not is recoverable; believing it
+     * survived when it did not is not the error, but believing the command
+     * ran when it was refused sends someone looking for data that is still
+     * there.
+     */
+    clearOpen(): void {
+      patchState(store, { clearing: 'open', clearResult: null, clearError: null });
+      api.clearOpenTrades().subscribe({
+        next: ({ removed }) =>
+          patchState(store, {
+            clearing: null,
+            clearResult: `Cleared ${removed} open position${removed === 1 ? '' : 's'}.`,
+          }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            clearing: null,
+            clearError: `Nothing was cleared — ${error.message}`,
+          }),
+      });
+    },
+
+    clearHistory(): void {
+      patchState(store, { clearing: 'history', clearResult: null, clearError: null });
+      api.clearTradeHistory().subscribe({
+        next: ({ removed }) =>
+          patchState(store, {
+            clearing: null,
+            clearResult: `Cleared ${removed} closed trade${removed === 1 ? '' : 's'}.`,
+          }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            clearing: null,
+            clearError: `Nothing was cleared — ${error.message}`,
+          }),
+      });
+    },
+
+    /** The CSV export URL for the CURRENT query, so the file matches the
+     *  list on screen rather than the whole book. A URL rather than a
+     *  request: the browser downloading it through a normal navigation is
+     *  what produces a Save dialog and the server's filename. */
+    exportUrl: (): string => api.tradesExportUrl(store.query()),
   })),
   withHooks({
     onInit(store, events = inject(EventStream)) {
