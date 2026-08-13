@@ -62,6 +62,18 @@ jobs:
       - name: Test suite
         run: python scripts/testrun.py full
 
+      # testrun.py prints a one-line verdict and writes the tracebacks to a
+      # file -- which is right for a terminal and useless in CI, where a red
+      # run gave nothing but a node id and no way to see why. Upload it.
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log
+          path: .pytest-last-run.log
+          if-no-files-found: warn
+          retention-days: 7
+
   # ── 2b. The frontend ───────────────────────────────────────────────────────
   # The Angular suite and a real production build. The build is not redundant
   # with the Docker one below: this fails in ~1 minute with a readable
