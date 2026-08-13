@@ -77,10 +77,16 @@ set -a; . ./.env; set +a
 # password sent is "secret" plus a CR, and the server answers 401 for a
 # password that looks perfectly correct in the file. Cheap to do, and the
 # failure it prevents is a deploy that reports a broken UI when the UI is fine.
-ADMIN_USERNAME="${ADMIN_USERNAME%$'\r'}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD%$'\r'}"
-ADMIN_PORT="${ADMIN_PORT%$'\r'}"
-ADMIN_UI="${ADMIN_UI%$'\r'}"
+#
+# The `-` in ${VAR-} matters: `set -u` is on, and a .env is not required to
+# define all four. ADMIN_UI in particular is usually absent, since `spa` is
+# the default -- referencing it bare aborted the verification with "unbound
+# variable" on the very deploy that was meant to prove the fix. Defaults are
+# applied at the call below, so empty here is correct.
+ADMIN_USERNAME="${ADMIN_USERNAME-}"; ADMIN_USERNAME="${ADMIN_USERNAME%$'\r'}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD-}"; ADMIN_PASSWORD="${ADMIN_PASSWORD%$'\r'}"
+ADMIN_PORT="${ADMIN_PORT-}";         ADMIN_PORT="${ADMIN_PORT%$'\r'}"
+ADMIN_UI="${ADMIN_UI-}";             ADMIN_UI="${ADMIN_UI%$'\r'}"
 if docker compose exec -T admin python scripts/smoke_spa.py \
       --url "http://127.0.0.1:${ADMIN_PORT:-1234}" \
       --user "${ADMIN_USERNAME:-admin}" \
