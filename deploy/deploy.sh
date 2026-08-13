@@ -17,9 +17,26 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-echo "==> Fetching latest code (main)"
-git fetch origin main
-git reset --hard origin/main
+# This script updates ITSELF, and then has to hand over to the new version.
+#
+# `git reset --hard` below rewrites this very file while bash is executing it,
+# and bash reads a script lazily, by byte offset. So after the reset it
+# continues at whatever offset it had reached -- now pointing into different
+# content. Best case it skips the steps that were added (observed: the
+# 2026-08-13 Release A deploy silently did not run the verification step this
+# file had just gained). Worst case the offset lands mid-line and it executes
+# a fragment.
+#
+# So the update is a separate phase that re-execs. Phase 1 updates the code
+# and hands off; phase 2 -- a fresh bash reading the NEW file from the top --
+# does the actual work. The flag is what stops it looping.
+if [ "${1:-}" != "--updated" ]; then
+  echo "==> Fetching latest code (main)"
+  git fetch origin main
+  git reset --hard origin/main
+  echo "==> Re-running the updated deploy script"
+  exec bash "$0" --updated
+fi
 
 echo "==> Building and starting services"
 # --wait blocks until all containers with a healthcheck report healthy
