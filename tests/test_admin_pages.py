@@ -31,7 +31,16 @@ def client(monkeypatch):
         yield c
 
 
-PAGES = ["/", "/performance", "/watchlist", "/settings", "/logs"]
+# `/dashboard`, not `/`. Since NG53 the front door is mode-dependent: with a
+# built bundle and ADMIN_UI=spa it 302s to /cockpit, so asserting 200 on `/`
+# asserts "nobody has built the SPA in this checkout". That held in CI --
+# static/app/ is gitignored and only the Dockerfile's frontend stage fills it
+# -- and broke the moment NG54's walk built the bundle locally. `/dashboard`
+# is the Jinja dashboard's own URL, added by NG53 for exactly this reason, and
+# it renders in both modes. `/` itself is covered properly in
+# tests/admin/test_admin_ui_flag.py, which pins the flag in both directions
+# instead of depending on what happens to be on disk.
+PAGES = ["/dashboard", "/performance", "/watchlist", "/settings", "/logs"]
 
 
 @pytest.mark.parametrize("path", PAGES)

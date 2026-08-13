@@ -53,6 +53,7 @@ import {
   imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
   template: `
     <div class="wrap" [attr.aria-busy]="loading()">
+      <div class="scroller" tabindex="0">
       <table>
         <thead>
           <tr>
@@ -123,6 +124,7 @@ import {
           }
         </tbody>
       </table>
+      </div>
 
       @if (showEmptyState(); as state) {
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
@@ -136,6 +138,23 @@ import {
   styles: `
     .wrap { position: relative; }
     .wrap[aria-busy='true'] { opacity: 0.6; transition: opacity var(--transition); }
+
+    /* NG54. Cells are white-space:nowrap by design — a wrapped price is
+     * worse than a scroll — so a wide column set makes the table wider than
+     * its column and something has to give. Without this it was the PAGE
+     * that scrolled: with all 24 Trades columns picked the document went to
+     * 1877px at a 1280px viewport, taking the sidebar and header off-screen
+     * with it. Measured during A5's browser half; the geometry in A5 covers
+     * the row EXPANSION, which fits, and says nothing about the table.
+     *
+     * Scrolling the table inside its own box keeps the chrome fixed. It sits
+     * inside .wrap rather than on it so the pagination below stays put too.
+     *
+     * tabindex="0" because a scroll container that only a mouse can reach is
+     * unreachable by keyboard; making it focusable is what lets arrow keys
+     * scroll it. Chrome warns about exactly this otherwise. */
+    .scroller { overflow-x: auto; }
+    .scroller:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
     table {
       width: 100%;

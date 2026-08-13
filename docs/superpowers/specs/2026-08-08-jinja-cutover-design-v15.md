@@ -482,6 +482,12 @@ eighteen columns picked, Analytics' strategy registry, and the heatmap at ten
 horizons. Those belong to 2b's walk-through, at 1280px, and this appendix does
 not claim them.
 
+> **Done — see B6.** The fonts load and the digit estimate above was accurate.
+> The three wide surfaces found one real defect: the Trades table at its full
+> column set (24, not eighteen) scrolled the whole document rather than
+> itself. Fixed. The expansion geometry computed above was never the problem —
+> it fits, as claimed; the table beside it was simply never measured.
+
 ---
 
 # Appendix B — the NG54 acceptance gate
@@ -791,14 +797,82 @@ Deliberately not fixed: jsdom's `HTMLCanvasElement.getContext` notices. Silencin
 those means adding the native `canvas` package as a dev dependency to satisfy a
 chart nothing asserts against, which is a worse trade than a console notice.
 
+## B6 — A5's browser half, at 1280px — one defect, fixed
+
+A5 computed the row-expansion geometry and then said the browser half was
+still owed: font fallback, real values rather than assumed digit counts, and
+the three surfaces wider than the expansion. Done 2026-08-13 at a 1280×900
+viewport.
+
+### The fonts load, and A5's digit estimate was right
+
+Inter and JetBrains Mono both resolve from `/static/vendor/` — not a fallback.
+Measured on canvas at 11px, eight mono digits are **52.8px with the face
+against 48.4px without it**, so the face is genuinely in use and A5's
+"8 × 0.6em × 11px ≈ 53px" was accurate to within a pixel. Every width
+conclusion in A5 stands.
+
+(Weights 500 and 700 report `unloaded` via the CSS Font Loading API. That is
+lazy loading, not a failure — the browser fetches a face when something
+actually renders in it.)
+
+### DEFECT — Trades at full column set scrolled the whole page
+
+With all 24 columns picked the table is **1689px** wide. Its container is
+1057px, and that container's `overflow-x` was `visible`, so the overflow went
+to the document: `documentElement.scrollWidth` **1877px at a 1280px
+viewport**. The page scrolled sideways, taking the sidebar and the header with
+it — the two things that should never move.
+
+This is not something A5 could have caught by computation, because A5's
+geometry is about the row *expansion*, which does fit. The table was never
+measured.
+
+Fixed in `DataTable` with a `.scroller` div around the `<table>` carrying
+`overflow-x: auto`, inside `.wrap` so the pagination below stays put. It is
+`tabindex="0"` because a scroll container reachable only by mouse cannot be
+scrolled from the keyboard at all.
+
+After: table 1689px scrolling inside a 1072px box, `documentElement.scrollWidth`
+back to **1280px**, sidebar in place.
+
+Cells are `white-space: nowrap` by design, so this was the only honest fix —
+wrapping a price across two lines is worse than a scrollbar.
+
+### The other two surfaces
+
+| Surface | Columns | Table width | Result |
+|---|---|---|---|
+| Analytics → strategy registry | 13 | 1100px | scrolls in its own box (1055px), page does not |
+| Analytics → strategy × horizon heatmap | 11 (label + 10 horizons) | 1055px | fits |
+| Cockpit / Universe / System / Risk / other Analytics tabs | — | — | no page scroll, no unscrollable overflow |
+
+The registry benefits from the same fix — at 1100px in a 1055px box it was
+also overflowing to the document before it.
+
+### The heatmap needed the fixtures corrected first
+
+It rendered nothing measurable at first, because the fixture set used
+`1m`, `3w` and `6w` as horizon keys and **none of those are horizons**.
+`HORIZONS` is `2w, 4w, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m`. The keys were wrong,
+the heatmap had no cells to draw, and the screen looked fine — which is the
+whole failure mode: a fixture using vocabulary the product does not know
+produces a plausible page that proves nothing.
+
+`seed_parity_fixtures.py` now imports `HORIZONS` rather than spelling keys
+out, and adds 30 closed trades (3 strategies × 10 horizons) purely so the
+matrix has something to render. The trades list correspondingly shows 37 rows
+— still the join, not a concatenation.
+
 ## B5 — Gate status
 
 | Item | Result |
 |---|---|
 | 2a route coverage | **PASS** — nothing unmapped; `/dashboard` added to A1; method changed to the live url_map |
-| 2b behaviour parity | **WALKED** — one blocker (fixed), two defects (open), A5's browser half still owed |
+| 2b behaviour parity | **WALKED** — one blocker (fixed), two defects (open) |
 | 2c degraded mode | **PASS** |
 | 2d suite green | **PASS** — 1537 Python, 294 frontend, 0 failed, 0 errors |
+| A5 1280px, browser half | **DONE** — one defect (fixed): the Trades table scrolled the page |
 
 **Do not ship Release A (NG55) yet.** The blocker is fixed and the gate is
 mostly green, but two defects found by 2b are open and both are decisions
@@ -820,9 +894,27 @@ cannot be walked at all.
 ### What this gate bought
 
 Worth recording, because the cost of 2b is the argument against ever doing it
-again: **every one of the three findings was invisible to both test suites**,
-and the worst of them was fatal. 1537 Python tests and 294 Angular tests were
-green on a bundle that rendered a black screen in a browser. The Python tests
-write a fake `index.html`; the Angular tests never load one. Neither suite has
-a way to notice, and neither was wrong to be green — they test what they test.
-A gate item that says "open it in a browser" is not ceremony.
+again: **every finding was invisible to both test suites**, and the worst was
+fatal. 1537 Python tests and 294 Angular tests were green on a bundle that
+rendered a black screen in a browser. The Python tests write a fake
+`index.html`; the Angular tests never load one. Neither suite has a way to
+notice, and neither was wrong to be green — they test what they test. A gate
+item that says "open it in a browser" is not ceremony.
+
+The walk also turned up **three tests that were passing for environmental
+reasons rather than behavioural ones**, all found by doing something the suite
+never does — building the SPA and putting real data in `data/`:
+
+- `test_page_renders[/]` asserted 200 on `/`, which since NG53 302s to
+  `/cockpit` when a bundle exists. It passed only because `static/app/` is
+  gitignored and nothing in a source checkout ever fills it. Now points at
+  `/dashboard`, the URL NG53 added for exactly this.
+- Five tests in `test_engine_v2_plans.py` read the real `config.DATA_DIR`, so
+  a bad fixture file there fails them (see B2).
+- `test_spa_serving.py`'s `built` fixture *deleted* a real `index.html` on
+  cleanup, silently un-building a developer's bundle mid-session. It now
+  saves and restores the bytes.
+
+None of these were wrong when written. They are the ordinary drift of a suite
+that has only ever run in one shape of environment, and the reason the gate
+asks for a walk rather than a re-run.

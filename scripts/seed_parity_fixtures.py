@@ -33,6 +33,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from swingbot import config  # noqa: E402  (needs the path above)
+# The real horizon keys. Imported rather than written out: the first version
+# of this file invented "1m", "3w" and "6w", which are not horizons at all, so
+# the Analytics heatmap silently had nothing to draw. A fixture using keys the
+# product does not know produces a plausible-looking screen that proves
+# nothing.
+from swingbot.core.strategy_types import HORIZONS  # noqa: E402
 
 # --- ids ------------------------------------------------------------------
 # Plan ids are UUID4-shaped because trade_commands.py routes a note by
@@ -52,7 +58,7 @@ T_LEGACY_OPEN = "trade-legacy-open-0001"
 T_LEGACY_LOSS = "trade-legacy-loss-0001"
 
 
-def _plan(plan_id, *, ticker, status, strategy, horizon="1m", direction="bullish",
+def _plan(plan_id, *, ticker, status, strategy, horizon="4w", direction="bullish",
           tier="A", badge="VALIDATED", quality=72, legs=()):
     return {
         "plan_id": plan_id, "ticker": ticker,
@@ -68,7 +74,7 @@ def _plan(plan_id, *, ticker, status, strategy, horizon="1m", direction="bullish
     }
 
 
-def _trade(trade_id, *, plan_id, ticker, status, strategy, horizon="1m",
+def _trade(trade_id, *, plan_id, ticker, status, strategy, horizon="4w",
            direction="bullish", tier="A", badge="VALIDATED", quality=72,
            entry=101.0, stop=95.0, tp=110.0, exit_price=None, pnl=None,
            shares=10, closed_at=None):
@@ -93,7 +99,7 @@ def _journal(trade_id, *, ticker, strategy, outcome, r_realized, note,
              closed_at, tier="A", badge="VALIDATED"):
     return {
         "trade_id": trade_id, "ticker": ticker, "strategy": strategy,
-        "horizon_key": "1m", "direction": "bullish", "tier": tier,
+        "horizon_key": "4w", "direction": "bullish", "tier": tier,
         "badge": badge, "quality_score": 72, "outcome": outcome,
         "r_realized": r_realized, "mfe_r": 1.9, "mae_r": -0.4,
         "exit_efficiency": 0.74, "holding_days": 3,
@@ -102,6 +108,8 @@ def _journal(trade_id, *, ticker, strategy, outcome, r_realized, note,
     }
 
 
+_HORIZON_KEYS = list(HORIZONS)
+
 PLANS = [
     _plan(P_PENDING, ticker="AAPL", status="PENDING", strategy="RSI Divergence"),
     _plan(P_ACTIVE, ticker="MSFT", status="ACTIVE", strategy="MACD Cross",
@@ -109,13 +117,13 @@ PLANS = [
     # PARTIAL is the state most likely to render wrong, because it is the only
     # one carrying a realized leg while still being an open position.
     _plan(P_PARTIAL, ticker="NVDA", status="PARTIAL", strategy="Breakout",
-          horizon="3w", tier="A",
+          horizon="4w", tier="A",
           legs=[{"leg": "tp1", "price": 110.0, "fraction": 0.5,
                  "realized_at": "2026-08-05T14:30:00+00:00", "r_multiple": 1.5}]),
     _plan(P_CANCELLED, ticker="TSLA", status="CANCELLED", strategy="RSI Divergence",
           horizon="2w", tier="C", badge="UNPROVEN", quality=41),
     _plan(P_CLOSED, ticker="AMD", status="CLOSED", strategy="MACD Cross",
-          horizon="1m", tier="A"),
+          horizon="4w", tier="A"),
 ]
 
 TRADES = [
@@ -123,7 +131,7 @@ TRADES = [
            strategy="MACD Cross", horizon="2m", tier="B", entry=402.5,
            stop=388.0, tp=430.0, shares=6),
     _trade(T_PARTIAL, plan_id=P_PARTIAL, ticker="NVDA", status="open",
-           strategy="Breakout", horizon="3w", entry=118.2, stop=110.0,
+           strategy="Breakout", horizon="4w", entry=118.2, stop=110.0,
            tp=135.0, shares=25),
     _trade(T_CLOSED, plan_id=P_CLOSED, ticker="AMD", status="win",
            strategy="MACD Cross", entry=142.0, stop=134.0, tp=158.0,
@@ -133,14 +141,42 @@ TRADES = [
     # has to pick these up separately, and their status vocabulary differs
     # (open/win/loss rather than the plan statuses).
     _trade(T_LEGACY_OPEN, plan_id=None, ticker="SPY", status="open",
-           strategy="Support Bounce", horizon="6w", tier=None, badge=None,
+           strategy="Support Bounce", horizon="3m", tier=None, badge=None,
            entry=548.1, stop=536.0, tp=572.0, shares=4),
     _trade(T_LEGACY_LOSS, plan_id=None, ticker="COIN", status="loss",
            strategy="Breakout", horizon="2w", tier="C", badge="UNPROVEN",
            quality=38, entry=210.0, stop=198.0, tp=240.0,
-           exit_price=197.4, pnl=-126.0, shares=10,
+           exit_price=197.4, pnl=-126.0, shares=10,  # noqa: E128
            closed_at="2026-08-06T19:45:00+00:00"),
 ]
+
+# --- heatmap coverage -----------------------------------------------------
+# A5 names "the heatmap at ten horizons" as one of three surfaces wider than
+# the row expansion, and the heatmap is a strategy x horizon matrix built from
+# CLOSED trades. The five hand-written rows above cover four cells, which
+# renders a matrix too small to say anything about width. These fill it: three
+# strategies across all ten horizons, alternating win/loss so no cell is
+# empty and no column is uniformly one colour.
+#
+# Closed and legacy (plan_id=None) on purpose. They exist to give the matrix
+# something to draw, and adding thirty plans to plans.json would change the
+# trades-list row count that the join check above depends on.
+_HEATMAP_STRATEGIES = ("RSI Divergence", "MACD Cross", "Breakout")
+_HEATMAP_TICKERS = ("AAPL", "MSFT", "NVDA")
+
+for _si, _strategy in enumerate(_HEATMAP_STRATEGIES):
+    for _hi, _horizon in enumerate(_HORIZON_KEYS):
+        _win = (_si + _hi) % 3 != 0        # two wins per loss, roughly
+        TRADES.append(_trade(
+            f"trade-heat-{_si}-{_horizon}",
+            plan_id=None, ticker=_HEATMAP_TICKERS[_si], status="win" if _win else "loss",
+            strategy=_strategy, horizon=_horizon,
+            tier="ABC"[_si], badge="VALIDATED" if _win else "UNPROVEN",
+            quality=60 + _hi, entry=100.0, stop=94.0, tp=112.0,
+            exit_price=112.0 if _win else 94.0,
+            pnl=120.0 if _win else -60.0, shares=10,
+            closed_at=f"2026-0{7 if _hi < 5 else 8}-{(_hi % 5) * 5 + 1:02d}T15:00:00+00:00",
+        ))
 
 # Only closed trades get journal entries -- notes attach on close, which is
 # what trade_commands.set_note's 404 message says. A note on the ACTIVE
@@ -213,12 +249,17 @@ def main() -> int:
             fh.write("\n")
         print(f"  wrote {name:20s} {len(payload)} record(s)", flush=True)
 
+    heat = len(_HEATMAP_STRATEGIES) * len(_HORIZON_KEYS)
     print(f"\nSeeded {data_dir}")
     print("  5 plans   PENDING / ACTIVE / PARTIAL / CANCELLED / CLOSED")
-    print("  5 trades  3 plan-linked (2 open, 1 win) + 2 legacy (1 open, 1 loss)")
+    print(f"  {len(TRADES)} trades  3 plan-linked (2 open, 1 win) + 2 legacy "
+          f"(1 open, 1 loss)")
+    print(f"            + {heat} closed for the heatmap "
+          f"({len(_HEATMAP_STRATEGIES)} strategies x {len(_HORIZON_KEYS)} horizons)")
     print("  2 journal entries, one with a note and one without")
-    print("\nThe trades list should show SEVEN rows, not ten: the three linked")
-    print("pairs join into one row each. Ten rows means the join regressed.")
+    print(f"\nThe trades list should show {5 + 2 + heat} rows, not {len(TRADES) + 5}:")
+    print("the three plan-linked pairs join into one row each. The higher")
+    print("number means the join regressed to a concatenation.")
     return 0
 
 

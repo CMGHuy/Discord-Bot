@@ -24,11 +24,34 @@ SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system")
 
 @pytest.fixture
 def built():
-    """A fake bundle in the real output directory, cleaned up after."""
+    """A fake bundle in the real output directory, cleaned up after.
+
+    **Restores what was there rather than deleting it.** A developer who has
+    actually built the SPA has a real index.html in this directory, and an
+    earlier version of this fixture removed it on cleanup — so running the
+    Python suite silently un-built their bundle, and the next page load 404ed
+    with nothing to connect it to. Found during NG54's browser walk, which
+    lost its bundle to a full-suite run mid-session.
+
+    The obvious alternative — write the fake bundle to a tmp_path and
+    monkeypatch `spa.APP_DIR` — is what the module docstring above argues
+    against, because it would test a directory the deployment never uses.
+    Saving and putting back the real bytes keeps that argument intact.
+    """
     created = not os.path.isdir(spa.APP_DIR)
     os.makedirs(spa.APP_DIR, exist_ok=True)
     index = os.path.join(spa.APP_DIR, "index.html")
     asset = os.path.join(spa.APP_DIR, "main-ABCD1234.js")
+
+    # Read before writing, so a real bundle can be put back byte for byte.
+    saved = {}
+    for path in (index, asset):
+        try:
+            with open(path, "rb") as f:
+                saved[path] = f.read()
+        except OSError:
+            saved[path] = None
+
     with open(index, "w", encoding="utf-8") as f:
         f.write("<!doctype html><sb-root></sb-root>")
     with open(asset, "w", encoding="utf-8") as f:
@@ -36,15 +59,19 @@ def built():
     try:
         yield
     finally:
-        # ignore_errors throughout: Werkzeug can still hold a sent file open
-        # on Windows when the test client has not closed the response, and a
-        # cleanup failure must not turn a passing test red.
+        # ignore_errors / suppressed OSError throughout: Werkzeug can still
+        # hold a sent file open on Windows when the test client has not closed
+        # the response, and a cleanup failure must not turn a passing test red.
         if created:
             shutil.rmtree(spa.APP_DIR, ignore_errors=True)
         else:
-            for path in (index, asset):
+            for path, original in saved.items():
                 try:
-                    os.remove(path)
+                    if original is None:
+                        os.remove(path)
+                    else:
+                        with open(path, "wb") as f:
+                            f.write(original)
                 except OSError:
                     pass
 

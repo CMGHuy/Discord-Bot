@@ -1,0 +1,30 @@
+{
+  "tables": {
+    "trades": [
+      "num",
+      "status",
+      "ticker",
+      "now",
+      "pnl_pct",
+      "held",
+      "actions",
+      "entry",
+      "stop_loss",
+      "target",
+      "risk_reward",
+      "r_multiple",
+      "strategy",
+      "horizon",
+      "direction",
+      "tier",
+      "confidence_level",
+      "shares",
+      "position_value",
+      "realized_pnl_amount",
+      "exit_price",
+      "opened_at",
+      "closed_at",
+      "origin"
+    ]
+  }
+}
