@@ -179,6 +179,14 @@ specific combination proves genuinely hard to reconstruct.
 
 ## Decision 5 — Cockpit
 
+> **Superseded in part by v18 (2026-08-13).** The workspace is now **Dashboard**
+> — route `/dashboard`, endpoint `/api/v1/dashboard`, `DashboardStore` — with
+> `/cockpit` redirecting. Its "Open positions" table is no longer the fixed
+> four-column summary described below: it is the same component, the same two
+> density modes and the same column sets as Trades, filtered to open positions.
+> Two tables of the same rows behaving differently is a thing to learn twice.
+> The header's metric tiers are untouched. See spec v18 Decisions 6 and 7.
+
 **Route:** `/cockpit` (and `/` redirects here)
 
 `GET /api/v1/cockpit`, refetching on `account` and `trades`.

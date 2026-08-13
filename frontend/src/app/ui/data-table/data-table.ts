@@ -21,7 +21,7 @@ import {
 
 /**
  * The load-bearing table — spec `2026-08-08-v14-angular-workspaces-design.md`
- * Decision 1. Trades, Analytics/Strategies, Risk and Universe all render
+ * Decision 1. Trades, Analytics/Strategies, Risk and Watchlist all render
  * through this one component, which is why it was built and settled before any
  * of them started: discovering the API is wrong afterwards means rewriting
  * four workspaces.
@@ -43,7 +43,7 @@ import {
  *     store exists.
  *
  * The pager and the empty state are `PaginationComponent` and
- * `EmptyStateComponent` (NG39). They live outside this file because Cockpit
+ * `EmptyStateComponent` (NG39). They live outside this file because Dashboard
  * and the Analytics panels need an empty state without a table, but the table
  * still owns *when* they appear — a caller cannot forget to render the pager.
  */
@@ -315,7 +315,7 @@ export class DataTable<T> {
    * Activation is mouse-only by design. A call site that needs the row
    * reachable by keyboard puts a real `<a>` or `<button>` in a cell (Trades
    * uses the `#` column); making every row focusable would put Risk's and
-   * Universe's read-only rows into the tab order for nothing.
+   * Watchlist's read-only rows into the tab order for nothing.
    */
   protected activate(row: T, event: Event): void {
     const target = event.target as HTMLElement | null;

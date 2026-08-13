@@ -105,7 +105,7 @@ describe('ColumnPickerComponent', () => {
     fixture.detectChanges();
 
     expect(preferences.columns('trades')).toEqual(['num', 'status', 'ticker', 'pnl']);
-    expect(preferences.columns('universe')).toBeNull();
+    expect(preferences.columns('watchlist')).toBeNull();
   });
 
   it('will not let the last visible column be unchecked', () => {

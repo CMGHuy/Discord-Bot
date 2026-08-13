@@ -149,7 +149,7 @@ def test_best_and_worst_trade_see_the_whole_scoped_history(client, auth, admin_a
     real extremes onto page 2 pins the fix."""
     from swingbot import config
     _seed_history_with_extremes_off_the_first_page(config.DATA_DIR)
-    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
 
     assert _stat_card_value(html, "Best trade") == "+100.0%"
     assert _stat_card_value(html, "Worst trade") == "-50.0%"
@@ -164,7 +164,7 @@ def test_avg_realized_pnl_counts_every_closed_trade_in_scope(client, auth, admin
     """
     from swingbot import config
     _seed_history_with_extremes_off_the_first_page(config.DATA_DIR)
-    html = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
 
     assert "over 30 closed" in html
     assert _stat_card_value(html, "Avg realized P&amp;L") == "+11.0%"
@@ -179,6 +179,6 @@ def test_equity_card_shows_period_change_not_the_balance_again(client, auth, adm
                         lambda max_age_seconds=3600: {"built_at": "x", "equity_curve": curve})
     monkeypatch.setattr("swingbot.admin.pages.rank_plans", lambda plans: [])
 
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     # 10000 -> 12900 across the window
     assert _stat_card_value(html, "Equity (30d)") == "+29.00%"

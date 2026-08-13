@@ -42,7 +42,9 @@ Every task's requirements implicitly include this section.
 - **Colour rule: one colour, one valence** — `--pos` good · `--neg` bad · `--warn` caution · `--accent` interactive/brand · `--info` neutral information. Everything else greyscale. A sixth hue is a review defect. The one recorded exception is LONG ▲ `--pos` / SHORT ▼ `--neg`.
 - **Merge to `main` once per phase, not per task.** Check `git status` on the main tree before merging — other sessions leave it dirty.
 - Windows dev machine: `python`, never `python3`.
-- `python scripts/testrun.py full` green (`0 failed`) before each commit; `python scripts/testrun.py file tests/admin` while iterating. `cd frontend && npx vitest run` for the TS side.
+- `python scripts/testrun.py full` green (`0 failed`) before each commit; `python scripts/testrun.py file tests/admin` while iterating. `cd frontend && npx ng test` for the TS side.
+- **`npx ng test`, never bare `npx vitest run`.** The `@angular/build:unit-test` builder is what calls `TestBed.initTestEnvironment()`; running vitest directly makes 18 of 20 spec files fail with "Need to call TestBed.initTestEnvironment() first", which looks like a broken suite and is not. `vitest.config.ts` is only a runner config the builder merges in.
+- **`ng test` occasionally dies at exactly 60s** with "Timeout waiting for worker to respond" — a hard-coded vitest constant, load-dependent, documented at the top of `vitest.config.ts`. **A re-run succeeds.** Treat a fresh timeout as "try again", not as a failure.
 - Conventional commits, one per task, `git add <explicit paths>` — never `-A`.
 - New docs follow `YYYY-MM-DD-vN-<name>.md`; next free number is **v22**.
 
@@ -132,7 +134,7 @@ describe('design tokens', () => {
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail** — `cd frontend && npx vitest run src/app/ui/tokens.spec.ts`. Expected: failures on `--surface-overlay`, `--info`, every `-soft`, all three durations, `--ease-spring`, the reduced-motion block; `--space-28` currently passes-as-present so that case fails too.
+- [ ] **Step 2: Run it and watch it fail** — `cd frontend && npx ng test`. Expected: failures on `--surface-overlay`, `--info`, every `-soft`, all three durations, `--ease-spring`, the reduced-motion block; `--space-28` currently passes-as-present so that case fails too.
 - [ ] **Step 3: Replace the colour block.**
 
 ```css
@@ -206,7 +208,7 @@ Delete `--quality-high` / `--quality-mid` / `--quality-low` and fix their call s
 ```
 
 - [ ] **Step 8: Rewrite the file's header comment.** It currently states the old three-rule colour system as fact. Replace with the valence rule and a pointer to spec v18 Decision 2. A stale comment asserting the opposite of the code is worse than no comment.
-- [ ] **Step 9: Run** `npx vitest run` (whole suite — the quality-token rename touches components) and `python scripts/testrun.py full`. Both green.
+- [ ] **Step 9: Run** `npx ng test` (whole suite — the quality-token rename touches components) and `python scripts/testrun.py full`. Both green.
 - [ ] **Step 10: Commit** `feat(tokens): the modern-fintech palette and a three-step motion scale`
 
 **Trap: CSS custom properties do not work in media-query conditions.** `@media (min-width: var(--bp-md))` silently never matches. The breakpoints in SR23 are therefore literal `px` values in the media queries, with the canonical list documented in a comment here and in one TS constant. Do not add `--bp-*` tokens; they would look usable and would not be.
@@ -223,7 +225,7 @@ The palette only holds if nothing bypasses it.
 - [ ] **Step 1: Enumerate.** `cd frontend && git grep -nE "#[0-9a-fA-F]{3,8}\b" -- src | grep -v "src/styles/tokens.css"`
 - [ ] **Step 2:** For each hit, either replace it with the token carrying that meaning, or record it in the audit doc with the reason it is exempt. There are only two legitimate exemption classes: colours inside an SVG asset that is artwork rather than UI, and the chart theme's own required literals (SR35 replaces those with token reads).
 - [ ] **Step 3: Verify** the grep from Step 1 returns only lines listed in the audit doc.
-- [ ] **Step 4:** `npx vitest run` and `python scripts/testrun.py full` green.
+- [ ] **Step 4:** `npx ng test` and `python scripts/testrun.py full` green.
 - [ ] **Step 5: Commit** `refactor(frontend): every colour comes from a token`
 
 ---
@@ -257,7 +259,7 @@ git mv frontend/src/app/stores/cockpit.store.spec.ts frontend/src/app/stores/das
 - [ ] **Step 5: `tests/admin/conftest.py`** — the `api_v1` reload rules reference module names. Check `_RELOAD_MODULES` and any explicit import of `api_v1.cockpit`.
 - [ ] **Step 6: No API alias.** `/api/v1/cockpit` is deleted, not aliased. One consumer, shipped from the same build. Add a test asserting it 404s so the absence is deliberate rather than accidental.
 - [ ] **Step 7: Verify** `git grep -niE "cockpit" -- swingbot frontend/src tests` returns only the redirect route, the `spa.py` prefix, and the 404 test.
-- [ ] **Step 8:** `python scripts/testrun.py full` and `npx vitest run` green; `cd frontend && npx ng build` succeeds.
+- [ ] **Step 8:** `python scripts/testrun.py full` and `npx ng test` green; `cd frontend && npx ng build` succeeds.
 - [ ] **Step 9: Commit** `refactor(admin): Cockpit is Dashboard, end to end`
 
 ---
@@ -286,13 +288,13 @@ Spec Decision 7. Same steps as SR4 with `universe`→`watchlist`, `UniverseStore
 
 Spec Decision 8.
 
-- [ ] **Step 1: Copy** — not move; Jinja still serves its own copies until NG57.
+- [x] **Step 1: Copy** — not move; Jinja still serves its own copies until NG57. **`favicon.png` deliberately excluded** — see the note under step 6.
 
 ```bash
 cp swingbot/admin/static/images/{favicon.svg,favicon.png,favicon.ico,favicon-16.png,favicon-32.png,apple-touch-icon.png,bot-profile.png,bot-profile@2x.png} frontend/public/
 ```
 
-- [ ] **Step 2: Replace the `<link rel="icon">` line** in `frontend/src/index.html` with the full set, SVG first:
+- [x] **Step 2: Replace the `<link rel="icon">` line** in `frontend/src/index.html` with the full set, SVG first:
 
 ```html
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -302,20 +304,49 @@ cp swingbot/admin/static/images/{favicon.svg,favicon.png,favicon.ico,favicon-16.
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
 ```
 
-- [ ] **Step 3:** Update the inline `<style>` fallback background from `#000000` to `#0a0b10` so a slow bundle load paints the new ground colour, not the old one.
-- [ ] **Step 4:** Confirm `angular.json`'s `assets` block copies all of `public/` into the build output. It does by default in Angular 21; verify rather than assume, because a missing favicon fails silently.
-- [ ] **Step 5: Verify** `cd frontend && npx ng build` then `ls dist/*/browser/favicon.svg` exists.
-- [ ] **Step 6: Commit** `feat(frontend): the guinea pig comes back`
+- [x] **Step 3:** Update the inline `<style>` fallback background from `#000000` to `#0a0b10` so a slow bundle load paints the new ground colour, not the old one.
+- [x] **Step 4:** Confirm `angular.json`'s `assets` block copies all of `public/` into the build output. It does by default in Angular 21; verify rather than assume, because a missing favicon fails silently.
+- [x] **Step 5: Verify** `cd frontend && npx ng build` then `ls dist/*/browser/favicon.svg` exists.
+- [x] **Step 6: Commit** `feat(frontend): the guinea pig comes back`
+
+**Deviation from step 1, on purpose.** The `cp` list above includes
+`favicon.png`, and it should not: that file is the **1.9 MB master** every
+other size was generated from, the SPA's `<link>` set never references it, and
+only the Jinja templates consume it. Copying it would have put five times the
+app's entire initial bundle (313 kB) into `dist/` to be downloaded by nobody.
+It stays in `swingbot/admin/static/images/`, where its consumers are. The
+built output was checked for its absence, not just for the others' presence.
+
+The inline `#0a0b10` in `index.html` is now the one colour literal SR3's audit
+leaves standing — it must paint before any stylesheet exists, so it cannot
+read `--bg`. Commented as a copy that has to be kept in sync, since the
+symptom of drift is a single frame of the old colour on a cold load.
 
 ---
 
 ## Phase 0 gate
 
-- [ ] `python scripts/testrun.py full` → `0 failed`
-- [ ] `cd frontend && npx vitest run` → green
-- [ ] `npx ng build` → succeeds
-- [ ] Load the SPA, click every nav entry, confirm no 404 and the new palette is live
+- [x] `python scripts/testrun.py full` → `0 failed` — 1679 passed
+- [x] `cd frontend && npx ng test` → green — 336 passed across 20 files
+- [x] `npx ng build` → succeeds — 313 kB initial, `<base href="/app/">` intact
+- [x] Load the SPA, click every nav entry, confirm no 404 and the new palette is live — all six render, zero console errors, zero 4xx; `--bg` resolves to `#0a0b10` and Inter is loading. `scripts/smoke_spa.py` passes 23/23 against a real server on the built bundle, including all five favicons resolving from `/app/`.
 - [ ] Merge `worktree-spa-refresh` → `main` (check main-tree `git status` first)
+
+**Two things the walk found, both in the verification rather than the app:**
+
+`scripts/smoke_spa.py` had gone stale in two places the moment SR4/SR5 landed.
+Its workspace list still read `cockpit`/`universe`, so it kept passing while
+testing neither `/dashboard` nor `/watchlist` — the two routes those tasks
+created. And it asserted `/` redirects to `/cockpit`, which the app had
+correctly changed to `/dashboard`. Both fixed: the list now covers the new
+names plus the legacy ones (dropping those 404s an old bookmark before Angular
+can redirect it), and the front-door check now asserts the *property* — that
+`/` redirects and wherever it lands serves the app — rather than a hardcoded
+destination that goes stale on the next rename.
+
+A hard load of `/risk` renders empty. That is `spa.py:register`'s documented
+collision — Jinja owns `/risk` until NG57 — not a regression. In-app
+navigation to Risk works. It self-heals when the Jinja routes go.
 
 ---
 
@@ -479,7 +510,7 @@ describe('PlanCell', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `npx vitest run src/app/ui/plan-cell.spec.ts`. Expected: cannot resolve `./plan-cell`.
+- [ ] **Step 2: Run and watch it fail** — `npx ng test`. Expected: cannot resolve `./plan-cell`.
 - [ ] **Step 3: Implement.**
 
 ```ts
@@ -529,7 +560,7 @@ export class PlanCell {
 }
 ```
 
-- [ ] **Step 4: Run** `npx vitest run src/app/ui/plan-cell.spec.ts` → PASS. If `num(null)` does not already return `—`, fix `format.ts` rather than special-casing here.
+- [ ] **Step 4: Run** `npx ng test` → PASS. If `num(null)` does not already return `—`, fix `format.ts` rather than special-casing here.
 - [ ] **Step 5: Commit** `feat(ui): the combined plan cell`
 
 ---
@@ -830,7 +861,7 @@ describe('trade column sets', () => {
 - [ ] **Step 5: `status` sorts on `progress_pct`,** with null-progress rows last in **both** directions. Add a test: sorting ascending and descending must both put a no-price row at the end, not cluster it at whichever end zero falls.
 - [ ] **Step 6: Add the toolbar** — density toggle, picker, per-page — beside the existing filter and status chips.
 - [ ] **Step 7: Default to compact** on first load and for any user with no stored preference.
-- [ ] **Step 8: Run** `npx vitest run` → green.
+- [ ] **Step 8: Run** `npx ng test` → green.
 - [ ] **Step 9: Commit** `feat(trades): compact and full, with the status bar`
 
 ---
@@ -846,7 +877,7 @@ Spec Decision 6. Reverses workspaces v14 Decision 5.
 - [ ] **Step 2: Pass `tableId="dashboard"`** so density and column choices persist separately from the Trades table's.
 - [ ] **Step 3: Add the same toolbar.** Filtering stays fixed to open positions — that is what the panel is.
 - [ ] **Step 4: Write the test** asserting the two tables share column definitions but not preferences: writing `tables.dashboard.compact.columns` must not change what Trades renders.
-- [ ] **Step 5: Run** `npx vitest run` → green.
+- [ ] **Step 5: Run** `npx ng test` → green.
 - [ ] **Step 6: Commit** `feat(dashboard): the same table as Trades`
 
 ---
@@ -881,7 +912,7 @@ Spec Decision 4, "Row expansion stays".
 
 ## Phase 1 gate
 
-- [ ] `python scripts/testrun.py full` → `0 failed`; `npx vitest run` green; `ng build` succeeds
+- [ ] `python scripts/testrun.py full` → `0 failed`; `npx ng test` green; `ng build` succeeds
 - [ ] Every checklist line in SR19 recorded `PASS`
 - [ ] Merge to `main`
 
@@ -1269,7 +1300,7 @@ The gap list cannot be enumerated before the audit runs, so this task *writes th
 - [ ] **Step 2:** Update the README sections the renames and the table changes invalidate — `grep -n "^## " README.md` and read only the sections you need.
 - [ ] **Step 3: Walk the full QA checklist** end to end, all four phases, at all four widths. Record it.
 - [ ] **Step 4: Release NG57's block** — replace SR1's deferral note in the migration plan with a line stating this plan completed and NG57 may proceed, naming the gap table as the evidence that nothing is lost by deleting the templates.
-- [ ] **Step 5:** `python scripts/testrun.py full`, `npx vitest run`, `npx ng build` — all green.
+- [ ] **Step 5:** `python scripts/testrun.py full`, `npx ng test`, `npx ng build` — all green.
 - [ ] **Step 6: Commit** `release(ui): 1.2.0 — the SPA refresh`
 - [ ] **Step 7:** Merge to `main`.
 

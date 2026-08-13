@@ -30,7 +30,7 @@ interface RiskSlice {
 
 /** A cluster is a list of correlated tickers. The server ships
  *  `list[list[str]]` but `models.ts` types it `unknown[]`, because the shape
- *  is `_collect_portfolio_state`'s to decide -- see `CockpitStore`'s
+ *  is `_collect_portfolio_state`'s to decide -- see `DashboardStore`'s
  *  `finiteNumber` for the same trade-off. Narrowing happens here so the
  *  template is not asserting a wire format, and anything that is not a list
  *  of strings is dropped rather than rendered as `[object Object]`. */
@@ -43,7 +43,7 @@ function tickerList(value: unknown): string[] | null {
 /**
  * Exposure, portfolio heat against the cap, and the killswitch.
  *
- * Same shape as `CockpitStore` -- read that one first. Two things differ,
+ * Same shape as `DashboardStore` -- read that one first. Two things differ,
  * and both come from this being the only workspace that holds an
  * operational control rather than a readout:
  *

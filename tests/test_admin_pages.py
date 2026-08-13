@@ -40,7 +40,7 @@ def client(monkeypatch):
 # it renders in both modes. `/` itself is covered properly in
 # tests/admin/test_admin_ui_flag.py, which pins the flag in both directions
 # instead of depending on what happens to be on disk.
-PAGES = ["/dashboard", "/performance", "/watchlist", "/settings", "/logs"]
+PAGES = ["/jinja/dashboard", "/performance", "/jinja/watchlist", "/settings", "/logs"]
 
 
 @pytest.mark.parametrize("path", PAGES)
@@ -50,7 +50,7 @@ def test_page_renders(client, path):
 
 
 def test_tokens_and_font_are_linked(client):
-    html = client.get("/dashboard").get_data(as_text=True)
+    html = client.get("/jinja/dashboard").get_data(as_text=True)
     assert "tokens.css" in html and "vendor/inter/inter.css" in html
     assert "googleapis" not in html  # no-CDN constraint
 

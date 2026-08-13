@@ -20,11 +20,17 @@ import { authGuard } from './shell/auth.guard';
  * (NG42); the route shape here is what allows it.
  */
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'cockpit' },
+  { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+  // SR4: the workspace was `/cockpit` until 2026-08-13. The `**` route below
+  // would already send a bare `/cockpit` here, but only by treating it as a
+  // typo — this says it is a rename, and it is the pair to `spa.py` keeping
+  // `cockpit` in WORKSPACES so the server serves index.html for it at all.
+  // Both come out at NG57.
+  { path: 'cockpit', pathMatch: 'full', redirectTo: 'dashboard' },
   {
-    path: 'cockpit',
+    path: 'dashboard',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/cockpit/cockpit').then((m) => m.Cockpit),
+    loadComponent: () => import('./workspaces/dashboard/dashboard').then((m) => m.Dashboard),
   },
   {
     path: 'trades',
@@ -47,16 +53,21 @@ export const routes: Routes = [
       import('./workspaces/analytics/analytics').then((m) => m.Analytics),
   },
   {
-    path: 'universe',
+    path: 'watchlist',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/universe/universe').then((m) => m.Universe),
+    loadComponent: () => import('./workspaces/watchlist/watchlist').then((m) => m.Watchlist),
   },
   {
-    path: 'universe/:symbol',
+    path: 'watchlist/:symbol',
     canMatch: [authGuard],
     loadComponent: () =>
-      import('./workspaces/universe/ticker-detail').then((m) => m.TickerDetail),
+      import('./workspaces/watchlist/ticker-detail').then((m) => m.TickerDetail),
   },
+  // SR5: the workspace was `/universe` until 2026-08-13. The `:symbol` form
+  // is why these are explicit rather than left to the `**` route below —
+  // that would send `/universe/AAPL` to the Dashboard and drop the symbol.
+  { path: 'universe', pathMatch: 'full', redirectTo: 'watchlist' },
+  { path: 'universe/:symbol', redirectTo: 'watchlist/:symbol' },
   {
     path: 'risk',
     canMatch: [authGuard],
@@ -67,8 +78,8 @@ export const routes: Routes = [
     canMatch: [authGuard],
     loadComponent: () => import('./workspaces/system/system').then((m) => m.System),
   },
-  // A typo'd URL lands on the Cockpit rather than a blank outlet. There is
+  // A typo'd URL lands on the Dashboard rather than a blank outlet. There is
   // no 404 view: with six destinations and no external links into the app,
   // a dedicated not-found page would be a page nobody ever means to reach.
-  { path: '**', redirectTo: 'cockpit' },
+  { path: '**', redirectTo: 'dashboard' },
 ];

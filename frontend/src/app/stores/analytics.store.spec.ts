@@ -26,7 +26,7 @@ import { AnalyticsStore, RELOCATED_METRICS } from './analytics.store';
  *
  * Two properties carry most of the weight here and neither is incidental:
  *
- *   1. **The six relocated Cockpit metrics arrive.** Spec v14 Decision 6
+ *   1. **The six relocated Dashboard metrics arrive.** Spec v14 Decision 6
  *      accepted the cost of moving them one click away, not of losing them,
  *      so "all six are present" is asserted rather than assumed.
  *   2. **Tuning progress comes from the `jobs` event, not a timer.** The
@@ -35,7 +35,7 @@ import { AnalyticsStore, RELOCATED_METRICS } from './analytics.store';
  *      event are what break.
  *
  * `EventStream` is faked down to the one method a store uses, matching
- * `cockpit.store.spec.ts`.
+ * `dashboard.store.spec.ts`.
  */
 
 class FakeEventStream {
@@ -210,7 +210,7 @@ describe('AnalyticsStore', () => {
 
   /* -- the six relocated metrics -------------------------------------- */
 
-  it('exposes all six metrics relocated from the Cockpit', () => {
+  it('exposes all six metrics relocated from the Dashboard', () => {
     tick();
     respondPerformance();
 

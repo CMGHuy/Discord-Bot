@@ -11,7 +11,7 @@ are in, and separate packages are what make that obvious.
 
 This module holds only what every endpoint shares — the error shape, the
 collection envelope, timestamp rendering, and query-parameter parsing.
-Endpoints live in sibling modules (`trades.py`, `cockpit.py`, ...) and are
+Endpoints live in sibling modules (`trades.py`, `dashboard.py`, ...) and are
 registered onto `api_v1` below.
 
 Auth is NOT reimplemented here. Endpoint modules import `require_auth_json`
@@ -180,9 +180,9 @@ def register(app) -> None:
     # app.py's bottom, which is exactly that point. Importing them above
     # would drag those modules in at api_v1 import time and re-create the
     # circular-import deadlock app.py documents.
-    from . import (analytics, cockpit, jobs, market, risk,  # noqa: F401
+    from . import (analytics, dashboard, jobs, market, risk,  # noqa: F401
                    session, system, trade_commands, trades,
-                   universe)  # (register routes)
+                   watchlist)  # (register routes)
     # /api/v1/events lives outside this package -- it is one route on top of
     # the watcher and broker, and splitting those across two packages to put
     # the route here would be filing by framework rather than by concern.

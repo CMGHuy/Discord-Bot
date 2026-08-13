@@ -24,7 +24,7 @@ import { RiskStore } from './risk.store';
 
 /* NG49 — exposure, heat and the killswitch.
  *
- * The read half is the same shape as `CockpitStore` and is covered here only
+ * The read half is the same shape as `DashboardStore` and is covered here only
  * where Risk differs from it. What earns its own tests is the command: the
  * killswitch decides whether the bot opens positions at all, and the two
  * states worth failing over are "the screen says engaged when it is not" and

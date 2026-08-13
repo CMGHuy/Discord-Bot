@@ -157,8 +157,8 @@ describe('SessionStore', () => {
     expect(store.isAuthenticated()).toBe(true);
 
     const http = TestBed.inject(HttpClient);
-    http.get('/api/v1/cockpit').subscribe({ error: () => {} });
-    backend.expectOne('/api/v1/cockpit').flush(
+    http.get('/api/v1/dashboard').subscribe({ error: () => {} });
+    backend.expectOne('/api/v1/dashboard').flush(
       { error: { code: 'auth', message: 'Authentication required.' } },
       { status: 401, statusText: 'Unauthorized' },
     );

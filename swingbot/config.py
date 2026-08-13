@@ -507,6 +507,14 @@ FIELDS: list[Field] = [
           help="Last close below this floor skips the ticker for new signals this scan -- filters penny "
                "stocks, whose price action/spreads behave differently from the swing-trade universe this "
                "bot is tuned for."),
+    # SR5 renamed the admin UI's Universe workspace to Watchlist, end to end.
+    # This key and its section are deliberately NOT part of that rename, and
+    # this note exists so nobody "finishes the job" later: *watchlist* is the
+    # UI workspace and the bot's `!watchlist`-managed ticker list; *universe*
+    # survives as the name of the scan-BREADTH setting, which is a different
+    # thing -- note that "watchlist" is one of this field's own values. It is
+    # also a live `.env` key on a deployed server, so renaming it would be a
+    # config migration for no gain.
     Field("SCAN_UNIVERSE", "SCAN_UNIVERSE", "Universe & Scanning", "Scan universe",
           type="select", default="watchlist",
           options=["watchlist", "sp500", "sp500_top150", "etfs", "sp500+etfs"],

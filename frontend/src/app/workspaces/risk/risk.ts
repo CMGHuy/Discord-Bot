@@ -27,8 +27,8 @@ import { Sparkline } from '../../ui/sparkline';
  * the workspace exists, so it sits at the top, above the numbers that justify
  * pulling it.
  *
- * **"Risk used" appears here and on the Cockpit. That is one number in two
- * places, not two features.** The Cockpit's card is the glance; this page is
+ * **"Risk used" appears here and on the Dashboard. That is one number in two
+ * places, not two features.** The Dashboard's card is the glance; this page is
  * where the breakdown behind it lives, and both read `heat.open_pct` -- the
  * sum of the same `trade_risk_pct` the exposure table lists row by row.
  *

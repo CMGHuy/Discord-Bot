@@ -13,7 +13,7 @@ than the rendered <svg>.
 
 Two response bodies are exercised here and the distinction matters:
 
-  * "/dashboard/fragment" -- the polled fragment: session banner, lifecycle
+  * "/jinja/dashboard/fragment" -- the polled fragment: session banner, lifecycle
     strip, stat cards, Open Trades. Re-rendered every few seconds.
   * "/" -- the full page, which contains that fragment inline PLUS the Trade
     History card. History markup is static shell content filled by
@@ -47,7 +47,7 @@ def test_dashboard_renders_only_the_first_page_of_history(client, auth, admin_ap
     """
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 510)
-    r = client.get("/dashboard?mode=all", headers=auth)
+    r = client.get("/jinja/dashboard?mode=all", headers=auth)
     html = r.data.decode("utf-8")
     assert html.count('id="ct-row-') == 25
     assert 'id="ct-total-count">510<' in html     # full total still reported
@@ -62,12 +62,12 @@ def test_history_is_not_part_of_the_polled_fragment(client, auth, admin_app):
     """
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 30)
-    fragment = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    fragment = client.get("/jinja/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
     assert "ct-row-" not in fragment
     assert "closed-trades-table" not in fragment
     assert "ct-filter-ticker" not in fragment
 
-    page = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    page = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     assert "closed-trades-table" in page
 
 
@@ -77,7 +77,7 @@ def test_fragment_carries_no_script_tags(client, auth, admin_app):
     static/dashboard.js precisely so nothing here depends on that."""
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 5)
-    fragment = client.get("/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
+    fragment = client.get("/jinja/dashboard/fragment?mode=all", headers=auth).data.decode("utf-8")
     assert "<script" not in fragment.lower()
 
 
@@ -86,7 +86,7 @@ def test_dashboard_never_advertises_truncated_history(client, auth, admin_app):
     longer any history the table cannot reach."""
     from swingbot import config
     _seed_many_closed_trades(config.DATA_DIR, 510)
-    r = client.get("/dashboard?mode=all", headers=auth)
+    r = client.get("/jinja/dashboard?mode=all", headers=auth)
     assert "Showing latest" not in r.data.decode("utf-8")
 
 
@@ -103,7 +103,7 @@ def test_dashboard_open_trade_renders_pedigree_chip_and_runner_row(client, auth,
     }]
     with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
         json.dump(trades, f)
-    r = client.get("/dashboard/fragment", headers=auth)
+    r = client.get("/jinja/dashboard/fragment", headers=auth)
     html = r.data.decode("utf-8")
     assert "chip-tier-a" in html
     assert "runner" in html
@@ -119,7 +119,7 @@ def test_dashboard_fragment_shows_lifecycle_strip_and_equity_sparkline(client, a
     }
     monkeypatch.setattr("swingbot.admin.dashboard.load_snapshot", lambda max_age_seconds=3600: fake_snapshot)
     monkeypatch.setattr("swingbot.admin.pages.rank_plans", lambda plans: [])
-    r = client.get("/dashboard/fragment", headers=auth)
+    r = client.get("/jinja/dashboard/fragment", headers=auth)
     html = r.data.decode("utf-8")
     assert "lifecycle-strip" in html
     assert "<svg" in html
@@ -159,7 +159,7 @@ def test_closed_runner_row_is_marked_so_pagination_can_skip_it(client, auth, adm
     must be identifiable as a non-trade row and tied to its parent trade."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     tbody = _closed_tbody(html)
 
     leg_rows = [row for row in tbody.split("<tr")[1:] if "ct-leg-row" in row.split(">", 1)[0]]
@@ -173,7 +173,7 @@ def test_every_paginated_closed_row_has_a_row_number(client, auth, admin_app):
     2 trades -> 2 .row-num spans, and exactly 1 extra (excluded) leg row."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     tbody = _closed_tbody(html)
 
     total_rows = tbody.count("<tr")
@@ -198,7 +198,7 @@ def test_open_runner_row_is_marked_so_pagination_can_skip_it(client, auth, admin
     }]
     with open(os.path.join(config.DATA_DIR, "trades.json"), "w") as f:
         json.dump(trades, f)
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     tbody = html.split('id="trades-table"', 1)[1].split("<tbody>", 1)[1].split("</tbody>", 1)[0]
 
     rows = tbody.split("<tr")[1:]
@@ -212,7 +212,7 @@ def test_history_defaults_to_compact_density(client, auth, admin_app):
     """A browser with no stored preference must get the compact table."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     assert 'data-density-for="ct"' in html
     wrapper = html.split('data-density-for="ct"', 1)[0].rsplit("<div", 1)[1]
     assert "density-compact" in wrapper
@@ -223,7 +223,7 @@ def test_history_full_only_columns_are_marked(client, auth, admin_app):
     they will not hide together."""
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
     head, body = table.split("<tbody>", 1)
     for col in ("strategy", "horizon", "dir", "conf", "entry", "exit", "pnlpct", "opened"):
@@ -238,7 +238,7 @@ def test_history_still_renders_every_column_server_side(client, auth, admin_app)
     import re
     from swingbot import config
     _seed_closed_pair_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     table = html.split('id="closed-trades-table"', 1)[1].split("</table>", 1)[0]
     # NB: count "<th " / "<th>" -- a bare "<th" also matches "<thead>".
     assert len(re.findall(r"<th[ >]", table)) == 16, "all 16 columns must still render"
@@ -263,7 +263,7 @@ def test_open_trades_cell_count_matches_header(client, auth, admin_app):
     import re
     from swingbot import config
     _seed_open_trade_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     table = html.split('id="trades-table"', 1)[1].split("</table>", 1)[0]
     head, body = table.split("<tbody>", 1)
     # NB: count "<th " / "<th>" -- a bare "<th" also matches "<thead>".
@@ -276,7 +276,7 @@ def test_open_trades_cell_count_matches_header(client, auth, admin_app):
 def test_open_trades_leg_row_colspan_covers_every_column(client, auth, admin_app):
     from swingbot import config
     _seed_open_trade_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     table = html.split('id="trades-table"', 1)[1].split("</table>", 1)[0]
     leg = [r for r in table.split("<tr")[1:] if "ot-leg-row" in r.split(">", 1)[0]][0]
     assert 'colspan="17"' in leg, "2 empty td + colspan 17 == 19 columns"
@@ -285,7 +285,7 @@ def test_open_trades_leg_row_colspan_covers_every_column(client, auth, admin_app
 def test_open_trades_defaults_to_compact_density(client, auth, admin_app):
     from swingbot import config
     _seed_open_trade_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     assert 'data-density-for="ot"' in html
     wrapper = html.split('data-density-for="ot"', 1)[0].rsplit("<div", 1)[1]
     assert "density-compact" in wrapper
@@ -294,7 +294,7 @@ def test_open_trades_defaults_to_compact_density(client, auth, admin_app):
 def test_open_trades_full_only_columns_are_marked(client, auth, admin_app):
     from swingbot import config
     _seed_open_trade_with_runner(config.DATA_DIR)
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     table = html.split('id="trades-table"', 1)[1].split("</table>", 1)[0]
     head, body = table.split("<tbody>", 1)
     for col in ("strategy", "horizon", "direction", "confidence", "score",
@@ -329,7 +329,7 @@ def _badged_trade(tid, status, badge, **extra):
 def test_open_trades_table_does_not_show_the_validation_badge(client, auth, admin_app):
     from swingbot import config
     _seed_trades(config.DATA_DIR, [_badged_trade("t1", "open", "VALIDATED")])
-    html = client.get("/dashboard/fragment", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard/fragment", headers=auth).data.decode("utf-8")
     assert "VALIDATED" not in html
     assert "chip-tier-a" in html
 
@@ -338,7 +338,7 @@ def test_closed_trades_table_does_not_show_the_validation_badge(client, auth, ad
     from swingbot import config
     _seed_trades(config.DATA_DIR, [_badged_trade(
         "t1", "win", "WEAK", exit_price=110.0, closed_at="2026-07-05T00:00:00+00:00")])
-    html = client.get("/dashboard?mode=all", headers=auth).data.decode("utf-8")
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).data.decode("utf-8")
     assert "WEAK" not in html
     assert "chip-tier-a" in html
 

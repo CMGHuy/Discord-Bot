@@ -12,13 +12,13 @@ export type EventName =
   | 'scan'
   | 'bot'
   | 'risk'
-  | 'universe'
+  | 'watchlist'
   | 'jobs'
   | 'settings';
 
 export const EVENT_NAMES: readonly EventName[] = [
   'trades', 'account', 'analytics', 'journal', 'scan',
-  'bot', 'risk', 'universe', 'jobs', 'settings',
+  'bot', 'risk', 'watchlist', 'jobs', 'settings',
 ] as const;
 
 export type StreamState = 'connecting' | 'live' | 'degraded';

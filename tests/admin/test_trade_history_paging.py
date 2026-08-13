@@ -262,31 +262,31 @@ def _row_ids(html):
 
 
 def test_dashboard_today_mode_renders_only_todays_history(client, auth, seeded):
-    html = client.get("/dashboard?mode=today", headers=auth).get_data(as_text=True)
+    html = client.get("/jinja/dashboard?mode=today", headers=auth).get_data(as_text=True)
     ids = _row_ids(html)
     assert set(ids) == {"today1", "today2"}, ids
 
 
 def test_dashboard_active_mode_renders_only_todays_history(client, auth, seeded):
-    assert set(_row_ids(client.get("/dashboard?mode=active", headers=auth).get_data(as_text=True))) \
+    assert set(_row_ids(client.get("/jinja/dashboard?mode=active", headers=auth).get_data(as_text=True))) \
         == {"today1", "today2"}
 
 
 def test_dashboard_all_mode_renders_first_page_only(client, auth, seeded):
-    ids = _row_ids(client.get("/dashboard?mode=all", headers=auth).get_data(as_text=True))
+    ids = _row_ids(client.get("/jinja/dashboard?mode=all", headers=auth).get_data(as_text=True))
     assert len(ids) == 25, len(ids)          # first page, not all 62
     assert "today1" in ids                    # newest-closed first
 
 
 def test_dashboard_no_longer_advertises_a_truncated_history(client, auth, seeded):
-    html = client.get("/dashboard?mode=all", headers=auth).get_data(as_text=True)
+    html = client.get("/jinja/dashboard?mode=all", headers=auth).get_data(as_text=True)
     assert "Showing latest" not in html
 
 
 def test_filter_dropdown_options_still_come_from_full_history(client, auth, seeded):
     """Regression guard: options must reflect every ticker in the log, not
     just the ones on the current page. AAPL only exists in older trades."""
-    html = client.get("/dashboard?mode=today", headers=auth).get_data(as_text=True)
+    html = client.get("/jinja/dashboard?mode=today", headers=auth).get_data(as_text=True)
     import re
     sel = re.search(r'id="ct-filter-ticker".*?</select>', html, re.S).group(0)
     assert "AAPL" in sel and "NVDA" in sel

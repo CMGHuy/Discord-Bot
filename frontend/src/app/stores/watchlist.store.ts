@@ -15,7 +15,7 @@ import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
 import { Ticker, TickerSuggestion } from '../api/models';
 
-interface UniverseSlice {
+interface WatchlistSlice {
   tickers: Ticker[];
   loaded: boolean;
   loading: boolean;
@@ -66,8 +66,8 @@ export function parseSymbols(text: string): string[] {
  * out-of-order failure that makes a suggestion list flicker between two
  * queries.
  */
-export const UniverseStore = signalStore(
-  withState<UniverseSlice>({
+export const WatchlistStore = signalStore(
+  withState<WatchlistSlice>({
     tickers: [],
     loaded: false,
     loading: false,
@@ -149,7 +149,7 @@ export const UniverseStore = signalStore(
               addResult: parts.join(' · ') || 'Nothing to add.',
               suggestions: [],
             });
-            // The server emits `universe`, but only outside tests and only
+            // The server emits `watchlist`, but only outside tests and only
             // once the watcher notices. Reloading here means the row appears
             // with the click rather than a poll later.
             load();
@@ -198,9 +198,9 @@ export const UniverseStore = signalStore(
   }),
   withHooks({
     onInit(store, events = inject(EventStream)) {
-      const universe = events.changes('universe');
+      const watchlist = events.changes('watchlist');
       effect(() => {
-        universe();
+        watchlist();
         store.load();
       });
     },

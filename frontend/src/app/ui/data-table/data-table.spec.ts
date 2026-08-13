@@ -197,7 +197,7 @@ describe('DataTable', () => {
   /* -- property 4: pagination is supplied as a unit, or not at all -------- */
 
   it('shows no pager when the data is not paginated', () => {
-    // Risk, Universe and Analytics/Strategies all return plain lists. Under
+    // Risk, Watchlist and Analytics/Strategies all return plain lists. Under
     // the original contract each would have passed total = rows.length, which
     // is the bug the `total` rule exists to prevent.
     expect(host.pagination()).toBeNull();

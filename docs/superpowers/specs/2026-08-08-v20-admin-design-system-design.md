@@ -80,6 +80,12 @@ the killswitch — an operational control, not a readout.
 
 ## Decision 2 — Density and hierarchy
 
+> **Superseded in part by v18 (2026-08-13).** The compact/full toggle, the
+> drag-to-reorder columns and the seven-column default all come back — the
+> committed default turned out to be seven columns nobody could extend into the
+> view they actually wanted. Row expansion survives with a narrower job. The
+> Cockpit header's two tiers below are untouched. See spec v18 Decision 4.
+
 **The compact/full toggle is removed. The drag-to-reorder columns are removed.**
 Both are replaced by a committed default plus targeted escape hatches.
 
@@ -124,6 +130,15 @@ Three constraints keep this from becoming the old toggle:
 3. The choice persists per user.
 
 ## Decision 3 — Visual language
+
+> **Superseded in part by v18 (2026-08-13).** The three-rule colour system
+> (`green/red = money only · amber = caution · blue = interactive only ·
+> everything else greyscale`) becomes *one colour, one **valence***, and the
+> palette moves off near-black onto an indigo-charcoal ramp. The motion rule
+> ("120ms on state change, nothing on entrance") becomes a three-step scale;
+> the specific thing it ruled out — a card flash on every push event — stays
+> ruled out. The type scale, the density and the monospace numerics below are
+> untouched. See spec v18 Decisions 2 and 3.
 
 **Terminal:** near-black, monospace numerics, minimal chrome, colour reserved for
 signal. Chosen over evolving the current palette (too little change for a stated

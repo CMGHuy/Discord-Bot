@@ -45,7 +45,7 @@ interface TradeDetailSlice {
 /**
  * One trade, for the detail view — `GET /api/v1/trades/:id`.
  *
- * Same shape as `CockpitStore` and `TradesStore`: one server response in,
+ * Same shape as `DashboardStore` and `TradesStore`: one server response in,
  * everything derived, and an effect that turns events into refetches. The
  * `id` lives in state rather than being passed to `load()` so that setting it
  * IS the load, exactly as setting the query is the load in `TradesStore` —

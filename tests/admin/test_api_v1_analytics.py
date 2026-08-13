@@ -3,7 +3,7 @@
 Backs the four Analytics tabs (spec v14 Decision 6). The load-bearing
 assertion is `test_performance_carries_the_six_relocated_metrics`: spec 3
 moved wins, losses, avg realised P&L, best trade, worst trade and avg
-holding period off the Cockpit header on the promise that they would be
+holding period off the Dashboard header on the promise that they would be
 one click away, and if they never actually arrive here that trade was a
 straight loss.
 """

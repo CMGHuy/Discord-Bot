@@ -9,7 +9,7 @@ import {
 import { Router, RouterLink } from '@angular/router';
 
 import { TradeRow } from '../../api/models';
-import { CockpitStore } from '../../stores/cockpit.store';
+import { DashboardStore } from '../../stores/dashboard.store';
 import { TradesStore } from '../../stores/trades.store';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
@@ -22,7 +22,7 @@ import { Sparkline } from '../../ui/sparkline';
 /**
  * How many open positions the summary table shows.
  *
- * A cap, not a page. The Cockpit answers "what is happening right now" at a
+ * A cap, not a page. The Dashboard answers "what is happening right now" at a
  * glance, and a glance does not scroll; the full list is one click away in
  * Trades, which is where paging, filtering and sorting belong. This is also
  * why no pager is passed to the table -- a pager here would invite paging
@@ -31,7 +31,7 @@ import { Sparkline } from '../../ui/sparkline';
 export const OPEN_POSITIONS_CAP = 6;
 
 /**
- * The Cockpit — spec v14 Decision 5's two-tier header plus a capped view of
+ * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
  * what is currently open.
  *
  * Three large cards and six compact chips, and the split is the point:
@@ -57,7 +57,7 @@ export const OPEN_POSITIONS_CAP = 6;
  * effect owns both the first load and every refetch.
  */
 @Component({
-  selector: 'sb-cockpit',
+  selector: 'sb-dashboard',
   imports: [RouterLink, MetricCard, MetricChip, Sparkline, Panel, DataTable],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the stores are created on entry and
@@ -65,10 +65,10 @@ export const OPEN_POSITIONS_CAP = 6;
   // are looking at another one. `TradesStore` is a second, independent
   // instance -- the Trades workspace's own copy is unaffected by the query
   // this screen sets on its own.
-  providers: [CockpitStore, TradesStore],
+  providers: [DashboardStore, TradesStore],
   template: `
     <header class="head">
-      <h1>Cockpit</h1>
+      <h1>Dashboard</h1>
       @if (store.error(); as message) {
         <!-- Beside the numbers, not instead of them: the previous values
              are still the best information available, and replacing nine
@@ -255,9 +255,9 @@ export const OPEN_POSITIONS_CAP = 6;
     }
   `,
 })
-export class Cockpit {
+export class Dashboard {
   private readonly router = inject(Router);
-  protected readonly store = inject(CockpitStore);
+  protected readonly store = inject(DashboardStore);
   /** The open-positions table's data. Same component, same store shape and
    *  the same `trades` event as the Trades workspace -- what differs is only
    *  the query, which is set once below and never changes. */
@@ -287,13 +287,13 @@ export class Cockpit {
   ]);
 
   /** Belt and braces over the server's `per_page`: if the API ever ignores or
-   *  raises the cap, the Cockpit still shows a glanceable list rather than
+   *  raises the cap, the Dashboard still shows a glanceable list rather than
    *  silently growing into a second Trades page. */
   protected readonly openPositions = computed(() =>
     this.trades.rows().slice(0, OPEN_POSITIONS_CAP),
   );
 
-  /** Counts come from the Cockpit endpoint rather than the table, because the
+  /** Counts come from the Dashboard endpoint rather than the table, because the
    *  table is capped: "All 23 open" is the truth the link leads to, where
    *  `rows.length` would say 6 and be wrong in exactly the case the link
    *  matters most. */

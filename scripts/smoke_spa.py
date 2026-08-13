@@ -48,11 +48,22 @@ _ASSET_RE = re.compile(
     re.IGNORECASE,
 )
 
-#: Workspaces, from spa.py's WORKSPACES. `/risk` is absent on purpose: until
-#: NG57 deletes the Jinja routes, a hard GET of it lands on the Jinja page by
-#: design (see spa.py:register). Asserting it serves the SPA would fail on a
-#: correct deployment.
-WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system")
+#: Workspaces, from spa.py's WORKSPACES. Keep the two lists in step: this one
+#: went stale the moment SR4/SR5 renamed Cockpit to Dashboard and Universe to
+#: Watchlist, and because the old names still serve (as redirect targets) the
+#: check kept passing while testing neither new route. A verification that
+#: silently stops covering the thing that changed is worse than none.
+#:
+#: `/risk` is absent on purpose: until NG57 deletes the Jinja routes, a hard
+#: GET of it lands on the Jinja page by design (see spa.py:register).
+#: Asserting it serves the SPA would fail on a correct deployment.
+WORKSPACES = ("dashboard", "trades", "analytics", "watchlist", "system")
+
+#: The pre-SR4/SR5 URLs, kept server-side so a bookmark or an open tab does
+#: not 404 before Angular loads and can redirect it. Checked because losing
+#: them breaks quietly -- the person affected is the one who bookmarked a page
+#: months ago, and they see a 404 with no way to know it used to work.
+LEGACY_WORKSPACES = ("cockpit", "universe")
 
 #: Assets that are allowed to be missing. Angular emits a favicon link whether
 #: or not one was provided, and a missing favicon is not a broken deployment.
@@ -135,10 +146,20 @@ class Smoke:
         status, _, headers = self.get("/", follow=False)
         location = headers.get("Location", "")
         if expect_spa:
+            # Assert the PROPERTY, not the destination: the front door
+            # redirects, and wherever it points serves the app. Hardcoding
+            # "/cockpit" here went stale the day SR4 renamed it to
+            # "/dashboard" -- the app was right and the check was wrong, which
+            # is the failure mode that teaches people to ignore the check.
+            redirected = status in (301, 302, 303, 307, 308)
+            if not self.check(redirected, "GET / redirects (ADMIN_UI=spa)",
+                              f"HTTP {status} Location={location!r}"):
+                return
+            target_status, target_body, _ = self.get(location)
             self.check(
-                status in (301, 302, 303, 307, 308) and "/cockpit" in location,
-                "GET / redirects to /cockpit (ADMIN_UI=spa)",
-                f"HTTP {status} Location={location!r}",
+                target_status == 200 and b"<sb-root>" in target_body,
+                f"GET / lands on {location} and it serves the app",
+                f"HTTP {target_status}",
             )
         else:
             self.check(status == 200, "GET / renders (ADMIN_UI=jinja)", f"HTTP {status}")
@@ -187,6 +208,14 @@ class Smoke:
                 status == 200 and b"<sb-root>" in body,
                 f"GET /{workspace} serves the SPA shell",
                 f"HTTP {status}",
+            )
+        for workspace in LEGACY_WORKSPACES:
+            status, body, _ = self.get(f"/{workspace}")
+            self.check(
+                status == 200 and b"<sb-root>" in body,
+                f"GET /{workspace} still resolves (old bookmarks)",
+                f"HTTP {status} -- dropping it 404s a bookmark before Angular "
+                f"can redirect it",
             )
 
     # -- runner -----------------------------------------------------------

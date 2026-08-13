@@ -1,4 +1,11 @@
-"""GET /api/v1/cockpit — the nine metrics of spec 3's header.
+"""GET /api/v1/dashboard — the nine metrics of spec 3's header.
+
+**Not `swingbot/admin/dashboard.py`.** That is the Jinja UI's view-model
+builder module, and this file imports it as `dash`. The two have shared a name
+since SR4 renamed this one from `cockpit.py` (plan v21, spec v18 Decision 7);
+they are different packages and there is no import ambiguity, but a reader
+grepping for "dashboard.py" will find both. The Jinja one dies at NG57.
+
 
 Fourteen equal-weight stat cards became three large cards and six compact
 chips. This endpoint returns exactly those nine:
@@ -67,7 +74,7 @@ def _risk_used() -> tuple[float | None, float | None]:
     without its cap says nothing about whether you are near the limit.
 
     Degrades to (None, cap) rather than failing: every other collector on
-    the Risk page already treats heat as best-effort, and the Cockpit is
+    the Risk page already treats heat as best-effort, and the Dashboard is
     the landing page.
     """
     cap = float(getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0))
@@ -79,9 +86,9 @@ def _risk_used() -> tuple[float | None, float | None]:
         return None, cap
 
 
-@api_v1.route("/cockpit", methods=["GET"])
+@api_v1.route("/dashboard", methods=["GET"])
 @require_auth
-def cockpit():
+def dashboard():
     tl = TradeLog()
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
     open_trades = [t for t in all_raw if t.get("status") == "open"]

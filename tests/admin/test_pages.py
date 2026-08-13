@@ -26,7 +26,7 @@ def test_index_requires_auth(client):
 def test_index_renders(client, auth):
     # /dashboard, not /: NG53 put what "/" serves behind the ADMIN_UI flag,
     # and this asserts the Jinja page renders, not which UI is default.
-    r = client.get("/dashboard", headers=auth)
+    r = client.get("/jinja/dashboard", headers=auth)
     assert r.status_code == 200 and b"Dashboard" in r.data
 
 
@@ -50,7 +50,7 @@ def test_new_pages_redirect_to_login_unauthed(client, path):
 
 
 def test_new_nav_items_in_sidebar(client, auth):
-    r = client.get("/dashboard", headers=auth)
+    r = client.get("/jinja/dashboard", headers=auth)
     html = r.data.decode("utf-8")
     for label in ("Plans", "Strategies", "Calibration", "Journal", "Tuning"):
         assert label in html

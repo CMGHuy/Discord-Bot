@@ -44,7 +44,7 @@ describe('http interceptors', () => {
     body: string | Object,
     status: number,
     statusText = 'Error',
-    url = '/api/v1/cockpit',
+    url = '/api/v1/dashboard',
   ) =>
     new Promise<ApiError>((resolve) => {
       http.get(url).subscribe({ error: (e: ApiError) => resolve(e) });
@@ -54,8 +54,8 @@ describe('http interceptors', () => {
   /* -- auth ------------------------------------------------------------ */
 
   it('sends the session cookie', () => {
-    http.get('/api/v1/cockpit').subscribe();
-    expect(backend.expectOne('/api/v1/cockpit').request.withCredentials).toBe(true);
+    http.get('/api/v1/dashboard').subscribe();
+    expect(backend.expectOne('/api/v1/dashboard').request.withCredentials).toBe(true);
   });
 
   it('reports a 401 to the unauthorized seam', async () => {
@@ -115,9 +115,9 @@ describe('http interceptors', () => {
 
   it('calls an unreachable server unavailable, with status 0', async () => {
     const error = await new Promise<ApiError>((resolve) => {
-      http.get('/api/v1/cockpit').subscribe({ error: (e: ApiError) => resolve(e) });
+      http.get('/api/v1/dashboard').subscribe({ error: (e: ApiError) => resolve(e) });
       backend
-        .expectOne('/api/v1/cockpit')
+        .expectOne('/api/v1/dashboard')
         .error(new ProgressEvent('error'), { status: 0, statusText: '' });
     });
 
@@ -138,10 +138,10 @@ describe('http interceptors', () => {
     const loading = TestBed.inject(LoadingService);
     expect(loading.isLoading()).toBe(false);
 
-    http.get('/api/v1/cockpit').subscribe();
+    http.get('/api/v1/dashboard').subscribe();
     expect(loading.inFlight()).toBe(1);
 
-    backend.expectOne('/api/v1/cockpit').flush({});
+    backend.expectOne('/api/v1/dashboard').flush({});
     expect(loading.inFlight()).toBe(0);
     expect(loading.isLoading()).toBe(false);
   });
@@ -149,12 +149,12 @@ describe('http interceptors', () => {
   it('counts overlapping requests', () => {
     const loading = TestBed.inject(LoadingService);
 
-    http.get('/api/v1/cockpit').subscribe();
+    http.get('/api/v1/dashboard').subscribe();
     http.get('/api/v1/risk').subscribe();
     expect(loading.inFlight()).toBe(2);
 
     // A boolean flag would clear here, while one request is still open.
-    backend.expectOne('/api/v1/cockpit').flush({});
+    backend.expectOne('/api/v1/dashboard').flush({});
     expect(loading.isLoading()).toBe(true);
 
     backend.expectOne('/api/v1/risk').flush({});
@@ -186,12 +186,12 @@ describe('http interceptors', () => {
     loading.finished();
     loading.finished();
 
-    http.get('/api/v1/cockpit').subscribe();
+    http.get('/api/v1/dashboard').subscribe();
 
     // Without the clamp the counter would be -1 here, and isLoading() would
     // stay false through this request and the next one.
     expect(loading.isLoading()).toBe(true);
-    backend.expectOne('/api/v1/cockpit').flush({});
+    backend.expectOne('/api/v1/dashboard').flush({});
   });
 });
 
@@ -216,8 +216,8 @@ describe('ApiClient', () => {
   it('addresses the v1 namespace with relative URLs', () => {
     // Relative so the same bundle works behind ng serve's proxy, behind
     // Flask, and behind any reverse proxy in front of either.
-    api.cockpit().subscribe();
-    expect(backend.expectOne('/api/v1/cockpit').request.method).toBe('GET');
+    api.dashboard().subscribe();
+    expect(backend.expectOne('/api/v1/dashboard').request.method).toBe('GET');
   });
 
   it('drops empty query parameters instead of sending them', () => {

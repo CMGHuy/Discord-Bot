@@ -11,7 +11,7 @@
   gap: var(--space-14);
   width: 100%;
   max-width: 280px;
-  padding: var(--space-28);
+  padding: var(--space-20);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);

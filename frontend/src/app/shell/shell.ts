@@ -23,7 +23,7 @@ interface NavEntry {
  * **Scan and bot status live here and nowhere else.** They were on the old
  * Dashboard as well as the header, which meant two renderings of one fact
  * that could disagree; the design system moves them to the shell precisely
- * so a workspace cannot own a second copy. Do not add them to Cockpit.
+ * so a workspace cannot own a second copy. Do not add them to Dashboard.
  */
 @Component({
   selector: 'sb-shell',
@@ -42,10 +42,10 @@ export class Shell {
   /** The six workspaces, in the IA's order: what is true now, then the
    *  entities, then the analysis, then the two administrative ones. */
   protected readonly nav: NavEntry[] = [
-    { path: '/cockpit', label: 'Cockpit' },
+    { path: '/dashboard', label: 'Dashboard' },
     { path: '/trades', label: 'Trades' },
     { path: '/analytics', label: 'Analytics' },
-    { path: '/universe', label: 'Universe' },
+    { path: '/watchlist', label: 'Watchlist' },
     { path: '/risk', label: 'Risk' },
     { path: '/system', label: 'System' },
   ];

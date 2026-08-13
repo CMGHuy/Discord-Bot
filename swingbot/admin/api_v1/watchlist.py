@@ -1,6 +1,6 @@
-"""GET/POST/DELETE /api/v1/universe/* — the watchlist.
+"""GET/POST/DELETE /api/v1/watchlist/* — the watchlist.
 
-Spec 3's Universe workspace. Spec v11 Decision 4 collapses the Jinja UI's
+Spec 3's Watchlist workspace. Spec v11 Decision 4 collapses the Jinja UI's
 separate `/watchlist/add` and `/watchlist/bulk_add` into ONE endpoint whose
 body is always a list: those two exist only because an HTML form cannot
 post an array, which stops being a constraint the moment the client is JSON.
@@ -71,7 +71,7 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
     return names
 
 
-@api_v1.route("/universe/tickers", methods=["GET"])
+@api_v1.route("/watchlist/tickers", methods=["GET"])
 @require_auth
 def list_tickers():
     from swingbot.core.performance import TradeLog
@@ -93,7 +93,7 @@ def list_tickers():
     ]})
 
 
-@api_v1.route("/universe/tickers", methods=["POST"])
+@api_v1.route("/watchlist/tickers", methods=["POST"])
 @require_auth
 def add_tickers():
     """One endpoint for single and bulk add: the body is always a list.
@@ -137,7 +137,7 @@ def add_tickers():
     })
 
 
-@api_v1.route("/universe/tickers/<symbol>", methods=["DELETE"])
+@api_v1.route("/watchlist/tickers/<symbol>", methods=["DELETE"])
 @require_auth
 def remove_ticker_route(symbol: str):
     from swingbot.core.watchlist import load_watchlist, remove_ticker
@@ -150,7 +150,7 @@ def remove_ticker_route(symbol: str):
     return jsonify({"removed": symbol, "total": len(remaining)})
 
 
-@api_v1.route("/universe/suggest", methods=["GET"])
+@api_v1.route("/watchlist/suggest", methods=["GET"])
 @require_auth
 def suggest():
     from swingbot.core.ticker_directory import search_tickers

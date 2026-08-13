@@ -364,14 +364,19 @@ def index():
         # than serving index.html here, so the URL in the address bar is one
         # the SPA's router actually owns; landing on "/" and having the
         # router rewrite it is the version that breaks the back button.
-        # Endpoint is bare `spa_cockpit`: spa.register() adds the workspace
+        # Endpoint is bare `spa_dashboard`: spa.register() adds the workspace
         # rules to the app directly, not to the blueprint, so there is no
         # `spa.` prefix on this one.
-        return redirect(url_for("spa_cockpit"))
+        #
+        # This endpoint only exists because SR4 moved the Jinja dashboard to
+        # `/jinja/dashboard`. While Jinja owned `/dashboard`, spa.register()
+        # would have skipped the SPA's rule (see its docstring) and this
+        # url_for would raise BuildError on the default UI's front door.
+        return redirect(url_for("spa_dashboard"))
     return _dashboard_page()
 
 
-@app.route("/dashboard", methods=["GET"])
+@app.route("/jinja/dashboard", methods=["GET"])
 @require_auth
 def dashboard_page():
     """The Jinja dashboard's own URL, reachable in either mode.
@@ -379,6 +384,21 @@ def dashboard_page():
     Added by NG53 so that turning the SPA on does not make one Jinja page
     unreachable while the other eleven stay up — the acceptance gate walks
     all twelve, and a rollback that needs a redeploy is not a rollback.
+
+    **Moved from `/dashboard` to `/jinja/dashboard` by SR4** (plan v21), which
+    renamed the SPA's Cockpit workspace to Dashboard and therefore needed
+    `/dashboard` for it. The alternative was to let the SPA's rule be skipped
+    the way `/risk` is (see `spa.register`), but that fails differently here:
+    a skipped `/dashboard` would serve this Jinja page on a hard reload *and*
+    leave `url_for("spa_dashboard")` unbuildable, which is what `/` redirects
+    to in SPA mode. So the newer UI takes the clean URL and this one steps
+    aside rather than the flag deciding who owns the path — the latter would
+    have left this page with no URL at all while the SPA is on, which is the
+    precise thing NG53 created this route to prevent.
+
+    The endpoint name is deliberately unchanged, so every `url_for`
+    ("dashboard_page") in the templates keeps resolving. This route dies with
+    the rest of Jinja at NG57; `/watchlist` moved the same way in SR5.
     """
     return _dashboard_page()
 
@@ -414,7 +434,15 @@ def _dashboard_page():
     )
 
 
-@app.route("/dashboard/fragment", methods=["GET"])
+# Moved with its page by SR4. Leaving it at /dashboard/fragment would have
+# split ownership of the /dashboard/* space between the two UIs: spa.py
+# registers /dashboard/<path:_rest>, which does not collide as a rule string
+# and so registers, and then loses to this narrower static rule on this one
+# path only. That works, but "who serves /dashboard/x" would depend on
+# whether x happens to be the word "fragment". The URL is built by url_for
+# and handed to dashboard.js as BOOT.fragmentUrl, so nothing client-side
+# hardcodes it.
+@app.route("/jinja/dashboard/fragment", methods=["GET"])
 @require_auth
 def dashboard_fragment():
     """
@@ -928,9 +956,25 @@ def export_trades_csv():
 # ---------------------------------------------------------------------------
 # Routes -- Watchlist
 # ---------------------------------------------------------------------------
-@app.route("/watchlist", methods=["GET"])
+@app.route("/jinja/watchlist", methods=["GET"])
 @require_auth
 def watchlist_page():
+    """The Jinja watchlist page.
+
+    **Moved from `/watchlist` by SR5**, for the same reason and in the same
+    way as the dashboard in SR4: the SPA's Universe workspace was renamed to
+    Watchlist and needs the clean URL, and `spa.register()` would otherwise
+    skip its rule and let this page answer a hard reload of `/watchlist`.
+
+    Its four sibling routes (`suggest`, `add`, `bulk_add`, `remove`) moved
+    with it. They had to: `spa.py` registers `/watchlist/<path:_rest>`, which
+    would have competed with them for the same space, and a POST target that
+    sometimes resolves to an SPA shell is a worse failure than a moved URL.
+    Endpoint names are unchanged, so `url_for` in the templates still
+    resolves and no form action is hardcoded.
+
+    All five die with the rest of Jinja at NG57.
+    """
     tickers = load_watchlist()
     # Build per-ticker trade stats -- one read of trades.json (get_trades()
     # re-reads the file from disk every call, see TradeLog.refresh()) instead
@@ -965,7 +1009,7 @@ def watchlist_page():
     )
 
 
-@app.route("/watchlist/suggest", methods=["GET"])
+@app.route("/jinja/watchlist/suggest", methods=["GET"])
 @require_auth
 def watchlist_suggest():
     """
@@ -978,7 +1022,7 @@ def watchlist_suggest():
     return Response(json.dumps(search_tickers(q)), mimetype="application/json")
 
 
-@app.route("/watchlist/add", methods=["POST"])
+@app.route("/jinja/watchlist/add", methods=["POST"])
 @require_auth
 def watchlist_add():
     ticker = request.form.get("ticker", "").strip().upper()
@@ -993,7 +1037,7 @@ def watchlist_add():
     return redirect(url_for("watchlist_page", msg=f"{ticker} is already in the watchlist.", ok=1))
 
 
-@app.route("/watchlist/bulk_add", methods=["POST"])
+@app.route("/jinja/watchlist/bulk_add", methods=["POST"])
 @require_auth
 def watchlist_bulk_add():
     """
@@ -1041,7 +1085,7 @@ def watchlist_bulk_add():
     return redirect(url_for("watchlist_page", msg=msg, ok=1 if not invalid else 0))
 
 
-@app.route("/watchlist/remove", methods=["POST"])
+@app.route("/jinja/watchlist/remove", methods=["POST"])
 @require_auth
 def watchlist_remove():
     ticker = request.form.get("ticker", "").strip().upper()
@@ -1238,9 +1282,9 @@ app.register_blueprint(_pages.pages)
 # imports require_auth_json from api.py, so that module must already exist.
 from . import api_v1 as _api_v1  # noqa: E402
 _api_v1.register(app)
-# The SPA's own routes -- an allow-list of six workspace prefixes plus its
-# asset directory. Registered last so a workspace name can never shadow an
-# API route; /cockpit and /api/v1/cockpit are different rules, but the
+# The SPA's own routes -- an allow-list of workspace prefixes plus its asset
+# directory. Registered last so a workspace name can never shadow an API
+# route; /dashboard and /api/v1/dashboard are different rules, but the
 # ordering makes that a property of this file rather than of Werkzeug's
 # matcher.
 from . import spa as _spa  # noqa: E402

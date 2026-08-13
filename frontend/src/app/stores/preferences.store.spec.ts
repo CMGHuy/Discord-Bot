@@ -102,7 +102,7 @@ describe('PreferencesStore', () => {
   });
 
   it('keeps other tables when one changes', () => {
-    loadWith({ tables: { trades: ['a'], universe: ['symbol'] } });
+    loadWith({ tables: { trades: ['a'], watchlist: ['symbol'] } });
 
     store.setColumns('trades', ['b']);
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
@@ -110,7 +110,7 @@ describe('PreferencesStore', () => {
     const request = backend.expectOne(ENDPOINT);
     expect(request.request.body.preferences.tables).toEqual({
       trades: ['b'],
-      universe: ['symbol'],
+      watchlist: ['symbol'],
     });
     request.flush({ preferences: request.request.body.preferences });
   });

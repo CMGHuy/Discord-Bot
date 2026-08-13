@@ -35,24 +35,24 @@ function configure(authenticated: boolean) {
 describe('routing, authenticated', () => {
   beforeEach(() => configure(true));
 
-  it('sends / to the cockpit', async () => {
+  it('sends / to the dashboard', async () => {
     const harness = await RouterTestingHarness.create('/');
-    expect(TestBed.inject(Router).url).toBe('/cockpit');
-    expect(harness.routeNativeElement?.textContent).toContain('Cockpit');
+    expect(TestBed.inject(Router).url).toBe('/dashboard');
+    expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
   });
 
-  it('sends an unknown path to the cockpit', async () => {
+  it('sends an unknown path to the dashboard', async () => {
     // Six destinations and no external links in: a dedicated 404 view would
     // be a page nobody ever means to reach.
     await RouterTestingHarness.create('/does-not-exist');
-    expect(TestBed.inject(Router).url).toBe('/cockpit');
+    expect(TestBed.inject(Router).url).toBe('/dashboard');
   });
 
   it.each([
-    ['/cockpit', 'Cockpit'],
+    ['/dashboard', 'Dashboard'],
     ['/trades', 'Trades'],
     ['/analytics', 'Analytics'],
-    ['/universe', 'Universe'],
+    ['/watchlist', 'Watchlist'],
     ['/risk', 'Risk'],
     ['/system', 'System'],
   ])('mounts %s', async (path, heading) => {
@@ -70,7 +70,7 @@ describe('routing, authenticated', () => {
   });
 
   it('does not let the list route shadow the detail route', async () => {
-    const harness = await RouterTestingHarness.create('/universe/AAPL');
+    const harness = await RouterTestingHarness.create('/watchlist/AAPL');
     expect(harness.routeNativeElement?.textContent).toContain('AAPL');
   });
 });

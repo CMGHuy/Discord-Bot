@@ -8,7 +8,7 @@ endpoints back those tabs.
 computed by `swingbot.core.analytics` and cached in
 `data/analytics_snapshot.json`. These routes project it; they do not
 derive. The one exception is `/performance`, which assembles the six
-metrics spec 3 relocated from the Cockpit header out of
+metrics spec 3 relocated from the Dashboard header out of
 `TradeLog.get_extended_stats` -- an assembly of existing values, not a new
 calculation.
 
@@ -51,7 +51,7 @@ def analytics_snapshot():
 @api_v1.route("/analytics/performance", methods=["GET"])
 @require_auth
 def analytics_performance():
-    """Overall record, INCLUDING the six metrics relocated from the Cockpit.
+    """Overall record, INCLUDING the six metrics relocated from the Dashboard.
 
     Spec 3 accepted the cost of moving wins, losses, avg realised P&L, best
     trade, worst trade and avg holding period one click away. They have to
@@ -74,7 +74,7 @@ def analytics_performance():
             "open": stats.get("open"),
             "closed": stats.get("closed"),
         },
-        # The six spec 3 moved here from the Cockpit header.
+        # The six spec 3 moved here from the Dashboard header.
         "relocated": {
             "wins": stats.get("wins"),
             "losses": stats.get("losses"),

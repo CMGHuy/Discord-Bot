@@ -1,6 +1,6 @@
-"""NG10 — GET /api/v1/cockpit.
+"""NG10 — GET /api/v1/dashboard.
 
-Spec 3 fixed the Cockpit header at nine metrics in two tiers, replacing
+Spec 3 fixed the Dashboard header at nine metrics in two tiers, replacing
 fourteen equal-weight cards. This endpoint returns exactly those nine and
 nothing else -- the six that moved to Analytics (wins, losses, avg realised
 P&L, best trade, worst trade, avg holding period) are NOT here, and
@@ -27,7 +27,7 @@ from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_error, assert_sh
 
 _LOGIN = {"username": "admin", "password": "admin"}
 
-COCKPIT = {
+DASHBOARD = {
     "account_balance": NULLABLE_NUMBER,
     "open_pnl_pct": NULLABLE_NUMBER,
     "risk_used_pct": NULLABLE_NUMBER,
@@ -61,12 +61,12 @@ def logged_in(client):
 
 
 def test_requires_auth(client):
-    assert_error(client.get("/api/v1/cockpit"), "auth", 401)
+    assert_error(client.get("/api/v1/dashboard"), "auth", 401)
 
 
 def test_returns_exactly_the_nine_metrics(seed, logged_in):
     seed()
-    assert_shape(logged_in.get("/api/v1/cockpit").get_json(), COCKPIT)
+    assert_shape(logged_in.get("/api/v1/dashboard").get_json(), DASHBOARD)
 
 
 def test_relocated_metrics_are_absent(seed, logged_in):
@@ -74,15 +74,15 @@ def test_relocated_metrics_are_absent(seed, logged_in):
     undeclared keys, but this names them so a future re-add fails loudly
     rather than as an anonymous 'undeclared key'."""
     seed()
-    body = logged_in.get("/api/v1/cockpit").get_json()
+    body = logged_in.get("/api/v1/dashboard").get_json()
     assert not [k for k in RELOCATED if k in body]
 
 
 def test_works_on_an_empty_store(seed, logged_in):
-    """A fresh install has no trades. The Cockpit must render zeros and
+    """A fresh install has no trades. The Dashboard must render zeros and
     nulls rather than 500 -- it is the landing page."""
     seed()
-    body = logged_in.get("/api/v1/cockpit").get_json()
+    body = logged_in.get("/api/v1/dashboard").get_json()
     assert body["open_trades"] == 0
     assert body["win_rate"] is None or isinstance(body["win_rate"], (int, float))
 
@@ -91,7 +91,7 @@ def test_equity_sparkline_is_numbers_not_svg(seed, logged_in):
     """Sub-project 3 owns how a sparkline looks; markup from the server
     would take that decision away from it."""
     seed()
-    equity = logged_in.get("/api/v1/cockpit").get_json()["equity_30d"]
+    equity = logged_in.get("/api/v1/dashboard").get_json()["equity_30d"]
     assert_shape(equity, {"points": list, "change_pct": NULLABLE_NUMBER}, where="equity_30d")
     assert all(isinstance(p, (int, float)) for p in equity["points"])
     assert "svg" not in equity
@@ -101,7 +101,7 @@ def test_risk_used_is_reported_with_its_cap(seed, logged_in):
     """A heat percentage is meaningless without the cap it is measured
     against -- spec 3 defines this card as heat AS A FRACTION of the cap."""
     seed()
-    body = logged_in.get("/api/v1/cockpit").get_json()
+    body = logged_in.get("/api/v1/dashboard").get_json()
     assert body["risk_cap_pct"] is not None
 
 
@@ -112,4 +112,44 @@ def test_open_trades_counts_open_positions(seed, logged_in):
         _trade("bbbbbbbbbbbbbbbb", plan_id=None, status="open"),
         _trade("cccccccccccccccc", plan_id=None, status="win"),
     ])
-    assert logged_in.get("/api/v1/cockpit").get_json()["open_trades"] == 2
+    assert logged_in.get("/api/v1/dashboard").get_json()["open_trades"] == 2
+
+
+# ---------------------------------------------------------------------------
+# SR4 — the rename itself
+# ---------------------------------------------------------------------------
+
+def test_the_old_cockpit_api_path_is_gone_not_aliased(logged_in):
+    """/api/v1/cockpit is deleted, with no alias.
+
+    The v1 API has exactly one consumer and it ships from the same build, so
+    an alias would only preserve a name nothing can still be asking for. This
+    test exists so the absence is deliberate rather than incidental: anything
+    that quietly re-adds the old route has to delete this test to do it.
+    """
+    assert logged_in.get("/api/v1/cockpit").status_code == 404
+
+
+def test_the_spa_still_serves_the_old_workspace_url():
+    """`/cockpit` is NOT deleted the way the API path is.
+
+    A bookmark or an open tab on the old workspace URL must not 404 at the
+    server: Angular can only redirect it if index.html is served for it,
+    which is why `cockpit` stays in `spa.WORKSPACES`. The assertion is on the
+    URL map rather than on a response, because in dev the bundle is unbuilt
+    and every SPA route answers 404 by design — that would make a response
+    check unable to tell "not routed" from "not built".
+    """
+    from swingbot.admin import app as _app
+
+    rules = {rule.rule for rule in _app.app.url_map.iter_rules()}
+    assert "/cockpit" in rules
+    assert "/dashboard" in rules
+
+
+def test_the_jinja_dashboard_kept_its_own_url_under_jinja(logged_in):
+    """SR4 moved it aside rather than letting the flag decide who owns
+    `/dashboard`. Both UIs are live until NG57, and NG53 added a dedicated
+    URL for this page precisely so enabling the SPA could not strand it.
+    """
+    assert logged_in.get("/jinja/dashboard").status_code == 200

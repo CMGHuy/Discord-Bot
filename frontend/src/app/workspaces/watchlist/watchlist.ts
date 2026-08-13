@@ -10,7 +10,7 @@ import {
 import { Router, RouterLink } from '@angular/router';
 
 import { Ticker } from '../../api/models';
-import { UniverseStore } from '../../stores/universe.store';
+import { WatchlistStore } from '../../stores/watchlist.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
@@ -19,7 +19,7 @@ import { text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 
 /**
- * Universe — the watchlist the scanner walks.
+ * Watchlist — the watchlist the scanner walks.
  *
  * Deliberately the thinnest workspace (spec v14 Decision 9): a table, an add
  * box and a remove button. Everything interesting about a symbol is one
@@ -36,13 +36,13 @@ import { Panel } from '../../ui/layout';
  * a defect, and this screen is small enough to have been tempting.
  */
 @Component({
-  selector: 'sb-universe',
+  selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog],
-  providers: [UniverseStore],
+  providers: [WatchlistStore],
   template: `
     <header class="head">
-      <h1>Universe</h1>
+      <h1>Watchlist</h1>
       <span class="count">{{ store.count() }} watched</span>
       @if (store.error(); as message) {
         <span class="stale" role="status">{{ message }}</span>
@@ -134,7 +134,7 @@ import { Panel } from '../../ui/layout';
     <!-- cells ----------------------------------------------------------- -->
 
     <ng-template #symbolCell let-row>
-      <a class="row-link" [routerLink]="['/universe', row.symbol]">{{ row.symbol }}</a>
+      <a class="row-link" [routerLink]="['/watchlist', row.symbol]">{{ row.symbol }}</a>
     </ng-template>
 
     <ng-template #actionsCell let-row>
@@ -201,9 +201,9 @@ import { Panel } from '../../ui/layout';
     .row-link:hover { text-decoration: underline; }
   `,
 })
-export class Universe {
+export class Watchlist {
   private readonly router = inject(Router);
-  protected readonly store = inject(UniverseStore);
+  protected readonly store = inject(WatchlistStore);
 
   protected readonly entry = signal('');
   /** The row awaiting confirmation, or null. */
@@ -281,6 +281,6 @@ export class Universe {
   }
 
   protected open(row: Ticker): void {
-    void this.router.navigate(['/universe', row.symbol]);
+    void this.router.navigate(['/watchlist', row.symbol]);
   }
 }

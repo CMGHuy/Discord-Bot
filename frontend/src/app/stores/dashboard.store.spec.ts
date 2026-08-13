@@ -19,8 +19,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { Cockpit } from '../api/models';
-import { CockpitStore } from './cockpit.store';
+import { Dashboard } from '../api/models';
+import { DashboardStore } from './dashboard.store';
 
 /* NG35/NG36 — the reference store, and the tracer bullet's data path.
  *
@@ -51,7 +51,7 @@ class FakeEventStream {
   }
 }
 
-const RESPONSE: Cockpit = {
+const RESPONSE: Dashboard = {
   account_balance: 10_000,
   open_pnl_pct: 1.5,
   risk_used_pct: 4,
@@ -64,8 +64,8 @@ const RESPONSE: Cockpit = {
   position_premium: {},
 };
 
-describe('CockpitStore', () => {
-  let store: InstanceType<typeof CockpitStore>;
+describe('DashboardStore', () => {
+  let store: InstanceType<typeof DashboardStore>;
   let backend: HttpTestingController;
   let events: FakeEventStream;
 
@@ -79,16 +79,16 @@ describe('CockpitStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
-        CockpitStore,
+        DashboardStore,
       ],
     });
-    store = TestBed.inject(CockpitStore);
+    store = TestBed.inject(DashboardStore);
     backend = TestBed.inject(HttpTestingController);
   });
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
-  const respond = (body: Partial<Cockpit> = {}) =>
-    backend.expectOne('/api/v1/cockpit').flush({ ...RESPONSE, ...body });
+  const respond = (body: Partial<Dashboard> = {}) =>
+    backend.expectOne('/api/v1/dashboard').flush({ ...RESPONSE, ...body });
 
   it('loads on creation, with no separate bootstrap call', () => {
     // The first effect run IS the initial load, so the load path and the
@@ -127,7 +127,7 @@ describe('CockpitStore', () => {
     tick();
     respond();
 
-    events.raise('universe');
+    events.raise('watchlist');
     tick();
 
     backend.verify();
@@ -140,7 +140,7 @@ describe('CockpitStore', () => {
     events.raise('account');
     tick();
     backend
-      .expectOne('/api/v1/cockpit')
+      .expectOne('/api/v1/dashboard')
       .error(new ProgressEvent('error'), { status: 0 });
 
     // Replacing nine live figures with an error panel because one poll
@@ -153,7 +153,7 @@ describe('CockpitStore', () => {
   it('clears the error once a refetch succeeds', () => {
     tick();
     backend
-      .expectOne('/api/v1/cockpit')
+      .expectOne('/api/v1/dashboard')
       .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
 

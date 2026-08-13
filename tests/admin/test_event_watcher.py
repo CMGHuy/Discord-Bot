@@ -91,7 +91,7 @@ def test_default_paths_realise_the_spec_taxonomy(data_dir):
     assert set(paths.values()) == w.WATCHED_EVENTS
     assert w.WATCHED_EVENTS == {
         "trades", "account", "analytics", "journal", "scan",
-        "bot", "risk", "universe", "jobs", "settings",
+        "bot", "risk", "watchlist", "jobs", "settings",
     }
 
     # Several files, one concern -- the client must not learn the storage

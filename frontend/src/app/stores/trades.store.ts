@@ -50,7 +50,7 @@ export function fromSortParam(param: string | null | undefined): SortSpec | null
 /**
  * The Trades list — `GET /api/v1/trades`, driven entirely by its query.
  *
- * Follows `CockpitStore`'s shape (one server response in, everything else
+ * Follows `DashboardStore`'s shape (one server response in, everything else
  * derived) with one addition: it holds the **query** as well, and the query is
  * a projection of the URL rather than a fourth copy of the truth. The
  * workspace reads the route's query parameters, hands them here, and every

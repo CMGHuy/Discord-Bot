@@ -18,6 +18,15 @@
 > mounted; `ADMIN_UI` chooses which answers `/`. Do not delete Jinja code as a
 > side effect of unrelated work.
 >
+> **A second gate, added 2026-08-13:** that future plan must not run until
+> **`2026-08-13-v21-spa-refresh.md`** completes either. v21 ports the
+> compact/full density model, the SL→TP status bar and the combined plan cell
+> *out of* these templates, and audits all 19 of them for feature parity —
+> the first audit at that level, since NG52 only ever covered routes. Deleting
+> the reference halfway through the port is how details get lost. So NG57 is
+> now gated on two things, not one: the soak (no earlier than 2026-08-27) and
+> v21's completion. See spec v18 Decision 13.
+>
 > Unchecked boxes below are not a to-do list. Sessions committed work without
 > ticking them (NG8–NG53 read as unstarted while their code is in the git log),
 > so **derive status from the git history and each task's outcome note**, never

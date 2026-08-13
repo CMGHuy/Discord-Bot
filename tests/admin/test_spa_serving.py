@@ -127,7 +127,7 @@ def test_the_jinja_ui_is_untouched(client, auth, built):
     the flag itself. What this asserts is the part that has not changed:
     the Jinja dashboard still renders, whatever `/` is doing.
     """
-    response = client.get("/dashboard", headers=auth)
+    response = client.get("/jinja/dashboard", headers=auth)
 
     assert response.status_code == 200
     assert b"sb-root" not in response.data

@@ -30,10 +30,10 @@ export const appConfig: ApplicationConfig = {
     // files from /app/ -- deliberately, so they cannot collide with the Jinja
     // UI's /static/. But `<base href>` is read by TWO things: the browser,
     // resolving asset URLs, and the router, deciding what a route path means.
-    // Only the first one wants /app/. The workspaces live at /cockpit,
+    // Only the first one wants /app/. The workspaces live at /dashboard,
     // /trades and so on, which is what spa.py registers and what a user
     // bookmarks; a router that inherited /app/ would build every link as
-    // /app/cockpit and 404 on the first navigation.
+    // /app/dashboard and 404 on the first navigation.
     //
     // APP_BASE_HREF is the override for exactly that split. It must stay in
     // step with the --base-href in angular.json: assets under /app/, routes

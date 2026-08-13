@@ -33,8 +33,17 @@ spa = Blueprint("spa", __name__)
 APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 
 #: The six workspaces. Detail views live under their workspace's prefix, so
-#: `/trades/abc` and `/universe/AAPL` are covered by `trades` and `universe`.
-WORKSPACES = ("cockpit", "trades", "analytics", "universe", "risk", "system")
+#: `/trades/abc` and `/watchlist/AAPL` are covered by `trades` and `watchlist`.
+#:
+#: `cockpit` and `universe` are the pre-SR4/SR5 names, kept as prefixes on
+#: purpose. They serve the same index.html, and the SPA's router redirects
+#: them client-side to `/dashboard` and `/watchlist`. Dropping them would make
+#: a bookmark or an open tab 404 at the server before Angular ever loaded,
+#: which a client-side redirect cannot rescue. They come out at NG57.
+WORKSPACES = (
+    "dashboard", "trades", "analytics", "watchlist", "risk", "system",
+    "cockpit", "universe",
+)
 
 #: Hashed filenames (`main-FWP2ASZR.js`) are immutable by construction: a
 #: changed file gets a different name, so it can never need revalidating.

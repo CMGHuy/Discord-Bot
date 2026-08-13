@@ -22,7 +22,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     </div>
   `,
   styles: `
-    .empty { padding: var(--space-28) var(--space-20); text-align: center; }
+    .empty { padding: var(--space-20) var(--space-20); text-align: center; }
     .empty-title { color: var(--text-secondary); font-size: var(--text-body); }
     .empty-hint {
       margin-top: var(--space-6);

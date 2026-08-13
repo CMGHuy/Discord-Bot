@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="70%">
+      <stop offset="0%" stop-color="#1c2130"/>
+      <stop offset="100%" stop-color="#0e1016"/>
+    </radialGradient>
+    <linearGradient id="fur" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#eccb98"/>
+      <stop offset="100%" stop-color="#d4a668"/>
+    </linearGradient>
+    <linearGradient id="coin" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffe07a"/>
+      <stop offset="100%" stop-color="#e2b25a"/>
+    </linearGradient>
+  </defs>
+  <circle cx="128" cy="128" r="124" fill="url(#bg)" stroke="#e2b25a" stroke-width="8"/>
+  <polyline points="26,138 58,116 84,130 118,76"
+            fill="none" stroke="#4fe08f" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="118,76 142,54 146,88" fill="#4fe08f"/>
+  <path d="M78,100 L54,34 L118,82 Z" fill="#2c303c"/>
+  <path d="M178,100 L202,34 L138,82 Z" fill="#2c303c"/>
+  <path d="M83,92 L68,48 L108,80 Z" fill="#f2a7c0"/>
+  <path d="M173,92 L188,48 L148,80 Z" fill="#f2a7c0"/>
+  <ellipse cx="128" cy="152" rx="82" ry="72" fill="url(#fur)" stroke="#8a6a3d" stroke-width="4"/>
+  <circle cx="100" cy="140" r="12" fill="#1a1c22"/>
+  <circle cx="156" cy="140" r="12" fill="#1a1c22"/>
+  <circle cx="104" cy="136" r="4" fill="#fff"/>
+  <circle cx="160" cy="136" r="4" fill="#fff"/>
+  <ellipse cx="128" cy="166" rx="13" ry="9" fill="#c9718a"/>
+  <path d="M116,180 Q128,188 140,180" fill="none" stroke="#6b4a2b" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="188" cy="196" r="46" fill="url(#coin)" stroke="#7a5c18" stroke-width="6"/>
+  <text x="188" y="212" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700" text-anchor="middle" fill="#5a4415">$</text>
+</svg>
