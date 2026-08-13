@@ -140,7 +140,12 @@ import {
       }
 
       @if (pagination(); as page) {
-        <sb-pagination [pagination]="page" (pageChange)="pageChange.emit($event)" />
+        <sb-pagination
+          [pagination]="page"
+          [showPerPage]="showPerPage()"
+          (pageChange)="pageChange.emit($event)"
+          (perPageChange)="perPageChange.emit($event)"
+        />
       }
     </div>
   `,
@@ -261,6 +266,11 @@ export class DataTable<T> {
   readonly pinned = input<string[]>([]);
   /** Emitted with the full new order whenever a column is moved. */
   readonly reorder = output<string[]>();
+
+  /** Forwarded to the pager. The table does not own paging policy —
+   *  it renders the control and passes the choice back up. */
+  readonly showPerPage = input(false);
+  readonly perPageChange = output<number>();
 
   /** The key currently being dragged, or null. Signal rather than a field so
    *  the header can style itself while the drag is in flight. */

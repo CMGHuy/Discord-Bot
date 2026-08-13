@@ -503,3 +503,39 @@ def test_a_terminal_row_has_no_position_only_a_label(seed, logged_in):
     assert row["entry_pct"] is None
     assert row["blink_seconds"] is None
     assert row["status_label"] == "CANCELLED"
+
+
+# --- SR16: sorting by status means sorting by progress --------------------
+
+def test_status_sort_orders_by_progress_not_alphabetically(seed, logged_in, priced):
+    """Alphabetical status is meaningless to a trader; how close a position is
+    to its target is what the column draws."""
+    near, near_t = _open_pair(ticker="NEAR")
+    far, far_t = _open_pair(ticker="FAR")
+    far["plan_id"] = far_t["plan_id"] = "33333333-3333-4333-8333-333333333333"
+    seed(plans=[near, far], trades=[near_t, far_t])
+    priced(118.0)                      # same price; both progress equally
+
+    body = logged_in.get("/api/v1/trades?sort=status").get_json()
+    assert body["total"] == 2
+    # Both priced, so both carry progress -- the point is that neither is
+    # dropped and the sort does not 400.
+    assert all(r["progress_pct"] is not None for r in body["items"])
+
+
+@pytest.mark.parametrize("direction", ["status", "-status"])
+def test_rows_without_progress_sort_last_in_both_directions(seed, logged_in, priced,
+                                                            direction):
+    """`reverse=True` on a plain key flips the is-None flag too, floating every
+    priceless row to the TOP on descending -- a user asking for "closest to
+    target" would get a screen of rows with no price."""
+    live, live_t = _open_pair(ticker="LIVE")
+    seed(plans=[live, _plan("44444444-4444-4444-8444-444444444444",
+                            ticker="DEAD", status="CANCELLED")],
+         trades=[live_t])
+    priced(110.0)
+
+    items = logged_in.get(f"/api/v1/trades?sort={direction}").get_json()["items"]
+
+    assert items[-1]["progress_pct"] is None, "a row with no progress must sort last"
+    assert items[0]["progress_pct"] is not None

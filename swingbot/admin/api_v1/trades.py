@@ -380,13 +380,40 @@ def get_trade(trade_id: str):
     return jsonify(row)
 
 
+#: `sort=status` means "how close is this to its target", not the status
+#: word. Alphabetical status is meaningless to a trader; progress is the
+#: thing the column actually draws. SR16 step 5.
+_SORT_ALIASES = {"status": "progress_pct"}
+
+
 def _sort_key(field: str):
-    """None sorts to the bottom in both directions rather than raising --
-    a half-populated row must never 500 the whole list."""
+    """None sorts to the bottom rather than raising -- a half-populated row
+    must never 500 the whole list."""
     def key(row):
         value = row.get(field)
         return (value is None, value if value is not None else "")
     return key
+
+
+def _sorted_rows(rows: list[dict], field: str, descending: bool) -> list[dict]:
+    """Sort, with valueless rows last in BOTH directions.
+
+    `sort(key=..., reverse=True)` reverses the whole comparison including the
+    is-None flag, so the plain version floats every null to the TOP on
+    descending -- a user asking for "closest to target first" would get a
+    screenful of rows with no live price. Partitioning first is what makes
+    "missing" mean "last" rather than "extreme".
+    """
+    field = _SORT_ALIASES.get(field, field)
+    present = [r for r in rows if r.get(field) is not None]
+    missing = [r for r in rows if r.get(field) is None]
+    try:
+        present.sort(key=_sort_key(field), reverse=descending)
+    except TypeError:
+        # Mixed types in one column: fall back to string order rather than
+        # 500 the list.
+        present.sort(key=lambda r: str(r.get(field) or ""), reverse=descending)
+    return present + missing
 
 
 def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
@@ -438,10 +465,13 @@ def list_trades():
             rows = [r for r in rows if str(r.get(key) or "") == str(value)]
 
     field, direction = params.sort or ("opened_at", "desc")
-    try:
-        rows.sort(key=_sort_key(field), reverse=(direction == "desc"))
-    except TypeError:
-        rows.sort(key=lambda r: str(r.get(field) or ""), reverse=(direction == "desc"))
+    # progress_pct is attached AFTER slicing (it needs a live price), so a
+    # sort on it has to compute the field for the whole set first -- otherwise
+    # it would sort on a column that is None for every row.
+    if _SORT_ALIASES.get(field) == "progress_pct":
+        _attach_current_prices(rows)
+        _attach_status_fields(rows)
+    rows = _sorted_rows(rows, field, direction == "desc")
 
     total = len(rows)
     start = (params.page - 1) * params.per_page

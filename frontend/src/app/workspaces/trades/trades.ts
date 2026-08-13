@@ -14,6 +14,16 @@ import { Router, RouterLink } from '@angular/router';
 import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
 import { PreferencesStore } from '../../stores/preferences.store';
+import { Density } from '../../ui/data-table/data-table.types';
+import {
+  perPageForApi,
+  readTableColumns,
+  readTableDensity,
+  readTablePerPage,
+  writeTableColumns,
+  writeTableDensity,
+  writeTablePerPage,
+} from '../../ui/table-prefs';
 import { DEFAULT_PER_PAGE, TradesStore, toSortParam } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
 import { QualityChip } from '../../ui/chip';
@@ -24,7 +34,10 @@ import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
 import { dateTime, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
-import { StatusIndicator } from '../../ui/status-indicator';
+import { ConfidenceCell } from '../../ui/confidence-cell';
+import { DirectionArrow } from '../../ui/direction-arrow';
+import { PlanCell } from '../../ui/plan-cell';
+import { StatusCell } from '../../ui/status-cell';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -34,7 +47,9 @@ import {
   runTradeAction,
 } from './trade-actions';
 import {
-  DEFAULT_TRADE_COLUMNS,
+  COMPACT_COLUMNS,
+  FULL_COLUMNS,
+  PINNED_COLUMNS,
   STATUS_CHIPS,
   TRADES_TABLE_ID,
   chipQuery,
@@ -70,7 +85,10 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     TextInput,
     Button,
     ConfirmDialog,
-    StatusIndicator,
+    StatusCell,
+    DirectionArrow,
+    PlanCell,
+    ConfidenceCell,
     QualityChip,
   ],
   template: `
@@ -95,11 +113,32 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
         <button sb-button variant="ghost" type="button" (click)="bulk.set('history')">
           Clear history
         </button>
+        <div class="density" role="group" aria-label="Row density">
+          <button
+            sb-button
+            variant="ghost"
+            type="button"
+            [attr.aria-pressed]="density() === 'compact'"
+            (click)="setDensity('compact')"
+          >
+            Compact
+          </button>
+          <button
+            sb-button
+            variant="ghost"
+            type="button"
+            [attr.aria-pressed]="density() === 'full'"
+            (click)="setDensity('full')"
+          >
+            Full
+          </button>
+        </div>
         <sb-column-picker
           [tableId]="tableId"
-          density="compact"
+          [density]="density()"
+          [pinned]="pinned"
           [columns]="allColumns()"
-          [defaults]="defaultColumns"
+          [defaults]="defaultColumns()"
           [visible]="visible()"
           (visibleChange)="visible.set($event)"
         />
@@ -163,6 +202,10 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       (sortChange)="onSort($event)"
       (pageChange)="navigate({ page: $event }, false)"
       (rowActivate)="open($event)"
+      [pinned]="pinned"
+      (reorder)="onReorder($event)"
+      [showPerPage]="true"
+      (perPageChange)="onPerPage($event)"
     />
 
     <!-- cells ---------------------------------------------------------- -->
@@ -172,13 +215,15 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     </ng-template>
 
     <ng-template #statusCell let-row>
-      <sb-status-indicator
-        [status]="row.status"
-        [current]="row.current_price"
-        [entry]="row.entry"
-        [stop]="row.stop_loss"
-        [target]="row.target"
-      />
+      <sb-status-cell [row]="row" />
+    </ng-template>
+
+    <ng-template #directionCell let-row>
+      <sb-direction-arrow [direction]="row.direction" />
+    </ng-template>
+
+    <ng-template #planCell let-row>
+      <sb-plan-cell [entry]="row.entry" [target]="row.target" [stop]="row.stop_loss" />
     </ng-template>
 
     <ng-template #pnlCell let-row>
@@ -192,9 +237,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     </ng-template>
 
     <ng-template #confidenceCell let-row>
-      @if (row.confidence_level !== null) {
-        <sb-quality-chip [value]="row.confidence_level" [label]="'Lv' + row.confidence_level" />
-      }
+      <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
     </ng-template>
 
     <ng-template #openedCell let-row>{{ fmtDate(row.opened_at) }}</ng-template>
@@ -337,8 +380,19 @@ export class Trades {
   readonly origin = input<string>();
 
   protected readonly statusChips = STATUS_CHIPS;
-  protected readonly defaultColumns = DEFAULT_TRADE_COLUMNS;
   protected readonly tableId = TRADES_TABLE_ID;
+  protected readonly pinned = PINNED_COLUMNS;
+
+  /** Compact or full. Read once from preferences; compact for anyone who has
+   *  never chosen, because the table exists to show many rows at once. */
+  protected readonly density = signal<Density>(
+    readTableDensity(this.preferences.values(), TRADES_TABLE_ID),
+  );
+
+  /** What "Reset to default" restores, for whichever density is showing. */
+  protected readonly defaultColumns = computed(() =>
+    this.density() === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS,
+  );
   protected readonly rowKey = (row: TradeRow) => row.id;
 
   protected readonly directionOptions = [
@@ -350,10 +404,50 @@ export class Trades {
     { value: 'legacy', label: 'Legacy' },
   ];
 
-  /** Read once from preferences; the picker owns every write from here on. */
+  /** The visible set for the CURRENT density, in order.
+   *
+   *  Re-read on every density change rather than held as one list: the two
+   *  densities are separate preferences, so switching has to load the other
+   *  one rather than carry this one across. */
   protected readonly visible = signal<string[]>(
-    this.preferences.columns(TRADES_TABLE_ID) ?? DEFAULT_TRADE_COLUMNS,
+    readTableColumns(
+      this.preferences.values(),
+      TRADES_TABLE_ID,
+      readTableDensity(this.preferences.values(), TRADES_TABLE_ID),
+      readTableDensity(this.preferences.values(), TRADES_TABLE_ID) === 'full'
+        ? FULL_COLUMNS
+        : COMPACT_COLUMNS,
+    ),
   );
+
+  /** Rows per page. 0 means "All", translated at the API boundary. */
+  protected readonly perPage = signal<number>(
+    readTablePerPage(this.preferences.values(), TRADES_TABLE_ID),
+  );
+
+  protected setDensity(next: Density): void {
+    if (next === this.density()) return;
+    this.density.set(next);
+    this.preferences.update((prefs) => writeTableDensity(prefs, TRADES_TABLE_ID, next));
+    // Load the other density's saved arrangement, not this one's.
+    this.visible.set(
+      readTableColumns(this.preferences.values(), TRADES_TABLE_ID, next,
+                       next === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+    );
+  }
+
+  protected onReorder(order: string[]): void {
+    this.visible.set(order);
+    this.preferences.update((prefs) =>
+      writeTableColumns(prefs, TRADES_TABLE_ID, this.density(), order),
+    );
+  }
+
+  protected onPerPage(value: number): void {
+    this.perPage.set(value);
+    this.preferences.update((prefs) => writeTablePerPage(prefs, TRADES_TABLE_ID, value));
+    this.navigate({ page: null });
+  }
 
   protected readonly pending = signal<PendingAction>(null);
   protected readonly working = signal(false);
@@ -363,6 +457,8 @@ export class Trades {
 
   private readonly numCell = viewChild.required<TemplateRef<unknown>>('numCell');
   private readonly statusCell = viewChild.required<TemplateRef<unknown>>('statusCell');
+  private readonly directionCell = viewChild.required<TemplateRef<unknown>>('directionCell');
+  private readonly planCell = viewChild.required<TemplateRef<unknown>>('planCell');
   private readonly pnlCell = viewChild.required<TemplateRef<unknown>>('pnlCell');
   private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
   private readonly confidenceCell =
@@ -379,6 +475,8 @@ export class Trades {
     const cells: Record<string, TemplateRef<{ $implicit: TradeRow }>> = {
       num: this.numCell(),
       status: this.statusCell(),
+      direction: this.directionCell(),
+      plan: this.planCell(),
       pnl_pct: this.pnlCell(),
       tier: this.tierCell(),
       confidence_level: this.confidenceCell(),

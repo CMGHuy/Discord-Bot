@@ -904,7 +904,7 @@ could undo the choice. Pinned by a test.
 
 Spec Decision 4. This is where it all meets.
 
-- [ ] **Step 1: Write the failing test** in `trades.columns.spec.ts`:
+- [x] **Step 1: Write the failing test** in `trades.columns.spec.ts`:
 
 ```ts
 import { COMPACT_COLUMNS, FULL_COLUMNS, PINNED_COLUMNS, tradeColumns } from './trades.columns';
@@ -949,16 +949,29 @@ describe('trade column sets', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `COMPACT_COLUMNS` does not exist.
-- [ ] **Step 3: Replace `DEFAULT_TRADE_COLUMNS`** with the three exported constants above, and add the `plan` column def rendering `PlanCell`. Delete `DEFAULT_TRADE_COLUMNS` — leaving it means two answers to "what does this table show".
-- [ ] **Step 4: Wire the cell components** into their column defs: `status` → `StatusCell`, `direction` → `DirectionArrow`, `confidence_level` → `ConfidenceCell`, `plan` → `PlanCell`.
-- [ ] **Step 5: `status` sorts on `progress_pct`,** with null-progress rows last in **both** directions. Add a test: sorting ascending and descending must both put a no-price row at the end, not cluster it at whichever end zero falls.
-- [ ] **Step 6: Add the toolbar** — density toggle, picker, per-page — beside the existing filter and status chips.
-- [ ] **Step 7: Default to compact** on first load and for any user with no stored preference.
-- [ ] **Step 8: Run** `npx ng test` → green.
-- [ ] **Step 9: Commit** `feat(trades): compact and full, with the status bar`
+- [x] **Step 2: Run and watch it fail** — `COMPACT_COLUMNS` does not exist.
+- [x] **Step 3: Replace `DEFAULT_TRADE_COLUMNS`** with the three exported constants above, and add the `plan` column def rendering `PlanCell`. Delete `DEFAULT_TRADE_COLUMNS` — leaving it means two answers to "what does this table show".
+- [x] **Step 4: Wire the cell components** into their column defs: `status` → `StatusCell`, `direction` → `DirectionArrow`, `confidence_level` → `ConfidenceCell`, `plan` → `PlanCell`.
+- [x] **Step 5: `status` sorts on `progress_pct`,** with null-progress rows last in **both** directions. Add a test: sorting ascending and descending must both put a no-price row at the end, not cluster it at whichever end zero falls.
+- [x] **Step 6: Add the toolbar** — density toggle, picker, per-page — beside the existing filter and status chips.
+- [x] **Step 7: Default to compact** on first load and for any user with no stored preference.
+- [x] **Step 8: Run** `npx ng test` → green.
+- [x] **Step 9: Commit** `feat(trades): compact and full, with the status bar`
 
 ---
+
+**Step 5 exposed a real server bug, not just a missing feature.**
+`rows.sort(key=..., reverse=True)` reverses the whole comparison including the
+is-None flag, so the existing sort floated every valueless row to the TOP on
+any descending sort — not only for progress. Asking for "closest to target
+first" would have returned a screenful of rows with no live price. Fixed by
+partitioning present from missing before sorting, so "missing" means last
+rather than extreme, in every direction and for every column.
+
+`sort=status` also had to attach prices BEFORE slicing, which is the opposite
+of the usual order: `_attach_current_prices` runs on the page only, by design,
+so sorting on a field it produces would otherwise sort on a column that is
+None for every row.
 
 ### Task SR17: Dashboard adopts the same table
 

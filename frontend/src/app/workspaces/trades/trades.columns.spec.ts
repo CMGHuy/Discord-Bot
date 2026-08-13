@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { STATUS_CHIPS, chipQuery } from './trades.columns';
+import {
+  COMPACT_COLUMNS,
+  FULL_COLUMNS,
+  PINNED_COLUMNS,
+  STATUS_CHIPS,
+  chipQuery,
+  tradeColumns,
+} from './trades.columns';
 
 /* NG54 — the status chips.
  *
@@ -74,5 +81,65 @@ describe('chipQuery', () => {
     const afterCancelled = chipQuery('CANCELLED');
     expect(afterWin.status).toBeNull();
     expect(afterCancelled.outcome).toBeNull();
+  });
+});
+
+// --- SR16: the two column sets -------------------------------------------
+
+describe('trade column sets', () => {
+  it('compact is exactly the spec list', () => {
+    expect(COMPACT_COLUMNS).toEqual([
+      'num', 'status', 'ticker', 'confidence_level', 'direction',
+      'now', 'plan', 'pnl_pct', 'r_multiple', 'opened_at', 'closed_at',
+    ]);
+  });
+
+  it('full is exactly the spec list', () => {
+    expect(FULL_COLUMNS).toEqual([
+      'num', 'status', 'ticker', 'confidence_level', 'direction',
+      'now', 'plan', 'risk_reward', 'r_multiple', 'strategy', 'horizon',
+      'pnl_pct', 'held', 'realized_pnl_amount', 'opened_at', 'closed_at',
+    ]);
+  });
+
+  it('actions are pinned, not a member of either set', () => {
+    expect(PINNED_COLUMNS).toEqual(['actions']);
+    expect(COMPACT_COLUMNS).not.toContain('actions');
+    expect(FULL_COLUMNS).not.toContain('actions');
+  });
+
+  it('every key in both sets exists in tradeColumns()', () => {
+    const known = new Set(tradeColumns().map((c) => c.key));
+    for (const k of [...COMPACT_COLUMNS, ...FULL_COLUMNS, ...PINNED_COLUMNS]) {
+      expect(known, `missing column def: ${k}`).toContain(k);
+    }
+  });
+
+  it('the plan column is not sortable', () => {
+    // It is three numbers in one cell; there is no single field to sort on,
+    // and the server would 400 on `sort=plan`.
+    expect(tradeColumns().find((c) => c.key === 'plan')!.sortable).toBeFalsy();
+  });
+
+  it('keeps entry, stop and target available to the picker', () => {
+    // Folded into `plan` for the default view, not deleted -- anyone who
+    // wants them as separate sortable columns can still add them.
+    const known = new Set(tradeColumns().map((c) => c.key));
+    for (const k of ['entry', 'stop_loss', 'target']) expect(known).toContain(k);
+  });
+
+  it('only offers sortable on keys the API will accept', () => {
+    // A sortable column the server rejects is a 400 on click, which is worse
+    // than not offering the control.
+    const sortable = tradeColumns().filter((c) => c.sortable).map((c) => c.key);
+    const apiSortable = new Set([
+      'opened_at', 'closed_at', 'ticker', 'status', 'pnl_pct', 'r_multiple',
+      'entry', 'exit_price', 'held_hours', 'realized_pnl_amount',
+    ]);
+    for (const key of sortable) {
+      expect(apiSortable, `not in TRADE_SORTABLE: ${key}`).toContain(
+        key === 'held' ? 'held_hours' : key,
+      );
+    }
   });
 });
