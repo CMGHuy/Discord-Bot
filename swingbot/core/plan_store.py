@@ -9,6 +9,7 @@ import os
 import threading
 
 from swingbot import config
+from swingbot.core.jsonio import atomic_write_json
 from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
                                        plan_from_dict, plan_to_dict)
 
@@ -35,10 +36,11 @@ class PlanStore:
             return {}
 
     def _save(self) -> None:
-        tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(list(self._plans.values()), f, indent=2)
-        os.replace(tmp, self.path)
+        # Through jsonio rather than a second copy of the tmp+replace dance.
+        # The duplicate was missing the fsync AND the Windows retry, so this
+        # store was the one most likely to lose a write -- and it is the store
+        # the scan loop writes to most often.
+        atomic_write_json(self.path, list(self._plans.values()))
 
     def add(self, plan: TradePlanV2) -> None:
         with _LOCK:

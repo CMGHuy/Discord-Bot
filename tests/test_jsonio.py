@@ -1,6 +1,10 @@
 import json
 import os
 
+import pytest
+
+from swingbot.core import jsonio
+
 from swingbot.core.jsonio import atomic_write_json, read_json
 
 
@@ -83,3 +87,50 @@ def test_account_config_atomic(tmp_path):
 
     reloaded = account_module.load_account_config(path)
     assert reloaded["base_balance"] == 50_000.0
+
+
+# --- Windows transient lock on os.replace ---------------------------------
+# `os.replace` is atomic, but on Windows it fails transiently with
+# PermissionError when something else briefly holds a handle on either file --
+# Defender scanning the freshly-written .tmp is the usual cause. Seen three
+# times in one afternoon, each in a DIFFERENT test, which is what identified
+# the write helper rather than any single caller as the culprit. The same
+# failure in the bot loses a trade or plan write silently.
+
+def test_a_transient_permission_error_is_retried(tmp_path, monkeypatch):
+    from unittest import mock
+
+    target = str(tmp_path / "plans.json")
+    real = os.replace
+    calls = {"n": 0}
+
+    def flaky(src, dst):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise PermissionError(5, "Access is denied")
+        return real(src, dst)
+
+    with mock.patch.object(jsonio.os, "replace", flaky):
+        jsonio.atomic_write_json(target, [{"plan_id": "p1"}])
+
+    assert calls["n"] == 3, "should have retried past the two failures"
+    assert jsonio.read_json(target, None) == [{"plan_id": "p1"}]
+
+
+def test_a_permanent_permission_error_still_raises(tmp_path, monkeypatch):
+    """Bounded retry, not infinite patience. A write that never landed must
+    not be reported as one that did — the caller has to be able to tell."""
+    from unittest import mock
+
+    target = str(tmp_path / "plans.json")
+    jsonio.atomic_write_json(target, [{"plan_id": "original"}])
+
+    def always(src, dst):
+        raise PermissionError(5, "Access is denied")
+
+    with mock.patch.object(jsonio.os, "replace", always):
+        with pytest.raises(PermissionError):
+            jsonio.atomic_write_json(target, [{"plan_id": "never-lands"}])
+
+    # The previous content survives: a failed replace leaves the target alone.
+    assert jsonio.read_json(target, None) == [{"plan_id": "original"}]
