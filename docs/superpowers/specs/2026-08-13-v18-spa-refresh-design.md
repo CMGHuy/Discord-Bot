@@ -5,12 +5,12 @@
 **Status:** approved, not yet implemented
 **Supersedes parts of:**
 
-- `2026-08-08-admin-design-system-design.md` — **Decision 2** (which removed the
+- `2026-08-08-v20-admin-design-system-design.md` — **Decision 2** (which removed the
   compact/full toggle and drag-to-reorder, and fixed the Trades table at seven
   columns) and **Decision 3** (the colour rules and the motion scale).
-- `2026-08-08-angular-workspaces-design-v14.md` — **Decision 5**, the Cockpit's
+- `2026-08-08-v14-angular-workspaces-design.md` — **Decision 5**, the Cockpit's
   fixed four-column summary table.
-- `2026-08-08-jinja-cutover-design-v15.md` — **Decision 1**'s schedule only. Its
+- `2026-08-08-v15-jinja-cutover-design.md` — **Decision 1**'s schedule only. Its
   Decision 3 (the PNG chart routes stay deleted) is *upheld*, not reversed.
 - The migration plan's global constraint *"`visible` columns carry no order"*.
 
@@ -377,10 +377,18 @@ blink_seconds   float | null
 status_label    string         human-readable, drives the tooltip
 ```
 
-`progress_color` returns a **token name** (`pos` / `neg` / `warn` / `muted`),
-not a hex value. The server does not own the palette; sending `#6dda9e` from
-Python is how the Jinja UI ended up with colours that no longer matched its own
-stylesheet.
+`progress_color` returns a **token name**, never a hex value. The server does
+not own the palette; sending `#6dda9e` from Python is how the Jinja UI ended up
+with colours that no longer matched its own stylesheet.
+
+**Refinement, found while planning:** the Jinja bar's fill is not one colour but
+an *interpolation* — red at the stop, grey at the entry tick, green at the
+target (`admin/dashboard.py::pos_color`) — and a token name cannot express a
+lerp. So the field is `progress_band ∈ {toward_stop, neutral, toward_target}`,
+naming which pair of tokens to interpolate between, and the client does the
+interpolation in CSS between `--neg` / `--text-muted` / `--pos`. The semantics
+(which band, how urgent) stay server-side; only the mixing moves to the client,
+which is where the palette lives.
 
 ## Degraded states
 

@@ -1,6 +1,6 @@
 /* The /api/v1 contract, in TypeScript.
  *
- * Spec `2026-08-08-admin-rest-api-design-v11.md` Decision 6: **there is no
+ * Spec `2026-08-08-v11-admin-rest-api-design.md` Decision 6: **there is no
  * OpenAPI document and no code generation.** These interfaces are written by
  * hand, and what keeps them honest is `tests/admin/api_v1_contract.py` plus
  * the per-endpoint contract tests -- those assert types rather than mere key

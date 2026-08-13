@@ -1,6 +1,6 @@
 """NG3 — assertions that pin the /api/v1 contract.
 
-Spec `docs/superpowers/specs/2026-08-08-admin-rest-api-design-v11.md`
+Spec `docs/superpowers/specs/2026-08-08-v11-admin-rest-api-design.md`
 Decision 6: there is no OpenAPI document. The Angular client's TypeScript
 interfaces are hand-written, and *these assertions are what keeps them
 honest*. If a field is renamed, removed, or changes type on the Python

@@ -3,7 +3,7 @@
 NG19 TRIAGE: KEEP unchanged. This tests `swingbot/admin/events/broker.py`,
 which has no Jinja involvement at all and survives the cutover untouched.
 
-Spec: `docs/superpowers/specs/2026-08-08-realtime-push-design-v12.md`,
+Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`,
 Decisions 4 (process-wide monotonic `seq`) and 5 (one watcher per process
 started lazily; cap of 8 concurrent connections).
 

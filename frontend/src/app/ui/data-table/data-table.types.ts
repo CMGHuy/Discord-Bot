@@ -1,6 +1,6 @@
 import { TemplateRef } from '@angular/core';
 
-/* The data table's contract — spec `2026-08-08-angular-workspaces-design-v14.md`
+/* The data table's contract — spec `2026-08-08-v14-angular-workspaces-design.md`
  * Decision 1, with one amendment recorded at `PageSpec` below.
  *
  * These types live apart from the component because all four call sites

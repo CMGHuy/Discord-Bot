@@ -20,7 +20,7 @@ import {
 } from './data-table.types';
 
 /**
- * The load-bearing table — spec `2026-08-08-angular-workspaces-design-v14.md`
+ * The load-bearing table — spec `2026-08-08-v14-angular-workspaces-design.md`
  * Decision 1. Trades, Analytics/Strategies, Risk and Universe all render
  * through this one component, which is why it was built and settled before any
  * of them started: discovering the API is wrong afterwards means rewriting

@@ -20,11 +20,11 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 3. Open a paper position so `!portfolio` has something to show.
 4. In the test channel run: `!portfolio` (verify it lists the open position), `!killswitch status` (verify current state), `!killswitch on` (verify the pause label appears on the next scan/alert), `!killswitch off` (verify it clears).
 5. Open the admin UI's `/risk` page in a browser against the same dev DB, confirm the kill-switch toggle reflects what you just set via Discord.
-**Record result:** update `.superpowers/sdd/2026-07-11-edge-engine-v4/DEFERRED-MANUAL-VERIFICATION.md` — check off the E56 item with a dated note.
+**Record result:** update `.superpowers/sdd/2026-07-11-v4-edge-engine/DEFERRED-MANUAL-VERIFICATION.md` — check off the E56 item with a dated note.
 
 ### Task E67 — Plan-engine flag side-by-side smoke
 **How:** flip the relevant feature flag in the dev `.env`, trigger one scan cycle in the test channel, then flip it back and trigger another — compare the two alerts by eye for the fields the flag is supposed to change.
-**Record result:** note in the E67 section of `.superpowers/sdd/2026-07-11-edge-engine-v4/progress.md`.
+**Record result:** note in the E67 section of `.superpowers/sdd/2026-07-11-v4-edge-engine/progress.md`.
 
 ### Task E75 — Chart visual QA
 **How:**

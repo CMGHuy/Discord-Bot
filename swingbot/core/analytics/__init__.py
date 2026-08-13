@@ -1,5 +1,5 @@
 """Analytics core -- pure computation over trade-record dicts (see the Global
-Constraints in docs/superpowers/plans/2026-07-11-cockpit-v3.md Part 1: no I/O
+Constraints in docs/superpowers/plans/2026-07-11-v3-cockpit.md Part 1: no I/O
 in metrics/aggregate/calibration/rank/insights, and every stat has exactly
 one definition here that every UI/embed/route consumes instead of
 re-deriving). Re-exports the public surface so callers can do either

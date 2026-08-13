@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order T1→T12.
 
-**Goal:** Cut the per-change cost of the **1145-test** suite along both axes — wall-clock (180s → ~40-60s gate, ~27s inner loop) and agent context (hundreds/thousands of tokens per run → ~50) — per `docs/superpowers/specs/2026-08-07-test-cost-reduction-design.md`.
+**Goal:** Cut the per-change cost of the **1145-test** suite along both axes — wall-clock (180s → ~40-60s gate, ~27s inner loop) and agent context (hundreds/thousands of tokens per run → ~50) — per `docs/superpowers/specs/2026-08-07-v7-test-cost-reduction-design.md`.
 
 **Architecture:** A single wrapper `scripts/testrun.py` becomes the only entry point any agent calls. It owns worker count (`-n 4`, measured-optimal), tier selection (`slow` marker), auto-escalation on chart/template edits, and — critically — output discipline: full pytest output to a gitignored log, progress to stderr, and a 1-3 line verdict to stdout. A `test-runner` subagent wraps it so full-suite output never enters the main context. The bare `python -m pytest` default is left semantically unchanged so the recorded baseline stays comparable.
 

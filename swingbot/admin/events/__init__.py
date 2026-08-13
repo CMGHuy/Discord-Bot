@@ -1,6 +1,6 @@
 """Real-time event push: the admin notices `data/` change, the browser hears.
 
-Spec: `docs/superpowers/specs/2026-08-08-realtime-push-design-v12.md`.
+Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`.
 
 Three pieces, in dependency order:
 

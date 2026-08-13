@@ -14,7 +14,7 @@ one spec, so it is split into six sub-projects:
 |---|---|---|
 | 1 | **REST API for the whole admin surface** | **this document** |
 | 2 | Real-time event push (bot → admin) | not started |
-| 3 | Design system | agreed (`2026-08-08-admin-design-system-design.md`) |
+| 3 | Design system | agreed (`2026-08-08-v20-admin-design-system-design.md`) |
 | 4 | Angular shell + build/deploy/auth | not started |
 | 5 | The workspace implementations | not started |
 | 6 | Cutover, delete Jinja | not started |

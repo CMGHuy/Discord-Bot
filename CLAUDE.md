@@ -107,6 +107,32 @@ script, either confirm it already logs per-unit progress, or add a
 `print(..., flush=True)` (or `log.info`) per completed unit before
 kicking it off — don't discover this gap hours into an unmonitorable run.
 
+## Naming specs and plans
+
+**`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md`** — date,
+then version, then name:
+
+```
+2026-08-08-v16-angular-migration.md          (plan)
+2026-08-08-v15-jinja-cutover-design.md       (spec)
+2026-07-14-v6-gatekeeper_0-index.md          (one document split into parts)
+```
+
+`vN` is one repo-wide counter shared by both directories — `v11` is the
+eleventh design document in this repo, whether spec or plan. Next number:
+
+```bash
+ls docs/superpowers/{specs,plans}/ | grep -oE 'v[0-9]+' | sort -V | tail -1
+```
+
+Never reuse a number, and never renumber a committed one — commit messages and
+cross-links reference it. Revising a document in place keeps its number; only a
+genuinely new document takes the next. A document split across files reuses the
+parent's number with a `_N` part suffix rather than consuming N numbers.
+
+`docs/claude/working-conventions.md` has the reasoning and the history of the
+2026-08-13 sweep that moved every file to this layout.
+
 ## Reference docs
 
 Not auto-loaded — read the relevant one before starting work in that area.
@@ -123,11 +149,8 @@ Not auto-loaded — read the relevant one before starting work in that area.
   gates, frozen constants. Read before running or interpreting any
   backtest/grid/validation.
 - `docs/claude/working-conventions.md` — commit style, concurrent-session git
-  hygiene, worktrees, and the **`-vN` document-numbering convention**: every
-  spec and plan filename ends in `-vN` drawn from one repo-wide, ever-increasing
-  counter shared by both directories (`ls docs/superpowers/{specs,plans}/ |
-  grep -o 'v[0-9]*' | sort -V | tail -1` gives the last one used). Read it
-  before writing any new spec or plan.
+  hygiene, worktrees, and the full document-naming convention. Read it before
+  writing any new spec or plan.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
 - `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats

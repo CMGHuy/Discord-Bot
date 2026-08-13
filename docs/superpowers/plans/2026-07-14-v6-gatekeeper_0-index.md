@@ -17,17 +17,17 @@ The pre-split master plan (~15k lines, 822 KB) was split into the part files bel
 
 | Part | File | Tasks | Scope | Status |
 |---|---|---|---|---|
-| 1 | [2026-07-14-gatekeeper-v6_1.md](2026-07-14-gatekeeper-v6_1.md) | G1-G8 | Honest math, contracts & scaffolding | not started |
-| 2 | [2026-07-14-gatekeeper-v6_2.md](2026-07-14-gatekeeper-v6_2.md) | G9-G28 | Macro data layer I: plumbing, FRED series, market internals | not started |
-| 3 | [2026-07-14-gatekeeper-v6_3.md](2026-07-14-gatekeeper-v6_3.md) | G29-G44 (no G33-G37) | Macro data layer II: events, snapshot & degradation | not started |
-| 4 | [2026-07-14-gatekeeper-v6_4.md](2026-07-14-gatekeeper-v6_4.md) | G45-G56 | Checklist engine I: HTF context & setup quality (sections 1-2) | not started |
-| 5 | [2026-07-14-gatekeeper-v6_5.md](2026-07-14-gatekeeper-v6_5.md) | G57-G67 (no G62-G63) | Checklist engine II: the 9 red flags (section 3) | not started |
-| 6 | [2026-07-14-gatekeeper-v6_6.md](2026-07-14-gatekeeper-v6_6.md) | G68-G88 | Checklist engine III: risk, timing & assembly (sections 4-5) | not started |
-| 7 | [2026-07-14-gatekeeper-v6_7.md](2026-07-14-gatekeeper-v6_7.md) | G89-G118 | Backtest validation & the win-rate frontier | not started |
-| 8 | [2026-07-14-gatekeeper-v6_8.md](2026-07-14-gatekeeper-v6_8.md) | G119-G146 (no G131-G133) | Scan pipeline & alert integration | not started |
-| 9 | [2026-07-14-gatekeeper-v6_9.md](2026-07-14-gatekeeper-v6_9.md) | G147-G166 (no G150, G161) | Discord command suite | not started |
-| 10 | [2026-07-14-gatekeeper-v6_10.md](2026-07-14-gatekeeper-v6_10.md) | G167-G196 | Admin frontend | not started |
-| 11 | [2026-07-14-gatekeeper-v6_11.md](2026-07-14-gatekeeper-v6_11.md) | G197-G216 | Ops, governance & wrap-up (+ traceability appendix) | not started |
-| 12 | [2026-07-14-gatekeeper-v6_12.md](2026-07-14-gatekeeper-v6_12.md) | G217-G218 | Carried-over verification debt from completed/skipped plans | not started |
+| 1 | [2026-07-14-v6-gatekeeper_1.md](2026-07-14-v6-gatekeeper_1.md) | G1-G8 | Honest math, contracts & scaffolding | not started |
+| 2 | [2026-07-14-v6-gatekeeper_2.md](2026-07-14-v6-gatekeeper_2.md) | G9-G28 | Macro data layer I: plumbing, FRED series, market internals | not started |
+| 3 | [2026-07-14-v6-gatekeeper_3.md](2026-07-14-v6-gatekeeper_3.md) | G29-G44 (no G33-G37) | Macro data layer II: events, snapshot & degradation | not started |
+| 4 | [2026-07-14-v6-gatekeeper_4.md](2026-07-14-v6-gatekeeper_4.md) | G45-G56 | Checklist engine I: HTF context & setup quality (sections 1-2) | not started |
+| 5 | [2026-07-14-v6-gatekeeper_5.md](2026-07-14-v6-gatekeeper_5.md) | G57-G67 (no G62-G63) | Checklist engine II: the 9 red flags (section 3) | not started |
+| 6 | [2026-07-14-v6-gatekeeper_6.md](2026-07-14-v6-gatekeeper_6.md) | G68-G88 | Checklist engine III: risk, timing & assembly (sections 4-5) | not started |
+| 7 | [2026-07-14-v6-gatekeeper_7.md](2026-07-14-v6-gatekeeper_7.md) | G89-G118 | Backtest validation & the win-rate frontier | not started |
+| 8 | [2026-07-14-v6-gatekeeper_8.md](2026-07-14-v6-gatekeeper_8.md) | G119-G146 (no G131-G133) | Scan pipeline & alert integration | not started |
+| 9 | [2026-07-14-v6-gatekeeper_9.md](2026-07-14-v6-gatekeeper_9.md) | G147-G166 (no G150, G161) | Discord command suite | not started |
+| 10 | [2026-07-14-v6-gatekeeper_10.md](2026-07-14-v6-gatekeeper_10.md) | G167-G196 | Admin frontend | not started |
+| 11 | [2026-07-14-v6-gatekeeper_11.md](2026-07-14-v6-gatekeeper_11.md) | G197-G216 | Ops, governance & wrap-up (+ traceability appendix) | not started |
+| 12 | [2026-07-14-v6-gatekeeper_12.md](2026-07-14-v6-gatekeeper_12.md) | G217-G218 | Carried-over verification debt from completed/skipped plans | not started |
 
 Phase map: Part 1 = Phase G0 · Parts 2-3 = Phase G1 · Parts 4-6 = Phase G2 · Part 7 = Phase G3 · Part 8 = Phase G4 · Part 9 = Phase G5 · Part 10 = Phase G6 · Part 11 = Phase G7 + appendix · Part 12 = Phase G8 (carried-over debt, added 2026-07-27).

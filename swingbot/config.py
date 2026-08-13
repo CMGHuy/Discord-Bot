@@ -406,7 +406,7 @@ FIELDS: list[Field] = [
                "signal to Level 2 (and thus below the default MIN_ALERT_CONFIDENCE_LEVEL=3 gate). "
                "Set 0 to disable the penalty while keeping the counter-trend label visible."),
 
-    # --- Plan Engine v2 (rollout flags, spec 2026-07-11-unified-plan-engine-design) ---
+    # --- Plan Engine v2 (rollout flags, spec 2026-07-11-v2-unified-plan-engine-design) ---
     Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",
           type="select", default="on", options=["off", "shadow", "on"],
           help="off = legacy behavior. shadow = v2 plans are computed and logged to "

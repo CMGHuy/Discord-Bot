@@ -4,7 +4,7 @@
    test (tests/test_chart_theme.py) keeps the two in sync.
 
    NG38 swapped the VALUES to the terminal palette of spec
-   `2026-08-08-admin-design-system-design.md` Decision 3, and
+   `2026-08-08-v20-admin-design-system-design.md` Decision 3, and
    deliberately kept the NAMES. Every Jinja template binds to
    these names and Jinja is not deleted until NG57, so renaming
    here would break the running UI to save an edit that NG57

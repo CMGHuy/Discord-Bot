@@ -3,7 +3,7 @@
 Referenced from the root `CLAUDE.md`. Read this before optimising, timing, or
 reasoning about how long the suite takes. Every number here was measured on
 2026-08-07 at `main` = `017c777`, 12 logical cores. Full design:
-`docs/superpowers/specs/2026-08-07-test-cost-reduction-design.md`.
+`docs/superpowers/specs/2026-08-07-v7-test-cost-reduction-design.md`.
 
 ## Baseline
 
@@ -95,7 +95,7 @@ python -m pytest tests/ -p no:cacheprovider -n 4     # no -q: prints the counts 
 Not a test cost, but measured the same way and filed here because this is
 where the repo keeps measured-not-estimated numbers. Measured 2026-08-12 on
 the same box (Windows, NTFS, 12 logical cores), two runs, `time.process_time()
-/ wall` over 30s windows. Spec: `2026-08-08-realtime-push-design-v12.md`,
+/ wall` over 30s windows. Spec: `2026-08-08-v12-realtime-push-design.md`,
 which asks for a before/after because "it is small, but it never stops".
 
 | | run 1 | run 2 |

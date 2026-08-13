@@ -1,4 +1,4 @@
-/* Design tokens — spec `2026-08-08-admin-design-system-design.md`, Decision 3.
+/* Design tokens — spec `2026-08-08-v20-admin-design-system-design.md`, Decision 3.
  *
  * **Dark only. There is no light theme and there is not going to be one**, so
  * there is no `prefers-color-scheme` block here and no `[data-theme]` hook to

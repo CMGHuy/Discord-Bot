@@ -3,7 +3,7 @@
 NG19 TRIAGE: KEEP unchanged. This tests `swingbot/admin/events/stream.py`,
 a v1 route with no Jinja involvement; it survives the cutover untouched.
 
-Spec: `docs/superpowers/specs/2026-08-08-realtime-push-design-v12.md`,
+Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`,
 Decisions 3 (thin events), 4 (resync, not replay) and 5 (auth, and the cap).
 
 **Nothing here consumes the stream to exhaustion.** `event_stream` is an

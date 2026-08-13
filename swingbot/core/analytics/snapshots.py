@@ -2,7 +2,7 @@
 (data/analytics_snapshot.json) so every UI (!stats, /api/stats, the
 Performance page, the Strategies heatmap) reads ONE pre-built file
 instead of recomputing on every request -- see design decision #3 in
-docs/superpowers/plans/2026-07-11-cockpit-v3.md. build_snapshot itself is
+docs/superpowers/plans/2026-07-11-v3-cockpit.md. build_snapshot itself is
 pure (a function of its three arguments); save/load are the only I/O in
 this module, both going through jsonio."""
 from __future__ import annotations

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, discord.py 2.7.1, pandas 2.3.3, numpy, yfinance 0.2.66, mplfinance, pytest ≥8. JSON persistence under `data/`. No new dependencies.
 
-**Spec:** `docs/superpowers/specs/2026-07-11-unified-plan-engine-design.md` — read it before starting any task.
+**Spec:** `docs/superpowers/specs/2026-07-11-v2-unified-plan-engine-design.md` — read it before starting any task.
 
 ## Progress
 
@@ -192,7 +192,7 @@ def test_pending_can_cancel():
 """Unified trade-plan engine v2.
 
 Single authority for plan construction and exit policy (spec:
-docs/superpowers/specs/2026-07-11-unified-plan-engine-design.md).
+docs/superpowers/specs/2026-07-11-v2-unified-plan-engine-design.md).
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -5697,7 +5697,7 @@ Every consumer of the scenario's numbers in the alert path (`build_embed`'s plan
 
 ### Task 92: Docs — README, flags, DEPLOY
 
-**Files:** Modify `README.md`, `DOCKER.md`/`DEPLOY_HETZNER.md` (flag documentation), `docs/superpowers/specs/2026-07-11-unified-plan-engine-design.md` (mark shipped).
+**Files:** Modify `README.md`, `DOCKER.md`/`DEPLOY_HETZNER.md` (flag documentation), `docs/superpowers/specs/2026-07-11-v2-unified-plan-engine-design.md` (mark shipped).
 
 - [ ] **Step 1: Document: the three flags and their rollout meaning, `!plans`, badge semantics (what VALIDATED/WEAK legally claim: OOS window, gates), scale-out mechanics, the registry file and how it regenerates.**
 - [ ] **Step 2: Commit** — `git commit -m "docs: v2 engine user + operator documentation"`

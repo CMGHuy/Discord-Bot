@@ -12,10 +12,10 @@ one spec, so it is split into six sub-projects:
 
 | # | Sub-project | Status |
 |---|---|---|
-| 1 | REST API for the whole admin surface | agreed (`2026-08-08-admin-rest-api-design-v11.md`) |
-| 2 | Real-time event push (bot → admin) | agreed (`2026-08-08-realtime-push-design-v12.md`) |
-| 3 | Design system | agreed (`2026-08-08-admin-design-system-design.md`) |
-| 4 | Angular shell + build/deploy/auth | agreed (`2026-08-08-angular-shell-design-v13.md`) |
+| 1 | REST API for the whole admin surface | agreed (`2026-08-08-v11-admin-rest-api-design.md`) |
+| 2 | Real-time event push (bot → admin) | agreed (`2026-08-08-v12-realtime-push-design.md`) |
+| 3 | Design system | agreed (`2026-08-08-v20-admin-design-system-design.md`) |
+| 4 | Angular shell + build/deploy/auth | agreed (`2026-08-08-v13-angular-shell-design.md`) |
 | 5 | **The workspace implementations** | **this document** |
 | 6 | Cutover, delete Jinja | not started |
 

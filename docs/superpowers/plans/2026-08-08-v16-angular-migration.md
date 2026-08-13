@@ -37,12 +37,12 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 
 | # | Sub-project | Spec | Phase |
 |---|---|---|---|
-| 1 | REST API | `docs/superpowers/specs/2026-08-08-admin-rest-api-design-v11.md` | 1 |
-| 2 | Real-time push | `docs/superpowers/specs/2026-08-08-realtime-push-design-v12.md` | 2 |
-| 3 | Design system | `docs/superpowers/specs/2026-08-08-admin-design-system-design.md` | ✅ done |
-| 4 | Angular shell | `docs/superpowers/specs/2026-08-08-angular-shell-design-v13.md` | 3 |
-| 5 | Workspaces | `docs/superpowers/specs/2026-08-08-angular-workspaces-design-v14.md` | 4 |
-| 6 | Cutover | `docs/superpowers/specs/2026-08-08-jinja-cutover-design-v15.md` | 5 |
+| 1 | REST API | `docs/superpowers/specs/2026-08-08-v11-admin-rest-api-design.md` | 1 |
+| 2 | Real-time push | `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md` | 2 |
+| 3 | Design system | `docs/superpowers/specs/2026-08-08-v20-admin-design-system-design.md` | ✅ done |
+| 4 | Angular shell | `docs/superpowers/specs/2026-08-08-v13-angular-shell-design.md` | 3 |
+| 5 | Workspaces | `docs/superpowers/specs/2026-08-08-v14-angular-workspaces-design.md` | 4 |
+| 6 | Cutover | `docs/superpowers/specs/2026-08-08-v15-jinja-cutover-design.md` | 5 |
 
 ## Progress
 
@@ -315,7 +315,7 @@ Every task in this phase: add endpoints, add contract-test cases, change nothing
 
 ### Task NG18: Route coverage audit
 
-**Files:** `docs/superpowers/specs/2026-08-08-admin-rest-api-design-v11.md`
+**Files:** `docs/superpowers/specs/2026-08-08-v11-admin-rest-api-design.md`
 
 - [ ] `grep -rn "\.route(" swingbot/admin/*.py`; classify every route as replaced / dropped / **unmapped**
 - [ ] Fix any unmapped route now, or record the deliberate drop with a reason
@@ -605,7 +605,7 @@ Spec v12 Decision 2 — load-bearing, so check rather than assume.
 
 ### Task NG52: Parity mapping and 1280px check
 
-**Files:** `docs/superpowers/specs/2026-08-08-jinja-cutover-design-v15.md`
+**Files:** `docs/superpowers/specs/2026-08-08-v15-jinja-cutover-design.md`
 
 - [ ] Table: every Jinja page → its Angular successor, or a named deliberate drop
 - [ ] Verify the Trades expansion content at **1280px** — spec 3 flags mono digits as wide

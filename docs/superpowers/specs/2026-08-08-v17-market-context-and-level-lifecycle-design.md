@@ -5,7 +5,7 @@
 > **Renumbered v11 → v17 on merge (2026-08-08).** This document was written on
 > a branch that diverged *before* `d308273` introduced the repo-wide `-vN`
 > counter, and it self-assigned "v11" in its title. By the time it merged, main
-> had committed `2026-08-08-admin-rest-api-design-v11.md` to that number. Since
+> had committed `2026-08-08-v11-admin-rest-api-design.md` to that number. Since
 > a number is never reused, this document takes the next free one instead. Any
 > pre-merge commit message referring to it as "v11" means this document.
 

@@ -2,7 +2,7 @@
 answer "which plan should I follow today?" -- Discord alerts, !plans,
 !top, the weekly digest, /api/plans, and the admin board all consume
 rank_plans() instead of sorting locally. See design decision #1 in
-docs/superpowers/plans/2026-07-11-cockpit-v3.md."""
+docs/superpowers/plans/2026-07-11-v3-cockpit.md."""
 from __future__ import annotations
 
 import datetime as dt
