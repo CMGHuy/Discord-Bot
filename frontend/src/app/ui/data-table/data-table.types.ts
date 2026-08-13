@@ -67,10 +67,15 @@ export interface RowContext<T> {
  * One column. `key` is the identity used by `visible` and by sorting, and it
  * must match the API's sort field name when `sortable` is set.
  *
- * There is deliberately **no ordering property**. Render order comes from the
- * position of the entry in the `columns` array and nothing else — that is what
- * physically retires the drag-to-reorder machinery, since no call site can
- * express an order the component would honour.
+ * There is still no ordering property ON THE COLUMN, and there should not be:
+ * order lives in the `visible` array, which the user arranges and SR12
+ * persists. `columns` declares what exists and supplies the fallback order for
+ * anything `visible` does not mention.
+ *
+ * This replaces a note saying the component deliberately could not express an
+ * order at all. Spec v18 Decision 4 reverses that — see "Reversal recorded"
+ * there for why, and `ui/table-prefs.ts` for the tolerance that makes a stale
+ * saved order degrade rather than break.
  */
 export interface ColumnDef<T> {
   key: string;

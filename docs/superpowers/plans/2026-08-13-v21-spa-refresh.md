@@ -852,15 +852,26 @@ a second place to keep key spellings correct.
 
 Spec Decision 4, "Reversal recorded".
 
-- [ ] **Step 1: Write the failing test** — a `dragstart` on header B and `drop` on header A reorders the rendered cells to match, emits the new order, and **pinned columns cannot be dragged or dropped onto**.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** with native HTML5 drag events on `<th>` (`draggable="true"`), as the Jinja table did. No drag library — it would be a new dependency for one interaction.
-- [ ] **Step 4: Keyboard equivalent.** Left/Right arrow on a focused header moves that column one position, because a mouse-only reorder is unreachable by keyboard and this table is the product's main surface.
-- [ ] **Step 5: Delete the "visible columns carry no order" note** from `data-table.types.ts`'s header comment and replace it with a pointer to spec v18 Decision 4. Leaving the old note would contradict the code it sits on.
-- [ ] **Step 6: Run** → PASS.
-- [ ] **Step 7: Commit** `feat(table): drag-to-reorder returns, with a keyboard path`
+- [x] **Step 1: Write the failing test** — a `dragstart` on header B and `drop` on header A reorders the rendered cells to match, emits the new order, and **pinned columns cannot be dragged or dropped onto**.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** with native HTML5 drag events on `<th>` (`draggable="true"`), as the Jinja table did. No drag library — it would be a new dependency for one interaction.
+- [x] **Step 4: Keyboard equivalent.** Left/Right arrow on a focused header moves that column one position, because a mouse-only reorder is unreachable by keyboard and this table is the product's main surface.
+- [x] **Step 5: Delete the "visible columns carry no order" note** from `data-table.types.ts`'s header comment and replace it with a pointer to spec v18 Decision 4. Leaving the old note would contradict the code it sits on.
+- [x] **Step 6: Run** → PASS.
+- [x] **Step 7: Commit** `feat(table): drag-to-reorder returns, with a keyboard path`
 
 ---
+
+Step 5 says to delete the stale note in `data-table.types.ts`. **A test
+encoded the same rule** and had to go with it: `ignores the order of 'visible'
+and renders in 'columns' order` asserted the exact behaviour this task
+reverses. Replaced rather than deleted, so the reversal is pinned from both
+sides, and a second case added for a `visible` key naming a column that no
+longer exists — which is what a saved preference does after a rename.
+
+`renderedColumns` is built by looking each key up rather than by filtering
+`columns`. Filtering would silently reimpose the declaration order and make a
+reorder appear not to have taken.
 
 ### Task SR15: Per-page selector
 

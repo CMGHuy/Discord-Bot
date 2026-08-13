@@ -58,9 +58,11 @@ const ROWS: Row[] = [
       [loading]="loading()"
       [expansion]="withExpansion() ? expansionTemplate() : null"
       [emptyState]="emptyState()"
+      [pinned]="pinned()"
       (sortChange)="lastSort = $event"
       (pageChange)="pages.push($event)"
       (rowActivate)="activated.push($event)"
+      (reorder)="reordered.push($event)"
     />
   `,
 })
@@ -72,6 +74,7 @@ class Host {
   readonly loading = signal(false);
   readonly emptyState = signal<EmptyState | null>(null);
   readonly withExpansion = signal(false);
+  readonly pinned = signal<string[]>([]);
 
   readonly expansionTemplate =
     viewChild.required<TemplateRef<RowContext<Row>>>('expansion');
@@ -90,6 +93,7 @@ class Host {
   lastSort: SortSpec | null = null;
   readonly pages: number[] = [];
   readonly activated: Row[] = [];
+  readonly reordered: string[][] = [];
 }
 
 describe('DataTable', () => {
@@ -110,19 +114,31 @@ describe('DataTable', () => {
   const bodyRows = () => [...el().querySelectorAll('tbody tr.row')];
   const cells = (row: Element) => [...row.querySelectorAll('td')].map((c) => c.textContent!.trim());
 
-  /* -- property 2: visibility is a set, order comes from `columns` -------- */
+  /* -- property 2: `visible` decides membership AND order ----------------- */
 
   it('renders only the visible columns', () => {
     expect(headers()).toEqual(['Ticker', 'P&L %']);
   });
 
-  it('ignores the order of `visible` and renders in `columns` order', () => {
-    // The whole point of the contract: there is no way to express an order,
-    // so drag-to-reorder cannot come back through a call site.
+  it('honours the order of `visible`', () => {
+    // SR14 reverses the original contract, which said order could not be
+    // expressed at all so that drag-to-reorder could never return through a
+    // call site. Spec v18 Decision 4 brings it back deliberately -- see
+    // "Reversal recorded" there, and ui/table-prefs.ts for the tolerance that
+    // keeps a stale saved order from breaking a table.
     host.visible.set(['pnl', 'ticker']);
     fixture.detectChanges();
 
-    expect(headers()).toEqual(['Ticker', 'P&L %']);
+    expect(headers()).toEqual(['P&L %', 'Ticker']);
+  });
+
+  it('skips a visible key that is not a column', () => {
+    // `visible` can arrive from a saved preference naming a column that has
+    // since been removed.
+    host.visible.set(['pnl', 'gone', 'ticker']);
+    fixture.detectChanges();
+
+    expect(headers()).toEqual(['P&L %', 'Ticker']);
   });
 
   it('ignores a visible key that no column declares', () => {
@@ -360,5 +376,108 @@ describe('DataTable', () => {
     fixture.detectChanges();
 
     expect(el().querySelector('.wrap')!.getAttribute('aria-busy')).toBe('true');
+  });
+});
+
+// --- SR14: drag-to-reorder, and its keyboard equivalent -------------------
+// Spec v18 Decision 4, "Reversal recorded". Order is meaningful again, so the
+// component must honour `visible`'s order and let it be changed by both mouse
+// and keyboard.
+
+describe('DataTable reordering', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    host.visible.set(['ticker', 'pnl', 'held']);
+    fixture.detectChanges();
+  });
+
+  const ths = () => [...fixture.nativeElement.querySelectorAll('thead th')] as HTMLElement[];
+  const headerText = () => ths().map((th) => th.textContent!.trim());
+
+  function drag(fromIndex: number, toIndex: number): void {
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      setData: (k: string, v: string) => void data.set(k, v),
+      getData: (k: string) => data.get(k) ?? '',
+      effectAllowed: '',
+      dropEffect: '',
+    };
+    const list = ths();
+    for (const [type, index] of [['dragstart', fromIndex], ['dragover', toIndex], ['drop', toIndex]] as const) {
+      list[index].dispatchEvent(
+        Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer }));
+    }
+    fixture.detectChanges();
+  }
+
+  function arrow(index: number, key: 'ArrowLeft' | 'ArrowRight'): void {
+    ths()[index].dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    fixture.detectChanges();
+  }
+
+  it('renders in `visible` order, not in `columns` order', () => {
+    host.visible.set(['held', 'ticker']);
+    fixture.detectChanges();
+    expect(headerText()).toEqual(['Held', 'Ticker']);
+  });
+
+  it('reorders on drop and emits the new order', () => {
+    drag(2, 0);                                   // Held onto Ticker
+    expect(host.reordered.at(-1)).toEqual(['held', 'ticker', 'pnl']);
+  });
+
+  it('moves rather than swaps across a gap', () => {
+    // A swap is only equivalent for adjacent columns; dropped across two, a
+    // column should land where it was dropped.
+    drag(0, 2);                                   // Ticker onto Held
+    expect(host.reordered.at(-1)).toEqual(['pnl', 'held', 'ticker']);
+  });
+
+  it('will not drag a pinned column', () => {
+    host.pinned.set(['ticker']);
+    fixture.detectChanges();
+    drag(0, 2);
+    expect(host.reordered).toEqual([]);
+  });
+
+  it('will not drop onto a pinned column', () => {
+    host.pinned.set(['ticker']);
+    fixture.detectChanges();
+    drag(2, 0);
+    expect(host.reordered).toEqual([]);
+  });
+
+  it('marks only the unpinned headers draggable', () => {
+    host.pinned.set(['ticker']);
+    fixture.detectChanges();
+    expect(ths()[0].getAttribute('draggable')).toBeNull();
+    expect(ths()[1].getAttribute('draggable')).toBe('true');
+  });
+
+  it('moves a column with the arrow keys', () => {
+    arrow(0, 'ArrowRight');
+    expect(host.reordered.at(-1)).toEqual(['pnl', 'ticker', 'held']);
+  });
+
+  it('does not walk a column off either end', () => {
+    arrow(0, 'ArrowLeft');
+    expect(host.reordered).toEqual([]);
+  });
+
+  it('skips over a pinned neighbour rather than swapping with it', () => {
+    host.pinned.set(['pnl']);
+    fixture.detectChanges();
+    arrow(0, 'ArrowRight');
+    expect(host.reordered.at(-1)).toEqual(['pnl', 'held', 'ticker']);
+  });
+
+  it('gives a keyboard user something to focus and a hint about it', () => {
+    expect(ths()[0].getAttribute('tabindex')).toBe('0');
+    expect(ths()[0].getAttribute('aria-label')).toContain('arrow keys to reorder');
   });
 });

@@ -64,7 +64,16 @@ import {
               <th
                 [style.width]="col.width"
                 [class.num]="col.numeric"
+                [class.dragging]="dragging() === col.key"
                 [attr.aria-sort]="ariaSort(col)"
+                [attr.draggable]="isPinned(col.key) ? null : 'true'"
+                [attr.tabindex]="isPinned(col.key) ? null : 0"
+                [attr.aria-label]="isPinned(col.key) ? null : col.header + ' column, arrow keys to reorder'"
+                (dragstart)="onDragStart(col.key, $event)"
+                (dragover)="onDragOver(col.key, $event)"
+                (drop)="onDrop(col.key, $event)"
+                (dragend)="onDragEnd()"
+                (keydown)="onHeaderKeydown(col.key, $event)"
               >
                 @if (col.sortable) {
                   <button type="button" class="sort" (click)="toggleSort(col)">
@@ -136,6 +145,9 @@ import {
     </div>
   `,
   styles: `
+    th[draggable='true'] { cursor: grab; }
+    th.dragging { opacity: 0.5; }
+    th:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .wrap { position: relative; }
     .wrap[aria-busy='true'] { opacity: 0.6; transition: opacity var(--transition); }
 
@@ -244,15 +256,111 @@ export class DataTable<T> {
   readonly visibleChange = output<string[]>();
   readonly rowActivate = output<T>();
 
+  /** Columns the user may not move. Dragging one, or dropping onto one, is a
+   *  no-op rather than a silently-refused gesture that looks broken. */
+  readonly pinned = input<string[]>([]);
+  /** Emitted with the full new order whenever a column is moved. */
+  readonly reorder = output<string[]>();
+
+  /** The key currently being dragged, or null. Signal rather than a field so
+   *  the header can style itself while the drag is in flight. */
+  protected readonly dragging = signal<string | null>(null);
+
   /** Expanded rows, by `rowKey`. Keyed rather than indexed so a refetch that
    *  reorders or repages the rows does not leave a different row expanded. */
   private readonly expanded = signal<ReadonlySet<string>>(new Set());
 
-  /** Order comes from `columns`; `visible` only decides membership. */
+  /** Order comes from `visible`, which SR14 made an ordered list.
+   *
+   *  Built by looking each key up rather than by filtering `columns`, because
+   *  filtering would silently reimpose the declaration order and make a
+   *  reorder look like it had not taken. Unknown keys are skipped: `visible`
+   *  can arrive from a saved preference, and SR12's reader is tolerant for
+   *  the same reason. */
   protected readonly renderedColumns = computed(() => {
-    const keys = new Set(this.visible());
-    return this.columns().filter((column) => keys.has(column.key));
+    const byKey = new Map(this.columns().map((column) => [column.key, column]));
+    return this.visible()
+      .map((key) => byKey.get(key))
+      .filter((column): column is ColumnDef<T> => column !== undefined);
   });
+
+  /** Keys the table pins in place — not draggable, not a drop target. */
+  private readonly pinnedSet = computed(() => new Set(this.pinned()));
+
+  protected isPinned(key: string): boolean {
+    return this.pinnedSet().has(key);
+  }
+
+  /**
+   * Move `key` so it sits where `target` is now.
+   *
+   * Splice-out-then-insert rather than a swap: a swap is only equivalent for
+   * adjacent columns, and dragging one header across four others should land
+   * it where it was dropped rather than trading places with whatever was
+   * there.
+   */
+  private move(key: string, target: string): void {
+    if (key === target || this.isPinned(key) || this.isPinned(target)) return;
+    const order = this.visible().slice();
+    const from = order.indexOf(key);
+    const to = order.indexOf(target);
+    if (from < 0 || to < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, key);
+    this.reorder.emit(order);
+  }
+
+  protected onDragStart(key: string, event: DragEvent): void {
+    if (this.isPinned(key)) {
+      event.preventDefault();
+      return;
+    }
+    this.dragging.set(key);
+    // Firefox ignores a drag that carries no data at all.
+    event.dataTransfer?.setData('text/plain', key);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  protected onDragOver(key: string, event: DragEvent): void {
+    // preventDefault is what marks a valid drop target; without it the
+    // browser refuses the drop and the gesture looks broken.
+    if (this.dragging() === null || this.isPinned(key)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  protected onDrop(key: string, event: DragEvent): void {
+    event.preventDefault();
+    const source = this.dragging() ?? event.dataTransfer?.getData('text/plain') ?? '';
+    this.dragging.set(null);
+    if (source) this.move(source, key);
+  }
+
+  protected onDragEnd(): void {
+    this.dragging.set(null);
+  }
+
+  /**
+   * Left/Right on a focused header moves that column one place.
+   *
+   * A mouse-only reorder is simply unavailable to a keyboard user, and this
+   * table is the product's main surface -- so the drag has a keyboard
+   * equivalent rather than an apology. Pinned columns are skipped over rather
+   * than swapped with, so a move never lands a column somewhere the drag
+   * could not have put it.
+   */
+  protected onHeaderKeydown(key: string, event: KeyboardEvent): void {
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (step === 0 || this.isPinned(key)) return;
+
+    const order = this.visible();
+    let index = order.indexOf(key) + step;
+    while (index >= 0 && index < order.length && this.isPinned(order[index])) index += step;
+    if (index < 0 || index >= order.length) return;
+
+    event.preventDefault();
+    this.move(key, order[index]);
+  }
 
   protected readonly colspan = computed(
     () => this.renderedColumns().length + (this.expansion() ? 1 : 0),
