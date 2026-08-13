@@ -1443,14 +1443,57 @@ kind of bug.
 **Owns:** `frontend/src/app/ui/chart/trade-chart.ts`, `frontend/src/app/ui/chart/chart-theme.ts`, `frontend/src/app/stores/chart.store.ts`, `frontend/src/app/stores/chart.store.spec.ts`
 **Blocked by:** SR33, SR34
 
-- [ ] **Step 1: Write the failing store test** — `ChartStore` loads from the SR33 endpoint, exposes `loading` / `error` / `data`, and refetches on a `trade` event.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement the store**, then the component: three panes (price+volume, MACD, RSI), candles and the volume histogram on pane 0. Panes are created empty at mount so later tasks add series without restructuring.
-- [ ] **Step 4: `chart-theme.ts` reads the CSS tokens** via `getComputedStyle(document.documentElement).getPropertyValue('--pos')` rather than repeating hex values — this is the file SR3's audit exempted, and this step is what removes the exemption.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(chart): three panes, candles and volume`
+- [x] **Step 1: Write the failing store test** — `ChartStore` loads from the SR33 endpoint, exposes `loading` / `error` / `data`, and refetches on a `trade` event.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement the store**, then the component: three panes (price+volume, MACD, RSI), candles and the volume histogram on pane 0. Panes are created empty at mount so later tasks add series without restructuring.
+- [x] **Step 4: `chart-theme.ts` reads the CSS tokens** via `getComputedStyle(document.documentElement).getPropertyValue('--pos')` rather than repeating hex values — this is the file SR3's audit exempted, and this step is what removes the exemption.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(chart): three panes, candles and volume`
 
 ---
+
+**Result:** vitest `31 files, 479 passed`, `ng build` clean. 11 store tests in
+`chart.store.spec.ts`, 3 theme tests in `chart-theme.spec.ts`.
+
+**The panes are created empty with `addPane(true)`, and the `true` is the
+task.** `preserveEmptyPane` is what keeps a pane that holds no series alive;
+without it the library may drop it, and since `addPane` *appends*, SR37's RSI
+pane would silently become pane 1 on any frame whose MACD was omitted for want
+of history — the panes would be in the wrong order exactly on the frames where
+that is hardest to notice. `PANE_PRICE` / `PANE_MACD` / `PANE_RSI` are exported
+for the same reason: SR36–SR39 pass a pane index to every `addSeries`, and a
+bare `1` at four call sites is how the RSI ends up drawn over the MACD.
+
+**Volume is one greyscale colour, not green-up/red-down.** Under the token
+palette a hue means a valence — `--pos` is profit, `--neg` is loss — and volume
+has none: a heavy down day is information, not a loss. It also has to sit
+behind the candles without competing, which the same choice buys. It gets its
+own overlay price scale (`'volume'`), because volume in shares and price in
+dollars sharing one axis flattens the candles to a line.
+
+**`TradeChart` does not replace `PriceChart`,** and the duplication is real but
+correct: `PriceChart` draws ticker-detail from `/market/ohlcv`, whose time type
+is the `YYYY-MM-DD` string, while this payload's is an epoch second (SR33's
+note explains why they differ). One component serving both would carry a
+branch on time representation through every series it draws.
+
+**`ng build` was broken before this task and is fixed here.** `src/test-setup.ts`
+(added earlier in this task for the token injection) reads the token file with
+`node:fs`, and `tsconfig.app.json` compiles `src/**/*.ts` with `"types": []` —
+so the app build failed on `node:path` and `process` while `ng test` passed,
+which is the ordering that lets it go unnoticed. The file is now excluded from
+the app config and listed in `tsconfig.spec.json`, which has the node types.
+
+**`src/vite-env.d.ts` was deleted as dead.** It declared `*.css?raw` for an
+import that no longer exists — `test-setup.ts` tried `?raw` first, found the
+Angular compiler claims every `.css` import ahead of Vite's handler and yields
+an **empty string**, and switched to `readFileSync`. A declaration for a module
+form nothing imports is an invitation to try the broken route again.
+
+**Pre-existing:** `api-client.ts` and `vitest.config.ts` do not satisfy
+`npx prettier --check`, and did not at HEAD either (verified by checking the
+committed blobs). Left alone, as SR33 left `models.ts` — a whole-file reflow
+would bury this task's diff. The files this task creates are prettier-clean.
 
 ### Task SR36: Plan lines and risk/reward shading
 

@@ -24,6 +24,14 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
+    /* Injects `src/styles/tokens.css` into the test document, so the charts'
+     * `getComputedStyle` reads resolve to the real palette instead of coming
+     * back empty (SR35). Appended to the builder's own setup files —
+     * `polyfills.js`, `init-testbed.js`, `vitest-mock-patch.js` — by Vite's
+     * config merge, NOT replacing them; a replacement would take the TestBed
+     * initialiser with it and every spec would fail at once, which is at least
+     * a loud failure if this ever changes. */
+    setupFiles: ['./src/test-setup.ts'],
     pool: 'threads',
     // Top-level, not under poolOptions: Vitest 4 removed that block, and a
     // config written the old way is accepted, warned about, and ignored --
