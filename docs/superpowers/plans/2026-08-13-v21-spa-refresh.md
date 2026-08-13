@@ -1707,16 +1707,40 @@ spec now pins both that and the two-survivor case.
 - [x] **Step 2: Run and watch it fail.**
 - [x] **Step 3: Implement**, and replace the trade detail's Chart tab with `TradeChart`.
 - [ ] **Step 4: Compare against the PNG.** For each of SR32's fixture trades, put the rendered chart beside the generated image and confirm every level, band and overlay sits at the same price. Record the comparison in the QA doc. This is the only check that catches a coordinate-conversion error, which unit tests cannot see.
-- [ ] **Step 5: Walk the Phase 3 checklist**, recording each line.
-- [ ] **Step 6: Commit** `feat(chart): degraded states, and the walk against the PNG`
+- [x] **Step 5: Walk the Phase 3 checklist**, recording each line.
+- [x] **Step 6: Commit** `feat(chart): degraded states, and the walk against the PNG`
 
 ---
 
-**Steps 1–3 done; steps 4–6 are open.** vitest `36 files, 567 passed`,
-`ng build` clean. **Steps 4 and 5 need a running admin and a browser** — the
-PNG comparison is the only check that catches a coordinate-conversion error,
-and it cannot be faked from unit tests, so it is deliberately left rather than
-signed off.
+**Result:** the walk is written up in
+`docs/superpowers/results/2026-08-13-spa-refresh-qa.md`. vitest `36 files, 571
+passed`, full pytest `1738 passed, 0 failed`, `ng build` clean.
+
+**The walk found three defects, and every one of them passed the unit tests.**
+The plan's targets were drawn off the top of the pane (price lines take no part
+in autoscale — SR37 had already solved this for the RSI thresholds and the
+price pane needed the same fix); Fibonacci was drawn as a diagonal fan where
+the PNG draws horizontal levels, which is the exact disagreement spec Decision
+10 names; and a `--pos` pivot diamond on an up candle was invisible. Two of the
+three were only visible with the images side by side.
+
+**The comparison was run without a live admin.** `scripts/dump_chart_payloads.py`
+drives the real Flask route with the two seams the market tests already patch,
+and `frontend/chart-harness/` draws that payload with the real chart modules in
+Chromium. Both are kept — this check is worth repeating on any chart change.
+
+**`price-pane.ts` exists because the harness earned it.** The first version
+rebuilt the candle and volume series by hand, so the autoscale fix appeared not
+to work: the harness was still drawing the old options. The pane's two series
+now come from one factory that both the component and the harness call. That
+was the phase's own rule — one implementation — biting at the smallest scale.
+
+**One gap left open deliberately, and it is not blocked:** the Chart tab itself
+in the running admin, which is the only thing that exercises `TradeChart`'s
+wiring, `ChartStore` and the tab chrome together. Phases 1 and 2 were walked
+that way (`scripts/seed_parity_fixtures.py` + the built bundle) and Phase 3
+could be. The harness was the right tool for the PNG comparison — SR32's
+fixtures are not seedable trades — but it stops at the module boundary.
 
 **Only one of the three degraded states needed new code.** `overlay: null` is
 already pinned in `strategy-overlay.spec.ts` and a missing indicator's pane in
@@ -1739,9 +1763,15 @@ still an unlabelled diamond; whether that reads is a question for step 4.
 
 ## Phase 3 gate
 
-- [ ] Full pytest, vitest, `ng build` green
-- [ ] Chart fixture hashes still match SR32's baseline
-- [ ] Every fixture's interactive chart matches its PNG level-for-level
+- [x] Full pytest, vitest, `ng build` green — `1738 passed, 0 failed`;
+      `36 files, 571 passed`; bundle clean.
+- [x] Chart fixture hashes still match SR32's baseline. All 10 re-rendered this
+      session. The only commit to touch `swingbot/` since SR32 is SR33's, which
+      added a route and changed nothing under `swingbot/core/charts/` — so the
+      renders are unchanged by construction as well as in fact.
+- [x] Every fixture's interactive chart matches its PNG level-for-level, after
+      the three fixes SR40's walk found. One documented exception: the three
+      trendline fixtures, which the endpoint does not fit — see the QA doc.
 - [ ] Merge to `main`
 
 ---

@@ -70,6 +70,27 @@ export function planLineSpecs(levels: ChartLevels, palette: ChartPalette): PlanL
 }
 
 /**
+ * Every level the plan draws, for widening the price pane's autoscale.
+ *
+ * **Price lines take no part in the library's autoscale**, and SR40's walk
+ * against the PNG is what caught it: a plan whose targets sit above the
+ * frame's high — which is every plan that has not hit its target, i.e. most of
+ * them — drew TP1 and TP2 off the top of the pane. They were there, correct,
+ * and invisible. matplotlib widens its ylim to include the levels, so the two
+ * renderers disagreed about the one thing this phase exists to keep identical.
+ *
+ * The candles do get squashed when a target is far away. That is what the PNG
+ * does too, and a target you cannot see is worse than a candle body that is
+ * three pixels shorter.
+ */
+export function planLevelPrices(levels: ChartLevels | null): number[] {
+  if (!levels) return [];
+  return [levels.entry, levels.stop, levels.target1, levels.target2, levels.working_stop].filter(
+    (price): price is number => price !== null && Number.isFinite(price),
+  );
+}
+
+/**
  * The risk and reward bands, spanning the frame from `from` to `to`.
  *
  * **Reward is measured to the FIRST target**, falling back to the second when a

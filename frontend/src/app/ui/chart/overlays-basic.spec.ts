@@ -191,7 +191,9 @@ describe('VolumeProfilePrimitive', () => {
 });
 
 describe('BasicOverlays', () => {
-  it('draws two Keltner lines in the info token when the payload has an envelope', () => {
+  it('draws two Keltner lines in the info token, visibly', () => {
+    // `--info-soft` was tried first and SR40's walk against the PNG found it
+    // invisible: 12% alpha is a fill's opacity, not a line's.
     const chart = fakeChart();
 
     new BasicOverlays(chart.api as never, chart.priceSeries as never).render(
@@ -204,7 +206,7 @@ describe('BasicOverlays', () => {
     );
 
     expect(chart.series).toHaveLength(2);
-    expect(chart.series.every((s) => s.options['color'] === PALETTE.infoSoft)).toBe(true);
+    expect(chart.series.every((s) => s.options['color'] === PALETTE.info)).toBe(true);
   });
 
   it('draws no line series at all when the frame was too short for Keltner', () => {

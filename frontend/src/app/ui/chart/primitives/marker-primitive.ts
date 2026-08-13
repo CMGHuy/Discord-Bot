@@ -32,11 +32,16 @@ export interface MarkerSpec {
   time: number;
   price: number;
   color: string;
+  /** Drawn around the diamond. SR40's walk found a `--pos` marker sitting on
+   *  an up candle: same hue, four pixels, invisible. The overlay colour is
+   *  fixed per SIDE, so it will land on a candle of its own colour regularly —
+   *  the outline is what keeps the pivot readable when it does. */
+  outline?: string;
   /** Half-diagonal, in CSS pixels. */
   size?: number;
 }
 
-const DEFAULT_SIZE = 4;
+const DEFAULT_SIZE = 5;
 
 class MarkerRenderer implements IPrimitivePaneRenderer {
   constructor(
@@ -81,6 +86,11 @@ class MarkerRenderer implements IPrimitivePaneRenderer {
       context.lineTo(cx - dx, cy);
       context.closePath();
       context.fill();
+      if (this.spec.outline) {
+        context.strokeStyle = this.spec.outline;
+        context.lineWidth = 1.5 * horizontalPixelRatio;
+        context.stroke();
+      }
       context.restore();
     });
   }

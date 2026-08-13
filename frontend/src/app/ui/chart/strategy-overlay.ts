@@ -52,6 +52,11 @@ export function overlayPrimitives(
   palette: ChartPalette,
 ): ISeriesPrimitive<Time>[] {
   const color = overlayColor(overlay.side, palette);
+  // Diamonds are small and the overlay colour is fixed per side, so a marker
+  // regularly lands on a candle of its own colour. The outline is what keeps it
+  // readable when it does — SR40's walk found a pivot that was simply not there
+  // to the eye.
+  const outline = palette.surface;
   const shape: ChartShape = overlay.shape;
 
   switch (shape.kind) {
@@ -67,33 +72,51 @@ export function overlayPrimitives(
         ...shape.pivots
           .filter((point) => point[1] !== null)
           .map(
-            (point) => new MarkerPrimitive({ time: point[0], price: point[1] as number, color }),
+            (point) =>
+              new MarkerPrimitive({ time: point[0], price: point[1] as number, color, outline }),
           ),
       ];
 
     case 'fib_fan': {
-      // Every ray starts at the 0% anchor, so without its price there is no
-      // fan to draw rather than a fan drawn from zero.
-      const origin = shape.origin[1];
-      if (origin === null) return [];
+      // **Horizontal levels, not a diagonal fan**, and SR40's walk against the
+      // PNG is what settled it. A retracement ratio names a PRICE — the PNG
+      // draws 61.8% as a horizontal line at 120.10 across the frame — whereas a
+      // ray from the 0% anchor is at that price at exactly one x and at some
+      // other price everywhere else. Spec Decision 10 names this exact case as
+      // what the shared geometry exists to prevent: "the chart in the browser
+      // and the image in Discord cannot disagree about where a Fibonacci level
+      // sits". SR39's step 1 says "one ray per ratio"; it was written before
+      // anyone had put the two renderers side by side.
+      const from = Math.min(shape.origin[0], shape.anchor[0]);
+      const to = Math.max(shape.origin[0], shape.anchor[0]);
 
-      // The whole fan, not just the matching member: a lone line at 61.8% says
-      // nothing about the swing it was measured from. The match is drawn
-      // bolder and solid so the reader still sees which one confirmed.
-      return shape.ratios
+      // The whole retracement, not just the matching member: a lone line at
+      // 61.8% says nothing about the swing it was measured from. The match is
+      // solid and bolder so the reader still sees which one confirmed.
+      const levels = shape.ratios
         .filter(([, price]) => price !== null)
+        .map(([, price, isMatch]) =>
+          line(
+            [
+              [from, price as number],
+              [to, price as number],
+            ],
+            color,
+            { lineWidth: isMatch ? MATCH_WIDTH : FAN_WIDTH, dashed: !isMatch },
+          ),
+        )
+        .flat();
+
+      // The two swing points the ratios were measured between, as the PNG
+      // marks them. Without these the levels are prices with no provenance.
+      const anchors = [shape.origin, shape.anchor]
+        .filter((point) => point[1] !== null)
         .map(
-          ([, price, isMatch]) =>
-            new PolylinePrimitive({
-              points: [
-                [shape.origin[0], origin],
-                [shape.anchor[0], price as number],
-              ],
-              color,
-              lineWidth: isMatch ? MATCH_WIDTH : FAN_WIDTH,
-              dashed: !isMatch,
-            }),
+          (point) =>
+            new MarkerPrimitive({ time: point[0], price: point[1] as number, color, outline }),
         );
+
+      return [...levels, ...anchors];
     }
 
     case 'fvg_zone':
@@ -125,7 +148,7 @@ export function overlayPrimitives(
       );
 
     case 'marker':
-      return [new MarkerPrimitive({ time: shape.t, price: shape.price, color })];
+      return [new MarkerPrimitive({ time: shape.t, price: shape.price, color, outline })];
 
     default:
       // A kind this client has never heard of. Nothing drawn, nothing thrown.

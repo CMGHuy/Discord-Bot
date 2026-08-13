@@ -6,6 +6,7 @@ import {
   ISeriesPrimitive,
   LineData,
   LineSeries,
+  LineStyle,
   SeriesAttachedParameter,
   SeriesType,
   Time,
@@ -232,15 +233,20 @@ export class BasicOverlays {
 
     const kc = data.indicators.kc;
     if (kc) {
-      // `--info-soft` is `--info` at 12%: the tokens' own vocabulary for "this
-      // hue, reduced". Inventing a fourth opacity here would be inventing a
-      // fourth palette, which is what SR3's audit existed to stop.
+      // `--info` DASHED, not `--info-soft` solid. SR38 chose the soft token
+      // because the plan says "at reduced opacity" and `-soft` is the tokens'
+      // own word for that; SR40's walk against the PNG showed 12% alpha on a
+      // one-pixel line is not faint, it is invisible — the envelope simply was
+      // not there. `-soft` is tuned for fills. A dash pattern says "context"
+      // without spending opacity to say it, and matches how the PNG draws the
+      // same envelope.
       for (const values of [kc.upper, kc.lower]) {
         const line = this.chart.addSeries(
           LineSeries,
           {
-            color: palette.infoSoft,
+            color: palette.info,
             lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
             // No axis tag, no last-value label, no crosshair marker: an
             // envelope is read as a shape, and three more numbers on the price
             // scale would crowd out the plan levels that are read as numbers.

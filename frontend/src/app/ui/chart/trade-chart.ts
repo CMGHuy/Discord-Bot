@@ -9,20 +9,14 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import {
-  CandlestickSeries,
-  HistogramSeries,
-  IChartApi,
-  ISeriesApi,
-  UTCTimestamp,
-  createChart,
-} from 'lightweight-charts';
+import { IChartApi, ISeriesApi, UTCTimestamp, createChart } from 'lightweight-charts';
 
-import { ChartResponse } from '../../api/models';
-import { ChartPalette, chartOptions, chartPalette } from './chart-theme';
+import { ChartLevels, ChartResponse } from '../../api/models';
+import { chartOptions, chartPalette } from './chart-theme';
 import { IndicatorPanes } from './indicator-panes';
 import { BasicOverlays } from './overlays-basic';
 import { PlanLines } from './plan-lines';
+import { createPricePane } from './price-pane';
 import { StrategyOverlay } from './strategy-overlay';
 
 /**
@@ -69,15 +63,6 @@ import { StrategyOverlay } from './strategy-overlay';
  *  component's docstring, and `indicator-panes.ts`. */
 export const PANE_PRICE = 0;
 
-/** The price pane's share of the height. `IndicatorPanes` gives each of its own
- *  panes 2, so a full stack is the 6:2:2 SR35 set. */
-const PRICE_STRETCH = 6;
-
-/** The volume histogram's own price scale. An overlay scale (a non-empty id
- *  that is neither `left` nor `right`) rather than the price scale: volume in
- *  shares and price in dollars on one axis makes the candles a flat line. */
-const VOLUME_SCALE = 'volume';
-
 @Component({
   selector: 'sb-trade-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -108,6 +93,10 @@ export class TradeChart {
   private overlays: BasicOverlays | null = null;
   private panes: IndicatorPanes | null = null;
   private strategy: StrategyOverlay | null = null;
+  /** The levels the price pane's autoscale has to make room for. Held on the
+   *  instance because the provider above is installed once, at creation, and
+   *  asked again on every frame. */
+  private levels: ChartLevels | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -143,57 +132,17 @@ export class TradeChart {
     const chart = createChart(element, chartOptions(palette));
     this.chart = chart;
 
-    chart.panes()[PANE_PRICE]?.setStretchFactor(PRICE_STRETCH);
+    // The pane's two series come from a shared factory rather than from here,
+    // so that anything else drawing this chart — SR40's comparison harness —
+    // gets the same options rather than a copy that drifts.
+    const pane = createPricePane(chart, palette, () => this.levels, PANE_PRICE);
+    this.candles = pane.candles;
+    this.volume = pane.volume;
 
-    this.candles = chart.addSeries(
-      CandlestickSeries,
-      {
-        upColor: palette.up,
-        downColor: palette.down,
-        // Bodies, borders and wicks share their side's colour: a candle is one
-        // object, and outlining it in a third colour only adds edges to read.
-        borderUpColor: palette.up,
-        borderDownColor: palette.down,
-        wickUpColor: palette.up,
-        wickDownColor: palette.down,
-      },
-      PANE_PRICE,
-    );
-    // Room at the bottom for the volume histogram to sit under the candles
-    // rather than through them. The volume's own margins do the other half.
-    this.candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.26 } });
-
-    this.volume = this.createVolume(chart, palette);
     this.planLines = new PlanLines(this.candles);
     this.overlays = new BasicOverlays(chart, this.candles);
     this.panes = new IndicatorPanes(chart);
     this.strategy = new StrategyOverlay(this.candles);
-  }
-
-  /** One colour for every bar, not green-up/red-down.
-   *
-   *  Under the token palette a hue carries a MEANING — `--pos` is profit,
-   *  `--neg` is loss — and volume has no valence: a heavy down day is
-   *  information, not a loss, and painting its bar red says otherwise. It also
-   *  has to sit behind the candles without competing with them, which the same
-   *  greyscale choice buys. */
-  private createVolume(chart: IChartApi, palette: ChartPalette): ISeriesApi<'Histogram'> {
-    const volume = chart.addSeries(
-      HistogramSeries,
-      {
-        color: palette.volume,
-        priceFormat: { type: 'volume' },
-        priceScaleId: VOLUME_SCALE,
-        // The volume axis is never read as a number — the bars are read against
-        // each other — and a second set of tick labels on the price pane would
-        // cost more than it tells.
-        lastValueVisible: false,
-        priceLineVisible: false,
-      },
-      PANE_PRICE,
-    );
-    volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-    return volume;
   }
 
   private render(data: ChartResponse | null): void {
@@ -212,6 +161,7 @@ export class TradeChart {
       this.overlays?.detach();
       this.panes?.detach();
       this.strategy?.detach();
+      this.levels = null;
       return;
     }
 
@@ -241,6 +191,10 @@ export class TradeChart {
    *  reward apply for as long as the position does — a band bounded by
    *  something narrower would claim the plan only held over those bars. */
   private renderPlan(data: ChartResponse): void {
+    // Before the early return: an empty frame still has levels, and the field
+    // is what the autoscale provider reads.
+    this.levels = data.levels;
+
     const first = data.ohlcv[0];
     const last = data.ohlcv[data.ohlcv.length - 1];
     if (!first || !last) {
@@ -248,6 +202,7 @@ export class TradeChart {
       this.overlays?.detach();
       this.panes?.detach();
       this.strategy?.detach();
+      this.levels = null;
       return;
     }
     this.planLines?.render(

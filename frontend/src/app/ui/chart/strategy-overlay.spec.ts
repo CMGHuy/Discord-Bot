@@ -130,7 +130,7 @@ describe('overlayPrimitives', () => {
     ]);
   });
 
-  it('draws a fib fan as one ray per ratio from the shared origin', () => {
+  it('draws each fib ratio as a HORIZONTAL level at its own price', () => {
     const shape: ChartShape = {
       kind: 'fib_fan',
       origin: [100, 10],
@@ -143,20 +143,44 @@ describe('overlayPrimitives', () => {
       matched_price: 16.18,
     };
 
-    const rays = overlayPrimitives(wrap(shape), PALETTE) as PolylinePrimitive[];
+    const drawn = overlayPrimitives(wrap(shape), PALETTE);
+    const levels = drawn.filter((p) => p instanceof PolylinePrimitive) as PolylinePrimitive[];
 
-    expect(rays).toHaveLength(2);
-    // Each ray ends at the PRICE THE SERVER COMPUTED for its ratio, never at a
-    // price re-derived from origin and anchor here.
-    expect(rays.map((r) => r.spec.points)).toEqual([
+    // A ratio names a PRICE. The PNG draws 61.8% as a horizontal line at the
+    // price the server computed, and a ray sloping away from it is the two
+    // renderers disagreeing about where a Fibonacci level sits — the exact
+    // failure spec Decision 10 cites. SR40's walk caught this.
+    expect(levels.map((r) => r.spec.points)).toEqual([
       [
-        [100, 10],
+        [100, 13.82],
         [400, 13.82],
       ],
       [
-        [100, 10],
+        [100, 16.18],
         [400, 16.18],
       ],
+    ]);
+  });
+
+  it('marks the two swing points the ratios were measured between', () => {
+    const shape: ChartShape = {
+      kind: 'fib_fan',
+      origin: [100, 10],
+      anchor: [400, 20],
+      ratios: [[0.618, 16.18, true]],
+      matched: 'Fib 61.8%',
+      matched_price: 16.18,
+    };
+
+    const markers = overlayPrimitives(wrap(shape), PALETTE).filter(
+      (p) => p instanceof MarkerPrimitive,
+    ) as MarkerPrimitive[];
+
+    // Without them the levels are prices with no provenance — the PNG marks
+    // 0% and 100% for the same reason.
+    expect(markers.map((m) => [m.spec.time, m.spec.price])).toEqual([
+      [100, 10],
+      [400, 20],
     ]);
   });
 
@@ -176,9 +200,12 @@ describe('overlayPrimitives', () => {
       matched_price: 16.18,
     };
 
-    const [faint, bold] = overlayPrimitives(wrap(shape), PALETTE) as PolylinePrimitive[];
+    const [faint, bold] = overlayPrimitives(wrap(shape), PALETTE).filter(
+      (p) => p instanceof PolylinePrimitive,
+    ) as PolylinePrimitive[];
 
     expect(bold.spec.lineWidth).toBeGreaterThan(faint.spec.lineWidth ?? 1);
+    expect(bold.spec.dashed).toBe(false);
   });
 
   it('skips a fib ratio with no price', () => {
@@ -194,7 +221,10 @@ describe('overlayPrimitives', () => {
       matched_price: null,
     };
 
-    expect(overlayPrimitives(wrap(shape), PALETTE)).toHaveLength(1);
+    const levels = overlayPrimitives(wrap(shape), PALETTE).filter(
+      (p) => p instanceof PolylinePrimitive,
+    );
+    expect(levels).toHaveLength(1);
   });
 
   it('draws an fvg zone as a box between its two times and two prices', () => {

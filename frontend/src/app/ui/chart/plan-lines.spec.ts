@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ChartLevels } from '../../api/models';
 import { ChartPalette } from './chart-theme';
-import { PlanLines, planBands, planLineSpecs } from './plan-lines';
+import { PlanLines, planBands, planLevelPrices, planLineSpecs } from './plan-lines';
 
 /* SR36 — the plan levels and the risk/reward bands.
  *
@@ -120,6 +120,25 @@ describe('planLineSpecs', () => {
     expect(
       titles({ entry: null, stop: null, target1: null, target2: null, working_stop: null }),
     ).toEqual([]);
+  });
+});
+
+describe('planLevelPrices', () => {
+  it('lists every level the pane has to make room for', () => {
+    // SR40's walk found TP1 and TP2 drawn off the top of the pane: price lines
+    // take no part in the library's autoscale, and a plan that has not hit its
+    // target — most of them — has targets above the frame's high. The PNG
+    // widens its ylim to include them, so this is the two renderers disagreeing
+    // about the one thing the phase exists to keep identical.
+    expect(planLevelPrices(FULL).sort((a, b) => a - b)).toEqual([90, 100, 104, 120, 140]);
+  });
+
+  it('skips the levels a plan does not have', () => {
+    expect(planLevelPrices({ ...FULL, target2: null, working_stop: null })).toEqual([100, 90, 120]);
+  });
+
+  it('is empty without levels at all, so the pane scales to the candles', () => {
+    expect(planLevelPrices(null)).toEqual([]);
   });
 });
 
