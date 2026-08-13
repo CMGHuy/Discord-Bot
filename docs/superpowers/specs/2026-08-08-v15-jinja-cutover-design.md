@@ -959,6 +959,14 @@ Written 2026-08-13, the day Release A shipped. **NG57 must not run before
 everything NG57 asks for that is *not* the irreversible deletion, done now so
 that Release B is mechanical rather than exploratory.
 
+> **Second gate, added later the same day.** NG57 must also not run until
+> `2026-08-13-v21-spa-refresh.md` completes. That plan ports the density
+> model, the status bar and the plan cell out of these templates and runs the
+> first *feature*-level parity audit of all 19 of them — C2 below triages the
+> tests that die with Jinja, but nothing yet triages the UI behaviour that
+> does. Its gap table is the evidence that deleting the templates loses
+> nothing. Both gates must be satisfied, not either. See spec v18 Decision 13.
+
 ## C1 — The PNG chart routes: safe to delete — VERIFIED
 
 NG57's checklist says to delete `/trades/<id>/chart.png` and
