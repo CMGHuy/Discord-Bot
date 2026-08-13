@@ -330,7 +330,18 @@ symptom of drift is a single frame of the old colour on a cold load.
 - [x] `cd frontend && npx ng test` → green — 336 passed across 20 files
 - [x] `npx ng build` → succeeds — 313 kB initial, `<base href="/app/">` intact
 - [x] Load the SPA, click every nav entry, confirm no 404 and the new palette is live — all six render, zero console errors, zero 4xx; `--bg` resolves to `#0a0b10` and Inter is loading. `scripts/smoke_spa.py` passes 23/23 against a real server on the built bundle, including all five favicons resolving from `/app/`.
-- [ ] Merge `worktree-spa-refresh` → `main` (check main-tree `git status` first)
+- [x] Merge `worktree-spa-refresh` → `main` (check main-tree `git status` first) — merged 2026-08-13 as `682fc91`, main tree was clean. **Not pushed**: pushing `main` triggers the Hetzner deploy, and Phase 0 is foundation only — production would get the new palette and identity on top of the old tables. That is coherent but partial, so it is a call to make deliberately rather than as a side effect of finishing a phase.
+
+**One production bug fell out of the merge verification** and is fixed in
+`22c2dd6`: three full-suite runs failed on `os.replace` with Windows'
+`PermissionError: [WinError 5]`, each in a *different* test. Different tests,
+one call site — `jsonio.atomic_write_json` — which is what made it a bug
+rather than a flaky test. `os.replace` is atomic but fails transiently on
+Windows while anything holds a handle on either file, and the bot writes
+`plans.json` on every scan with no handler, so the same failure there loses
+the write silently. Now a bounded retry that still raises if it never lands,
+and `plan_store._save`'s duplicate copy of the dance (missing the fsync *and*
+the retry) goes through the shared helper.
 
 **Two things the walk found, both in the verification rather than the app:**
 
