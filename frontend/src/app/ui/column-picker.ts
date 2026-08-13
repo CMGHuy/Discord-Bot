@@ -9,6 +9,8 @@ import {
 } from '@angular/core';
 
 import { PreferencesStore } from '../stores/preferences.store';
+import { Density } from './data-table/data-table.types';
+import { clearTableColumns, writeTableColumns } from './table-prefs';
 
 /** The minimum a column needs to appear in the picker. `ColumnDef` satisfies
  *  it, so a call site passes the same array it gives the table. */
@@ -60,7 +62,7 @@ export interface PickableColumn {
       @if (open()) {
         <div class="panel" role="group" aria-label="Visible columns">
           <ul>
-            @for (column of columns(); track column.key) {
+            @for (column of pickable(); track column.key) {
               <li>
                 <label [class.locked]="isLast(column.key)">
                   <input
@@ -155,14 +157,28 @@ export class ColumnPickerComponent {
   /** The designed set, and what "Reset to default" restores. Distinct from
    *  `visible` so the design is never merely the current state. */
   readonly defaults = input.required<string[]>();
-  /** The current set. Keys only; order is meaningless — see constraint 2. */
+  /** The current set, in render order. SR14 made the order meaningful, so
+   *  toggling preserves it rather than re-deriving from `columns`. */
   readonly visible = input.required<string[]>();
+  /** Which density this edit applies to. The two are stored separately, so
+   *  arranging Compact must leave Full exactly as it was. */
+  readonly density = input.required<Density>();
+  /** Columns the table pins — row actions, the expander. They are not the
+   *  user's to hide, so they never appear in the list at all rather than
+   *  appearing disabled: an unexplained disabled checkbox reads as a bug. */
+  readonly pinned = input<string[]>([]);
 
   readonly visibleChange = output<string[]>();
 
   protected readonly open = signal(false);
 
   private readonly visibleSet = computed(() => new Set(this.visible()));
+  private readonly pinnedSet = computed(() => new Set(this.pinned()));
+
+  /** What the picker offers: everything the table can show, minus the pins. */
+  protected readonly pickable = computed(() =>
+    this.columns().filter((column) => !this.pinnedSet().has(column.key)),
+  );
 
   protected isVisible(key: string): boolean {
     return this.visibleSet().has(key);
@@ -180,21 +196,29 @@ export class ColumnPickerComponent {
     } else {
       next.add(key);
     }
-    // Emitted in `columns` order rather than click order. The order carries no
-    // meaning to the table, but a stable one keeps the persisted value from
-    // churning every time a column is toggled off and on again.
-    const ordered = this.columns()
+    // Keep the user's arrangement. Re-deriving from `columns` would silently
+    // undo a drag-reorder every time a column was toggled -- the order is
+    // meaningful since SR14, so the previously-visible keys keep their
+    // positions and a newly-shown one goes where the table would put it.
+    const kept = this.visible().filter((columnKey) => next.has(columnKey));
+    const added = this.columns()
       .map((column) => column.key)
-      .filter((columnKey) => next.has(columnKey));
+      .filter((columnKey) => next.has(columnKey) && !kept.includes(columnKey));
+    const ordered = [...kept, ...added];
 
-    this.preferences.setColumns(this.tableId(), ordered);
+    this.preferences.update((prefs) =>
+      writeTableColumns(prefs, this.tableId(), this.density(), ordered),
+    );
     this.visibleChange.emit(ordered);
   }
 
   protected reset(): void {
     // Forgets the preference rather than storing the defaults as a choice, so
-    // a table whose designed columns change later picks the new ones up.
-    this.preferences.resetColumns(this.tableId());
+    // a table whose designed columns change later picks the new ones up --
+    // and only for THIS density, so resetting Compact leaves Full arranged.
+    this.preferences.update((prefs) =>
+      clearTableColumns(prefs, this.tableId(), this.density()),
+    );
     this.visibleChange.emit([...this.defaults()]);
   }
 }

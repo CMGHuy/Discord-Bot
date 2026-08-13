@@ -12,6 +12,16 @@ import { TemplateRef } from '@angular/core';
 /** Which way a column is sorted. Structured rather than the API's `-field`
  *  string: the table must not know how the wire format spells a sort, and a
  *  store that translates one to the other is the only place that should. */
+/**
+ * How much room a row gets — spec v18 Decision 4.
+ *
+ * `compact` is the default: the table exists to show many rows at once. Kept
+ * as a two-value union rather than a number so the two modes can differ in
+ * WHICH columns they show, not merely in padding — which is the whole reason
+ * column preferences are stored per density.
+ */
+export type Density = 'compact' | 'full';
+
 export interface SortSpec {
   key: string;
   direction: 'asc' | 'desc';
@@ -57,10 +67,15 @@ export interface RowContext<T> {
  * One column. `key` is the identity used by `visible` and by sorting, and it
  * must match the API's sort field name when `sortable` is set.
  *
- * There is deliberately **no ordering property**. Render order comes from the
- * position of the entry in the `columns` array and nothing else — that is what
- * physically retires the drag-to-reorder machinery, since no call site can
- * express an order the component would honour.
+ * There is still no ordering property ON THE COLUMN, and there should not be:
+ * order lives in the `visible` array, which the user arranges and SR12
+ * persists. `columns` declares what exists and supplies the fallback order for
+ * anything `visible` does not mention.
+ *
+ * This replaces a note saying the component deliberately could not express an
+ * order at all. Spec v18 Decision 4 reverses that — see "Reversal recorded"
+ * there for why, and `ui/table-prefs.ts` for the tolerance that makes a stale
+ * saved order degrade rather than break.
  */
 export interface ColumnDef<T> {
   key: string;

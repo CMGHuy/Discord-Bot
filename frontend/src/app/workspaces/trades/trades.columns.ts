@@ -10,18 +10,61 @@ import { held, num, rMultiple, text } from '../../ui/format';
  * individually re-addable through the column picker, so nothing is lost, it is
  * merely not shouted.
  */
-export const DEFAULT_TRADE_COLUMNS = [
+export const COMPACT_COLUMNS = [
   'num',
   'status',
   'ticker',
+  'confidence_level',
+  'direction',
   'now',
+  'plan',
   'pnl_pct',
-  'held',
-  'actions',
+  'r_multiple',
+  'opened_at',
+  'closed_at',
 ];
 
-/** Persistence key for the column preference. Stable across releases. */
+/**
+ * Full adds what compact folds away: the risk/reward numbers, the setup
+ * (strategy, horizon), and the realised amount. It is not "every column" —
+ * the picker still exists for that.
+ */
+export const FULL_COLUMNS = [
+  'num',
+  'status',
+  'ticker',
+  'confidence_level',
+  'direction',
+  'now',
+  'plan',
+  'risk_reward',
+  'r_multiple',
+  'strategy',
+  'horizon',
+  'pnl_pct',
+  'held',
+  'realized_pnl_amount',
+  'opened_at',
+  'closed_at',
+];
+
+/**
+ * Columns the table pins: present in every density, absent from the picker,
+ * immovable by drag or keyboard.
+ *
+ * Row actions are not a column the user chose to show — they are how a row is
+ * operated. Hiding them would leave a table you can read and not use.
+ */
+export const PINNED_COLUMNS = ['actions'];
+
+/** Persistence keys for the column preferences. Stable across releases.
+ *
+ *  Two ids over one set of definitions: the Dashboard and Trades render the
+ *  same columns and must not share an arrangement. They are read for
+ *  different reasons — one at a glance, one in depth — so a layout that suits
+ *  one is not a layout that suits the other. */
 export const TRADES_TABLE_ID = 'trades';
+export const DASHBOARD_TABLE_ID = 'dashboard';
 
 /**
  * Every column the Trades table can show.
@@ -53,7 +96,11 @@ export function tradeColumns(): ColumnDef<TradeRow>[] {
     { key: 'r_multiple', header: 'R', value: (row) => rMultiple(row.r_multiple), numeric: true, sortable: true },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy) },
     { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon) },
-    { key: 'direction', header: 'Direction', value: (row) => text(row.direction) },
+    { key: 'direction', header: 'Direction', width: '3.5rem' },
+    // Entry, target and stop in one cell (SR8). Not sortable: there is no
+    // single field behind it, and `sort=plan` is a 400 from the collection
+    // endpoint. The three keys remain as separate columns for the picker.
+    { key: 'plan', header: 'Plan', width: '12rem' },
     { key: 'tier', header: 'Tier' },
     { key: 'confidence_level', header: 'Confidence' },
     { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true },

@@ -150,6 +150,58 @@ TRADES = [
            closed_at="2026-08-06T19:45:00+00:00"),
 ]
 
+# --- status-bar spectrum --------------------------------------------------
+# The QA walk (SR19) has to see a position near its target, near its stop, and
+# sitting at entry. Synthetic levels cannot produce those: the bar is computed
+# against the LIVE price, and a plan priced at 101 against a real quote of 493
+# clamps to 100% every time -- which is correct, and shows nothing.
+#
+# So these levels are derived FROM the live price at seed time. It costs one
+# network call per ticker and makes the walk show the four states it is
+# supposed to check rather than four identical full bars.
+def _spectrum_plans():
+    try:
+        from swingbot.core.data import get_current_price
+    except Exception:
+        return [], []
+
+    # (ticker, where the price should sit between stop and target)
+    wanted = [("AAPL", 0.85), ("NVDA", 0.15), ("AMD", 0.50)]
+    plans, trades = [], []
+    for index, (ticker, position) in enumerate(wanted):
+        try:
+            price = get_current_price(ticker)
+        except Exception:
+            price = None
+        if not price:
+            continue
+        # Place stop and target ASYMMETRICALLY around the live price so the
+        # price itself lands at `position` along the span -- that is what
+        # varies the BAR LENGTH. Putting them symmetrically and moving entry
+        # instead (the first attempt) varies only the band, leaving three
+        # identical half-full bars, which is not what the walk needs to see.
+        span = price * 0.20
+        stop = round(price - span * position, 2)
+        target = round(price + span * (1 - position), 2)
+        # Entry mid-span, so the tick sits in the middle and the bar's
+        # position relative to it is the thing that reads.
+        entry = round(stop + (target - stop) * 0.5, 2)
+        pid = f"9{index}999999-9999-4999-8999-99999999999{index}"
+        plan = _plan(pid, ticker=ticker, status="ACTIVE", strategy="Breakout",
+                     horizon="4w")
+        plan.update({"entry_price": entry, "stop_loss": stop, "tp1": target})
+        trade = _trade(f"trade-spectrum-{index}", plan_id=pid, ticker=ticker,
+                       status="open", strategy="Breakout", horizon="4w",
+                       entry=entry, stop=stop, tp=target, shares=10)
+        plans.append(plan)
+        trades.append(trade)
+    return plans, trades
+
+
+_SPECTRUM_PLANS, _SPECTRUM_TRADES = _spectrum_plans()
+PLANS.extend(_SPECTRUM_PLANS)
+TRADES.extend(_SPECTRUM_TRADES)
+
 # --- heatmap coverage -----------------------------------------------------
 # A5 names "the heatmap at ten horizons" as one of three surfaces wider than
 # the row expansion, and the heatmap is a strategy x horizon matrix built from

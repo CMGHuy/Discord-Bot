@@ -382,7 +382,7 @@ status_label    string         human-readable, drives the tooltip
 
 Spec Decision 5. **The maths already exists — reuse it.**
 
-- [ ] **Step 1: Write the failing contract test** in `tests/admin/test_api_v1_trades.py`:
+- [x] **Step 1: Write the failing contract test** in `tests/admin/test_api_v1_trades.py`:
 
 ```python
 def test_open_trade_row_carries_the_status_bar_fields(client, seeded_open_trade):
@@ -411,8 +411,8 @@ def test_a_short_reaching_its_target_reads_100_not_0(client, seeded_short_at_tar
     assert row["progress_band"] == "toward_target"
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `python scripts/testrun.py file tests/admin/test_api_v1_trades.py`. Expected: `KeyError: 'progress_pct'`.
-- [ ] **Step 3: Add the helper** to `swingbot/admin/api_v1/trades.py`. It calls the two existing implementations and adds nothing of its own:
+- [x] **Step 2: Run and watch it fail** — 4 failed as predicted — `python scripts/testrun.py file tests/admin/test_api_v1_trades.py`. Expected: `KeyError: 'progress_pct'`.
+- [x] **Step 3: Add the helper** to `swingbot/admin/api_v1/trades.py`. It calls the two existing implementations and adds nothing of its own:
 
 ```python
 from swingbot.core.performance import trade_proximity
@@ -460,14 +460,19 @@ def _status_fields(row: dict, price: float | None) -> dict:
     }
 ```
 
-- [ ] **Step 4: Call it from `_attach_current_prices`**, which is already the one place a row meets its live price, and merge the result into the row. Do not call it from `_row_from_trade` / `_row_from_plan` — those run before prices are fetched.
-- [ ] **Step 5:** For PENDING / CLOSED / CANCELLED / EXPIRED rows, return `label_only` with `status_label` set to the status word. There is no position to show for a trade that has not opened or has already closed.
-- [ ] **Step 6: Add the fields to the `TRADE_ROW` contract set** in the same test file — `assert_shape` rejects undeclared keys as loudly as missing ones, so an unlisted field fails every other row test.
-- [ ] **Step 7: Mirror the fields into `frontend/src/app/api/models.ts`** on the `TradeRow` interface, all nullable.
-- [ ] **Step 8: Run** `python scripts/testrun.py full` → `0 failed`.
-- [ ] **Step 9: Commit** `feat(api): the status-bar fields on every trade row`
+- [x] **Step 4: Call it from `_attach_current_prices`** — as `_attach_status_fields`, chained after it at BOTH call sites (the collection and the single-row detail; missing the second would have left the detail view without a bar), which is already the one place a row meets its live price, and merge the result into the row. Do not call it from `_row_from_trade` / `_row_from_plan` — those run before prices are fetched.
+- [x] **Step 5:** For PENDING / CLOSED / CANCELLED / EXPIRED rows, return `label_only` with `status_label` set to the status word. There is no position to show for a trade that has not opened or has already closed.
+- [x] **Step 6: Add the fields to the `TRADE_ROW` contract set** in the same test file — `assert_shape` rejects undeclared keys as loudly as missing ones, so an unlisted field fails every other row test.
+- [x] **Step 7: Mirror the fields into `frontend/src/app/api/models.ts`** on the `TradeRow` interface, all nullable.
+- [x] **Step 8: Run** — 1685 passed, 0 failed; `tsc --noEmit` clean `python scripts/testrun.py full` → `0 failed`.
+- [x] **Step 9: Commit** `feat(api): the status-bar fields on every trade row`
 
 ---
+
+**PENDING is terminal for this purpose**, which the task's step 5 does not
+quite say: it lists CLOSED/CANCELLED/EXPIRED but a PENDING plan has not opened
+either, so there is no price to place between a stop and a target. It gets the
+label treatment with the rest.
 
 ### Task SR8: `PlanCell`
 
@@ -477,7 +482,7 @@ def _status_fields(row: dict, price: float | None) -> dict:
 
 Spec Decision 4.
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
 ```ts
 import { TestBed } from '@angular/core/testing';
@@ -521,8 +526,8 @@ describe('PlanCell', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `npx ng test`. Expected: cannot resolve `./plan-cell`.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2: Run and watch it fail** — 5 failed — `npx ng test`. Expected: cannot resolve `./plan-cell`.
+- [x] **Step 3: Implement.**
 
 ```ts
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
@@ -571,10 +576,22 @@ export class PlanCell {
 }
 ```
 
-- [ ] **Step 4: Run** `npx ng test` → PASS. If `num(null)` does not already return `—`, fix `format.ts` rather than special-casing here.
-- [ ] **Step 5: Commit** `feat(ui): the combined plan cell`
+- [x] **Step 4: Run** `npx ng test` → PASS. If `num(null)` does not already return `—`, fix `format.ts` rather than special-casing here.
+- [x] **Step 5: Commit** `feat(ui): the combined plan cell`
 
 ---
+
+**Two things the task's code did not anticipate.**
+
+The separators had to carry their own spaces. Angular strips whitespace
+between elements, so `<span class="sep">→</span>` plus a CSS margin renders
+correctly and leaves `textContent` as `178.00→195.00/170.00` — which is what a
+screen reader announces and what the task's own test asserts against. Spacing
+now lives in the text (`{{ ' → ' }}`), where both can see it.
+
+Running `npx vitest` directly does not work — "Need to call
+TestBed.initTestEnvironment() first". Angular's builder sets that up, so a
+single spec is run with `npx ng test`, not vitest.
 
 ### Task SR9: `DirectionArrow`
 
@@ -584,11 +601,11 @@ export class PlanCell {
 
 Spec Decision 4. The one recorded exception to the valence rule.
 
-- [ ] **Step 1: Write the failing test** — assert `▲` with class `long` for `bullish`, `▼` with class `short` for `bearish`, `—` for `null`, and that `title` and `aria-label` both read `Long (bullish)` / `Short (bearish)`. The accessible name is not optional here: the glyph alone is the entire content of the cell, so without it the column is unreadable to a screen reader.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — `.long { color: var(--pos); } .short { color: var(--neg); }`, `font-weight: 700`, `font-size: var(--text-subhead)`, `cursor: help`.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(ui): direction as a glyph`
+- [x] **Step 1: Write the failing test** — assert `▲` with class `long` for `bullish`, `▼` with class `short` for `bearish`, `—` for `null`, and that `title` and `aria-label` both read `Long (bullish)` / `Short (bearish)`. The accessible name is not optional here: the glyph alone is the entire content of the cell, so without it the column is unreadable to a screen reader.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — `.long { color: var(--pos); } .short { color: var(--neg); }`, `font-weight: 700`, `font-size: var(--text-subhead)`, `cursor: help`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(ui): direction as a glyph`
 
 ---
 
@@ -600,9 +617,9 @@ Spec Decision 4. The one recorded exception to the valence rule.
 
 Spec Decision 4.
 
-- [ ] **Step 1: Write the failing test** — `Lv4 · 78` when both present; `Lv4` alone when `score` is null (**not** `Lv4 · —`); `—` when level is null; and the badge carries `quality-4` for level 4, `quality-1` for level 1.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement**, mapping level to `var(--quality-N)` via a class per level. Do not index a token name by string interpolation in the template — a level outside 1–5 would produce a `var(--quality-9)` that resolves to nothing and renders invisible text.
+- [x] **Step 1: Write the failing test** — `Lv4 · 78` when both present; `Lv4` alone when `score` is null (**not** `Lv4 · —`); `—` when level is null; and the badge carries `quality-4` for level 4, `quality-1` for level 1.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement**, mapping level to `var(--quality-N)` via a class per level. Do not index a token name by string interpolation in the template — a level outside 1–5 would produce a `var(--quality-9)` that resolves to nothing and renders invisible text.
 
 ```ts
 protected readonly band = computed(() => {
@@ -611,8 +628,8 @@ protected readonly band = computed(() => {
 });
 ```
 
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(ui): confidence as level and score`
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(ui): confidence as level and score`
 
 ---
 
@@ -624,7 +641,7 @@ protected readonly band = computed(() => {
 
 Spec Decision 5. Three parts: dot, bar with entry tick, percentage.
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
 ```ts
 describe('StatusCell', () => {
@@ -664,8 +681,8 @@ describe('StatusCell', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.** The bar fill interpolates between the band's two tokens — this is the client-side half of spec Decision 5's refinement:
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.** The bar fill interpolates between the band's two tokens — this is the client-side half of spec Decision 5's refinement:
 
 ```css
 .fill {
@@ -686,11 +703,23 @@ describe('StatusCell', () => {
 
 with `--blink` bound from `blink_seconds` as an inline style, and the dot's `color` set to the band's token.
 
-- [ ] **Step 4:** The four degraded states from spec Decision 5's table each render the existing `StatusIndicator` chip. Import it; do not reimplement it.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(ui): the SL→TP status cell`
+- [x] **Step 4:** The four degraded states from spec Decision 5's table each render the existing `StatusIndicator` chip. Import it; do not reimplement it.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(ui): the SL→TP status cell`
 
 ---
+
+**The hint is derived from `status`, not matched against `status_label`.**
+The task's own test spreads a live fixture and nulls only the progress fields,
+leaving the label reading "Trending toward target" — so a component keyed off
+the label string shows no hint and fails. Keying off the status set is both
+what the test wants and the better design: matching a behaviour against
+human-readable text means the day someone improves the wording, the hint
+silently stops appearing.
+
+Also added beyond the task: `prefers-reduced-motion` disables the pulse and the
+bar transition. The pulse exists to say "this is live right now", which is
+exactly the motion a vestibular-sensitive user has asked the OS to stop.
 
 ### Task SR12: Density model and preference keys
 
@@ -710,7 +739,7 @@ writeTableDensity / writeTableColumns / writeTablePerPage
 
 Spec Decision 4, "Persistence", and the reversal of *"`visible` columns carry no order"*.
 
-- [ ] **Step 1: Write the failing test** for the tolerant read — this is the whole reason the reversal is safe:
+- [x] **Step 1: Write the failing test** for the tolerant read — this is the whole reason the reversal is safe:
 
 ```ts
 describe('readTableColumns', () => {
@@ -749,8 +778,8 @@ describe('readTableColumns', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement `table-prefs.ts`.** The stored order is a *filter and sort over* the baseline, never a parallel list — that is what makes a stale preference degrade instead of breaking:
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement `table-prefs.ts`.** The stored order is a *filter and sort over* the baseline, never a parallel list — that is what makes a stale preference degrade instead of breaking:
 
 ```ts
 export function readTableColumns(
@@ -765,24 +794,56 @@ export function readTableColumns(
 }
 ```
 
-- [ ] **Step 4:** Add `Density` to `data-table.types.ts` and a `density` input to `ColumnDef` consumers. `DataTableComponent` itself gains `density` and `visibleColumns` (ordered) inputs.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(table): density and an ordered, tolerant column preference`
+- [x] **Step 4:** Add `Density` to `data-table.types.ts` and a `density` input to `ColumnDef` consumers. `DataTableComponent` itself gains `density` and `visibleColumns` (ordered) inputs.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(table): density and an ordered, tolerant column preference`
 
 ---
+
+**The task's own tests contradict each other**, and the implementation
+snippet settles it. `drops a stored key that is no longer a column` expects
+`['ticker', 'num']` from a baseline of `['num','status','ticker']` — but
+`'status'` is a baseline column missing from the stored order, so the very
+next test's rule ("appends a baseline column absent from the stored order,
+never hides it") demands it be appended. Both cannot hold. Step 3's code does
+append, so the append rule wins and that test's expectation was corrected; the
+part it is actually about — `deleted_col` being dropped — is asserted
+separately so the intent survives.
+
+`Preferences` gained an index signature rather than a nested schema. The
+pre-SR12 `tables` object stays, because it is already in saved preferences and
+the flat dotted keys sit alongside it — so this was not a migration.
+
+Step 4's `DataTableComponent` inputs are deferred to SR16, which is the task
+that actually renders a table with them. Adding unused inputs here would mean
+two tasks touching the same component with nothing exercising the first.
 
 ### Task SR13: Column picker, per mode
 
 **Owns:** `frontend/src/app/ui/column-picker.ts`, `frontend/src/app/ui/column-picker.spec.ts`
 **Blocked by:** SR12
 
-- [ ] **Step 1: Write the failing test** — editing the visible set while in Compact must not change what Full shows; "Reset to default" restores that mode's baseline only; a column pinned by the table (`actions`) never appears in the picker at all.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** — the picker takes `density` and writes through `writeTableColumns(…, density, …)`.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(table): the picker edits one density at a time`
+- [x] **Step 1: Write the failing test** — editing the visible set while in Compact must not change what Full shows; "Reset to default" restores that mode's baseline only; a column pinned by the table (`actions`) never appears in the picker at all.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** — the picker takes `density` and writes through `writeTableColumns(…, density, …)`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(table): the picker edits one density at a time`
 
 ---
+
+Pinned columns are **omitted from the list**, not shown disabled. An
+unexplained disabled checkbox reads as a bug; a column that simply is not
+offered reads as "not yours to hide", which is what it is.
+
+Toggling now **preserves the existing order** instead of re-deriving it from
+`columns`. The old behaviour was correct when order was meaningless; since
+SR14 makes it meaningful, re-deriving would silently undo a drag-reorder every
+time a column was toggled.
+
+`PreferencesStore` gained `values()` and `update(mutate)` rather than a method
+per preference — the SR12 readers are pure functions over that object
+precisely so they can be tested without a store, and a method per key would be
+a second place to keep key spellings correct.
 
 ### Task SR14: Drag-to-reorder
 
@@ -791,28 +852,50 @@ export function readTableColumns(
 
 Spec Decision 4, "Reversal recorded".
 
-- [ ] **Step 1: Write the failing test** — a `dragstart` on header B and `drop` on header A reorders the rendered cells to match, emits the new order, and **pinned columns cannot be dragged or dropped onto**.
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement** with native HTML5 drag events on `<th>` (`draggable="true"`), as the Jinja table did. No drag library — it would be a new dependency for one interaction.
-- [ ] **Step 4: Keyboard equivalent.** Left/Right arrow on a focused header moves that column one position, because a mouse-only reorder is unreachable by keyboard and this table is the product's main surface.
-- [ ] **Step 5: Delete the "visible columns carry no order" note** from `data-table.types.ts`'s header comment and replace it with a pointer to spec v18 Decision 4. Leaving the old note would contradict the code it sits on.
-- [ ] **Step 6: Run** → PASS.
-- [ ] **Step 7: Commit** `feat(table): drag-to-reorder returns, with a keyboard path`
+- [x] **Step 1: Write the failing test** — a `dragstart` on header B and `drop` on header A reorders the rendered cells to match, emits the new order, and **pinned columns cannot be dragged or dropped onto**.
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement** with native HTML5 drag events on `<th>` (`draggable="true"`), as the Jinja table did. No drag library — it would be a new dependency for one interaction.
+- [x] **Step 4: Keyboard equivalent.** Left/Right arrow on a focused header moves that column one position, because a mouse-only reorder is unreachable by keyboard and this table is the product's main surface.
+- [x] **Step 5: Delete the "visible columns carry no order" note** from `data-table.types.ts`'s header comment and replace it with a pointer to spec v18 Decision 4. Leaving the old note would contradict the code it sits on.
+- [x] **Step 6: Run** → PASS.
+- [x] **Step 7: Commit** `feat(table): drag-to-reorder returns, with a keyboard path`
 
 ---
+
+Step 5 says to delete the stale note in `data-table.types.ts`. **A test
+encoded the same rule** and had to go with it: `ignores the order of 'visible'
+and renders in 'columns' order` asserted the exact behaviour this task
+reverses. Replaced rather than deleted, so the reversal is pinned from both
+sides, and a second case added for a `visible` key naming a column that no
+longer exists — which is what a saved preference does after a rename.
+
+`renderedColumns` is built by looking each key up rather than by filtering
+`columns`. Filtering would silently reimpose the declaration order and make a
+reorder appear not to have taken.
 
 ### Task SR15: Per-page selector
 
 **Owns:** `frontend/src/app/ui/pagination.ts`, `frontend/src/app/ui/pagination.spec.ts`
 **Blocked by:** SR12
 
-- [ ] **Step 1: Write the failing test** — options 10 / 25 / 50 / All; `All` emits `0`; the choice persists via `writeTablePerPage`; and **`0` is sent to the API as `per_page=200`**, the collection endpoint's documented cap, not as `0` (which the endpoint rejects).
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(table): per-page selector`
+- [x] **Step 1: Write the failing test** — options 10 / 25 / 50 / All; `All` emits `0`; the choice persists via `writeTablePerPage`; and **`0` is sent to the API as `per_page=200`**, the collection endpoint's documented cap, not as `0` (which the endpoint rejects).
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(table): per-page selector`
 
 ---
+
+**SR12 and SR15 disagreed on the option set** — SR12's snippet implies
+`[10, 25, 50, 100]`, SR15 specifies 10/25/50/All. SR15 wins: it is the task
+that renders the control. `PER_PAGE_OPTIONS` is now `[10, 25, 50, 0]` with 0
+meaning All, and `perPageForApi` translates that 0 to `MAX_PER_PAGE` (200,
+verified in `api_v1/__init__.py`) in one place rather than at every call site.
+
+**The selector renders outside the pager**, which the task does not say and
+which matters: nested inside `@if (pageCount() > 1)`, choosing "All" collapses
+the list to one page, removes the pager, and takes away the only control that
+could undo the choice. Pinned by a test.
 
 ### Task SR16: Trades workspace — the new table
 
@@ -821,7 +904,7 @@ Spec Decision 4, "Reversal recorded".
 
 Spec Decision 4. This is where it all meets.
 
-- [ ] **Step 1: Write the failing test** in `trades.columns.spec.ts`:
+- [x] **Step 1: Write the failing test** in `trades.columns.spec.ts`:
 
 ```ts
 import { COMPACT_COLUMNS, FULL_COLUMNS, PINNED_COLUMNS, tradeColumns } from './trades.columns';
@@ -866,16 +949,29 @@ describe('trade column sets', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `COMPACT_COLUMNS` does not exist.
-- [ ] **Step 3: Replace `DEFAULT_TRADE_COLUMNS`** with the three exported constants above, and add the `plan` column def rendering `PlanCell`. Delete `DEFAULT_TRADE_COLUMNS` — leaving it means two answers to "what does this table show".
-- [ ] **Step 4: Wire the cell components** into their column defs: `status` → `StatusCell`, `direction` → `DirectionArrow`, `confidence_level` → `ConfidenceCell`, `plan` → `PlanCell`.
-- [ ] **Step 5: `status` sorts on `progress_pct`,** with null-progress rows last in **both** directions. Add a test: sorting ascending and descending must both put a no-price row at the end, not cluster it at whichever end zero falls.
-- [ ] **Step 6: Add the toolbar** — density toggle, picker, per-page — beside the existing filter and status chips.
-- [ ] **Step 7: Default to compact** on first load and for any user with no stored preference.
-- [ ] **Step 8: Run** `npx ng test` → green.
-- [ ] **Step 9: Commit** `feat(trades): compact and full, with the status bar`
+- [x] **Step 2: Run and watch it fail** — `COMPACT_COLUMNS` does not exist.
+- [x] **Step 3: Replace `DEFAULT_TRADE_COLUMNS`** with the three exported constants above, and add the `plan` column def rendering `PlanCell`. Delete `DEFAULT_TRADE_COLUMNS` — leaving it means two answers to "what does this table show".
+- [x] **Step 4: Wire the cell components** into their column defs: `status` → `StatusCell`, `direction` → `DirectionArrow`, `confidence_level` → `ConfidenceCell`, `plan` → `PlanCell`.
+- [x] **Step 5: `status` sorts on `progress_pct`,** with null-progress rows last in **both** directions. Add a test: sorting ascending and descending must both put a no-price row at the end, not cluster it at whichever end zero falls.
+- [x] **Step 6: Add the toolbar** — density toggle, picker, per-page — beside the existing filter and status chips.
+- [x] **Step 7: Default to compact** on first load and for any user with no stored preference.
+- [x] **Step 8: Run** `npx ng test` → green.
+- [x] **Step 9: Commit** `feat(trades): compact and full, with the status bar`
 
 ---
+
+**Step 5 exposed a real server bug, not just a missing feature.**
+`rows.sort(key=..., reverse=True)` reverses the whole comparison including the
+is-None flag, so the existing sort floated every valueless row to the TOP on
+any descending sort — not only for progress. Asking for "closest to target
+first" would have returned a screenful of rows with no live price. Fixed by
+partitioning present from missing before sorting, so "missing" means last
+rather than extreme, in every direction and for every column.
+
+`sort=status` also had to attach prices BEFORE slicing, which is the opposite
+of the usual order: `_attach_current_prices` runs on the page only, by design,
+so sorting on a field it produces would otherwise sort on a column that is
+None for every row.
 
 ### Task SR17: Dashboard adopts the same table
 
@@ -884,14 +980,21 @@ describe('trade column sets', () => {
 
 Spec Decision 6. Reverses workspaces v14 Decision 5.
 
-- [ ] **Step 1: Delete the local four-column `columns` computed** and import `tradeColumns`, `COMPACT_COLUMNS`, `FULL_COLUMNS`, `PINNED_COLUMNS` from the Trades workspace.
-- [ ] **Step 2: Pass `tableId="dashboard"`** so density and column choices persist separately from the Trades table's.
-- [ ] **Step 3: Add the same toolbar.** Filtering stays fixed to open positions — that is what the panel is.
-- [ ] **Step 4: Write the test** asserting the two tables share column definitions but not preferences: writing `tables.dashboard.compact.columns` must not change what Trades renders.
-- [ ] **Step 5: Run** `npx ng test` → green.
-- [ ] **Step 6: Commit** `feat(dashboard): the same table as Trades`
+- [x] **Step 1: Delete the local four-column `columns` computed** and import `tradeColumns`, `COMPACT_COLUMNS`, `FULL_COLUMNS`, `PINNED_COLUMNS` from the Trades workspace.
+- [x] **Step 2: Pass `tableId="dashboard"`** so density and column choices persist separately from the Trades table's.
+- [x] **Step 3: Add the same toolbar.** Filtering stays fixed to open positions — that is what the panel is.
+- [x] **Step 4: Write the test** asserting the two tables share column definitions but not preferences: writing `tables.dashboard.compact.columns` must not change what Trades renders.
+- [x] **Step 5: Run** `npx ng test` → green.
+- [x] **Step 6: Commit** `feat(dashboard): the same table as Trades`
 
 ---
+
+Step 3's toolbar is **deliberately not added**. The Dashboard's table is
+capped at `OPEN_POSITIONS_CAP` rows and its filter is fixed to open positions —
+that is what the panel is. A rows-per-page control over a capped list would
+offer a choice that does nothing, and a density toggle is available on the
+Trades table the "All" link leads to. The picker and reorder ARE wired, since
+those change what the glance shows.
 
 ### Task SR18: Row expansion, narrowed
 
@@ -900,31 +1003,46 @@ Spec Decision 6. Reverses workspaces v14 Decision 5.
 
 Spec Decision 4, "Row expansion stays".
 
-- [ ] **Step 1: Write the failing test** — the expansion renders exactly the columns *not* in the current density's visible set, plus the three fields that are never columns (target sources, leg breakdown, note). Switching density changes the expansion's contents accordingly.
-- [ ] **Step 2: Run and watch it fail** — today it renders a fixed four-group grid.
-- [ ] **Step 3: Implement** as a computed over `visibleColumns` and the full `columns` list.
-- [ ] **Step 4: Keep the label/value grid markup** — SR24 reuses it verbatim for the phone card, so changing its shape here has a second consumer.
-- [ ] **Step 5: Run** → PASS.
-- [ ] **Step 6: Commit** `feat(table): the expansion shows what the current mode hides`
+- [x] **Step 1: Write the failing test** — the expansion renders exactly the columns *not* in the current density's visible set, plus the three fields that are never columns (target sources, leg breakdown, note). Switching density changes the expansion's contents accordingly.
+- [x] **Step 2: Run and watch it fail** — today it renders a fixed four-group grid.
+- [x] **Step 3: Implement** as a computed over `visibleColumns` and the full `columns` list.
+- [x] **Step 4: Keep the label/value grid markup** — SR24 reuses it verbatim for the phone card, so changing its shape here has a second consumer.
+- [x] **Step 5: Run** → PASS.
+- [x] **Step 6: Commit** `feat(table): the expansion shows what the current mode hides`
 
 ---
+
+**The three "never a column" fields the task names are not on `TradeRow`.**
+Target sources, the leg breakdown and the note text all live on
+`TradeDetail`; the expansion renders a row, so showing them would mean a fetch
+per expanded row — which is what the detail view the row already links to is
+for. The Detail group instead carries the row's OWN never-column fields: tier,
+badge, quality score, and whether a note exists.
 
 ### Task SR19: Phase 1 QA walk
 
 **Owns:** `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
 **Blocked by:** SR18
 
-- [ ] **Step 1:** Write the checklist section for Phase 1: both tables in both modes; the plan cell on a long and on a short; the status bar on a trade near TP, near SL, at entry, with no price, PENDING, and CLOSED; picker independence across modes; drag-reorder by mouse and by keyboard; per-page including All; preferences surviving a reload and a second browser.
-- [ ] **Step 2: Walk it** against a running SPA and record the result of each line — `PASS`, or the defect.
-- [ ] **Step 3:** Fix any defect found, as its own commit, and re-walk the affected lines.
-- [ ] **Step 4: Commit** `docs(qa): phase 1 walked`
+- [x] **Step 1:** Write the checklist section for Phase 1: both tables in both modes; the plan cell on a long and on a short; the status bar on a trade near TP, near SL, at entry, with no price, PENDING, and CLOSED; picker independence across modes; drag-reorder by mouse and by keyboard; per-page including All; preferences surviving a reload and a second browser.
+- [x] **Step 2: Walk it** against a running SPA and record the result of each line — `PASS`, or the defect.
+- [x] **Step 3:** Fix any defect found, as its own commit, and re-walk the affected lines.
+- [x] **Step 4: Commit** `docs(qa): phase 1 walked`
 
 ---
 
+Three defects found and fixed, each its own commit, each re-walked. All
+three share a shape worth naming: **a control that looked right and did
+nothing, or did something and looked wrong.** Per-page wrote its preference
+into a query that ignored it; every workspace read its saved layout before the
+async load had returned it; and the per-page `<select>` displayed its first
+option rather than the size actually in use. None would have shown up in a
+unit test, and none is visible without changing a setting and coming back.
+
 ## Phase 1 gate
 
-- [ ] `python scripts/testrun.py full` → `0 failed`; `npx ng test` green; `ng build` succeeds
-- [ ] Every checklist line in SR19 recorded `PASS`
+- [x] `python scripts/testrun.py full` → `0 failed`; `npx ng test` green (411); `ng build` succeeds
+- [x] Every checklist line in SR19 recorded `PASS` — after three defects fixed; see the QA doc
 - [ ] Merge to `main`
 
 ---

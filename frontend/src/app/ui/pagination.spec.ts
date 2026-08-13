@@ -92,3 +92,72 @@ describe('PaginationComponent', () => {
     expect(el().querySelector('.pager')).toBeNull();
   });
 });
+
+// --- SR15: the per-page selector -----------------------------------------
+
+describe('PaginationComponent per-page selector', () => {
+  function build(perPage: number, total: number, showPerPage: boolean) {
+    const f = TestBed.createComponent(PaginationComponent);
+    f.componentRef.setInput('pagination', { page: 1, perPage, total });
+    f.componentRef.setInput('showPerPage', showPerPage);
+    f.detectChanges();
+    return f;
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('is absent unless the table opts in', () => {
+    const el = build(25, 100, false).nativeElement as HTMLElement;
+    expect(el.querySelector('select')).toBeNull();
+  });
+
+  it('offers 10 / 25 / 50 / All', () => {
+    const el = build(25, 100, true).nativeElement as HTMLElement;
+    const options = [...el.querySelectorAll('option')].map((o) => o.textContent!.trim());
+    expect(options).toEqual(['10', '25', '50', 'All']);
+  });
+
+  it('emits 0 for All', () => {
+    const f = build(25, 100, true);
+    const emitted: number[] = [];
+    f.componentInstance.perPageChange.subscribe((v: number) => emitted.push(v));
+    const select = (f.nativeElement as HTMLElement).querySelector('select')!;
+    (select as HTMLSelectElement).value = '0';
+    select.dispatchEvent(new Event('change'));
+    expect(emitted).toEqual([0]);
+  });
+
+  it('stays visible when All collapses the list to one page', () => {
+    // The trap this guards: nested inside the pager, choosing All removes the
+    // pager and with it the only control that could undo the choice.
+    const el = build(0, 3, true).nativeElement as HTMLElement;
+    expect(el.querySelector('.pager')).toBeNull();
+    expect(el.querySelector('select')).not.toBeNull();
+  });
+});
+
+describe('PaginationComponent per-page reflects the active page size', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  function build(perPage: number) {
+    const f = TestBed.createComponent(PaginationComponent);
+    f.componentRef.setInput('pagination', { page: 1, perPage, total: 500 });
+    f.componentRef.setInput('showPerPage', true);
+    f.detectChanges();
+    return (f.nativeElement as HTMLElement).querySelector('select') as HTMLSelectElement;
+  }
+
+  it('shows the size actually in use, not the first option', () => {
+    // Binding [value] on the select applies before @for creates the options,
+    // so it matched nothing and fell back to "10" while the table paged by 50.
+    expect(build(50).value).toBe('50');
+  });
+
+  it('shows All when paging is off', () => {
+    expect(build(0).value).toBe('0');
+  });
+});

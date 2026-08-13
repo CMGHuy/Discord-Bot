@@ -67,6 +67,14 @@ TRADE_ROW = {
     "opened_at": NULLABLE_STR,
     "closed_at": NULLABLE_STR,
     "has_note": bool,
+    # SR7 -- the status bar. All five on every row, terminal ones included: a
+    # cell that must check whether a field exists has a second render path,
+    # and the second one only runs on data nobody tests with.
+    "progress_pct": NULLABLE_NUMBER,
+    "entry_pct": NULLABLE_NUMBER,
+    "progress_band": NULLABLE_STR,
+    "blink_seconds": NULLABLE_NUMBER,
+    "status_label": str,
 }
 
 
@@ -413,3 +421,121 @@ def test_has_note_total_is_the_post_filter_count(seed, logged_in, tmp_path):
     seed(trades=[_trade("aaaaaaaaaaaaaaaa"), _trade("bbbbbbbbbbbbbbbb")])
     _with_note("aaaaaaaaaaaaaaaa", tmp_path)
     assert logged_in.get("/api/v1/trades?has_note=1").get_json()["total"] == 1
+
+
+# --- SR7: the status-bar fields ------------------------------------------
+# Spec v18 Decision 5. Five fields on every row, so SR11's StatusCell can draw
+# a position bar without doing arithmetic of its own -- and so the arithmetic
+# happens once, next to the bot's own near-close alerts, rather than twice.
+
+def _open_pair(ticker="MSFT", direction="bullish", entry=100.0, sl=90.0, tp=120.0):
+    """An ACTIVE plan and its linked open trade -- the shape a live position
+    actually has in this store, not a synthetic single row."""
+    plan = _plan("22222222-2222-4222-8222-222222222222", ticker=ticker, status="ACTIVE")
+    plan.update({"direction": direction, "entry_price": entry,
+                 "stop_loss": sl, "tp1": tp})
+    trade = _trade("t-open", plan_id=plan["plan_id"], ticker=ticker, status="open")
+    trade.update({"direction": direction, "entry": entry,
+                  "stop_loss": sl, "take_profit": tp})
+    return plan, trade
+
+
+@pytest.fixture
+def priced(monkeypatch):
+    """Pin the live price. The real one is a network call, and the whole
+    point of these fields is what they do WITH a price."""
+    def _at(value):
+        import swingbot.core.data as data
+        monkeypatch.setattr(data, "prefetch_prices", lambda tickers: None)
+        monkeypatch.setattr(data, "get_current_price", lambda t: value)
+    return _at
+
+
+def test_open_trade_row_carries_the_status_bar_fields(seed, logged_in, priced):
+    plan, trade = _open_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(110.0)                      # between entry and target
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+
+    assert 0.0 <= row["progress_pct"] <= 100.0
+    assert 0.0 <= row["entry_pct"] <= 100.0
+    assert row["progress_band"] in {"toward_stop", "neutral", "toward_target"}
+    assert 0.6 <= row["blink_seconds"] <= 2.2
+    assert isinstance(row["status_label"], str) and row["status_label"]
+
+
+def test_status_fields_are_null_without_a_live_price(seed, logged_in, priced):
+    plan, trade = _open_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(None)                       # the network is down; the list must still render
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+
+    assert row["progress_pct"] is None
+    assert row["progress_band"] is None
+    assert row["blink_seconds"] is None
+    # The label always exists -- it is what the degraded cell shows.
+    assert row["status_label"]
+
+
+def test_a_short_reaching_its_target_reads_100_not_0(seed, logged_in, priced):
+    """Direction handling is the one thing a naive implementation gets wrong:
+    for a short the target is BELOW entry, so a falling price is progress."""
+    plan, trade = _open_pair(direction="bearish", entry=100.0, sl=110.0, tp=80.0)
+    seed(plans=[plan], trades=[trade])
+    priced(81.0)                       # all but at the target
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+
+    assert row["progress_pct"] > 95.0
+    assert row["progress_band"] == "toward_target"
+
+
+def test_a_terminal_row_has_no_position_only_a_label(seed, logged_in):
+    """A cancelled plan never opened; there is no position to place on a bar.
+    The label still has to say something, because the cell still renders."""
+    seed(plans=[_plan("44444444-4444-4444-8444-444444444444", status="CANCELLED")])
+
+    row = logged_in.get("/api/v1/trades?status=CANCELLED").get_json()["items"][0]
+
+    assert row["progress_pct"] is None
+    assert row["entry_pct"] is None
+    assert row["blink_seconds"] is None
+    assert row["status_label"] == "CANCELLED"
+
+
+# --- SR16: sorting by status means sorting by progress --------------------
+
+def test_status_sort_orders_by_progress_not_alphabetically(seed, logged_in, priced):
+    """Alphabetical status is meaningless to a trader; how close a position is
+    to its target is what the column draws."""
+    near, near_t = _open_pair(ticker="NEAR")
+    far, far_t = _open_pair(ticker="FAR")
+    far["plan_id"] = far_t["plan_id"] = "33333333-3333-4333-8333-333333333333"
+    seed(plans=[near, far], trades=[near_t, far_t])
+    priced(118.0)                      # same price; both progress equally
+
+    body = logged_in.get("/api/v1/trades?sort=status").get_json()
+    assert body["total"] == 2
+    # Both priced, so both carry progress -- the point is that neither is
+    # dropped and the sort does not 400.
+    assert all(r["progress_pct"] is not None for r in body["items"])
+
+
+@pytest.mark.parametrize("direction", ["status", "-status"])
+def test_rows_without_progress_sort_last_in_both_directions(seed, logged_in, priced,
+                                                            direction):
+    """`reverse=True` on a plain key flips the is-None flag too, floating every
+    priceless row to the TOP on descending -- a user asking for "closest to
+    target" would get a screen of rows with no price."""
+    live, live_t = _open_pair(ticker="LIVE")
+    seed(plans=[live, _plan("44444444-4444-4444-8444-444444444444",
+                            ticker="DEAD", status="CANCELLED")],
+         trades=[live_t])
+    priced(110.0)
+
+    items = logged_in.get(f"/api/v1/trades?sort={direction}").get_json()["items"]
+
+    assert items[-1]["progress_pct"] is None, "a row with no progress must sort last"
+    assert items[0]["progress_pct"] is not None

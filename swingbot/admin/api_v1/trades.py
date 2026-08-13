@@ -376,16 +376,44 @@ def get_trade(trade_id: str):
         row["detail"] = _legacy_detail(trade)
 
     _attach_current_prices([row])
+    _attach_status_fields([row])
     return jsonify(row)
 
 
+#: `sort=status` means "how close is this to its target", not the status
+#: word. Alphabetical status is meaningless to a trader; progress is the
+#: thing the column actually draws. SR16 step 5.
+_SORT_ALIASES = {"status": "progress_pct"}
+
+
 def _sort_key(field: str):
-    """None sorts to the bottom in both directions rather than raising --
-    a half-populated row must never 500 the whole list."""
+    """None sorts to the bottom rather than raising -- a half-populated row
+    must never 500 the whole list."""
     def key(row):
         value = row.get(field)
         return (value is None, value if value is not None else "")
     return key
+
+
+def _sorted_rows(rows: list[dict], field: str, descending: bool) -> list[dict]:
+    """Sort, with valueless rows last in BOTH directions.
+
+    `sort(key=..., reverse=True)` reverses the whole comparison including the
+    is-None flag, so the plain version floats every null to the TOP on
+    descending -- a user asking for "closest to target first" would get a
+    screenful of rows with no live price. Partitioning first is what makes
+    "missing" mean "last" rather than "extreme".
+    """
+    field = _SORT_ALIASES.get(field, field)
+    present = [r for r in rows if r.get(field) is not None]
+    missing = [r for r in rows if r.get(field) is None]
+    try:
+        present.sort(key=_sort_key(field), reverse=descending)
+    except TypeError:
+        # Mixed types in one column: fall back to string order rather than
+        # 500 the list.
+        present.sort(key=lambda r: str(r.get(field) or ""), reverse=descending)
+    return present + missing
 
 
 def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
@@ -437,17 +465,89 @@ def list_trades():
             rows = [r for r in rows if str(r.get(key) or "") == str(value)]
 
     field, direction = params.sort or ("opened_at", "desc")
-    try:
-        rows.sort(key=_sort_key(field), reverse=(direction == "desc"))
-    except TypeError:
-        rows.sort(key=lambda r: str(r.get(field) or ""), reverse=(direction == "desc"))
+    # progress_pct is attached AFTER slicing (it needs a live price), so a
+    # sort on it has to compute the field for the whole set first -- otherwise
+    # it would sort on a column that is None for every row.
+    if _SORT_ALIASES.get(field) == "progress_pct":
+        _attach_current_prices(rows)
+        _attach_status_fields(rows)
+    rows = _sorted_rows(rows, field, direction == "desc")
 
     total = len(rows)
     start = (params.page - 1) * params.per_page
     page_rows = rows[start:start + params.per_page]
 
     _attach_current_prices(page_rows)
+    _attach_status_fields(page_rows)
     return jsonify(collection(page_rows, total, params.page, params.per_page))
+
+
+def _status_fields(row: dict, price: float | None) -> dict:
+    """The status-bar numbers, from the two functions that already own them.
+
+    `trade_proximity` (core/performance.py) owns urgency and the label -- it
+    is the same computation the bot's own near-close alerts use, so a second
+    implementation here could make the UI and the alerts disagree about how
+    close a trade is to its stop. The 0..100 position is the dashboard's
+    (`admin/dashboard.py`, `pos_pct`), restated here rather than imported
+    because that module builds a whole Jinja view model to produce it -- and
+    that module is deleted at NG57.
+
+    No colour is returned. The band names which pair of tokens the client
+    interpolates between; the palette lives in tokens.css, so a repaint is a
+    CSS change and never an API change. See spec v18 Decision 5.
+    """
+    from swingbot.core.performance import trade_proximity
+
+    entry, sl, tp = row.get("entry"), row.get("stop_loss"), row.get("target")
+    direction = row.get("direction") or "bullish"
+    label_only = {"progress_pct": None, "entry_pct": None, "progress_band": None,
+                  "blink_seconds": None, "status_label": "No live price"}
+
+    if price is None or not all(isinstance(v, (int, float)) for v in (entry, sl, tp)):
+        return label_only
+
+    prox = trade_proximity(direction, entry, sl, tp, price)
+    is_bull = direction == "bullish"
+    span = (tp - sl) if is_bull else (sl - tp)
+    if span <= 0:
+        # Malformed record -- stop on the wrong side of the target. Degrade to
+        # a label rather than render a bar that is confidently backwards.
+        return label_only
+
+    pos = ((price - sl) if is_bull else (sl - price)) / span * 100
+    ent = ((entry - sl) if is_bull else (sl - entry)) / span * 100
+    band = ("toward_target" if prox["proximity"] > 0.15
+            else "toward_stop" if prox["proximity"] < -0.15
+            else "neutral")
+    return {
+        # Clamped: price runs past the stop or target all the time, and a bar
+        # is 0..100 by definition. The band and label still carry "past it".
+        "progress_pct": max(0.0, min(100.0, round(pos, 1))),
+        "entry_pct": max(0.0, min(100.0, round(ent, 1))),
+        "progress_band": band,
+        "blink_seconds": prox["blink_seconds"],
+        "status_label": prox["label"],
+    }
+
+
+def _attach_status_fields(rows: list[dict]) -> None:
+    """Merge the status-bar fields into every row, terminal ones included.
+
+    Every row gets all five keys. A cell that has to ask whether a field
+    exists before reading it is a cell with two rendering paths, and the
+    second one only runs on data nobody tests with.
+    """
+    for row in rows:
+        if row["status"] in _TERMINAL or row["status"] == "PENDING":
+            # Nothing has opened, or it is already over: there is no position
+            # to place on a bar. The label is the status itself, which is what
+            # the cell shows in place of the bar.
+            row.update({"progress_pct": None, "entry_pct": None,
+                        "progress_band": None, "blink_seconds": None,
+                        "status_label": row["status"]})
+        else:
+            row.update(_status_fields(row, row.get("current_price")))
 
 
 def _attach_current_prices(rows: list[dict]) -> None:

@@ -82,6 +82,15 @@ export interface TradeRow {
   opened_at: string | null;
   closed_at: string | null;
   has_note: boolean;
+  /* SR7 — the status bar, computed server-side so the cell draws rather than
+     calculates, and so the arithmetic lives next to the bot's own near-close
+     alerts instead of being reimplemented here. `progress_band` names which
+     pair of tokens to interpolate between; no colour crosses the wire. */
+  progress_pct: number | null;
+  entry_pct: number | null;
+  progress_band: 'toward_stop' | 'neutral' | 'toward_target' | null;
+  blink_seconds: number | null;
+  status_label: string;
 }
 
 /** The heavy half of a trade, fetched only for the detail view.
@@ -513,6 +522,15 @@ export interface OhlcvResponse {
  *  a server that validated its shape would need editing every time the SPA
  *  remembered one more thing. Typed here, where it is actually used. */
 export interface Preferences {
-  /** Visible column ids, per table id. Absent means "the table's default". */
+  /** Visible column ids, per table id. Absent means "the table's default".
+   *
+   *  Pre-SR12 shape, kept because it is already in people's saved
+   *  preferences. SR12's per-density keys are flat and dotted
+   *  (`tables.trades.compact.columns`) and live alongside it. */
   tables?: Record<string, string[]>;
+  /** SR12 onward: flat dotted keys, so a new preference is a new key rather
+   *  than a schema migration. Values are whatever that key stores, and every
+   *  reader validates — see `ui/table-prefs.ts` for why that tolerance is
+   *  what makes a stale preference degrade instead of break. */
+  [key: string]: unknown;
 }
