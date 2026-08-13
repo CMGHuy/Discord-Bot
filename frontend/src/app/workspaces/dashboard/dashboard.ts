@@ -3,8 +3,10 @@ import {
   Component,
   TemplateRef,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
@@ -350,6 +352,27 @@ export class Dashboard {
         : COMPACT_COLUMNS,
     ),
   );
+
+  /**
+   * Apply the saved layout once the server's preferences arrive.
+   *
+   * The signals above are seeded synchronously, which reads `{}` while the
+   * request is still in flight — so without this the saved density, column
+   * order and page size are written correctly and then never applied. The
+   * write path working is what makes it easy to miss.
+   */
+  private readonly applyStoredPreferences = effect(() => {
+    if (!this.preferences.isLoaded()) return;
+    const prefs = this.preferences.values();
+    const density = readTableDensity(prefs, DASHBOARD_TABLE_ID);
+    untracked(() => {
+      this.density.set(density);
+      this.visible.set(
+        readTableColumns(prefs, DASHBOARD_TABLE_ID, density,
+                         density === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+      );
+    });
+  });
 
   protected setDensity(next: Density): void {
     if (next === this.density()) return;

@@ -7,6 +7,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
@@ -24,7 +25,7 @@ import {
   writeTableDensity,
   writeTablePerPage,
 } from '../../ui/table-prefs';
-import { DEFAULT_PER_PAGE, TradesStore, toSortParam } from '../../stores/trades.store';
+import { TradesStore, toSortParam } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
 import { QualityChip } from '../../ui/chip';
 import { ColumnPickerComponent } from '../../ui/column-picker';
@@ -430,6 +431,28 @@ export class Trades {
     readTablePerPage(this.preferences.values(), TRADES_TABLE_ID),
   );
 
+  /**
+   * Apply the saved layout once the server's preferences arrive.
+   *
+   * The signals above are seeded synchronously, which reads `{}` while the
+   * request is still in flight — so without this the saved density, column
+   * order and page size are written correctly and then never applied. The
+   * write path working is what makes it easy to miss.
+   */
+  private readonly applyStoredPreferences = effect(() => {
+    if (!this.preferences.isLoaded()) return;
+    const prefs = this.preferences.values();
+    const density = readTableDensity(prefs, TRADES_TABLE_ID);
+    untracked(() => {
+      this.density.set(density);
+      this.visible.set(
+        readTableColumns(prefs, TRADES_TABLE_ID, density,
+                         density === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+      );
+      this.perPage.set(readTablePerPage(prefs, TRADES_TABLE_ID));
+    });
+  });
+
   protected setDensity(next: Density): void {
     if (next === this.density()) return;
     this.density.set(next);
@@ -533,7 +556,12 @@ export class Trades {
     effect(() => {
       const query: TradeQuery = {
         page: Number(this.page() ?? 1) || 1,
-        per_page: DEFAULT_PER_PAGE,
+        // Reading the signal here is what makes a per-page change refetch --
+        // the effect re-runs on every signal it reads, and DEFAULT_PER_PAGE
+        // is a constant, so the selector wrote a preference that nothing
+        // acted on. perPageForApi turns "All" (0) into the endpoint's cap;
+        // 0 itself is rejected by _positive_int.
+        per_page: perPageForApi(this.perPage()),
         sort: this.sort(),
         status: this.status(),
         outcome: this.outcome(),

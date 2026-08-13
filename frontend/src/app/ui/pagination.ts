@@ -33,12 +33,16 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
       <div class="per-page">
         <label>
           <span class="label">Rows</span>
-          <select
-            [value]="pagination().perPage"
-            (change)="onPerPage($any($event.target).value)"
-          >
+          <!-- [selected] on the option, not [value] on the select. Angular
+               applies the select's value binding before @for has created any
+               options, so it finds nothing to match and the control silently
+               falls back to the first entry -- it showed "10" while the table
+               was actually paging by 50. -->
+          <select (change)="onPerPage($any($event.target).value)">
             @for (option of perPageOptions; track option) {
-              <option [value]="option">{{ perPageLabel(option) }}</option>
+              <option [value]="option" [selected]="option === pagination().perPage">
+                {{ perPageLabel(option) }}
+              </option>
             }
           </select>
         </label>

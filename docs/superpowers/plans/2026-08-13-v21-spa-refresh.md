@@ -1024,17 +1024,25 @@ badge, quality score, and whether a note exists.
 **Owns:** `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
 **Blocked by:** SR18
 
-- [ ] **Step 1:** Write the checklist section for Phase 1: both tables in both modes; the plan cell on a long and on a short; the status bar on a trade near TP, near SL, at entry, with no price, PENDING, and CLOSED; picker independence across modes; drag-reorder by mouse and by keyboard; per-page including All; preferences surviving a reload and a second browser.
-- [ ] **Step 2: Walk it** against a running SPA and record the result of each line — `PASS`, or the defect.
-- [ ] **Step 3:** Fix any defect found, as its own commit, and re-walk the affected lines.
-- [ ] **Step 4: Commit** `docs(qa): phase 1 walked`
+- [x] **Step 1:** Write the checklist section for Phase 1: both tables in both modes; the plan cell on a long and on a short; the status bar on a trade near TP, near SL, at entry, with no price, PENDING, and CLOSED; picker independence across modes; drag-reorder by mouse and by keyboard; per-page including All; preferences surviving a reload and a second browser.
+- [x] **Step 2: Walk it** against a running SPA and record the result of each line — `PASS`, or the defect.
+- [x] **Step 3:** Fix any defect found, as its own commit, and re-walk the affected lines.
+- [x] **Step 4: Commit** `docs(qa): phase 1 walked`
 
 ---
 
+Three defects found and fixed, each its own commit, each re-walked. All
+three share a shape worth naming: **a control that looked right and did
+nothing, or did something and looked wrong.** Per-page wrote its preference
+into a query that ignored it; every workspace read its saved layout before the
+async load had returned it; and the per-page `<select>` displayed its first
+option rather than the size actually in use. None would have shown up in a
+unit test, and none is visible without changing a setting and coming back.
+
 ## Phase 1 gate
 
-- [ ] `python scripts/testrun.py full` → `0 failed`; `npx ng test` green; `ng build` succeeds
-- [ ] Every checklist line in SR19 recorded `PASS`
+- [x] `python scripts/testrun.py full` → `0 failed`; `npx ng test` green (411); `ng build` succeeds
+- [x] Every checklist line in SR19 recorded `PASS` — after three defects fixed; see the QA doc
 - [ ] Merge to `main`
 
 ---

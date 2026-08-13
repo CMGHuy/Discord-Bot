@@ -78,6 +78,17 @@ export const PreferencesStore = signalStore(
         return store.values();
       },
 
+      /** Whether the server's preferences have arrived.
+       *
+       *  Exposed because reading `values()` before this is true yields the
+       *  empty defaults, and a workspace that reads once in its constructor
+       *  would silently show the default layout to everyone -- the write
+       *  path works, so the preference is saved and then ignored, which is
+       *  the hardest version of this bug to notice. */
+      isLoaded(): boolean {
+        return store.loaded();
+      },
+
       /** Apply a pure updater from `ui/table-prefs` and schedule the write.
        *
        *  Takes a function rather than a key and a value so the caller cannot
