@@ -25,9 +25,17 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 
 > Updated by the executing session after each task. Resume from the first unchecked task.
 >
-> - **Branch:** `worktree-angular-migration` (worktree at `.claude/worktrees/angular-migration`). Specs v11–v15 and this plan are merged to `main`.
-> - **Completed:** NG1–NG7. Phase 0 done; Phase 1 in progress (trades surface complete). Read each task's outcome note before the next.
-> - **Next:** NG8 — trade note (PUT).
+> - **Branch:** `worktree-angular-migration`, **merged to `main` 2026-08-13**.
+> - **Completed:** NG1–NG55. The checkboxes below are unreliable — earlier
+>   sessions committed work without ticking them, so derive status from the
+>   git log and the task outcome notes, not from `[ ]`.
+> - **Release A shipped 2026-08-13** (NG55). `ui` 1.0.9 → 1.1.0. The two-week
+>   soak (NG56) therefore ends no earlier than **2026-08-27**, and NG57 —
+>   deleting Jinja, the one irreversible step — must not start before then.
+> - **Rollback is a restart:** set `ADMIN_UI=jinja` in the server's `.env` and
+>   `docker compose restart admin`. No rebuild, no revert. Record here anything
+>   that forced a flip back, per NG56.
+> - **Next:** NG56 — two weeks of live sessions, watching. Not a code task.
 
 ## Global Constraints
 
@@ -618,9 +626,9 @@ Two things to do rather than assume, both from what NG54 found:
 
 **Files:** `VERSION.json`
 
-- [ ] `ui` `1.0.9` → `1.1.0` (minor — a different UI is not a patch)
-- [ ] Deploy; **write down the date**. Release B is ≥ 2 weeks of live sessions later.
-- [ ] Update the Progress block with that date
+- [x] `ui` `1.0.9` → `1.1.0` (minor — a different UI is not a patch)
+- [x] Deploy; **write down the date**. Release B is ≥ 2 weeks of live sessions later. — **2026-08-13**, by merging to `main`, which triggers `deploy.yml`.
+- [x] Update the Progress block with that date — soak ends **2026-08-27** at the earliest.
 
 ### Task NG56: Wait, and watch
 
