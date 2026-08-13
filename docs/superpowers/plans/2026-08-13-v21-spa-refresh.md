@@ -1643,7 +1643,7 @@ theme file is touched outside SR35.
 
 The layer that explains why the trade exists.
 
-- [ ] **Step 1: Write the failing test** — one case per `kind`, asserting the primitive chosen and its anchor coordinates:
+- [x] **Step 1: Write the failing test** — one case per `kind`, asserting the primitive chosen and its anchor coordinates:
   - `trendline` → a two-point line plus a diamond marker at each pivot
   - `fib_fan` → one ray per ratio from the shared origin
   - `fvg_zone` → SR34's box
@@ -1706,7 +1706,7 @@ spec now pins both that and the two-survivor case.
 - [x] **Step 1: Write the failing test** for spec Decision 10's three degraded states — a failed request renders an empty state naming the reason with a retry (never a blank pane); `overlay: null` draws candles, indicators and plan lines only; a missing indicator omits its pane.
 - [x] **Step 2: Run and watch it fail.**
 - [x] **Step 3: Implement**, and replace the trade detail's Chart tab with `TradeChart`.
-- [ ] **Step 4: Compare against the PNG.** For each of SR32's fixture trades, put the rendered chart beside the generated image and confirm every level, band and overlay sits at the same price. Record the comparison in the QA doc. This is the only check that catches a coordinate-conversion error, which unit tests cannot see.
+- [x] **Step 4: Compare against the PNG.** For each of SR32's fixture trades, put the rendered chart beside the generated image and confirm every level, band and overlay sits at the same price. Record the comparison in the QA doc. This is the only check that catches a coordinate-conversion error, which unit tests cannot see.
 - [x] **Step 5: Walk the Phase 3 checklist**, recording each line.
 - [x] **Step 6: Commit** `feat(chart): degraded states, and the walk against the PNG`
 
