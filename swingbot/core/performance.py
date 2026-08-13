@@ -175,7 +175,7 @@ def primary_strategy_label(t: dict) -> str:
     stop_sources: the independent methods (EMA20, VWAP, Fib 61.8%, Volume
     Profile, a diagonal trendline, ...) that a real confluence pass found
     agreeing on this trade's levels (see levels.count_confirming_strategies()).
-    This reuses chart_drawing._pick_primary_source -- the same ranking
+    This reuses chart_geometry._pick_primary_source -- the same ranking
     (METHOD_PRIORITY) already used to choose which single confirming
     method gets drawn on that trade's own chart, and that the dashboard's
     open-trades table already uses for its Strategy column -- so every
@@ -191,7 +191,7 @@ def primary_strategy_label(t: dict) -> str:
     read a trade log -- only paid for by the callers (admin UI page
     renders) that actually need this label.
     """
-    from swingbot.core.charts.chart_drawing import _pick_primary_source
+    from swingbot.core.charts.chart_geometry import _pick_primary_source
     sources = t.get("target_sources") or t.get("stop_sources") or []
     return _pick_primary_source(sources) or t.get("strategy") or "--"
 

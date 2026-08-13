@@ -1255,7 +1255,7 @@ Spec Decision 10. **SR34 is a risk gate — read its note before planning any wo
 
 The one task in this plan that touches code the bot depends on.
 
-- [ ] **Step 1: Capture the baseline.** Render the PNG for a fixed set of fixture trades — one per overlay kind (`trendline`, `fib_fan`, `fvg_zone`, `curve`, `horizontal`) plus one with no drawable source — and hash each file.
+- [x] **Step 1: Capture the baseline.** Render the PNG for a fixed set of fixture trades — one per overlay kind (`trendline`, `fib_fan`, `fvg_zone`, `curve`, `horizontal`) plus one with no drawable source — and hash each file.
 
 ```bash
 python scripts/render_chart_fixtures.py --out /tmp/chart-baseline
@@ -1264,10 +1264,10 @@ sha256sum /tmp/chart-baseline/*.png > /tmp/chart-baseline/SHA256
 
 Write `scripts/render_chart_fixtures.py` as part of this step if it does not exist; it is the acceptance instrument for the whole task.
 
-- [ ] **Step 2: Write the failing test** in `tests/test_chart_geometry.py` — `overlay_geometry` returns the documented dict for each fixture, and `None` when nothing is drawable.
-- [ ] **Step 3: Run and watch it fail.**
-- [ ] **Step 4: Extract.** Move the *geometry* computation out of `chart_strategy_overlay.py` into `chart_geometry.py`, returning data. Leave the *drawing* in place, rewritten to consume that data. The dispatcher (`_pick_primary_source`) moves with the geometry — which source wins is a decision about the data, not about matplotlib.
-- [ ] **Step 5: Re-render and diff.**
+- [x] **Step 2: Write the failing test** in `tests/test_chart_geometry.py` — `overlay_geometry` returns the documented dict for each fixture, and `None` when nothing is drawable.
+- [x] **Step 3: Run and watch it fail.**
+- [x] **Step 4: Extract.** Move the *geometry* computation out of `chart_strategy_overlay.py` into `chart_geometry.py`, returning data. Leave the *drawing* in place, rewritten to consume that data. The dispatcher (`_pick_primary_source`) moves with the geometry — which source wins is a decision about the data, not about matplotlib.
+- [x] **Step 5: Re-render and diff.**
 
 ```bash
 python scripts/render_chart_fixtures.py --out /tmp/chart-after
@@ -1276,8 +1276,65 @@ sha256sum -c /tmp/chart-baseline/SHA256 --quiet   # run against /tmp/chart-after
 
 **Every hash must match.** A single differing byte means the refactor changed output and the task is not done. If matplotlib's non-determinism makes hashing infeasible, fall back to a per-pixel comparison with zero tolerance — but try the hash first; these renders have a fixed seed (`trade_chart.py` sets one deliberately).
 
-- [ ] **Step 6:** `python scripts/testrun.py full` → `0 failed`.
-- [ ] **Step 7: Commit** `refactor(charts): geometry as data, with byte-identical output`
+- [x] **Step 6:** `python scripts/testrun.py full` → `0 failed`.
+- [x] **Step 7: Commit** `refactor(charts): geometry as data, with byte-identical output`
+
+---
+
+**Result: 10/10 renders byte-identical**, full suite `1715 passed, 136 skipped,
+1 xfailed, 0 failed`, `tests/test_chart_geometry.py` 27 passed.
+
+**There is no fixed seed.** Step 5's note that "these renders have a fixed
+seed (`trade_chart.py` sets one deliberately)" is wrong — nothing in
+`swingbot/core/charts/` seeds an RNG. Hashing works anyway, for a better
+reason: the fixture frames are built arithmetically from a closing series, so
+there is no randomness to seed. Determinism was proven before relying on it —
+two runs of the unmodified renderer produced identical hashes for all
+fixtures. `--check` does the comparison in-process because this repo runs on
+Windows, where `sha256sum` is not a given.
+
+**A sixth shape kind, `marker`.** Spec Decision 10's table has five, and none
+of them fits a zigzag `Pivot`, which the PNG draws as a lone diamond with a
+label — not a line and not a segment. Folding it into `horizontal` as a
+zero-length segment would have lost that, and dropping it would have lost the
+overlay. SR39 needs one more primitive than its step 1 lists; an unknown
+`kind` already has to degrade without throwing there, so a client that hasn't
+added it yet simply draws nothing.
+
+**`ratios` is `[[ratio, price, is_match], …]`,** not the bare ratio list the
+spec's `fib_fan` row implies — the consumer needs the prices, and re-deriving
+them from `origin`/`anchor` client-side is exactly the second implementation
+this task exists to prevent. `horizontal` also carries `full_width`, because
+floor pivots and the volume-profile HVN are drawn edge-to-edge with `axhline`
+while a rolling S/R level is bounded by its own lookback, and the geometry is
+the only place that distinction survives.
+
+**The `trendline` shape is converted, never re-fit.** `generate_trade_chart`
+fits the pair before the display window is decided (the window is then
+expanded to fit the line's own touches), so `overlay_geometry` takes
+`trend_info` and returns `None` without it. The matplotlib trendline path
+(`_draw_side_trendline` / `_draw_trendline`) was left alone deliberately —
+it lives in `trade_chart.py`, not in the module being extracted, so touching
+it would have been pure hash risk for no gain.
+
+**Two fixture frames had to be rebuilt, and this is the trap worth
+remembering:** the first `trendline` fixture used a smooth exponential trend,
+on which `strongest_trendline_pair` returns `None` — so `trendline.png`
+contained no trendline and pinned nothing while looking like it did. Fixture
+frames now oscillate (`_oscillating_df`, amplitude 8 / period 7) so both sides
+fit with 5 and 6 touches. Re-baselining was done in a throwaway `git worktree`
+at HEAD rather than by stashing, and verified by the seven *unchanged*
+fixtures reproducing their original hashes exactly — otherwise "re-baseline"
+silently means "bless whatever the new code does".
+
+**One behaviour change, invisible in every render:** a `Rolling` source whose
+value is NaN now returns `None`/`False` instead of drawing a NaN line and
+returning `True`, required by the no-NaN-in-JSON contract. Both call sites
+ignore the bool, and a NaN line draws nothing either way. The drawing half of
+both drawers keeps its own blanket `try/except → False`: `overlay_geometry`
+inherited the geometry half of the original, and leaving the drawing
+unguarded would have turned a missing overlay into a failed chart render
+inside the scan loop.
 
 ---
 

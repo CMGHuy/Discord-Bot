@@ -643,9 +643,9 @@ def primary_strategy_for(scenario) -> str:
     """Real strategy attribution for a confluence scenario: the highest-
     priority confirming method behind its target (falling back to the stop's
     methods, then the legacy literal). Delegates the ranking to
-    chart_drawing._pick_primary_source -- ONE priority list for charts,
+    chart_geometry._pick_primary_source -- ONE priority list for charts,
     trade rows, and plan attribution. Imported lazily (matplotlib chain)."""
-    from swingbot.core.charts.chart_drawing import _pick_primary_source
+    from swingbot.core.charts.chart_geometry import _pick_primary_source
     sources = list(getattr(scenario, "target_sources", []) or []) \
         + list(getattr(scenario, "stop_sources", []) or [])
     return _pick_primary_source(sources) or "S/R Confluence"

@@ -33,7 +33,7 @@ side of the scenario has a drawable source, in a fixed accent color per
 side (target vs stop) so the chart stays a two-color read regardless of
 which specific method gets picked. When a scenario is confirmed by
 several independent methods at once (see confidence.py), the single
-most visually distinctive one is drawn (see `chart_drawing._pick_primary_source`)
+most visually distinctive one is drawn (see `chart_geometry._pick_primary_source`)
 -- drawing every clustered source at once would just be noise. Purely
 additive: if `target_sources`/`stop_sources` aren't passed, or nothing
 in them is drawable, this falls back to the old plain trendline-only
@@ -91,7 +91,8 @@ from .chart_style import (
     _label_bbox,
 )
 from .chart_annotations import draw_legend_block, draw_level
-from .chart_drawing import _draw_trendline, _fib_anchor_points, _pick_primary_source
+from .chart_drawing import _draw_trendline, _fib_anchor_points
+from .chart_geometry import _pick_primary_source
 from .chart_strategy_overlay import _draw_confirmed_strategy, _draw_confirmed_strategy_secondary
 from .chart_volume_profile import _draw_volume_profile_overlay
 
