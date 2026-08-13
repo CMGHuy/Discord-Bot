@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { Preferences } from '../api/models';
 import {
+  ALL_PER_PAGE,
+  API_MAX_PER_PAGE,
   PER_PAGE_OPTIONS,
   clearTableColumns,
   readTableColumns,
@@ -9,6 +11,7 @@ import {
   readTablePerPage,
   writeTableColumns,
   writeTableDensity,
+  perPageForApi,
   writeTablePerPage,
 } from './table-prefs';
 
@@ -112,8 +115,15 @@ describe('readTablePerPage', () => {
     expect(readTablePerPage({ 'tables.trades.per_page': '50' } as Preferences, 'trades')).toBe(25);
   });
 
-  it('offers a sane set of options', () => {
-    expect([...PER_PAGE_OPTIONS]).toEqual([10, 25, 50, 100]);
+  it('offers 10 / 25 / 50 / All', () => {
+    // SR15 specifies this set and it is the task that renders the control,
+    // so it wins over SR12's provisional [10, 25, 50, 100].
+    expect([...PER_PAGE_OPTIONS]).toEqual([10, 25, 50, ALL_PER_PAGE]);
+  });
+
+  it('accepts All as a stored value', () => {
+    expect(readTablePerPage({ 'tables.trades.per_page': ALL_PER_PAGE }, 'trades'))
+      .toBe(ALL_PER_PAGE);
   });
 });
 
@@ -166,5 +176,19 @@ describe('clearTableColumns', () => {
     const prefs = writeTableColumns({}, 'trades', 'compact', ['ticker']);
     expect(clearTableColumns(prefs, 'trades', 'compact'))
       .not.toHaveProperty('tables.trades.compact.columns');
+  });
+});
+
+describe('perPageForApi', () => {
+  it('sends the documented cap for All', () => {
+    // 0 is what the collection endpoint rejects outright -- _positive_int
+    // requires a positive value -- so the translation happens once, here,
+    // rather than at every call site.
+    expect(perPageForApi(ALL_PER_PAGE)).toBe(API_MAX_PER_PAGE);
+    expect(API_MAX_PER_PAGE).toBe(200);
+  });
+
+  it('passes an ordinary page size straight through', () => {
+    expect(perPageForApi(25)).toBe(25);
   });
 });

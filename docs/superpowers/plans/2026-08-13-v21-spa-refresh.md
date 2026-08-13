@@ -878,13 +878,24 @@ reorder appear not to have taken.
 **Owns:** `frontend/src/app/ui/pagination.ts`, `frontend/src/app/ui/pagination.spec.ts`
 **Blocked by:** SR12
 
-- [ ] **Step 1: Write the failing test** — options 10 / 25 / 50 / All; `All` emits `0`; the choice persists via `writeTablePerPage`; and **`0` is sent to the API as `per_page=200`**, the collection endpoint's documented cap, not as `0` (which the endpoint rejects).
-- [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(table): per-page selector`
+- [x] **Step 1: Write the failing test** — options 10 / 25 / 50 / All; `All` emits `0`; the choice persists via `writeTablePerPage`; and **`0` is sent to the API as `per_page=200`**, the collection endpoint's documented cap, not as `0` (which the endpoint rejects).
+- [x] **Step 2: Run and watch it fail.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** `feat(table): per-page selector`
 
 ---
+
+**SR12 and SR15 disagreed on the option set** — SR12's snippet implies
+`[10, 25, 50, 100]`, SR15 specifies 10/25/50/All. SR15 wins: it is the task
+that renders the control. `PER_PAGE_OPTIONS` is now `[10, 25, 50, 0]` with 0
+meaning All, and `perPageForApi` translates that 0 to `MAX_PER_PAGE` (200,
+verified in `api_v1/__init__.py`) in one place rather than at every call site.
+
+**The selector renders outside the pager**, which the task does not say and
+which matters: nested inside `@if (pageCount() > 1)`, choosing "All" collapses
+the list to one page, removes the pager, and takes away the only control that
+could undo the choice. Pinned by a test.
 
 ### Task SR16: Trades workspace — the new table
 

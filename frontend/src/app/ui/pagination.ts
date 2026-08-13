@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 
 import { PageSpec } from './data-table/data-table.types';
+import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
 
 /**
  * The pager under a paginated table.
@@ -24,6 +25,25 @@ import { PageSpec } from './data-table/data-table.types';
   selector: 'sb-pagination',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    @if (showPerPage()) {
+      <!-- Rendered independently of the page count, deliberately. Nested
+           inside the pager it would vanish the moment a user chose "All" --
+           one page means no pager -- taking away the only control that could
+           put them back. -->
+      <div class="per-page">
+        <label>
+          <span class="label">Rows</span>
+          <select
+            [value]="pagination().perPage"
+            (change)="onPerPage($any($event.target).value)"
+          >
+            @for (option of perPageOptions; track option) {
+              <option [value]="option">{{ perPageLabel(option) }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    }
     @if (pageCount() > 1) {
       <div class="pager">
         <span class="range num">{{ rangeLabel() }}</span>
@@ -42,6 +62,16 @@ import { PageSpec } from './data-table/data-table.types';
     }
   `,
   styles: `
+    .per-page { display: flex; align-items: center; gap: var(--space-6); }
+    .per-page .label { font-size: var(--text-chip); color: var(--text-secondary); }
+    .per-page select {
+      background: var(--surface-raised);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: var(--text-chip);
+      padding: 2px var(--space-4);
+    }
     .pager {
       display: flex;
       align-items: center;
@@ -69,6 +99,22 @@ import { PageSpec } from './data-table/data-table.types';
 export class PaginationComponent {
   readonly pagination = input.required<PageSpec>();
   readonly pageChange = output<number>();
+
+  /** Shown only when a table opts in — a list with one page of results does
+   *  not need a rows-per-page control taking up room. */
+  readonly showPerPage = input(false);
+  readonly perPageChange = output<number>();
+
+  protected readonly perPageOptions = PER_PAGE_OPTIONS;
+  protected readonly allPerPage = ALL_PER_PAGE;
+
+  protected onPerPage(value: string): void {
+    this.perPageChange.emit(Number(value));
+  }
+
+  protected perPageLabel(value: number): string {
+    return value === ALL_PER_PAGE ? 'All' : String(value);
+  }
 
   protected readonly pageCount = computed(() => {
     const { total, perPage } = this.pagination();

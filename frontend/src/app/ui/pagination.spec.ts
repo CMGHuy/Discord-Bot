@@ -92,3 +92,48 @@ describe('PaginationComponent', () => {
     expect(el().querySelector('.pager')).toBeNull();
   });
 });
+
+// --- SR15: the per-page selector -----------------------------------------
+
+describe('PaginationComponent per-page selector', () => {
+  function build(perPage: number, total: number, showPerPage: boolean) {
+    const f = TestBed.createComponent(PaginationComponent);
+    f.componentRef.setInput('pagination', { page: 1, perPage, total });
+    f.componentRef.setInput('showPerPage', showPerPage);
+    f.detectChanges();
+    return f;
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('is absent unless the table opts in', () => {
+    const el = build(25, 100, false).nativeElement as HTMLElement;
+    expect(el.querySelector('select')).toBeNull();
+  });
+
+  it('offers 10 / 25 / 50 / All', () => {
+    const el = build(25, 100, true).nativeElement as HTMLElement;
+    const options = [...el.querySelectorAll('option')].map((o) => o.textContent!.trim());
+    expect(options).toEqual(['10', '25', '50', 'All']);
+  });
+
+  it('emits 0 for All', () => {
+    const f = build(25, 100, true);
+    const emitted: number[] = [];
+    f.componentInstance.perPageChange.subscribe((v: number) => emitted.push(v));
+    const select = (f.nativeElement as HTMLElement).querySelector('select')!;
+    (select as HTMLSelectElement).value = '0';
+    select.dispatchEvent(new Event('change'));
+    expect(emitted).toEqual([0]);
+  });
+
+  it('stays visible when All collapses the list to one page', () => {
+    // The trap this guards: nested inside the pager, choosing All removes the
+    // pager and with it the only control that could undo the choice.
+    const el = build(0, 3, true).nativeElement as HTMLElement;
+    expect(el.querySelector('.pager')).toBeNull();
+    expect(el.querySelector('select')).not.toBeNull();
+  });
+});

@@ -23,10 +23,34 @@ import { Density } from './data-table/data-table.types';
 
 const DEFAULT_PER_PAGE = 25;
 
-/** The per-page values the UI offers. A stored value outside this set is
- *  treated as absent — it would otherwise let a hand-edited preference ask
- *  the server for an unbounded page. */
-export const PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+/** "All" — the UI's word for it, and 0 on the wire between the selector and
+ *  the store. Never sent to the API; see `perPageForApi`. */
+export const ALL_PER_PAGE = 0;
+
+/** The API's documented ceiling (`MAX_PER_PAGE` in api_v1/__init__.py). The
+ *  endpoint clamps to it anyway; asking for exactly it is how "All" is
+ *  expressed to a paginated API that has no unbounded mode. */
+export const API_MAX_PER_PAGE = 200;
+
+/** The per-page values the UI offers, "All" included. A stored value outside
+ *  this set is treated as absent — it would otherwise let a hand-edited
+ *  preference ask the server for an unbounded page.
+ *
+ *  SR12 originally listed 100 here; SR15 specifies 10/25/50/All, and SR15 is
+ *  the task that actually renders the control, so its set wins. */
+export const PER_PAGE_OPTIONS = [10, 25, 50, ALL_PER_PAGE] as const;
+
+/**
+ * What to actually send as `per_page`.
+ *
+ * "All" is 0 everywhere inside the client, and 0 is precisely what the
+ * collection endpoint rejects — `_positive_int` requires a positive value. So
+ * the one place the two meet translates it to the documented cap rather than
+ * every call site remembering to.
+ */
+export function perPageForApi(perPage: number): number {
+  return perPage === ALL_PER_PAGE ? API_MAX_PER_PAGE : perPage;
+}
 
 function key(tableId: string, density: Density, name: string): string {
   return `tables.${tableId}.${density}.${name}`;
