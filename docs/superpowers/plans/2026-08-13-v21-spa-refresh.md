@@ -1304,15 +1304,34 @@ sha256sum -c /tmp/chart-baseline/SHA256 --quiet   # run against /tmp/chart-after
 
 **This task exists to find out whether the rest of the phase is possible.** `lightweight-charts` has no native shape support; SR37–SR39 all depend on the v5 series-primitive API being able to draw arbitrary geometry in price/time space.
 
-- [ ] **Step 1:** Implement one `ISeriesPrimitive` that draws a filled, bordered rectangle between two timestamps and two prices — the `fvg_zone` shape, and the simplest of the five.
-- [ ] **Step 2: Verify in a browser** that it renders at the correct coordinates, stays anchored while panning and zooming, and survives a series data update.
-- [ ] **Step 3: Record the outcome** in `docs/superpowers/results/2026-08-13-chart-primitive-spike.md`: the API used, whether coordinates convert cleanly, and the redraw cost with 500 bars on screen.
-- [ ] **Step 4 — THE GATE:**
+- [x] **Step 1:** Implement one `ISeriesPrimitive` that draws a filled, bordered rectangle between two timestamps and two prices — the `fvg_zone` shape, and the simplest of the five.
+- [x] **Step 2: Verify in a browser** that it renders at the correct coordinates, stays anchored while panning and zooming, and survives a series data update.
+- [x] **Step 3: Record the outcome** in `docs/superpowers/results/2026-08-13-chart-primitive-spike.md`: the API used, whether coordinates convert cleanly, and the redraw cost with 500 bars on screen.
+- [x] **Step 4 — THE GATE:**
   - **If it works:** proceed to SR35. SR37–SR39 use this file as their template.
   - **If it does not:** **stop the phase.** Do not attempt SR37–SR39. Write up what failed and take the fallback decision — a `<canvas>` overlay positioned over the chart and synchronised to its coordinate system via `timeScale().timeToCoordinate()` and `priceToCoordinate()` — as an amendment to this plan, with its own task list. That decision belongs at this point, on evidence, not four tasks later on a sunk cost.
-- [ ] **Step 5: Commit** `feat(chart): a series primitive, proven`
+- [x] **Step 5: Commit** `feat(chart): a series primitive, proven`
 
 ---
+
+**Run FIRST, ahead of SR32 and SR33.** The plan lists this third, but it is
+blocked only by Phase 2 and its entire purpose is to decide whether the phase
+is possible. Doing SR32 first — a refactor of chart code the bot depends on —
+would have been exactly the sunk cost step 4 exists to prevent.
+
+**Verdict: PASS.** Coordinates match the API exactly, the shape stays anchored
+through pan and zoom, it survives a data update, and 500 bars redraw at
+16.63 ms/frame — one vsync interval, so the measurement is bounded by
+`requestAnimationFrame` rather than by the drawing. The `<canvas>` fallback is
+not needed and should not be built.
+
+**One trap for SR37–SR39:** `window.devicePixelRatio` is NOT the ratio to draw
+with. Measured here at DPR 1.0 while the library supplied
+`horizontalPixelRatio: 1.5` and `verticalPixelRatio: 1.5012…` — different from
+DPR and from each other. Use the ratios `useBitmapCoordinateSpace` hands over
+and nothing else; DPR would render every shape at two thirds scale here and
+correctly on a machine where the numbers happen to agree, which is the worst
+kind of bug.
 
 ### Task SR35: Chart scaffold — panes, candles, volume
 
