@@ -1,11 +1,80 @@
+import json
 from types import SimpleNamespace
+
 import numpy as np
+import pytest
+
 import swingbot.config as config
+from swingbot.core import account as _account
 from swingbot.core.edge import throttle
 from swingbot.core.performance import TradeLog
 from swingbot.core.scanning import engine
 from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
+
+
+@pytest.fixture(autouse=True)
+def isolate_data_dir(tmp_path, monkeypatch):
+    """Point `config.DATA_DIR` somewhere this test owns.
+
+    These tests drive `_sync_run_scan`, which reads the account config and
+    writes scan telemetry — and until this fixture existed it did both against
+    the REAL `data/`. Two consequences, both of which actually happened:
+
+    - the suite wrote real `scan_telemetry.jsonl` rows during a run, which is
+      why that filename had to be gitignored;
+    - and it READ the real `account.json`, so the suite's result depended on
+      whatever was sitting in `data/`. A fixture file with `balance_history`
+      keyed `date` instead of `ts` failed five tests here with `KeyError:
+      'ts'` — a failure with no connection to anything these tests are about.
+
+    The second half is the dangerous one: a suite that reads shared mutable
+    state passes on one machine and fails on another for reasons invisible in
+    the diff.
+
+    Seeded rather than left empty, because the code under test assumes these
+    files exist — an absent account.json is a different failure from an
+    isolated one, and would just move the problem.
+    """
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+
+    # DATA_DIR alone is not enough, and finding out why is the whole reason
+    # this fixture is documented rather than terse. `account.py` does
+    # `CONFIG_PATH = os.path.join(config.DATA_DIR, "account.json")` at IMPORT
+    # time, and `load_account_config(path=CONFIG_PATH)` binds that as a
+    # default argument at DEF time -- so it is captured twice over, and
+    # patching either `config.DATA_DIR` or `account.CONFIG_PATH` afterwards
+    # changes nothing. The engine also imported the function by name, so it
+    # holds its own reference.
+    #
+    # Patching it where the engine looks it up is the one place that works.
+    # Two entry points, reached two different ways, so both need redirecting:
+    # the engine imported `load_account_config` BY NAME (its own reference),
+    # and calls `get_balance_history_points` THROUGH the module. Patching the
+    # module attribute fixes the second and does nothing for the first.
+    account_path = str(tmp_path / "account.json")
+    monkeypatch.setattr(
+        engine, "load_account_config",
+        lambda path=account_path: _account.load_account_config(path),
+    )
+    monkeypatch.setattr(
+        _account, "get_balance_history_points",
+        lambda path=account_path: [
+            (e["ts"][:10], e["balance"])
+            for e in _account.get_balance_history(path)
+        ],
+    )
+
+    (tmp_path / "trades.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "account.json").write_text(json.dumps({
+        "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct",
+        # `ts`, not `date`. account.py reads entry["ts"] unguarded.
+        "balance_history": [{"ts": "2026-08-01T00:00:00+00:00",
+                             "balance": 10000.0}],
+    }), encoding="utf-8")
+
 
 def _item():
     return SimpleNamespace(plan_v2=None)   # or a real ScanItem fixture

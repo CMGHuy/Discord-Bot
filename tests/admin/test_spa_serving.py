@@ -4,13 +4,25 @@ NG19 TRIAGE: KEEP unchanged. This tests `swingbot/admin/spa.py`, which
 exists only for the Angular UI and outlives the cutover.
 
 The bundle is absent in a source checkout (`static/app/` is gitignored and
-produced by the Dockerfile's frontend stage), so these tests write a fake
-one into it and remove it afterwards. That is the honest setup: it is the
-same directory the container uses, and pointing the tests at a tmp_path
-would test a path the deployment never takes.
+produced by the Dockerfile's frontend stage), so these tests build a fake one
+**in a tmp_path** and point `spa.APP_DIR` at it.
+
+An earlier version wrote into the real `static/app/` instead, arguing that a
+tmp_path "would test a path the deployment never takes". That argument was
+wrong twice over. `send_from_directory` behaves identically whichever
+directory it is given, so nothing about the serving logic was being proved by
+using the real one -- and the real one is *shared mutable state*: under
+`-n 4` two workers create and delete it underneath each other, and a
+developer who had actually built the SPA had their bundle deleted by running
+the suite.
+
+What the real path genuinely needs is one assertion that it points where the
+Dockerfile puts the bundle, which is
+`test_app_dir_points_where_the_dockerfile_copies_the_bundle` below. That is
+the part a tmp_path cannot cover, and it is one test rather than a
+filesystem-wide side effect.
 """
 import os
-import shutil
 
 import pytest
 
@@ -23,57 +35,29 @@ SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system")
 
 
 @pytest.fixture
-def built():
-    """A fake bundle in the real output directory, cleaned up after.
+def built(tmp_path, monkeypatch):
+    """A fake bundle, in a directory belonging to this test alone."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    (app_dir / "index.html").write_text(
+        "<!doctype html><sb-root></sb-root>", encoding="utf-8")
+    (app_dir / "main-ABCD1234.js").write_text("console.log(1)", encoding="utf-8")
+    monkeypatch.setattr(spa, "APP_DIR", str(app_dir))
+    return app_dir
 
-    **Restores what was there rather than deleting it.** A developer who has
-    actually built the SPA has a real index.html in this directory, and an
-    earlier version of this fixture removed it on cleanup — so running the
-    Python suite silently un-built their bundle, and the next page load 404ed
-    with nothing to connect it to. Found during NG54's browser walk, which
-    lost its bundle to a full-suite run mid-session.
 
-    The obvious alternative — write the fake bundle to a tmp_path and
-    monkeypatch `spa.APP_DIR` — is what the module docstring above argues
-    against, because it would test a directory the deployment never uses.
-    Saving and putting back the real bytes keeps that argument intact.
+def test_app_dir_points_where_the_dockerfile_copies_the_bundle():
+    """The one thing a tmp_path cannot check.
+
+    `COPY --from=frontend /build/dist/frontend/browser
+    /app/swingbot/admin/static/app` in the Dockerfile, and docker-compose
+    keeps that path alive past its bind mount with an anonymous volume at the
+    same string. Three places have to agree; this asserts the one in Python.
     """
-    created = not os.path.isdir(spa.APP_DIR)
-    os.makedirs(spa.APP_DIR, exist_ok=True)
-    index = os.path.join(spa.APP_DIR, "index.html")
-    asset = os.path.join(spa.APP_DIR, "main-ABCD1234.js")
-
-    # Read before writing, so a real bundle can be put back byte for byte.
-    saved = {}
-    for path in (index, asset):
-        try:
-            with open(path, "rb") as f:
-                saved[path] = f.read()
-        except OSError:
-            saved[path] = None
-
-    with open(index, "w", encoding="utf-8") as f:
-        f.write("<!doctype html><sb-root></sb-root>")
-    with open(asset, "w", encoding="utf-8") as f:
-        f.write("console.log(1)")
-    try:
-        yield
-    finally:
-        # ignore_errors / suppressed OSError throughout: Werkzeug can still
-        # hold a sent file open on Windows when the test client has not closed
-        # the response, and a cleanup failure must not turn a passing test red.
-        if created:
-            shutil.rmtree(spa.APP_DIR, ignore_errors=True)
-        else:
-            for path, original in saved.items():
-                try:
-                    if original is None:
-                        os.remove(path)
-                    else:
-                        with open(path, "wb") as f:
-                            f.write(original)
-                except OSError:
-                    pass
+    expected = os.path.join(
+        os.path.dirname(os.path.abspath(spa.__file__)), "static", "app")
+    assert spa.APP_DIR == expected
+    assert spa.APP_DIR.replace("\\", "/").endswith("swingbot/admin/static/app")
 
 
 # --------------------------------------------------------------------------
@@ -177,11 +161,18 @@ def test_index_is_never_cached(client, built):
 # Before the bundle exists
 # --------------------------------------------------------------------------
 
-def test_an_unbuilt_spa_404s_rather_than_pretending(client):
+def test_an_unbuilt_spa_404s_rather_than_pretending(client, tmp_path, monkeypatch):
     """A source checkout has no bundle. A friendly placeholder here would be
-    indistinguishable from a broken deployment."""
-    if spa.is_built():
-        pytest.skip("a real bundle is present in static/app/")
+    indistinguishable from a broken deployment.
+
+    Points APP_DIR at a directory that does not exist, rather than skipping
+    when the real one happens to be populated. The skip meant this ran on a
+    clean checkout and silently did not run on any machine where someone had
+    built the SPA -- so the assertion was weakest exactly where a person was
+    most likely to be changing this code.
+    """
+    monkeypatch.setattr(spa, "APP_DIR", str(tmp_path / "never-built"))
+    assert not spa.is_built()
 
     assert client.get("/cockpit").status_code == 404
     assert client.get("/app/main-ABCD1234.js").status_code == 404
