@@ -199,27 +199,27 @@ export class ApiClient {
     );
   }
 
-  /* -- universe -------------------------------------------------------- */
+  /* -- watchlist -------------------------------------------------------- */
 
   tickers(): Observable<TickerList> {
-    return this.http.get<TickerList>(`${this.base}/universe/tickers`);
+    return this.http.get<TickerList>(`${this.base}/watchlist/tickers`);
   }
 
   /** Always a list, single add included: the endpoint absorbs both, and two
    *  client methods over one endpoint is how the two grow different
    *  validation. */
   addTickers(tickers: string[]): Observable<TickerAddResult> {
-    return this.http.post<TickerAddResult>(`${this.base}/universe/tickers`, { tickers });
+    return this.http.post<TickerAddResult>(`${this.base}/watchlist/tickers`, { tickers });
   }
 
   removeTicker(symbol: string): Observable<TickerRemoveResult> {
     return this.http.delete<TickerRemoveResult>(
-      `${this.base}/universe/tickers/${encodeURIComponent(symbol)}`,
+      `${this.base}/watchlist/tickers/${encodeURIComponent(symbol)}`,
     );
   }
 
   suggestTickers(q: string): Observable<TickerSuggestions> {
-    return this.http.get<TickerSuggestions>(`${this.base}/universe/suggest`, {
+    return this.http.get<TickerSuggestions>(`${this.base}/watchlist/suggest`, {
       params: { q },
     });
   }

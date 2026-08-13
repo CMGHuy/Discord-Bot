@@ -19,7 +19,7 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { UniverseStore, parseSymbols } from './universe.store';
+import { WatchlistStore, parseSymbols } from './watchlist.store';
 
 /* NG51 — the watchlist.
  *
@@ -73,8 +73,8 @@ describe('parseSymbols', () => {
   });
 });
 
-describe('UniverseStore', () => {
-  let store: InstanceType<typeof UniverseStore>;
+describe('WatchlistStore', () => {
+  let store: InstanceType<typeof WatchlistStore>;
   let backend: HttpTestingController;
   let events: FakeEventStream;
 
@@ -88,17 +88,17 @@ describe('UniverseStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
-        UniverseStore,
+        WatchlistStore,
       ],
     });
-    store = TestBed.inject(UniverseStore);
+    store = TestBed.inject(WatchlistStore);
     backend = TestBed.inject(HttpTestingController);
   });
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
   const boot = () => {
     tick();
-    backend.expectOne('/api/v1/universe/tickers').flush(TICKERS);
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
   };
 
   it('reads the list out of the tickers envelope, not a collection', () => {
@@ -111,12 +111,12 @@ describe('UniverseStore', () => {
     expect(store.empty()).toBe(false);
   });
 
-  it('refetches on a universe event', () => {
+  it('refetches on a watchlist event', () => {
     boot();
 
-    events.raise('universe');
+    events.raise('watchlist');
     tick();
-    backend.expectOne('/api/v1/universe/tickers').flush({ tickers: [] });
+    backend.expectOne('/api/v1/watchlist/tickers').flush({ tickers: [] });
 
     expect(store.count()).toBe(0);
     // Still not "empty" in the loading sense -- the watchlist is genuinely
@@ -128,12 +128,12 @@ describe('UniverseStore', () => {
     boot();
 
     store.addTickers('nvda');
-    const request = backend.expectOne('/api/v1/universe/tickers');
+    const request = backend.expectOne('/api/v1/watchlist/tickers');
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ tickers: ['NVDA'] });
 
     request.flush({ added: ['NVDA'], already_present: [], invalid: [], total: 3 });
-    backend.expectOne('/api/v1/universe/tickers').flush(TICKERS);
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
   });
 
   it('names what was rejected as well as what was added', () => {
@@ -143,13 +143,13 @@ describe('UniverseStore', () => {
     boot();
 
     store.addTickers('AAPL, NVDA, not-a-ticker');
-    backend.expectOne('/api/v1/universe/tickers').flush({
+    backend.expectOne('/api/v1/watchlist/tickers').flush({
       added: ['NVDA'],
       already_present: ['AAPL'],
       invalid: ['NOT-A-TICKER'],
       total: 3,
     });
-    backend.expectOne('/api/v1/universe/tickers').flush(TICKERS);
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
 
     const message = store.addResult() ?? '';
     expect(message).toContain('NVDA');
@@ -173,7 +173,7 @@ describe('UniverseStore', () => {
 
     store.removeTicker('AAPL');
     backend
-      .expectOne('/api/v1/universe/tickers/AAPL')
+      .expectOne('/api/v1/watchlist/tickers/AAPL')
       .error(new ProgressEvent('error'), { status: 0 });
 
     expect(store.removeError()).toContain('AAPL');
@@ -185,10 +185,10 @@ describe('UniverseStore', () => {
 
     store.removeTicker('AAPL');
     backend
-      .expectOne('/api/v1/universe/tickers/AAPL')
+      .expectOne('/api/v1/watchlist/tickers/AAPL')
       .flush({ removed: 'AAPL', total: 1 });
     backend
-      .expectOne('/api/v1/universe/tickers')
+      .expectOne('/api/v1/watchlist/tickers')
       .flush({ tickers: [TICKERS.tickers[1]] });
 
     expect(store.count()).toBe(1);

@@ -74,8 +74,8 @@ _DATA_PATHS: tuple[tuple[str, str], ...] = (
     ("scan_telemetry.jsonl", "scan"),
     ("bot_heartbeat.json", "bot"),
     ("killswitch.json", "risk"),
-    ("watchlist.json", "universe"),
-    ("ticker_directory.json", "universe"),
+    ("watchlist.json", "watchlist"),
+    ("ticker_directory.json", "watchlist"),
     ("admin_jobs.json", "jobs"),
     # A directory. Its mtime moves when a result file is created or removed,
     # which is the whole lifecycle of a tuning result -- an in-place rewrite

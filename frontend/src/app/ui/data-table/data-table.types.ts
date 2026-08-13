@@ -4,7 +4,7 @@ import { TemplateRef } from '@angular/core';
  * Decision 1, with one amendment recorded at `PageSpec` below.
  *
  * These types live apart from the component because all four call sites
- * (Trades, Analytics/Strategies, Risk, Universe) import `ColumnDef` to declare
+ * (Trades, Analytics/Strategies, Risk, Watchlist) import `ColumnDef` to declare
  * their columns, and importing the component to get a type would drag the
  * whole table into files that only describe data.
  */
@@ -23,7 +23,7 @@ export interface SortSpec {
  * **Amends spec v14 Decision 1**, which made `total`, `page` and `perPage`
  * three separate required inputs. Only one of the four call sites paginates
  * (`GET /api/v1/trades`, the `Collection<T>` envelope); Analytics/Strategies,
- * Risk and Universe all return plain lists. Under the original contract each
+ * Risk and Watchlist all return plain lists. Under the original contract each
  * of those three would have had to pass `total = rows.length`, which is
  * precisely what the spec's own Property 4 forbids — so the contract as
  * written pushed its worst anti-pattern into three of its four consumers.

@@ -52,7 +52,7 @@ describe('routing, authenticated', () => {
     ['/dashboard', 'Dashboard'],
     ['/trades', 'Trades'],
     ['/analytics', 'Analytics'],
-    ['/universe', 'Universe'],
+    ['/watchlist', 'Watchlist'],
     ['/risk', 'Risk'],
     ['/system', 'System'],
   ])('mounts %s', async (path, heading) => {
@@ -70,7 +70,7 @@ describe('routing, authenticated', () => {
   });
 
   it('does not let the list route shadow the detail route', async () => {
-    const harness = await RouterTestingHarness.create('/universe/AAPL');
+    const harness = await RouterTestingHarness.create('/watchlist/AAPL');
     expect(harness.routeNativeElement?.textContent).toContain('AAPL');
   });
 });

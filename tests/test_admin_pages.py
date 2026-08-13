@@ -40,7 +40,7 @@ def client(monkeypatch):
 # it renders in both modes. `/` itself is covered properly in
 # tests/admin/test_admin_ui_flag.py, which pins the flag in both directions
 # instead of depending on what happens to be on disk.
-PAGES = ["/jinja/dashboard", "/performance", "/watchlist", "/settings", "/logs"]
+PAGES = ["/jinja/dashboard", "/performance", "/jinja/watchlist", "/settings", "/logs"]
 
 
 @pytest.mark.parametrize("path", PAGES)

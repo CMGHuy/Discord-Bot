@@ -90,8 +90,14 @@ def test_every_jinja_page_stays_reachable_in_both_modes(
     """
     monkeypatch.setattr(config, "ADMIN_UI", mode, raising=False)
 
+    # `/jinja/dashboard` and `/jinja/watchlist` are the only two that carry a
+    # prefix: SR4 and SR5 moved them there because the SPA's renamed
+    # Dashboard and Watchlist workspaces needed the clean URLs, and
+    # spa.register() skips any rule Jinja owns. The point of this test is
+    # unchanged -- every Jinja page still answers 200 in BOTH modes, which is
+    # what keeps rollback a restart rather than a redeploy.
     for path in ("/jinja/dashboard", "/plans", "/journal", "/performance",
-                 "/strategies", "/calibration", "/tuning", "/watchlist",
+                 "/strategies", "/calibration", "/tuning", "/jinja/watchlist",
                  "/risk", "/settings", "/logs"):
         response = client.get(path, headers=auth)
         assert response.status_code == 200, f"{path} under ADMIN_UI={mode}"

@@ -47,7 +47,7 @@ export const TICKER_TRADES_CAP = 25;
   providers: [TradesStore, OhlcvStore],
   template: `
     <header class="head">
-      <a class="back" routerLink="/universe">← Universe</a>
+      <a class="back" routerLink="/watchlist">← Watchlist</a>
       <h1>{{ symbol() }}</h1>
       <span class="counts">
         {{ openCount() }} open · {{ closedCount() }} closed

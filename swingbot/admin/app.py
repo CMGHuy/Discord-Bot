@@ -956,9 +956,25 @@ def export_trades_csv():
 # ---------------------------------------------------------------------------
 # Routes -- Watchlist
 # ---------------------------------------------------------------------------
-@app.route("/watchlist", methods=["GET"])
+@app.route("/jinja/watchlist", methods=["GET"])
 @require_auth
 def watchlist_page():
+    """The Jinja watchlist page.
+
+    **Moved from `/watchlist` by SR5**, for the same reason and in the same
+    way as the dashboard in SR4: the SPA's Universe workspace was renamed to
+    Watchlist and needs the clean URL, and `spa.register()` would otherwise
+    skip its rule and let this page answer a hard reload of `/watchlist`.
+
+    Its four sibling routes (`suggest`, `add`, `bulk_add`, `remove`) moved
+    with it. They had to: `spa.py` registers `/watchlist/<path:_rest>`, which
+    would have competed with them for the same space, and a POST target that
+    sometimes resolves to an SPA shell is a worse failure than a moved URL.
+    Endpoint names are unchanged, so `url_for` in the templates still
+    resolves and no form action is hardcoded.
+
+    All five die with the rest of Jinja at NG57.
+    """
     tickers = load_watchlist()
     # Build per-ticker trade stats -- one read of trades.json (get_trades()
     # re-reads the file from disk every call, see TradeLog.refresh()) instead
@@ -993,7 +1009,7 @@ def watchlist_page():
     )
 
 
-@app.route("/watchlist/suggest", methods=["GET"])
+@app.route("/jinja/watchlist/suggest", methods=["GET"])
 @require_auth
 def watchlist_suggest():
     """
@@ -1006,7 +1022,7 @@ def watchlist_suggest():
     return Response(json.dumps(search_tickers(q)), mimetype="application/json")
 
 
-@app.route("/watchlist/add", methods=["POST"])
+@app.route("/jinja/watchlist/add", methods=["POST"])
 @require_auth
 def watchlist_add():
     ticker = request.form.get("ticker", "").strip().upper()
@@ -1021,7 +1037,7 @@ def watchlist_add():
     return redirect(url_for("watchlist_page", msg=f"{ticker} is already in the watchlist.", ok=1))
 
 
-@app.route("/watchlist/bulk_add", methods=["POST"])
+@app.route("/jinja/watchlist/bulk_add", methods=["POST"])
 @require_auth
 def watchlist_bulk_add():
     """
@@ -1069,7 +1085,7 @@ def watchlist_bulk_add():
     return redirect(url_for("watchlist_page", msg=msg, ok=1 if not invalid else 0))
 
 
-@app.route("/watchlist/remove", methods=["POST"])
+@app.route("/jinja/watchlist/remove", methods=["POST"])
 @require_auth
 def watchlist_remove():
     ticker = request.form.get("ticker", "").strip().upper()

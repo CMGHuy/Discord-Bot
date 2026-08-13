@@ -45,7 +45,7 @@ export class Shell {
     { path: '/dashboard', label: 'Dashboard' },
     { path: '/trades', label: 'Trades' },
     { path: '/analytics', label: 'Analytics' },
-    { path: '/universe', label: 'Universe' },
+    { path: '/watchlist', label: 'Watchlist' },
     { path: '/risk', label: 'Risk' },
     { path: '/system', label: 'System' },
   ];

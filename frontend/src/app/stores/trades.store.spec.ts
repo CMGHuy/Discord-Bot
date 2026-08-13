@@ -182,7 +182,7 @@ describe('TradesStore', () => {
     tick();
     respond();
 
-    events.raise('universe');
+    events.raise('watchlist');
     tick();
 
     backend.verify();

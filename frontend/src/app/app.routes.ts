@@ -53,16 +53,21 @@ export const routes: Routes = [
       import('./workspaces/analytics/analytics').then((m) => m.Analytics),
   },
   {
-    path: 'universe',
+    path: 'watchlist',
     canMatch: [authGuard],
-    loadComponent: () => import('./workspaces/universe/universe').then((m) => m.Universe),
+    loadComponent: () => import('./workspaces/watchlist/watchlist').then((m) => m.Watchlist),
   },
   {
-    path: 'universe/:symbol',
+    path: 'watchlist/:symbol',
     canMatch: [authGuard],
     loadComponent: () =>
-      import('./workspaces/universe/ticker-detail').then((m) => m.TickerDetail),
+      import('./workspaces/watchlist/ticker-detail').then((m) => m.TickerDetail),
   },
+  // SR5: the workspace was `/universe` until 2026-08-13. The `:symbol` form
+  // is why these are explicit rather than left to the `**` route below —
+  // that would send `/universe/AAPL` to the Dashboard and drop the symbol.
+  { path: 'universe', pathMatch: 'full', redirectTo: 'watchlist' },
+  { path: 'universe/:symbol', redirectTo: 'watchlist/:symbol' },
   {
     path: 'risk',
     canMatch: [authGuard],
