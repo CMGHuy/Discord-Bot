@@ -109,9 +109,14 @@ def test_an_api_typo_does_not_return_html(client, built):
 
 
 def test_the_jinja_ui_is_untouched(client, auth, built):
-    """Both UIs are live until Phase 5. / is still the Jinja dashboard, and
-    nothing here may change that."""
-    response = client.get("/", headers=auth)
+    """Both UIs are live until Phase 5, and every Jinja page stays reachable.
+
+    NG53 moved which UI answers `/` behind the `ADMIN_UI` flag, so the
+    dashboard's own URL is `/dashboard` -- see `test_admin_ui_flag.py` for
+    the flag itself. What this asserts is the part that has not changed:
+    the Jinja dashboard still renders, whatever `/` is doing.
+    """
+    response = client.get("/dashboard", headers=auth)
 
     assert response.status_code == 200
     assert b"sb-root" not in response.data

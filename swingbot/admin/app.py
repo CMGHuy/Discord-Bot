@@ -340,6 +340,50 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 @app.route("/", methods=["GET"])
 @require_auth
 def index():
+    """The front door — whichever UI `ADMIN_UI` says owns it (NG53).
+
+    The flag decides this one thing. Every Jinja page stays mounted in both
+    modes, this one included: `/dashboard` below is its own URL, and it is
+    what makes rolling back a restart rather than a rebuild or a deploy.
+
+    `index` stays the endpoint `url_for` resolves to `/`, which several
+    redirects (login, and every `redirect(url_for("index", ...))` in this
+    module) depend on — hence a separate view for the alias rather than a
+    second `@app.route` on this one, which would make `url_for("index")`
+    build `/dashboard` and quietly move where logging in lands you.
+    """
+    # Imported inside the function: `spa` is registered at the bottom of this
+    # module (it needs `app` to exist), so a module-level import here would
+    # be circular.
+    from . import spa as _spa_module
+
+    if _spa_module.serves_root():
+        # The SPA has no route of its own at "/" -- its six workspaces are
+        # registered individually (spa.py) -- so the flag is honoured by
+        # sending the browser to the default workspace. A redirect rather
+        # than serving index.html here, so the URL in the address bar is one
+        # the SPA's router actually owns; landing on "/" and having the
+        # router rewrite it is the version that breaks the back button.
+        # Endpoint is bare `spa_cockpit`: spa.register() adds the workspace
+        # rules to the app directly, not to the blueprint, so there is no
+        # `spa.` prefix on this one.
+        return redirect(url_for("spa_cockpit"))
+    return _dashboard_page()
+
+
+@app.route("/dashboard", methods=["GET"])
+@require_auth
+def dashboard_page():
+    """The Jinja dashboard's own URL, reachable in either mode.
+
+    Added by NG53 so that turning the SPA on does not make one Jinja page
+    unreachable while the other eleven stay up — the acceptance gate walks
+    all twelve, and a rollback that needs a redeploy is not a rollback.
+    """
+    return _dashboard_page()
+
+
+def _dashboard_page():
     """Full Dashboard page.
 
     Renders the auto-refreshing fragment inline for first paint, and -- unlike

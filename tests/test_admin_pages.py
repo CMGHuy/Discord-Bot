@@ -41,7 +41,7 @@ def test_page_renders(client, path):
 
 
 def test_tokens_and_font_are_linked(client):
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/dashboard").get_data(as_text=True)
     assert "tokens.css" in html and "vendor/inter/inter.css" in html
     assert "googleapis" not in html  # no-CDN constraint
 

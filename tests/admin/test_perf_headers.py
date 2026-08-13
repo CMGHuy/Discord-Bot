@@ -37,13 +37,13 @@ import gzip
 
 
 def test_gzip_applied_to_large_html_response(client, auth):
-    r = client.get("/", headers={**auth, "Accept-Encoding": "gzip"})
+    r = client.get("/dashboard", headers={**auth, "Accept-Encoding": "gzip"})
     assert r.headers.get("Content-Encoding") == "gzip"
     assert b"Dashboard" in gzip.decompress(r.data)
 
 
 def test_gzip_skipped_without_accept_encoding(client, auth):
-    r = client.get("/", headers=auth)  # no Accept-Encoding at all
+    r = client.get("/dashboard", headers=auth)  # no Accept-Encoding at all
     assert r.headers.get("Content-Encoding") is None
 
 

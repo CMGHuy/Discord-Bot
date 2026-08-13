@@ -66,7 +66,9 @@ def test_login_grants_access_to_the_jinja_ui_too(client):
     """One session mechanism, two front doors -- the SPA and the Jinja UI
     must not diverge into separate notions of 'logged in' while both exist."""
     client.post("/api/v1/session", json=_LOGIN)
-    assert client.get("/").status_code == 200
+    # /dashboard rather than /: since NG53 the root's answer depends on the
+    # ADMIN_UI flag, and this is about the session, not about which UI won.
+    assert client.get("/dashboard").status_code == 200
 
 
 def test_jinja_login_grants_access_to_the_v1_api(client):

@@ -439,6 +439,12 @@ FIELDS: list[Field] = [
     Field("ADMIN_PORT", "ADMIN_PORT", "Admin UI", "Admin UI port",
           type="number", default="1234", min=1, max=65535, step=1, hot_reloadable=False,
           help="Requires restarting the ADMIN container (Flask can't rebind its own port live)."),
+    Field("ADMIN_UI", "ADMIN_UI", "Admin UI", "Admin interface",
+          type="select", default="spa", options=["spa", "jinja"], hot_reloadable=False,
+          help="'spa' serves the Angular UI at /; 'jinja' serves the original server-rendered "
+               "pages. Every Jinja URL stays reachable either way -- this only decides what / "
+               "answers with, so flipping it back is a restart, not a rebuild. Falls back to "
+               "'jinja' with a warning if the SPA bundle has not been built."),
     Field("DASHBOARD_REFRESH_SECONDS", "DASHBOARD_REFRESH_SECONDS", "Admin UI", "Dashboard auto-refresh (seconds)",
           type="number", default="15", min=2, max=300, step=1,
           help="How often the Dashboard page's open-trades table auto-refreshes while the 'Auto-refresh' "
