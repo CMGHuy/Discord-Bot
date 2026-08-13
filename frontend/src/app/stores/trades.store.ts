@@ -178,11 +178,13 @@ export const TradesStore = signalStore(
       });
     },
 
-    /** The CSV export URL for the CURRENT query, so the file matches the
-     *  list on screen rather than the whole book. A URL rather than a
-     *  request: the browser downloading it through a normal navigation is
-     *  what produces a Save dialog and the server's filename. */
-    exportUrl: (): string => api.tradesExportUrl(store.query()),
+    /** The CSV export URL. A URL rather than a request: the browser
+     *  downloading it through a normal navigation is what produces a Save
+     *  dialog and the server's filename.
+     *
+     *  Not query-dependent — see `tradesExportUrl`. The export is the whole
+     *  trade log, and the button says so. */
+    exportUrl: (): string => api.tradesExportUrl(),
   })),
   withHooks({
     onInit(store, events = inject(EventStream)) {

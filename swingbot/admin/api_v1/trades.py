@@ -56,8 +56,23 @@ _LEGACY_STATUS = {
 # Statuses where a live price is meaningless -- the position is over.
 _TERMINAL = {"CLOSED", "CANCELLED"}
 
-FILTERS = frozenset({"status", "ticker", "strategy", "horizon", "direction",
-                     "tier", "origin", "has_note"})
+FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon",
+                     "direction", "tier", "origin", "has_note"})
+
+# NG54. `status` normalises win and loss to CLOSED, so the two cannot be told
+# apart by it -- but the Jinja UI had an `outcome` filter over exactly that
+# distinction (dashboard.py's history table), and the SPA's Win/Loss chips
+# were sending `status=win` into a field that never holds "win". This is the
+# field they mean: the RAW status of the underlying trade, untranslated.
+#
+# `None` for a plan with no trade behind it. A PENDING or CANCELLED plan has
+# no outcome, which is different from having an outcome of "not yet".
+_OUTCOMES = frozenset({"win", "loss", "open", "closed"})
+
+# The two plan statuses that both mean "position is live". `status=open` is
+# accepted as an alias for either, because "open" is what a user means and
+# splitting it across two chips would be exposing a storage detail.
+_OPEN_STATUSES = frozenset({"ACTIVE", "PARTIAL"})
 
 # Compared as booleans, not as strings. `has_note` is a real bool on the row,
 # and the generic comparison below stringifies it -- so `?has_note=1` would
@@ -102,6 +117,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "id": plan["plan_id"],
         "origin": "plan",
         "status": plan.get("status"),
+        # The linked trade's own status, or None when no trade exists yet.
+        "outcome": t.get("status") if trade else None,
         "ticker": plan.get("ticker"),
         "direction": plan.get("direction"),
         "strategy": plan.get("strategy"),
@@ -140,6 +157,8 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "id": t.get("id"),
         "origin": "legacy",
         "status": _LEGACY_STATUS.get(t.get("status"), "CLOSED"),
+        # Legacy rows ARE the trade, so their raw status is the outcome.
+        "outcome": t.get("status"),
         "ticker": t.get("ticker"),
         "direction": t.get("direction"),
         "strategy": t.get("strategy"),
@@ -369,6 +388,26 @@ def _sort_key(field: str):
     return key
 
 
+def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
+    """Match the `status` filter, case-insensitively, with one alias.
+
+    NG54. This was an exact, case-sensitive string compare, which meant the
+    SPA's own chips matched nothing: they send the lowercase legacy vocabulary
+    (`open`, `cancelled`, `expired`) and rows carry the uppercase plan
+    vocabulary. Every chip but "All" returned an empty list, and it looked
+    exactly like "no trades in that state".
+
+    `open` is an alias for ACTIVE-or-PARTIAL rather than a status of its own.
+    A partially-realised position is still open, and making the user pick
+    between two chips to see all their live trades would be exposing how the
+    plan lifecycle is stored rather than what they asked for.
+    """
+    want = value.strip().lower()
+    if want == "open":
+        return [r for r in rows if r.get("status") in _OPEN_STATUSES]
+    return [r for r in rows if str(r.get("status") or "").lower() == want]
+
+
 @api_v1.route("/trades", methods=["GET"])
 @require_auth
 def list_trades():
@@ -384,6 +423,16 @@ def list_trades():
         if key in _BOOLEAN_FILTERS:
             want = str(value).strip().lower() in _TRUTHY
             rows = [r for r in rows if bool(r.get(key)) is want]
+        elif key == "status":
+            rows = _filter_by_status(rows, str(value))
+        elif key == "outcome":
+            # Case-insensitive, like status. Values outside _OUTCOMES simply
+            # match nothing rather than 400ing: an unknown filter value is a
+            # request for an empty set, and the collection convention reserves
+            # 400 for a malformed request, not an unsatisfiable one.
+            want = str(value).strip().lower()
+            rows = [r for r in rows
+                    if str(r.get("outcome") or "").lower() == want]
         else:
             rows = [r for r in rows if str(r.get(key) or "") == str(value)]
 

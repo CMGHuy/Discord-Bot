@@ -37,6 +37,7 @@ import {
   DEFAULT_TRADE_COLUMNS,
   STATUS_CHIPS,
   TRADES_TABLE_ID,
+  chipQuery,
   tradeColumns,
 } from './trades.columns';
 
@@ -77,10 +78,17 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       <h1>Trades</h1>
       <div class="head-actions">
         <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
-             the server's filename, both of which an XHR throws away. It
-             carries the current query, so the file matches the list on
-             screen rather than the whole book. -->
-        <a class="export" [href]="store.exportUrl()" download>Export CSV</a>
+             the server's filename, both of which an XHR throws away.
+             The title names what comes out, because it is NOT what is on
+             screen: the export is the whole trade log, unfiltered. Saying so
+             here is the same courtesy the two Clear dialogs already pay. -->
+        <a
+          class="export"
+          [href]="store.exportUrl()"
+          title="Downloads the entire trade log. The filters above do not narrow it."
+          download
+          >Export CSV</a
+        >
         <button sb-button variant="ghost" type="button" (click)="bulk.set('open')">
           Clear open
         </button>
@@ -108,9 +116,9 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
     <sb-filter-chips
       [chips]="statusChips"
-      [selected]="status() ?? null"
+      [selected]="selectedChip()"
       label="Status"
-      (selectedChange)="navigate({ status: $event })"
+      (selectedChange)="onStatusChip($event)"
     />
 
     <sb-filter-bar [activeCount]="store.activeFilterCount()" (cleared)="clearFilters()">
@@ -319,6 +327,7 @@ export class Trades {
   readonly page = input<string>();
   readonly sort = input<string>();
   readonly status = input<string>();
+  readonly outcome = input<string>();
   readonly ticker = input<string>();
   readonly strategy = input<string>();
   readonly horizon = input<string>();
@@ -400,6 +409,7 @@ export class Trades {
         per_page: DEFAULT_PER_PAGE,
         sort: this.sort(),
         status: this.status(),
+        outcome: this.outcome(),
         ticker: this.ticker(),
         strategy: this.strategy(),
         horizon: this.horizon(),
@@ -451,6 +461,23 @@ export class Trades {
     this.router.navigate([], { queryParams, queryParamsHandling: 'merge' });
   }
 
+  /** Whichever of the two parameters is set — only one ever is. */
+  protected readonly selectedChip = computed(
+    () => this.outcome() ?? this.status() ?? null,
+  );
+
+  /**
+   * Drive `status` or `outcome` from one chip row.
+   *
+   * Both are always written, one to a value and the other to null, so
+   * switching from Win to Cancelled cannot leave `outcome=win` behind in the
+   * URL and silently intersect the two filters — which would show an empty
+   * table for a chip that looks selected.
+   */
+  protected onStatusChip(value: string | null): void {
+    this.navigate(chipQuery(value));
+  }
+
   protected onSort(sort: SortSpec): void {
     this.navigate({ sort: toSortParam(sort) ?? null });
   }
@@ -458,6 +485,7 @@ export class Trades {
   protected clearFilters(): void {
     this.navigate({
       status: null,
+      outcome: null,
       ticker: null,
       strategy: null,
       horizon: null,

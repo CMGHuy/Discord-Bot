@@ -37,6 +37,11 @@ TRADE_ROW = {
     "id": str,
     "origin": str,               # "plan" | "legacy" -- which store it came from
     "status": str,
+    # NG54. The RAW trade status, untranslated -- win/loss/open/closed, or
+    # None for a plan with no trade behind it. `status` normalises win and
+    # loss to CLOSED, so this is the only field that can tell them apart, and
+    # the Trades workspace's Win/Loss chips filter on it.
+    "outcome": NULLABLE_STR,
     "ticker": str,
     "direction": str,
     "strategy": NULLABLE_STR,
@@ -210,6 +215,81 @@ def test_status_filter(seed, logged_in):
     body = logged_in.get("/api/v1/trades?status=PENDING").get_json()
     assert body["total"] == 1
     assert body["items"][0]["status"] == "PENDING"
+
+
+# --- NG54: the status vocabulary the UI actually sends -------------------
+#
+# Every one of these failed before NG54, which is how five of the six status
+# chips came to return an empty list that read as "no trades in that state".
+# The gate's browser walk found it; nothing in either suite could have.
+
+def _lifecycle(seed):
+    """One plan per status, plus the two legacy shapes."""
+    seed(
+        plans=[
+            _plan("11111111-1111-4111-8111-111111111111", status="PENDING"),
+            _plan("22222222-2222-4222-8222-222222222222", status="ACTIVE"),
+            _plan("33333333-3333-4333-8333-333333333333", status="PARTIAL"),
+            _plan("44444444-4444-4444-8444-444444444444", status="CANCELLED"),
+        ],
+        trades=[
+            _trade("t-open", ticker="SPY", status="open"),
+            _trade("t-win", ticker="AMD", status="win"),
+            _trade("t-loss", ticker="COIN", status="loss"),
+        ],
+    )
+
+
+@pytest.mark.parametrize("value", ["CANCELLED", "cancelled", "Cancelled"])
+def test_status_matches_whatever_case_it_arrives_in(seed, logged_in, value):
+    """The chips send lowercase; the rows hold uppercase. An exact compare
+    made every lowercase chip match nothing."""
+    _lifecycle(seed)
+    body = logged_in.get(f"/api/v1/trades?status={value}").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["status"] == "CANCELLED"
+
+
+def test_status_open_means_active_or_partial(seed, logged_in):
+    """`open` is an alias, not a status. A partially-realised position is
+    still open, and the user should not have to know that to see it."""
+    _lifecycle(seed)
+    body = logged_in.get("/api/v1/trades?status=open").get_json()
+
+    # Two plans (ACTIVE, PARTIAL) plus the legacy open trade, which maps to
+    # ACTIVE. Not the win or the loss.
+    assert body["total"] == 3
+    assert {r["status"] for r in body["items"]} == {"ACTIVE", "PARTIAL"}
+
+
+def test_outcome_separates_a_win_from_a_loss(seed, logged_in):
+    """`status` normalises both to CLOSED, so this is the only field that
+    can tell them apart — and the Jinja UI filtered on exactly it."""
+    _lifecycle(seed)
+
+    won = logged_in.get("/api/v1/trades?outcome=win").get_json()
+    lost = logged_in.get("/api/v1/trades?outcome=loss").get_json()
+
+    assert [r["ticker"] for r in won["items"]] == ["AMD"]
+    assert [r["ticker"] for r in lost["items"]] == ["COIN"]
+    # Both are CLOSED by status, which is why status could not do this.
+    assert won["items"][0]["status"] == lost["items"][0]["status"] == "CLOSED"
+
+
+def test_a_plan_with_no_trade_has_no_outcome(seed, logged_in):
+    """None, not "open". A PENDING plan has not had an outcome yet; saying it
+    is open would make it match a filter for live positions."""
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111", status="PENDING")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["outcome"] is None
+
+
+def test_an_unknown_outcome_is_an_empty_set_not_an_error(seed, logged_in):
+    """Unsatisfiable is not malformed. 400 is reserved for the latter."""
+    _lifecycle(seed)
+    resp = logged_in.get("/api/v1/trades?outcome=banana")
+    assert resp.status_code == 200
+    assert resp.get_json()["total"] == 0
 
 
 def test_ticker_filter(seed, logged_in):

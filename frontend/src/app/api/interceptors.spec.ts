@@ -243,9 +243,12 @@ describe('ApiClient', () => {
 
   it('returns download URLs rather than fetching them', () => {
     // An XHR would discard the Save dialog and the server's filename.
-    expect(api.tradesExportUrl({ status: 'CLOSED' })).toBe(
-      '/api/v1/trades/export.csv?status=CLOSED',
-    );
+    //
+    // NG54: the trades export takes NO query. It used to accept one and pass
+    // it along, and the endpoint ignored every parameter — so a filtered view
+    // exported the whole book while the link implied otherwise. The endpoint
+    // exports the trade log, which is not the set the collection shows, so
+    // there is no query it could honour.
     expect(api.tradesExportUrl()).toBe('/api/v1/trades/export.csv');
     expect(api.settingsExportUrl()).toBe('/api/v1/system/settings/export');
     backend.verify();

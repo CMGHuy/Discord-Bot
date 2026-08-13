@@ -645,8 +645,30 @@ status chip". There is no Pending chip, and `PENDING` is unreachable from the
 chip row — so the Jinja plans page has no working SPA equivalent today. A1 was
 right that the *route* is covered and wrong that the *control* is.
 
-**Not fixed here.** Phase 5's "Adding nothing" rule and the Win/Loss question
-make this a decision, not a typo.
+**FIXED.** The decision, once made, was that Win and Loss were never a new
+feature — the Jinja history table already had an `outcome` filter over exactly
+that distinction. So the SPA was not asking for something new; it was asking
+the wrong field.
+
+- The v1 row gains **`outcome`**: the raw trade status (`win`/`loss`/`open`/
+  `closed`), untranslated, and `null` for a plan with no trade behind it. A
+  PENDING plan has no outcome, which is not the same as an outcome of "open".
+- **`status` matches case-insensitively**, and accepts **`open` as an alias
+  for ACTIVE-or-PARTIAL**. A partially-realised position is still open, and
+  making the user pick between two chips to see their live trades would be
+  exposing how the plan lifecycle is stored rather than answering what they
+  asked.
+- The chips become **Pending · Open · Win · Loss · Cancelled · Expired**, each
+  naming which parameter it drives. `chipQuery()` always writes *both*
+  parameters, one to a value and one to `null`, so switching from Win to
+  Cancelled cannot leave `outcome=win` in the URL for the server to intersect
+  — an empty table under a chip that looks selected is exactly the failure
+  this whole finding was.
+
+Pending closes the `GET /plans` gap A1 claimed and B2 disproved.
+
+Verified in the browser against the fixtures: 1 / 3 / 21 / 11 / 1 / 0 rows for
+the six chips, and `?outcome=win` then `?status=CANCELLED` leaves a clean URL.
 
 ### DEFECT 2 — Export CSV carries a query the endpoint ignores
 
@@ -669,8 +691,21 @@ Note that A2 was careful to spell exactly this out in the *clear* dialogs
 ("the filter on screen does not narrow either") — and then the Export link
 sitting beside them quietly implies the opposite.
 
-**Not fixed here** — same reason: either the link stops carrying the query or
-the endpoint starts honouring it, and that is a decision.
+**FIXED, by removing the promise rather than inventing the feature.** The
+endpoint exports the **trade log**, which is not the set this collection
+shows: the collection joins plans and trades, and a PENDING plan has no trade
+row to export. `status=PENDING` is not a filter the export could honour even
+in principle, so teaching it to filter would mean two different meanings of
+"the trades" in one workspace.
+
+`tradesExportUrl()` now takes no argument at all — the type system enforces
+it, rather than a comment asking nicely — and the link carries a title:
+*"Downloads the entire trade log. The filters above do not narrow it."* That
+is the same courtesy A2 already paid in the two Clear dialogs, which say what
+goes and what stays.
+
+Byte-parity with the Jinja route is preserved by construction, and re-checked
+after the change (5266 bytes, identical).
 
 ### What passed
 
@@ -869,27 +904,23 @@ matrix has something to render. The trades list correspondingly shows 37 rows
 | Item | Result |
 |---|---|
 | 2a route coverage | **PASS** — nothing unmapped; `/dashboard` added to A1; method changed to the live url_map |
-| 2b behaviour parity | **WALKED** — one blocker (fixed), two defects (open) |
+| 2b behaviour parity | **PASS** — one blocker and two defects found, all three fixed |
 | 2c degraded mode | **PASS** |
-| 2d suite green | **PASS** — 1537 Python, 294 frontend, 0 failed, 0 errors |
-| A5 1280px, browser half | **DONE** — one defect (fixed): the Trades table scrolled the page |
+| 2d suite green | **PASS** — 1544 Python, 302 frontend, 0 failed, 0 errors |
+| A5 1280px, browser half | **PASS** — one defect (the Trades table scrolled the page) fixed |
 
-**Do not ship Release A (NG55) yet.** The blocker is fixed and the gate is
-mostly green, but two defects found by 2b are open and both are decisions
-rather than typos:
+**The gate passes. Release A (NG55) is unblocked** — it is now a deploy
+decision, not an engineering one.
 
-1. **Status chips** — five of six return nothing. Fixing "Open", "Cancelled"
-   and "Expired" is mechanical; "Win" and "Loss" need an outcome concept the
-   v1 collection does not have. There is also no "Pending" chip, which leaves
-   `GET /plans` without a working equivalent.
-2. **Export CSV** — the link carries the on-screen query and the endpoint
-   ignores it. Either the link stops carrying it or the endpoint starts
-   honouring it.
+Two things NG55 should do rather than assume:
 
-Both were left alone deliberately: Phase 5's "Adding nothing" rule means a
-gate finding is written down and decided on, not fixed on the way past. The
-one thing that *was* fixed is the blocker, because a UI that does not load
-cannot be walked at all.
+1. **Re-run the route derivation immediately before shipping**, from the live
+   `url_map` (B1's command, not the grep). One route appeared in the five days
+   between the NG52 audit and this gate; assume another can.
+2. **Rebuild and reinstall the bundle**, and load one page in a browser. The
+   blocker in B2 was invisible to 1544 passing tests and fatal in a browser,
+   and `static/app/` is gitignored — so what CI validates is never the artifact
+   that ships.
 
 ### What this gate bought
 

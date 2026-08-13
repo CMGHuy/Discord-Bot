@@ -160,6 +160,9 @@ export interface TradeQuery {
   /** `field` or `-field` for descending. Closed set -- see SORTABLE. */
   sort?: string;
   status?: string;
+  /** How it ended: win | loss | open | closed. `status` normalises win and
+   *  loss to CLOSED, so this is the only way to separate them. */
+  outcome?: string;
   ticker?: string;
   strategy?: string;
   horizon?: string;

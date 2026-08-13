@@ -603,11 +603,18 @@ Spec v15 Decision 2. Do not ship Release A until every item passes.
 
 ### Task NG55: Release A
 
-**Blocked by NG54's two open defects** — the status chips and the Export CSV
-query (spec Appendix B2). Both are decisions, not typos; neither was fixed
-under Phase 5's "Adding nothing" rule. Re-run the live-`url_map` route
-derivation immediately before shipping: NG54 found one route (`/dashboard`)
-had appeared in the five days since the NG52 audit.
+**NG54's gate passes — unblocked.** Its two defects (the status chips and the
+Export CSV query) are fixed; see spec Appendix B2 and B5.
+
+Two things to do rather than assume, both from what NG54 found:
+
+- **Re-run the route derivation from the live `url_map`** (spec B1's command,
+  not the grep) immediately before shipping. One route appeared in the five
+  days between the NG52 audit and the gate.
+- **Rebuild and reinstall the bundle, then load one page in a browser.**
+  `static/app/` is gitignored, so what the suite validates is never the
+  artifact that ships — which is exactly how NG54's blocker survived 1544
+  passing tests.
 
 **Files:** `VERSION.json`
 

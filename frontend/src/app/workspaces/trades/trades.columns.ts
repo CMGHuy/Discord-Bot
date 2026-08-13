@@ -78,11 +78,55 @@ export function tradeColumns(): ColumnDef<TradeRow>[] {
  * **Chips, not tabs.** Tabs would reintroduce the "separate page per state"
  * model that collapsing Plans, Journal and the two dashboard tables into one
  * Trades workspace exists to abolish — spec v14 Decision 4 says so outright.
+ *
+ * **Two parameters, one row.** `status` and `outcome` are different questions
+ * — `status` is where the position is in its lifecycle, `outcome` is how it
+ * ended — and win and loss are indistinguishable by status, because both
+ * normalise to CLOSED. So each chip names the parameter it filters on, and
+ * only one is ever set at a time.
+ *
+ * NG54: before that, every chip sent `status` and five of the six matched
+ * nothing. `status=win` was querying a field that never holds "win", and
+ * `status=cancelled` was case-mismatched against CANCELLED. It read as "no
+ * trades in that state" rather than as a bug, which is why it survived to
+ * the acceptance gate.
  */
-export const STATUS_CHIPS = [
-  { value: 'open', label: 'Open' },
-  { value: 'win', label: 'Win' },
-  { value: 'loss', label: 'Loss' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'expired', label: 'Expired' },
+export interface StatusChip {
+  value: string;
+  label: string;
+  /** Which query parameter this chip drives. */
+  param: 'status' | 'outcome';
+}
+
+export const STATUS_CHIPS: StatusChip[] = [
+  // Pending was missing entirely, which left the old /plans page — whose
+  // whole purpose was listing un-filled plans — with no equivalent here.
+  { value: 'PENDING', label: 'Pending', param: 'status' },
+  // `open` is a server-side alias for ACTIVE-or-PARTIAL. One chip, because
+  // "is my position live" is one question.
+  { value: 'open', label: 'Open', param: 'status' },
+  { value: 'win', label: 'Win', param: 'outcome' },
+  { value: 'loss', label: 'Loss', param: 'outcome' },
+  { value: 'CANCELLED', label: 'Cancelled', param: 'status' },
+  { value: 'EXPIRED', label: 'Expired', param: 'status' },
 ];
+
+/**
+ * The URL patch for a chip selection — both parameters, always.
+ *
+ * Writing both is the point. Setting only the one a chip uses would leave the
+ * other behind on a switch: going from Win to Cancelled would navigate to
+ * `?outcome=win&status=CANCELLED`, the server would intersect them, and the
+ * table would be empty under a chip that looks selected. Passing `null` for
+ * an unselected chip is also how "All" clears both.
+ */
+export function chipQuery(value: string | null): {
+  status: string | null;
+  outcome: string | null;
+} {
+  const chip = STATUS_CHIPS.find((c) => c.value === value);
+  return {
+    status: chip?.param === 'status' ? chip.value : null,
+    outcome: chip?.param === 'outcome' ? chip.value : null,
+  };
+}

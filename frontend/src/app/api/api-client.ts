@@ -132,10 +132,21 @@ export class ApiClient {
 
   /** The CSV export URL. Returned rather than fetched: the browser should
    *  download this through a normal navigation so it gets a Save dialog and
-   *  the server's filename, which an XHR would throw away. */
-  tradesExportUrl(query: TradeQuery = {}): string {
-    const params = toParams(query).toString();
-    return `${this.base}/trades/export.csv${params ? `?${params}` : ''}`;
+   *  the server's filename, which an XHR would throw away.
+   *
+   *  **Takes no query, deliberately.** It used to pass the current one, and
+   *  the endpoint ignored every parameter — so a user who filtered to one
+   *  ticker and clicked Export got the whole book, with nothing on screen
+   *  saying so (NG54). The endpoint exports the TRADE LOG, which is not the
+   *  set this collection shows: the collection joins plans and trades, and a
+   *  PENDING plan has no trade to export. `status=PENDING` is not a filter
+   *  the export could honour even in principle.
+   *
+   *  So the link stops promising a filter rather than the endpoint inventing
+   *  one. Byte-parity with the Jinja route — which the acceptance gate
+   *  checks — is preserved by construction. */
+  tradesExportUrl(): string {
+    return `${this.base}/trades/export.csv`;
   }
 
   /* -- analytics ------------------------------------------------------- */
