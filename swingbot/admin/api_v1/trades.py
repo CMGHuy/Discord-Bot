@@ -376,6 +376,7 @@ def get_trade(trade_id: str):
         row["detail"] = _legacy_detail(trade)
 
     _attach_current_prices([row])
+    _attach_status_fields([row])
     return jsonify(row)
 
 
@@ -447,7 +448,76 @@ def list_trades():
     page_rows = rows[start:start + params.per_page]
 
     _attach_current_prices(page_rows)
+    _attach_status_fields(page_rows)
     return jsonify(collection(page_rows, total, params.page, params.per_page))
+
+
+def _status_fields(row: dict, price: float | None) -> dict:
+    """The status-bar numbers, from the two functions that already own them.
+
+    `trade_proximity` (core/performance.py) owns urgency and the label -- it
+    is the same computation the bot's own near-close alerts use, so a second
+    implementation here could make the UI and the alerts disagree about how
+    close a trade is to its stop. The 0..100 position is the dashboard's
+    (`admin/dashboard.py`, `pos_pct`), restated here rather than imported
+    because that module builds a whole Jinja view model to produce it -- and
+    that module is deleted at NG57.
+
+    No colour is returned. The band names which pair of tokens the client
+    interpolates between; the palette lives in tokens.css, so a repaint is a
+    CSS change and never an API change. See spec v18 Decision 5.
+    """
+    from swingbot.core.performance import trade_proximity
+
+    entry, sl, tp = row.get("entry"), row.get("stop_loss"), row.get("target")
+    direction = row.get("direction") or "bullish"
+    label_only = {"progress_pct": None, "entry_pct": None, "progress_band": None,
+                  "blink_seconds": None, "status_label": "No live price"}
+
+    if price is None or not all(isinstance(v, (int, float)) for v in (entry, sl, tp)):
+        return label_only
+
+    prox = trade_proximity(direction, entry, sl, tp, price)
+    is_bull = direction == "bullish"
+    span = (tp - sl) if is_bull else (sl - tp)
+    if span <= 0:
+        # Malformed record -- stop on the wrong side of the target. Degrade to
+        # a label rather than render a bar that is confidently backwards.
+        return label_only
+
+    pos = ((price - sl) if is_bull else (sl - price)) / span * 100
+    ent = ((entry - sl) if is_bull else (sl - entry)) / span * 100
+    band = ("toward_target" if prox["proximity"] > 0.15
+            else "toward_stop" if prox["proximity"] < -0.15
+            else "neutral")
+    return {
+        # Clamped: price runs past the stop or target all the time, and a bar
+        # is 0..100 by definition. The band and label still carry "past it".
+        "progress_pct": max(0.0, min(100.0, round(pos, 1))),
+        "entry_pct": max(0.0, min(100.0, round(ent, 1))),
+        "progress_band": band,
+        "blink_seconds": prox["blink_seconds"],
+        "status_label": prox["label"],
+    }
+
+
+def _attach_status_fields(rows: list[dict]) -> None:
+    """Merge the status-bar fields into every row, terminal ones included.
+
+    Every row gets all five keys. A cell that has to ask whether a field
+    exists before reading it is a cell with two rendering paths, and the
+    second one only runs on data nobody tests with.
+    """
+    for row in rows:
+        if row["status"] in _TERMINAL or row["status"] == "PENDING":
+            # Nothing has opened, or it is already over: there is no position
+            # to place on a bar. The label is the status itself, which is what
+            # the cell shows in place of the bar.
+            row.update({"progress_pct": None, "entry_pct": None,
+                        "progress_band": None, "blink_seconds": None,
+                        "status_label": row["status"]})
+        else:
+            row.update(_status_fields(row, row.get("current_price")))
 
 
 def _attach_current_prices(rows: list[dict]) -> None:

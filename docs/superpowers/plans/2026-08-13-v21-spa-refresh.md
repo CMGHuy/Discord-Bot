@@ -382,7 +382,7 @@ status_label    string         human-readable, drives the tooltip
 
 Spec Decision 5. **The maths already exists — reuse it.**
 
-- [ ] **Step 1: Write the failing contract test** in `tests/admin/test_api_v1_trades.py`:
+- [x] **Step 1: Write the failing contract test** in `tests/admin/test_api_v1_trades.py`:
 
 ```python
 def test_open_trade_row_carries_the_status_bar_fields(client, seeded_open_trade):
@@ -411,8 +411,8 @@ def test_a_short_reaching_its_target_reads_100_not_0(client, seeded_short_at_tar
     assert row["progress_band"] == "toward_target"
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `python scripts/testrun.py file tests/admin/test_api_v1_trades.py`. Expected: `KeyError: 'progress_pct'`.
-- [ ] **Step 3: Add the helper** to `swingbot/admin/api_v1/trades.py`. It calls the two existing implementations and adds nothing of its own:
+- [x] **Step 2: Run and watch it fail** — 4 failed as predicted — `python scripts/testrun.py file tests/admin/test_api_v1_trades.py`. Expected: `KeyError: 'progress_pct'`.
+- [x] **Step 3: Add the helper** to `swingbot/admin/api_v1/trades.py`. It calls the two existing implementations and adds nothing of its own:
 
 ```python
 from swingbot.core.performance import trade_proximity
@@ -460,14 +460,19 @@ def _status_fields(row: dict, price: float | None) -> dict:
     }
 ```
 
-- [ ] **Step 4: Call it from `_attach_current_prices`**, which is already the one place a row meets its live price, and merge the result into the row. Do not call it from `_row_from_trade` / `_row_from_plan` — those run before prices are fetched.
-- [ ] **Step 5:** For PENDING / CLOSED / CANCELLED / EXPIRED rows, return `label_only` with `status_label` set to the status word. There is no position to show for a trade that has not opened or has already closed.
-- [ ] **Step 6: Add the fields to the `TRADE_ROW` contract set** in the same test file — `assert_shape` rejects undeclared keys as loudly as missing ones, so an unlisted field fails every other row test.
-- [ ] **Step 7: Mirror the fields into `frontend/src/app/api/models.ts`** on the `TradeRow` interface, all nullable.
-- [ ] **Step 8: Run** `python scripts/testrun.py full` → `0 failed`.
-- [ ] **Step 9: Commit** `feat(api): the status-bar fields on every trade row`
+- [x] **Step 4: Call it from `_attach_current_prices`** — as `_attach_status_fields`, chained after it at BOTH call sites (the collection and the single-row detail; missing the second would have left the detail view without a bar), which is already the one place a row meets its live price, and merge the result into the row. Do not call it from `_row_from_trade` / `_row_from_plan` — those run before prices are fetched.
+- [x] **Step 5:** For PENDING / CLOSED / CANCELLED / EXPIRED rows, return `label_only` with `status_label` set to the status word. There is no position to show for a trade that has not opened or has already closed.
+- [x] **Step 6: Add the fields to the `TRADE_ROW` contract set** in the same test file — `assert_shape` rejects undeclared keys as loudly as missing ones, so an unlisted field fails every other row test.
+- [x] **Step 7: Mirror the fields into `frontend/src/app/api/models.ts`** on the `TradeRow` interface, all nullable.
+- [x] **Step 8: Run** — 1685 passed, 0 failed; `tsc --noEmit` clean `python scripts/testrun.py full` → `0 failed`.
+- [x] **Step 9: Commit** `feat(api): the status-bar fields on every trade row`
 
 ---
+
+**PENDING is terminal for this purpose**, which the task's step 5 does not
+quite say: it lists CLOSED/CANCELLED/EXPIRED but a PENDING plan has not opened
+either, so there is no price to place between a stop and a target. It gets the
+label treatment with the rest.
 
 ### Task SR8: `PlanCell`
 

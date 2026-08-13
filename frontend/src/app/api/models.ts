@@ -82,6 +82,15 @@ export interface TradeRow {
   opened_at: string | null;
   closed_at: string | null;
   has_note: boolean;
+  /* SR7 — the status bar, computed server-side so the cell draws rather than
+     calculates, and so the arithmetic lives next to the bot's own near-close
+     alerts instead of being reimplemented here. `progress_band` names which
+     pair of tokens to interpolate between; no colour crosses the wire. */
+  progress_pct: number | null;
+  entry_pct: number | null;
+  progress_band: 'toward_stop' | 'neutral' | 'toward_target' | null;
+  blink_seconds: number | null;
+  status_label: string;
 }
 
 /** The heavy half of a trade, fetched only for the detail view.
