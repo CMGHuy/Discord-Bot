@@ -1043,7 +1043,7 @@ unit test, and none is visible without changing a setting and coming back.
 
 - [x] `python scripts/testrun.py full` → `0 failed`; `npx ng test` green (411); `ng build` succeeds
 - [x] Every checklist line in SR19 recorded `PASS` — after three defects fixed; see the QA doc
-- [ ] Merge to `main`
+- [x] Merge to `main` — 2026-08-13
 
 ---
 
