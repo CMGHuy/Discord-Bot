@@ -482,7 +482,7 @@ label treatment with the rest.
 
 Spec Decision 4.
 
-- [ ] **Step 1: Write the failing test.**
+- [x] **Step 1: Write the failing test.**
 
 ```ts
 import { TestBed } from '@angular/core/testing';
@@ -526,8 +526,8 @@ describe('PlanCell', () => {
 });
 ```
 
-- [ ] **Step 2: Run and watch it fail** — `npx ng test`. Expected: cannot resolve `./plan-cell`.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2: Run and watch it fail** — 5 failed — `npx ng test`. Expected: cannot resolve `./plan-cell`.
+- [x] **Step 3: Implement.**
 
 ```ts
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
@@ -576,10 +576,22 @@ export class PlanCell {
 }
 ```
 
-- [ ] **Step 4: Run** `npx ng test` → PASS. If `num(null)` does not already return `—`, fix `format.ts` rather than special-casing here.
-- [ ] **Step 5: Commit** `feat(ui): the combined plan cell`
+- [x] **Step 4: Run** `npx ng test` → PASS. If `num(null)` does not already return `—`, fix `format.ts` rather than special-casing here.
+- [x] **Step 5: Commit** `feat(ui): the combined plan cell`
 
 ---
+
+**Two things the task's code did not anticipate.**
+
+The separators had to carry their own spaces. Angular strips whitespace
+between elements, so `<span class="sep">→</span>` plus a CSS margin renders
+correctly and leaves `textContent` as `178.00→195.00/170.00` — which is what a
+screen reader announces and what the task's own test asserts against. Spacing
+now lives in the text (`{{ ' → ' }}`), where both can see it.
+
+Running `npx vitest` directly does not work — "Need to call
+TestBed.initTestEnvironment() first". Angular's builder sets that up, so a
+single spec is run with `npx ng test`, not vitest.
 
 ### Task SR9: `DirectionArrow`
 
