@@ -47,6 +47,58 @@ scale-out + manager only after ≥5 clean `on` sessions.
 
 ## Admin UI
 
+### Which UI is served — `ADMIN_UI`, and how to roll back
+
+There are two admin UIs in the image right now: the Angular SPA and the
+original Jinja one. `ADMIN_UI` in `.env` decides which answers `/`:
+
+| Value | `/` serves | Everything else |
+|---|---|---|
+| `spa` (default) | redirects to `/cockpit`, the SPA | every Jinja page stays mounted and reachable |
+| `jinja` | the Jinja dashboard | the SPA's workspace URLs stay mounted too |
+
+**Rolling back is a restart, not a rebuild or a deploy** — that is the entire
+point of the flag, and it is the mitigation the cutover rests on:
+
+```bash
+sed -i 's/^ADMIN_UI=.*/ADMIN_UI=jinja/' .env   # or edit it by hand
+docker compose restart admin
+```
+
+The flag is deliberately **not** hot-reloadable over SIGHUP: which UI is
+served changing under a live session is worse than a restart.
+
+Two things worth knowing while both UIs are mounted:
+
+- The Jinja dashboard keeps its own URL, `/dashboard`, in *both* modes.
+- A hard reload of `/risk` or of a trade detail (`/trades/<id>`) lands on the
+  **Jinja** page, because those URLs were already taken. Navigating to them
+  inside the SPA works normally. This resolves itself when the Jinja routes
+  are deleted.
+
+### Verifying a deploy actually works
+
+`docker compose up --wait` proves the containers are *up*. It does not prove
+the SPA loads: the healthcheck accepts a 302 on `/`, which is what an
+unauthenticated request returns whether the bundle is fine or every asset is
+404ing. That failure is real — it shipped once and was caught by opening a
+browser, with both test suites green.
+
+`deploy/deploy.sh` now runs this automatically after every deploy, and you can
+run it by hand against any instance:
+
+```bash
+docker compose exec admin python scripts/smoke_spa.py \
+  --url http://127.0.0.1:1234 --user "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD"
+```
+
+It fetches the real `index.html` and follows every asset URL the page
+declares, resolved through its `<base href>` — which is the specific thing
+that breaks when the build and the server disagree about where the bundle
+lives. Add `--expect jinja` when checking a rolled-back instance.
+
+### The pages
+
 Protected by HTTP Basic Auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD` from
 `.env` — note `.env` is authoritative for these even over shell-exported
 values, same as every other setting). Three pages, in the sidebar:

@@ -44,3 +44,21 @@ docker-compose.yml
 frontend/node_modules/
 frontend/dist/
 frontend/.angular/
+
+# The BUILD OUTPUT the frontend stage produces. It must come from that stage
+# and from nowhere else.
+#
+# This line is load-bearing and its absence was a real defect. `COPY . .` in
+# the runtime stage copies whatever is in the context, and .gitignore has no
+# say in what the context contains -- only this file does. So a developer who
+# had built the SPA locally (which NG54's acceptance walk required) shipped
+# their own bundle into the image. `COPY --from=frontend` then overwrote only
+# the files whose names MATCHED; every hashed chunk from the local build that
+# the fresh build did not happen to reproduce survived alongside it. The image
+# carried two `main-<hash>.js`, one of them stale.
+#
+# It was not visibly broken -- index.html names exactly one bundle, and that
+# one came from the stage. But the image depended on the developer's working
+# tree, which is the property a container build exists to remove, and a broken
+# local bundle would have shipped just as quietly as a stale one.
+swingbot/admin/static/app/

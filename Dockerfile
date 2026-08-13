@@ -89,10 +89,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY . .
 
-# The built SPA, from stage 1. Copied AFTER the source tree: `COPY . .`
-# above would otherwise land on top of it. (It cannot overwrite it today --
-# static/app/ is gitignored and absent from the context -- but the ordering
-# is what makes that a fact about this file rather than a coincidence.)
+# The built SPA, from stage 1. Copied AFTER the source tree, so `COPY . .`
+# above cannot land on top of it.
+#
+# An earlier version of this comment claimed static/app/ was "gitignored and
+# absent from the context". Only the first half was true: .gitignore has no
+# say in what the build context contains -- .dockerignore does, and it did not
+# mention the directory. So a developer's locally-built bundle was being
+# copied in by `COPY . .`, and this line overwrote only the files whose names
+# collided, leaving stale hashed chunks behind. Now excluded there, which is
+# what makes this stage the only source of the bundle.
 #
 # Nothing from stage 1 but this directory crosses the boundary: no Node, no
 # npm, no package cache. `docker compose exec admin-ui which node` finding
