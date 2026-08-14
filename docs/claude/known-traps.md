@@ -48,6 +48,16 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   go *after* `update_open_trades`/`_check_near_close` and *before* the
   new-signal horizon loop, so an already-open paper trade keeps being
   monitored for SL/TP even on a day its ticker fails the screen.
+- **An empty config table is not automatically an unfinished one.**
+  `strategy_types.REGIME_ALLOW = {}` with `REGIME_GATES_ENABLED` defaulting off
+  reads like a stub someone forgot to fill. It is the **measured answer**: the
+  v17 P2a harness (`scripts/fill_regime_allow.py`) ran the pre-registered rule
+  across 78 tickers × 11 strategies × 10 horizons on TRAIN and no cell cleared
+  it, recorded in `docs/superpowers/results/2026-08-08-regime-allow-train.md`.
+  The spec pre-committed to accepting that outcome. Filling the table by hand,
+  or re-running with looser thresholds, undoes a closed pre-registration —
+  see `docs/claude/backtest-methodology.md`. **Before "finishing" any empty
+  table or default-off flag, grep `docs/superpowers/results/` for its name.**
 - **Function names that don't exist** (plans and briefs guess wrong at these
   constantly — verify before use): there is no `market_events.days_to_earnings`
   (use `events.get_next_earnings_date` / `earnings_within_window`), no

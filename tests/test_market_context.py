@@ -1,5 +1,5 @@
 """P0 market context layer -- see
-docs/superpowers/specs/2026-08-08-v17-market-context-and-level-lifecycle-design.md
+docs/superpowers/specs/implemented/2026-08-08-v17-market-context-and-level-lifecycle-design.md
 
 The load-bearing tests here are the alignment ones. A market-context gate is
 exactly the feature where an off-by-one silently leaks tomorrow's regime into

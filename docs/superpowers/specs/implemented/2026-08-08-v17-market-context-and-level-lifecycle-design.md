@@ -2,6 +2,31 @@
 
 **Version:** ui 1.0.8 · bot 1.1.2
 
+> ## ✅ CLOSED — all five components resolved, audited 2026-08-14
+>
+> Every component either shipped or was closed by its own pre-registered rule.
+> Nothing here is awaiting implementation.
+>
+> | | Component | Outcome |
+> |---|---|---|
+> | **P0** | market context layer | **Shipped, both paths.** `swingbot/core/market_context.py` carries the §4.2 surface exactly; live attaches at `scanning/engine.py:1119` (`be2d827`), backtest at `78a9c47`. |
+> | **P1** | level lifecycle | **Shipped, measured.** `swingbot/core/levels_lifecycle.py`, routed through *both* plan paths (`97940da`) as §7.1 demands. Stops passed the fold gate and are default-on (`6451d2c`); **targets measured inert** and stayed off. |
+> | **P2a** | regime gate | **Closed — no gate justified.** The harness (`090f6d1`) ran the §5.2 rule on TRAIN; 0 of 44 cells cleared it, so `REGIME_ALLOW` stays `{}` *by evidence*. Recorded in `results/2026-08-08-regime-allow-train.md` (`95f5668`). §5.4 pre-committed to accepting this. |
+> | **P2b** | COT positioning | **Not built, correctly.** §6 gates it on "built only if P2a clears validation". P2a did not clear, so building it now would break this document's own gate. |
+> | **P3** | options snapshot archive | **Script shipped** (`scripts/record_option_snapshots.py`, `tests/test_option_snapshots.py`) — but see the open item below. |
+>
+> **The one open item is operational, not engineering.** Nothing schedules
+> `record_option_snapshots.py` — not compose, not cron, not the bot loop — and
+> `market_data/options/` is empty. Per §8 the archive's entire value is that it
+> starts accumulating; every unrecorded day is unrecoverable. Scheduling it is
+> a deployment decision (`DEPLOY_HETZNER.md`), not a code change, and it needs
+> no new evidence or pre-registration.
+>
+> **Do not "finish" P2a by filling `REGIME_ALLOW` by hand.** That empty dict is
+> a closed measurement — see `docs/claude/known-traps.md` and
+> `docs/claude/backtest-methodology.md`. Reopening it requires a new
+> pre-registered hypothesis and its own validation shot.
+
 > **Renumbered v11 → v17 on merge (2026-08-08).** This document was written on
 > a branch that diverged *before* `d308273` introduced the repo-wide `-vN`
 > counter, and it self-assigned "v11" in its title. By the time it merged, main

@@ -162,6 +162,15 @@ flight, and what is designed but still to be built. Everything else is below.
   several plans stays put until the last of them closes — `v15-jinja-cutover`
   is the example: its plan (`v16-angular-migration`) is closed and moved, but
   the cutover itself was handed to a future plan, so the spec stayed.
+- **Not every spec has a plan.** A multi-component design doc can be executed
+  component-by-component with no plan file at all; it is closed when every
+  component is resolved — and **"resolved" includes a negative result or a
+  component correctly not built because its own gate never opened.**
+  `v17-market-context` is the example: P0/P1 shipped, P2a closed on measured
+  evidence with an *empty* `REGIME_ALLOW`, P2b was gated off by P2a's failure,
+  P3's script shipped. It carries a status table in its header; write one
+  before moving a spec like that, or the next session will read the empty
+  table as unfinished work and re-run a closed pre-registration.
 - **Fix the references in the same commit.** Plans, specs, source docstrings
   (`swingbot/core/analytics/*.py`, `swingbot/admin/**`), tests and
   `.claude/skills/task-brief/SKILL.md` all cite these paths; after moving,
@@ -194,10 +203,12 @@ Not auto-loaded — read the relevant one before starting work in that area.
   `plan_engine`, or the scan pipeline.
 - `docs/claude/known-traps.md` — the two parallel OHLCV caches, legacy shims,
   silent sizing/wiring no-ops, scan-loop ordering, symbol names plans get
-  wrong. Read before touching data caching, `scan_engine`/`scan_embeds`, or
-  `embeds.py`.
+  wrong, and **empty tables that are measured answers rather than stubs**. Read
+  before touching data caching, `scan_engine`/`scan_embeds`, or `embeds.py` —
+  and before "finishing" any empty config table or default-off flag.
 - `docs/claude/backtest-methodology.md` — TRAIN/VALIDATION windows, acceptance
-  gates, frozen constants. Read before running or interpreting any
+  gates, frozen constants, and the table of **closed pre-registrations that
+  must not be re-run**. Read before running or interpreting any
   backtest/grid/validation.
 - `docs/claude/working-conventions.md` — commit style, concurrent-session git
   hygiene, worktrees, and the full document-naming convention. Read it before

@@ -187,6 +187,25 @@ that's exactly what the admin UI's Settings page and `!account`/
 settings hot-reload the bot in place via `SIGHUP`, no restart needed.
 The CI pipeline above is for *code* changes.
 
+## Not scheduled yet: the option-chain archive
+
+`scripts/record_option_snapshots.py` is built and tested but **nothing runs
+it** — not compose, not cron, not the bot loop — so `market_data/options/` is
+still empty.
+
+It is meant to run once daily near the US close, writing
+`market_data/options/YYYY/MM/DD/SYMBOL.parquet` for a capped symbol set. It is
+idempotent (re-running a date overwrites), a failed symbol is logged and
+skipped, and nothing under `swingbot/` imports it — so it cannot affect the
+live path. Roughly 0.5 GB/year at ~10 symbols.
+
+The point of it is that yfinance keeps no option history: **every day it does
+not run is a day that can never be recovered.** It gates nothing and improves
+nothing today, which is exactly why it is easy to leave unscheduled
+indefinitely. Design rationale in
+`docs/superpowers/specs/implemented/2026-08-08-v17-market-context-and-level-lifecycle-design.md`
+§8.
+
 ## Extending this to a staging server
 
 Since the pipeline is just "SSH in, run a script", a second environment

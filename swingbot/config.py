@@ -557,10 +557,13 @@ FIELDS: list[Field] = [
           type="checkbox", default="false",
           help="Restricts each strategy's entries to the market regimes listed for it in "
                "swingbot/core/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
-               "The market-context channel that feeds this is now wired in both the live scan "
+               "The market-context channel that feeds this is wired in both the live scan "
                "and the backtest (swingbot/core/market_context.py), so the gate DOES bite -- but "
-               "REGIME_ALLOW still ships empty, so enabling it changes nothing until fold "
-               "evidence populates that table. NOTE: this flag is also what makes market context "
+               "REGIME_ALLOW ships empty BY EVIDENCE, not as a placeholder: the v17 P2a fold ran "
+               "the pre-registered rule on TRAIN and no cell cleared it (see "
+               "docs/superpowers/results/2026-08-08-regime-allow-train.md). Enabling this today "
+               "therefore changes no entry decision. Do not hand-fill that table to make the flag "
+               "do something -- that reopens a closed pre-registration. NOTE: this flag is also what makes market context "
                "fail closed -- with it on and the benchmark unavailable, entries are blocked "
                "rather than silently passed."),
     Field("LEVEL_LIFECYCLE_STOPS_ENABLED", "LEVEL_LIFECYCLE_STOPS_ENABLED", "Universe & Scanning",
