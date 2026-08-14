@@ -1,0 +1,58 @@
+name: Prune old container images
+
+# GHCR has no native "delete after N days" setting, so retention is a job.
+#
+# It runs weekly rather than on every push: pruning is not urgent, and a
+# scheduled job that only ever deletes is far easier to reason about (and to
+# stop) than one wired into the deploy path. workflow_dispatch is there for
+# when you want the space back now.
+on:
+  schedule:
+    - cron: "17 4 * * 0"   # Sundays, 04:17 UTC. Off-hour, off-peak, arbitrary.
+  workflow_dispatch: {}
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write        # delete-package-versions needs this
+    steps:
+      # WHY THIS IS NOT A STRICT 14-DAY DELETE
+      #
+      # A blind "remove everything older than 14 days" eventually deletes the
+      # image production is currently running. Nothing breaks that same day --
+      # the container is already started, and Docker keeps the local copy --
+      # but the next `docker compose up`, host reboot, or `docker image prune`
+      # on the server leaves it unable to re-pull what it was running. You
+      # find out during an incident, which is the worst possible moment.
+      #
+      # So: 14 days is the cut-off for OLD BUILDS, and the most recent
+      # versions are kept regardless of age. If nothing is deployed for a
+      # month, the live image is still there. `latest` is excluded outright,
+      # since it always points at the newest build and deleting the version
+      # it resolves to would break a plain `docker pull`.
+      #
+      # keep-n-most-recent applies AFTER the cut-off filter, so a burst of
+      # deploys cannot push the live image out of the retained set inside a
+      # single 14-day window.
+      - name: Delete image versions older than 14 days
+        uses: snok/container-retention-policy@v3.0.0
+        with:
+          account: ${{ github.repository_owner }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: ${{ github.event.repository.name }}
+          cut-off: 14d
+          keep-n-most-recent: 10
+          # Never the moving tag, and never an untagged version that a
+          # multi-arch manifest still references.
+          image-tags: "!latest"
+          dry-run: false
+
+      # Deleting a version does not always reclaim what you expect (a layer
+      # shared with a retained image stays), so the summary is worth reading
+      # before assuming the storage went down.
+      - name: Note what to check
+        if: always()
+        run: |
+          echo "Review the step above for the versions actually deleted."
+          echo "Storage: https://github.com/${{ github.repository_owner }}?tab=packages"
