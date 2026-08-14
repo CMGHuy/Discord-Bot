@@ -58,6 +58,18 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   or re-running with looser thresholds, undoes a closed pre-registration —
   see `docs/claude/backtest-methodology.md`. **Before "finishing" any empty
   table or default-off flag, grep `docs/superpowers/results/` for its name.**
+- **An "unused import" here is often a deliberate re-export — check before
+  deleting one.** A linter's unused-import list is not a delete list in this
+  repo: `core/strategy.py` re-exports its `signals`/`strategy_types` split so
+  `from swingbot.core.strategy import <anything>` keeps working,
+  `core/scanning/engine.py` re-exports embeds symbols that callers reach
+  through the `core/scan_engine.py` `import *` shim, and `admin/app.py`
+  re-exports `docker_sdk`/`_SECTION_META` purely for `api_v1/system.py`. A
+  2026-08-14 cleanup pass found **4 of 29** flagged imports were load-bearing
+  this way. Before removing one, grep for both `from <module> import <name>`
+  and `<module>.<name>` across `swingbot/`, `tests/` and `scripts/`. The known
+  re-export blocks now carry `# noqa: F401` and a comment saying so — leave
+  them.
 - **Function names that don't exist** (plans and briefs guess wrong at these
   constantly — verify before use): there is no `market_events.days_to_earnings`
   (use `events.get_next_earnings_date` / `earnings_within_window`), no
@@ -77,10 +89,16 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   at all. All six filters, all 14 sort columns and the pager go through
   `_query_closed_trades()`, which survived the Jinja deletion precisely
   because it is builder-level and the v1 API uses it too. If you add a Trade
-  History control, add it there too; do not filter or sort rows client-side. The filter dropdown *options*
-  are the deliberate exception — they are built from the FULL history
-  (`closed_trade_filter_options`), never from the loaded page, or values that
-  only appear in older trades become unselectable.
+  History control, add it there too; do not filter or sort rows client-side.
+  **The filter dropdown *options* used to be the deliberate exception** — the
+  Jinja page built them from the FULL history via
+  `dashboard.build_filter_options`, never from the loaded page, because values
+  appearing only in older trades would otherwise become unselectable. The SPA
+  answered that differently: the ticker filter is a free-text input, so there
+  is no option list to go stale. `build_filter_options` had no caller left
+  after Release B and was deleted on 2026-08-14. **If you ever reintroduce an
+  enumerated filter dropdown, build its options from the full history
+  server-side** — deriving them from the loaded page is the original bug.
 - **Not every `data/` JSON file is written atomically — six are not.** Spec
   v12 Decision 2 asserted the whole directory was; the NG23 audit found
   otherwise, which is why that task existed. Atomic, via

@@ -12,7 +12,7 @@ metrics spec 3 relocated from the Dashboard header out of
 `TradeLog.get_extended_stats` -- an assembly of existing values, not a new
 calculation.
 
-Rendered artefacts are stripped. `pages._sparkline_svg` gives Jinja an
+Rendered artefacts are stripped. The old `pages._sparkline_svg` gave Jinja an
 `<svg>` string; the SPA gets the underlying series and draws it itself,
 because sub-project 3 owns how a sparkline looks.
 """
@@ -172,9 +172,10 @@ def analytics_performance():
 def analytics_journal():
     """SR55 — the trailing-week digest and the recurring lessons.
 
-    Both already existed (`core.analytics.insights`) and were rendered by
-    `pages.py:journal_page`; only the API in front of them was missing, which
-    is why the parity audit found this cluster with nothing on the wire.
+    Both already existed (`core.analytics.insights`) and were rendered by the
+    since-deleted `pages.py:journal_page`; only the API in front of them was
+    missing, which is why the parity audit found this cluster with nothing on
+    the wire.
 
     This is NOT a rebuilt Journal page. Spec v14 Decision 4 collapsed that
     page deliberately: the digest and lessons are analytics and belong on the

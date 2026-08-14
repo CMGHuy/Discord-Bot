@@ -17,6 +17,9 @@ from itertools import groupby
 from dotenv import dotenv_values
 
 from swingbot import config
+# Re-exported under its historical private name: dashboard.py and queries.py
+# import `_primary_strategy_label` from here, so this alias is used even
+# though nothing in this file calls it.
 from swingbot.core.performance import primary_strategy_label as _primary_strategy_label
 from swingbot.core.scan_engine import CONFIDENCE_COLORS
 

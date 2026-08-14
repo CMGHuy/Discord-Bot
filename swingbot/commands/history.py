@@ -15,16 +15,12 @@ Usage:
 import asyncio
 from collections import defaultdict
 
-import discord
-
 from swingbot.bot_core import bot
 from swingbot.core import scan_engine
 from swingbot.core.data import get_daily_data, get_currency_symbol
 from swingbot import config
 from swingbot.core.strategy import HORIZONS
-from swingbot.commands.backtest import (
-    STRATEGY_MAP, ALL_STRATEGIES, _parse_backtest_args, _sync_backtest_one,
-)
+from swingbot.commands.backtest import STRATEGY_MAP
 
 trade_log = scan_engine.trade_log
 

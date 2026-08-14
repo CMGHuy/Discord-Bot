@@ -65,8 +65,12 @@ import numpy as np
 import pandas as pd
 
 from .indicators import atr, elliott_wave3_entries
-from .strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE
-from .strategy_types import BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
+# Re-exported for callers that import these from `backtest` rather than from
+# their defining modules (tests/test_entry_filters.py does exactly that).
+from .strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE  # noqa: F401
+from .strategy_types import (  # noqa: F401
+    BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE,
+)
 
 ENTRY_SHIFT = 0
 

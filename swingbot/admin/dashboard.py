@@ -1,35 +1,38 @@
 """
-View-model builders for the Dashboard page.
+View-model builders for the Dashboard.
 
-This module holds everything the Dashboard needs to *compute*; app.py keeps
-only the three thin routes that serve it (`index`, `dashboard_fragment`,
-`api_trade_history`). Deliberately not a Flask blueprint: moving the routes
-would rename their endpoints (`index` -> `dashboard.index`) and break
-`url_for('index')` across every template plus NAV_ITEMS, for no gain.
+These are the computations behind the Dashboard, kept out of the routes that
+serve them. Their only consumer now is `/api/v1/dashboard` (plus `queries.py`
+and `api_v1/trades.py`, which share the closed-trade derivations) -- Release B
+deleted the Jinja routes that used to be the other caller.
 
-Nothing here touches `flask.request`. The dashboard mode ("active"/"today"/
-"all") arrives as an argument, which is what makes these functions directly
-unit-testable without a request context -- the previous single 315-line
-`_render_dashboard_fragment()` read `request.args` in its first statement and
-so could only ever be exercised through a full HTTP round trip.
+**Builder-level, deliberately.** These functions were extracted from a single
+315-line `_render_dashboard_fragment()` that read `request.args` in its first
+statement and so could only be exercised through a full HTTP round trip.
+Nothing here touches `flask.request`; the dashboard mode ("active"/"today"/
+"all") arrives as an argument. That is what let the whole file survive the
+Jinja deletion untouched while the tests whose subject was rendered HTML went
+away with it.
 
 Split of responsibilities, top to bottom:
-  * formatting//colour helpers shared by several panels
-  * closed-trade derivations (P&L, R, holding period) -- also used by
-    /api/trade-history, which renders the same row partial
-  * `query_closed_trades()` -- scope/filter/sort/slice for Trade History
-  * per-panel builders (`build_sizing_note`, `build_open_trade_views`, ...)
-  * `build_fragment_context()` -- the one orchestrator the routes call
+  * formatting/colour helpers shared by several panels
+  * closed-trade derivations (P&L, R, holding period)
+  * `query_closed_trades()` -- scope/filter/sort/slice for Trade History.
+    Filtering, sorting and paging all live here on purpose; see the Trade
+    History note in `docs/claude/known-traps.md` before moving any of it
+    into the client.
+  * per-panel builders (`build_sizing_note`, `build_open_trade_views`)
 """
 from datetime import datetime, timezone
 
-from swingbot import config
-from swingbot.core.account import compute_position_size, get_daily_summary, load_account_config
-from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
-from swingbot.core.data import get_currency_symbol, get_current_price, prefetch_prices, is_us_market_active
-from swingbot.core.performance import TradeLog, trade_proximity
+# `load_account_config` is re-exported: api_v1/dashboard.py reaches it as
+# `dash.load_account_config`, so it is used even though nothing in this file
+# calls it.
+from swingbot.core.account import compute_position_size, load_account_config
+from swingbot.core.data import get_current_price, prefetch_prices
+from swingbot.core.performance import trade_proximity
 
-from .helpers import _confidence_hex, _primary_strategy_label
+from .helpers import _primary_strategy_label
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
@@ -442,143 +445,4 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     return {
         "status": status_map, "price": price_map, "pnl": pnl_map,
         "days": days_map, "sizing": sizing_map, "unrealized_pcts": unrealized_pcts,
-    }
-
-
-def build_equity_curve() -> dict:
-    """{svg, change_pct} for the Equity (30d) card.
-
-    snap["equity_curve"] is {"points": [...], "skipped_n": ...} (see
-    metrics.equity_curve), not a bare list; each point's balance key is
-    "date"/"balance". Balances are raw account-currency figures (e.g. 10000+),
-    not the 0-100 scale _sparkline_svg assumes (it is shared with the win-rate
-    sparkline), so they are min-max normalized purely for the sparkline's shape.
-
-    `change_pct` is the first->last move across the window. The card used to
-    show the current account balance as its headline, which was the identical
-    number already shown by the Account balance card immediately to its left;
-    the period change is what a 30-day curve is actually there to tell you.
-    """
-    # Local import: pages.py does `from .app import ...` at its own top, and
-    # app.py imports this module, so a module-level import here would close the
-    # circle. Everything is fully loaded by request time.
-    from .pages import _sparkline_svg
-
-    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
-    raw = [
-        p["balance"] for p in ((snap or {}).get("equity_curve") or {}).get("points", [])[-30:]
-    ]
-    if not raw:
-        return {"svg": "&mdash;", "change_pct": None}
-
-    lo, hi = min(raw), max(raw)
-    span = hi - lo
-    svg = _sparkline_svg([(v - lo) / span * 100.0 if span else 50.0 for v in raw], ref=None)
-    first = raw[0]
-    change = round((raw[-1] - first) / first * 100.0, 2) if first else None
-    return {"svg": svg, "change_pct": change}
-
-
-def build_filter_options(all_raw: list) -> dict:
-    """Ticker/strategy/horizon options for Trade History's filter dropdowns.
-
-    Built from the COMPLETE history, not the rows currently on screen: a
-    ticker that only appears in an old trade is still a perfectly real
-    filterable value. Rendered once by the page shell -- these belong to
-    markup that never re-renders, so recomputing them per poll was pure waste.
-    """
-    closed = [t for t in all_raw if t.get("status") in CLOSED_TRADE_STATUSES]
-    return {
-        "ticker":   sorted({t["ticker"] for t in closed if t.get("ticker")}),
-        "strategy": sorted({_primary_strategy_label(t) for t in closed}),
-        "horizon":  sorted({t.get("horizon_key") for t in closed if t.get("horizon_key")}),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Orchestrator
-# ---------------------------------------------------------------------------
-def build_fragment_context(mode: str) -> dict:
-    """Everything dashboard_fragment.html needs, for one dashboard mode.
-
-    The fragment covers the session banner, lifecycle strip, stat cards and
-    Open Trades table -- the panels that genuinely change every few seconds.
-    Trade History is NOT here: it lives in the page shell and is driven
-    entirely by /api/trade-history after first paint, so re-rendering its rows
-    and dropdowns on every 5s poll only ever produced markup the browser threw
-    away.
-    """
-    mode = normalize_mode(mode)
-
-    # Single TradeLog read for the whole render -- avoids re-reading trades.json
-    # separately for get_stats(), get_extended_stats(), and the trade lists.
-    tl = TradeLog()
-    all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at")
-    scoped = scoped_trades(all_raw, mode)
-
-    if scoped is None:
-        open_trades = tl.get_trades(status="open", limit=None, sort_by="confidence")
-    else:
-        open_trades = sorted(
-            [t for t in scoped if t["status"] == "open"],
-            key=lambda t: (t.get("confidence_level") or 0, t.get("confidence_score") or 0),
-            reverse=True,
-        )
-
-    stats = tl.get_stats(trades=scoped)
-    stats.update(tl.get_extended_stats(trades=scoped))
-    stats["avg_holding_label"] = (
-        format_duration_hms(stats["avg_holding_days"] * 86400)
-        if stats.get("avg_holding_days") is not None else None
-    )
-
-    account_cfg = load_account_config()
-    views = build_open_trade_views(open_trades, account_cfg)
-
-    # Equal-weighted average unrealized return across open positions with a
-    # live price (None -> "—" in the stat card).
-    pcts = views["unrealized_pcts"]
-    stats["total_unrealized_pct"] = sum(pcts) / len(pcts) if pcts else None
-
-    # Realized stat cards, over the mode's WHOLE closed set. These used to be
-    # computed from the first page of Trade History only, which quietly made
-    # "Best trade" mean "best of the 25 most recently closed".
-    closed_scoped = scoped_closed_trades(all_raw, mode)
-    realized = [p for p in (closed_pnl(t) for t in closed_scoped) if p is not None]
-    stats["total_realized_pct"] = round(sum(realized) / len(realized), 2) if realized else None
-    stats["best_trade_pct"]     = round(max(realized), 2) if realized else None
-    stats["worst_trade_pct"]    = round(min(realized), 2) if realized else None
-    stats["realized_count"]     = len(realized)
-
-    # Recomputed on every fragment render, so with the auto-refresh poll this
-    # card updates on its own the moment a trade closes and settles into the
-    # balance (see performance.py's _settle_account_balance).
-    stats["account"] = get_daily_summary()
-
-    from .pages import _plan_rows
-
-    return {
-        "open_trades": open_trades,
-        "stats": stats,
-        "confidence_hex": _confidence_hex,
-        "cur_map": {t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
-                    for t in open_trades},
-        # Account-currency symbol for the sizing card. Its figures are account
-        # balance/risk amounts, not per-ticker prices, so config's symbol is
-        # the right one -- the template used to reach for "whatever currency
-        # the first ticker on the page happens to trade in", which was only
-        # ever accidentally correct.
-        "currency_symbol": config.CURRENCY_SYMBOL,
-        "status_map": views["status"],
-        "price_map": views["price"],
-        "pnl_map": views["pnl"],
-        "days_map": views["days"],
-        "sizing_map": views["sizing"],
-        "strategy_map": {t["id"]: _primary_strategy_label(t) for t in open_trades},
-        "account_cfg": account_cfg,
-        "sizing_note": build_sizing_note(account_cfg),
-        "is_market_active": is_us_market_active(),
-        "dashboard_mode": mode,
-        "plan_counts": _plan_rows()["counts"],
-        "equity": build_equity_curve(),
     }

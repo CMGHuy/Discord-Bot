@@ -56,11 +56,16 @@ worked before this split still works identically.
 """
 import pandas as pd
 
-from .strategy_types import (
+# Both blocks below are the RE-EXPORT SURFACE this module docstring promises:
+# several of these names are unused *here* on purpose, so that callers who
+# imported them from `swingbot.core.strategy` before the signals/
+# strategy_types split still can. Do not "clean up" an unused-import warning
+# by deleting one -- check for importers first.
+from .strategy_types import (  # noqa: F401
     FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, MIN_BARS,
     RSI_OVERBOUGHT, RSI_OVERSOLD, SR_VOLUME_MULTIPLE, SignalResult,
 )
-from .signals import (
+from .signals import (  # noqa: F401
     break_retest_signal, compute_hvn_level, compute_volume_profile,
     ema_cross_signal, elliott_wave_signal, fibonacci_signal, ma_ribbon_signal,
     macd_signal, rsi_divergence_signal, rsi_signal, support_resistance_signal,

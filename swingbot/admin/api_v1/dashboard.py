@@ -22,12 +22,11 @@ that move, so re-adding one here is a design change, not a convenience.
 **Nothing is computed in this module.** Spec 3's constraint is "UI renders,
 analytics computes": every figure is projected from `dashboard`'s existing
 builders, `TradeLog.get_stats`, or `_collect_portfolio_state`. A second
-definition of win rate here would drift from the one the Jinja UI shows,
-and the two would disagree during the whole migration.
+definition of win rate here would drift from the projected one.
 
-The equity sparkline ships as numbers. `dashboard.build_equity_curve()`
-returns a rendered `<svg>` string because Jinja needs one; sub-project 3
-owns how a sparkline looks in the SPA, and a server that ships markup has
+The equity sparkline ships as NUMBERS, via `_equity_30d()` below. Jinja's
+equivalent builder returned a rendered `<svg>` string and was deleted with
+it: the SPA owns how a sparkline looks, and a server that ships markup has
 taken that decision away from it.
 """
 from __future__ import annotations

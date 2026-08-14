@@ -16,8 +16,6 @@ reused well beyond just that one signal (trade_chart.py's volume-profile
 panel, levels.py's confluence engine), so they're kept as their own
 top-level functions rather than folded into volume_profile_signal.
 """
-from dataclasses import dataclass, field
-
 import pandas as pd
 
 from .entry_filters import entries_for, RIBBON_PERIODS_BY_HORIZON

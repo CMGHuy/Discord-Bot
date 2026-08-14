@@ -748,7 +748,6 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
             from swingbot.core.analytics.journal import JournalStore
             entry = JournalStore().get(trade["id"])
             if entry and entry.get("mfe_r") is not None:
-                opened = df.index[df.index.searchsorted(trade["opened_at"][:10])]
                 closed_key = trade.get("closed_at", trade["opened_at"])[:10]
                 window = df.loc[trade["opened_at"][:10]:closed_key]
                 if not window.empty:
@@ -852,7 +851,6 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
 
     # Holding period
     try:
-        from datetime import datetime, timezone
         opened  = datetime.fromisoformat(trade["opened_at"])
         closed_ = datetime.fromisoformat(trade["closed_at"])
         days    = max(0, (closed_ - opened).days)

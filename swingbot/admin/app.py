@@ -1,93 +1,54 @@
 """
-Small, self-contained admin web UI for the swing bot -- runs as its own
-container alongside the bot (see docker-compose.yml), sharing the same
-project directory (and therefore the same .env, data/, and logs/
-directories).
+Admin web API for the swing bot -- runs as its own container alongside the
+bot (see docker-compose.yml), sharing the same project directory (and
+therefore the same .env, data/, and logs/ directories).
 
-Pages (sidebar navigation, see NAV_ITEMS):
-  - Dashboard: open trades, auto-refreshing every 5s so a trade logged
-    by `!check` or the background scan shows up without a manual
-    browser refresh, click through to full detail on any of them,
-    "clear all open trades".
-  - Settings: every .env-driven setting as its own compact input field,
-    grouped into sections (swingbot.config.FIELDS is the single source
-    of truth both this UI and config.py itself read from). "Update
-    settings" saves .env AND hot-reloads the bot -- see below.
-  - Logs: a live-updating tail of the bot's log file.
+**This module renders no HTML.** Release B (2026-08-14) deleted the Jinja UI,
+so what is left here is the Flask app object, the auth layer, and the handful
+of payload builders that `/api/v1/*` imports back out of this module. The
+browser-facing surface is the Angular SPA in `frontend/`, served as static
+assets by `spa.py`; `/` redirects into the SPA's router and every data route
+lives under `/api/v1/`.
 
-Hot reload: "Update settings" sends the bot container a SIGHUP (via the
-Docker socket, same mechanism as "Restart bot container" but without
-actually stopping/starting anything); the bot's signal handler (see
-bot_core.py) re-reads .env and updates its live config in place. A few
-settings genuinely can't apply without a real restart (the Discord
-token, and the admin UI's own username/password/port) -- those are
-flagged in the UI and the save confirmation message says so explicitly
-rather than claiming success it didn't achieve.
+This is meant for trusted, private use (e.g. behind your own firewall/VPN, or
+just on localhost) -- it's protected by a single ADMIN_USERNAME/ADMIN_PASSWORD
+from the environment, not a full user/permissions system. Don't expose it to
+the open internet without putting a reverse proxy with real auth in front of
+it.
 
-This is meant for trusted, private use (e.g. behind your own firewall/
-VPN, or just on localhost) -- it's protected by a single ADMIN_USERNAME/
-ADMIN_PASSWORD from the environment, not a full user/permissions system.
-Don't expose it to the open internet without putting a reverse proxy with
-real auth in front of it.
-
-Two ways in, both checked against the same ADMIN_USERNAME/ADMIN_PASSWORD:
-a browser hitting any page gets redirected to /login (a real HTML form,
-so password managers can save it), which sets a long-lived (90-day)
-signed session cookie on success -- see the Auth section below. Anything
-that sends an HTTP Basic Auth header (scripts, this project's own test
-suite) is still checked the old way, untouched. Changing ADMIN_PASSWORD
+Two ways in, both checked against the same ADMIN_USERNAME/ADMIN_PASSWORD: a
+browser gets the SPA, which renders its own login form and sets a long-lived
+(90-day) signed session cookie on success -- see the Auth section below.
+Anything that sends an HTTP Basic Auth header (scripts, this project's own
+test suite) is still checked the old way, untouched. Changing ADMIN_PASSWORD
 (and restarting, same as today) invalidates existing sessions immediately.
 
-Page markup lives in templates/*.html (Flask's standard auto-discovered
-templates/ folder next to this module) rather than inline Python string
-constants -- keeps this file to routes/logic only and lets the HTML be
-edited/linted as HTML. Shared CSS lives in static/style.css.
+Hot reload: saving settings sends the bot container a SIGHUP (via the Docker
+socket, same mechanism as "Restart bot container" but without actually
+stopping/starting anything); the bot's signal handler re-reads .env and
+updates its live config in place. A few settings genuinely can't apply without
+a real restart (the Discord token, and the admin UI's own
+username/password/port) -- `/api/v1/system/settings` flags those rather than
+claiming a success it didn't achieve. This process picks up .env changes via
+the `_reload_env_if_changed` before-request hook further down.
 """
-import csv
 import gzip
 import hashlib
 import hmac
-import io
 import json
 import logging
 import os
-import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
-
-from flask import Flask, Response, abort, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, Response, redirect, request, session, url_for
 
 from swingbot import config
-from swingbot.core.performance import TradeLog
-from swingbot.core.scan_engine import is_scan_running, regenerate_chart_for_trade, request_stop
-from swingbot.core.data import get_company_name, get_currency_symbol
-from swingbot.core.watchlist import load_watchlist, add_ticker, remove_ticker
-from swingbot.core.backtest_cache import ensure_cached_background
-from swingbot.core.ticker_directory import search_tickers
-from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
-# Dashboard view-model builders. Imported as a namespace rather than by name:
-# these are the ONLY dashboard computation left outside this file's routes,
-# and `dash.` at each call site says so.
-from . import dashboard as dash
-# Pure helper functions (.env parsing, Docker container control, confidence-hex,
-# log tailing) live in their own module -- see helpers.py's own docstring for why.
-from .helpers import (
-    BOT_CONTAINER_NAME, FIELDS_BY_KEY, FIELDS_BY_SECTION, docker_sdk,
-    _build_env_text, _changed_non_hot_reloadable_fields, _clear_log, _confidence_hex,
-    _field_display_value, _get_bot_container, _hot_reload_bot_container, _primary_strategy_label,
-    _read_env_values, _restart_bot_container, _sources_str, _tail_log, _tail_admin_log,
-    _clear_admin_log, _write_env_text, get_versions, settings_diff,
-    append_settings_audit, read_settings_audit, import_env_text,
-    build_settings_export_text, _load_or_create_secret_key,
-)
+from swingbot.core.scan_engine import is_scan_running
+# `docker_sdk` is re-exported: api_v1/system.py imports it from here rather
+# than from helpers, so it is used even though nothing in this file calls it.
+from .helpers import docker_sdk, _load_or_create_secret_key
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -95,20 +56,9 @@ TRIGGER_FILE        = os.path.join(config.DATA_DIR, "trigger_check.flag")
 MANUAL_CLOSE_QUEUE  = os.path.join(config.DATA_DIR, "manual_close_notify.json")
 PAUSE_FILE = os.path.join(config.DATA_DIR, "scan_paused.flag")
 
-NAV_ITEMS = [
-    ("dashboard", "🏠", "Dashboard", "index"),
-    ("plans",     "📋", "Plans", "pages.plans_page"),
-    ("stats",     "📊", "Performance", "stats_page"),
-    ("strategies","🧭", "Strategies", "pages.strategies_page"),
-    ("calibration","📐", "Calibration", "pages.calibration_page"),
-    ("journal",   "📓", "Journal", "pages.journal_page"),
-    ("tuning",    "🛠", "Tuning", "pages.tuning_page"),
-    ("watchlist", "📋", "Watchlist", "watchlist_page"),
-    ("risk",      "🛡", "Risk", "risk_panel"),
-    ("settings",  "⚙️", "Settings", "settings_page"),
-    ("logs",      "📜", "Logs", "logs_page"),
-]
-
+# Section headings for the Settings screen, keyed by the section name in
+# swingbot.config.FIELDS. Consumed by api_v1/system.py, which imports this
+# from here.
 _SECTION_META = {
     "Discord Connection":    ("🔗", "Token and channel IDs for the Discord bot."),
     "Scanning & Session":    ("⏱", "When the bot scans automatically and how often."),
@@ -174,47 +124,6 @@ def _gzip_response(response):
     return response
 
 
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-    _BERLIN_TZ = _ZoneInfo("Europe/Berlin")
-except Exception:
-    _BERLIN_TZ = None
-
-
-def _berlin_time(dt_str: str, fmt: str = "%Y-%m-%d %H:%M") -> str:
-    """Jinja filter: converts a UTC ISO datetime string to Berlin local time."""
-    if not dt_str:
-        return ""
-    try:
-        dt = datetime.fromisoformat(dt_str)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        if _BERLIN_TZ:
-            dt = dt.astimezone(_BERLIN_TZ)
-        return dt.strftime(fmt)
-    except Exception:
-        return dt_str[:16]
-
-
-app.jinja_env.filters["berlin_time"] = _berlin_time
-
-
-def _trades() -> TradeLog:
-    """
-    A fresh TradeLog *every call*, deliberately not a module-level
-    singleton. TradeLog reads trades.json once, in __init__, and caches
-    it in memory -- fine for the bot process, which is the only writer
-    and always reads its own in-memory copy right after writing it. The
-    admin UI is a *separate process* though: a singleton created once at
-    Flask startup would never see trades the bot logs afterward (e.g.
-    from `!check`), even though they're sitting right there in the
-    shared trades.json file. Re-reading fresh each request is cheap
-    (small JSON file) and guarantees the admin UI always reflects
-    what's actually on disk right now.
-    """
-    return TradeLog()
-
-
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -248,15 +157,6 @@ def _session_authenticated() -> bool:
     )
 
 
-def _safe_next(next_value: str | None) -> str:
-    """Only ever redirect to a same-site relative path -- next_value comes
-    from a query string / form field, so an unvalidated value (e.g.
-    "https://evil.example") would be an open-redirect vector."""
-    if next_value and next_value.startswith("/") and not next_value.startswith("//") and "://" not in next_value:
-        return next_value
-    return url_for("index")
-
-
 def require_auth(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -286,38 +186,29 @@ def require_auth(view):
     return wrapped
 
 
-# ---------------------------------------------------------------------------
-# Page rendering -- shared sidebar layout (templates/base.html) wraps every
-# page's own template via Jinja's {% extends %}.
-# ---------------------------------------------------------------------------
-def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
-    # The admin process never otherwise re-reads .env on its own (only the
-    # BOT process's scan loop calls this) -- without it, a value changed via
-    # the Settings page (or by hand) wouldn't show up here until the admin
-    # container itself restarted. Cheap (a single stat() call) unless .env
-    # actually changed, so safe to call on every single page render.
+@app.before_request
+def _reload_env_if_changed():
+    """Pick up .env edits without restarting the admin container.
+
+    The admin process never otherwise re-reads .env on its own (only the BOT
+    process's scan loop calls this) -- without it, a value changed via the
+    Settings page, or by hand, wouldn't show up here until the container
+    itself restarted. Cheap (a single stat() call) unless .env actually
+    changed, so safe to run per request.
+
+    This lived in the Jinja `_render()` helper and so covered page renders
+    only. Release B deleted the last route that called it, which silently
+    dropped admin-side hot reload altogether -- the API kept serving whatever
+    config was loaded at import. Moving it here restores the documented
+    behaviour and widens it to `/api/v1/*`, which is the only thing serving
+    config-derived values now.
+    """
     config.auto_reload_if_changed()
-    return render_template(
-        template_name,
-        title=title,
-        active_page=active_page,
-        nav_items=NAV_ITEMS,
-        now=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-        msg=request.args.get("msg"),
-        ok=request.args.get("ok"),
-        versions=get_versions(),
-        **ctx,
-    )
 
 
 # ---------------------------------------------------------------------------
-# Routes -- Dashboard
+# Routes
 # ---------------------------------------------------------------------------
-# Every computation these three routes need lives in dashboard.py as plain
-# functions of their arguments. What is left here is the HTTP shell: read the
-# query string, clamp it, delegate, respond.
-
-
 @app.route("/", methods=["GET"])
 def index():
     """The front door. Release B: the SPA owns it unconditionally.
@@ -340,37 +231,6 @@ def index():
     the SPA renders its own login form, and `/api/v1/*` is what is guarded.
     """
     return redirect(url_for("spa_dashboard"))
-
-
-def _dashboard_page():
-    """Full Dashboard page.
-
-    Renders the auto-refreshing fragment inline for first paint, and -- unlike
-    the fragment -- also the Trade History card's filter options. Those belong
-    to markup the poll never replaces, so building them once per page load
-    rather than once per 5s tick costs nothing and saves a full-history walk
-    every tick.
-    """
-    mode = dash.normalize_mode(request.args.get("mode"))
-    all_raw = _trades().get_trades(status=None, limit=None, sort_by="opened_at")
-    first_page, total = dash.query_closed_trades(
-        all_raw, mode=mode, page=1, per_page=dash.CLOSED_TRADES_FIRST_PAGE)
-    return _render(
-        "Dashboard", "dashboard", "dashboard.html",
-        fragment=render_template("dashboard_fragment.html",
-                                 **dash.build_fragment_context(mode)),
-        dashboard_refresh_seconds=config.DASHBOARD_REFRESH_SECONDS,
-        dashboard_mode=mode,
-        closed_trades=first_page,
-        closed_trades_total=total,
-        closed_trade_filter_options=dash.build_filter_options(all_raw),
-        strategy_map={t["id"]: _primary_strategy_label(t) for t in first_page},
-        cur_map={t["ticker"]: get_currency_symbol(t["ticker"], config.CURRENCY_SYMBOL)
-                 for t in first_page},
-        confidence_hex=_confidence_hex,
-        trade_pnl=dash.closed_pnl, trade_r=dash.closed_r, trade_days=dash.closed_days,
-        row_offset=0,
-    )
 
 
 def _ohlcv_frame(ticker: str):
@@ -497,19 +357,14 @@ def main():
 # ---------------------------------------------------------------------------
 # Blueprints -- registered at the BOTTOM of this module, after every name
 # they import from here (app, ADMIN_USERNAME, ADMIN_PASSWORD, require_auth,
-# helpers, ...) already exists in this module's namespace. Importing these
-# any earlier (e.g. alongside the top-of-file imports) would deadlock on
-# the circular reference: api.py/pages.py both do `from .app import app`.
+# _SECTION_META, the payload builders above, ...) already exists in this
+# module's namespace. Importing them any earlier (e.g. alongside the
+# top-of-file imports) would deadlock on the circular reference: the api_v1
+# endpoint modules reach back into `.app` for those names.
 # ---------------------------------------------------------------------------
 # api_v1 registers itself (blueprint + its two error handlers) rather than
 # exposing a blueprint to register here: its 404 handler must be app-level,
 # because an unmatched URL never reaches a blueprint.
-#
-# (Release B note: an earlier version of this comment said api_v1 "imports
-# require_auth_json from api.py, so that module must already exist". It does
-# not -- `api_v1/auth.py` imports the `app` MODULE and builds its own
-# decorator, precisely so the legacy error shape never leaked into v1. The
-# stale claim would have made deleting api.py look impossible.)
 from . import api_v1 as _api_v1  # noqa: E402
 _api_v1.register(app)
 # The SPA's own routes -- an allow-list of workspace prefixes plus its asset

@@ -1,7 +1,0 @@
-/* JetBrains Mono (SIL OFL 1.1) — self-hosted; see LICENSE.txt in this folder.
-   Latin subset only, from @fontsource/jetbrains-mono 5.3.0. Three weights:
-   400 table body, 500 emphasis, 700 the 23px primary metric. The family is
-   used for numerics, and the admin has no Cyrillic/Greek/Vietnamese text. */
-@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("jetbrains-mono-400.woff2") format("woff2"); }
-@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("jetbrains-mono-500.woff2") format("woff2"); }
-@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("jetbrains-mono-700.woff2") format("woff2"); }

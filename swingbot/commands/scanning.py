@@ -14,9 +14,7 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core import scan_engine
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
-from swingbot.core.account import load_account_config
 from swingbot.core.data import get_current_price
-from swingbot.core.performance import TradeLog
 from swingbot.core.silent_channel import silence
 from swingbot.core.strategy import HORIZONS
 from swingbot.core.watchlist import load_watchlist

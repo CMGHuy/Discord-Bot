@@ -15,7 +15,6 @@ since daily bars don't tell us the actual intraday order of events.
 This is a paper-trade tracker -- it does not know about slippage, fees,
 partial fills, or gaps beyond what the daily bar shows.
 """
-import json
 import os
 import secrets
 import string

@@ -18,22 +18,20 @@ it is queries and shaping, which is exactly why the v1 API wanted it.
 re-exported it, and callers now import it from `swingbot.core.performance`,
 its real home.
 
-The colour helpers (`_lerp_hex`, `_heatmap_color`) came along because
-`_strategy_horizon_heatmap` calls them. The v1 API strips the colour before
-it reaches the wire (`api_v1/analytics.py::_json_heatmap` — "no colour
-crosses the wire"), so they are dead weight from the SPA's point of view;
-they are kept rather than surgically removed because that is a behaviour
-change, and this extraction is deliberately behaviour-preserving.
+Two colour helpers (`_lerp_hex`, `_heatmap_color`) came across with the
+extraction and were kept on the stated grounds that `_strategy_horizon_heatmap`
+called them. It does not, and did not: its cells have only carried `n` and
+`win_rate`. Nothing else referenced them either, so they were deleted on
+2026-08-14. Colour is the SPA's decision — `api_v1/analytics.py::_json_heatmap`
+projects the matrix without one, and no colour crosses the wire.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core import entry_filters
 from swingbot.core.analytics.metrics import win_rate
 from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
 from swingbot.core.analytics.rank import follow_score, rank_plans
@@ -146,26 +144,6 @@ def _registry_rows() -> list[dict]:
             "gate_description": _gate_description(rec["strategy"]),
         })
     return rows
-
-
-def _lerp_hex(c1: str, c2: str, t: float) -> str:
-    r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
-    r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
-    r = round(r1 + (r2 - r1) * t)
-    g = round(g1 + (g2 - g1) * t)
-    b = round(b1 + (b2 - b1) * t)
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _heatmap_color(win_rate: float) -> str:
-    """Linear red (<=60) -> amber (75) -> green (>=85)."""
-    if win_rate <= 60:
-        return "#da6d6d"
-    if win_rate >= 85:
-        return "#6dda9e"
-    if win_rate <= 75:
-        return _lerp_hex("#da6d6d", "#e2b25a", (win_rate - 60) / 15)
-    return _lerp_hex("#e2b25a", "#6dda9e", (win_rate - 75) / 10)
 
 
 def _strategy_horizon_heatmap() -> dict:

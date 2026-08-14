@@ -2,30 +2,28 @@
 
 Spec: `docs/superpowers/specs/implemented/2026-08-08-v11-admin-rest-api-design.md`.
 
-This package is deliberately SEPARATE from `swingbot/admin/api.py`. The two
-namespaces coexist for the whole Angular migration: the Jinja UI consumes
-`/api/*` and must keep working until cutover, while `/api/v1/*` is designed
-for the SPA without being bent around what `dashboard.js` already expects.
-Anyone editing admin code during the migration needs to know which one they
-are in, and separate packages are what make that obvious.
+This package began as the SPA-facing half of a two-namespace split: a legacy
+`swingbot/admin/api.py` served the Jinja UI's `/api/*` while `/api/v1/*` was
+designed for the SPA without being bent around what the old `dashboard.js`
+expected. Release B (2026-08-14) deleted the Jinja UI and `api.py` with it,
+so this is now the admin's ONLY API namespace.
 
 This module holds only what every endpoint shares — the error shape, the
 collection envelope, timestamp rendering, and query-parameter parsing.
 Endpoints live in sibling modules (`trades.py`, `dashboard.py`, ...) and are
 registered onto `api_v1` below.
 
-Auth is NOT reimplemented here. Endpoint modules import `require_auth_json`
-from `swingbot.admin.api`, so there is exactly one Basic/session auth path
-in the admin rather than two that can drift apart.
+Auth lives in `auth.py`, which reaches `swingbot.admin.app` as a MODULE and
+reuses `_session_authenticated` rather than reimplementing the predicate, so
+there is exactly one Basic/session auth path in the admin.
 
 **This module imports nothing from the rest of `swingbot.admin`, and must
-not start.** api.py does `from .app import ...`, and app.py registers its
-blueprints at the bottom of its own body -- so anything importing api.py at
-module level is only importable via that same bottom-of-app.py path. Keeping
-this module free of admin imports is what lets a test (or any endpoint
-module) import these helpers directly without tripping the circular-import
-deadlock app.py documents. Endpoint modules take on that constraint instead;
-they are imported from app.py's bottom, where the ordering is already sound.
+not start.** app.py registers its blueprints at the bottom of its own body,
+after every name they import from it exists. Keeping this module free of
+admin imports is what lets a test (or any endpoint module) import these
+helpers directly without tripping the circular-import deadlock app.py
+documents. Endpoint modules take on that constraint instead; they are
+imported from app.py's bottom, where the ordering is already sound.
 """
 from __future__ import annotations
 
@@ -175,7 +173,7 @@ def register(app) -> None:
     be a live-UI change, which this migration does not make.
     """
     # Endpoint modules are imported HERE, not at this module's top level.
-    # They import from swingbot.admin.api / .app, which are only safely
+    # They import from swingbot.admin.app, which is only safely
     # importable once app.py's body has run -- and register() is called from
     # app.py's bottom, which is exactly that point. Importing them above
     # would drag those modules in at api_v1 import time and re-create the

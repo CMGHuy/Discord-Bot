@@ -86,7 +86,11 @@ from swingbot.core import universe
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.watchlist import load_watchlist
-from .embeds import (
+# Several of these are unused HERE and re-exported on purpose: core/scan_engine.py
+# is an `import *` shim over this module, and callers reach them through it
+# (admin/helpers.py imports CONFIDENCE_COLORS, commands/trades.py uses
+# scan_engine.regenerate_chart_for_trade). Check for importers before deleting one.
+from .embeds import (  # noqa: F401
     CONFIDENCE_COLORS, CONFIDENCE_EMOJI, CONFIDENCE_ANSI,
     confidence_color, _build_requirement_checks, build_embed, build_simple_alert,
     plan_numbers_for_display,

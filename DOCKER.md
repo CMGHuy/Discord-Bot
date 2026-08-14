@@ -85,7 +85,8 @@ docker compose exec admin python scripts/smoke_spa.py \
 It fetches the real `index.html` and follows every asset URL the page
 declares, resolved through its `<base href>` — which is the specific thing
 that breaks when the build and the server disagree about where the bundle
-lives. (`--expect jinja` is gone with the Jinja UI.)
+lives. (The `--expect` flag is gone entirely — it selected between the SPA and
+the Jinja UI, and there is only one UI now.)
 
 ### The pages
 

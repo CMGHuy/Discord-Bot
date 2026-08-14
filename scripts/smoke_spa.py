@@ -20,7 +20,7 @@ something fetches the real page over HTTP and follows what it asks for.
 So this does exactly that, and deliberately no more:
 
   1. `/api/v1/health` answers.
-  2. The front door behaves as the ADMIN_UI flag says it should.
+  2. The front door redirects into the SPA, and the target serves the app.
   3. The SPA's index.html loads and contains the app's root element.
   4. **Every asset that index.html references resolves to a 200** -- resolved
      through its own `<base href>`, which is the specific thing that broke.
@@ -136,33 +136,31 @@ class Smoke:
         except ValueError:
             self.check(False, "health returns JSON", body[:80].decode("utf-8", "replace"))
 
-    def front_door(self, expect_spa: bool) -> None:
-        """`/` with ADMIN_UI=spa redirects to /cockpit; with jinja it renders.
+    def front_door(self) -> None:
+        """`/` redirects into the SPA, and wherever it lands serves the app.
 
-        Checked without following the redirect, because *which* it does is the
-        whole meaning of the flag -- a followed redirect makes both modes look
-        identical.
+        Checked without following the redirect first, because *that it
+        redirects at all* is the property: a followed redirect would make a
+        front door that simply rendered something look identical to one that
+        handed off to the router.
         """
         status, _, headers = self.get("/", follow=False)
         location = headers.get("Location", "")
-        if expect_spa:
-            # Assert the PROPERTY, not the destination: the front door
-            # redirects, and wherever it points serves the app. Hardcoding
-            # "/cockpit" here went stale the day SR4 renamed it to
-            # "/dashboard" -- the app was right and the check was wrong, which
-            # is the failure mode that teaches people to ignore the check.
-            redirected = status in (301, 302, 303, 307, 308)
-            if not self.check(redirected, "GET / redirects (ADMIN_UI=spa)",
-                              f"HTTP {status} Location={location!r}"):
-                return
-            target_status, target_body, _ = self.get(location)
-            self.check(
-                target_status == 200 and b"<sb-root>" in target_body,
-                f"GET / lands on {location} and it serves the app",
-                f"HTTP {target_status}",
-            )
-        else:
-            self.check(status == 200, "GET / renders (ADMIN_UI=jinja)", f"HTTP {status}")
+        # Assert the PROPERTY, not the destination: the front door redirects,
+        # and wherever it points serves the app. Hardcoding "/cockpit" here
+        # went stale the day SR4 renamed it to "/dashboard" -- the app was
+        # right and the check was wrong, which is the failure mode that
+        # teaches people to ignore the check.
+        redirected = status in (301, 302, 303, 307, 308)
+        if not self.check(redirected, "GET / redirects",
+                          f"HTTP {status} Location={location!r}"):
+            return
+        target_status, target_body, _ = self.get(location)
+        self.check(
+            target_status == 200 and b"<sb-root>" in target_body,
+            f"GET / lands on {location} and it serves the app",
+            f"HTTP {target_status}",
+        )
 
     def index_and_assets(self) -> None:
         """The check that would have caught NG54's blocker."""
@@ -220,13 +218,12 @@ class Smoke:
 
     # -- runner -----------------------------------------------------------
 
-    def run(self, expect_spa: bool) -> int:
+    def run(self) -> int:
         print(f"Smoke-testing {self.base}\n")
         self.health()
-        self.front_door(expect_spa)
-        if expect_spa:
-            self.index_and_assets()
-            self.workspaces()
+        self.front_door()
+        self.index_and_assets()
+        self.workspaces()
 
         print()
         if self.failures:
@@ -251,18 +248,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--password", help="Basic-auth password.")
     parser.add_argument(
         "--from-config", action="store_true",
-        help="Read credentials and the expected UI from swingbot.config "
+        help="Read credentials from swingbot.config "
              "instead of the command line. Only valid when running inside "
              "the app's own container.",
     )
     parser.add_argument("--timeout", type=float, default=10.0)
-    parser.add_argument(
-        "--expect", choices=("spa", "jinja"), default="spa",
-        help="Which UI the instance is configured to serve at /. Default spa.",
-    )
     args = parser.parse_args(argv)
 
-    user, password, expect = args.user, args.password, args.expect
+    user, password = args.user, args.password
     if args.from_config:
         # Read what the SERVER reads, from the same parser, in the same
         # process space. The alternative -- sourcing .env in bash and passing
@@ -278,10 +271,9 @@ def main(argv: list[str] | None = None) -> int:
 
         user = getattr(config, "ADMIN_USERNAME", None) or user
         password = getattr(config, "ADMIN_PASSWORD", None) or password
-        # `expect` used to come from config.ADMIN_UI. Release B deleted that
-        # field along with the Jinja UI it selected, so there is one UI and
-        # the default ("spa") is always right. The getattr that read it is
-        # gone rather than left to silently return None for ever.
+        # There is no UI to choose any more: config.ADMIN_UI and the
+        # `--expect` flag that mirrored it both went with the Jinja UI in
+        # Release B, rather than being left to read a field that is gone.
         if "--url" not in (argv if argv is not None else sys.argv[1:]):
             # 127.0.0.1, not localhost: inside the container `localhost` can
             # resolve to ::1 first while Flask binds IPv4, which failed on one
@@ -290,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
             args.url = f"http://127.0.0.1:{port}"
 
     smoke = Smoke(args.url, user, password, args.timeout)
-    return smoke.run(expect_spa=expect == "spa")
+    return smoke.run()
 
 
 if __name__ == "__main__":

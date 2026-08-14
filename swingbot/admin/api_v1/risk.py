@@ -79,8 +79,8 @@ def _positions(balance: float) -> list[dict]:
 def _scan_health() -> dict:
     """Best-effort, matching how the Risk page already treats it.
 
-    Durations ship as numbers. `scan_duration_sparkline()` returns rendered
-    SVG because Jinja needs one; sub-project 3 owns how a sparkline looks in
+    Durations ship as numbers. `helpers.scan_duration_sparkline()` returns
+    rendered SVG for callers that want one; the SPA owns how a sparkline looks in
     the SPA, and a server shipping markup takes that decision away from it.
     """
     try:

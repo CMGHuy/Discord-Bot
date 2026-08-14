@@ -11,7 +11,6 @@ is strengthening or weakening.
 This is a single blunt filter, not a full macro model -- it doesn't know
 about sector rotation, rates, or individual stock beta to the index.
 """
-import os
 from dataclasses import dataclass
 
 import pandas as pd

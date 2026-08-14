@@ -23,9 +23,8 @@ python scripts/testrun.py file tests/x.py   # one file              ~7s
 python scripts/testrun.py lf                # last failed        seconds
 ```
 
-`fast` auto-escalates to `full` when anything under `swingbot/core/charts/`,
-`swingbot/admin/templates/` or `swingbot/admin/static/` is dirty, and when
-git cannot answer. Let it. Do not pass `--no-escalate` unless the controller
+`fast` auto-escalates to `full` when anything under `swingbot/core/charts/`
+or `swingbot/admin/static/` is dirty, and when git cannot answer. Let it. Do not pass `--no-escalate` unless the controller
 explicitly asked for a narrow run.
 
 Stdout is the verdict. Progress goes to stderr; you can ignore it. Full

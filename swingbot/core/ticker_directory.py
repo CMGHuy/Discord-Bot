@@ -17,7 +17,6 @@ outbound internet from the container) -- search_tickers() just returns an
 empty list and a warning is logged once, matching this codebase's existing
 pattern for other optional/best-effort features (logo fetching, trendln).
 """
-import io
 import logging
 import os
 import time

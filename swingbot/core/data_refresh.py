@@ -26,13 +26,11 @@ from .. import config
 from .jsonio import atomic_write_json, read_json
 from .data_store import (
     DATA_DIR,
-    TIMEFRAMES,
     TRAINING_TIMEFRAMES,
     _default_ranged_fetch,
     cache_path,
     fetch_interval_data,
     load_from_disk,
-    save_to_disk,
     timeframe_name,
 )
 

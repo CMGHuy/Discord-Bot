@@ -5,15 +5,16 @@
  * alone. Zero CDN (spec v13) -- the admin has to work on a box with no
  * outbound internet, so nothing here may reach fonts.googleapis.com.
  *
- * These @font-face rules duplicate the ones in the vendored `inter.css` and
- * `jetbrains-mono.css`, which is deliberate and temporary. Those files are
- * what the *Jinja* UI loads, and both UIs are live until cutover. Declaring
- * them here instead of `<link>`-ing those stylesheets from index.html keeps
- * the build silent: the build tries to resolve a `<link rel=stylesheet>` at
- * build time to inline it, cannot find `/static/...` on disk, and warns on
- * every single build -- which is how a project teaches itself to ignore
- * build warnings. At cutover (NG57) the vendored .css files go and these
- * become the only copy; the .woff2 files stay where they are.
+ * These rules are the ONLY @font-face declarations for the two families.
+ * They used to duplicate the vendored `inter.css` / `jetbrains-mono.css`,
+ * which the Jinja UI loaded; Release B deleted that UI and those two
+ * stylesheets went with it on 2026-08-14, as planned. The .woff2 files stay
+ * where they are.
+ *
+ * Declared here rather than `<link>`-ed from index.html on purpose: the build
+ * tries to resolve a `<link rel=stylesheet>` at build time to inline it,
+ * cannot find `/static/...` on disk, and warns on every single build -- which
+ * is how a project teaches itself to ignore build warnings.
  */
 
 @font-face {

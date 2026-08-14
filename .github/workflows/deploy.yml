@@ -323,8 +323,7 @@ jobs:
         run: |
           python scripts/smoke_spa.py \
             --url http://127.0.0.1:1234 \
-            --user ci --password ci-secret \
-            --expect spa
+            --user ci --password ci-secret
 
       - name: Verify container stayed healthy throughout the test
         run: |

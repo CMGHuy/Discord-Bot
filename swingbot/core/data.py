@@ -1,10 +1,8 @@
 """Fetches daily OHLC data for a ticker."""
-import io
 import json
 import logging
 import os
 import time
-import urllib.request
 
 import pandas as pd
 import yfinance as yf

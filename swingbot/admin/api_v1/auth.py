@@ -2,19 +2,15 @@
 
 Spec v11 Decision 5. This is NOT a second auth mechanism: the predicate --
 a valid session cookie, or Basic credentials matching ADMIN_USERNAME /
-ADMIN_PASSWORD -- is the same one `app.require_auth` and
-`api.require_auth_json` apply, and `_session_authenticated` is imported
-rather than reimplemented.
+ADMIN_PASSWORD -- is the same one `app.require_auth` applies, and
+`_session_authenticated` is reused rather than reimplemented.
 
-What differs is only how failure is *rendered*. The legacy JSON blueprint
-answers `{"error": "auth"}`, where `error` is a bare string; v1's contract
-(Decision 3) is `{"error": {"code", "message"}}`. Reusing
-`require_auth_json` directly would have leaked the old shape into the new
+What differs is only how failure is *rendered*. `app.require_auth` redirects
+a browser into the SPA; a v1 endpoint must answer JSON in the contract's
+shape (Decision 3), `{"error": {"code", "message"}}`. A legacy JSON
+decorator in the deleted `api.py` answered `{"error": "auth"}` with `error`
+as a bare string; reusing it would have leaked that shape into this
 namespace, which the contract assertions caught immediately.
-
-The old decorator is deliberately left untouched -- `dashboard.js` and the
-Plans board branch on its body today, and changing it would be a live-UI
-change this migration does not make.
 """
 from __future__ import annotations
 

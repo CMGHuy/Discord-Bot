@@ -14,8 +14,9 @@ filesystem path. Flask's URL converter rejects a literal '/' but NOT a
 backslash -- and on Windows os.path.join treats '\' as a separator and a
 drive-letter prefix as an absolute-path override that discards the
 directory entirely. Without the allow-list regexes below, the delete route
-is an arbitrary-file-delete primitive on a Windows host. pages.py
-documents this at length; the same reasoning applies here unchanged.
+is an arbitrary-file-delete primitive on a Windows host. The guards came
+from the since-deleted pages.py, which documented them at length; the
+reasoning applies here unchanged.
 """
 from __future__ import annotations
 
