@@ -451,7 +451,22 @@ interface ProposalView extends ProposalRow {
           }
         }
 
+        <!-- SR61. strategies.html:10-18, copied rather than paraphrased --
+             it states exactly how a badge is earned and what it feeds. -->
+        <p class="section-help">
+          This page answers "is this strategy's edge still working?" for every
+          confirming method the bot trades. Each was backtested once on a
+          held-out out-of-sample (OOS) window and given a
+          <strong>VALIDATED</strong> badge if it cleared the acceptance bar, or
+          <strong>WEAK</strong> if it didn't — that badge feeds directly into a
+          live plan's quality score and A/B/C tier (see the Calibration tab's
+          Tier calibration table). The Live columns then track how that
+          strategy is actually doing right now; a DECAY chip means live win
+          rate has fallen meaningfully below what OOS testing promised.
+        </p>
+
         <sb-panel heading="Strategy registry" [flush]="true">
+          <p class="panel-subtitle">out-of-sample validation status per strategy</p>
           <sb-data-table
             [rows]="store.strategyRows()"
             [columns]="strategyColumns()"
@@ -460,6 +475,19 @@ interface ProposalView extends ProposalRow {
             [loading]="store.loading()"
             [emptyState]="strategyEmpty"
           />
+
+          <!-- SR61. The twelve column tips from strategies.html:30-41. A
+               glossary under the table rather than a tip icon per header,
+               per this task's Step 2: the SPA has no tip-icon component and
+               adding one would be a design decision, not a copy task. -->
+          <details class="glossary">
+            <summary>What these columns mean</summary>
+            <dl>
+              @for (entry of strategyGlossary; track entry.term) {
+                <div><dt>{{ entry.term }}</dt><dd>{{ entry.gloss }}</dd></div>
+              }
+            </dl>
+          </details>
         </sb-panel>
 
         @if (store.heatmap(); as heatmap) {
@@ -494,7 +522,26 @@ interface ProposalView extends ProposalRow {
 
       <!-- -- calibration ---------------------------------------------- -->
       @case ('calibration') {
+        <!-- SR61. calibration.html:5-15. The tab used to open straight into
+             a table whose numbers mean nothing without this. -->
+        <p class="section-help">
+          Calibration asks one question: does a higher confidence score
+          actually win more? Every closed trade is bucketed into a decile by
+          its confidence score at entry, and each decile's realised win rate is
+          judged against the 80% target. A well-calibrated system produces a
+          roughly upward-sloping staircase — top-decile trades should win
+          noticeably more often than bottom-decile trades. A flat or inverted
+          staircase means the score isn't actually predictive yet and needs
+          revisiting before it's trusted for sizing or filtering decisions.
+        </p>
+
         <sb-panel heading="Quality score vs outcome" [flush]="true">
+          <!-- SR61. The Jinja chart drew an 80% line across the deciles; this
+               table has no chart to draw it on, so it says the target instead.
+               80 is calibration.py:_meets_band's A-tier bar, verified. -->
+          <p class="panel-subtitle">
+            Each decile's realised win rate, against an 80% target.
+          </p>
           <sb-data-table
             [rows]="store.deciles()"
             [columns]="decileColumns"
@@ -506,6 +553,26 @@ interface ProposalView extends ProposalRow {
         </sb-panel>
 
         <sb-panel heading="Tier calibration" [flush]="true">
+          <!-- SR61. stats.html:19 and :21. Both numbers verified against code
+               before being written down: the A/B/C SCORE bands are
+               quality.py:_tier (>=75, 50-74, <50) and the win-rate bands
+               each tier is judged against are calibration.py:EXPECTED_BAND
+               (A >=80, B 70-80, C <70). They are different scales and the
+               original copy was right to name only the first. -->
+          <p class="panel-subtitle">
+            Every plan is graded A (score ≥75), B (50–74) or C (below 50) when
+            it is built. This table checks whether that grading holds up: does
+            tier A actually win more often live than tier C? "Pass" means the
+            tier's live win rate falls inside the band it is supposed to
+            deliver — and a verdict needs at least 10 closed trades, below
+            which it reads as unknown rather than as a failure.
+          </p>
+          <p class="section-help">
+            If A/B rows stay empty or thin (N small), it usually means too few
+            trades have closed yet at that tier — not that the tiering is
+            broken. See the Strategies tab for why a strategy's badge
+            (VALIDATED vs WEAK) may be dragging its tier down.
+          </p>
           <sb-data-table
             [rows]="store.tiers()"
             [columns]="tierColumns()"
@@ -517,6 +584,21 @@ interface ProposalView extends ProposalRow {
         </sb-panel>
 
         <sb-panel heading="Badge drift" [flush]="true">
+          <!-- SR61. stats.html:48 and :50. The rule is
+               calibration.py:DRIFT_LIVE_N_FLOOR (20) and
+               DRIFT_THRESHOLD_POINTS (10.0), both verified. -->
+          <p class="panel-subtitle">
+            "Decay" = edge decay. A strategy earns a VALIDATED badge from a
+            historical out-of-sample backtest with a committed win rate; this
+            table compares that to how it is actually performing live. A decay
+            flag is an early warning that the edge may no longer hold in
+            current market conditions.
+          </p>
+          <p class="section-help">
+            Flagged only once a strategy has at least 20 closed live trades
+            (fewer than that is too noisy to judge) AND live win rate is more
+            than 10 percentage points below its out-of-sample win rate.
+          </p>
           <sb-data-table
             [rows]="store.drift()"
             [columns]="driftColumns()"
@@ -863,6 +945,29 @@ interface ProposalView extends ProposalRow {
       font-variant-numeric: tabular-nums;
     }
 
+    /* -- SR61: explanatory copy ----------------------------------------- */
+
+    .panel-subtitle {
+      margin-bottom: var(--space-8);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+      line-height: 1.5;
+    }
+
+    .glossary {
+      margin-top: var(--space-8);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+    .glossary summary { cursor: pointer; color: var(--text-faint); }
+    .glossary dl {
+      display: grid;
+      gap: var(--space-6);
+      margin-top: var(--space-8);
+    }
+    .glossary dt { color: var(--text-primary); font-weight: 600; }
+    .glossary dd { margin: 0; line-height: 1.5; }
+
     /* -- SR55: the journal's lists -------------------------------------- */
 
     .sub {
@@ -1036,6 +1141,63 @@ export class Analytics {
   protected fmtCount(value: number | null): string {
     return value === null ? ABSENT : String(value);
   }
+
+  /* -- SR61: the column glossary --------------------------------------- */
+
+  /**
+   * The twelve `?` tips from `strategies.html:30-41`.
+   *
+   * Copied rather than paraphrased, with ONE correction. The original said the
+   * R:R override "falls back to a 0.35 default when not set". It does not:
+   * `plan_engine._rr_for` falls back to the HORIZON's `reward_risk_ratio`,
+   * floored at `RR_FLOOR` (0.30). Every strategy currently carries an override
+   * so the fallback is unreachable today, but copy that states a wrong rule is
+   * worse than no copy — this task's Step 3.
+   */
+  protected readonly strategyGlossary: { term: string; gloss: string }[] = [
+    {
+      term: 'Rolling WR',
+      gloss: 'Win rate over just the last 10 closed trades for this strategy — '
+        + 'a short-window sanity check, separate from the full Live WR column.',
+    },
+    {
+      term: 'Badge',
+      gloss: 'VALIDATED = this strategy cleared its out-of-sample acceptance '
+        + 'bar in a one-shot backtest. WEAK = it did not. A live plan only '
+        + 'gets full badge-quality points when its primary confirming method '
+        + 'is VALIDATED.',
+    },
+    {
+      term: 'R:R',
+      gloss: "This strategy's override for the entry-to-TP1 risk:reward ratio. "
+        + "With no override the horizon's own ratio applies, floored at 0.30 — "
+        + 'below that floor a strategy can clear an 80% win rate and still '
+        + 'lose money.',
+    },
+    { term: 'OOS N', gloss: 'Number of trades in the out-of-sample backtest this badge is based on.' },
+    {
+      term: 'OOS WR',
+      gloss: 'Win rate achieved in that one-shot out-of-sample backtest — the '
+        + 'number the badge and the live comparison are measured against.',
+    },
+    {
+      term: 'OOS ExpR',
+      gloss: 'Expectancy in R-multiples from the same backtest — average return '
+        + 'per trade as a multiple of planned risk.',
+    },
+    { term: 'Live N', gloss: 'Number of closed live trades attributed to this strategy so far.' },
+    { term: 'Live WR', gloss: 'Actual win rate from live closed trades attributed to this strategy.' },
+    {
+      term: 'Δ vs OOS',
+      gloss: 'Live WR minus OOS WR. Decay is flagged once Live N reaches at '
+        + 'least 20 trades AND this delta drops below −10 points — enough live '
+        + 'sample to trust, and a large enough gap to call it decay rather '
+        + 'than noise.',
+    },
+    { term: 'Window', gloss: 'The date range of historical data the OOS backtest was run over.' },
+    { term: 'Run date', gloss: "When this strategy's OOS validation was last run and committed." },
+    { term: 'Gate', gloss: 'The entry-confirmation rule this strategy must satisfy to fire a signal at all.' },
+  ];
 
   /* -- SR54: the range control ----------------------------------------- */
 
