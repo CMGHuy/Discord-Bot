@@ -164,6 +164,127 @@ describe('SystemStore', () => {
     expect(store.restartAvailable()).toBe(true);
   });
 
+  /* -- SR56: finding a setting again ---------------------------------- */
+
+  describe('settings navigability', () => {
+    it('searches label, key AND help text, like the Jinja page did', () => {
+      boot();
+
+      store.setSettingsQuery('risk per');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['RISK_PCT']);
+
+      store.setSettingsQuery('scale_out');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['SCALE_OUT']);
+
+      store.setSettingsQuery('bot token');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['DISCORD_TOKEN']);
+    });
+
+    it('matches case-insensitively and on a substring', () => {
+      boot();
+      store.setSettingsQuery('RISK');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['RISK_PCT']);
+    });
+
+    it('hides a section whose every field is filtered out', () => {
+      // Otherwise the page becomes a column of empty headings.
+      boot();
+      store.setSettingsQuery('token');
+      expect(store.visibleSections().map((s) => s.name)).toEqual(['Discord Connection']);
+    });
+
+    it('an empty query shows everything', () => {
+      boot();
+      store.setSettingsQuery('   ');
+      expect(store.visibleSections()).toHaveLength(2);
+      expect(store.visibleFields()).toHaveLength(3);
+    });
+
+    it('marks a field that DIFFERS FROM ITS DEFAULT, not one merely edited', () => {
+      // The whole trap in this task: `isChanged` answered "edited in this
+      // draft", which is a different question from the Jinja page's dot.
+      boot({
+        sections: [{
+          name: 'Risk', icon: '', description: '',
+          fields: [field({ key: 'RISK_PCT', value: '2.5', default: '1.0' })],
+        }],
+      });
+
+      // Untouched this session, but away from the code default.
+      expect(store.differsFromDefault(store.fields()[0])).toBe(true);
+    });
+
+    it('compares numerically, so 0.50 and 0.5 are the same default', () => {
+      // String comparison would mark an untouched float as modified for ever.
+      boot({
+        sections: [{
+          name: 'Risk', icon: '', description: '',
+          fields: [field({ key: 'RISK_PCT', type: 'float', value: 0.5, default: '0.50' })],
+        }],
+      });
+      expect(store.differsFromDefault(store.fields()[0])).toBe(false);
+    });
+
+    it('compares a checkbox against its string default', () => {
+      boot({
+        sections: [{
+          name: 'Risk', icon: '', description: '',
+          fields: [field({ key: 'SCALE_OUT', type: 'checkbox', value: true, default: 'false' })],
+        }],
+      });
+      expect(store.differsFromDefault(store.fields()[0])).toBe(true);
+    });
+
+    it('only-changed hides fields sitting at their default', () => {
+      boot();
+      store.setOnlyChanged(true);
+      // Every fixture field is at its default except the token, whose stored
+      // value is masked and therefore cannot be compared.
+      expect(store.visibleFields().map((f) => f.key)).not.toContain('RISK_PCT');
+    });
+
+    it('never hides a sensitive field, whose stored value cannot be compared', () => {
+      // The server sends bullets, not the secret. Calling that "changed" or
+      // "unchanged" would both be guesses, so it stays visible.
+      boot();
+      store.setOnlyChanged(true);
+      expect(store.visibleFields().map((f) => f.key)).toContain('DISCORD_TOKEN');
+    });
+
+    it('only-changed keeps a field edited in this draft even if it matched', () => {
+      boot();
+      store.edit(store.fields()[0], '3.0');
+      store.setOnlyChanged(true);
+      expect(store.visibleFields().map((f) => f.key)).toContain('RISK_PCT');
+    });
+
+    it('resets one field to its default without touching the rest of the draft', () => {
+      boot();
+      const [risk, flag] = store.fields();
+      store.edit(risk, '4.0');
+      store.edit(flag, true);
+
+      store.resetField(risk);
+
+      expect(store.currentValue(risk)).toBe('1.0');
+      // The other edit survives — a per-field reset is not a discard.
+      expect(store.currentValue(flag)).toBe(true);
+      expect(store.dirtyKeys()).toContain('SCALE_OUT');
+    });
+
+    it('resetting a field already at its default leaves the draft clean', () => {
+      boot();
+      const risk = store.fields()[0];
+      store.edit(risk, '4.0');
+
+      store.resetField(risk);
+
+      // Not "draft it back to the same value" — the key leaves the draft, so
+      // the save bar stops counting a change that is not one.
+      expect(store.dirtyKeys()).not.toContain('RISK_PCT');
+    });
+  });
+
   it('shows the server value until a field is edited', () => {
     boot();
     const risk = store.fields()[0];

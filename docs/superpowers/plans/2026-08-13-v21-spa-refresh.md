@@ -1893,7 +1893,7 @@ but each should land *after* the task that builds the thing it annotates.
 > | `699bcb4` → `492fd0a` | SR46, SR47 |
 > | `06fea6a` `364e5d6` `434d359` `91f458b` `610fcac` `51cf83c` | SR48–SR53 |
 >
-> **SR54 and SR55 are done. SR56 is the next unstarted task.** The
+> **SR54, SR55 and SR56 are done. SR57 is the next unstarted task.** The
 > SR48–SR53 boxes are left unticked deliberately: the mapping above is by
 > commit subject and scope, which is strong evidence the task landed but not
 > a step-by-step verification, and ticking on that basis is how the boxes
@@ -1920,7 +1920,7 @@ Phase 3 gate — the same failure mode as NG54.
 - [ ] **Step 1: Write the failing test** — `availableActions('ACTIVE')` and `('PARTIAL')` contain `close`; `('PENDING')` contains `cancel`; `('CLOSED')`, `('CANCELLED')` and `('EXPIRED')` return `['delete']` alone. Assert against the **uppercase** vocabulary, and add a case asserting no status returns an empty list. A test written against the lowercase strings would pass today and prove nothing.
 - [ ] **Step 2: Run and watch it fail** — four of the six cases.
 - [ ] **Step 3: Implement.** Switch on the plan vocabulary. Keep `'open'` accepted as an alias — it is the server-side query alias for ACTIVE-or-PARTIAL (`_OPEN_STATUSES`, `trades.py:75`) and the Dashboard queries with it — but do not let correctness depend on it, since no row ever carries it.
-- [ ] **Step 4: Run** → PASS. Then check it in the app: an ACTIVE row shows Close, a PENDING row shows Cancel, and the detail view's Live → Actions panel shows the same.
+- [x] **Step 4: Run** → PASS. Then check it in the app: an ACTIVE row shows Close, a PENDING row shows Cancel, and the detail view's Live → Actions panel shows the same.
 - [ ] **Step 5: Commit** `fix(trades): close and cancel actually render`
 
 ---
@@ -1936,7 +1936,7 @@ fetched on every detail load, and read by nothing — `grep` finds each exactly
 once in `frontend/src`, in `models.ts` itself. No endpoint work.
 
 - [ ] **Step 1: Write the failing test** — mount the detail view with a fixture carrying all nine fields and assert each renders: the explanation as prose, `confirmed_by` as a list, target/stop sources on the Levels rows they justify, the two breakdowns as factor/points tables, `status_history` as an ordered timeline, `legs` as the runner rows, `trigger_price` beside Entry, and the break-even fraction on the Plan tab. Assert too that a legacy row with all nine null renders the "logged before the admin UI captured full detail" state rather than nine empty panels.
-- [ ] **Step 2: Run and watch it fail.**
+- [x] **Step 2: Run and watch it fail.**
 - [ ] **Step 3: Implement.** Four of the five tabs already exist; put the prose and the two breakdowns behind the Plan tab, the timeline and legs behind Live. `quality_breakdown` and `status_history` are `unknown[]` on purpose (the Python side owns their shape) — narrow them in the store the way `DashboardStore.finiteNumber` does, never in the template.
 - [ ] **Step 4: Run** → PASS. `npx ng test`.
 - [ ] **Step 5: Commit** `feat(trades): the detail fields that were already on the wire`
@@ -2094,6 +2094,23 @@ the same record — so they come back together or not at all.
 **Blocked by:** SR47
 **Gap rows:** 5 — the search box, the only-changed filter, the changed-from-default state, the per-field reset, and `.env` import by file.
 
+> **Trap checked before starting, as this task instructs:** `SettingField`
+> DOES carry `default` over the wire (`api_v1/system.py:82` -> `models.ts`
+> `SettingField.default`), so **this task did not grow a server side.** It is
+> client-only.
+>
+> Two subtleties that fell out of using it. `default` is a **string for every
+> type** while `value` is heterogeneous, so a naive `value === default` marks
+> every checkbox and number as modified; `defaultValue()` normalises the way
+> `fieldValue()` already did. And numbers must compare **numerically** --
+> `0.50` and `0.5` are the same default, and a string comparison would mark an
+> untouched float as modified for ever, which is precisely what makes an
+> only-changed filter useless.
+>
+> A **sensitive** field answers `differsFromDefault` as `false` (the server
+> sends bullets, so both answers would be guesses) but is never hidden by the
+> only-changed filter -- it is excluded from the count, not from the page.
+
 Over a hundred fields with no way to find one by name. Note the trap before
 estimating: the SPA's `isChanged()` (`settings-tab.ts:415`) answers *edited in
 this draft*, which is a different question from the Jinja page's dot, which
@@ -2102,11 +2119,11 @@ the default over the wire before starting** — the changed-dot, the
 only-changed filter and the per-field reset all need it, and if it is absent
 this task grows a server side.
 
-- [ ] **Step 1: Write the failing test** — search narrows by label, key and help text (the Jinja page matched all three); only-changed hides fields at their default; reset restores one field without touching the rest of the draft; a field away from its default is marked even when untouched this session.
+- [x] **Step 1: Write the failing test** — search narrows by label, key and help text (the Jinja page matched all three); only-changed hides fields at their default; reset restores one field without touching the rest of the draft; a field away from its default is marked even when untouched this session.
 - [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.** Search filters sections as well as fields — a section whose every field is hidden must hide too, or the page becomes a column of empty headings.
+- [x] **Step 3: Implement.** Search filters sections as well as fields — a section whose every field is hidden must hide too, or the page becomes a column of empty headings.
 - [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(system): find a setting again`
+- [x] **Step 5: Commit** `feat(system): find a setting again`
 
 ---
 

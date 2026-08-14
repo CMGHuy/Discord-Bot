@@ -49,6 +49,12 @@ interface SystemSlice {
    *  full-form submission would write back every field a concurrent editor
    *  had just changed. */
   draft: Record<string, string | boolean>;
+  /** SR56 — free-text filter over the settings form. Held in the store
+   *  beside the draft it filters, so a search cannot survive a discard. */
+  settingsQuery: string;
+  /** SR56 — show only fields away from their code default (plus anything
+   *  edited in this draft). */
+  onlyChanged: boolean;
   previewing: boolean;
   /** The approved diff, or null when nothing has been previewed. Non-null
    *  is what puts the form in "confirm this" rather than "keep editing". */
@@ -107,6 +113,58 @@ function fieldValue(field: SettingField): string | boolean {
   return field.value === null || field.value === undefined ? '' : String(field.value);
 }
 
+/**
+ * SR56 — the field's CODE default, normalised the same way `fieldValue`
+ * normalises its current value so the two are comparable.
+ *
+ * The server sends `default` as a string for every type (it comes straight
+ * off `config.py`'s `Field`), while `value` is genuinely heterogeneous. A
+ * naive `field.value === field.default` therefore reports every checkbox and
+ * every number as modified.
+ */
+function defaultValue(field: SettingField): string | boolean {
+  if (field.type === 'checkbox') return field.default === 'true';
+  return field.default ?? '';
+}
+
+/**
+ * Whether a field's current value differs from its code default.
+ *
+ * **Numbers compare numerically.** `0.50` and `0.5` are the same default, and
+ * comparing them as strings would mark an untouched float as modified for
+ * ever — which is exactly the sort of permanently-wrong indicator that makes
+ * a "only show changed" filter useless.
+ *
+ * A SENSITIVE field always answers `false`: the server sends bullets rather
+ * than the stored secret, so both "changed" and "unchanged" would be guesses.
+ * Saying "not changed" keeps it out of the changed COUNT; `visibleFields`
+ * separately refuses to hide it, so it is never filtered away either.
+ */
+function differsFromDefault(field: SettingField, current: string | boolean): boolean {
+  if (field.sensitive) return false;
+  const fallback = defaultValue(field);
+  if (typeof current === 'boolean' || typeof fallback === 'boolean') {
+    return current !== fallback;
+  }
+  if (field.type === 'number' || field.type === 'float') {
+    const a = Number(current);
+    const b = Number(fallback);
+    if (!Number.isNaN(a) && !Number.isNaN(b)) return a !== b;
+  }
+  return current !== fallback;
+}
+
+/** Does this field match a free-text query? Label, key and help text, which
+ *  is the same triple the Jinja page matched — searching only labels misses
+ *  the case where someone knows the env var but not what it is called. */
+function fieldMatches(field: SettingField, needle: string): boolean {
+  return (
+    field.label.toLowerCase().includes(needle) ||
+    field.key.toLowerCase().includes(needle) ||
+    (field.help ?? '').toLowerCase().includes(needle)
+  );
+}
+
 function auditEntry(value: unknown): AuditEntry | null {
   if (typeof value !== 'object' || value === null) return null;
   const row = value as Record<string, unknown>;
@@ -156,6 +214,8 @@ export const SystemStore = signalStore(
     settingsLoading: false,
     settingsError: null,
     draft: {},
+    settingsQuery: '',
+    onlyChanged: false,
     previewing: false,
     preview: null,
     restartRequired: [],
@@ -181,10 +241,42 @@ export const SystemStore = signalStore(
     restartMessage: null,
     restartUnavailable: false,
   }),
-  withComputed(({ settings, draft, preview, scan }) => ({
+  withComputed(({ settings, draft, preview, scan, settingsQuery, onlyChanged }) => ({
     settingsEmpty: computed(() => settings() === null),
 
     sections: computed(() => settings()?.sections ?? []),
+
+    /**
+     * SR56 — the sections the form should actually render, after the search
+     * box and the only-changed filter.
+     *
+     * **A section whose every field is hidden hides too.** Filtering fields
+     * but keeping their headings turns a search for one setting into a page
+     * of empty panels, which is barely better than the scrolling it replaced.
+     */
+    visibleSections: computed(() => {
+      const needle = settingsQuery().trim().toLowerCase();
+      const changedOnly = onlyChanged();
+      const edits = draft();
+      if (!needle && !changedOnly) return settings()?.sections ?? [];
+
+      return (settings()?.sections ?? [])
+        .map((section) => ({
+          ...section,
+          fields: section.fields.filter((field) => {
+            if (needle && !fieldMatches(field, needle)) return false;
+            if (!changedOnly) return true;
+            // Edited in this draft, or away from its default, or a secret
+            // whose stored value cannot be compared either way.
+            return (
+              field.key in edits ||
+              field.sensitive ||
+              differsFromDefault(field, fieldValue(field))
+            );
+          }),
+        }))
+        .filter((section) => section.fields.length > 0);
+    }),
 
     /** Every field, flattened, for the lookups below. Sections are how the
      *  form is laid out; this is how it is reasoned about. */
@@ -214,6 +306,17 @@ export const SystemStore = signalStore(
     scanQueued: computed(() => scan()?.pending ?? false),
     botAlive: computed(() => scan()?.bot_alive ?? false),
   })),
+  // A second computed block: `visibleFields` reads `visibleSections` from the
+  // one above, and a signalStore only exposes a slice's own computeds to the
+  // blocks that follow it.
+  withComputed(({ visibleSections }) => ({
+    /** Every visible field, flattened — the counterpart to `fields`, and what
+     *  a "nothing matched" empty state is measured against. */
+    visibleFields: computed<SettingField[]>(() =>
+      visibleSections().flatMap((section) => section.fields),
+    ),
+  })),
+
   withMethods((store, api = inject(ApiClient)) => {
     /** The value the form shows for a field: the draft if it has been
      *  touched, the server's otherwise. Defined here so both the component
@@ -312,6 +415,46 @@ export const SystemStore = signalStore(
        * screen would no longer be the diff that gets written, and a stale
        * approval is worse than none.
        */
+      /** SR56 — the search box. */
+      setSettingsQuery(query: string): void {
+        patchState(store, { settingsQuery: query });
+      },
+
+      /** SR56 — show only fields away from their default. */
+      setOnlyChanged(only: boolean): void {
+        patchState(store, { onlyChanged: only });
+      },
+
+      /**
+       * SR56 — whether a field sits away from its CODE default, accounting
+       * for any edit in the current draft.
+       *
+       * This is the question the Jinja page's dot answered, and it is NOT
+       * the one `settings-tab.ts`'s old `isChanged()` answered ("edited in
+       * this draft"). Both are worth showing; conflating them meant a field
+       * someone changed months ago looked untouched.
+       */
+      differsFromDefault(field: SettingField): boolean {
+        return differsFromDefault(field, currentValue(field));
+      },
+
+      /**
+       * SR56 — put one field back to its code default, leaving every other
+       * edit in the draft alone. A per-field reset is not a discard.
+       *
+       * When the SERVER value is already the default the key is removed from
+       * the draft rather than set to the same value, so the save bar stops
+       * counting a change that is not one -- the same normalisation `edit`
+       * does when a value is typed back to what the server sent.
+       */
+      resetField(field: SettingField): void {
+        const fallback = defaultValue(field);
+        const draft = { ...store.draft() };
+        if (fallback === fieldValue(field)) delete draft[field.key];
+        else draft[field.key] = fallback;
+        patchState(store, { draft, preview: null });
+      },
+
       edit(field: SettingField, value: string | boolean): void {
         const draft = { ...store.draft() };
         if (value === fieldValue(field)) delete draft[field.key];
