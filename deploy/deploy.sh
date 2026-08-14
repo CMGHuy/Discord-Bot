@@ -44,7 +44,29 @@ echo "==> Building and starting services"
 # start_period + retries window). This means the SSH step in the CI
 # pipeline fails loudly instead of silently returning while a container
 # is still crashing in a restart loop.
-docker compose up -d --build --wait
+#
+# --renew-anon-volumes is what makes `--build` mean anything for the SPA.
+#
+# Both services mount an ANONYMOUS volume at
+# /app/swingbot/admin/static/app, to stop the `.:/app` bind mount from
+# hiding the bundle the image built (see docker-compose.yml). An anonymous
+# volume is initialised from the image only when it is first CREATED, and
+# Compose deliberately carries existing anonymous volumes over to the new
+# container on every recreate -- that is what the flag exists to opt out
+# of. So without it: the image rebuilds with a fresh bundle, the container
+# is recreated, and it re-mounts the volume created by the FIRST deploy,
+# pinning the SPA to whatever it was that day. Forever.
+#
+# That is not theoretical -- it is what shipped. The Python side kept
+# updating (it comes from the bind mount, which `git reset --hard` above
+# refreshes), so the API was current while the UI was months stale: the
+# admin still showed the pre-SR4 "Cockpit" navigation against an API that
+# had long since renamed it to Dashboard.
+#
+# Safe by construction: this recreates ANONYMOUS volumes only. data/,
+# logs/ and .env live on the host through the `.:/app` bind mount and are
+# untouched, and there are no named volumes in this project.
+docker compose up -d --build --renew-anon-volumes --wait
 
 echo "==> Pruning old, now-unused images (keeps disk usage in check on small instances)"
 docker image prune -f
@@ -79,9 +101,38 @@ if docker compose exec -T admin python scripts/smoke_spa.py --from-config; then
 else
   echo "" >&2
   echo "DEPLOY VERIFICATION FAILED -- the containers are up but the admin UI" >&2
-  echo "is not serving a usable page. Roll back with ADMIN_UI=jinja and a" >&2
-  echo "restart (that is what the flag is for), then investigate:" >&2
+  echo "is not serving a usable page. Investigate:" >&2
   echo "  docker compose logs --tail=100 admin" >&2
+  exit 1
+fi
+
+# The smoke test proves the served bundle WORKS. It cannot prove it is the
+# bundle just built -- a months-old SPA loads perfectly and passes every
+# assertion in it. That is exactly how the stale-anonymous-volume bug above
+# survived deploy after deploy: every check was green and the UI was frozen.
+#
+# So compare what the image contains against what the container serves. Same
+# path, two sources: the freshly built image, and the running container with
+# its volumes mounted over the top. A mismatch means something between the
+# build and the mount is shadowing the bundle.
+echo "==> Verifying the served bundle is the one just built"
+IMAGE_SUM=$(docker run --rm --entrypoint sha256sum swing-bot:latest \
+  /app/swingbot/admin/static/app/index.html | awk '{print $1}')
+SERVED_SUM=$(docker compose exec -T admin sha256sum \
+  /app/swingbot/admin/static/app/index.html | awk '{print $1}')
+
+if [ "$IMAGE_SUM" = "$SERVED_SUM" ]; then
+  echo "==> Bundle matches the image (${IMAGE_SUM:0:12})."
+else
+  echo "" >&2
+  echo "DEPLOY VERIFICATION FAILED -- the admin container is serving a bundle" >&2
+  echo "that is NOT the one this build produced." >&2
+  echo "  image:  $IMAGE_SUM" >&2
+  echo "  served: $SERVED_SUM" >&2
+  echo "" >&2
+  echo "Almost certainly a stale anonymous volume shadowing the image's copy." >&2
+  echo "Clear it and redeploy:" >&2
+  echo "  docker compose down && docker compose up -d --build --renew-anon-volumes --wait" >&2
   exit 1
 fi
 

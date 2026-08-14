@@ -18,6 +18,12 @@
 #   4. Bot logs:   docker compose logs -f bot
 #      Admin UI:   http://localhost:1234  (or your server's address)
 #
+# Upgrading an existing stack: use
+#   docker compose up -d --build --renew-anon-volumes
+# The extra flag is not optional -- without it the admin keeps serving the
+# SPA bundle from the anonymous volume created by the FIRST run, not the one
+# your rebuild just produced. See the volumes: comment on each service.
+#
 # After editing .env from the admin UI, restart the bot to pick up the
 # change: click "Restart bot container" in the UI (requires the Docker
 # socket mount below), or run `docker compose restart bot`.
@@ -46,6 +52,16 @@ services:
       # takes precedence over the bind mount underneath it -- the same trick
       # used to keep a container's node_modules. Nothing needs to be built on
       # the host, which is the point.
+      #
+      # AND IT IS INITIALISED FROM THE IMAGE EXACTLY ONCE, when the volume is
+      # first created. Compose then carries that same volume over to every
+      # replacement container, by design, so a rebuilt image does NOT refresh
+      # it -- the bundle stays pinned to whatever the first deploy put there
+      # while the Python code (bind-mounted) keeps updating around it. That
+      # shipped: the admin served the pre-SR4 "Cockpit" nav for weeks against
+      # an API that had already renamed it. deploy/deploy.sh passes
+      # --renew-anon-volumes for this reason; if you bring the stack up by
+      # hand, pass it too, or you are not running what you just built.
       #
       # Worth knowing: CI could not catch this. container-healthcheck uses
       # plain `docker run` with no bind mount, so the bundle was visible there
@@ -102,6 +118,16 @@ services:
       # takes precedence over the bind mount underneath it -- the same trick
       # used to keep a container's node_modules. Nothing needs to be built on
       # the host, which is the point.
+      #
+      # AND IT IS INITIALISED FROM THE IMAGE EXACTLY ONCE, when the volume is
+      # first created. Compose then carries that same volume over to every
+      # replacement container, by design, so a rebuilt image does NOT refresh
+      # it -- the bundle stays pinned to whatever the first deploy put there
+      # while the Python code (bind-mounted) keeps updating around it. That
+      # shipped: the admin served the pre-SR4 "Cockpit" nav for weeks against
+      # an API that had already renamed it. deploy/deploy.sh passes
+      # --renew-anon-volumes for this reason; if you bring the stack up by
+      # hand, pass it too, or you are not running what you just built.
       #
       # Worth knowing: CI could not catch this. container-healthcheck uses
       # plain `docker run` with no bind mount, so the bundle was visible there
