@@ -271,7 +271,12 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     </ng-template>
 
     <ng-template #planCell let-row>
-      <sb-plan-cell [entry]="row.entry" [target]="row.target" [stop]="row.stop_loss" />
+      <sb-plan-cell
+        [entry]="row.entry"
+        [target]="row.target"
+        [stop]="row.stop_loss"
+        [trigger]="row.trigger_price"
+      />
     </ng-template>
 
     <ng-template #pnlCell let-row>

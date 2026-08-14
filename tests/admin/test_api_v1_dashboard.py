@@ -38,6 +38,10 @@ DASHBOARD = {
     "expectancy_r": NULLABLE_NUMBER,
     "equity_30d": dict,
     "position_premium": dict,
+    # SR53. The five plan-lifecycle counts the Jinja dashboard's strip showed.
+    # Not a tenth metric on the header -- the SPA renders them as filter links
+    # into Trades, which is what the Jinja cards were.
+    "lifecycle": dict,
 }
 
 RELOCATED = [
@@ -67,6 +71,21 @@ def test_requires_auth(client):
 def test_returns_exactly_the_nine_metrics(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/dashboard").get_json(), DASHBOARD)
+
+
+def test_lifecycle_counts_cover_the_five_plan_statuses(seed, logged_in):
+    """SR53. The strip's counts, which the SPA had as chips with no numbers.
+
+    PENDING/ACTIVE/PARTIAL are all-time and CLOSED/CANCELLED count only today's
+    — a lifetime CLOSED count only ever goes up and says nothing about the
+    session. `_plan_rows` already scopes them that way; this projects rather
+    than recomputes.
+    """
+    seed()
+    lifecycle = logged_in.get("/api/v1/dashboard").get_json()["lifecycle"]
+
+    assert set(lifecycle) == {"PENDING", "ACTIVE", "PARTIAL", "CLOSED", "CANCELLED"}
+    assert all(isinstance(n, int) for n in lifecycle.values())
 
 
 def test_relocated_metrics_are_absent(seed, logged_in):

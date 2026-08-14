@@ -1,6 +1,6 @@
 import { TradeRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { held, num, rMultiple, text } from '../../ui/format';
+import { age, held, num, rMultiple, text } from '../../ui/format';
 
 /**
  * The seven columns the Trades list shows by default — spec 3 Decision 2.
@@ -116,6 +116,38 @@ export function tradeColumns(): ColumnDef<TradeRow>[] {
     { key: 'opened_at', header: 'Opened', sortable: true },
     { key: 'closed_at', header: 'Closed', sortable: true },
     { key: 'origin', header: 'Origin', value: (row) => text(row.origin) },
+
+    /* -- SR53: the plan's own columns ---------------------------------------
+     *
+     * These are what made the old plans board readable for a plan that has not
+     * filled. A PENDING row has no `entry`, no `opened_at` and no `held_hours`
+     * — all three describe an execution — so without these it is a row of em
+     * dashes. Picker-addable rather than default: they are empty on a closed
+     * position, which is most of the table most of the time. */
+
+    // The stop-entry price still being waited on. `plan` (SR8) falls back to it
+    // when there is no fill, so this column is for reading the two side by
+    // side rather than for finding out there is a trigger at all.
+    { key: 'trigger_price', header: 'Trigger', value: (row) => num(row.trigger_price), numeric: true },
+    { key: 'target2', header: 'Target 2', value: (row) => num(row.target2), numeric: true },
+    // The plans board's Age column. Sorts on the plan's creation, which is the
+    // only time an unfilled plan has.
+    {
+      key: 'created_at',
+      header: 'Created',
+      value: (row) => (row.created_at ? age(row.created_at) : null),
+      sortable: true,
+    },
+    // 0-100 composite from analytics.rank — badge, quality, regime, freshness.
+    // Zero decimals: it is a ranking, and the third digit of a composite is
+    // precision the inputs do not have.
+    {
+      key: 'follow_score',
+      header: 'Follow',
+      value: (row) => num(row.follow_score, 0),
+      numeric: true,
+      sortable: true,
+    },
   ];
 }
 

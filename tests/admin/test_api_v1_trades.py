@@ -67,6 +67,15 @@ TRADE_ROW = {
     "opened_at": NULLABLE_STR,
     "closed_at": NULLABLE_STR,
     "has_note": bool,
+    # SR53 — the plan's own numbers, so a row that has not filled is not
+    # mostly nulls. `created_at` is the only time an unfilled plan has;
+    # `trigger_price` is its only actionable price; `follow_score` is the
+    # plans board's ranking column, which was not on the wire at all.
+    # All three on both origins: a legacy row emits nulls rather than omitting
+    # the keys, so there is one row shape rather than two.
+    "created_at": NULLABLE_STR,
+    "trigger_price": NULLABLE_NUMBER,
+    "follow_score": NULLABLE_NUMBER,
     # SR7 -- the status bar. All five on every row, terminal ones included: a
     # cell that must check whether a field exists has a second render path,
     # and the second one only runs on data nobody tests with.
@@ -427,6 +436,60 @@ def test_tag_is_not_a_trade_filter(seed, logged_in):
     """
     seed()
     assert_error(logged_in.get("/api/v1/trades?tag=revenge"), "invalid", 400)
+
+
+def test_a_pending_plan_carries_its_creation_time_and_trigger(seed, logged_in):
+    """SR53. The row a PENDING plan produces used to be mostly nulls.
+
+    `opened_at`, `held_hours` and `entry` all describe an execution that has
+    not happened. What the plan HAS is when it was created and the price it is
+    waiting for, and the plans board showed both.
+    """
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111", status="PENDING")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+
+    assert row["created_at"] == "2026-08-01T10:00:00+00:00"
+    assert row["trigger_price"] == 100.0
+
+
+def test_a_plan_row_is_ranked(seed, logged_in):
+    """follow_score is a composite over the plan population, so it is attached
+    for the whole set in one pass rather than scored per row."""
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+
+    assert row["follow_score"] is not None
+    assert 0 <= row["follow_score"] <= 100
+
+
+def test_a_legacy_row_has_no_plan_numbers_but_still_has_the_keys(seed, logged_in):
+    """One row shape for both origins. A client that had to check whether a key
+    exists would have a second render path, and the second one only runs on
+    data nobody tests with."""
+    seed(trades=[_trade("aaaaaaaaaaaaaaaa")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+
+    assert row["origin"] == "legacy"
+    assert row["trigger_price"] is None
+    assert row["follow_score"] is None
+    # A legacy trade has no creation apart from its open, which is what it gets.
+    assert row["created_at"] == row["opened_at"]
+
+
+def test_sorting_by_follow_score_sinks_the_unranked(seed, logged_in):
+    """Valueless rows last in BOTH directions.
+
+    A descending sort that floated every unranked legacy row to the top would
+    make "best-ranked first" show a screenful of rows with no ranking.
+    """
+    seed(
+        plans=[_plan("11111111-1111-4111-8111-111111111111")],
+        trades=[_trade("aaaaaaaaaaaaaaaa")],
+    )
+    items = logged_in.get("/api/v1/trades?sort=-follow_score").get_json()["items"]
+
+    assert items[0]["follow_score"] is not None
+    assert items[-1]["follow_score"] is None
 
 
 def test_new_filters_narrow_the_total_not_just_the_page(seed, logged_in):

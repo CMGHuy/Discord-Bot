@@ -86,6 +86,26 @@ def _risk_used() -> tuple[float | None, float | None]:
         return None, cap
 
 
+def _lifecycle_counts() -> dict:
+    """The five plan-lifecycle counts the Jinja dashboard's strip showed.
+
+    SR53. PENDING/ACTIVE/PARTIAL are all-time; CLOSED/CANCELLED count only
+    today's, because a lifetime CLOSED count is a number that only ever goes up
+    and says nothing about the session. `_plan_rows` already applies exactly
+    that scoping for the Jinja strip, so this projects its counts rather than
+    recomputing them -- the module's own "nothing is computed here" rule.
+
+    Returns an empty dict on failure rather than raising: this is the landing
+    page, and one degraded panel is better than a 500 for the other nine
+    figures.
+    """
+    try:
+        from swingbot.admin.pages import _plan_rows
+        return dict(_plan_rows()["counts"])
+    except Exception:
+        return {}
+
+
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
 def dashboard():
@@ -121,4 +141,5 @@ def dashboard():
         "expectancy_r": stats.get("expectancy_r"),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
+        "lifecycle": _lifecycle_counts(),
     })

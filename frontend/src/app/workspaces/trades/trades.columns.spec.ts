@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { TRADE_SORTABLE } from '../../api/models';
+
 import {
   COMPACT_COLUMNS,
   FULL_COLUMNS,
@@ -131,11 +133,13 @@ describe('trade column sets', () => {
   it('only offers sortable on keys the API will accept', () => {
     // A sortable column the server rejects is a 400 on click, which is worse
     // than not offering the control.
+    //
+    // Reads TRADE_SORTABLE rather than restating it. It used to hold its own
+    // copy of the list, which is the drift this test exists to catch: SR53 made
+    // created_at and follow_score sortable on both sides and this failed
+    // anyway, against a third list that agreed with neither.
     const sortable = tradeColumns().filter((c) => c.sortable).map((c) => c.key);
-    const apiSortable = new Set([
-      'opened_at', 'closed_at', 'ticker', 'status', 'pnl_pct', 'r_multiple',
-      'entry', 'exit_price', 'held_hours', 'realized_pnl_amount',
-    ]);
+    const apiSortable = new Set<string>(TRADE_SORTABLE);
     for (const key of sortable) {
       expect(apiSortable, `not in TRADE_SORTABLE: ${key}`).toContain(
         key === 'held' ? 'held_hours' : key,

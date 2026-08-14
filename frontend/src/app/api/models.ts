@@ -82,6 +82,12 @@ export interface TradeRow {
   opened_at: string | null;
   closed_at: string | null;
   has_note: boolean;
+  /* SR53 — the plan's own numbers, so a row that has not filled is not mostly
+     nulls. `opened_at` and `held_hours` describe an execution; these describe
+     the plan. Null on a legacy row, which never had a plan. */
+  created_at: string | null;
+  trigger_price: number | null;
+  follow_score: number | null;
   /* SR7 — the status bar, computed server-side so the cell draws rather than
      calculates, and so the arithmetic lives next to the bot's own near-close
      alerts instead of being reimplemented here. `progress_band` names which
@@ -185,6 +191,9 @@ export interface TradeQuery {
 export const TRADE_SORTABLE = [
   'opened_at', 'closed_at', 'ticker', 'status', 'pnl_pct', 'r_multiple',
   'entry', 'exit_price', 'held_hours', 'realized_pnl_amount',
+  // SR53. A ranking is a column nobody wants unsorted, and `created_at` is the
+  // only time an unfilled plan has to sort by.
+  'created_at', 'follow_score',
 ] as const;
 
 /* -- dashboard ------------------------------------------------------------ */
@@ -205,6 +214,10 @@ export interface Dashboard {
   expectancy_r: number | null;
   equity_30d: EquitySeries;
   position_premium: Record<string, unknown>;
+  /** SR53 — the five plan-lifecycle counts, keyed by status. Loosely typed
+   *  like `position_premium`: the statuses come from `PlanStatus` on the Python
+   *  side, and an empty object is what a failed collector returns. */
+  lifecycle: Record<string, unknown>;
 }
 
 /* -- analytics ---------------------------------------------------------- */

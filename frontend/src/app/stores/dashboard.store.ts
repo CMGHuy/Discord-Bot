@@ -123,6 +123,36 @@ export const DashboardStore = signalStore(
 
     positionPremiumIsCap: computed(() => data()?.position_premium?.['mode'] === 'risk_pct'),
 
+    /**
+     * The five plan-lifecycle counts — SR53.
+     *
+     * The Jinja dashboard had these as a strip of clickable cards; the SPA had
+     * the status chips they navigated to, with no numbers on them. A chip that
+     * says "Pending" and a chip that says "Pending 4" answer different
+     * questions, and the second is the one worth landing on.
+     *
+     * Rendered in lifecycle order rather than by size: PENDING → ACTIVE →
+     * PARTIAL → CLOSED → CANCELLED is the order a plan moves through, and
+     * sorting by count would reshuffle the row every time a trade closed.
+     *
+     * A count of zero is kept, not dropped. "No pending plans" is information;
+     * a strip that shed its empty entries would change width as the session
+     * went on.
+     */
+    lifecycle: computed<{ status: string; count: number }[]>(() => {
+      const raw = data()?.lifecycle;
+      // An EMPTY object, not just a missing one. `_lifecycle_counts` returns
+      // {} rather than raising, because the Dashboard is the landing page and
+      // one degraded panel beats a 500 for the other nine figures — so {} has
+      // to mean "no strip". Rendering five zeros for it would be a claim about
+      // the account rather than an admission the counts are unavailable.
+      if (!raw || Object.keys(raw).length === 0) return [];
+      return ['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED'].map((status) => ({
+        status,
+        count: finiteNumber(raw[status]) ?? 0,
+      }));
+    }),
+
     /** Risk used as a fraction of the cap, for a meter. Null rather than 0
      *  when either side is missing: an empty meter and a meter at zero look
      *  identical and mean opposite things. */

@@ -46,6 +46,11 @@ class FakeEventStream {
 }
 
 const ROW: TradeRow = {
+  // SR53 — the plan's own numbers, null here because this fixture is a filled
+  // position rather than a waiting plan.
+  created_at: '2026-08-01T10:00:00Z',
+  trigger_price: null,
+  follow_score: null,
   id: 'plan-1',
   origin: 'plan',
   status: 'open',

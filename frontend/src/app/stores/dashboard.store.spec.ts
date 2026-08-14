@@ -52,6 +52,9 @@ class FakeEventStream {
 }
 
 const RESPONSE: Dashboard = {
+  // SR53. Five counts, PENDING/ACTIVE/PARTIAL all-time and CLOSED/CANCELLED
+  // today's only.
+  lifecycle: { PENDING: 4, ACTIVE: 2, PARTIAL: 1, CLOSED: 3, CANCELLED: 0 },
   account_balance: 10_000,
   open_pnl_pct: 1.5,
   risk_used_pct: 4,
@@ -193,6 +196,37 @@ describe('DashboardStore', () => {
     respond({ risk_used_pct: 4, risk_cap_pct: 0 });
 
     expect(store.riskUtilisation()).toBeNull();
+  });
+
+  /* -- SR53: the lifecycle counts -------------------------------------- */
+
+  it('reads the five lifecycle counts in lifecycle order', () => {
+    // Lifecycle order, not by size: PENDING → ACTIVE → PARTIAL → CLOSED →
+    // CANCELLED is the order a plan moves through, and sorting by count would
+    // reshuffle the row every time a trade closed.
+    tick();
+    respond();
+    expect(store.lifecycle().map((entry) => entry.status)).toEqual([
+      'PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED',
+    ]);
+    expect(store.lifecycle().map((entry) => entry.count)).toEqual([4, 2, 1, 3, 0]);
+  });
+
+  it('keeps a status whose count is zero', () => {
+    // "No pending plans" is information, and a strip that shed empty entries
+    // would change width as the session went on.
+    tick();
+    respond();
+    expect(store.lifecycle()).toHaveLength(5);
+  });
+
+  it('renders no strip at all when the collector failed', () => {
+    // `_lifecycle_counts` returns {} rather than raising, because the
+    // Dashboard is the landing page. An empty object must mean "no strip", not
+    // five zeros -- five zeros is a claim about the account.
+    tick();
+    respond({ lifecycle: {} });
+    expect(store.lifecycle()).toEqual([]);
   });
 
   /* -- the chip tier's loosely typed fields ----------------------------- */

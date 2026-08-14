@@ -152,6 +152,24 @@ export const OPEN_POSITIONS_CAP = 6;
       />
     </div>
 
+    <!-- SR53. The lifecycle strip: five counts, each a link into Trades
+         filtered to that status. The Jinja dashboard had exactly this and the
+         SPA had the chips it navigated to with no numbers on them. -->
+    @if (store.lifecycle().length) {
+      <nav class="lifecycle" aria-label="Plans by lifecycle status">
+        @for (entry of store.lifecycle(); track entry.status) {
+          <a
+            class="lc"
+            routerLink="/trades"
+            [queryParams]="{ status: entry.status, outcome: null }"
+          >
+            <span class="lc-count num">{{ entry.count }}</span>
+            <span class="lc-label">{{ entry.status }}</span>
+          </a>
+        }
+      </nav>
+    }
+
     <sb-panel heading="Open positions" [flush]="true">
       <!-- The link out is in the panel header rather than under the table:
            it belongs to this table, and a "see all" floating below a capped
@@ -188,7 +206,12 @@ export const OPEN_POSITIONS_CAP = 6;
       <sb-direction-arrow [direction]="row.direction" />
     </ng-template>
     <ng-template #planCell let-row>
-      <sb-plan-cell [entry]="row.entry" [target]="row.target" [stop]="row.stop_loss" />
+      <sb-plan-cell
+        [entry]="row.entry"
+        [target]="row.target"
+        [stop]="row.stop_loss"
+        [trigger]="row.trigger_price"
+      />
     </ng-template>
     <ng-template #confidenceCell let-row>
       <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
@@ -264,6 +287,32 @@ export const OPEN_POSITIONS_CAP = 6;
     }
     .equity sb-sparkline { flex: 1 1 auto; min-width: 60px; }
     .value { font-size: var(--text-subhead); font-weight: 600; }
+
+    /* SR53. One row, lifecycle order, sized to the count rather than the
+       label -- the number is what is being read. */
+    .lifecycle {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: var(--space-8);
+      max-width: 960px;
+    }
+    .lc {
+      display: grid;
+      gap: 2px;
+      padding: var(--space-8) var(--space-10);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      text-decoration: none;
+    }
+    .lc:hover { border-color: var(--border-strong); }
+    .lc-count { color: var(--text); font-size: var(--text-subhead); font-weight: 600; }
+    .lc-label {
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
 
     /* The panel is flush so the table can run edge to edge; anything else
        inside it has to bring its own padding. */

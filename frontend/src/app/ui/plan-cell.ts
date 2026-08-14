@@ -21,7 +21,7 @@ import { num } from './format';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <span class="plan" [title]="tooltip()">
-      <span class="entry">{{ fmt(entry()) }}</span>
+      <span class="entry" [class.pending]="showsTrigger()">{{ fmt(first()) }}</span>
       <span class="sep">{{ ' → ' }}</span>
       <span class="target">{{ fmt(target()) }}</span>
       <span class="sep">{{ ' / ' }}</span>
@@ -31,6 +31,13 @@ import { num } from './format';
   styles: `
     .plan { font-family: var(--font-mono); font-size: var(--text-table); white-space: nowrap; }
     .entry  { color: var(--text-secondary); }
+    /* A trigger is a price nothing has traded at yet. Dashed underline rather
+       than a colour: the palette's hues all mean something already, and
+       "provisional" is not one of them. */
+    .entry.pending {
+      color: var(--text-faint);
+      border-bottom: 1px dashed currentColor;
+    }
     .target { color: var(--pos); }
     .stop   { color: var(--neg); }
     /* Spacing lives in the TEXT, not in a margin. Angular strips whitespace
@@ -45,12 +52,33 @@ export class PlanCell {
   readonly entry = input<number | null>(null);
   readonly target = input<number | null>(null);
   readonly stop = input<number | null>(null);
+  /**
+   * The stop-entry price a plan is still waiting on — SR53.
+   *
+   * A PENDING plan has no `entry`: nothing has filled. Without this the cell
+   * read `— → 195.00 / 170.00`, which says the two levels but not the price
+   * that would put you in them, and the trigger was the actionable number the
+   * old plans board led with.
+   */
+  readonly trigger = input<number | null>(null);
 
-  protected readonly tooltip = computed(
-    () =>
-      `Entry ${this.fmt(this.entry())} · Target ${this.fmt(this.target())} · ` +
-      `Stop ${this.fmt(this.stop())}`,
+  /** True when the first number is a trigger rather than a fill. */
+  protected readonly showsTrigger = computed(
+    () => this.entry() === null && this.trigger() !== null,
   );
+
+  protected readonly first = computed(() =>
+    this.showsTrigger() ? this.trigger() : this.entry(),
+  );
+
+  protected readonly tooltip = computed(() => {
+    // Names the role, because the styling difference alone does not: an
+    // unfilled plan and a filled one are one glyph apart otherwise.
+    const lead = this.showsTrigger()
+      ? `Trigger ${this.fmt(this.trigger())} (not yet filled)`
+      : `Entry ${this.fmt(this.entry())}`;
+    return `${lead} · Target ${this.fmt(this.target())} · Stop ${this.fmt(this.stop())}`;
+  });
 
   protected fmt(v: number | null): string {
     return num(v);

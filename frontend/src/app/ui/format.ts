@@ -47,6 +47,27 @@ export function held(hours: number | null | undefined): string {
   return rest === 0 ? `${days}d` : `${days}d ${rest}h`;
 }
 
+/**
+ * How long ago, coarsely — "4h", "3d", "2mo".
+ *
+ * For the Age of a plan, which is read as "is this stale?" rather than as a
+ * timestamp. `held` is the same idea for a duration that is already computed
+ * server-side; this one measures from a point in time to now, so it is a
+ * different question and a different unit ladder — past a month, days stop
+ * being the useful unit.
+ */
+export function age(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return ABSENT;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return ABSENT;
+  const hours = Math.max(0, (now - then) / 3_600_000);
+  if (hours < 1) return '<1h';
+  if (hours < 24) return `${Math.floor(hours)}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 60) return `${days}d`;
+  return `${Math.floor(days / 30)}mo`;
+}
+
 /** Dates are rendered in the viewer's locale rather than as the raw ISO
  *  string the API returns. Time is included only where it is meaningful. */
 export function dateTime(iso: string | null | undefined): string {
