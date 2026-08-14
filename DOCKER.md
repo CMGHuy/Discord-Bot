@@ -61,7 +61,7 @@ less.
 
 The admin now exposes exactly three kinds of route: `/api/v1/*`, the SPA's
 workspace URLs and its asset directory, and `/`. Anything else is a bug; the
-check is in `docs/superpowers/specs/2026-08-08-v15-jinja-cutover-design.md`
+check is in `docs/superpowers/specs/implemented/2026-08-08-v15-jinja-cutover-design.md`
 Appendix C3, and it reads the live `url_map` rather than grepping for
 `.route(` — `spa.py` mounts its routes with `add_url_rule`, which a grep does
 not see.

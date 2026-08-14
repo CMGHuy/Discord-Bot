@@ -32,9 +32,25 @@
 > closed by SR48–SR58. **Read that document before deleting anything** — it is
 > the only place the per-template detail exists once the templates are gone.
 >
-> **NG57 therefore remains gated on ONE thing: the soak** (no earlier than
-> 2026-08-27), plus the manual QA still outstanding on v21 — see that plan's
-> SR64 Step 3, which was not walked. See spec v18 Decision 13.
+> **NG57 IS DONE — 2026-08-14, `ui` 1.2.2.** The Jinja UI is deleted: 20
+> templates, `pages.py`, the legacy `/api/*` blueprint and `api.py`, the old
+> static assets, the vendored `lightweight-charts` 4.2.3, and the `ADMIN_UI`
+> flag. Routes went 129 → 72; the spec's Appendix C3 `url_map` check shows
+> only `/api/v1/*`, the SPA and `/`.
+>
+> **Two of its gates were waived, not met, and that is on the record.** The
+> human partner waived the soak (Decision 1's two weeks of live sessions,
+> which would have run to 2026-08-27) on 2026-08-14, having confirmed
+> production was serving `ADMIN_UI=spa`. v21's SR64 Step 3 QA walk was never
+> performed either. Both were deliberate calls, not oversights.
+>
+> **What the deletion found, which Appendix C1 had not:** `pages.py` was
+> load-bearing for the v1 API — eleven symbols imported across
+> `api_v1/analytics.py`, `dashboard.py` and `jobs.py`. Deleting it as Decision
+> 3 instructs would have taken the SPA's Analytics, Dashboard and Tuning
+> endpoints down with the UI it replaced. They were extracted to
+> `swingbot/admin/queries.py` first. Anyone reading C1's "safe to delete"
+> conclusion should know it covered one direction only.
 >
 > Unchecked boxes below are not a to-do list. Sessions committed work without
 > ticking them (NG8–NG53 read as unstarted while their code is in the git log),
@@ -60,7 +76,7 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 | 3 | Design system | `docs/superpowers/specs/implemented/2026-08-08-v20-admin-design-system-design.md` | ✅ done |
 | 4 | Angular shell | `docs/superpowers/specs/implemented/2026-08-08-v13-angular-shell-design.md` | 3 |
 | 5 | Workspaces | `docs/superpowers/specs/implemented/2026-08-08-v14-angular-workspaces-design.md` | 4 |
-| 6 | Cutover | `docs/superpowers/specs/2026-08-08-v15-jinja-cutover-design.md` | 5 |
+| 6 | Cutover | `docs/superpowers/specs/implemented/2026-08-08-v15-jinja-cutover-design.md` | 5 |
 
 ## Progress
 
@@ -623,7 +639,7 @@ Spec v12 Decision 2 — load-bearing, so check rather than assume.
 
 ### Task NG52: Parity mapping and 1280px check
 
-**Files:** `docs/superpowers/specs/2026-08-08-v15-jinja-cutover-design.md`
+**Files:** `docs/superpowers/specs/implemented/2026-08-08-v15-jinja-cutover-design.md`
 
 - [ ] Table: every Jinja page → its Angular successor, or a named deliberate drop
 - [ ] Verify the Trades expansion content at **1280px** — spec 3 flags mono digits as wide
