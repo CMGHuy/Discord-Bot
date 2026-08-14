@@ -278,7 +278,10 @@ def main(argv: list[str] | None = None) -> int:
 
         user = getattr(config, "ADMIN_USERNAME", None) or user
         password = getattr(config, "ADMIN_PASSWORD", None) or password
-        expect = getattr(config, "ADMIN_UI", None) or expect
+        # `expect` used to come from config.ADMIN_UI. Release B deleted that
+        # field along with the Jinja UI it selected, so there is one UI and
+        # the default ("spa") is always right. The getattr that read it is
+        # gone rather than left to silently return None for ever.
         if "--url" not in (argv if argv is not None else sys.argv[1:]):
             # 127.0.0.1, not localhost: inside the container `localhost` can
             # resolve to ::1 first while Flask binds IPv4, which failed on one
