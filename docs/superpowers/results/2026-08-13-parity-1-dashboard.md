@@ -97,7 +97,7 @@ SR42's.
 | Direction glyph inline on the ticker (compact) | `dashboard_fragment.html:286` | migrated | `sb-direction-arrow` as its own column (SR9) |
 | Tier chip | `dashboard_fragment.html:287` | migrated | `tier` column + `sb-quality-chip`, `trades.ts:234-238` |
 | VALIDATED/WEAK badge deliberately absent from this table | `dashboard_fragment.html:289-293` | dropped on purpose | Same decision holds: `badge` is in row expansion (`trades.ts:286`) and the detail view, not a list column |
-| Strategy column + "Sources: …" tooltip | `dashboard_fragment.html:296-299` | migrated (narrowed) | `strategy` column exists; the target/stop **sources** tooltip does not — sources are `TradeDetailFields`, shown in the detail view |
+| Strategy column + "Sources: …" tooltip | `dashboard_fragment.html:296-299` | migrated (narrowed) | `strategy` column exists. The target/stop **sources** do not render anywhere: `target_sources` / `stop_sources` are typed on `TradeDetailFields` (`models.ts:134-136`) and no component reads them — see SR42 |
 | Horizon pill + "~N months" tooltip | `dashboard_fragment.html:301-305` | migrated (narrowed) | `horizon` column, raw key only, no expanded label |
 | Direction column | `dashboard_fragment.html:307-312` | migrated | `sb-direction-arrow` (SR9) |
 | Confidence Lv1-5 badge | `dashboard_fragment.html:314-318` | migrated | `sb-confidence-cell` (SR10) |
@@ -114,7 +114,7 @@ SR42's.
 | Opened timestamp (Berlin) | `dashboard_fragment.html:406` | migrated | `opened_at` column, `dateTime()` |
 | Row action: open detail in new tab | `dashboard_fragment.html:409-410` | dropped on purpose | The ticker/id cell is a real anchor, so the browser's own "open in new tab" covers it |
 | Row action: close trade | `dashboard_fragment.html:411-414` | **missing** | `availableActions()` (`trade-actions.ts:48-58`) switches on `'open'`/`'planned'`/`'pending'`, but `row.status` carries the uppercase plan vocabulary (`api_v1/trades.py:119`, `:159`). `ACTIVE`/`PARTIAL` therefore fall through to `['delete']` and no Close button renders |
-| Scale-out leg rows ("↳ runner N%: price (R)") | `dashboard_fragment.html:417-427` | migrated | Detail view — `legs` / `legs_realized` are `TradeDetailFields`; row expansion says so explicitly (`trades.ts:277-283`) |
+| Scale-out leg rows ("↳ runner N%: price (R)") | `dashboard_fragment.html:417-427` | **missing** | Row expansion defers them to the detail view (`trades.ts:277-283`), but the detail view does not render them either: `legs` / `legs_realized` are on the wire (`models.ts:129-130`) and no component reads them — see SR42 |
 | Footer note: 15s refresh, sizing risk %, `!account` hint | `dashboard_fragment.html:443-445` | **missing** | — no equivalent line |
 | Empty state: "No open trades right now. Run `!check`…" | `dashboard_fragment.html:447-451` | migrated | `emptyState` on the Dashboard panel, `dashboard.ts:307-310` (different copy, same role) |
 | "Clear open trades" bulk action | `dashboard_fragment.html:453-461` | migrated | `trades.ts:111-113` + confirm dialog |
@@ -149,7 +149,7 @@ the board's purpose survives. What follows classifies its *contents*, since
 | Column: Direction | `_plans_board.html:74, 95-99` | migrated | `sb-direction-arrow` |
 | Column: Status pill | `_plans_board.html:75, 100` | migrated | `sb-status-cell` / `status_label` |
 | Column: Follow score (`analytics.rank.rank_plans`) | `_plans_board.html:76, 101`, `pages.py:_ranked_plan_rows` | **missing** | — `follow_score` appears nowhere in `frontend/src`; the ranking is not on the wire |
-| Column: Entry **or trigger** price, with the "(trigger)" marker | `_plans_board.html:77, 102-105` | **missing** | — the list shows `entry`, which is null for a PENDING plan. `trigger_price` is a `TradeDetailFields` field, so the actionable number for an unfilled plan is only in the detail view |
+| Column: Entry **or trigger** price, with the "(trigger)" marker | `_plans_board.html:77, 102-105` | **missing** | — the list shows `entry`, which is null for a PENDING plan. `trigger_price` is typed on `TradeDetailFields` (`models.ts:118`) but no component renders it, so the actionable number for an unfilled plan is nowhere on screen |
 | Column: SL | `_plans_board.html:78, 106` | migrated | `stop_loss` column |
 | Column: TP1 | `_plans_board.html:79, 107` | migrated | `target` column |
 | Column: TP2 | `_plans_board.html:80, 108` | **missing** | — `target2` is on `TradeRow` (`models.ts:72`) but has no column and no picker entry |
@@ -166,9 +166,9 @@ the board's purpose survives. What follows classifies its *contents*, since
 
 | Status | Count |
 |---|---|
-| migrated (incl. narrowed) | 62 |
+| migrated (incl. narrowed) | 61 |
 | dropped on purpose | 10 |
-| **missing** | 21 |
+| **missing** | 22 |
 | new in the SPA (not a parity row) | 1 |
 
 The `missing` rows cluster into five themes, which is what SR46 will rank:
