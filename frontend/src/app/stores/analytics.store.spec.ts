@@ -75,6 +75,43 @@ const PERFORMANCE: AnalyticsPerformance = {
     '2': { total: 5, open: 1, closed: 4, wins: 2, losses: 2, win_rate: 50 },
     '1': { total: 3, open: 0, closed: 3, wins: 1, losses: 2, win_rate: 33.3 },
   },
+  // SR54. Deliberately a mix of populated and null figures: the store's job
+  // is to pass nulls through as nulls, and a fixture where everything has a
+  // value cannot catch a `?? 0` creeping into a computed.
+  range: { from: null, to: null, span_years: 2.5, n: 34 },
+  derived: {
+    avg_win_pct: 4.2,
+    avg_loss_pct: -2.1,
+    total_return_pct: 18.4,
+    annualised_return_pct: 7.1,
+    calmar: 1.3,
+    volatility_ann_pct: 22.6,
+    trades_per_month: 1.1,
+    pct_in_market: 44.5,
+    sharpe_ann: 0.94,
+    sortino_ann: null,
+    win_rate: 61.8,
+    expectancy_r: 0.42,
+  },
+  distributions: {
+    returns: [
+      { lo: -6.1, hi: -1.0, count: 13 },
+      { lo: -1.0, hi: 4.1, count: 0 },
+      { lo: 4.1, hi: 12.5, count: 21 },
+    ],
+    r_multiples: [{ lo: -1.0, hi: 2.4, count: 34 }],
+  },
+  rolling_returns: [{ date: '2026-08-01', return_pct: 3.2 }],
+  holding_period_split: [
+    { bucket: '0-2d', n: 0, win_rate: null, avg_return_pct: null },
+    { bucket: '8-30d', n: 34, win_rate: 61.8, avg_return_pct: 1.8 },
+  ],
+  calendar: [{ month: '2026-08', return_pct: 3.2, n: 4 }],
+  cumulative_by_strategy: {
+    MACD: [{ date: '2026-08-02', cum_pct: 4.0 }],
+    RSI: [{ date: '2026-08-01', cum_pct: 2.0 }],
+  },
+  benchmark: { spy_cum: { '2026-08-01': 1.4, '2026-07-01': 0.3 } },
 };
 
 const STRATEGIES = {
@@ -535,5 +572,143 @@ describe('AnalyticsStore', () => {
 
     expect(store.error()).toBeNull();
     expect(store.snapshotError()).toBeNull();
+  });
+
+  /* -- SR54: the date range -------------------------------------------- */
+
+  describe('the analytics date range', () => {
+    /** Settle the first load so the assertions below are about the refetch. */
+    const openPerformance = () => {
+      tick();
+      respondPerformance();
+    };
+
+    it('sends both bounds as query parameters, not as a client-side filter', () => {
+      openPerformance();
+
+      store.setRange('2026-01-01', '2026-06-30');
+      tick();
+
+      const request = backend.expectOne(
+        (req) => req.url === '/api/v1/analytics/performance',
+      );
+      expect(request.request.params.get('from')).toBe('2026-01-01');
+      expect(request.request.params.get('to')).toBe('2026-06-30');
+      request.flush(PERFORMANCE);
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+    });
+
+    it('omits an unset bound instead of sending it empty', () => {
+      openPerformance();
+
+      store.setRange('2026-01-01', null);
+      tick();
+
+      const request = backend.expectOne(
+        (req) => req.url === '/api/v1/analytics/performance',
+      );
+      expect(request.request.params.get('from')).toBe('2026-01-01');
+      expect(request.request.params.has('to')).toBe(false);
+      request.flush(PERFORMANCE);
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+    });
+
+    it('normalises an inverted range rather than rejecting it', () => {
+      // A date picker mid-edit legitimately produces from > to; erroring
+      // there surfaces a problem the user is one keystroke from fixing.
+      openPerformance();
+
+      store.setRange('2026-06-30', '2026-01-01');
+      tick();
+
+      expect(store.rangeFrom()).toBe('2026-01-01');
+      expect(store.rangeTo()).toBe('2026-06-30');
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/performance')
+        .flush(PERFORMANCE);
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+    });
+
+    it('makes exactly one performance request per range change', () => {
+      // Both bounds move together, so a range pick cannot fire two requests
+      // whose responses could land out of order.
+      openPerformance();
+
+      store.setRange('2026-01-01', '2026-06-30');
+      tick();
+
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/performance')
+        .flush(PERFORMANCE);
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.verify();
+    });
+
+    it('clearRange goes back to unbounded', () => {
+      openPerformance();
+      store.setRange('2026-01-01', '2026-06-30');
+      tick();
+      backend
+        .expectOne((req) => req.url === '/api/v1/analytics/performance')
+        .flush(PERFORMANCE);
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+
+      store.clearRange();
+      tick();
+
+      const request = backend.expectOne(
+        (req) => req.url === '/api/v1/analytics/performance',
+      );
+      expect(request.request.params.has('from')).toBe(false);
+      expect(request.request.params.has('to')).toBe(false);
+      expect(store.rangeFrom()).toBeNull();
+      request.flush(PERFORMANCE);
+      backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+    });
+
+    it('passes null figures through as null rather than zero', () => {
+      // The regression this guards: a `?? 0` in a computed turns "not enough
+      // trades for a Sortino" into a confident 0.00 on a KPI card.
+      openPerformance();
+
+      expect(store.derived().sortino_ann).toBeNull();
+      expect(store.derived().calmar).toBe(1.3);
+    });
+
+    it('reports an all-null derived block before the first response', () => {
+      // No tick, no flush: nothing has arrived yet.
+      expect(store.derived().calmar).toBeNull();
+      expect(store.derivedMetrics().length).toBeGreaterThan(0);
+      expect(store.derivedMetrics().every((m) => m.value === null)).toBe(true);
+    });
+
+    it('labels histogram buckets by their lower edge so losses read as losses', () => {
+      openPerformance();
+
+      const bins = store.returnsHistogram();
+      expect(bins[0].label).toBe('-6.1%');
+      // The empty interior bucket survives — dropping it would let the chart
+      // silently redraw its own axis.
+      expect(bins[1].count).toBe(0);
+      expect(bins).toHaveLength(3);
+    });
+
+    it('sorts the benchmark and per-strategy series it is handed', () => {
+      openPerformance();
+
+      expect(store.benchmarkSeries().map((p) => p.date))
+        .toEqual(['2026-07-01', '2026-08-01']);
+      expect(store.cumulativeByStrategy().map((s) => s.strategy))
+        .toEqual(['MACD', 'RSI']);
+    });
+
+    it('echoes the applied range back with its sample size', () => {
+      openPerformance();
+
+      expect(store.rangeSampleSize()).toBe(34);
+      // PERFORMANCE carries no bounds, so the range is not "active" even
+      // though the block is present.
+      expect(store.rangeActive()).toBe(false);
+    });
   });
 });

@@ -169,6 +169,120 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <!-- SR54. Everything below is scoped by the range control; the two
+             panels above are deliberately all-time, so the heading says which
+             is which rather than leaving the reader to guess. -->
+        <sb-panel [heading]="derivedHeading()">
+          <div class="range" role="group" aria-label="Analytics date range">
+            <label>
+              From
+              <input type="date" [value]="store.rangeFrom() ?? ''"
+                     (change)="onRangeFrom($event)" />
+            </label>
+            <label>
+              To
+              <input type="date" [value]="store.rangeTo() ?? ''"
+                     (change)="onRangeTo($event)" />
+            </label>
+            @if (store.rangeActive()) {
+              <button sb-button type="button" variant="ghost"
+                      (click)="store.clearRange()">
+                Clear
+              </button>
+            }
+            <!-- The sample size sits with the control, not the cards: a Calmar
+                 over four trades and one over four hundred must not read as
+                 equally authoritative. -->
+            <span class="sample">{{ sampleLabel() }}</span>
+          </div>
+
+          @if (store.rangeSampleSize() === 0) {
+            <!-- Not an error. An empty window is a legitimate answer, and the
+                 cards below would otherwise be twelve em dashes with no
+                 explanation of why. -->
+            <p class="stale" role="status">
+              No closed trades in this window.
+            </p>
+          }
+
+          <div class="chips">
+            @for (metric of store.derivedMetrics(); track metric.key) {
+              <sb-metric-chip
+                [label]="metric.label"
+                [value]="metric.value"
+                [unit]="metric.unit"
+                [decimals]="metric.decimals"
+                [tone]="metric.pnl ? 'pnl' : 'plain'"
+              />
+            }
+          </div>
+        </sb-panel>
+
+        <div class="panels">
+          <sb-panel heading="Return distribution">
+            @if (store.returnsHistogram().length) {
+              <sb-histogram [bins]="store.returnsHistogram()" />
+            } @else {
+              <p class="stale">No closed trades to distribute.</p>
+            }
+          </sb-panel>
+
+          <sb-panel heading="R-multiple distribution">
+            @if (store.rHistogram().length) {
+              <sb-histogram [bins]="store.rHistogram()" />
+            } @else {
+              <p class="stale">No R-multiples — trades need an entry and a stop.</p>
+            }
+          </sb-panel>
+        </div>
+
+        <div class="panels">
+          <sb-panel heading="By holding period">
+            <!-- Every band renders, including empty ones: "the edge is all in
+                 8-30d" is only legible next to the bands that are empty. -->
+            <dl>
+              @for (band of store.holdingSplit(); track band.bucket) {
+                <div>
+                  <dt>{{ band.bucket }}</dt>
+                  <dd class="num">
+                    {{ fmtCount(band.n) }} · {{ fmtRate(band.win_rate) }}
+                  </dd>
+                </div>
+              }
+            </dl>
+          </sb-panel>
+
+          <sb-panel heading="By month">
+            @if (store.calendarReturns().length) {
+              <dl>
+                @for (month of store.calendarReturns(); track month.month) {
+                  <div>
+                    <dt>{{ month.month }}</dt>
+                    <dd class="num">
+                      {{ month.return_pct.toFixed(2) }}% · {{ fmtCount(month.n) }}
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <p class="stale">No months with closed trades.</p>
+            }
+          </sb-panel>
+        </div>
+
+        @if (store.cumulativeByStrategy().length) {
+          <sb-panel heading="Cumulative return by strategy">
+            <dl>
+              @for (series of store.cumulativeByStrategy(); track series.strategy) {
+                <div>
+                  <dt>{{ series.strategy }}</dt>
+                  <dd class="num">{{ fmtCumulative(series.points) }}</dd>
+                </div>
+              }
+            </dl>
+          </sb-panel>
+        }
+
         <!-- SR50. Everything below comes from GET /analytics/snapshot, which
              the server has been building and serving all along. -->
         @if (store.snapshotError(); as message) {
@@ -679,6 +793,41 @@ interface ProposalView extends ProposalRow {
 
     dl { display: grid; gap: var(--space-6); }
 
+    /* -- SR54: the range control ---------------------------------------- */
+
+    .range {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: var(--space-8);
+      margin-bottom: var(--space-8);
+    }
+
+    .range label {
+      display: grid;
+      gap: var(--space-4);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+
+    .range input {
+      /* Matches the shared form controls rather than inheriting the browser's
+         date input, which sets its own font and breaks the row's baseline. */
+      font: inherit;
+      color: var(--text-primary);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-4) var(--space-6);
+    }
+
+    .range .sample {
+      margin-left: auto;
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+      font-variant-numeric: tabular-nums;
+    }
+
     /* -- SR50: the snapshot's panels ------------------------------------ */
 
     .series-note { margin-top: var(--space-6); color: var(--text-faint); }
@@ -833,6 +982,39 @@ export class Analytics {
 
   protected fmtCount(value: number | null): string {
     return value === null ? ABSENT : String(value);
+  }
+
+  /* -- SR54: the range control ----------------------------------------- */
+
+  /** Says out loud which figures the range covers. The two panels above it
+   *  are all-time, and a heading that just said "Derived" would leave the
+   *  reader to work that out from the numbers. */
+  protected readonly derivedHeading = computed(() =>
+    this.store.rangeActive() ? 'Derived (selected range)' : 'Derived (all time)',
+  );
+
+  /** Trades in the window, so a figure computed on a handful is not read with
+   *  the confidence of one computed on hundreds. */
+  protected readonly sampleLabel = computed(() => {
+    const n = this.store.rangeSampleSize();
+    return `${n} closed ${n === 1 ? 'trade' : 'trades'}`;
+  });
+
+  protected onRangeFrom(event: Event): void {
+    this.store.setRange((event.target as HTMLInputElement).value || null,
+                        this.store.rangeTo());
+  }
+
+  protected onRangeTo(event: Event): void {
+    this.store.setRange(this.store.rangeFrom(),
+                        (event.target as HTMLInputElement).value || null);
+  }
+
+  /** The last point of a per-strategy walk — where that strategy ended up.
+   *  The full series is in the payload for whoever plots it; this is the
+   *  one number a list row can carry honestly. */
+  protected fmtCumulative(points: readonly { cum_pct: number }[]): string {
+    return points.length ? `${points[points.length - 1].cum_pct.toFixed(2)}%` : ABSENT;
   }
 
   /* -- cell templates --------------------------------------------------- */

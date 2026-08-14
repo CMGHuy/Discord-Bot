@@ -254,12 +254,70 @@ export interface AnalyticsSnapshot {
   r_multiples: unknown[];
 }
 
+/** A histogram bucket. Empty interior buckets are present with `count: 0` —
+ *  dropping them would let the chart silently redraw its own x-axis. */
+export interface HistogramBucket {
+  lo: number;
+  hi: number;
+  count: number;
+}
+
+/** One holding-period band. `win_rate` is null (never 0) for an empty band. */
+export interface HoldingBucket {
+  bucket: string;
+  n: number;
+  win_rate: number | null;
+  avg_return_pct: number | null;
+}
+
+/**
+ * SR54 — every figure `stats.html` used to derive in browser JS.
+ *
+ * All of it is `number | null`, and null means "not enough data", never zero.
+ * The workspace must render null as an em dash rather than coercing: a fresh
+ * account showing "Calmar 0.00" reads as a measured result, not an empty one.
+ *
+ * `win_rate` and `expectancy_r` appear BOTH here and at the top level of
+ * `AnalyticsPerformance`. That is deliberate, not duplication: the top-level
+ * pair is the account's all-time record, and this pair is scoped by the
+ * selected date range.
+ */
+export interface AnalyticsDerived {
+  avg_win_pct: number | null;
+  avg_loss_pct: number | null;
+  total_return_pct: number | null;
+  annualised_return_pct: number | null;
+  calmar: number | null;
+  volatility_ann_pct: number | null;
+  trades_per_month: number | null;
+  pct_in_market: number | null;
+  sharpe_ann: number | null;
+  sortino_ann: number | null;
+  win_rate: number | null;
+  expectancy_r: number | null;
+}
+
 export interface AnalyticsPerformance {
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
+  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   win_rate: number | null;
+  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   expectancy_r: number | null;
   by_confidence: Record<string, unknown>;
+  range: {
+    from: string | null;
+    to: string | null;
+    span_years: number | null;
+    n: number;
+  };
+  derived: AnalyticsDerived;
+  distributions: { returns: HistogramBucket[]; r_multiples: HistogramBucket[] };
+  rolling_returns: { date: string; return_pct: number }[];
+  holding_period_split: HoldingBucket[];
+  calendar: { month: string; return_pct: number; n: number }[];
+  cumulative_by_strategy: Record<string, { date: string; cum_pct: number }[]>;
+  benchmark: { spy_cum: Record<string, number> };
 }
 
 export interface AnalyticsStrategies {

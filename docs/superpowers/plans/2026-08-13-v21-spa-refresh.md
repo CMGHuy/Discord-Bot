@@ -1882,6 +1882,23 @@ a capability every other task assumes exists. SR49–SR58 have disjoint `Owns:`
 sets and may fan out. SR59–SR63 are copy-only and may run alongside anything,
 but each should land *after* the task that builds the thing it annotates.
 
+> **Frontier, derived 2026-08-14 from commits rather than from checkboxes.**
+> The boxes in this file lag reality badly — SR1–SR5 read as untouched while
+> their work is demonstrably on `main` — so the resume point was recovered by
+> mapping the 13 commits on `worktree-spa-refresh` onto tasks:
+>
+> | Commits | Tasks |
+> |---|---|
+> | `2158a3d` `9962676` `11f3335` `9e1e875` `25c5cff` | SR41–SR45, the five template audits |
+> | `699bcb4` → `492fd0a` | SR46, SR47 |
+> | `06fea6a` `364e5d6` `434d359` `91f458b` `610fcac` `51cf83c` | SR48–SR53 |
+>
+> **SR54 is done (this commit). SR55 is the next unstarted task.** The
+> SR48–SR53 boxes are left unticked deliberately: the mapping above is by
+> commit subject and scope, which is strong evidence the task landed but not
+> a step-by-step verification, and ticking on that basis is how the boxes
+> came to lie in the first place. Whoever verifies one may tick it.
+
 ---
 
 ### Task SR48: The row actions that never render
@@ -2019,12 +2036,26 @@ wire at all.
 The expensive half of the analytics gap: unlike SR50, none of these is served
 today. `stats.html` derived them all in browser JS from the raw trade list.
 
-- [ ] **Step 1: Decide where the arithmetic lives, and record it in one sentence at the top of this task.** Server, so `swingbot/core/analytics/metrics.py` stays the one definition per stat — that is a Global Constraint of the analytics code and the reason `aggregate.py` delegates every ratio. Recomputing in TypeScript would be a second definition of Sharpe.
-- [ ] **Step 2: Write the failing tests** — Python: each new figure against a fixture with a known answer, and the date-range parameter narrowing the set. Note the empty window: every metric is `None`, not `0`.
-- [ ] **Step 3: Run and watch them fail.**
-- [ ] **Step 4: Implement** the metrics in `core/analytics/metrics.py`, expose them through `/analytics/performance` with an optional range, and render. The date range is a query parameter on the workspace, for the same reason the Trades filters are.
-- [ ] **Step 5: Run** → PASS. `python scripts/testrun.py file tests/admin`, then `npx ng test`.
-- [ ] **Step 6: Commit** `feat(analytics): the derived figures`
+> **Step 1 decision (recorded 2026-08-14):** the arithmetic lives **server-side
+> in `swingbot/core/analytics/metrics.py`**, exposed through
+> `/analytics/performance?from=&to=`; the workspace renders what it is given
+> and computes no figure of its own.
+>
+> One consequence found while implementing, worth recording because it is the
+> kind of thing "one definition per stat" exists to catch: `stats.html`'s
+> Sharpe and Sortino are **annualised** (`× sqrt(252 / avg_holding_days)`)
+> while `metrics.sharpe`/`sortino` are deliberately **per-trade and
+> unannualised**. Porting the template's formula would have created a second
+> Sharpe. Instead `annualisation_factor()` is its own function, the existing
+> ratios stay untouched, and the endpoint annualises by multiplying — so
+> there remains exactly one definition of Sharpe and one of the factor.
+
+- [x] **Step 1: Decide where the arithmetic lives, and record it in one sentence at the top of this task.** Server, so `swingbot/core/analytics/metrics.py` stays the one definition per stat — that is a Global Constraint of the analytics code and the reason `aggregate.py` delegates every ratio. Recomputing in TypeScript would be a second definition of Sharpe.
+- [x] **Step 2: Write the failing tests** — Python: each new figure against a fixture with a known answer, and the date-range parameter narrowing the set. Note the empty window: every metric is `None`, not `0`.
+- [x] **Step 3: Run and watch them fail.**
+- [x] **Step 4: Implement** the metrics in `core/analytics/metrics.py`, expose them through `/analytics/performance` with an optional range, and render. The date range is a query parameter on the workspace, for the same reason the Trades filters are.
+- [x] **Step 5: Run** → PASS. `python scripts/testrun.py file tests/admin`, then `npx ng test`.
+- [x] **Step 6: Commit** `feat(analytics): the derived figures`
 
 ---
 

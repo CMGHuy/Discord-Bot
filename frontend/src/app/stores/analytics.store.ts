@@ -13,10 +13,12 @@ import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
 import {
   AnalyticsCalibration,
+  AnalyticsDerived,
   AnalyticsPerformance,
   AnalyticsSnapshot,
   AnalyticsStrategies,
 } from '../api/models';
+import { HistogramBin } from '../ui/histogram';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -178,6 +180,59 @@ export interface RelocatedMetric {
 }
 
 const PNL_METRICS = new Set(['avg_realized_pct', 'best_trade_pct', 'worst_trade_pct']);
+
+/* -- SR54: the derived figures ------------------------------------------ */
+
+/**
+ * The twelve figures `stats.html` derived in browser JS, now served.
+ *
+ * Same rationale as `RELOCATED_METRICS`: driving the render off one array
+ * makes a lost figure a visible defect rather than a card that quietly stops
+ * appearing. `decimals` is per-metric because these have genuinely different
+ * scales — a Calmar of 1.2 and a volatility of 34.6% should not be rounded
+ * the same way, and an expectancy of 0.08R disappears at one decimal.
+ */
+export const DERIVED_METRICS = [
+  { key: 'total_return_pct', label: 'Total return', unit: '%', decimals: 2, pnl: true },
+  { key: 'annualised_return_pct', label: 'Annualised', unit: '%', decimals: 2, pnl: true },
+  { key: 'avg_win_pct', label: 'Avg win', unit: '%', decimals: 2, pnl: true },
+  { key: 'avg_loss_pct', label: 'Avg loss', unit: '%', decimals: 2, pnl: true },
+  { key: 'win_rate', label: 'Win rate', unit: '%', decimals: 1, pnl: false },
+  { key: 'expectancy_r', label: 'Expectancy', unit: 'R', decimals: 3, pnl: true },
+  { key: 'sharpe_ann', label: 'Sharpe (ann)', unit: '', decimals: 2, pnl: false },
+  { key: 'sortino_ann', label: 'Sortino (ann)', unit: '', decimals: 2, pnl: false },
+  { key: 'calmar', label: 'Calmar', unit: '', decimals: 2, pnl: false },
+  { key: 'volatility_ann_pct', label: 'Volatility (ann)', unit: '%', decimals: 1, pnl: false },
+  { key: 'trades_per_month', label: 'Trades / month', unit: '', decimals: 1, pnl: false },
+  { key: 'pct_in_market', label: '% in market', unit: '%', decimals: 1, pnl: false },
+] as const satisfies readonly {
+  key: keyof AnalyticsDerived;
+  label: string;
+  unit: string;
+  decimals: number;
+  pnl: boolean;
+}[];
+
+/** One derived figure, resolved against the payload and ready to render. */
+export interface DerivedMetric {
+  key: keyof AnalyticsDerived;
+  label: string;
+  unit: string;
+  decimals: number;
+  /** Whether green/red P&L colouring applies. A Sharpe is not money. */
+  pnl: boolean;
+  value: number | null;
+}
+
+/** Every figure null — what the cards show before the first response, and
+ *  what an empty date range legitimately returns. The two look identical on
+ *  purpose: both mean "no number to show", not "the number is zero". */
+const EMPTY_DERIVED: AnalyticsDerived = {
+  avg_win_pct: null, avg_loss_pct: null, total_return_pct: null,
+  annualised_return_pct: null, calmar: null, volatility_ann_pct: null,
+  trades_per_month: null, pct_in_market: null, sharpe_ann: null,
+  sortino_ann: null, win_rate: null, expectancy_r: null,
+};
 
 /** A payload number, or null. Not `Number(value)`: the endpoint returns JSON
  *  `null` for "no closed trades yet", and coercing that to 0 would report a
@@ -381,6 +436,18 @@ interface AnalyticsSlice {
   tab: AnalyticsTab;
 
   performance: AnalyticsPerformance | null;
+  /**
+   * SR54 — the date range scoping every derived figure, as `YYYY-MM-DD` or
+   * null for unbounded.
+   *
+   * Held in the store rather than the component because it is a *fetch*
+   * parameter: changing it re-requests `/analytics/performance`. A range kept
+   * in component state would have to reach back into the store to trigger
+   * that, which is the wiring spec v14 Decision 1 pushes into the store on
+   * purpose.
+   */
+  rangeFrom: string | null;
+  rangeTo: string | null;
   /** SR50 — the pre-built blob, fetched alongside `performance`. */
   snapshot: AnalyticsSnapshot | null;
   /** Its own error: the snapshot self-heals on the server and can rebuild on
@@ -447,6 +514,8 @@ export const AnalyticsStore = signalStore(
   withState<AnalyticsSlice>({
     tab: 'performance',
     performance: null,
+    rangeFrom: null,
+    rangeTo: null,
     snapshot: null,
     snapshotError: null,
     breakdown: 'ticker',
@@ -562,6 +631,82 @@ export const AnalyticsStore = signalStore(
     winRate: computed(() => performance()?.win_rate ?? null),
     expectancyR: computed(() => performance()?.expectancy_r ?? null),
 
+    /* -- SR54: the figures that used to be derived in the browser -------- */
+
+    /**
+     * The derived block, or an all-null one before the first response.
+     *
+     * All-null rather than `null` so the KPI grid renders its cards with em
+     * dashes on first paint instead of collapsing and then reflowing when the
+     * payload lands. `DERIVED_METRICS` drives the render off this, the same
+     * pattern (and for the same auditability reason) as `RELOCATED_METRICS`.
+     */
+    derived: computed<AnalyticsDerived>(
+      () => performance()?.derived ?? EMPTY_DERIVED),
+
+    /** The derived figures resolved into render-ready rows. */
+    derivedMetrics: computed<DerivedMetric[]>(() => {
+      const block = performance()?.derived ?? EMPTY_DERIVED;
+      return DERIVED_METRICS.map((metric) => ({
+        ...metric,
+        value: block[metric.key] ?? null,
+      }));
+    }),
+
+    /** What the server says it scoped to — echoed back, not what we asked
+     *  for. If the two ever disagree the range silently did not apply, which
+     *  is exactly the failure this echo exists to make visible. */
+    appliedRange: computed(() => performance()?.range ?? null),
+
+    /** True once a bound is set, so the UI can offer "clear" and label the
+     *  section as scoped rather than all-time. */
+    rangeActive: computed(() => {
+      const range = performance()?.range;
+      return Boolean(range?.from || range?.to);
+    }),
+
+    /** Trades inside the window. Shown beside the figures because a Calmar
+     *  computed on four trades and one computed on four hundred should not
+     *  look equally authoritative. */
+    rangeSampleSize: computed(() => performance()?.range?.n ?? 0),
+
+    /** Server buckets mapped onto `sb-histogram`'s `{label, count}` contract.
+     *  The label is the bucket's LOWER edge, which is what makes the default
+     *  "starts with a minus sign means loss" predicate correct — labelling by
+     *  midpoint would mark the bucket straddling zero as a win. */
+    returnsHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.distributions?.returns ?? []).map((bucket) => ({
+        label: `${bucket.lo.toFixed(1)}%`,
+        count: bucket.count,
+      }))),
+
+    rHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.distributions?.r_multiples ?? []).map((bucket) => ({
+        label: `${bucket.lo.toFixed(2)}R`,
+        count: bucket.count,
+      }))),
+    rollingReturns: computed(() => performance()?.rolling_returns ?? []),
+    holdingSplit: computed(() => performance()?.holding_period_split ?? []),
+    calendarReturns: computed(() => performance()?.calendar ?? []),
+
+    /** `{strategy: points}` flattened into sorted series, so the chart never
+     *  iterates object keys and never redraws in a different order. */
+    cumulativeByStrategy: computed(() => {
+      const block = performance()?.cumulative_by_strategy ?? {};
+      return Object.entries(block)
+        .map(([strategy, points]) => ({ strategy, points }))
+        .sort((a, b) => a.strategy.localeCompare(b.strategy));
+    }),
+
+    /** SPY's cumulative % return, as a sorted series. Empty when the fetch
+     *  was unavailable — the benchmark overlay is best-effort by design. */
+    benchmarkSeries: computed(() => {
+      const block = performance()?.benchmark?.spy_cum ?? {};
+      return Object.entries(block)
+        .map(([date, pct]) => ({ date, pct }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }),
+
     totals: computed(() => {
       const block = performance()?.totals as Record<string, unknown> | undefined;
       return {
@@ -662,11 +807,14 @@ export const AnalyticsStore = signalStore(
 
     const loadPerformance = (): void => {
       patchState(store, { loading: true });
-      api.analyticsPerformance().subscribe({
-        next: (performance) =>
-          patchState(store, { performance, loading: false, error: null }),
-        error: fail,
-      });
+      // SR54: the range travels to the server. See ApiClient.analyticsPerformance
+      // for why it cannot be applied to an all-time payload on the client.
+      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() })
+        .subscribe({
+          next: (performance) =>
+            patchState(store, { performance, loading: false, error: null }),
+          error: fail,
+        });
 
       // SR50. A second request rather than a widened /analytics/performance:
       // the snapshot is a whole pre-built blob served by its own endpoint, and
@@ -799,6 +947,30 @@ export const AnalyticsStore = signalStore(
        *  the one snapshot — so there is no request for the URL to describe. */
       setBreakdown(breakdown: BreakdownDimension): void {
         patchState(store, { breakdown });
+      },
+
+      /**
+       * SR54 — set the analytics date range and refetch.
+       *
+       * Unlike `setBreakdown` this DOES refetch, because the arithmetic lives
+       * on the server. Both bounds are set together in one call so a user
+       * picking a range never triggers two requests, the second of which
+       * would race the first and could land older numbers last.
+       *
+       * An out-of-order pair is normalised rather than rejected: a date picker
+       * mid-edit legitimately passes through `from > to`, and refusing it
+       * would surface an error for a state the user is about to fix anyway.
+       */
+      setRange(from: string | null, to: string | null): void {
+        const [lo, hi] = from && to && from > to ? [to, from] : [from, to];
+        patchState(store, { rangeFrom: lo || null, rangeTo: hi || null });
+        loadPerformance();
+      },
+
+      /** Back to all-time. */
+      clearRange(): void {
+        patchState(store, { rangeFrom: null, rangeTo: null });
+        loadPerformance();
       },
 
       load,

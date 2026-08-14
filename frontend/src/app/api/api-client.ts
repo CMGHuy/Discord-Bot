@@ -157,8 +157,22 @@ export class ApiClient {
     return this.http.get<AnalyticsSnapshot>(`${this.base}/analytics/snapshot`);
   }
 
-  analyticsPerformance(): Observable<AnalyticsPerformance> {
-    return this.http.get<AnalyticsPerformance>(`${this.base}/analytics/performance`);
+  /**
+   * SR54 — the range is a query parameter, for the same reason the Trades
+   * filters are: it has to reach the arithmetic. A range applied client-side
+   * to an all-time payload would scope the charts and leave every KPI card
+   * reading all-time, which is worse than no range control at all.
+   *
+   * An omitted bound is omitted from the URL rather than sent empty, so the
+   * server sees "unbounded" instead of having to treat `''` as unset.
+   */
+  analyticsPerformance(range?: { from?: string | null; to?: string | null }):
+    Observable<AnalyticsPerformance> {
+    let params = new HttpParams();
+    if (range?.from) params = params.set('from', range.from);
+    if (range?.to) params = params.set('to', range.to);
+    return this.http.get<AnalyticsPerformance>(
+      `${this.base}/analytics/performance`, { params });
   }
 
   analyticsStrategies(): Observable<AnalyticsStrategies> {
