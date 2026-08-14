@@ -129,6 +129,26 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+#: Job ids this PROCESS has a live watcher thread for.
+#:
+#: `_reap_stale` exists for jobs orphaned by an admin RESTART -- their watcher
+#: died with the old process, so nothing will ever record their result. It must
+#: not touch a job this process is still watching, and it used to: a job whose
+#: child had exited but whose watcher had not yet taken the lock looked
+#: identical to an orphan (state "running", pid dead), so a poll landing in
+#: that window wrote state="failed", returncode=None over a job that had in
+#: fact succeeded. `status()` reaps on every call, so a 50ms poll loop hit it
+#: readily, and a fast job -- the common case for a small grid -- was the most
+#: exposed. It surfaced as a flaky test; it was a real wrong verdict in the
+#: Tuning UI.
+#:
+#: Module-level rather than per-instance because `JobManager()` is constructed
+#: freely (the admin uses a singleton, tests build their own) and the set has
+#: to describe the PROCESS, not one manager object.
+_WATCHED: set[str] = set()
+_WATCHED_LOCK = threading.Lock()
+
+
 class JobManager:
     def __init__(self):
         self._lock = threading.Lock()
@@ -136,14 +156,28 @@ class JobManager:
     def _any_active(self, jobs: dict) -> bool:
         for job in jobs.values():
             if job["state"] in ("queued", "running"):
+                # Still being watched by this process: its child may have
+                # exited a moment ago, but the result is not recorded yet and
+                # it is emphatically not free to be replaced.
+                with _WATCHED_LOCK:
+                    watched = job["id"] in _WATCHED
+                if watched:
+                    return True
                 if job.get("pid") and not _pid_alive(job["pid"]):
-                    continue  # stale -- _reap_stale will mark it failed
+                    continue  # orphaned -- _reap_stale will mark it failed
                 return True
         return False
 
     def _reap_stale(self, jobs: dict) -> None:
+        """Mark ORPHANED jobs failed -- ones whose watcher died with a previous
+        process. A job this process is still watching is never reaped: see
+        `_WATCHED`."""
         changed = False
+        with _WATCHED_LOCK:
+            watched = set(_WATCHED)
         for job in jobs.values():
+            if job["id"] in watched:
+                continue
             if job["state"] in ("queued", "running") and job.get("pid") and not _pid_alive(job["pid"]):
                 job["state"] = "failed"
                 job["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -183,18 +217,31 @@ class JobManager:
                 "started_at": datetime.now(timezone.utc).isoformat(), "finished_at": None,
                 "returncode": None, "log_path": log_path, "pid": proc.pid, "result_path": result_path,
             }
+            # Registered BEFORE the record is published, so there is no
+            # instant where another thread can see a running job with no
+            # watcher and reap it.
+            with _WATCHED_LOCK:
+                _WATCHED.add(job_id)
             _write_jobs(jobs)
 
             def _watch():
-                proc.wait()
-                logfile.close()
-                with self._lock:
-                    j = _read_jobs()
-                    if job_id in j:
-                        j[job_id]["state"] = "done" if proc.returncode == 0 else "failed"
-                        j[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
-                        j[job_id]["returncode"] = proc.returncode
-                        _write_jobs(j)
+                try:
+                    proc.wait()
+                    logfile.close()
+                    with self._lock:
+                        j = _read_jobs()
+                        if job_id in j:
+                            j[job_id]["state"] = "done" if proc.returncode == 0 else "failed"
+                            j[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                            j[job_id]["returncode"] = proc.returncode
+                            _write_jobs(j)
+                finally:
+                    # In a finally: if this thread dies unexpectedly the job
+                    # must become reapable again, or it would sit "running"
+                    # for the life of the process with nothing able to
+                    # correct it.
+                    with _WATCHED_LOCK:
+                        _WATCHED.discard(job_id)
 
             threading.Thread(target=_watch, daemon=True).start()
             return job_id

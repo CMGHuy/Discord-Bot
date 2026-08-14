@@ -67,8 +67,8 @@ The wrapper prints exactly one of:
 - `VERDICT: UNKNOWN` — the output could not be parsed. A tooling problem, and
   **never** to be read as success. Investigate the wrapper or the exit code.
 
-Reference baseline: **1828 passed, 136 skipped, 0 xfailed, 0 failed** (1152
-collected). The pass count drifts upward as tasks land tests and concurrent
+Reference baseline: **1686 passed, 66 skipped, 0 xfailed, 0 failed**
+(1752 collected). The pass count drifts upward as tasks land tests and concurrent
 sessions commit — a changed pass count is not itself a failure. `0 failed` is
 the check. An `xpass` on the quarantined test is also fine.
 

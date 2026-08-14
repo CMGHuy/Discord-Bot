@@ -85,7 +85,7 @@ make up / make logs / make restart         # docker compose lifecycle
 ```
 
 **Green means `0 failed`, and now also `0 xfailed`.** Reference baseline:
-`1680 passed, 66 skipped, 0 failed`.
+`1686 passed, 66 skipped, 0 failed`.
 
 **That count dropped from 1898 on 2026-08-14 and the drop is correct**, not
 lost coverage: Release B deleted the Jinja UI, and with it the tests whose

@@ -12,6 +12,16 @@ import time
 import pytest
 
 
+def _certainly_dead_pid() -> int:
+    """A pid that is not running. Spawn a trivial process and reap it, so the
+    number is real and definitely finished -- inventing a large integer risks
+    colliding with a live process on a busy machine."""
+    import subprocess, sys
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    return proc.pid
+
+
 def _wait_until_done(mgr, job_id, timeout=5.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -30,6 +40,103 @@ def test_job_runs_and_tail_captures_output(admin_app):
     assert status["state"] == "done"
     assert status["returncode"] == 0
     assert "hi" in mgr.tail(job_id)
+
+
+def test_a_finished_job_is_never_reaped_as_failed(admin_app):
+    """The race that made this file flaky, pinned deterministically.
+
+    `_reap_stale` marks jobs failed when their pid is dead while their state
+    still says running -- correct for a job orphaned by an admin restart, and
+    wrong for one whose watcher simply has not taken the lock yet. `status()`
+    reaps on every call, so a poll landing in that window turned a successful
+    job into `state="failed", returncode=None`.
+
+    Reproduced without timing luck: publish a running job whose pid is
+    certainly dead, with the job registered as watched, and reap. It must
+    survive. This is what the flaky
+    `test_job_runs_and_tail_captures_output` was hitting by chance under
+    `-n 4`, where the watcher thread is scheduled later.
+    """
+    from swingbot.admin import jobs as jobs_mod
+
+    mgr = jobs_mod.JobManager()
+    dead_pid = _certainly_dead_pid()
+    record = {
+        "id": "watched01", "kind": "test", "args": [], "state": "running",
+        "started_at": "2026-08-14T00:00:00+00:00", "finished_at": None,
+        "returncode": None, "log_path": "x.log", "pid": dead_pid,
+        "result_path": None,
+    }
+
+    with jobs_mod._WATCHED_LOCK:
+        jobs_mod._WATCHED.add("watched01")
+    try:
+        table = {"watched01": dict(record)}
+        mgr._reap_stale(table)
+        assert table["watched01"]["state"] == "running", (
+            "a job this process is still watching was reaped as failed"
+        )
+    finally:
+        with jobs_mod._WATCHED_LOCK:
+            jobs_mod._WATCHED.discard("watched01")
+
+
+def test_an_orphaned_job_is_still_reaped(admin_app):
+    """The other half: without this, the fix above would be "never reap", and
+    a job orphaned by an admin restart would sit `running` for ever with
+    nothing able to correct it -- and `_any_active` would refuse every new
+    job because one is perpetually "in progress"."""
+    from swingbot.admin import jobs as jobs_mod
+
+    mgr = jobs_mod.JobManager()
+    table = {"orphan01": {
+        "id": "orphan01", "kind": "test", "args": [], "state": "running",
+        "started_at": "2026-08-14T00:00:00+00:00", "finished_at": None,
+        "returncode": None, "log_path": "x.log", "pid": _certainly_dead_pid(),
+        "result_path": None,
+    }}
+
+    mgr._reap_stale(table)
+
+    assert table["orphan01"]["state"] == "failed"
+    assert table["orphan01"]["finished_at"] is not None
+
+
+def test_a_watched_job_still_blocks_a_second_start(admin_app):
+    """`_any_active` skipped pid-dead running jobs on the assumption the
+    reaper would clean them up. For a watched job that is wrong in the other
+    direction: its result is not recorded yet, so it is still the active job
+    and must keep the single-job lock."""
+    from swingbot.admin import jobs as jobs_mod
+
+    mgr = jobs_mod.JobManager()
+    with jobs_mod._WATCHED_LOCK:
+        jobs_mod._WATCHED.add("watched02")
+    try:
+        table = {"watched02": {
+            "id": "watched02", "kind": "test", "args": [], "state": "running",
+            "started_at": "2026-08-14T00:00:00+00:00", "finished_at": None,
+            "returncode": None, "log_path": "x.log",
+            "pid": _certainly_dead_pid(), "result_path": None,
+        }}
+        assert mgr._any_active(table) is True
+    finally:
+        with jobs_mod._WATCHED_LOCK:
+            jobs_mod._WATCHED.discard("watched02")
+
+
+def test_a_fast_job_reports_done_every_time(admin_app):
+    """The original flake, made deliberate: a job that finishes almost
+    immediately is exactly the one the reaper used to beat, so run it enough
+    times that the old race would show."""
+    from swingbot.admin.jobs import JobManager
+
+    for attempt in range(8):
+        mgr = JobManager()
+        job_id = mgr.start("test", ["-c", "print('hi')"])
+        status = _wait_until_done(mgr, job_id)
+        assert status["state"] == "done", f"attempt {attempt}: {status}"
+        assert status["returncode"] == 0
 
 
 def test_concurrent_start_raises_while_busy(admin_app):
