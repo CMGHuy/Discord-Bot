@@ -256,7 +256,10 @@ jobs:
 
       - name: Auth gate — wrong Basic Auth credentials must still return 401
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u "ci:wrong-password" http://localhost:1234/)
+          # Against the API, not "/": Release B opened the front door so the
+          # SPA can render its own login form, so "/" answers 302 for anyone.
+          # The credential check belongs where the DATA is.
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u "ci:wrong-password" http://localhost:1234/api/v1/dashboard)
           if [ "$STATUS" != "401" ]; then
             echo "FAIL: expected HTTP 401 with wrong Basic Auth credentials, got HTTP $STATUS"
             exit 1
@@ -282,17 +285,20 @@ jobs:
             fi
           }
 
-          # `/` is NOT 200 any more. Since NG53 the front door is behind the
-          # ADMIN_UI flag, which defaults to spa, and the image now contains a
-          # built bundle -- so `/` redirects to /cockpit. This step asserted
-          # 200 and would have failed every build, blocking every deploy. The
-          # redirect itself is checked by the SPA smoke test below; the
-          # dashboard keeps its own URL, which is what is checked here.
-          check "http://localhost:1234/dashboard"   "200" "jinja dashboard"
-          check "http://localhost:1234/performance" "200" "performance / stats"
-          check "http://localhost:1234/logs"        "200" "logs"
-          check "http://localhost:1234/settings"    "200" "settings"
-          check "http://localhost:1234/watchlist"   "200" "watchlist"
+          # `/` is NOT 200: it redirects to the SPA's default workspace, and
+          # the redirect is checked by the SPA smoke test below.
+          #
+          # Release B: /performance, /logs and /settings were Jinja pages and
+          # are 404 now. These are the SPA's six workspaces -- every one is a
+          # real server route (spa.py registers them so a bookmark or a hard
+          # reload resolves before Angular loads), so 200 here means the
+          # bundle is actually being served for each of them.
+          check "http://localhost:1234/dashboard" "200" "dashboard"
+          check "http://localhost:1234/trades"    "200" "trades"
+          check "http://localhost:1234/analytics" "200" "analytics"
+          check "http://localhost:1234/risk"      "200" "risk"
+          check "http://localhost:1234/watchlist" "200" "watchlist"
+          check "http://localhost:1234/system"    "200" "system"
 
           if [ -n "$FAILED" ]; then
             echo ""
