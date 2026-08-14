@@ -56,6 +56,9 @@ Referenced from the root `CLAUDE.md`.
   different product is a minor. See "What a spec's `Bump:` line is for".
 - **Every spec states which of its tasks can run in parallel**, in a
   `## Parallelisation` section. See "Saying what is parallelisable".
+- **Specs and plans have a length budget** — a spec fits in one read, a plan
+  splits into `_N` parts before it becomes a context landmine. See "How long a
+  document may be".
 ## Versioning: when to bump `VERSION.json`
 
 `VERSION.json` carries **two independent version lines**, `ui` and `bot`, and
@@ -185,6 +188,70 @@ release date: it moves on every deploy, including deploys that bump nothing.
   agent worktree) are full repo copies. Check `git worktree list` before
   assuming a stray path is dead. Never edit files there from a main-tree
   session — you will be editing a different branch.
+
+## How long a document may be
+
+Every session that opens a plan pays for it in context. `CLAUDE.md`'s first
+section exists because three documents in this repo grew past the point where
+reading one is affordable at all — `v3-cockpit` at 652 KB is roughly 170K
+tokens, more than a whole context window for a single file.
+
+**The budget:**
+
+| Document | Budget | Hard limit |
+|---|---|---|
+| Spec | ~350 lines / 20 KB | 500 lines — a spec is read **whole** |
+| Plan | ~15 tasks / 60 KB | 30 tasks or 120 KB, whichever comes first |
+
+Over the limit, **split — do not compress.**
+
+### Why splitting, and not writing less
+
+The measurement that decides this, taken across every plan the repo has:
+
+| Plan | Size | Tasks | Per task |
+|---|---|---|---|
+| `v24-control-alignment` | 48 KB | 14 | 3.4 KB |
+| `v21-spa-refresh` | 136 KB | 51 | 2.7 KB |
+| `v2-unified-plan-engine` | 300 KB | 110 | 2.7 KB |
+| `v3-cockpit` | 652 KB | 115 | 5.7 KB |
+
+Cost per task is near-constant at 2.7–5.7 KB, in the tight plans and the
+landmines alike. **The landmines are not verbose, they are long** — 652 KB is
+115 tasks in one file. So trimming prose inside tasks buys almost nothing, and
+buys it at the worst possible price: `superpowers:writing-plans` requires real
+test code, real implementation code and exact file paths in every task, and a
+task thinned to hit a byte target becomes the "add appropriate error handling"
+placeholder that skill exists to forbid. A vague task costs the *executing*
+session far more than the bytes saved.
+
+So the lever is the number of tasks in one file, never the completeness of one
+task.
+
+### Splitting
+
+Reuse the parent's number with a `_N` part suffix — that is what the suffix is
+for, and `v6-gatekeeper_0-index` … `_11` is the worked example: one document,
+one number, twelve files, each 25–30 tasks. Write a `_0-index` part carrying the
+header block, the goal, the global constraints, the parallelisation map and a
+table of what lives in each part; put the phases in the numbered parts.
+
+A spec over budget usually is not one spec. Before splitting it, check whether
+it is really two subjects sharing a document — `v22` and `v23` were separated
+during their own brainstorm for exactly this reason. Decompose first; split
+only what genuinely cannot be decomposed.
+
+### Being greppable is the other half
+
+A plan is **never read whole** — `/task-brief E53` and
+`grep -n "^### Task E53" -A 120` pull one task. That only works if the document
+is mechanically addressable, so both forms are mandatory regardless of length:
+
+- `### Task N: <name>` — one line, no variations, no prose before the colon.
+- `## Phase N — <name>` for phase boundaries.
+
+`grep -c "^### Task"` and `grep -n "^# Phase"` are how a session orients without
+loading the file, and a plan whose headers drift breaks both.
 
 ## Saying what is parallelisable
 
