@@ -131,10 +131,36 @@ describe('AnalyticsStore', () => {
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
 
-  const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) =>
+  /** The smallest snapshot the store will accept. Deliberately minimal — this
+   *  file is about which requests go out for which tab, not about the blob. */
+  const SNAPSHOT = {
+    built_at: '2026-08-14T06:00:00Z',
+    overall: {},
+    equity_curve: { points: [] },
+    drawdown: [],
+    rolling_wr: [],
+    by: {},
+    calibration: {},
+    r_multiples: [],
+  };
+
+  /**
+   * The Performance tab makes TWO requests, not one.
+   *
+   * SR50 added `/analytics/snapshot` beside it: the snapshot is a whole
+   * pre-built blob with its own endpoint, and folding it into the summary
+   * response would make every visit carry the equity curve whether or not the
+   * panels reading it are on screen. Both are settled here so the
+   * `backend.verify()` assertions below still mean "nothing ELSE went out".
+   *
+   * The snapshot's own contents are exercised in `analytics.snapshot.spec.ts`.
+   */
+  const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
       .expectOne('/api/v1/analytics/performance')
       .flush({ ...PERFORMANCE, ...body });
+    backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+  };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
     backend.expectOne('/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
@@ -485,12 +511,20 @@ describe('AnalyticsStore', () => {
     backend
       .expectOne('/api/v1/analytics/performance')
       .error(new ProgressEvent('error'), { status: 0 });
+    // The snapshot goes out alongside it (SR50) and fails with it here. Left
+    // outstanding it would still be pending on the refetch below, and the
+    // second expectOne would match two requests rather than one.
+    backend
+      .expectOne('/api/v1/analytics/snapshot')
+      .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
+    expect(store.snapshotError()).not.toBeNull();
 
     events.raise('analytics');
     tick();
     respondPerformance();
 
     expect(store.error()).toBeNull();
+    expect(store.snapshotError()).toBeNull();
   });
 });

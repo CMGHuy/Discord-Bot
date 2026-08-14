@@ -11,7 +11,12 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { AnalyticsCalibration, AnalyticsPerformance, AnalyticsStrategies } from '../api/models';
+import {
+  AnalyticsCalibration,
+  AnalyticsPerformance,
+  AnalyticsSnapshot,
+  AnalyticsStrategies,
+} from '../api/models';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -196,12 +201,150 @@ export const ANALYTICS_TABS: readonly AnalyticsTab[] = [
   'tuning',
 ] as const;
 
+/* -- the snapshot (SR50) --------------------------------------------------
+ *
+ * `GET /analytics/snapshot` forwards the whole pre-built analytics blob, and
+ * it already carries every figure `stats.html` charted: profit factor, Sharpe,
+ * Sortino, max drawdown, streaks, the equity and drawdown series, R-multiples,
+ * and a `by` block grouped along ten dimensions. `ApiClient.analyticsSnapshot()`
+ * existed and no store called it, so the parity audit found seventeen "missing"
+ * analytics rows whose data was being served the whole time.
+ *
+ * Narrowed here rather than in a template, and every narrower returns null
+ * rather than 0 for anything it cannot read — `ui/format.ts`'s rule, and the
+ * difference between "we don't know" and "it is zero" on a Sharpe ratio.
+ */
+
+/** One `StatRow` out of the `by` block (`aggregate.py:47-57`). */
+export interface BreakdownRow {
+  key: string;
+  n: number | null;
+  wins: number | null;
+  losses: number | null;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  avg_r: number | null;
+  profit_factor: number | null;
+  total_pnl: number | null;
+}
+
+export interface SeriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface Streaks {
+  current: number | null;
+  currentKind: string | null;
+  bestWin: number | null;
+  worstLoss: number | null;
+}
+
+/** The dimensions the Breakdowns table can group by, in the order they are
+ *  offered. A subset of `aggregate.py:DIMENSIONS`: `strategy` has the whole
+ *  Strategies tab and `confidence` has its own table on this one, so offering
+ *  them here as well would be three views of one number. */
+export const BREAKDOWN_DIMENSIONS = [
+  { value: 'ticker', label: 'Ticker' },
+  { value: 'horizon', label: 'Horizon' },
+  { value: 'direction', label: 'Direction' },
+  { value: 'dow', label: 'Day of week' },
+  { value: 'month', label: 'Month' },
+  { value: 'tier', label: 'Tier' },
+  { value: 'badge', label: 'Badge' },
+  { value: 'source', label: 'Source' },
+] as const;
+
+export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number]['value'];
+
+function snapNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function snapText(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** `{date, balance}` / `{date, dd_pct}` points, flattened to one shape. A point
+ *  missing either half is dropped: a gap in a series is not a zero, and
+ *  drawing it as one invents a crash that never happened. */
+function toSeries(raw: unknown[], valueKey: string): SeriesPoint[] {
+  return raw.flatMap((point) => {
+    if (!isPlainRecord(point)) return [];
+    const date = snapText(point['date']);
+    const value = snapNumber(point[valueKey]);
+    return date !== null && value !== null ? [{ date, value }] : [];
+  });
+}
+
+function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
+  return raw.flatMap((row) => {
+    if (!isPlainRecord(row)) return [];
+    const key = snapText(row['key']);
+    if (key === null) return [];
+    return [{
+      key,
+      n: snapNumber(row['n']),
+      wins: snapNumber(row['wins']),
+      losses: snapNumber(row['losses']),
+      win_rate: snapNumber(row['win_rate']),
+      expectancy_r: snapNumber(row['expectancy_r']),
+      avg_r: snapNumber(row['avg_r']),
+      profit_factor: snapNumber(row['profit_factor']),
+      total_pnl: snapNumber(row['total_pnl']),
+    }];
+  });
+}
+
+/** One histogram bin. */
+export interface Bin {
+  label: string;
+  count: number;
+}
+
+/**
+ * R-multiples binned at 0.5R.
+ *
+ * Bins rather than the raw list because the shape is the point: a healthy edge
+ * is a cluster of small losses and a tail of larger wins, and that is a
+ * statement about a distribution, not about any one trade. Clamped at ±5R so a
+ * single outlier cannot flatten every other bin to invisibility.
+ */
+export function binRMultiples(values: number[], width = 0.5): Bin[] {
+  if (!values.length) return [];
+  const LIMIT = 5;
+  const counts = new Map<number, number>();
+  for (const value of values) {
+    const clamped = Math.max(-LIMIT, Math.min(LIMIT, value));
+    const bin = Math.floor(clamped / width) * width;
+    counts.set(bin, (counts.get(bin) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([bin, count]) => ({
+      label: `${bin > 0 ? '+' : ''}${bin.toFixed(1)}R`,
+      count,
+    }));
+}
+
 interface AnalyticsSlice {
   /** Which tab is open, projected from the URL's `?tab=`. Held here rather
    *  than in the component because it decides what gets fetched. */
   tab: AnalyticsTab;
 
   performance: AnalyticsPerformance | null;
+  /** SR50 — the pre-built blob, fetched alongside `performance`. */
+  snapshot: AnalyticsSnapshot | null;
+  /** Its own error: the snapshot self-heals on the server and can rebuild on
+   *  the request, so a failure here is not a reason to warn about the rest of
+   *  the tab, which came from a different endpoint that may be fine. */
+  snapshotError: string | null;
+  /** Which dimension the Breakdowns table is grouped by. */
+  breakdown: BreakdownDimension;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
   jobs: JobSummary[];
@@ -249,6 +392,9 @@ export const AnalyticsStore = signalStore(
   withState<AnalyticsSlice>({
     tab: 'performance',
     performance: null,
+    snapshot: null,
+    snapshotError: null,
+    breakdown: 'ticker',
     strategies: null,
     calibration: null,
     jobs: [],
@@ -260,7 +406,65 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, jobs, job }) => ({
+  withComputed(({ performance, strategies, calibration, jobs, job, snapshot, breakdown }) => ({
+    /* -- SR50: the snapshot's own figures ------------------------------- */
+
+    /** When the blob was assembled. Worth showing: the server serves a
+     *  snapshot up to an hour old and rebuilds on demand past that, so "these
+     *  numbers are from 09:15" is a real thing to know. */
+    snapshotBuiltAt: computed(() => snapText(snapshot()?.built_at)),
+
+    profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
+    sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
+    sortino: computed(() => snapNumber(snapshot()?.overall?.['sortino'])),
+    maxDrawdownPct: computed(() => snapNumber(snapshot()?.overall?.['max_drawdown_pct'])),
+    totalPnl: computed(() => snapNumber(snapshot()?.overall?.['total_pnl'])),
+
+    /** Current run, and the best and worst ever. Never rendered even by the
+     *  Jinja page, which computed them and dropped them on the floor. */
+    streaks: computed<Streaks | null>(() => {
+      const raw = snapshot()?.overall?.['streaks'];
+      if (!isPlainRecord(raw)) return null;
+      return {
+        current: snapNumber(raw['current']),
+        currentKind: snapText(raw['current_kind']),
+        bestWin: snapNumber(raw['best_win_streak']),
+        worstLoss: snapNumber(raw['worst_loss_streak']),
+      };
+    }),
+
+    /** The account balance over time — the series behind the Dashboard's
+     *  30-day sparkline, in full and in account currency. */
+    equitySeries: computed<SeriesPoint[]>(() =>
+      toSeries((snapshot()?.equity_curve?.points ?? []) as unknown[], 'balance'),
+    ),
+
+    /** How far below its own peak the account sat at each point. */
+    drawdownSeries: computed<SeriesPoint[]>(() =>
+      toSeries((snapshot()?.drawdown ?? []) as unknown[], 'dd_pct'),
+    ),
+
+    rMultipleBins: computed<Bin[]>(() =>
+      binRMultiples(
+        ((snapshot()?.r_multiples ?? []) as unknown[])
+          .map(snapNumber)
+          .filter((value): value is number => value !== null),
+      ),
+    ),
+
+    /** The chosen dimension's rows, busiest group first — `stats_by` already
+     *  sorts by trade count descending, which is the order every table in this
+     *  cockpit wants. */
+    breakdownRows: computed<BreakdownRow[]>(() =>
+      toBreakdownRows((snapshot()?.by?.[breakdown()] ?? []) as unknown[]),
+    ),
+
+    breakdownLabel: computed(
+      () =>
+        BREAKDOWN_DIMENSIONS.find((d) => d.value === breakdown())?.label ??
+        breakdown(),
+    ),
+
     /* -- performance --------------------------------------------------- */
 
     /**
@@ -403,6 +607,22 @@ export const AnalyticsStore = signalStore(
           patchState(store, { performance, loading: false, error: null }),
         error: fail,
       });
+
+      // SR50. A second request rather than a widened /analytics/performance:
+      // the snapshot is a whole pre-built blob served by its own endpoint, and
+      // folding it into the summary response would make every Performance
+      // visit carry the equity curve whether or not the panels using it are on
+      // screen. It fails on its own terms -- see `snapshotError`.
+      api.analyticsSnapshot().subscribe({
+        next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            snapshotError:
+              error.code === 'unavailable'
+                ? 'The admin is not responding.'
+                : error.message,
+          }),
+      });
     };
 
     const loadStrategies = (): void => {
@@ -496,6 +716,13 @@ export const AnalyticsStore = signalStore(
       /** The one way the tab arrives, and it comes from the URL. */
       setTab(tab: AnalyticsTab): void {
         patchState(store, { tab });
+      },
+
+      /** Which dimension the Breakdowns table groups by. Local state, not a
+       *  query parameter: it refetches nothing — every dimension is already in
+       *  the one snapshot — so there is no request for the URL to describe. */
+      setBreakdown(breakdown: BreakdownDimension): void {
+        patchState(store, { breakdown });
       },
 
       load,

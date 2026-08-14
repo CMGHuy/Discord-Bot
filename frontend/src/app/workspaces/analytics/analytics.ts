@@ -15,10 +15,14 @@ import {
   ANALYTICS_TABS,
   AnalyticsStore,
   AnalyticsTab,
+  BREAKDOWN_DIMENSIONS,
+  BreakdownDimension,
+  BreakdownRow,
   DriftRow,
   HeatmapCell,
   JobStatus,
   ProposalRow,
+  Streaks,
   StrategyRow,
   TierRow,
 } from '../../stores/analytics.store';
@@ -28,12 +32,13 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { Select } from '../../ui/form-controls';
-import { ABSENT, dateTime } from '../../ui/format';
+import { ABSENT, date, dateTime } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
 import {
   CONFIDENCE_COLUMNS,
+  breakdownColumns,
   DECILE_COLUMNS,
   DRIFT_COLUMNS,
   STRATEGY_COLUMNS,
@@ -161,6 +166,107 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
+             the server has been building and serving all along. -->
+        @if (store.snapshotError(); as message) {
+          <!-- Its own line, not the tab-wide error: the panels above came from
+               a different endpoint and are not implicated. -->
+          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
+        }
+
+        <div class="panels">
+          <sb-panel heading="Risk-adjusted">
+            <div class="chips">
+              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
+              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
+              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
+              <!-- Max drawdown is always a loss, and always reported positive
+                   by the server. Amber, not red: it is the cost of the track
+                   record, not a loss happening now. -->
+              <sb-metric-chip
+                label="Max drawdown"
+                [value]="store.maxDrawdownPct()"
+                unit="%"
+                [decimals]="1"
+                tone="caution"
+              />
+              <sb-metric-chip
+                label="Total P&L"
+                [value]="store.totalPnl()"
+                tone="pnl"
+                unit=" USD"
+              />
+            </div>
+          </sb-panel>
+
+          @if (store.streaks(); as streaks) {
+            <sb-panel heading="Streaks">
+              <dl>
+                <div>
+                  <dt>Current</dt>
+                  <dd class="num">{{ currentStreak(streaks) }}</dd>
+                </div>
+                <div>
+                  <dt>Best win run</dt>
+                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
+                </div>
+                <div>
+                  <dt>Worst loss run</dt>
+                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
+                </div>
+              </dl>
+            </sb-panel>
+          }
+        </div>
+
+        @if (store.equitySeries().length) {
+          <div class="panels">
+            <sb-panel heading="Account balance">
+              <sb-sparkline
+                [points]="equityPoints()"
+                label="Account balance over the whole record"
+              />
+              <p class="series-note">
+                {{ store.equitySeries().length }} points ·
+                {{ seriesRange(store.equitySeries()) }}
+              </p>
+            </sb-panel>
+
+            <sb-panel heading="Drawdown">
+              <sb-sparkline
+                [points]="drawdownPoints()"
+                label="Percentage below the running peak balance"
+              />
+              <p class="series-note">
+                Peak-to-trough, as a share of the running high. Higher is worse.
+              </p>
+            </sb-panel>
+          </div>
+        }
+
+        @if (store.rMultipleBins().length) {
+          <sb-panel heading="R-multiple distribution">
+            <!-- Bars, not a pie and not a line: this is a distribution, and
+                 the shape IS the finding -- a healthy edge is a cluster of
+                 small losses with a tail of larger wins. -->
+            <ul class="histogram">
+              @for (bin of store.rMultipleBins(); track bin.label) {
+                <li>
+                  <span class="bin-label num">{{ bin.label }}</span>
+                  <span class="bin-track">
+                    <span
+                      class="bin-fill"
+                      [class.loss]="bin.label.startsWith('-')"
+                      [style.width.%]="binWidth(bin.count)"
+                    ></span>
+                  </span>
+                  <span class="bin-count num">{{ bin.count }}</span>
+                </li>
+              }
+            </ul>
+          </sb-panel>
+        }
+
         <sb-panel heading="By confidence level" [flush]="true">
           <sb-data-table
             [rows]="store.byConfidence()"
@@ -169,6 +275,29 @@ interface ProposalView extends ProposalRow {
             [rowKey]="confidenceKey"
             [loading]="store.loading()"
             [emptyState]="confidenceEmpty"
+          />
+        </sb-panel>
+
+        <sb-panel [heading]="'By ' + store.breakdownLabel().toLowerCase()" [flush]="true">
+          <!-- One table with a dimension picker rather than eight tables. The
+               Jinja page had three of these plus seven pie charts over the
+               same by-dimension block; the picker says outright they are one
+               question asked eight ways. -->
+          <div panel-actions class="dimension">
+            <sb-select
+              label="Group by"
+              [value]="store.breakdown()"
+              [options]="dimensions"
+              (valueChange)="onBreakdown($event)"
+            />
+          </div>
+          <sb-data-table
+            [rows]="store.breakdownRows()"
+            [columns]="breakdownColumns()"
+            [visible]="breakdownKeys"
+            [rowKey]="breakdownKey"
+            [loading]="store.loading()"
+            [emptyState]="breakdownEmpty()"
           />
         </sb-panel>
       }
@@ -481,6 +610,52 @@ interface ProposalView extends ProposalRow {
     }
 
     dl { display: grid; gap: var(--space-6); }
+
+    /* -- SR50: the snapshot's panels ------------------------------------ */
+
+    .series-note {
+      margin-top: var(--space-6);
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+    }
+    .dimension { min-width: 160px; }
+
+    /* A horizontal histogram, because the bin labels are the axis and a
+       vertical one would set them on their side. One row per bin, the bar
+       scaled against the tallest bin so a long tail stays visible. */
+    .histogram {
+      display: grid;
+      gap: 2px;
+      list-style: none;
+    }
+    .histogram li {
+      display: grid;
+      grid-template-columns: 4rem 1fr 2.5rem;
+      align-items: center;
+      gap: var(--space-8);
+    }
+    .bin-label,
+    .bin-count {
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+    .bin-count { text-align: right; }
+    .bin-track {
+      height: 10px;
+      background: var(--bg);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .bin-fill {
+      display: block;
+      height: 100%;
+      /* Wins and losses are P&L direction, the one place the green/red pair
+         is allowed. The label carries the sign too, so the colour is not
+         doing the work alone. */
+      background: var(--pos);
+      border-radius: 2px;
+    }
+    .bin-fill.loss { background: var(--neg); }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
@@ -667,6 +842,62 @@ export class Analytics {
     title: 'No trades to break down',
     hint: 'Levels appear once trades have been logged against them.',
   };
+
+  /* -- SR50: the snapshot's panels ------------------------------------- */
+
+  protected readonly dimensions = BREAKDOWN_DIMENSIONS.map((d) => ({
+    value: d.value,
+    label: d.label,
+  }));
+
+  protected readonly breakdownColumns = computed(() =>
+    breakdownColumns(this.store.breakdownLabel()),
+  );
+  protected readonly breakdownKeys = allKeys(breakdownColumns(''));
+  protected readonly breakdownKey = (row: BreakdownRow) => row.key;
+
+  protected readonly breakdownEmpty = computed(() => ({
+    title: `Nothing grouped by ${this.store.breakdownLabel().toLowerCase()} yet`,
+    hint: 'Groups appear once trades close against them.',
+  }));
+
+  protected onBreakdown(value: string): void {
+    this.store.setBreakdown(value as BreakdownDimension);
+  }
+
+  /** Sparklines take bare numbers; the dates are the series-note's job. */
+  protected readonly equityPoints = computed(() =>
+    this.store.equitySeries().map((point) => point.value),
+  );
+  protected readonly drawdownPoints = computed(() =>
+    this.store.drawdownSeries().map((point) => point.value),
+  );
+
+  /** The tallest bin is full width and the rest are relative to it. Scaling to
+   *  the largest COUNT rather than to the total is what keeps a long tail
+   *  visible — against the total, a bin holding two trades out of ninety is
+   *  two percent of the track and invisible. */
+  protected binWidth(count: number): number {
+    const tallest = Math.max(...this.store.rMultipleBins().map((bin) => bin.count), 1);
+    return (count / tallest) * 100;
+  }
+
+  /** "3 wins" rather than "3". The number alone does not say which way the run
+   *  is going, and a current streak is the one figure here where that is the
+   *  whole point. */
+  protected currentStreak(streaks: Streaks): string {
+    if (streaks.current === null || streaks.current === 0 || !streaks.currentKind) {
+      return 'none';
+    }
+    const plural = streaks.current === 1 ? '' : 's';
+    const noun = streaks.currentKind === 'win' ? 'win' : 'loss';
+    return `${streaks.current} ${noun === 'loss' ? (plural ? 'losses' : 'loss') : noun + plural}`;
+  }
+
+  protected seriesRange(series: { date: string }[]): string {
+    if (!series.length) return ABSENT;
+    return `${date(series[0].date)} → ${date(series[series.length - 1].date)}`;
+  }
   protected readonly decileEmpty = {
     title: 'No scored trades yet',
     hint: 'Only closed trades carrying a quality score can be bucketed.',

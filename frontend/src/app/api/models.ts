@@ -204,13 +204,36 @@ export interface Dashboard {
 
 /* -- analytics ---------------------------------------------------------- */
 
+/**
+ * `GET /analytics/snapshot` — the pre-built analytics blob, forwarded verbatim
+ * (`api_v1/analytics.py:44-48`).
+ *
+ * **This name used to describe something else entirely.** Until SR50 it held
+ * the six relocated Dashboard metrics — `wins`, `losses`, `avg_realized_pct`
+ * and so on — which are the `relocated` block of `/analytics/performance`, not
+ * this endpoint's response at all. `analyticsSnapshot()` declared that type
+ * and would have mis-shaped every field it returned; the mistype never bit
+ * because no store ever called the method. That is the same fact the parity
+ * audit recorded from the other side.
+ *
+ * Loosely typed on purpose, for the reason the Dashboard's two loose fields
+ * give: `swingbot/core/analytics` owns these shapes, and pinning an interface
+ * to them would make every backend tweak a compile error in the client. The
+ * narrowing happens once, in `AnalyticsStore`.
+ *
+ * `by` is keyed by the ten dimensions in `aggregate.py:DIMENSIONS` — strategy,
+ * horizon, tier, badge, confidence, direction, dow, month, ticker, source —
+ * each holding one `StatRow` per group.
+ */
 export interface AnalyticsSnapshot {
-  wins: number | null;
-  losses: number | null;
-  avg_realized_pct: number | null;
-  best_trade_pct: number | null;
-  worst_trade_pct: number | null;
-  avg_holding_days: number | null;
+  built_at: string | null;
+  overall: Record<string, unknown>;
+  equity_curve: { points?: unknown[]; skipped_n?: number } | null;
+  drawdown: unknown[];
+  rolling_wr: unknown[];
+  by: Record<string, unknown[]>;
+  calibration: Record<string, unknown>;
+  r_multiples: unknown[];
 }
 
 export interface AnalyticsPerformance {
