@@ -180,3 +180,32 @@ than 604s.
 unlike `test_flag_on_polls_open_plans` it is a real budget worth keeping —
 but a failure here on a busy box is evidence about the box. Re-run it
 isolated on an idle machine before touching `swingbot/core/analytics/`.
+
+## What the pass count means when it changes
+
+Reference baseline: `1686 passed, 66 skipped, 0 failed`. **Green means
+`0 failed`, and now also `0 xfailed`.**
+
+That count dropped from 1898 on 2026-08-14 and **the drop is correct**, not lost
+coverage: Release B deleted the Jinja UI, and with it the tests whose subject was
+rendered HTML — 10 whole files plus 45 individually-removed tests that asserted
+v1-against-Jinja parity or "the Jinja page still owns this URL". Builder-level
+tests were kept untouched, which is what they were extracted for. An unexplained
+drop from here is a different matter; investigate it.
+
+The pass count drifts up as tasks land tests and concurrent sessions commit — a
+*changed count* is not a failure; only `failed` is.
+
+### The long-standing `xfail` quarantine is gone (2026-08-14)
+
+`test_flag_on_polls_open_plans` was quarantined as "wall-clock dependent", which
+undersold it: the shared `_pending()` fixture is created at a fixed `2026-07-11`
+with `expiry_bars=5`, while `_bars_since` counts real trading days from a real
+data fetch. Once five trading days passed, the plan expired before it could fill
+— so it was not failing intermittently, it was failing **permanently and
+drifting further every day**, behind a `strict=False` that could never become an
+`xpass`. Fixed by injecting `_bars_since` the same way the test already injected
+`_price_fn`, plus a second test covering expiry through the same path.
+
+If a new `xfailed` appears, it is new — investigate it rather than assuming it is
+this one.
