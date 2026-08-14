@@ -61,6 +61,10 @@ import { Panel } from '../../ui/layout';
       <span class="found">{{ foundLabel() }}</span>
     </div>
 
+    <!-- SR63. settings.html:101-103. The dot has meant this since SR56; the
+         legend saying so is what makes it readable without guessing. -->
+    <p class="legend"><span class="legend-dot"></span> = changed from default</p>
+
     @if (!store.visibleSections().length && !store.settingsEmpty()) {
       <p class="stale-form" role="status">
         No setting matches. Clear the search or the only-changed filter.
@@ -69,6 +73,8 @@ import { Panel } from '../../ui/layout';
 
     @for (section of store.visibleSections(); track section.name) {
       <sb-panel [heading]="section.name">
+        <!-- SR63. settings.html:115. -->
+        <span class="field-count">{{ fieldCount(section.fields.length) }}</span>
         @if (section.description) {
           <p class="section-help">{{ section.description }}</p>
         }
@@ -114,6 +120,13 @@ import { Panel } from '../../ui/layout';
               }
               <p class="meta">
                 <span class="key">{{ field.key }}</span>
+                <!-- SR63. settings.html:50. Without it "what was this before I
+                     touched it" has no answer on screen -- and the per-field
+                     reset SR56 added is far less useful when you cannot see
+                     what it will reset TO. -->
+                @if (field.default) {
+                  <span class="default-badge" title="Default value">{{ field.default }}</span>
+                }
                 @if (store.differsFromDefault(field)) {
                   <!-- The Jinja page's dot: differs from the CODE default,
                        which is a different statement from "edited just now"
@@ -277,6 +290,11 @@ import { Panel } from '../../ui/layout';
       <!-- A plain link, not a fetch: the browser then gets a Save dialog and
            the server's filename, both of which an XHR throws away. -->
       <a class="export" [href]="exportUrl" download>Download .env</a>
+      <!-- SR63. settings.html:209. The asymmetry is the reason an exported
+           file is safe to hand around, and it was nowhere on screen. -->
+      <span class="asymmetry">
+        Export omits credentials/tokens entirely; import accepts them.
+      </span>
 
       <details class="import">
         <summary>Import from text or file</summary>
@@ -331,6 +349,34 @@ import { Panel } from '../../ui/layout';
     /* An edited field is marked so a change made three sections up is still
        findable without scrolling for it. */
     .changed { border-left: 2px solid var(--accent); padding-left: var(--space-8); }
+
+    /* -- SR63: badges and the legend --------------------------------- */
+    .field-count {
+      margin-left: var(--space-6);
+      color: var(--text-faint);
+      font-size: var(--text-micro);
+      font-variant-numeric: tabular-nums;
+    }
+    .legend {
+      margin-bottom: var(--space-8);
+      color: var(--text-faint);
+      font-size: var(--text-micro);
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: var(--space-4);
+      border-radius: 50%;
+      background: var(--accent);
+      vertical-align: middle;
+    }
+    .default-badge {
+      color: var(--text-faint);
+      font-family: var(--font-mono);
+      font-size: var(--text-micro);
+    }
+    .asymmetry { color: var(--text-faint); font-size: var(--text-micro); }
 
     /* -- SR56: finding a setting ------------------------------------- */
     .find {
@@ -513,6 +559,12 @@ export class SettingsTab {
     const total = this.store.fields().length;
     return shown === total ? `${total} settings` : `${shown} of ${total}`;
   });
+
+  /** SR63. settings.html:115 -- pluralised, because "1 fields" is the kind
+   *  of detail that makes a page look unfinished. */
+  protected fieldCount(n: number): string {
+    return `${n} field${n === 1 ? '' : 's'}`;
+  }
 
   protected runImport(): void {
     this.store.importSettings(this.importText());

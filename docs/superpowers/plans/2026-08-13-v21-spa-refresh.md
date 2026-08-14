@@ -1893,7 +1893,7 @@ but each should land *after* the task that builds the thing it annotates.
 > | `699bcb4` → `492fd0a` | SR46, SR47 |
 > | `06fea6a` `364e5d6` `434d359` `91f458b` `610fcac` `51cf83c` | SR48–SR53 |
 >
-> **SR54-SR58 are done. SR59-SR63 (the copy) are next; they may run concurrently.** The
+> **SR54-SR63 are done. SR64 (Release) is the last task.** The
 > SR48–SR53 boxes are left unticked deliberately: the mapping above is by
 > commit subject and scope, which is strong evidence the task landed but not
 > a step-by-step verification, and ticking on that basis is how the boxes
@@ -2207,14 +2207,47 @@ task's acceptance is that every cosmetic row for its workspace has landed.
 
 Each task:
 
-- [ ] **Step 1: Read the gap table's cosmetic rows for this workspace.** Each names the Jinja line the copy came from. Copy the sentence, do not paraphrase it — these were written against specific numbers and rules, and a paraphrase drifts from the rule it describes.
-- [ ] **Step 2: Place it.** Prefer a `section-help` line under a panel heading to a tooltip; the SPA has no tip-icon component and adding one for this would be a design decision, not a copy task. Where the original was a tooltip on a column header, the panel note is the SPA's equivalent.
-- [ ] **Step 3: Check the thresholds are still true.** SR61 and SR62 carry rules with numbers in them — ≥20 trades and >10 points for decay, the A/B/C score bands, the ≥80% / positive-expectancy / N≥30 tuning bar. Verify each against the code before writing it down; copy that states a stale threshold is worse than no copy.
-- [ ] **Step 4: Run** `npx ng test` — copy changes break snapshot-ish assertions more often than expected.
-- [ ] **Step 5: Commit** `docs(ui): <workspace> copy`
+- [x] **Step 1: Read the gap table's cosmetic rows for this workspace.** Each names the Jinja line the copy came from. Copy the sentence, do not paraphrase it — these were written against specific numbers and rules, and a paraphrase drifts from the rule it describes.
+- [x] **Step 2: Place it.** Prefer a `section-help` line under a panel heading to a tooltip; the SPA has no tip-icon component and adding one for this would be a design decision, not a copy task. Where the original was a tooltip on a column header, the panel note is the SPA's equivalent.
+- [x] **Step 3: Check the thresholds are still true.** SR61 and SR62 carry rules with numbers in them — ≥20 trades and >10 points for decay, the A/B/C score bands, the ≥80% / positive-expectancy / N≥30 tuning bar. Verify each against the code before writing it down; copy that states a stale threshold is worse than no copy.
+- [x] **Step 4: Run** `npx ng test` — copy changes break snapshot-ish assertions more often than expected.
+- [x] **Step 5: Commit** `docs(ui): <workspace> copy`
 
 **Acceptance for SR59–SR63 together:** the gap table's cosmetic section is
 fully struck through — 33 of 33 filled, none dropped.
+
+> **Closed 2026-08-14. 33 of 33 accounted for**, of which 30 were written, 2
+> were already filled by earlier tasks, and 1 was found already present and
+> annotated as a stale audit row.
+>
+> **Step 3 earned its place twice.** Two thresholds in the Jinja copy were
+> wrong or stale, and copying them verbatim would have shipped a rule the code
+> does not implement:
+>
+> 1. The Dashboard footer's "live prices refresh approximately every 15
+>    seconds" (SR59). `DASHBOARD_REFRESH_SECONDS` is read only by
+>    `admin/app.py` and `admin/pages.py`, both Jinja. The SPA is event-driven.
+> 2. The R:R column tip's "falls back to a 0.35 default when not set" (SR61).
+>    `plan_engine._rr_for` falls back to the HORIZON's `reward_risk_ratio`,
+>    floored at `RR_FLOOR` (0.30). Unreachable today because every strategy
+>    carries an override, but stated as a rule it never was.
+>
+> Everything else verified correct: `DRIFT_LIVE_N_FLOOR` 20 /
+> `DRIFT_THRESHOLD_POINTS` 10.0, `quality.py:_tier` (A ≥75, B 50-74, C <50),
+> `EXPECTED_BAND` (A ≥80, B 70-80, C <70), `MIN_N_FOR_CALIBRATION_VERDICT` 10,
+> and `TRAIN_WINDOW` = 2020-01-01..2023-12-31.
+>
+> **A correction to this task's own Step 3:** it lists the tuning acceptance
+> bar as three conditions. `_grid_row_passes` has **four** — `n_eval >= 30`,
+> `win_rate >= 80`, `expectancy_r > 0`, and `excluded_share <= 0.5`.
+>
+> Already filled before this batch, and annotated rather than re-implemented:
+> the Trades "logged before full detail" notice (SR49's `detailAbsent`), the
+> Analytics range summary (SR54), and the log hidden-count (SR57).
+>
+> The TRAIN window's dates are printed as literals in the SPA and pinned by
+> `tests/admin/test_api_v1_dashboard.py::test_train_window_still_matches_the_dates_the_spa_prints`,
+> so the one hardcoded threshold cannot drift silently.
 
 ---
 

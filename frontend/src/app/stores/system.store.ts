@@ -400,6 +400,26 @@ export const SystemStore = signalStore(
     return {
       /** SR57 — the tail, filtered to the checked levels. */
       visibleLog: computed(() => filtered().text),
+
+      /**
+       * SR63 — the same tail as lines carrying their own level, so a template
+       * can colour a WHOLE line rather than just the marker.
+       *
+       * Whole lines, matching logs.html:80-113: an ERROR's message is the part
+       * worth spotting, and colouring only the [ERROR] token leaves it
+       * indistinguishable from the INFO above it at a glance. A continuation
+       * line inherits, so a traceback stays with the error it belongs to.
+       */
+      visibleLogLines: computed<{ text: string; level: LogLevel | null }[]>(() => {
+        const text = filtered().text;
+        if (!text) return [];
+        let inherited: LogLevel | null = null;
+        return text.split('\n').map((line) => {
+          const declared = levelOf(line);
+          if (declared) inherited = declared;
+          return { text: line, level: declared ?? inherited };
+        });
+      }),
       /** How many lines the filter is holding back. Reported, because a
        *  filter that silently removes most of a log is indistinguishable
        *  from a log that is nearly empty. */

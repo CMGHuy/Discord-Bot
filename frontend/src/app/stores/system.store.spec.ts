@@ -251,6 +251,30 @@ describe('SystemStore', () => {
       expect(store.visibleLog()).toContain('orphan line with no level');
     });
 
+    it('gives each line its own level, so a whole line can be coloured', () => {
+      bootWithLog();
+
+      const lines = store.visibleLogLines();
+      expect(lines[1].level).toBe('WARNING');
+      expect(lines[2].level).toBe('ERROR');
+    });
+
+    it('a traceback line inherits the level of the error above it', () => {
+      // Colouring only the [ERROR] token would leave the message that matters
+      // indistinguishable from the INFO above it at a glance.
+      bootWithLog();
+
+      const lines = store.visibleLogLines();
+      expect(lines[3].text).toContain('Traceback');
+      expect(lines[3].level).toBe('ERROR');
+      expect(lines[5].level).toBe('ERROR');
+    });
+
+    it('an empty log has no lines rather than one empty one', () => {
+      bootWithLog('');
+      expect(store.visibleLogLines()).toEqual([]);
+    });
+
     it('an empty log filters to an empty string, not to a stray newline', () => {
       bootWithLog('');
       expect(store.visibleLog()).toBe('');

@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  effect,
+  inject,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 
 import {
   LOG_LEVELS,
@@ -102,7 +111,14 @@ import { Panel } from '../../ui/layout';
           <!-- A <pre>, not a table: log lines are already formatted and any
                attempt to structure them here would be guessing at a format
                the bot is free to change. -->
-          <pre class="log">{{ store.visibleLog() }}</pre>
+          <!-- SR63. Whole lines carry the level class, matching
+               logs.html:80-113: colouring only the [ERROR] token leaves the
+               message that matters indistinguishable at a glance. -->
+          <pre class="log" #logBox (scroll)="onLogScroll()">@for (line of store.visibleLogLines(); track $index) {<span
+              class="log-line"
+              [class]="line.level ? 'lvl-' + line.level.toLowerCase() : ''"
+            >{{ line.text }}
+</span>}</pre>
           @if (!store.visibleLog()) {
             <p class="none">Every line is filtered out. Check a level above.</p>
           }
@@ -149,6 +165,13 @@ import { Panel } from '../../ui/layout';
       color: var(--text-faint);
       font-variant-numeric: tabular-nums;
     }
+
+    /* -- SR63: per-level line colour ---------------------------------- */
+    .log-line { display: block; }
+    /* ERROR and WARNING only, per the colour rule. INFO and DEBUG inherit the
+       pre's own colour rather than each spending a hue on being ordinary. */
+    .lvl-error { color: var(--neg); }
+    .lvl-warning { color: var(--warn); }
     .raw {
       color: var(--accent);
       font-size: var(--text-table);
@@ -188,6 +211,34 @@ export class LogsTab {
    *  a level the parser does not recognise. */
   protected readonly levels = LOG_LEVELS;
   protected readonly lineChoices = LOG_LINE_CHOICES;
+
+  private readonly logBox = viewChild<ElementRef<HTMLElement>>('logBox');
+
+  /**
+   * SR63 — open at the newest lines, and stay there across a refresh.
+   *
+   * `logs.html:143-146`'s rule, kept: only auto-scroll when the reader was
+   * ALREADY within 60px of the bottom. Someone who has scrolled up to read a
+   * traceback is reading it, and yanking them back down on the next refresh
+   * is how a log viewer becomes unusable at exactly the moment it matters.
+   *
+   * The first render always scrolls, because there is no scroll position to
+   * preserve yet and the tail is what a log is for.
+   */
+  private wasAtBottom = true;
+
+  private readonly keepAtBottom = effect(() => {
+    this.store.visibleLogLines();          // re-run whenever the tail changes
+    const box = untracked(() => this.logBox()?.nativeElement);
+    if (!box) return;
+    if (this.wasAtBottom) box.scrollTop = box.scrollHeight;
+  });
+
+  protected onLogScroll(): void {
+    const box = this.logBox()?.nativeElement;
+    if (!box) return;
+    this.wasAtBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 60;
+  }
 
   protected readonly asking = signal(false);
 
