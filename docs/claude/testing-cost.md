@@ -10,7 +10,9 @@ reasoning about how long the suite takes. Every number here was measured on
 **1145 collected — 1008 passed, 136 skipped, 1 xfailed, 0 failed.**
 
 Green means **0 failed**. The single wall-clock-dependent test
-(`test_flag_on_polls_open_plans`) is quarantined `xfail(strict=False)`, so no
+(`test_flag_on_polls_open_plans`) WAS quarantined `xfail(strict=False)` when
+this was measured; it was fixed on 2026-08-14 and the suite now carries no
+xfail, so no
 judgment call is needed to tell it apart from a real regression. An `xpass`
 there is fine; a `failed` anywhere is yours.
 

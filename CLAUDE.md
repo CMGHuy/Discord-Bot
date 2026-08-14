@@ -80,13 +80,22 @@ python scripts/shadow_parity_report.py     # v2-vs-legacy comparison from data/s
 make up / make logs / make restart         # docker compose lifecycle
 ```
 
-**Green means `0 failed`.** Reference baseline: `~1015 passed, 136 skipped,
-1 xfailed, 0 failed` (1152 collected). The pass count drifts up as tasks land
+**Green means `0 failed`, and now also `0 xfailed`.** Reference baseline:
+`1828 passed, 136 skipped, 0 failed`. The pass count drifts up as tasks land
 tests and concurrent sessions commit — a *changed count* is not a failure;
-only `failed` is. `tests/test_trade_monitor_wiring.py::test_flag_on_polls_open_plans`
-is quarantined `xfail(strict=False)` because it is wall-clock/expiry
-dependent; it shows as `xfailed` or occasionally `xpassed` and **neither is a
-problem**. Don't "fix" it — forbidden side quest.
+only `failed` is.
+
+**The long-standing `xfail` quarantine is gone (2026-08-14).**
+`test_flag_on_polls_open_plans` was quarantined as "wall-clock dependent",
+which undersold it: the shared `_pending()` fixture is created at a fixed
+`2026-07-11` with `expiry_bars=5`, while `_bars_since` counts real trading
+days from a real data fetch. Once five trading days passed, the plan expired
+before it could fill — so it was not failing intermittently, it was failing
+**permanently and drifting further every day**, behind a `strict=False` that
+could never become an `xpass`. Fixed by injecting `_bars_since` the same way
+the test already injected `_price_fn`, plus a second test covering expiry
+through the same path. If a new `xfailed` appears, it is new — investigate it
+rather than assuming it is this one.
 
 Timings move a lot with machine load (the same run has measured 40s idle and
 262s under contention), and measuring them has its own traps —
