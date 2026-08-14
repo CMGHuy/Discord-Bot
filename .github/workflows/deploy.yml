@@ -432,9 +432,16 @@ jobs:
           # run tested, even if another push lands while this one is in
           # flight and moves :latest underneath it.
           SWING_BOT_IMAGE: ${{ needs.container-healthcheck.outputs.image }}:${{ needs.container-healthcheck.outputs.tag }}
-          # Where the checkout lives on the server. This was hardcoded to
-          # /opt/swing-bot while the running server actually uses
-          # /opt/swingbot -- a deploy against the wrong path fails outright
-          # (best case) rather than deploying anything. Set the
-          # HETZNER_APP_DIR secret to override without editing this file.
-          APP_DIR: ${{ secrets.HETZNER_APP_DIR || '/opt/swingbot' }}
+          # Where the checkout lives on the server. Overridable via the
+          # HETZNER_APP_DIR secret without editing this file.
+          #
+          # The default is HYPHENATED and must stay that way. An earlier
+          # revision of this block changed it to /opt/swingbot, on the
+          # stated grounds that the hyphenated path was wrong. It is not:
+          # deploy/hetzner-setup.sh:30 creates `APP_DIR="/opt/swing-bot"`,
+          # every path in DEPLOY_HETZNER.md matches, and on the box itself
+          # `ls /opt/swingbot` answers "No such file or directory" while the
+          # shell sits in /opt/swing-bot. The un-hyphenated spelling came
+          # from a probe that used it, got ENOENT for that reason, and was
+          # read as evidence for the layout it was actually disproving.
+          APP_DIR: ${{ secrets.HETZNER_APP_DIR || '/opt/swing-bot' }}

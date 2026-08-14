@@ -91,6 +91,30 @@ export SWING_BOT_IMAGE="$IMAGE"
 # here keeps ownership with the deploy user.
 mkdir -p data logs exports market_data
 
+# `mkdir -p data` above is silent whether it found the state directory or
+# just invented an empty one, and an empty one starts the bot with no trade
+# history at all -- a loss that looks exactly like a quiet, successful deploy
+# until someone opens the dashboard.
+#
+# It should never fire. The mount this script replaced was `.:/app`, so the
+# container's DATA_DIR (/app/data, config.py:63) resolved to this same
+# ./data on the host; the new explicit mount points at the identical path,
+# which is what makes the switch a no-op for existing state. A miss here
+# therefore means the assumption is wrong, not that a file moved -- so say
+# so rather than carrying on.
+#
+# Non-fatal: a genuinely new install has no trades.json yet, and refusing to
+# deploy one would be worse than the warning.
+if [ ! -f data/trades.json ]; then
+  echo "" >&2
+  echo "WARNING: $(pwd)/data/trades.json does not exist." >&2
+  echo "If this is NOT a first deploy, stop and check where the state lives" >&2
+  echo "before trusting what the dashboard shows -- the containers will come" >&2
+  echo "up healthy and empty either way. Expected layout:" >&2
+  echo "  $(pwd)/data/{trades,plans,account,state,watchlist}.json" >&2
+  echo "" >&2
+fi
+
 echo "==> Pulling $IMAGE"
 docker pull "$IMAGE"
 
