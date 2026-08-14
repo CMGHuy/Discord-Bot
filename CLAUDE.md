@@ -258,8 +258,11 @@ Not auto-loaded — read the relevant one before starting work in that area.
   must not be re-run**. Read before running or interpreting any
   backtest/grid/validation.
 - `docs/claude/working-conventions.md` — commit style, concurrent-session git
-  hygiene, worktrees, and the full document-naming convention. Read it before
-  writing any new spec or plan.
+  hygiene, worktrees, the full document-naming convention, and **when to bump
+  `VERSION.json`** (two independent `ui`/`bot` lines; the test is observable
+  difference, not diff size — Release B deleted the entire Jinja UI for a
+  *patch*). Read it before writing any new spec or plan, and before bumping a
+  version.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
 - `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats

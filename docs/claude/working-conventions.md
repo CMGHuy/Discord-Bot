@@ -45,6 +45,84 @@ Referenced from the root `CLAUDE.md`.
   numbers even while the plan is still active. Documents predating this
   convention (2026-08-08) were left unstamped rather than backfilled with
   versions that would have to be reconstructed from git.
+## Versioning: when to bump `VERSION.json`
+
+`VERSION.json` carries **two independent version lines**, `ui` and `bot`, and
+the admin sidebar renders both. They move separately — `bot` sat at `1.1.2`
+through five consecutive `ui` releases. **Bump only the line you changed**;
+bump both only when the change genuinely lands in both.
+
+The test is **not how large the diff is**. It is whether the thing the number
+names became different *for whoever uses it*. This repo already contains the
+pair that makes the distinction concrete:
+
+| Release | What it did | Bump |
+|---|---|---|
+| **A** (`8ad637c`) | Flipped the default so the SPA became the admin UI | ui 1.0.9 → **1.1.0** (minor) |
+| **B** (`8bfd050`) | Deleted the whole Jinja UI — 20 templates, `pages.py`, 10 test files | ui 1.2.1 → **1.2.2** (patch) |
+
+Release B is by far the bigger diff and by far the smaller bump. It removed a
+UI nobody was being served any more, so nobody's experience changed. Release A
+changed one flag and every user got a different product. **Observable
+difference is the question; size of change is not.**
+
+### The three levels
+
+**Patch — `x.y.Z`.** The default, and what nearly every release has been.
+Anything that ships and that someone might notice: a new control, a bug fix, a
+tuning change, a visual adjustment. Also the correct bump for a large internal
+refactor or deletion with no outward effect.
+
+**Minor — `x.Y.0`.** The component is materially different to the person using
+it. Three in this repo's life, and they are the entire set:
+
+- `ui 1.1.0` — Release A, the SPA becomes the admin UI.
+- `ui 1.2.0` — the SPA refresh (plan v21): every workspace rebuilt.
+- `bot 1.1.0` (`9b979be`) — Plan Engine v2: how trade plans are produced changed.
+
+The shape of a minor is that someone who used this yesterday has to look at it
+anew. An Angular migration is the canonical example.
+
+**Major — `X.0.0`.** Never used. Reserved for a release that *breaks an
+existing install* rather than improving it: `data/*.json` needing migration
+before the bot will start, `.env` keys removed rather than added, or paper-trade
+history becoming incomparable to what came before. If a deploy needs a manual
+step on the server, or a one-way migration, it is major. Do not spend it on
+"this is a big feature" — that is what minor is for.
+
+### When NOT to bump
+
+Most commits. There have been roughly 20 bumps across the repo's whole life
+against hundreds of commits. Do not bump for documentation, tests, CI or deploy
+plumbing, comments, plans and specs, or anything that cannot change what a
+running container does. `0379574` (a 600-line cleanup) and `ab7fe4c` (the deploy
+path fix) correctly bumped nothing: neither alters what the bot or the admin
+*does*.
+
+### How
+
+A bump is **its own commit**, touching only `VERSION.json`, in the established
+format — and it goes **last**, after the work it names is committed and green,
+so the version commit is a release marker rather than a guess about what will
+land:
+
+```
+release(ui): 1.2.0 -- the SPA refresh
+release(bot): 1.1.0 -- plan engine v2
+```
+
+Set the matching `ui_updated` / `bot_updated` stamp alongside it
+(`YYYY-MM-DD HH-MM-SS`, UTC).
+
+### What `last_updated` in the sidebar actually is
+
+`get_versions()` also returns `last_updated` — `VERSION.json`'s own mtime — and
+the sidebar shows it beside the numbers. It is **not** "when the version last
+changed". Under the image-based deploy the file is copied into the image from a
+fresh CI checkout, so its mtime is effectively *when the image was built*. That
+is the useful reading and the one the UI wants, but do not mistake it for a
+release date: it moves on every deploy, including deploys that bump nothing.
+
 - **Concurrent Claude sessions share this working tree.** Stage specific
   files, never `git add -A`; commit generated artifacts (especially the
   registry) immediately — uncommitted generated state has been silently wiped

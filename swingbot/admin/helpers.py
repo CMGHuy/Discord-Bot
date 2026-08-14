@@ -384,11 +384,19 @@ def get_versions() -> dict:
     version display.
 
     Also includes "last_updated" -- VERSION.json's own last-modified time,
-    formatted for display. Since this file is bumped by 0.0.1 every time a
-    real code change is made (the whole point of it being a version file),
-    its mtime doubles as "when was this container's image last actually
-    changed" -- there's no separate build-timestamp artifact baked into the
-    image to read instead, and this needs no extra plumbing to keep in sync.
+    formatted for display. Read it as **when this container's image was
+    built**, not as when the version last changed: the file is copied into
+    the image from a fresh CI checkout, so its mtime is the build, and it
+    moves on every deploy including deploys that bump nothing. There is no
+    separate build-timestamp artifact baked into the image to read instead,
+    and this needs no extra plumbing to stay in sync.
+
+    (An earlier version of this docstring claimed VERSION.json is "bumped by
+    0.0.1 every time a real code change is made", which would have made the
+    mtime a release date. That was never this repo's practice -- there are
+    roughly 20 bumps against hundreds of commits, deliberately. See the
+    versioning rules in docs/claude/working-conventions.md.)
+
     None if the file doesn't exist yet or its mtime can't be read.
     """
     if not os.path.exists(VERSION_PATH):
