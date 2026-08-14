@@ -202,6 +202,34 @@ Never invent a fresh topic name — a worktree called `trade-history-filter`
 takes a second lookup to tie back to plan v9. For work that is not executing a
 plan, a short topic name is fine; the rule binds only when a plan exists.
 
+## Never delete a branch whose name contains "backup"
+
+**Hard rule, no exceptions, no "but it looks merged":** any branch with
+`backup` in its name is off limits to every destructive git command —
+`branch -d`, `branch -D`, `push --delete`, and pruning that would remove it.
+Ask the human partner; do not decide.
+
+The same care applies to `stable-*` branches. They are rollback points, not
+topic branches, and "already merged" is not what they are for.
+
+**"Merged" is the wrong test for deletable, and this repo proves it.**
+`backup-main` and `origin/cleanup-gate-fixtures` are the same commit
+(`496caa1`) and carry **242 commits that are not on `main`** — the entire
+gatekeeper-v7 line, built to 86/90 and then rolled back by `c84924a`. `main`
+deliberately does not contain them. Deleting either branch destroys the only
+copy. A related near-miss is already on record: local `main` was once 135
+commits behind `origin/main`, where a force push would have destroyed them.
+
+Before ANY branch deletion, run this and read it:
+
+```bash
+git rev-list --count main..<branch>    # commits that would be lost
+```
+
+Non-zero means stop. Zero means it is *merged*, which makes deletion safe
+only for a topic branch you created for this task — never for a `backup*` or
+`stable-*` branch, whose whole purpose is to hold a state `main` moved past.
+
 ## Reference docs
 
 Not auto-loaded — read the relevant one before starting work in that area.
