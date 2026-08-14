@@ -11,7 +11,7 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { AnalyticsStrategies, TradeDetail } from '../api/models';
+import { AnalyticsStrategies, JournalEntry, TradeDetail } from '../api/models';
 import { StrategyRow } from './analytics.store';
 
 /* -- the narrowed shapes of the loosely typed detail fields ---------------
@@ -182,6 +182,19 @@ interface TradeDetailSlice {
   /** `/analytics/strategies`, for the read-only Strategy tab. */
   strategies: AnalyticsStrategies | null;
   strategiesError: string | null;
+
+  /** SR55 — the journal entry behind the note: MFE, MAE, exit efficiency,
+   *  tags and the auto-lesson.
+   *
+   *  Read from its own endpoint rather than widened into `/trades/:id`,
+   *  because the detail response is what the whole view blocks on and a
+   *  journal read failure must not empty the position itself. */
+  journal: JournalEntry | null;
+  /** True once the endpoint has answered "no entry". Distinct from
+   *  `journal === null`, which is also the pre-response state — rendering
+   *  those the same way would flash "not journaled" on every open. */
+  journalAnswered: boolean;
+  journalError: string | null;
 }
 
 /**
@@ -210,9 +223,13 @@ export const TradeDetailStore = signalStore(
     noteUnjournaled: false,
     strategies: null,
     strategiesError: null,
+    journal: null,
+    journalAnswered: false,
+    journalError: null,
   }),
   // eslint-disable-next-line max-len
-  withComputed(({ data, noteDraft, noteAcked, noteSaving, noteError, noteUnjournaled, strategies }) => ({
+  withComputed(({ data, noteDraft, noteAcked, noteSaving, noteError, noteUnjournaled, strategies,
+                 journal, journalAnswered }) => ({
     empty: computed(() => data() === null),
     trade: computed(() => data()),
     /** The heavy half. Null before the first response rather than an empty
@@ -350,6 +367,37 @@ export const TradeDetailStore = signalStore(
      * failed while the user kept typing must not look identical to one that
      * succeeded.
      */
+    /* -- SR55: the journal entry behind the note --------------------- */
+
+    /** The three excursion figures, as render-ready rows. Empty until the
+     *  endpoint answers, and empty when it answers "no entry" — an open
+     *  position has no excursions to report and must not show three dashes
+     *  implying it does. */
+    excursions: computed<{ label: string; value: number | null; unit: string; decimals: number }[]>(
+      () => {
+        const entry = journal();
+        if (!entry) return [];
+        return [
+          { label: 'MFE', value: entry.mfe_r, unit: 'R', decimals: 2 },
+          { label: 'MAE', value: entry.mae_r, unit: 'R', decimals: 2 },
+          {
+            // Stored 0-1; shown as a percentage, because "captured 31% of the
+            // favourable move" is the sentence a reader is trying to form.
+            label: 'Exit efficiency',
+            value: entry.exit_efficiency === null ? null : entry.exit_efficiency * 100,
+            unit: '%',
+            decimals: 0,
+          },
+        ];
+      }),
+
+    journalTags: computed<string[]>(() => journal()?.tags ?? []),
+    autoLesson: computed<string | null>(() => journal()?.auto_lesson ?? null),
+
+    /** The endpoint has answered and there is no entry — the normal state of
+     *  an open position, and a state rather than an error. */
+    journalAbsent: computed(() => journalAnswered() && journal() === null),
+
     noteStatus: computed<'unjournaled' | 'error' | 'saving' | 'unsaved' | 'saved'>(
       () => {
         if (noteUnjournaled()) return 'unjournaled';
@@ -461,6 +509,26 @@ export const TradeDetailStore = signalStore(
           patchState(store, {
             loading: false,
             error:
+              error.code === 'unavailable'
+                ? 'The admin is not responding.'
+                : error.message,
+          }),
+      });
+
+      // SR55. Its own request and its own error: the excursions explain the
+      // note, and losing them must not take the position down with them.
+      // `journaled: false` is a normal 200 here, not an error to catch.
+      api.tradeJournal(id).subscribe({
+        next: (response) =>
+          patchState(store, {
+            journal: response.entry,
+            journalAnswered: true,
+            journalError: null,
+          }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            journalAnswered: true,
+            journalError:
               error.code === 'unavailable'
                 ? 'The admin is not responding.'
                 : error.message,

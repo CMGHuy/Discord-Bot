@@ -158,7 +158,8 @@ describe('AnalyticsStore — the snapshot', () => {
     backend = TestBed.inject(HttpTestingController);
   });
 
-  /** The Performance tab loads on init; settle both of its requests. */
+  /** The Performance tab loads on init; settle all THREE of its requests.
+   *  SR55 added `/analytics/journal` beside the other two. */
   function open(snapshot: object | null = SNAPSHOT) {
     TestBed.inject(ApplicationRef).tick();
     backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
@@ -169,6 +170,9 @@ describe('AnalyticsStore — the snapshot', () => {
     } else {
       request.flush(snapshot);
     }
+    backend
+      .expectOne('/api/v1/analytics/journal')
+      .flush({ digest: [], lessons: [], entries_n: 0 });
   }
 
   it('asks for the snapshot at all — the whole point of this task', () => {
@@ -318,6 +322,9 @@ describe('AnalyticsStore — the tuning grid', () => {
     tick();
     backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
     backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+    backend
+      .expectOne('/api/v1/analytics/journal')
+      .flush({ digest: [], lessons: [], entries_n: 0 });
 
     store.setTab('tuning');
     tick();

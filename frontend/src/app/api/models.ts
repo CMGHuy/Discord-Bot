@@ -320,6 +320,60 @@ export interface AnalyticsPerformance {
   benchmark: { spy_cum: Record<string, number> };
 }
 
+/**
+ * SR55 — one position's journal entry.
+ *
+ * Every excursion figure is nullable because `build_entry` degrades to null
+ * when the ticker's bars were unavailable at close, rather than raising. A
+ * missing MFE means "we could not measure it", never "it did not move".
+ */
+export interface JournalEntry {
+  trade_id: string;
+  ticker: string;
+  strategy: string;
+  horizon_key: string;
+  direction: string;
+  tier: string | null;
+  badge: string | null;
+  quality_score: number | null;
+  outcome: string;
+  r_realized: number | null;
+  /** Maximum favourable excursion, in R. */
+  mfe_r: number | null;
+  /** Maximum adverse excursion, in R. */
+  mae_r: number | null;
+  /** Share of the favourable move actually captured, 0–1. */
+  exit_efficiency: number | null;
+  holding_days: number | null;
+  tags: string[];
+  auto_lesson: string | null;
+  note: string;
+  opened_at: string | null;
+  closed_at: string | null;
+  created_at: string | null;
+}
+
+/**
+ * `GET /trades/:id/journal`.
+ *
+ * `journaled: false` is a 200, not a 404 — entries are written at close, so
+ * an open position having none is the normal case and must be readable as a
+ * state rather than caught as an error.
+ */
+export interface TradeJournal {
+  journaled: boolean;
+  entry: JournalEntry | null;
+}
+
+/** `GET /analytics/journal` — the trailing-week digest and recurring lessons. */
+export interface AnalyticsJournal {
+  digest: string[];
+  lessons: string[];
+  /** Entries behind both lists, so a digest from three is not read like one
+   *  drawn from three hundred. */
+  entries_n: number;
+}
+
 export interface AnalyticsStrategies {
   strategies: unknown[];
   heatmap: Record<string, unknown>;

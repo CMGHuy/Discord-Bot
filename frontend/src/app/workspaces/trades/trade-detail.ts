@@ -15,7 +15,8 @@ import { ApiClient } from '../../api/api-client';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { Button } from '../../ui/button';
-import { QualityChip } from '../../ui/chip';
+import { Chip, QualityChip } from '../../ui/chip';
+import { MetricChip } from '../../ui/metric-chip';
 import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { TradeChart } from '../../ui/chart/trade-chart';
@@ -68,6 +69,8 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     ConfirmDialog,
     ChartContainer,
     TradeChart,
+    MetricChip,
+    Chip,
   ],
   template: `
     <header class="head">
@@ -441,6 +444,40 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       }
       @case ('notes') {
         <div class="notes">
+          <!-- SR55. The excursions sit ABOVE the note and beside it, not on
+               Analytics: they are the evidence the note is about. "Went 1.4R
+               in favour before stopping out" is the reason someone writes
+               "exit management" in the box below. -->
+          @if (store.journalError(); as message) {
+            <p class="stale" role="status">Journal unavailable — {{ message }}</p>
+          } @else if (store.excursions().length) {
+            <div class="excursions">
+              @for (figure of store.excursions(); track figure.label) {
+                <sb-metric-chip
+                  [label]="figure.label"
+                  [value]="figure.value"
+                  [unit]="figure.unit"
+                  [decimals]="figure.decimals"
+                  tone="plain"
+                />
+              }
+            </div>
+
+            @if (store.journalTags().length) {
+              <div class="journal-tags">
+                @for (tag of store.journalTags(); track tag) {
+                  <sb-chip [label]="tag" />
+                }
+              </div>
+            }
+
+            @if (store.autoLesson(); as lesson) {
+              <!-- Generated, and labelled as such: a reader must be able to
+                   tell it from the note they wrote themselves. -->
+              <p class="auto-lesson"><strong>Auto-lesson</strong> — {{ lesson }}</p>
+            }
+          }
+
           @if (store.noteStatus() === 'unjournaled') {
             <!-- Not an error. Journal entries are written at close, so an
                  open position has none and cannot take a note yet. Saying so
@@ -785,6 +822,28 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     }
     .not-journaled {
       margin-bottom: var(--space-10);
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
+    /* -- SR55: the journal entry behind the note ---------------------- */
+    .excursions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--space-8);
+      margin-bottom: var(--space-10);
+    }
+    /* Not .tags — the header already owns that class, and reusing it here
+       would silently restyle the horizon/strategy chips at the top. */
+    .journal-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      margin-bottom: var(--space-10);
+    }
+    .auto-lesson {
+      margin-bottom: var(--space-10);
+      padding: var(--space-8);
+      border-left: 2px solid var(--border);
       color: var(--text-secondary);
       font-size: var(--text-table);
     }

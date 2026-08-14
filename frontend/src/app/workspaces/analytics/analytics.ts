@@ -270,6 +270,41 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
+             that deliberately. The digest and lessons are analytics and live
+             here; a single trade's excursions live beside the note that
+             explains them, on the detail view. -->
+        <sb-panel heading="Journal">
+          @if (store.journalError(); as message) {
+            <p class="stale" role="status">Journal unavailable — {{ message }}</p>
+          } @else if (store.journalEmpty()) {
+            <p class="stale" role="status">
+              No journal entries yet — they are written when a trade closes.
+            </p>
+          } @else {
+            <p class="series-note">
+              From {{ store.journalEntryCount() }}
+              {{ store.journalEntryCount() === 1 ? 'entry' : 'entries' }}.
+            </p>
+            @if (store.digest().length) {
+              <h3 class="sub">This week</h3>
+              <ul class="lines">
+                @for (line of store.digest(); track line) {
+                  <li>{{ line }}</li>
+                }
+              </ul>
+            }
+            @if (store.lessons().length) {
+              <h3 class="sub">Recurring lessons</h3>
+              <ul class="lines">
+                @for (lesson of store.lessons(); track lesson) {
+                  <li>{{ lesson }}</li>
+                }
+              </ul>
+            }
+          }
+        </sb-panel>
+
         @if (store.cumulativeByStrategy().length) {
           <sb-panel heading="Cumulative return by strategy">
             <dl>
@@ -826,6 +861,24 @@ interface ProposalView extends ProposalRow {
       color: var(--text-faint);
       font-size: var(--text-chip);
       font-variant-numeric: tabular-nums;
+    }
+
+    /* -- SR55: the journal's lists -------------------------------------- */
+
+    .sub {
+      margin: var(--space-8) 0 var(--space-4);
+      font-size: var(--text-chip);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+
+    .lines {
+      display: grid;
+      gap: var(--space-4);
+      margin: 0;
+      padding-left: var(--space-8);
+      color: var(--text-primary);
     }
 
     /* -- SR50: the snapshot's panels ------------------------------------ */

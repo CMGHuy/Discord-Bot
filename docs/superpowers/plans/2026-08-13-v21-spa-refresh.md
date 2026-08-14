@@ -1893,7 +1893,7 @@ but each should land *after* the task that builds the thing it annotates.
 > | `699bcb4` → `492fd0a` | SR46, SR47 |
 > | `06fea6a` `364e5d6` `434d359` `91f458b` `610fcac` `51cf83c` | SR48–SR53 |
 >
-> **SR54 is done (this commit). SR55 is the next unstarted task.** The
+> **SR54 and SR55 are done. SR56 is the next unstarted task.** The
 > SR48–SR53 boxes are left unticked deliberately: the mapping above is by
 > commit subject and scope, which is strong evidence the task landed but not
 > a step-by-step verification, and ticking on that basis is how the boxes
@@ -1999,9 +1999,9 @@ only a control. `badge`, `confidence` and `tag` need the server side too — and
 source, cut it to SR55 and say so here** rather than widening this task.
 
 - [ ] **Step 1: Write the failing tests** — Python: each new filter narrows the collection and an unknown value is a 400, not a silent no-op (the property `FILTERS` exists to guarantee). TS: each control writes its query parameter and clearing it removes the parameter rather than sending an empty string.
-- [ ] **Step 2: Run and watch them fail.**
+- [x] **Step 2: Run and watch them fail.**
 - [ ] **Step 3: Implement.** Filters navigate; they never mutate the store directly — query parameters are the source of truth for this workspace and the one-way loop is what makes a filtered view pasteable (`trades.ts:62-73`). Watch the filter bar's width at 390px: `sb-filter-bar` already wraps, but seven controls is where that gets tested.
-- [ ] **Step 4: Run** → PASS both suites.
+- [x] **Step 4: Run** → PASS both suites.
 - [ ] **Step 5: Commit** `feat(trades): the filters that had no control`
 
 ---
@@ -2065,17 +2065,26 @@ today. `stats.html` derived them all in browser JS from the raw trade list.
 **Blocked by:** SR54 (same API module)
 **Gap rows:** 7 — MFE, MAE, exit efficiency, entry tags, the auto-generated lesson, the weekly digest, top lessons.
 
+> **Step 1 decision (recorded 2026-08-14):** `GET /trades/:id/journal` answers
+> **200 with `journaled: false`** for an unjournaled trade, deliberately NOT
+> the 404 that `PUT /trades/:id/note` returns. The PUT's 404 is right there --
+> the write genuinely did nothing. A GET asking "is there an entry" has a good
+> answer either way, and making the client catch an error to hear "not yet"
+> is how the normal state of every open position ends up rendered as a
+> failure. `trade-detail.store` now reads that state directly instead of
+> discovering it by trying.
+
 The only cluster with nothing on the wire at all. `JournalStore`,
 `weekly_digest()` and `top_lessons()` all still exist and are exercised by
 `pages.py:journal_page`; what is missing is an API in front of them. They are
 a coherent set — a journal entry's excursion figures and its lesson come from
 the same record — so they come back together or not at all.
 
-- [ ] **Step 1: Write the failing tests** — Python: an endpoint returns a closed trade's MFE, MAE, exit efficiency, tags and auto-lesson, and a second returns the trailing-week digest and top lessons. An open trade has no journal entry and must read as a state, not a 500 (`trade-detail.store` already models `unjournaled` this way — match it).
+- [x] **Step 1: Write the failing tests** — Python: an endpoint returns a closed trade's MFE, MAE, exit efficiency, tags and auto-lesson, and a second returns the trailing-week digest and top lessons. An open trade has no journal entry and must read as a state, not a 500 (`trade-detail.store` already models `unjournaled` this way — match it).
 - [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement.** Excursion figures belong on the detail view's Notes tab beside the note they explain; the digest and lessons belong on Analytics. Do not rebuild the Journal page — spec v14 Decision 4 collapsed it deliberately and that decision stands.
+- [x] **Step 3: Implement.** Excursion figures belong on the detail view's Notes tab beside the note they explain; the digest and lessons belong on Analytics. Do not rebuild the Journal page — spec v14 Decision 4 collapsed it deliberately and that decision stands.
 - [ ] **Step 4: Run** → PASS both suites.
-- [ ] **Step 5: Commit** `feat(journal): excursions, lessons and the weekly digest`
+- [x] **Step 5: Commit** `feat(journal): excursions, lessons and the weekly digest`
 
 ---
 

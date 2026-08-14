@@ -107,11 +107,25 @@ describe('TradeDetailStore — notes and strategy', () => {
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
 
-  /** Load a trade and settle. */
-  const open = (note: string | null = null, strategy = 'RSI Divergence') => {
+  /**
+   * Load a trade and settle BOTH of its requests.
+   *
+   * SR55 added `GET /trades/:id/journal` beside the detail fetch — the
+   * excursions explain the note, and they are read separately so a journal
+   * failure cannot empty the position itself. Settled here so the
+   * `backend.verify()` assertions below still mean "nothing ELSE went out".
+   *
+   * It answers `journaled: false` by default, which is the ordinary state of
+   * an open position. Tests that need an entry pass one.
+   */
+  const open = (note: string | null = null, strategy = 'RSI Divergence',
+                journal: unknown = null) => {
     store.setId(ID);
     tick();
     backend.expectOne(`/api/v1/trades/${ID}`).flush(detailResponse(note, strategy));
+    backend
+      .expectOne(`/api/v1/trades/${ID}/journal`)
+      .flush({ journaled: journal !== null, entry: journal });
   };
 
   it('shows the stored note before anything is typed', () => {
@@ -192,6 +206,49 @@ describe('TradeDetailStore — notes and strategy', () => {
 
     store.editNote('third');
     expect(store.noteStatus()).toBe('unsaved');
+  });
+
+  /* -- SR55: the journal entry behind the note ------------------------ */
+
+  const ENTRY = {
+    trade_id: ID, ticker: 'AAPL', strategy: 'RSI Divergence', horizon_key: '1m',
+    direction: 'bullish', tier: 'A', badge: 'VALIDATED', quality_score: 72,
+    outcome: 'loss', r_realized: -1.0, mfe_r: 1.4, mae_r: 0.2,
+    exit_efficiency: 0.31, holding_days: 3.2, tags: ['gave-it-back'],
+    auto_lesson: 'Went 1.4R in favour before stopping out.', note: '',
+    opened_at: null, closed_at: null, created_at: null,
+  };
+
+  it('shows the three excursion figures, with efficiency as a percentage', () => {
+    open(null, 'RSI Divergence', ENTRY);
+
+    const rows = store.excursions();
+    expect(rows.map((r) => r.label)).toEqual(['MFE', 'MAE', 'Exit efficiency']);
+    expect(rows[0].value).toBe(1.4);
+    // Stored 0-1, shown as a percentage: "captured 31% of the favourable
+    // move" is the sentence a reader is trying to form.
+    expect(rows[2].value).toBeCloseTo(31);
+  });
+
+  it('carries the tags and the auto-lesson through', () => {
+    open(null, 'RSI Divergence', ENTRY);
+    expect(store.journalTags()).toEqual(['gave-it-back']);
+    expect(store.autoLesson()).toContain('1.4R');
+  });
+
+  it('reports no excursions rather than dashes when a trade is unjournaled', () => {
+    // An open position has no excursions to report. Three em dashes would
+    // imply it does and that they could not be measured.
+    open('a note');
+    expect(store.excursions()).toEqual([]);
+    expect(store.journalAbsent()).toBe(true);
+  });
+
+  it('does not claim "unjournaled" before the endpoint has answered', () => {
+    // No open(): nothing has come back yet. Rendering this the same as a
+    // real "no entry" would flash the empty state on every navigation.
+    store.setId(ID);
+    expect(store.journalAbsent()).toBe(false);
   });
 
   it('does not save when nothing was typed', () => {

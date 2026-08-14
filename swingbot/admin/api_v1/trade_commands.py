@@ -216,6 +216,46 @@ def clear_history():
     return jsonify({"removed": TradeLog().clear_history()})
 
 
+# --- journal --------------------------------------------------------------
+
+@api_v1.route("/trades/<trade_id>/journal", methods=["GET"])
+@require_auth
+def get_journal(trade_id: str):
+    """SR55 — one position's journal entry: MFE, MAE, exit efficiency, the
+    entry tags and the auto-generated lesson.
+
+    **200 with `journaled: false`, not 404.** `PUT /trades/:id/note` returns
+    404 for an unjournaled trade and that is right there -- the write genuinely
+    did nothing. A GET asking "is there an entry for this trade" has a perfectly
+    good answer either way, and forcing the client to catch an error to hear
+    "not yet" is how the normal state of every open position ends up rendered
+    as a failure. `trade-detail.store` already models `unjournaled` as a state;
+    this lets it read that state directly instead of discovering it by trying.
+
+    Plan-backed positions resolve to their linked trade first, for the same
+    reason `set_note` does: entries are keyed by TRADE id, so looking one up
+    by plan id silently misses.
+
+    An unreadable journal degrades to "not journaled" rather than 500ing --
+    the excursion figures are context for a note, and losing them must not
+    take the detail view down with them.
+    """
+    from swingbot.core.analytics.journal import JournalStore
+
+    target = trade_id
+    if _looks_like_a_plan_id(trade_id):
+        linked = _linked_trade(TradeLog(), trade_id)
+        if linked is not None:
+            target = linked["id"]
+
+    try:
+        entry = JournalStore().get(target)
+    except Exception:
+        entry = None
+
+    return jsonify({"journaled": entry is not None, "entry": entry})
+
+
 # --- note ----------------------------------------------------------------
 
 @api_v1.route("/trades/<trade_id>/note", methods=["PUT"])

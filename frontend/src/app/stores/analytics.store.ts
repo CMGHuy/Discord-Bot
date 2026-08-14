@@ -14,6 +14,7 @@ import { EventStream } from '../api/event-stream';
 import {
   AnalyticsCalibration,
   AnalyticsDerived,
+  AnalyticsJournal,
   AnalyticsPerformance,
   AnalyticsSnapshot,
   AnalyticsStrategies,
@@ -448,6 +449,12 @@ interface AnalyticsSlice {
    */
   rangeFrom: string | null;
   rangeTo: string | null;
+  /** SR55 — the trailing-week digest and recurring lessons. Its own field
+   *  and its own error for the same reason the snapshot has them: it comes
+   *  from a different endpoint, and losing it is not a reason to warn about
+   *  panels that arrived fine. */
+  journal: AnalyticsJournal | null;
+  journalError: string | null;
   /** SR50 — the pre-built blob, fetched alongside `performance`. */
   snapshot: AnalyticsSnapshot | null;
   /** Its own error: the snapshot self-heals on the server and can rebuild on
@@ -516,6 +523,8 @@ export const AnalyticsStore = signalStore(
     performance: null,
     rangeFrom: null,
     rangeTo: null,
+    journal: null,
+    journalError: null,
     snapshot: null,
     snapshotError: null,
     breakdown: 'ticker',
@@ -535,7 +544,8 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, jobs, job, snapshot, breakdown }) => ({
+  withComputed(({ performance, strategies, calibration, jobs, job, snapshot, breakdown,
+                 journal }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
     /** When the blob was assembled. Worth showing: the server serves a
@@ -707,6 +717,23 @@ export const AnalyticsStore = signalStore(
         .sort((a, b) => a.date.localeCompare(b.date));
     }),
 
+    /* -- SR55: the journal's analytics half ----------------------------- */
+
+    digest: computed<string[]>(() => journal()?.digest ?? []),
+    lessons: computed<string[]>(() => journal()?.lessons ?? []),
+
+    /** Entries behind the two lists above. Shown with them: a digest drawn
+     *  from three entries and one drawn from three hundred read very
+     *  differently, and neither list says so on its own. */
+    journalEntryCount: computed(() => journal()?.entries_n ?? 0),
+
+    /** True once the endpoint has answered with nothing to say — distinct
+     *  from "has not answered yet", which must not render as "no lessons". */
+    journalEmpty: computed(() => {
+      const data = journal();
+      return data !== null && data.digest.length === 0 && data.lessons.length === 0;
+    }),
+
     totals: computed(() => {
       const block = performance()?.totals as Record<string, unknown> | undefined;
       return {
@@ -815,6 +842,21 @@ export const AnalyticsStore = signalStore(
             patchState(store, { performance, loading: false, error: null }),
           error: fail,
         });
+
+      // SR55. A third request, and a third failure mode, for the same reason
+      // the snapshot is separate: the journal lives in its own store and its
+      // own module, and folding it into the performance response would make a
+      // journal read failure empty the KPI cards.
+      api.analyticsJournal().subscribe({
+        next: (journal) => patchState(store, { journal, journalError: null }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            journalError:
+              error.code === 'unavailable'
+                ? 'The admin is not responding.'
+                : error.message,
+          }),
+      });
 
       // SR50. A second request rather than a widened /analytics/performance:
       // the snapshot is a whole pre-built blob served by its own endpoint, and

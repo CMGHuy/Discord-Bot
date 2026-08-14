@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   AnalyticsCalibration,
+  AnalyticsJournal,
   AnalyticsPerformance,
   AnalyticsRegistry,
   AnalyticsSnapshot,
@@ -42,6 +43,7 @@ import {
   TradeNote,
   TradeQuery,
   TradeRow,
+  TradeJournal,
 } from './models';
 
 /** The application's only HTTP surface.
@@ -132,6 +134,13 @@ export class ApiClient {
     );
   }
 
+  /** SR55 — one position's excursions, tags and auto-lesson. Never 404s for
+   *  an unjournaled trade; it answers `journaled: false`. */
+  tradeJournal(tradeId: string): Observable<TradeJournal> {
+    return this.http.get<TradeJournal>(
+      `${this.base}/trades/${encodeURIComponent(tradeId)}/journal`);
+  }
+
   /** The CSV export URL. Returned rather than fetched: the browser should
    *  download this through a normal navigation so it gets a Save dialog and
    *  the server's filename, which an XHR would throw away.
@@ -173,6 +182,11 @@ export class ApiClient {
     if (range?.to) params = params.set('to', range.to);
     return this.http.get<AnalyticsPerformance>(
       `${this.base}/analytics/performance`, { params });
+  }
+
+  /** SR55 — the trailing-week digest and recurring lessons. */
+  analyticsJournal(): Observable<AnalyticsJournal> {
+    return this.http.get<AnalyticsJournal>(`${this.base}/analytics/journal`);
   }
 
   analyticsStrategies(): Observable<AnalyticsStrategies> {

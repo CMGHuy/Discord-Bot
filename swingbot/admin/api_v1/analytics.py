@@ -24,7 +24,7 @@ from flask import jsonify, request
 
 from swingbot.core.performance import TradeLog
 
-from . import ApiError, api_v1
+from . import ApiError, _positive_int, api_v1
 from .auth import require_auth
 
 
@@ -164,6 +164,54 @@ def analytics_performance():
         # returns {}. The key is always present so the workspace never has to
         # distinguish "no benchmark" from "no such field".
         "benchmark": {"spy_cum": stats.get("spy_cum") or {}},
+    })
+
+
+@api_v1.route("/analytics/journal", methods=["GET"])
+@require_auth
+def analytics_journal():
+    """SR55 — the trailing-week digest and the recurring lessons.
+
+    Both already existed (`core.analytics.insights`) and were rendered by
+    `pages.py:journal_page`; only the API in front of them was missing, which
+    is why the parity audit found this cluster with nothing on the wire.
+
+    This is NOT a rebuilt Journal page. Spec v14 Decision 4 collapsed that
+    page deliberately: the digest and lessons are analytics and belong on the
+    Analytics workspace, while a single trade's excursions belong beside the
+    note that explains them, on the detail view. Serving both from here would
+    re-create the page the IA change removed.
+
+    `today` comes from the server clock rather than a parameter. The digest is
+    "the trailing week", and letting a client choose the anchor would turn a
+    fixed report into an ad-hoc query with no pre-registered meaning.
+    """
+    import datetime as dt
+
+    from swingbot.core.analytics.insights import top_lessons, weekly_digest
+    from swingbot.core.analytics.journal import JournalStore
+
+    raw_lessons = (request.args.get("lessons") or "").strip()
+    lessons_n = _positive_int(raw_lessons, "lessons") if raw_lessons else 5
+
+    try:
+        entries = JournalStore().entries()
+    except Exception:
+        # Same posture as `_noted_ids`: an unreadable journal degrades to
+        # "nothing to report" rather than failing an analytics tab whose
+        # other panels came from elsewhere and are fine.
+        entries = []
+
+    tl = TradeLog()
+    closed = [t for t in (tl.get_trades(status=None, limit=None) or [])
+              if t.get("status") in ("win", "loss", "closed")]
+
+    return jsonify({
+        "digest": weekly_digest(entries, closed, today=dt.datetime.now().date()),
+        "lessons": top_lessons(entries, n=lessons_n),
+        # The sample behind both lists. A digest drawn from three entries and
+        # one drawn from three hundred should not read the same way.
+        "entries_n": len(entries),
     })
 
 

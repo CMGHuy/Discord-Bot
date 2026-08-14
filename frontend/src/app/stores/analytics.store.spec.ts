@@ -182,7 +182,7 @@ describe('AnalyticsStore', () => {
   };
 
   /**
-   * The Performance tab makes TWO requests, not one.
+   * The Performance tab makes THREE requests, not one.
    *
    * SR50 added `/analytics/snapshot` beside it: the snapshot is a whole
    * pre-built blob with its own endpoint, and folding it into the summary
@@ -192,11 +192,18 @@ describe('AnalyticsStore', () => {
    *
    * The snapshot's own contents are exercised in `analytics.snapshot.spec.ts`.
    */
+  const JOURNAL = { digest: ['Two losses, both chased.'], lessons: ['Wait for the retest.'], entries_n: 2 };
+
   const respondPerformance = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
       .expectOne('/api/v1/analytics/performance')
       .flush({ ...PERFORMANCE, ...body });
     backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+    // SR55 made it THREE. Same reasoning as the snapshot above: the journal
+    // is its own module behind its own endpoint, and folding it into the
+    // performance response would let a journal read failure empty the KPI
+    // cards. Settled here so `backend.verify()` still means "nothing ELSE".
+    backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
@@ -563,8 +570,14 @@ describe('AnalyticsStore', () => {
     backend
       .expectOne('/api/v1/analytics/snapshot')
       .error(new ProgressEvent('error'), { status: 0 });
+    // SR55's journal goes out with them and fails the same way, for the same
+    // reason: left outstanding it would still be pending on the refetch.
+    backend
+      .expectOne('/api/v1/analytics/journal')
+      .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
     expect(store.snapshotError()).not.toBeNull();
+    expect(store.journalError()).not.toBeNull();
 
     events.raise('analytics');
     tick();
@@ -572,6 +585,8 @@ describe('AnalyticsStore', () => {
 
     expect(store.error()).toBeNull();
     expect(store.snapshotError()).toBeNull();
+    // Three independent failure modes, three independent recoveries.
+    expect(store.journalError()).toBeNull();
   });
 
   /* -- SR54: the date range -------------------------------------------- */
@@ -596,6 +611,7 @@ describe('AnalyticsStore', () => {
       expect(request.request.params.get('to')).toBe('2026-06-30');
       request.flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('omits an unset bound instead of sending it empty', () => {
@@ -611,6 +627,7 @@ describe('AnalyticsStore', () => {
       expect(request.request.params.has('to')).toBe(false);
       request.flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('normalises an inverted range rather than rejecting it', () => {
@@ -627,6 +644,7 @@ describe('AnalyticsStore', () => {
         .expectOne((req) => req.url === '/api/v1/analytics/performance')
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('makes exactly one performance request per range change', () => {
@@ -641,6 +659,7 @@ describe('AnalyticsStore', () => {
         .expectOne((req) => req.url === '/api/v1/analytics/performance')
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
       backend.verify();
     });
 
@@ -652,6 +671,7 @@ describe('AnalyticsStore', () => {
         .expectOne((req) => req.url === '/api/v1/analytics/performance')
         .flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
 
       store.clearRange();
       tick();
@@ -664,6 +684,7 @@ describe('AnalyticsStore', () => {
       expect(store.rangeFrom()).toBeNull();
       request.flush(PERFORMANCE);
       backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+      backend.expectOne('/api/v1/analytics/journal').flush(JOURNAL);
     });
 
     it('passes null figures through as null rather than zero', () => {
