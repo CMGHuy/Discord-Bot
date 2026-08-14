@@ -2081,9 +2081,9 @@ a coherent set — a journal entry's excursion figures and its lesson come from
 the same record — so they come back together or not at all.
 
 - [x] **Step 1: Write the failing tests** — Python: an endpoint returns a closed trade's MFE, MAE, exit efficiency, tags and auto-lesson, and a second returns the trailing-week digest and top lessons. An open trade has no journal entry and must read as a state, not a 500 (`trade-detail.store` already models `unjournaled` this way — match it).
-- [ ] **Step 2: Run and watch them fail.**
+- [x] **Step 2: Run and watch them fail.**
 - [x] **Step 3: Implement.** Excursion figures belong on the detail view's Notes tab beside the note they explain; the digest and lessons belong on Analytics. Do not rebuild the Journal page — spec v14 Decision 4 collapsed it deliberately and that decision stands.
-- [ ] **Step 4: Run** → PASS both suites.
+- [x] **Step 4: Run** → PASS both suites.
 - [x] **Step 5: Commit** `feat(journal): excursions, lessons and the weekly digest`
 
 ---
@@ -2120,9 +2120,9 @@ only-changed filter and the per-field reset all need it, and if it is absent
 this task grows a server side.
 
 - [x] **Step 1: Write the failing test** — search narrows by label, key and help text (the Jinja page matched all three); only-changed hides fields at their default; reset restores one field without touching the rest of the draft; a field away from its default is marked even when untouched this session.
-- [ ] **Step 2: Run and watch it fail.**
+- [x] **Step 2: Run and watch it fail.**
 - [x] **Step 3: Implement.** Search filters sections as well as fields — a section whose every field is hidden must hide too, or the page becomes a column of empty headings.
-- [ ] **Step 4: Run** → PASS.
+- [x] **Step 4: Run** → PASS.
 - [x] **Step 5: Commit** `feat(system): find a setting again`
 
 ---
@@ -2149,9 +2149,9 @@ The tail migrated as text; the tools for reading it did not. The line count is
 only the source (`system.store.ts:390, 433`).
 
 - [x] **Step 1: Write the failing test** — the selector reloads at the chosen count; unchecking a level hides those lines and reports how many are hidden; a continuation line with no `[LEVEL]` marker stays visible whenever INFO is checked (tracebacks are mostly continuation lines, and hiding them is how a filter eats the thing you were reading).
-- [ ] **Step 2: Run and watch it fail.**
+- [x] **Step 2: Run and watch it fail.**
 - [x] **Step 3: Implement.** Level colouring uses `--neg` / `--warn` / `--text-secondary` — ERROR and WARNING are the only two hues here, per the colour rule. Keep the `<pre>`; do not parse log lines into a table.
-- [ ] **Step 4: Run** → PASS.
+- [x] **Step 4: Run** → PASS.
 - [x] **Step 5: Commit** `feat(system): filter the log`
 
 ---
@@ -2184,9 +2184,9 @@ The leftovers, grouped because each is small and they touch the shell.
 > history would assert against `/` and pass for the wrong reason.
 
 - [x] **Step 1: Write the failing tests** — the version footer renders `ui` and `bot` from `GET /health` (`ApiClient.health()` exists at `api-client.ts:82` and has no caller); the dashboard scope toggle changes the endpoint's `mode`; a sign-in from a deep link returns to that link, not to `/dashboard`.
-- [ ] **Step 2: Run and watch them fail.**
+- [x] **Step 2: Run and watch them fail.**
 - [x] **Step 3: Implement.** Two judgement calls to make deliberately rather than by default: the **market-session indicator** belongs beside the connection status in the shell, since "are these prices live" is a global fact and `is_us_market_active()` already answers it server-side; the **font-zoom control** must persist through `PreferencesStore`, not `localStorage` — that is a Global Constraint of this plan, and the Jinja version used `localStorage` precisely because it had no alternative.
-- [ ] **Step 4: Run** → PASS both suites.
+- [x] **Step 4: Run** → PASS both suites.
 - [x] **Step 5: Commit** `feat(shell): version, session and scope`
 
 ---
