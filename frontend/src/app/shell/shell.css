@@ -70,8 +70,16 @@
   gap: var(--space-10);
 }
 
-.collapse {
+/* The bottom of the sidebar. This box owns the bottom anchor so its children
+   do not have to -- see the note in shell.html. */
+.sidebar-foot {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.collapse {
   display: inline-flex;
   align-self: flex-start;
   padding: var(--space-6);
@@ -236,14 +244,26 @@
   padding: 0 var(--space-4);
 }
 
+/* A column, not a row: the rail is 52px wide, so two versions side by side
+   cannot fit there however they are spaced. */
 .version {
   display: flex;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--space-10);
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-8);
   border-top: 1px solid var(--border);
   color: var(--text-faint);
   font-size: var(--text-micro);
   font-variant-numeric: tabular-nums;
 }
 
-.version .updated { margin-left: auto; }
+.version-row { display: flex; gap: var(--space-6); }
+/* Numbers flush right so the two of them line up as a column to compare. */
+.version .num { margin-left: auto; }
+.version .updated { white-space: nowrap; }
+
+/* On the rail the words clip away under the shared `.label` rule above and
+   only the numbers are left, so centre them and drop the flush-right push
+   that has nothing to sit against any more. */
+.shell.railed:not(.overlay) .version { align-items: center; }
+.shell.railed:not(.overlay) .version .num { margin-left: 0; }

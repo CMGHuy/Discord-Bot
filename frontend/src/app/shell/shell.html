@@ -43,19 +43,53 @@
       }
     </ul>
 
-    <!-- Not shown on the phone overlay: there it would sit under a sheet
-         that a navigation is about to dismiss. -->
-    @if (!overlay()) {
-      <button
-        class="collapse"
-        type="button"
-        [attr.aria-label]="railed() ? 'Expand sidebar' : 'Collapse sidebar'"
-        [attr.aria-pressed]="railed()"
-        (click)="toggleSidebar()"
-      >
-        <sb-icon [name]="railed() ? 'expand' : 'collapse'" />
-      </button>
-    }
+    <!-- Both feet in one box that owns the `margin-top: auto`. Putting that
+         on each child instead splits the free space between them when both
+         render, and loses the bottom anchor entirely when whichever child
+         carries it is the one that does not. -->
+    <div class="sidebar-foot">
+      <!-- Not shown on the phone overlay: there it would sit under a sheet
+           that a navigation is about to dismiss. -->
+      @if (!overlay()) {
+        <button
+          class="collapse"
+          type="button"
+          [attr.aria-label]="railed() ? 'Expand sidebar' : 'Collapse sidebar'"
+          [attr.aria-pressed]="railed()"
+          (click)="toggleSidebar()"
+        >
+          <sb-icon [name]="railed() ? 'expand' : 'collapse'" />
+        </button>
+      }
+
+      <!-- The install's version, where the Jinja sidebar had it. Nothing
+           renders until the first answer: a version block that reads 0.0.0
+           while it waits is worse than one that is not there yet.
+
+           The `label` class on the words is doing real work -- it is the same
+           hook the nav labels use, so on the rail they clip away under the
+           existing rule and only the numbers survive, which is all that fits
+           in 52px. `title` carries the full text for that state. -->
+      @if (connection.versions(); as versions) {
+        <div
+          class="version"
+          [attr.title]="'ui ' + versions.ui + ' · bot ' + versions.bot
+            + (connection.lastUpdated() ? ' · updated ' + connection.lastUpdated() : '')"
+        >
+          <span class="version-row">
+            <span class="label">ui</span><span class="num">{{ versions.ui }}</span>
+          </span>
+          <span class="version-row">
+            <span class="label">bot</span><span class="num">{{ versions.bot }}</span>
+          </span>
+          @if (connection.lastUpdated(); as updated) {
+            <!-- VERSION.json's own mtime: it is bumped on every real change, so
+                 it doubles as "when did this image last actually change". -->
+            <span class="label updated">updated {{ updated }}</span>
+          }
+        </div>
+      }
+    </div>
   </nav>
 
   <!-- Tapping away from the overlay dismisses it, which is what every phone
@@ -113,20 +147,6 @@
     <main class="workspace">
       <router-outlet />
     </main>
-
-    <!-- SR58. `ApiClient.health()` had existed with no caller since NG4; the
-         Jinja sidebar showed this and the SPA quietly dropped it. -->
-    @if (connection.versions(); as versions) {
-      <footer class="version">
-        <span>ui {{ versions.ui }}</span>
-        <span>bot {{ versions.bot }}</span>
-        @if (connection.lastUpdated(); as updated) {
-          <!-- VERSION.json's own mtime: it is bumped on every real change, so
-               it doubles as "when did this image last actually change". -->
-          <span class="updated">updated {{ updated }}</span>
-        }
-      </footer>
-    }
   </div>
 
   <sb-toast-host />
