@@ -187,3 +187,36 @@ def test_the_build_base_href_matches_where_flask_serves_the_bundle():
         f"from /app/. A mismatch means every asset 404s and the SPA renders a "
         f"black screen -- with both test suites still green."
     )
+
+
+def test_logged_out_front_door_does_not_500(client):
+    """Release B shipped a 500 here, and every test in this suite missed it.
+
+    `require_auth` redirected an unauthenticated browser to
+    `url_for("login_page")` — a Jinja endpoint the cutover deleted — so `/`
+    raised `BuildError` for anyone not already logged in. The deploy's
+    healthcheck caught it; the test suite did not, because every other test
+    authenticates first and `test_login.py` (which was the only thing
+    exercising the logged-out path) was deleted in the same commit.
+
+    The SPA renders its own login form, so the logged-out front door is
+    supposed to hand over to the SPA and let it ask `/api/v1/session`.
+    """
+    response = client.get("/")
+
+    assert response.status_code < 500, (
+        f"logged-out GET / returned {response.status_code}; it must reach the "
+        f"SPA, which renders the login form itself"
+    )
+    assert response.status_code in (302, 200)
+    if response.status_code == 302:
+        assert "/dashboard" in response.headers["Location"]
+
+
+def test_logged_out_api_is_still_guarded(client):
+    """The counterpart, so the fix above cannot become "nothing is guarded".
+
+    Serving the SPA shell to anyone is fine — it is static assets. What must
+    stay closed is the data.
+    """
+    assert client.get("/api/v1/dashboard").status_code == 401

@@ -273,8 +273,16 @@ def require_auth(view):
                 "Authentication required.", 401,
                 {"WWW-Authenticate": 'Basic realm="Swing Bot Admin"'},
             )
-        next_path = request.full_path if request.query_string else request.path
-        return redirect(url_for("login_page", next=next_path))
+        # Release B: there is no Jinja login page to redirect to any more.
+        # An unauthenticated browser gets the SPA, which renders its OWN login
+        # form instead of the shell (`App` branches on `session`), and asks
+        # `/api/v1/session` — the one v1 route that is deliberately NOT
+        # auth-guarded, precisely so "am I logged in" is answerable.
+        #
+        # Guarding the HTML here would be theatre: the SPA bundle is static
+        # assets, and what actually protects data is `/api/v1/*` being
+        # guarded, which it is.
+        return redirect(url_for("spa_dashboard"))
     return wrapped
 
 
@@ -311,7 +319,6 @@ def _render(title: str, active_page: str, template_name: str, **ctx) -> str:
 
 
 @app.route("/", methods=["GET"])
-@require_auth
 def index():
     """The front door. Release B: the SPA owns it unconditionally.
 
@@ -325,6 +332,12 @@ def index():
     `index` stays the endpoint `url_for` resolves to `/`. The endpoint it
     redirects to is bare `spa_dashboard` because `spa.register()` adds the
     workspace rules to the app directly, not to a blueprint.
+
+    **Not `@require_auth`.** It was, and that shipped a 500: the decorator
+    redirected an unauthenticated browser to `url_for("login_page")`, a Jinja
+    endpoint Release B deleted, so every logged-out request to `/` raised
+    BuildError. Guarding it was never the thing protecting anything anyway —
+    the SPA renders its own login form, and `/api/v1/*` is what is guarded.
     """
     return redirect(url_for("spa_dashboard"))
 
