@@ -78,7 +78,7 @@ second silently overwrites the first. Respect the groups.
 
 ---
 
-## Phase 1 — The contract
+# Phase 1 — The contract
 
 ### Task 1: The `--control-h` token
 
@@ -543,7 +543,7 @@ git commit -m "refactor(ui): filter bar and confirm dialog use sb-control-row"
 
 ---
 
-## Phase 2 — Settings
+# Phase 2 — Settings
 
 *Parallel with Phase 3. One worker takes Tasks 6–8 in order.*
 
@@ -932,7 +932,7 @@ git commit -m "refactor(settings): find row and save bar use sb-control-row"
 
 ---
 
-## Phase 3 — The workspaces
+# Phase 3 — The workspaces
 
 *Parallel with Phase 2 and internally parallel: four workers, one task each.*
 
@@ -1184,7 +1184,7 @@ git commit -m "refactor(workspaces): remaining control rows use sb-control-row"
 
 ---
 
-## Phase 4 — Lock it in
+# Phase 4 — Lock it in
 
 ### Task 13: The guard that catches the 48th row
 

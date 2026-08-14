@@ -75,7 +75,7 @@ canvas, reversing `strategy-overlay.ts`'s "No text" rule deliberately.
 
 ---
 
-## Phase 1 — The fit
+# Phase 1 — The fit
 
 ### Task 1: Extract the fit into one module
 
@@ -558,7 +558,7 @@ git commit -m "feat(charts): trendline geometry from the stored fit"
 
 ---
 
-## Phase 2 — The endpoint
+# Phase 2 — The endpoint
 
 ### Task 5: Re-key the chart endpoint to ticker
 
@@ -782,7 +782,7 @@ git commit -m "feat(api): both overlays, the trendline, and lazy fit backfill"
 
 ---
 
-## Phase 3 — One component
+# Phase 3 — One component
 
 ### Task 7: Retype the payload and delete the old route
 
@@ -891,7 +891,7 @@ git commit -m "refactor(chart): one chart component for trades and tickers"
 
 ---
 
-## Phase 4 — Legend and prefs
+# Phase 4 — Legend and prefs
 
 ### Task 9: The legend primitive
 

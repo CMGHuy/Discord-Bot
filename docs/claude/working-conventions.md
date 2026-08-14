@@ -248,7 +248,14 @@ A plan is **never read whole** — `/task-brief E53` and
 is mechanically addressable, so both forms are mandatory regardless of length:
 
 - `### Task N: <name>` — one line, no variations, no prose before the colon.
-- `## Phase N — <name>` for phase boundaries.
+- `# Phase N — <name>` for phase boundaries. **One hash, not two**, however
+  wrong that looks next to the `##` sections around it. `CLAUDE.md` documents
+  `grep -n "^# Phase"` as the way to orient in a plan, and every plan in the
+  repo from `v2-unified-plan-engine` onward is written to match it. A plan
+  using `## Phase` returns **zero** matches for that command and is invisible
+  to the tool that exists to keep it out of context — which is the whole point
+  of this section. (`v24` and `v25` were written with `##` and corrected;
+  that is how this was found.)
 
 `grep -c "^### Task"` and `grep -n "^# Phase"` are how a session orients without
 loading the file, and a plan whose headers drift breaks both.
@@ -296,3 +303,99 @@ Be honest about a group of one. A phase that is genuinely a chain says so —
 `Sequential throughout: each task consumes the previous task's payload field` —
 and that sentence is worth as much as a wide group, because it stops the next
 session re-deriving the dependency graph to find out.
+
+## Naming specs and plans
+
+**`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md`** — date,
+then version, then name:
+
+```
+2026-08-08-v16-angular-migration.md          (plan)
+2026-08-08-v15-jinja-cutover-design.md       (spec)
+2026-07-14-v6-gatekeeper_0-index.md          (one document split into parts)
+```
+
+`vN` is one repo-wide counter shared by both directories — `v11` is the eleventh
+design document in this repo, whether spec or plan. Next number:
+
+```bash
+find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
+  | grep -oE 'v[0-9]+' | sort -V | tail -1
+```
+
+Use `find`, not `ls` on the two directories — finished documents live one level
+down in `implemented/`, so an `ls` that misses them returns a stale maximum and
+makes you reuse a number.
+
+Never reuse a number, and never renumber a committed one — commit messages and
+cross-links reference it. Revising a document in place keeps its number; only a
+genuinely new document takes the next. A document split across files reuses the
+parent's number with a `_N` part suffix rather than consuming N numbers.
+
+### Plans that are no longer live move to `implemented/`
+
+**When a plan stops being live work, `git mv` it — and every spec it was built
+from — into `docs/superpowers/plans/implemented/` and
+`docs/superpowers/specs/implemented/` as part of the closing commit.** The top
+level of those two directories then holds exactly the live work: what is in
+flight, and what is designed but still to be built.
+
+- **`implemented/` means "off the live list", not "every box is ticked".** It
+  holds three kinds of document, deliberately: plans that finished; plans
+  abandoned part-way (`v3-cockpit` at 15/467, `v4-edge-engine` at 133/399); and
+  plans whose code was later deleted by a rollback (`v6-gatekeeper`, undone by
+  `c84924a`). Read a moved plan's Progress block before assuming its code ships
+  today — the folder does not promise that.
+- **A plan is done when its own work is done**, not when the checkboxes agree. A
+  plan closing with tasks deliberately cut, deferred to a successor, or left open
+  for manual QA is finished — say so in its Progress block, then move it. `[x]`
+  boxes lie in both directions; derive the verdict from deliverables and merge
+  commits, never from the boxes.
+- **A spec moves only when nothing live still builds from it.** A spec feeding
+  several plans stays put until the last of them closes — `v15-jinja-cutover` is
+  the example: its plan (`v16-angular-migration`) is closed and moved, but the
+  cutover itself was handed to a future plan, so the spec stayed.
+- **Not every spec has a plan.** A multi-component design doc can be executed
+  component-by-component with no plan file at all; it is closed when every
+  component is resolved — and **"resolved" includes a negative result or a
+  component correctly not built because its own gate never opened.**
+  `v17-market-context` is the example: P0/P1 shipped, P2a closed on measured
+  evidence with an *empty* `REGIME_ALLOW`, P2b was gated off by P2a's failure,
+  P3's script shipped. It carries a status table in its header; write one before
+  moving a spec like that, or the next session will read the empty table as
+  unfinished work and re-run a closed pre-registration.
+- **Fix the references in the same commit.** Plans, specs, source docstrings
+  (`swingbot/core/analytics/*.py`, `swingbot/admin/**`), tests and
+  `.claude/skills/task-brief/SKILL.md` all cite these paths; after moving,
+  re-point every reference and confirm none dangle.
+- **The `SessionStart` hook only globs `plans/*.md`**, so a moved plan drops out
+  of the cursor's "active plan" line by design. To resume one, move it back up
+  first.
+
+### Worktrees are named after the plan
+
+**A worktree created to execute a plan takes the plan's file stem**, so the
+branch, the directory and the document always name the same thing:
+
+```
+docs/superpowers/plans/2026-08-13-v21-spa-refresh.md
+  → .claude/worktrees/2026-08-13-v21-spa-refresh/   (branch: same name)
+```
+
+Never invent a fresh topic name — a worktree called `trade-history-filter` takes
+a second lookup to tie back to plan v9. For work that is not executing a plan, a
+short topic name is fine; the rule binds only when a plan exists.
+
+## Long-running scripts must report progress
+
+**Any script meant to run in the background for more than a couple of minutes
+must print incremental progress** — one flushed line per unit of work
+(fold/ticker/chunk), not just a final summary once everything is done.
+
+`scripts/wf_run.py --full` is the counterexample that cost a whole monitoring
+session: it only prints the fold table after `run_folds()` fully returns, so a
+multi-hour run gives zero signal beyond OS-level CPU time until the very end.
+When writing or invoking a new long-running script, either confirm it already
+logs per-unit progress, or add a `print(..., flush=True)` (or `log.info`) per
+completed unit before kicking it off — don't discover this gap hours into an
+unmonitorable run.
