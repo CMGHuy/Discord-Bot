@@ -205,7 +205,40 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               </dl>
             </sb-panel>
 
+            <!-- SR60. trade_detail.html:96-104. Derived from target2 and
+                 stop_loss, both of which the Levels panel already shows --
+                 what was missing was the sentence saying what they MEAN if
+                 price actually gets to TP1. -->
+            <sb-panel [heading]="ifItGetsThereHeading()">
+              <dl>
+                <div>
+                  <dt>Continues past {{ levelWord() }} 1</dt>
+                  <dd class="num">
+                    @if (trade.target2 !== null) {
+                      next stop {{ fmt(trade.target2) }}
+                    } @else {
+                      <span class="absent">no further level found</span>
+                    }
+                  </dd>
+                </div>
+                <div>
+                  <dt>Reverses at {{ levelWord() }} 1</dt>
+                  <dd class="num">
+                    pulls back toward {{ oppositeWord() }} at {{ fmt(trade.stop_loss) }}
+                  </dd>
+                </div>
+              </dl>
+            </sb-panel>
+
             <sb-panel heading="Sizing">
+              <!-- SR60. _trade_history_rows.html:67. The number was already
+                   here as a picker-addable column; what was missing is that a
+                   trade logged before sizing snapshots existed shows an
+                   estimate, not a recorded figure. -->
+              <p class="section-help">
+                Position size is snapshotted when the trade opens. A trade with
+                no sizing snapshot was logged before that feature existed.
+              </p>
               <dl>
                 <div>
                   <dt>Shares</dt>
@@ -871,6 +904,20 @@ export class TradeDetail {
   readonly tab = input<string>();
 
   protected readonly tabs = TABS;
+
+  /* -- SR60: the "if it gets there" wording ---------------------------- */
+
+  /** `admin/app.py:691` -- Resistance for a long, Support for a short. The
+   *  words matter: "next stop 210" reads differently above and below price. */
+  protected readonly levelWord = computed(() =>
+    this.store.trade()?.direction === 'bearish' ? 'support' : 'resistance',
+  );
+
+  protected readonly oppositeWord = computed(() =>
+    this.store.trade()?.direction === 'bearish' ? 'resistance' : 'support',
+  );
+
+  protected readonly ifItGetsThereHeading = computed(() => 'If it gets there');
 
   protected readonly fmt = num;
   protected readonly fmtText = text;

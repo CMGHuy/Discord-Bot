@@ -225,7 +225,7 @@ format was.
 | Dashboard | Section help: the PENDING → … → CLOSED explainer | `_plans_board.html:22-27` | cosmetic | — the lifecycle is not explained anywhere in the SPA |
 | Trades | That cell's tooltip: position size at open, or "no sizing snapshot" | `:67` | cosmetic | — `position_value` is a picker-addable column, but the "logged before this feature existed" distinction is gone |
 | Trades | "If it gets there" projection (next level up, pullback on reversal) | `:96-104` | cosmetic | — no equivalent panel; it is derived from `target2` and `stop_loss`, both of which the Levels panel already has |
-| Trades | "Logged before the admin UI captured full detail" notice | `:177-181` | cosmetic | — the SPA renders missing detail fields as dashes with no explanation of why they are empty |
+| Trades | "Logged before the admin UI captured full detail" notice | `:177-181` | cosmetic | **Already filled — this row is stale.** Found during SR60: `trade-detail.store.ts:detailAbsent` plus the `no-detail` paragraph in `trade-detail.ts` already say it, in near-identical wording. The audit recorded the gap against the *fields* rendering as dashes; the notice explaining them had in fact landed. No work was needed and none was invented. |
 | Analytics | Range summary line | `:420` | cosmetic | — |
 | Analytics | Badge-drift section help: the ≥20 trades / >10 points rule | `stats.html:50` | cosmetic | — the threshold is now nowhere in the UI |
 | Analytics | Badge-drift tip: what "decay" means | `calibration.html:53`, `stats.html:48` | cosmetic | — |
