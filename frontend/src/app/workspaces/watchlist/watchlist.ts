@@ -50,6 +50,17 @@ import { Panel } from '../../ui/layout';
     </header>
 
     <sb-panel heading="Add tickers">
+      <!-- SR62. watchlist.html:85-92. The gap table calls this the one
+           cosmetic row with a functional consequence: an add that fails
+           because the symbol format is wrong gives no hint what the right
+           format was, and the format is not guessable. -->
+      <p class="section-help">
+        Ticker symbols must match Yahoo Finance format — e.g.
+        <code>ASML.AS</code> for Euronext, <code>BTC-USD</code> for crypto,
+        <code>^GSPC</code> for the S&amp;P 500 index. After adding or removing
+        a ticker, the change takes effect on the next <code>!check</code> or
+        scheduled background scan.
+      </p>
       <div class="add">
         <div class="box">
           <input

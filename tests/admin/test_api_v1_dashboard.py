@@ -290,3 +290,20 @@ def test_health_carries_the_versions_and_the_market_session(logged_in):
     assert_shape(body["versions"], {
         "ui": str, "bot": str, "last_updated": (str, type(None)),
     }, where="versions")
+
+
+def test_train_window_still_matches_the_dates_the_spa_prints():
+    """SR62 printed the TRAIN window into the Analytics workspace as literal
+    text, because it is a frozen constant and serving it would be an endpoint
+    for two dates that never move.
+
+    "Never move" is the assumption this test holds. If `TRAIN_WINDOW` ever
+    changes, the SPA would keep printing the old dates with nothing to catch
+    it -- copy that states a stale window is worse than no copy.
+    """
+    from swingbot.admin.jobs import TRAIN_WINDOW
+
+    assert TRAIN_WINDOW == ("2020-01-01", "2023-12-31"), (
+        "TRAIN_WINDOW changed. Update the literal dates in "
+        "frontend/src/app/workspaces/analytics/analytics.ts (Run a TRAIN grid)."
+    )

@@ -615,7 +615,8 @@ interface ProposalView extends ProposalRow {
         <sb-panel heading="Run a TRAIN grid">
           <p class="note">
             A grid search runs one strategy's parameters through every
-            combination in its tuning grid against the fixed TRAIN window —
+            combination in its tuning grid against the fixed TRAIN window
+            (2020-01-01 .. 2023-12-31) —
             never the VALIDATION window the badges on the Strategies tab are
             measured against. That firewall is what keeps those badges honest,
             so no date input exists here or anywhere in this workbench.
