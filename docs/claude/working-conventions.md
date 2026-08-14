@@ -90,6 +90,18 @@ history becoming incomparable to what came before. If a deploy needs a manual
 step on the server, or a one-way migration, it is major. Do not spend it on
 "this is a big feature" — that is what minor is for.
 
+### Each part is an integer, not a digit
+
+`1.0.9` is followed by `1.0.10`, not by `1.1.0`. There is no carry and no
+ceiling — `1.1.1000` is a perfectly legal version. A part rolls over **only**
+when the rule above says the bump is a minor or a major, never because the
+number next to it "ran out".
+
+This is not hypothetical: `bot` ran `1.0.9 → 1.0.10 → … → 1.0.15` before
+Plan Engine v2 took it to `1.1.0`, and that minor was earned by the engine
+change, not by the counter. Reading `1.0.9` as "nearly 1.1" would have bumped
+a minor for eleven patches in a row.
+
 ### When NOT to bump
 
 Most commits. There have been roughly 20 bumps across the repo's whole life
