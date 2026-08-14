@@ -132,8 +132,9 @@ jobs:
   #   - Dockerfile or requirements.txt breakage that a plain `pip install`
   #     in the earlier jobs wouldn't catch (e.g. system-level deps).
   #   - admin_ui.py failing to bind / Flask crashing on startup.
-  #   - Auth gate regression (unauthenticated browser request must redirect
-  #     to /login, not serve the dashboard; wrong credentials still 401).
+  #   - Auth gate regression (an unauthenticated browser must reach the SPA,
+  #     which renders its own login form; /api/v1/* must still 401; wrong
+  #     Basic Auth credentials still 401).
   #   - Any route returning 5xx instead of 200.
   container-healthcheck:
     needs: [test, frontend]
@@ -223,29 +224,35 @@ jobs:
           docker logs swing-bot-admin-ci
           exit 1
 
-      - name: Auth gate — unauthenticated browser request must redirect to /login
+      # Release B deleted the Jinja login page. These two steps used to
+      # assert that "/" redirects to /login and that /login renders -- both
+      # now describe a UI that does not exist. What replaced them asserts the
+      # property that actually matters and survives a UI change: the SPA
+      # shell is servable to anyone (static assets; it renders its own login
+      # form), while the DATA behind /api/v1/* is not.
+      - name: Auth gate - unauthenticated browser request reaches the SPA
         run: |
           RESP=$(curl -s -D - -o /dev/null http://localhost:1234/)
           STATUS=$(echo "$RESP" | head -1 | grep -oE "[0-9]{3}")
           if [ "$STATUS" != "302" ]; then
-            echo "FAIL: expected HTTP 302 (redirect to /login) without credentials, got HTTP $STATUS"
+            echo "FAIL: expected HTTP 302 from / without credentials, got HTTP $STATUS"
             exit 1
           fi
           LOCATION=$(echo "$RESP" | grep -i "^location:" | tr -d "\r" | awk '{print $2}')
-          if ! echo "$LOCATION" | grep -q "/login"; then
-            echo "FAIL: expected redirect Location to contain /login, got: '$LOCATION'"
+          if ! echo "$LOCATION" | grep -q "/dashboard"; then
+            echo "FAIL: expected Location to contain /dashboard, got: '$LOCATION'"
             exit 1
           fi
-          echo "OK: unauthenticated request redirected to $LOCATION"
+          echo "OK: unauthenticated request handed to the SPA at $LOCATION"
 
-      - name: Auth gate — /login page itself must be reachable without credentials
+      - name: Auth gate - the API stays guarded without credentials
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234/login)
-          if [ "$STATUS" != "200" ]; then
-            echo "FAIL: expected HTTP 200 for /login without credentials, got HTTP $STATUS"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1234/api/v1/dashboard)
+          if [ "$STATUS" != "401" ]; then
+            echo "FAIL: expected HTTP 401 from /api/v1/dashboard without credentials, got HTTP $STATUS"
             exit 1
           fi
-          echo "OK: /login reachable"
+          echo "OK: /api/v1/* still requires auth"
 
       - name: Auth gate — wrong Basic Auth credentials must still return 401
         run: |
