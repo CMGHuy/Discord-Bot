@@ -1,6 +1,6 @@
 # Admin SPA refresh — Implementation Plan (v21)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order SR1→SR48 unless the parallel-dispatch table below says otherwise.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order SR1→SR64 unless the parallel-dispatch table below says otherwise. (SR48–SR63 did not exist when this plan was written — SR47 derived them from the parity audit, as it was always meant to.)
 
 **Version:** ui 1.1.0 · bot 1.1.2
 
@@ -58,7 +58,7 @@ Every task's requirements implicitly include this section.
 | **P1** | SR7–SR19 | `SR7` ∥ `SR8,SR9,SR10` ∥ `SR12,SR13,SR14,SR15`. Then SR11, then SR16, then SR17+SR18, then SR19. |
 | **P2** | SR20–SR31 | `SR20` ∥ `SR23`. Then `SR21,SR22` ∥ `SR24`. Then SR25–SR30 all six concurrently. Then SR31. |
 | **P3** | SR32–SR40 | `SR32→SR33` (Python) ∥ `SR34` (the risk gate, TS). Then SR35, which needs both. Then `SR36,SR37,SR38,SR39` concurrently. Then SR40. |
-| **P4** | SR41–SR48 | SR41–SR45 all five concurrently. Then SR46, SR47, SR48. |
+| **P4** | SR41–SR64 | SR41–SR45 all five concurrently. Then SR46, then SR47 — which *wrote* SR48–SR63. Then **SR48 alone** (it restores a capability the rest assume). Then `SR49` ∥ `SR50→SR51` ∥ `SR52→SR53→SR58` ∥ `SR54→SR55` ∥ `SR56→SR57`. SR59–SR63 are copy-only and run alongside, each after the task it annotates. Then SR64. |
 
 A dispatching session reads each task's `Owns:` and `Blocked by:` and confirms against this table. Where the two disagree, the task's own lines win — this table is a summary.
 
@@ -1844,20 +1844,299 @@ table's "The ranking" section — that grouping is what SR47 turns into tasks.
 
 The gap list cannot be enumerated before the audit runs, so this task *writes the remaining tasks*.
 
-- [ ] **Step 1:** For each `missing` row ranked *blocks NG57*, append a task `SR48+n` to this plan in the standard format — `Owns:`, `Blocked by:`, failing test, implementation, verification, commit. One task per feature, or one per tightly-coupled group.
-- [ ] **Step 2:** For each row ranked *cosmetic*, decide **drop** or **fill** and record the decision in the gap table. A dropped row moves to `dropped on purpose` with this task as the decision.
-- [ ] **Step 3: Update the phase table** at the top of this plan with the real Phase 4 task count.
-- [ ] **Step 4:** Renumber the release task below to follow the appended ones.
-- [ ] **Step 5: Commit** `docs(plan): the gap-fill tasks, derived`
+- [x] **Step 1:** For each `missing` row ranked *blocks NG57*, append a task `SR48+n` to this plan in the standard format — `Owns:`, `Blocked by:`, failing test, implementation, verification, commit. One task per feature, or one per tightly-coupled group.
+- [x] **Step 2:** For each row ranked *cosmetic*, decide **drop** or **fill** and record the decision in the gap table. A dropped row moves to `dropped on purpose` with this task as the decision.
+- [x] **Step 3: Update the phase table** at the top of this plan with the real Phase 4 task count.
+- [x] **Step 4:** Renumber the release task below to follow the appended ones.
+- [x] **Step 5: Commit** `docs(plan): the gap-fill tasks, derived`
 
-**Acceptance:** every `missing` row in the gap table is either a task in this plan or a recorded decision to drop. Zero rows in neither state.
+**Decision on the cosmetic rows: fill all 33.** None is dropped, so no row
+moves to `dropped on purpose` under this task. The reasoning is in the gap
+table's cosmetic section: the largest cluster is Analytics' explanatory copy,
+and a page whose numbers no longer state the bar they are judged against has
+changed what it communicates, not merely what it looks like.
+
+**Correction made in the same commit.** SR46's "The ranking" section printed
+cluster sizes of [1][11][20][9][7][5][17][7][5][2][4]. Bucketing all 88 rows
+one by one to write the tasks below gave [1][9][17][10][7][5][18][7][5][2][7].
+Both sum to 88, which is why the error survived SR46 — the gap table has been
+corrected to the second set, and the tasks below are numbered against it.
+
+**Acceptance:** every `missing` row in the gap table is either a task in this plan or a recorded decision to drop. Zero rows in neither state. — **met:** 88 blocking rows across SR48–SR58, 33 cosmetic rows across SR59–SR63.
 
 ---
 
-### Task SR48: Release
+# Phase 4 continued — the gap fill (SR48–SR63)
+
+Derived by SR47 from `docs/superpowers/results/2026-08-13-jinja-feature-parity.md`.
+Eleven tasks for the 88 *blocks NG57* rows, one per coupled cluster; five for
+the 33 *cosmetic* rows, one per workspace.
+
+**Read the gap table's row for a feature before implementing it.** Each row
+names where the feature was in Jinja and what the SPA has instead; several
+"missing" rows turn out to need only a view over data already on the wire, and
+the row says which.
+
+**Ordering.** SR48 first and alone — it is a one-line defect fix that restores
+a capability every other task assumes exists. SR49–SR58 have disjoint `Owns:`
+sets and may fan out. SR59–SR63 are copy-only and may run alongside anything,
+but each should land *after* the task that builds the thing it annotates.
+
+---
+
+### Task SR48: The row actions that never render
+
+**Owns:** `frontend/src/app/workspaces/trades/trade-actions.ts`, `frontend/src/app/workspaces/trades/trade-actions.spec.ts`
+**Blocked by:** SR47
+**Gap rows:** 1 — the Close and Cancel row actions, in both the list and the detail view.
+
+The only audit row that removed a capability rather than relocating it.
+`availableActions()` switches on `'open'` / `'planned'` / `'pending'`, but the
+collection endpoint always emits the uppercase plan vocabulary — `_row_from_plan`
+passes `plan["status"]` through verbatim and `_row_from_trade` maps legacy
+statuses through `_LEGACY_STATUS` into `ACTIVE` / `CLOSED`
+(`swingbot/admin/api_v1/trades.py:49-54, 119, 159`). Every row therefore falls
+to the `default:` branch and offers Delete alone. It reads as "this trade
+cannot be closed from here" rather than as a bug, which is how it reached the
+Phase 3 gate — the same failure mode as NG54.
+
+- [ ] **Step 1: Write the failing test** — `availableActions('ACTIVE')` and `('PARTIAL')` contain `close`; `('PENDING')` contains `cancel`; `('CLOSED')`, `('CANCELLED')` and `('EXPIRED')` return `['delete']` alone. Assert against the **uppercase** vocabulary, and add a case asserting no status returns an empty list. A test written against the lowercase strings would pass today and prove nothing.
+- [ ] **Step 2: Run and watch it fail** — four of the six cases.
+- [ ] **Step 3: Implement.** Switch on the plan vocabulary. Keep `'open'` accepted as an alias — it is the server-side query alias for ACTIVE-or-PARTIAL (`_OPEN_STATUSES`, `trades.py:75`) and the Dashboard queries with it — but do not let correctness depend on it, since no row ever carries it.
+- [ ] **Step 4: Run** → PASS. Then check it in the app: an ACTIVE row shows Close, a PENDING row shows Cancel, and the detail view's Live → Actions panel shows the same.
+- [ ] **Step 5: Commit** `fix(trades): close and cancel actually render`
+
+---
+
+### Task SR49: The detail fields that arrive and render nowhere
+
+**Owns:** `frontend/src/app/workspaces/trades/trade-detail.ts`, `frontend/src/app/workspaces/trades/trade-detail.spec.ts`
+**Blocked by:** SR47
+**Gap rows:** 9 — `explanation`, `confirmed_by`, `target_sources` / `stop_sources`, `confidence_breakdown`, `quality_breakdown`, `status_history`, `legs`, `trigger_price`, `breakeven_trigger_fraction`.
+
+Every one is typed on `TradeDetailFields` (`frontend/src/app/api/models.ts:101-139`),
+fetched on every detail load, and read by nothing — `grep` finds each exactly
+once in `frontend/src`, in `models.ts` itself. No endpoint work.
+
+- [ ] **Step 1: Write the failing test** — mount the detail view with a fixture carrying all nine fields and assert each renders: the explanation as prose, `confirmed_by` as a list, target/stop sources on the Levels rows they justify, the two breakdowns as factor/points tables, `status_history` as an ordered timeline, `legs` as the runner rows, `trigger_price` beside Entry, and the break-even fraction on the Plan tab. Assert too that a legacy row with all nine null renders the "logged before the admin UI captured full detail" state rather than nine empty panels.
+- [ ] **Step 2: Run and watch it fail.**
+- [ ] **Step 3: Implement.** Four of the five tabs already exist; put the prose and the two breakdowns behind the Plan tab, the timeline and legs behind Live. `quality_breakdown` and `status_history` are `unknown[]` on purpose (the Python side owns their shape) — narrow them in the store the way `DashboardStore.finiteNumber` does, never in the template.
+- [ ] **Step 4: Run** → PASS. `npx ng test`.
+- [ ] **Step 5: Commit** `feat(trades): the detail fields that were already on the wire`
+
+---
+
+### Task SR50: The analytics snapshot, unread
+
+**Owns:** `frontend/src/app/stores/analytics.store.ts`, `frontend/src/app/stores/analytics.store.spec.ts`, `frontend/src/app/workspaces/analytics/analytics.ts`
+**Blocked by:** SR47
+**Gap rows:** 17 — profit factor, Sharpe, Sortino, max drawdown, streaks, the balance and drawdown series, the monthly heatmap, R-multiples, the win/loss, long/short, strategy, ticker and horizon splits, and the by-stock and by-day-of-week breakdowns.
+
+`GET /analytics/snapshot` forwards the whole snapshot verbatim
+(`swingbot/admin/api_v1/analytics.py:44-48`), and it already carries every
+figure above — `overall.*`, `equity_curve`, `drawdown`, `r_multiples` and a
+`by` block grouped along ten dimensions (`swingbot/core/analytics/snapshots.py:37-66`,
+`aggregate.py:88-89`). `ApiClient.analyticsSnapshot()` exists
+(`api-client.ts:156`) and no store calls it. This task is a store slice and a
+set of views; no Python changes.
+
+- [ ] **Step 1: Write the failing test** — a snapshot fixture in, each derived signal out. Cover the absent cases explicitly: a snapshot with no closed trades must give `null` per metric, never `0` (`ui/format.ts`'s rule and `DashboardStore`'s `finiteNumber`), and a missing `by` dimension must give an empty list rather than throwing.
+- [ ] **Step 2: Run and watch it fail.**
+- [ ] **Step 3: Implement.** One `load()` and one `withHooks` effect on the `analytics` event, following `DashboardStore`'s shape as the file's own docstring instructs. Render the scalars as metric chips on the Performance tab and the `by` dimensions as tables — **tables, not pies.** Seven pie charts is what made `stats.html` unreadable, the data is categorical shares, and `dataviz` guidance is a bar or a table for that. The chart-shaped rows here are the balance series, the drawdown series and the R-multiple distribution.
+- [ ] **Step 4: Run** → PASS. `npx ng test`.
+- [ ] **Step 5: Commit** `feat(analytics): read the snapshot we were already serving`
+
+---
+
+### Task SR51: The tuning grid results and Propose
+
+**Owns:** `frontend/src/app/workspaces/analytics/analytics.ts`, `frontend/src/app/workspaces/analytics/analytics.columns.ts`, `frontend/src/app/stores/analytics.store.ts`, `frontend/src/app/api/api-client.ts`
+**Blocked by:** SR50 (same files)
+**Gap rows:** 10 — the grid-results table and its six columns, the Propose action, the per-job "view results" link, and the current-parameters `default_params` column.
+
+The break in the middle of the Tuning workflow. A grid can be launched and
+proposals can be deleted; a proposal cannot be created by any route, because
+the Propose button lived in the results table that did not migrate.
+`POST /tuning/propose` still exists (`swingbot/admin/pages.py:435-479`), takes
+`job_id` and `row_index`, and the job already writes its result file — so this
+is a view over data produced today.
+
+- [ ] **Step 1: Write the failing test** — a finished job's result fixture renders one row per grid combination with params, N, win rate, ExpR, excluded share and a pass marker; rows clearing the bar (win rate ≥80%, positive expectancy, N ≥30 — `pages.py:_grid_row_passes`) are marked; Propose posts `job_id` and the row's index and surfaces the server's reply. Assert the bar is read from one place, not reimplemented per column.
+- [ ] **Step 2: Run and watch it fail.**
+- [ ] **Step 3: Implement.** Add the results fetch to `ApiClient` and the store; declare the columns in `analytics.columns.ts` beside the other four column sets. Propose is destructive-adjacent — it stages a change to code — so route it through `sb-confirm-dialog` naming the strategy and the parameters, the way `trade-actions.ts` names what it acts on.
+- [ ] **Step 4: Run** → PASS. Then walk it: launch a grid, wait for the `jobs` event, propose a passing row, see it appear in Proposals below.
+- [ ] **Step 5: Commit** `feat(analytics): grid results, and Propose`
+
+---
+
+### Task SR52: The list filters with no control
+
+**Owns:** `frontend/src/app/workspaces/trades/trades.ts`, `frontend/src/app/stores/trades.store.ts`, `swingbot/admin/api_v1/trades.py`, `tests/admin/test_api_trades.py`
+**Blocked by:** SR47
+**Gap rows:** 7 — strategy, horizon, confidence, tier, badge, tag, has-note.
+
+Four are already accepted server-side: `strategy`, `horizon`, `tier` and
+`has_note` are in `FILTERS` (`swingbot/admin/api_v1/trades.py:59-60`) and need
+only a control. `badge`, `confidence` and `tag` need the server side too — and
+`tag` needs journal tags on the row at all, so **if it forces a second data
+source, cut it to SR55 and say so here** rather than widening this task.
+
+- [ ] **Step 1: Write the failing tests** — Python: each new filter narrows the collection and an unknown value is a 400, not a silent no-op (the property `FILTERS` exists to guarantee). TS: each control writes its query parameter and clearing it removes the parameter rather than sending an empty string.
+- [ ] **Step 2: Run and watch them fail.**
+- [ ] **Step 3: Implement.** Filters navigate; they never mutate the store directly — query parameters are the source of truth for this workspace and the one-way loop is what makes a filtered view pasteable (`trades.ts:62-73`). Watch the filter bar's width at 390px: `sb-filter-bar` already wraps, but seven controls is where that gets tested.
+- [ ] **Step 4: Run** → PASS both suites.
+- [ ] **Step 5: Commit** `feat(trades): the filters that had no control`
+
+---
+
+### Task SR53: Plan-shaped columns and the lifecycle counts
+
+**Owns:** `frontend/src/app/workspaces/trades/trades.columns.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `swingbot/admin/api_v1/trades.py`, `swingbot/admin/api_v1/dashboard.py`
+**Blocked by:** SR52 (touches the same API module)
+**Gap rows:** 5 — follow score, entry-or-trigger, TP2, age, and the five lifecycle counts.
+
+What made the plans board readable for plans that have not filled. A PENDING
+row today shows nulls in `entry`, `opened_at` and `held`, because all three
+describe an execution that has not happened; the plan's own trigger price,
+creation time and ranking are what it has instead. `follow_score` comes from
+`analytics.rank.rank_plans` (`pages.py:_ranked_plan_rows`) and is not on the
+wire at all.
+
+- [ ] **Step 1: Write the failing tests** — Python: a PENDING plan's row carries `follow_score`, `trigger_price` and `created_at`, and `/dashboard` returns the five status counts. TS: the Plan cell shows the trigger with its "(trigger)" marker when `entry` is null, Age falls back to `created_at` when `opened_at` is null, and TP2 is a picker-addable column.
+- [ ] **Step 2: Run and watch them fail.**
+- [ ] **Step 3: Implement.** `target2` is already on `TradeRow` (`models.ts:72`) and needs only a column entry. The lifecycle counts belong on the Dashboard endpoint, not a second call — `_plan_rows()["counts"]` already computes them for the Jinja fragment.
+- [ ] **Step 4: Run** → PASS both suites.
+- [ ] **Step 5: Commit** `feat(trades): the plan's own numbers`
+
+---
+
+### Task SR54: The analytics figures that need recomputing
+
+**Owns:** `swingbot/admin/api_v1/analytics.py`, `tests/admin/test_api_analytics.py`, `frontend/src/app/workspaces/analytics/analytics.ts`, `frontend/src/app/stores/analytics.store.ts`
+**Blocked by:** SR50 (same store and workspace)
+**Gap rows:** 18 — the date-range filter and everything scoped by it, avg win/loss, total and annualised return, Calmar, volatility, trades/month, % in market, the SPY benchmark, the two histograms, rolling returns, the holding-period split, the calendar drill-down and cumulative P&L by strategy.
+
+The expensive half of the analytics gap: unlike SR50, none of these is served
+today. `stats.html` derived them all in browser JS from the raw trade list.
+
+- [ ] **Step 1: Decide where the arithmetic lives, and record it in one sentence at the top of this task.** Server, so `swingbot/core/analytics/metrics.py` stays the one definition per stat — that is a Global Constraint of the analytics code and the reason `aggregate.py` delegates every ratio. Recomputing in TypeScript would be a second definition of Sharpe.
+- [ ] **Step 2: Write the failing tests** — Python: each new figure against a fixture with a known answer, and the date-range parameter narrowing the set. Note the empty window: every metric is `None`, not `0`.
+- [ ] **Step 3: Run and watch them fail.**
+- [ ] **Step 4: Implement** the metrics in `core/analytics/metrics.py`, expose them through `/analytics/performance` with an optional range, and render. The date range is a query parameter on the workspace, for the same reason the Trades filters are.
+- [ ] **Step 5: Run** → PASS. `python scripts/testrun.py file tests/admin`, then `npx ng test`.
+- [ ] **Step 6: Commit** `feat(analytics): the derived figures`
+
+---
+
+### Task SR55: The journal analytics
+
+**Owns:** `swingbot/admin/api_v1/analytics.py`, `swingbot/admin/api_v1/trades.py`, `tests/admin/test_api_journal.py`, `frontend/src/app/workspaces/trades/trade-detail.ts`, `frontend/src/app/workspaces/analytics/analytics.ts`
+**Blocked by:** SR54 (same API module)
+**Gap rows:** 7 — MFE, MAE, exit efficiency, entry tags, the auto-generated lesson, the weekly digest, top lessons.
+
+The only cluster with nothing on the wire at all. `JournalStore`,
+`weekly_digest()` and `top_lessons()` all still exist and are exercised by
+`pages.py:journal_page`; what is missing is an API in front of them. They are
+a coherent set — a journal entry's excursion figures and its lesson come from
+the same record — so they come back together or not at all.
+
+- [ ] **Step 1: Write the failing tests** — Python: an endpoint returns a closed trade's MFE, MAE, exit efficiency, tags and auto-lesson, and a second returns the trailing-week digest and top lessons. An open trade has no journal entry and must read as a state, not a 500 (`trade-detail.store` already models `unjournaled` this way — match it).
+- [ ] **Step 2: Run and watch them fail.**
+- [ ] **Step 3: Implement.** Excursion figures belong on the detail view's Notes tab beside the note they explain; the digest and lessons belong on Analytics. Do not rebuild the Journal page — spec v14 Decision 4 collapsed it deliberately and that decision stands.
+- [ ] **Step 4: Run** → PASS both suites.
+- [ ] **Step 5: Commit** `feat(journal): excursions, lessons and the weekly digest`
+
+---
+
+### Task SR56: Settings navigability
+
+**Owns:** `frontend/src/app/workspaces/system/settings-tab.ts`, `frontend/src/app/stores/system.store.ts`, `swingbot/admin/api_v1/system.py`
+**Blocked by:** SR47
+**Gap rows:** 5 — the search box, the only-changed filter, the changed-from-default state, the per-field reset, and `.env` import by file.
+
+Over a hundred fields with no way to find one by name. Note the trap before
+estimating: the SPA's `isChanged()` (`settings-tab.ts:415`) answers *edited in
+this draft*, which is a different question from the Jinja page's dot, which
+meant *differs from the code default*. **Check whether `SettingField` carries
+the default over the wire before starting** — the changed-dot, the
+only-changed filter and the per-field reset all need it, and if it is absent
+this task grows a server side.
+
+- [ ] **Step 1: Write the failing test** — search narrows by label, key and help text (the Jinja page matched all three); only-changed hides fields at their default; reset restores one field without touching the rest of the draft; a field away from its default is marked even when untouched this session.
+- [ ] **Step 2: Run and watch it fail.**
+- [ ] **Step 3: Implement.** Search filters sections as well as fields — a section whose every field is hidden must hide too, or the page becomes a column of empty headings.
+- [ ] **Step 4: Run** → PASS.
+- [ ] **Step 5: Commit** `feat(system): find a setting again`
+
+---
+
+### Task SR57: Log triage
+
+**Owns:** `frontend/src/app/workspaces/system/logs-tab.ts`, `frontend/src/app/stores/system.store.ts`
+**Blocked by:** SR56 (same workspace)
+**Gap rows:** 2 — the level filter and the line-count selector.
+
+The tail migrated as text; the tools for reading it did not. The line count is
+*displayed* (`logs-tab.ts:64`) and cannot be changed — `SystemStore` exposes
+only the source (`system.store.ts:390, 433`).
+
+- [ ] **Step 1: Write the failing test** — the selector reloads at the chosen count; unchecking a level hides those lines and reports how many are hidden; a continuation line with no `[LEVEL]` marker stays visible whenever INFO is checked (tracebacks are mostly continuation lines, and hiding them is how a filter eats the thing you were reading).
+- [ ] **Step 2: Run and watch it fail.**
+- [ ] **Step 3: Implement.** Level colouring uses `--neg` / `--warn` / `--text-secondary` — ERROR and WARNING are the only two hues here, per the colour rule. Keep the `<pre>`; do not parse log lines into a table.
+- [ ] **Step 4: Run** → PASS.
+- [ ] **Step 5: Commit** `feat(system): filter the log`
+
+---
+
+### Task SR58: Session, version, scope and zoom
+
+**Owns:** `frontend/src/app/shell/shell.ts`, `frontend/src/app/shell/shell.html`, `frontend/src/app/shell/login/login.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `swingbot/admin/api_v1/dashboard.py`
+**Blocked by:** SR53 (same dashboard endpoint)
+**Gap rows:** 7 — the dashboard date-scope toggle, today's realised amounts, the market-session indicator, "Last updated", the version tag, the font-zoom control, and the login `next` redirect.
+
+The leftovers, grouped because each is small and they touch the shell.
+
+- [ ] **Step 1: Write the failing tests** — the version footer renders `ui` and `bot` from `GET /health` (`ApiClient.health()` exists at `api-client.ts:82` and has no caller); the dashboard scope toggle changes the endpoint's `mode`; a sign-in from a deep link returns to that link, not to `/dashboard`.
+- [ ] **Step 2: Run and watch them fail.**
+- [ ] **Step 3: Implement.** Two judgement calls to make deliberately rather than by default: the **market-session indicator** belongs beside the connection status in the shell, since "are these prices live" is a global fact and `is_us_market_active()` already answers it server-side; the **font-zoom control** must persist through `PreferencesStore`, not `localStorage` — that is a Global Constraint of this plan, and the Jinja version used `localStorage` precisely because it had no alternative.
+- [ ] **Step 4: Run** → PASS both suites.
+- [ ] **Step 5: Commit** `feat(shell): version, session and scope`
+
+---
+
+### Tasks SR59–SR63: The copy
+
+**These five run concurrently.** Each owns one workspace's templates; none
+changes behaviour. SR47's decision was **fill all 33** cosmetic rows, so each
+task's acceptance is that every cosmetic row for its workspace has landed.
+
+| Task | Workspace | Rows | Notes |
+|---|---|---|---|
+| **SR59** | Dashboard | 7 | The "what appears here" banner, the premium card's reasoning, the sizing-mode mismatch warning, the lifecycle tooltips and section help, the footer note, the "closed today" qualifier |
+| **SR60** | Trades | 3 | The position-size-at-open tooltip, the "if it gets there" projection, the "logged before full detail was captured" notice |
+| **SR61** | Analytics | 10 | The calibration explainer, the strategies section help, the tier and decay threshold rules, the 80% target line, the column tips |
+| **SR62** | Risk | 5 | The cluster and throttle notes, the watchlist's "takes effect on the next scan", the Yahoo symbol-format tip, the TRAIN window dates |
+| **SR63** | System | 8 | The field-count badge, the default-value badge, the changed legend, the export/import asymmetry note, the log hidden-count and scroll-to-bottom, login required-field validation |
+
+Each task:
+
+- [ ] **Step 1: Read the gap table's cosmetic rows for this workspace.** Each names the Jinja line the copy came from. Copy the sentence, do not paraphrase it — these were written against specific numbers and rules, and a paraphrase drifts from the rule it describes.
+- [ ] **Step 2: Place it.** Prefer a `section-help` line under a panel heading to a tooltip; the SPA has no tip-icon component and adding one for this would be a design decision, not a copy task. Where the original was a tooltip on a column header, the panel note is the SPA's equivalent.
+- [ ] **Step 3: Check the thresholds are still true.** SR61 and SR62 carry rules with numbers in them — ≥20 trades and >10 points for decay, the A/B/C score bands, the ≥80% / positive-expectancy / N≥30 tuning bar. Verify each against the code before writing it down; copy that states a stale threshold is worse than no copy.
+- [ ] **Step 4: Run** `npx ng test` — copy changes break snapshot-ish assertions more often than expected.
+- [ ] **Step 5: Commit** `docs(ui): <workspace> copy`
+
+**Acceptance for SR59–SR63 together:** the gap table's cosmetic section is
+fully struck through — 33 of 33 filled, none dropped.
+
+---
+
+---
+
+### Task SR64: Release
 
 **Owns:** `VERSION.json`, `README.md`, `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`, `docs/superpowers/plans/2026-08-08-v16-angular-migration.md`
-**Blocked by:** every appended gap-fill task
+**Blocked by:** SR48–SR63, every one of them
 
 - [ ] **Step 1:** Bump `ui` to `1.2.0` in `VERSION.json` and set `ui_updated`. Minor, not patch: the table model, the palette and the chart are user-visible changes.
 - [ ] **Step 2:** Update the README sections the renames and the table changes invalidate — `grep -n "^## " README.md` and read only the sections you need.
@@ -1886,4 +2165,5 @@ Spec v18's "Definition of done" is the acceptance list. Every box there maps to 
 | No horizontal scroll at four widths | SR23, SR25–SR30, SR31 |
 | The chart's ten layers from one endpoint | SR32–SR40 |
 | Parity gap table, every row classified | SR41–SR47 |
+| Every `missing` row filled or dropped by decision | SR48–SR63 |
 | Suites green, checklists walked | every gate |

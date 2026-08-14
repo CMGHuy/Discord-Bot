@@ -41,57 +41,65 @@ The `missing` rows split two ways, per SR46 step 3:
 | **blocks NG57** | 88 | A real capability with no equivalent anywhere in the SPA |
 | cosmetic | 33 | A tooltip, a label, or a sentence of explanatory copy |
 
-88 is not 88 tasks. The blocking rows are heavily coupled, and SR47 should
-group them roughly as follows — the count in brackets is how many rows each
-group absorbs:
+88 is not 88 tasks. The blocking rows are heavily coupled, and SR47 grouped
+them as follows — the count in brackets is how many rows each group absorbs,
+and each group became one task (SR48–SR58).
 
-1. **The row actions that never render** [1] — `availableActions()`
+*Counts corrected by SR47.* This section first read
+[1][11][20][9][7][5][17][7][5][2][4]. Those were estimated per cluster and
+happened to sum to 88, which is why the error was not obvious; bucketing all 88
+rows one at a time to write the tasks gave the set below. The task numbering
+follows these.
+
+1. **The row actions that never render** [1] → SR48 — `availableActions()`
    (`trade-actions.ts:48-58`) matches `'open'` / `'planned'` / `'pending'`, but
    the collection endpoint always emits the uppercase plan vocabulary
    (`api_v1/trades.py:119`, `:159`). Every row therefore offers only Delete.
    **This is a defect, not a narrowing** — it is the one gap that removed a
    capability rather than relocating it, it affects both the list and the
    detail view, and it is a one-line fix.
-2. **Fetched but never rendered** [11] — `explanation`, `confirmed_by`,
+2. **Fetched but never rendered** [9] → SR49 — `explanation`, `confirmed_by`,
    `target_sources` / `stop_sources`, `confidence_breakdown`,
    `quality_breakdown`, `status_history`, `legs`, `trigger_price`,
-   `tp1_fraction`, `breakeven_trigger_fraction`, `created_at`. All are typed on
-   `TradeDetailFields` (`models.ts:101-139`) and each appears exactly once in
-   `frontend/src` — in `models.ts` itself. Views only.
-3. **The analytics snapshot, unread** [20] — `GET /analytics/snapshot`
+   `breakeven_trigger_fraction`. All are typed on `TradeDetailFields`
+   (`models.ts:101-139`) and each appears exactly once in `frontend/src` — in
+   `models.ts` itself. Views only. (`tp1_fraction` and `created_at` are the same
+   kind of gap but were bucketed elsewhere: the first with the Target 1 label
+   it qualifies, the second with the Age column that needs it — SR53.)
+3. **The analytics snapshot, unread** [17] → SR50 — `GET /analytics/snapshot`
    forwards `profit_factor`, `sharpe`, `sortino`, `max_drawdown_pct`,
    `streaks`, `equity_curve`, `drawdown`, `r_multiples` and a `by` block over
    ten dimensions (`core/analytics/snapshots.py:37-66`).
    `ApiClient.analyticsSnapshot()` exists (`api-client.ts:156`) and no store
    calls it. One store plus a set of views.
-4. **The tuning workflow's missing middle** [9] — the grid-results table and
+4. **The tuning workflow's missing middle** [10] → SR51 — the grid-results table and
    its Propose action. `POST /tuning/propose` still exists
    (`pages.py:435-479`) and the job already writes its result file, so this is
    a view over data that is produced today. Without it a grid can be launched
    and proposals can be deleted, but a proposal cannot be created by any route.
-5. **List filters with no control** [7] — strategy, horizon, confidence, tier,
+5. **List filters with no control** [7] → SR52 — strategy, horizon, confidence, tier,
    badge, tag, has-note. `strategy`, `horizon`, `tier` and `has_note` are
    already accepted by `api_v1/trades.py:FILTERS`; `badge`, `confidence` and
    `tag` need the server side too.
-6. **Plan-shaped columns** [5] — follow score, entry-or-trigger, TP2, age, and
+6. **Plan-shaped columns** [5] → SR53 — follow score, entry-or-trigger, TP2, age, and
    the lifecycle counts. These are what made the plans board readable for plans
    that have not filled; without them a PENDING row shows mostly nulls.
-7. **Analytics figures needing recomputation** [17] — the date-range filter and
+7. **Analytics figures needing recomputation** [18] → SR54 — the date-range filter and
    everything scoped by it, avg win/loss, total and annualised return, Calmar,
    volatility, trades/month, % in market, the SPY benchmark, the two
    histograms, the calendar drill-down, cumulative P&L by strategy. The
    expensive half: each needs a computation as well as a view.
-8. **Journal analytics never on the wire** [7] — MFE, MAE, exit efficiency,
+8. **Journal analytics never on the wire** [7] → SR55 — MFE, MAE, exit efficiency,
    tags, auto-lessons, the weekly digest, top lessons. A coherent set: they
    come back together or not at all, and all need an endpoint first.
-9. **Settings navigability** [5] — the search box over a hundred fields, the
+9. **Settings navigability** [5] → SR56 — the search box over a hundred fields, the
    only-changed filter, the changed-from-default state, the per-field reset,
    and `.env` file upload. Check whether `SettingField` carries the default
    before sizing the middle three; the Jinja page needed it and the SPA's
    `isChanged()` answers a different question (edited in this draft, not
    differing from default).
-10. **Log triage** [2] — the level filter and the line-count selector.
-11. **Everything else** [4] — the dashboard date-scope toggle, the
+10. **Log triage** [2] → SR57 — the level filter and the line-count selector.
+11. **Everything else** [7] → SR58 — the dashboard date-scope toggle, the
     market-session indicator, the version footer (`GET /health` already serves
     it, `ApiClient.health()` has no caller), the font-zoom control, the login
     `next` redirect, today's realised amounts on the balance card.
@@ -191,11 +199,13 @@ group absorbs:
 
 ## Missing — cosmetic
 
-These are tooltips, labels and explanatory sentences. SR47 decides drop or
-fill for each and records the decision; a row decided **drop** moves to
-`dropped on purpose` with SR47 named as the decision.
+These are tooltips, labels and explanatory sentences.
 
-Two observations for that decision. First, the largest cluster by far is
+**SR47's decision: fill all 33.** No cosmetic row is dropped, so none moves to
+`dropped on purpose`. They are grouped by workspace into SR59–SR63, one task
+each — Dashboard 7, Trades 3, Analytics 10, Risk 5, System 8.
+
+Two observations behind that decision. First, the largest cluster by far is
 explanatory copy on Analytics (nine rows) — the calibration explainer, the two
 threshold rules, the tip icons. That page's numbers are meaningless without
 knowing what bar they are judged against, so "drop them all" is a real change
