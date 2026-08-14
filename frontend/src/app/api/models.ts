@@ -175,6 +175,11 @@ export interface TradeQuery {
   tier?: string;
   origin?: string;
   has_note?: boolean;
+  /** SR52. VALIDATED or WEAK, compared case-insensitively server-side. */
+  badge?: string;
+  /** SR52. The 1-5 level. Named `confidence` in the URL and stored as
+   *  `confidence_level` on the row; `_FILTER_KEYS` bridges the two. */
+  confidence?: string;
 }
 
 export const TRADE_SORTABLE = [

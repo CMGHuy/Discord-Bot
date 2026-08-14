@@ -332,6 +332,114 @@ def test_unknown_filter_is_rejected(seed, logged_in):
     assert_error(logged_in.get("/api/v1/trades?tikcer=AAPL"), "invalid", 400)
 
 
+# --- SR52: the filters that had no control --------------------------------
+#
+# The parity audit found five list filters the Jinja UI had and the SPA did
+# not. Three -- strategy, horizon, tier -- were already accepted here and
+# merely had nothing sending them. Two were accepted by neither side.
+#
+# `tag` is the one deliberately left out: journal tags are not on a trade row
+# at all, so filtering by one needs the journal endpoint SR55 adds. Recorded
+# here so its absence reads as a decision rather than an oversight.
+
+
+def test_strategy_filter(seed, logged_in):
+    """Already in FILTERS before SR52; pinned now that a control sends it."""
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", strategy="RSI Divergence"),
+        _plan("22222222-2222-4222-8222-222222222222", strategy="VWAP"),
+    ])
+    body = logged_in.get("/api/v1/trades?strategy=VWAP").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["strategy"] == "VWAP"
+
+
+def test_horizon_filter(seed, logged_in):
+    seed(plans=[
+        {**_plan("11111111-1111-4111-8111-111111111111"), "horizon_key": "2w"},
+        {**_plan("22222222-2222-4222-8222-222222222222"), "horizon_key": "6m"},
+    ])
+    body = logged_in.get("/api/v1/trades?horizon=6m").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["horizon"] == "6m"
+
+
+def test_tier_filter(seed, logged_in):
+    seed(plans=[
+        {**_plan("11111111-1111-4111-8111-111111111111"), "tier": "A"},
+        {**_plan("22222222-2222-4222-8222-222222222222"), "tier": "C"},
+    ])
+    body = logged_in.get("/api/v1/trades?tier=C").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["tier"] == "C"
+
+
+def test_badge_filter(seed, logged_in):
+    """New in SR52 -- the plans board had it and this endpoint did not."""
+    seed(plans=[
+        {**_plan("11111111-1111-4111-8111-111111111111"), "badge": "VALIDATED"},
+        {**_plan("22222222-2222-4222-8222-222222222222"), "badge": "WEAK"},
+    ])
+    body = logged_in.get("/api/v1/trades?badge=WEAK").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["badge"] == "WEAK"
+
+
+@pytest.mark.parametrize("value", ["weak", "WEAK", "Weak"])
+def test_badge_filter_is_case_insensitive(seed, logged_in, value):
+    """NG54's shape, pre-empted. A `?badge=weak` that quietly matched nothing
+    would read as "no weak-badged trades", which is a perfectly ordinary thing
+    for this UI to say -- and is how the status chips stayed broken for a
+    phase."""
+    seed(plans=[{**_plan("22222222-2222-4222-8222-222222222222"), "badge": "WEAK"}])
+    assert logged_in.get(f"/api/v1/trades?badge={value}").get_json()["total"] == 1
+
+
+def test_confidence_filter(seed, logged_in):
+    """`confidence` in the URL, `confidence_level` on the row.
+
+    The parameter is named for what the chip row calls it; the row field keeps
+    its own name. The alias is what makes both true at once.
+    """
+    seed(trades=[
+        {**_trade("aaaaaaaaaaaaaaaa"), "confidence_level": 5},
+        {**_trade("bbbbbbbbbbbbbbbb"), "confidence_level": 2},
+    ])
+    body = logged_in.get("/api/v1/trades?confidence=5").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["confidence_level"] == 5
+
+
+def test_an_unsatisfiable_new_filter_is_empty_not_an_error(seed, logged_in):
+    """Same convention as `outcome`: unsatisfiable is not malformed."""
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111")])
+    resp = logged_in.get("/api/v1/trades?badge=NOSUCHBADGE")
+    assert resp.status_code == 200
+    assert resp.get_json()["total"] == 0
+
+
+def test_tag_is_not_a_trade_filter(seed, logged_in):
+    """Deliberately rejected rather than silently ignored.
+
+    A journal tag is not a field on a trade row, and `FILTERS` exists so that a
+    parameter this endpoint cannot honour is a 400 rather than a filter that
+    appears to work and returns everything.
+    """
+    seed()
+    assert_error(logged_in.get("/api/v1/trades?tag=revenge"), "invalid", 400)
+
+
+def test_new_filters_narrow_the_total_not_just_the_page(seed, logged_in):
+    """`total` stays post-filter, pre-slice for the new filters too."""
+    seed(plans=(
+        [{**_plan(f"{i:08d}-1111-4111-8111-111111111111"), "tier": "A"} for i in range(12)]
+        + [{**_plan(f"{i:08d}-2222-4222-8222-222222222222"), "tier": "C"} for i in range(8)]
+    ))
+    body = logged_in.get("/api/v1/trades?tier=C&per_page=5").get_json()
+    assert body["total"] == 8
+    assert len(body["items"]) == 5
+
+
 def test_unsortable_field_is_rejected(seed, logged_in):
     seed()
     assert_error(logged_in.get("/api/v1/trades?sort=nonsense"), "invalid", 400)

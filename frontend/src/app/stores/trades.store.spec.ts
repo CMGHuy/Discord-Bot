@@ -160,6 +160,54 @@ describe('TradesStore', () => {
     request.flush(COLLECTION);
   });
 
+  /* -- SR52: the filters that had no control -------------------------- */
+
+  it('sends the five filters that had no control', () => {
+    store.setQuery({
+      page: 1,
+      per_page: 25,
+      strategy: 'RSI Divergence',
+      horizon: '6m',
+      tier: 'C',
+      badge: 'WEAK',
+      confidence: '5',
+    });
+    tick();
+
+    const params = expectRequest().request.params;
+    expect(params.get('strategy')).toBe('RSI Divergence');
+    expect(params.get('horizon')).toBe('6m');
+    expect(params.get('tier')).toBe('C');
+    expect(params.get('badge')).toBe('WEAK');
+    // `confidence` in the URL, `confidence_level` on the row. The server
+    // bridges the two through _FILTER_KEYS.
+    expect(params.get('confidence')).toBe('5');
+  });
+
+  it('sends has_note=false rather than dropping it', () => {
+    // The subtle one. `toParams` skips undefined, null and '' — and `false` is
+    // none of the three, which is what makes "trades with NO note" a filter
+    // rather than the same request as not filtering at all. If this ever
+    // regresses, the No-note option silently returns everything.
+    store.setQuery({ page: 1, per_page: 25, has_note: false });
+    tick();
+
+    expect(expectRequest().request.params.get('has_note')).toBe('false');
+  });
+
+  it('counts each new filter as active', () => {
+    // The count beside Clear has to agree with what is on screen, so a filter
+    // the bar can set must be a filter the count can see.
+    store.setQuery({
+      page: 1,
+      per_page: 25,
+      badge: 'WEAK',
+      confidence: '5',
+      has_note: false,
+    });
+    expect(store.activeFilterCount()).toBe(3);
+  });
+
   it('refetches when the query changes', () => {
     tick();
     respond();

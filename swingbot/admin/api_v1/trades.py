@@ -57,7 +57,23 @@ _LEGACY_STATUS = {
 _TERMINAL = {"CLOSED", "CANCELLED"}
 
 FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon",
-                     "direction", "tier", "origin", "has_note"})
+                     "direction", "tier", "origin", "has_note",
+                     # SR52. `strategy`, `horizon` and `tier` were already
+                     # accepted and had no control; these two were accepted by
+                     # neither side. `tag` is deliberately NOT here -- journal
+                     # tags are not on a trade row at all, so filtering by one
+                     # needs the journal endpoint SR55 adds.
+                     "badge", "confidence"})
+
+# Query-parameter name -> row key, where the two differ. `confidence` reads
+# better in a URL than `confidence_level` and is what the chip row calls it;
+# the row field keeps its own name.
+_FILTER_KEYS = {"confidence": "confidence_level"}
+
+# Filters compared case-insensitively. These hold vocabulary the UI displays
+# (VALIDATED, bullish, A) rather than free text, and `?badge=validated` failing
+# to match VALIDATED is the exact shape of the NG54 bug.
+_CASELESS_FILTERS = frozenset({"badge", "tier", "direction", "origin"})
 
 # NG54. `status` normalises win and loss to CLOSED, so the two cannot be told
 # apart by it -- but the Jinja UI had an `outcome` filter over exactly that
@@ -461,8 +477,14 @@ def list_trades():
             want = str(value).strip().lower()
             rows = [r for r in rows
                     if str(r.get("outcome") or "").lower() == want]
+        elif key in _CASELESS_FILTERS:
+            want = str(value).strip().lower()
+            field = _FILTER_KEYS.get(key, key)
+            rows = [r for r in rows
+                    if str(r.get(field) or "").strip().lower() == want]
         else:
-            rows = [r for r in rows if str(r.get(key) or "") == str(value)]
+            field = _FILTER_KEYS.get(key, key)
+            rows = [r for r in rows if str(r.get(field) or "") == str(value)]
 
     field, direction = params.sort or ("opened_at", "desc")
     # progress_pct is attached AFTER slicing (it needs a live price), so a
