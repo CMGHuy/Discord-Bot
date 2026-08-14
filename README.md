@@ -535,6 +535,22 @@ early-warning signal into a curve-fit one.
 
 ## Admin cockpit
 
+**Two UIs are live.** The Angular SPA (`ui` 1.2.0) is the default and is
+served at `/`; the original Jinja pages are still mounted and still work.
+`ADMIN_UI` chooses which answers `/`. The Jinja UI stays until its own
+deletion plan runs — see `docs/superpowers/plans/implemented/2026-08-08-v16-angular-migration.md`.
+
+The SPA folds the pages below into **six workspaces**: Dashboard, Trades,
+Analytics, Risk, Watchlist and System. Two renames came with that — Cockpit →
+**Dashboard** and Universe → **Watchlist** — and both old URLs redirect. Plans
+and Trades became one Trades list (a plan and the trade it fills are one
+position, not two rows); Strategies, Calibration and Tuning became tabs on
+Analytics; the Journal's figures moved to where they are read — excursions
+onto the trade detail's Notes tab, the weekly digest onto Analytics.
+
+The table below describes the Jinja pages, which remain the reference for what
+each surface does:
+
 Beyond the original Dashboard/Watchlist/Settings/Logs pages, the admin UI
 (`python admin_ui.py`) is a decision cockpit built entirely on top of the
 analytics core above — every page renders numbers computed once, never
@@ -588,6 +604,13 @@ CDN calls, so the admin UI keeps working fully offline.
 | `/api/ohlcv/<ticker>?bars=&trade_id=` | Auth-guarded, read-only OHLCV JSON for the interactive chart: `bars` defaults to 260, caps at 1000; falls back to the local CSV cache when a live fetch fails; an optional `trade_id` adds that trade's entry/stop/target levels to the response. |
 | Trade-detail chart | Every trade detail page renders an interactive `lightweight-charts` candlestick with entry/SL/TP price lines, replacing the old static PNG-only view. |
 | Dashboard quick-chart modal | Clicking a ticker anywhere on the dashboard opens the same interactive chart in a modal, without leaving the page. |
+
+**The SPA's tables** are one component with a compact/full density toggle,
+a column picker, drag-to-reorder with a keyboard path, and per-table column
+preferences persisted server-side rather than in `localStorage` — so a layout
+follows the account, not the browser. Density, visible columns and page size
+are all preferences; the range and filter controls are query parameters,
+because they change what the server computes rather than how it is drawn.
 
 ## The growth playbook
 

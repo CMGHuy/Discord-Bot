@@ -946,43 +946,25 @@ interface ProposalView extends ProposalRow {
       font-variant-numeric: tabular-nums;
     }
 
-    /* -- SR61: explanatory copy ----------------------------------------- */
+    /* -- SR55/SR61: explanatory copy ------------------------------------ */
 
-    .panel-subtitle {
-      margin-bottom: var(--space-8);
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-      line-height: 1.5;
-    }
-
-    .glossary {
-      margin-top: var(--space-8);
+    .glossary, .sub {
       color: var(--text-secondary);
       font-size: var(--text-chip);
     }
+    .glossary { margin-top: var(--space-8); }
     .glossary summary { cursor: pointer; color: var(--text-faint); }
-    .glossary dl {
-      display: grid;
-      gap: var(--space-6);
-      margin-top: var(--space-8);
-    }
+    .glossary dl, .lines { display: grid; margin: 0; }
+    .glossary dl { gap: var(--space-6); margin-top: var(--space-8); }
     .glossary dt { color: var(--text-primary); font-weight: 600; }
     .glossary dd { margin: 0; line-height: 1.5; }
-
-    /* -- SR55: the journal's lists -------------------------------------- */
-
     .sub {
       margin: var(--space-8) 0 var(--space-4);
-      font-size: var(--text-chip);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--text-secondary);
     }
-
     .lines {
-      display: grid;
       gap: var(--space-4);
-      margin: 0;
       padding-left: var(--space-8);
       color: var(--text-primary);
     }

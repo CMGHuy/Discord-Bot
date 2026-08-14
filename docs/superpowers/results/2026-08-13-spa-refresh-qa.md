@@ -262,3 +262,58 @@ deciding where the fit happens, which is a plan-level decision and not SR40's.
 - `ng test` → **36 files, 571 passed**
 - `ng build` → clean
 
+---
+
+## Phase 4 — Parity and the gap fill (SR41–SR64)
+
+**NOT WALKED. This section records that, rather than recording a pass.**
+
+Phases 1–3 above were walked against a running SPA on the built bundle.
+Phase 4 was implemented across SR41–SR64 in an agent session on 2026-08-14
+with no browser available, so **SR64 Step 3's end-to-end walk at four widths
+did not happen** and nothing below should be read as if it had.
+
+Writing "PASS" here from unit tests would be the specific failure this
+document exists to prevent — NG54 already cost a release to the difference
+between "the tests pass" and "the bundle works".
+
+### What IS verified, and by what
+
+| Evidence | Result |
+|---|---|
+| `python scripts/testrun.py full` | **1826 passed, 136 skipped, 1 xfailed, 0 failed** |
+| `npx ng test` | **701 passed, 42 files** |
+| `npx tsc --noEmit` | clean |
+| `npx ng build` | clean, initial total 328.16 kB / 88.29 kB transferred |
+
+Every SR41–SR63 task landed with tests at the layer it changed: server
+contract tests for the new endpoints and their shapes (SR54, SR55, SR58),
+store tests for the client wiring (SR54–SR58), and pure-function tests for
+the derived metrics (SR54). Those cover behaviour. They do not cover layout,
+overflow, focus order, or how any of it looks at 390px.
+
+### What a walk still has to check
+
+The copy tasks (SR59–SR63) added visible text to six workspaces and were
+verified only by compilation. Specifically unwalked:
+
+- **Every `section-help` paragraph added by SR59–SR63.** A defect found while
+  closing SR64: `.section-help` was defined in exactly ONE component's styles
+  while the copy tasks used the class in six workspaces, so most of that new
+  text was rendering as an unstyled `<p>`. It is a global rule now
+  (`styles.css`), but "it has a rule" is not "it looks right".
+- **The analytics glossary** (`<details>`), the settings **default-value
+  badges** and **field-count badges**, and the **log level colouring** — all
+  new visual elements, none seen.
+- **Log scroll-to-bottom**, which depends on real scroll geometry and cannot
+  be exercised in jsdom.
+- **The dashboard scope toggle and analytics date range** at narrow widths;
+  both are new control rows in headers that were previously tight.
+- All four widths, for everything in this phase.
+
+### Consequence for NG57
+
+The migration plan's second gate (v21 completing) is released. **The soak
+gate and this walk are not.** NG57 deletes the Jinja templates, and the
+argument that nothing is lost rests on the parity audit plus this phase
+having actually been *seen* to work. One of those two is still outstanding.

@@ -334,12 +334,6 @@ import { Panel } from '../../ui/layout';
   styles: `
     :host { display: grid; gap: var(--space-20); }
 
-    .section-help {
-      margin-bottom: var(--space-10);
-      color: var(--text-secondary);
-      font-size: var(--text-table);
-    }
-
     .fields {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

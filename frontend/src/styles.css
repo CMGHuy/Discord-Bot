@@ -70,3 +70,27 @@ a:hover {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* Explanatory copy under a panel heading — the SPA's equivalent of the Jinja
+ * pages' tip icons (SR59-SR63).
+ *
+ * Global, and it has to be: the copy tasks put `section-help` paragraphs in
+ * six workspaces, and it was defined in exactly one component's styles. Every
+ * other one rendered as an unstyled `<p>` — present in the DOM, invisible as
+ * a distinct kind of text. A class used across components belongs here rather
+ * than being copied into each of them. */
+.section-help {
+  margin-bottom: var(--space-10);
+  color: var(--text-secondary);
+  font-size: var(--text-table);
+  line-height: 1.5;
+}
+
+/* A one-line gloss directly under a panel heading — smaller and quieter than
+ * `.section-help`, for naming what a table is rather than explaining it. */
+.panel-subtitle {
+  margin-bottom: var(--space-8);
+  color: var(--text-secondary);
+  font-size: var(--text-chip);
+  line-height: 1.5;
+}

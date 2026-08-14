@@ -2258,13 +2258,17 @@ fully struck through — 33 of 33 filled, none dropped.
 **Owns:** `VERSION.json`, `README.md`, `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`, `docs/superpowers/plans/2026-08-08-v16-angular-migration.md`
 **Blocked by:** SR48–SR63, every one of them
 
-- [ ] **Step 1:** Bump `ui` to `1.2.0` in `VERSION.json` and set `ui_updated`. Minor, not patch: the table model, the palette and the chart are user-visible changes.
-- [ ] **Step 2:** Update the README sections the renames and the table changes invalidate — `grep -n "^## " README.md` and read only the sections you need.
+- [x] **Step 1:** Bump `ui` to `1.2.0` in `VERSION.json` and set `ui_updated`. Minor, not patch: the table model, the palette and the chart are user-visible changes.
+- [x] **Step 2:** Update the README sections the renames and the table changes invalidate — `grep -n "^## " README.md` and read only the sections you need.
 - [ ] **Step 3: Walk the full QA checklist** end to end, all four phases, at all four widths. Record it.
-- [ ] **Step 4: Release NG57's block** — replace SR1's deferral note in the migration plan with a line stating this plan completed and NG57 may proceed, naming the gap table as the evidence that nothing is lost by deleting the templates.
-- [ ] **Step 5:** `python scripts/testrun.py full`, `npx ng test`, `npx ng build` — all green.
-- [ ] **Step 6: Commit** `release(ui): 1.2.0 — the SPA refresh`
-- [ ] **Step 7:** Merge to `main`.
+  **NOT DONE — no browser available in the session that closed this plan (2026-08-14).**
+  Recorded as not-walked in `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`
+  rather than skipped silently, with the specific list of what a walk still
+  has to check. **NG57 stays blocked on this as well as on the soak.**
+- [x] **Step 4: Release NG57's block** — replace SR1's deferral note in the migration plan with a line stating this plan completed and NG57 may proceed, naming the gap table as the evidence that nothing is lost by deleting the templates.
+- [x] **Step 5:** `python scripts/testrun.py full`, `npx ng test`, `npx ng build` — all green.
+- [x] **Step 6: Commit** `release(ui): 1.2.0 — the SPA refresh`
+- [ ] **Step 7:** Merge to `main`. *(Not done — left for the human partner, along with Step 3's walk.)*
 
 ---
 
