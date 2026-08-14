@@ -1795,8 +1795,8 @@ Spec Decision 11.
 
 Each task, for each of its templates:
 
-- [ ] **Step 1: Enumerate** every control, column, tooltip, chart, computed number and empty state. Read the template *and* the route that renders it — a number computed in `pages.py` and passed in is a feature even if the template only interpolates it.
-- [ ] **Step 2: Classify** each as one row of a table:
+- [x] **Step 1: Enumerate** every control, column, tooltip, chart, computed number and empty state. Read the template *and* the route that renders it — a number computed in `pages.py` and passed in is a feature even if the template only interpolates it.
+- [x] **Step 2: Classify** each as one row of a table:
 
 ```markdown
 | Feature | Where in Jinja | Status | Where in the SPA / why dropped |
@@ -1807,8 +1807,14 @@ Each task, for each of its templates:
 
 Three statuses only: `migrated`, `dropped on purpose` (naming the decision), `missing`. **Nothing may be left unclassified** — an unclassified row is the state this audit exists to eliminate.
 
-- [ ] **Step 3: Check the SPA before writing `missing`.** Grep `frontend/src` for the field or label. The migration moved things between workspaces; a feature that changed home is `migrated`, not missing.
-- [ ] **Step 4: Commit** `docs(parity): <group> audited`
+- [x] **Step 3: Check the SPA before writing `missing`.** Grep `frontend/src` for the field or label. The migration moved things between workspaces; a feature that changed home is `migrated`, not missing.
+- [x] **Step 4: Commit** `docs(parity): <group> audited`
+
+All five groups audited (SR41 `2158a3d`, SR42 `9962676`, SR43 `11f3335`,
+SR44 `9e1e875`, SR45 `25c5cff`) — 410 classified rows plus 14 recorded as
+new in the SPA, none unclassified. The five per-group files were merged and
+deleted by SR46; the surviving artefact is
+`docs/superpowers/results/2026-08-13-jinja-feature-parity.md`.
 
 ---
 
@@ -1817,11 +1823,17 @@ Three statuses only: `migrated`, `dropped on purpose` (naming the decision), `mi
 **Owns:** `docs/superpowers/results/2026-08-13-jinja-feature-parity.md`
 **Blocked by:** SR41–SR45
 
-- [ ] **Step 1: Merge** the five tables into one, sorted by status then by workspace.
-- [ ] **Step 2: Count** and record: total features, migrated, dropped on purpose, missing.
-- [ ] **Step 3: Rank the `missing` rows** — *blocks NG57* (a real capability with no equivalent) or *cosmetic* (a tooltip, a label). The ranking is what makes SR47 finite.
-- [ ] **Step 4: Delete the five per-group files**; they are superseded and a stale duplicate of a gap table is worse than none.
-- [ ] **Step 5: Commit** `docs(parity): the gap table`
+- [x] **Step 1: Merge** the five tables into one, sorted by status then by workspace.
+- [x] **Step 2: Count** and record: total features, migrated, dropped on purpose, missing.
+- [x] **Step 3: Rank the `missing` rows** — *blocks NG57* (a real capability with no equivalent) or *cosmetic* (a tooltip, a label). The ranking is what makes SR47 finite.
+- [x] **Step 4: Delete the five per-group files**; they are superseded and a stale duplicate of a gap table is worse than none.
+- [x] **Step 5: Commit** `docs(parity): the gap table`
+
+410 classified rows: 256 migrated, 33 dropped on purpose, 121 missing (88
+*blocks NG57*, 33 *cosmetic*), plus 14 recorded as new in the SPA. Six rows
+that appeared in two group files are merged, with both Jinja locations named.
+The 88 blocking rows are grouped into eleven coupled clusters in the gap
+table's "The ranking" section — that grouping is what SR47 turns into tasks.
 
 ---
 
