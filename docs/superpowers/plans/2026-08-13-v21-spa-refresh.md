@@ -1893,7 +1893,7 @@ but each should land *after* the task that builds the thing it annotates.
 > | `699bcb4` → `492fd0a` | SR46, SR47 |
 > | `06fea6a` `364e5d6` `434d359` `91f458b` `610fcac` `51cf83c` | SR48–SR53 |
 >
-> **SR54, SR55 and SR56 are done. SR57 is the next unstarted task.** The
+> **SR54-SR57 are done. SR58 is the next unstarted task.** The
 > SR48–SR53 boxes are left unticked deliberately: the mapping above is by
 > commit subject and scope, which is strong evidence the task landed but not
 > a step-by-step verification, and ticking on that basis is how the boxes
@@ -1938,7 +1938,7 @@ once in `frontend/src`, in `models.ts` itself. No endpoint work.
 - [ ] **Step 1: Write the failing test** — mount the detail view with a fixture carrying all nine fields and assert each renders: the explanation as prose, `confirmed_by` as a list, target/stop sources on the Levels rows they justify, the two breakdowns as factor/points tables, `status_history` as an ordered timeline, `legs` as the runner rows, `trigger_price` beside Entry, and the break-even fraction on the Plan tab. Assert too that a legacy row with all nine null renders the "logged before the admin UI captured full detail" state rather than nine empty panels.
 - [x] **Step 2: Run and watch it fail.**
 - [ ] **Step 3: Implement.** Four of the five tabs already exist; put the prose and the two breakdowns behind the Plan tab, the timeline and legs behind Live. `quality_breakdown` and `status_history` are `unknown[]` on purpose (the Python side owns their shape) — narrow them in the store the way `DashboardStore.finiteNumber` does, never in the template.
-- [ ] **Step 4: Run** → PASS. `npx ng test`.
+- [x] **Step 4: Run** → PASS. `npx ng test`.
 - [ ] **Step 5: Commit** `feat(trades): the detail fields that were already on the wire`
 
 ---
@@ -1958,7 +1958,7 @@ figure above — `overall.*`, `equity_curve`, `drawdown`, `r_multiples` and a
 set of views; no Python changes.
 
 - [ ] **Step 1: Write the failing test** — a snapshot fixture in, each derived signal out. Cover the absent cases explicitly: a snapshot with no closed trades must give `null` per metric, never `0` (`ui/format.ts`'s rule and `DashboardStore`'s `finiteNumber`), and a missing `by` dimension must give an empty list rather than throwing.
-- [ ] **Step 2: Run and watch it fail.**
+- [x] **Step 2: Run and watch it fail.**
 - [ ] **Step 3: Implement.** One `load()` and one `withHooks` effect on the `analytics` event, following `DashboardStore`'s shape as the file's own docstring instructs. Render the scalars as metric chips on the Performance tab and the `by` dimensions as tables — **tables, not pies.** Seven pie charts is what made `stats.html` unreadable, the data is categorical shares, and `dataviz` guidance is a bar or a table for that. The chart-shaped rows here are the balance series, the drawdown series and the R-multiple distribution.
 - [ ] **Step 4: Run** → PASS. `npx ng test`.
 - [ ] **Step 5: Commit** `feat(analytics): read the snapshot we were already serving`
@@ -2133,15 +2133,26 @@ this task grows a server side.
 **Blocked by:** SR56 (same workspace)
 **Gap rows:** 2 — the level filter and the line-count selector.
 
+> **Continuation-line rule, as implemented (2026-08-14).** A line with no
+> `[LEVEL]` marker **inherits the level of the line above it** AND is shown
+> whenever INFO is checked. The two conditions are OR-ed deliberately: pure
+> inheritance would drop a traceback when filtering to INFO, and the pure
+> INFO rule this task's Step 1 describes would drop a traceback when filtering
+> to ERROR -- which is the exact failure the step is written to prevent.
+> Showing one extra line costs a glance; hiding one costs the stack trace.
+>
+> `api.logs()` already accepted `lines`, so the line-count selector needed no
+> API change -- only for the store to stop dropping the argument.
+
 The tail migrated as text; the tools for reading it did not. The line count is
 *displayed* (`logs-tab.ts:64`) and cannot be changed — `SystemStore` exposes
 only the source (`system.store.ts:390, 433`).
 
-- [ ] **Step 1: Write the failing test** — the selector reloads at the chosen count; unchecking a level hides those lines and reports how many are hidden; a continuation line with no `[LEVEL]` marker stays visible whenever INFO is checked (tracebacks are mostly continuation lines, and hiding them is how a filter eats the thing you were reading).
+- [x] **Step 1: Write the failing test** — the selector reloads at the chosen count; unchecking a level hides those lines and reports how many are hidden; a continuation line with no `[LEVEL]` marker stays visible whenever INFO is checked (tracebacks are mostly continuation lines, and hiding them is how a filter eats the thing you were reading).
 - [ ] **Step 2: Run and watch it fail.**
-- [ ] **Step 3: Implement.** Level colouring uses `--neg` / `--warn` / `--text-secondary` — ERROR and WARNING are the only two hues here, per the colour rule. Keep the `<pre>`; do not parse log lines into a table.
+- [x] **Step 3: Implement.** Level colouring uses `--neg` / `--warn` / `--text-secondary` — ERROR and WARNING are the only two hues here, per the colour rule. Keep the `<pre>`; do not parse log lines into a table.
 - [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `feat(system): filter the log`
+- [x] **Step 5: Commit** `feat(system): filter the log`
 
 ---
 

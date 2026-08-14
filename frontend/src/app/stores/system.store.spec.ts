@@ -141,7 +141,9 @@ describe('SystemStore', () => {
   const boot = (settings: Partial<Settings> = {}) => {
     tick();
     backend.expectOne('/api/v1/system/settings').flush({ ...SETTINGS, ...settings });
-    backend.expectOne('/api/v1/system/logs?source=bot').flush({
+    // SR57 sends the line count too, so match on the path rather than on a
+    // literal query string that now has two parameters in it.
+    backend.expectOne((req) => req.url === '/api/v1/system/logs').flush({
       source: 'bot',
       lines: 500,
       path: '/app/logs/bot.log',
@@ -162,6 +164,113 @@ describe('SystemStore', () => {
       'DISCORD_TOKEN',
     ]);
     expect(store.restartAvailable()).toBe(true);
+  });
+
+  /* -- SR57: reading the log ------------------------------------------ */
+
+  describe('log triage', () => {
+    const LOG = [
+      '2026-08-14 10:00:00 [INFO] scan started',
+      '2026-08-14 10:00:01 [WARNING] AAPL data stale',
+      '2026-08-14 10:00:02 [ERROR] fetch failed',
+      'Traceback (most recent call last):',
+      '  File "bot.py", line 1, in <module>',
+      'ValueError: boom',
+      '2026-08-14 10:00:03 [INFO] scan finished',
+    ].join('\n');
+
+    const bootWithLog = (content = LOG, lines = 500) => {
+      tick();
+      backend.expectOne('/api/v1/system/settings').flush(SETTINGS);
+      // SR57 sends the line count too, so match on the path rather than on a
+    // literal query string that now has two parameters in it.
+    backend.expectOne((req) => req.url === '/api/v1/system/logs').flush({
+        source: 'bot', lines, path: '/app/logs/bot.log', content,
+      });
+      backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    };
+
+    it('reloads at the chosen line count', () => {
+      bootWithLog();
+
+      store.setLogLines(2000);
+
+      const request = backend.expectOne(
+        (req) => req.url === '/api/v1/system/logs',
+      );
+      expect(request.request.params.get('lines')).toBe('2000');
+      expect(request.request.params.get('source')).toBe('bot');
+      request.flush({ source: 'bot', lines: 2000, path: 'p', content: '' });
+      expect(store.logLines()).toBe(2000);
+    });
+
+    it('does not refetch when the count is already selected', () => {
+      bootWithLog();
+      store.setLogLines(500);
+      backend.verify();
+    });
+
+    it('shows everything when every level is checked', () => {
+      bootWithLog();
+      expect(store.visibleLog().split('\n')).toHaveLength(7);
+      expect(store.hiddenLogLines()).toBe(0);
+    });
+
+    it('unchecking a level hides its lines and counts them', () => {
+      bootWithLog();
+
+      store.setLogLevel('INFO', false);
+
+      const shown = store.visibleLog().split('\n');
+      expect(shown).not.toContain('2026-08-14 10:00:00 [INFO] scan started');
+      expect(shown).not.toContain('2026-08-14 10:00:03 [INFO] scan finished');
+      expect(store.hiddenLogLines()).toBe(2);
+    });
+
+    it('keeps a traceback with the ERROR line it belongs to', () => {
+      // The continuation lines carry no [LEVEL] marker of their own. Losing
+      // them when filtering to ERROR would eat the thing being read.
+      bootWithLog();
+
+      store.setLogLevel('INFO', false);
+      store.setLogLevel('WARNING', false);
+
+      const shown = store.visibleLog();
+      expect(shown).toContain('[ERROR] fetch failed');
+      expect(shown).toContain('Traceback (most recent call last):');
+      expect(shown).toContain('ValueError: boom');
+    });
+
+    it('keeps an unattributable line visible whenever INFO is checked', () => {
+      // A line before any level marker at all has nothing to inherit. INFO
+      // is the catch-all, so it shows rather than vanishing.
+      bootWithLog('orphan line with no level\n2026-08-14 [ERROR] later');
+
+      store.setLogLevel('ERROR', false);
+
+      expect(store.visibleLog()).toContain('orphan line with no level');
+    });
+
+    it('an empty log filters to an empty string, not to a stray newline', () => {
+      bootWithLog('');
+      expect(store.visibleLog()).toBe('');
+      expect(store.hiddenLogLines()).toBe(0);
+    });
+
+    it('switching source keeps the chosen line count', () => {
+      bootWithLog();
+      store.setLogLines(100);
+      backend
+        .expectOne((req) => req.url === '/api/v1/system/logs')
+        .flush({ source: 'bot', lines: 100, path: 'p', content: '' });
+
+      store.setLogSource('admin');
+
+      const request = backend.expectOne((req) => req.url === '/api/v1/system/logs');
+      expect(request.request.params.get('lines')).toBe('100');
+      expect(request.request.params.get('source')).toBe('admin');
+      request.flush({ source: 'admin', lines: 100, path: 'p', content: '' });
+    });
   });
 
   /* -- SR56: finding a setting again ---------------------------------- */
@@ -512,7 +621,8 @@ describe('SystemStore', () => {
     store.setLogSource('admin');
     expect(store.logs()).toBeNull();
 
-    backend.expectOne('/api/v1/system/logs?source=admin').flush({
+    // Matched by path: SR57 added the line count as a second parameter.
+    backend.expectOne((req) => req.url === '/api/v1/system/logs').flush({
       source: 'admin',
       lines: 500,
       path: '/app/logs/admin.log',

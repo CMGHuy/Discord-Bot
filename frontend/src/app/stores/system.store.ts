@@ -78,6 +78,12 @@ interface SystemSlice {
   /* logs */
   logSource: LogSource;
   logs: Logs | null;
+  /** SR57 — how many lines to ask the server for. A fetch parameter, so it
+   *  lives here rather than in the component. */
+  logLines: number;
+  /** SR57 — which levels are checked. A record rather than a Set so the
+   *  slice stays a plain serialisable object like the rest of the state. */
+  logLevels: Record<LogLevel, boolean>;
   logsLoading: boolean;
   logsError: string | null;
   logsMessage: string | null;
@@ -165,6 +171,66 @@ function fieldMatches(field: SettingField, needle: string): boolean {
   );
 }
 
+/**
+ * SR57 — the levels the filter offers, most severe first.
+ *
+ * A closed set, matching what `logging` actually emits here. An unknown
+ * marker (`[CRITICAL]`, say) is treated as unattributable rather than added
+ * silently, so it follows the same generous visibility rule as a traceback
+ * line instead of disappearing from a filter that has never heard of it.
+ */
+export const LOG_LEVELS = ['ERROR', 'WARNING', 'INFO', 'DEBUG'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+/** The line counts the selector offers. */
+export const LOG_LINE_CHOICES = [100, 500, 2000, 10000] as const;
+
+const LEVEL_PATTERN = /\[(ERROR|WARNING|INFO|DEBUG)\]/;
+
+/** The level a line declares, or null when it carries no marker at all. */
+function levelOf(line: string): LogLevel | null {
+  const found = LEVEL_PATTERN.exec(line);
+  return found ? (found[1] as LogLevel) : null;
+}
+
+/**
+ * Filter a log tail to the checked levels.
+ *
+ * **A line with no `[LEVEL]` marker inherits the level of the line above it,
+ * and is ALSO shown whenever INFO is checked.** Tracebacks are almost
+ * entirely such continuation lines: filtering to ERROR and losing the
+ * traceback under the ERROR is how a filter eats the thing being read.
+ * Inheritance keeps it with its parent; the INFO fallback covers a line
+ * before any marker at all, which has nothing to inherit.
+ *
+ * The two conditions are OR-ed deliberately. Showing one extra line costs a
+ * reader a glance; hiding one costs them the stack trace.
+ */
+function filterLog(content: string, enabled: ReadonlySet<string>): {
+  text: string;
+  hidden: number;
+} {
+  if (!content) return { text: '', hidden: 0 };
+
+  const kept: string[] = [];
+  let hidden = 0;
+  let inherited: LogLevel | null = null;
+
+  for (const line of content.split('\n')) {
+    const declared = levelOf(line);
+    if (declared) inherited = declared;
+
+    const visible = declared
+      ? enabled.has(declared)
+      : (inherited !== null && enabled.has(inherited)) || enabled.has('INFO');
+
+    if (visible) kept.push(line);
+    else hidden += 1;
+  }
+
+  return { text: kept.join('\n'), hidden };
+}
+
 function auditEntry(value: unknown): AuditEntry | null {
   if (typeof value !== 'object' || value === null) return null;
   const row = value as Record<string, unknown>;
@@ -228,6 +294,8 @@ export const SystemStore = signalStore(
 
     logSource: 'bot',
     logs: null,
+    logLines: 500,
+    logLevels: { ERROR: true, WARNING: true, INFO: true, DEBUG: true },
     logsLoading: false,
     logsError: null,
     logsMessage: null,
@@ -317,6 +385,28 @@ export const SystemStore = signalStore(
     ),
   })),
 
+  withComputed(({ logs, logLevels }) => {
+    /** Filtered once; `visibleLog` and `hiddenLogLines` both read it, so the
+     *  tail is never scanned twice per render. */
+    const filtered = computed(() => {
+      const enabled = new Set(
+        Object.entries(logLevels())
+          .filter(([, on]) => on)
+          .map(([level]) => level),
+      );
+      return filterLog(logs()?.content ?? '', enabled);
+    });
+
+    return {
+      /** SR57 — the tail, filtered to the checked levels. */
+      visibleLog: computed(() => filtered().text),
+      /** How many lines the filter is holding back. Reported, because a
+       *  filter that silently removes most of a log is indistinguishable
+       *  from a log that is nearly empty. */
+      hiddenLogLines: computed(() => filtered().hidden),
+    };
+  }),
+
   withMethods((store, api = inject(ApiClient)) => {
     /** The value the form shows for a field: the draft if it has been
      *  touched, the server's otherwise. Defined here so both the component
@@ -349,7 +439,7 @@ export const SystemStore = signalStore(
 
     const loadLogs = (): void => {
       patchState(store, { logsLoading: true });
-      api.logs(store.logSource()).subscribe({
+      api.logs(store.logSource(), store.logLines()).subscribe({
         next: (logs) =>
           patchState(store, { logs, logsLoading: false, logsError: null }),
         error: (error: ApiError) =>
@@ -572,6 +662,22 @@ export const SystemStore = signalStore(
       },
 
       /* -- logs ---------------------------------------------------------- */
+
+      /** SR57 — how many lines to request. Refetches, because the tail is
+       *  server-side: filtering a 500-line response down cannot show line
+       *  501. */
+      setLogLines(lines: number): void {
+        if (lines === store.logLines()) return;
+        patchState(store, { logLines: lines });
+        loadLogs();
+      },
+
+      /** SR57 — check or uncheck one level. Purely client-side: the whole
+       *  tail is already here, and refetching to hide lines would throw away
+       *  the lines the user might check back on. */
+      setLogLevel(level: LogLevel, enabled: boolean): void {
+        patchState(store, { logLevels: { ...store.logLevels(), [level]: enabled } });
+      },
 
       setLogSource(source: LogSource): void {
         if (source === store.logSource()) return;

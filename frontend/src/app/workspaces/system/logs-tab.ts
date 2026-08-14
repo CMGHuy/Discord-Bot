@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
-import { LogSource, SystemStore } from '../../stores/system.store';
+import {
+  LOG_LEVELS,
+  LOG_LINE_CHOICES,
+  LogSource,
+  SystemStore,
+} from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Panel } from '../../ui/layout';
@@ -55,12 +60,52 @@ import { Panel } from '../../ui/layout';
         <p class="message" role="status">{{ message }}</p>
       }
 
+      <!-- SR57. The tail migrated as text; the tools for reading it did not.
+           Level checkboxes filter what is already here; the line count
+           refetches, because filtering a 500-line response cannot show line
+           501. -->
+      <div class="triage">
+        <div class="levels" role="group" aria-label="Log levels">
+          @for (level of levels; track level) {
+            <label class="level" [class]="'level-' + level.toLowerCase()">
+              <input
+                type="checkbox"
+                [checked]="store.logLevels()[level]"
+                (change)="store.setLogLevel(level, $any($event.target).checked)"
+              />
+              {{ level }}
+            </label>
+          }
+        </div>
+
+        <label class="count">
+          Lines
+          <select
+            [value]="store.logLines()"
+            (change)="store.setLogLines(+$any($event.target).value)"
+          >
+            @for (choice of lineChoices; track choice) {
+              <option [value]="choice">{{ choice }}</option>
+            }
+          </select>
+        </label>
+
+        @if (store.hiddenLogLines(); as hidden) {
+          <!-- Said out loud: a filter that silently removes most of a log is
+               indistinguishable from a log that is nearly empty. -->
+          <span class="hidden-count">{{ hidden }} lines hidden by filter</span>
+        }
+      </div>
+
       @if (store.logs(); as logs) {
         @if (logs.content) {
           <!-- A <pre>, not a table: log lines are already formatted and any
                attempt to structure them here would be guessing at a format
                the bot is free to change. -->
-          <pre class="log">{{ logs.content }}</pre>
+          <pre class="log">{{ store.visibleLog() }}</pre>
+          @if (!store.visibleLog()) {
+            <p class="none">Every line is filtered out. Check a level above.</p>
+          }
           <p class="meta">Last {{ logs.lines }} lines · {{ logs.path }}</p>
         } @else {
           <p class="none">This log is empty.</p>
@@ -81,6 +126,29 @@ import { Panel } from '../../ui/layout';
   `,
   styles: `
     .actions { display: flex; align-items: center; gap: var(--space-6); }
+
+    /* -- SR57: triage controls --------------------------------------- */
+    .triage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-10);
+      margin-bottom: var(--space-8);
+      font-size: var(--text-chip);
+    }
+    .levels { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+    .level { display: flex; align-items: center; gap: var(--space-4); }
+    /* ERROR and WARNING are the only two hues here, per the colour rule --
+       INFO and DEBUG stay secondary text rather than earning a colour. */
+    .level-error { color: var(--neg); }
+    .level-warning { color: var(--warn); }
+    .level-info, .level-debug { color: var(--text-secondary); }
+    .count { display: flex; align-items: center; gap: var(--space-4); color: var(--text-secondary); }
+    .hidden-count {
+      margin-left: auto;
+      color: var(--text-faint);
+      font-variant-numeric: tabular-nums;
+    }
     .raw {
       color: var(--accent);
       font-size: var(--text-table);
@@ -115,6 +183,11 @@ export class LogsTab {
   protected readonly store = inject(SystemStore);
 
   protected readonly sources: LogSource[] = ['bot', 'admin'];
+
+  /** SR57 — driven off the store's constants, so the filter can never offer
+   *  a level the parser does not recognise. */
+  protected readonly levels = LOG_LEVELS;
+  protected readonly lineChoices = LOG_LINE_CHOICES;
 
   protected readonly asking = signal(false);
 
