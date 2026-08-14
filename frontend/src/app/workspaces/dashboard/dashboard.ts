@@ -11,10 +11,11 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
-import { TradeRow } from '../../api/models';
+import { DashboardScope, TradeRow } from '../../api/models';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { TradesStore } from '../../stores/trades.store';
+import { Button } from '../../ui/button';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
@@ -81,7 +82,7 @@ export const OPEN_POSITIONS_CAP = 6;
   selector: 'sb-dashboard',
   imports: [
     RouterLink, MetricCard, MetricChip, Sparkline, Panel, DataTable,
-    StatusCell, DirectionArrow, PlanCell, ConfidenceCell,
+    StatusCell, DirectionArrow, PlanCell, ConfidenceCell, Button,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the stores are created on entry and
@@ -100,7 +101,46 @@ export const OPEN_POSITIONS_CAP = 6;
              worse than showing them slightly stale. -->
         <span class="stale" role="status">{{ message }}</span>
       }
+
+      <!-- SR58. The Jinja dashboard's three date scopes. A server parameter,
+           not a client filter: the realised figures below are computed from
+           the scoped set, and a client-side scope over an all-time payload
+           could not narrow them at all. -->
+      <div class="scope" role="group" aria-label="Date scope">
+        @for (option of scopes; track option.mode) {
+          <button
+            sb-button
+            type="button"
+            [variant]="store.scope() === option.mode ? 'secondary' : 'ghost'"
+            [attr.aria-pressed]="store.scope() === option.mode"
+            (click)="store.setScope(option.mode)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
     </header>
+
+    <!-- SR58. Realised, scoped by the toggle above -- distinct from the
+         Open P&L card, which is unrealised and always all-open. -->
+    <div class="realized">
+      <sb-metric-card
+        [label]="realizedLabel()"
+        [value]="store.realizedAmount()"
+        tone="pnl"
+        unit=" USD"
+      />
+      <sb-metric-card
+        label="Realised, average"
+        [value]="store.realizedPct()"
+        tone="pnl"
+        unit="%"
+      />
+      <span class="realized-count">
+        {{ store.realizedCount() }} closed ·
+        {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
+      </span>
+    </div>
 
     <div class="primary">
       <sb-metric-card
@@ -230,6 +270,22 @@ export const OPEN_POSITIONS_CAP = 6;
     </ng-template>
   `,
   styles: `
+    /* -- SR58: scope toggle and realised row ---------------------- */
+    .scope { display: flex; gap: var(--space-4); margin-left: auto; }
+    .realized {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-8);
+      margin-bottom: var(--space-10);
+    }
+    .realized-count {
+      margin-left: auto;
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+      font-variant-numeric: tabular-nums;
+    }
+
     :host { display: grid; gap: var(--space-20); }
 
     .head {
@@ -474,6 +530,22 @@ export class Dashboard {
   /** Amber once exposure is most of the cap. Amber means caution, which is
    *  what "nearly out of risk budget" is -- it is not a loss, so it must
    *  not be red. */
+  /* -- SR58: the date scope ------------------------------------------- */
+
+  /** The Jinja dashboard's three, in its order. `active` first because it is
+   *  the default and the one that answers "what is happening now". */
+  protected readonly scopes: { mode: DashboardScope; label: string }[] = [
+    { mode: 'active', label: 'Today + open' },
+    { mode: 'today', label: 'Today' },
+    { mode: 'all', label: 'All days' },
+  ];
+
+  /** Names the window in the card itself, so a figure cannot be read as
+   *  today's when the toggle is on All days. */
+  protected readonly realizedLabel = computed(() =>
+    this.store.scope() === 'all' ? 'Realised, all days' : 'Realised today',
+  );
+
   protected readonly riskTone = computed(() =>
     (this.store.riskUtilisation() ?? 0) >= 0.8 ? 'caution' : 'plain',
   );

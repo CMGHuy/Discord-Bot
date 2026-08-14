@@ -1893,7 +1893,7 @@ but each should land *after* the task that builds the thing it annotates.
 > | `699bcb4` → `492fd0a` | SR46, SR47 |
 > | `06fea6a` `364e5d6` `434d359` `91f458b` `610fcac` `51cf83c` | SR48–SR53 |
 >
-> **SR54-SR57 are done. SR58 is the next unstarted task.** The
+> **SR54-SR58 are done. SR59-SR63 (the copy) are next; they may run concurrently.** The
 > SR48–SR53 boxes are left unticked deliberately: the mapping above is by
 > commit subject and scope, which is strong evidence the task landed but not
 > a step-by-step verification, and ticking on that basis is how the boxes
@@ -2020,9 +2020,9 @@ creation time and ranking are what it has instead. `follow_score` comes from
 wire at all.
 
 - [ ] **Step 1: Write the failing tests** — Python: a PENDING plan's row carries `follow_score`, `trigger_price` and `created_at`, and `/dashboard` returns the five status counts. TS: the Plan cell shows the trigger with its "(trigger)" marker when `entry` is null, Age falls back to `created_at` when `opened_at` is null, and TP2 is a picker-addable column.
-- [ ] **Step 2: Run and watch them fail.**
+- [x] **Step 2: Run and watch them fail.**
 - [ ] **Step 3: Implement.** `target2` is already on `TradeRow` (`models.ts:72`) and needs only a column entry. The lifecycle counts belong on the Dashboard endpoint, not a second call — `_plan_rows()["counts"]` already computes them for the Jinja fragment.
-- [ ] **Step 4: Run** → PASS both suites.
+- [x] **Step 4: Run** → PASS both suites.
 - [ ] **Step 5: Commit** `feat(trades): the plan's own numbers`
 
 ---
@@ -2164,11 +2164,30 @@ only the source (`system.store.ts:390, 433`).
 
 The leftovers, grouped because each is small and they touch the shell.
 
-- [ ] **Step 1: Write the failing tests** — the version footer renders `ui` and `bot` from `GET /health` (`ApiClient.health()` exists at `api-client.ts:82` and has no caller); the dashboard scope toggle changes the endpoint's `mode`; a sign-in from a deep link returns to that link, not to `/dashboard`.
+> **Two things worth recording from the build (2026-08-14).**
+>
+> **`market_active` went on `/health`, not `/dashboard`** -- which puts it
+> outside this task's declared `Owns:` set (`api_v1/session.py`). Taken
+> deliberately: the indicator sits beside the connection status in the shell,
+> and a shell that read a *workspace's* endpoint to render its own chrome
+> breaks the moment that workspace is not open. No concurrent task owns that
+> file. `/health` is auth-guarded and stays that way --
+> `test_health_requires_auth_and_returns_json_401` pins it.
+>
+> **The deep link is captured in `SessionStore.boot()`**, which runs as an app
+> initializer *before* Angular bootstraps. That timing is the whole trick:
+> `authGuard` is a `CanMatchFn`, so while logged out no workspace route
+> matches and the `**` fallback rewrites the URL to `/dashboard` -- destroying
+> the deep link before any login form is on screen. `boot()` takes the arrival
+> URL as a parameter rather than reading `location`, because jsdom's
+> `location` does not follow `history.replaceState` and a test that pushed
+> history would assert against `/` and pass for the wrong reason.
+
+- [x] **Step 1: Write the failing tests** — the version footer renders `ui` and `bot` from `GET /health` (`ApiClient.health()` exists at `api-client.ts:82` and has no caller); the dashboard scope toggle changes the endpoint's `mode`; a sign-in from a deep link returns to that link, not to `/dashboard`.
 - [ ] **Step 2: Run and watch them fail.**
-- [ ] **Step 3: Implement.** Two judgement calls to make deliberately rather than by default: the **market-session indicator** belongs beside the connection status in the shell, since "are these prices live" is a global fact and `is_us_market_active()` already answers it server-side; the **font-zoom control** must persist through `PreferencesStore`, not `localStorage` — that is a Global Constraint of this plan, and the Jinja version used `localStorage` precisely because it had no alternative.
+- [x] **Step 3: Implement.** Two judgement calls to make deliberately rather than by default: the **market-session indicator** belongs beside the connection status in the shell, since "are these prices live" is a global fact and `is_us_market_active()` already answers it server-side; the **font-zoom control** must persist through `PreferencesStore`, not `localStorage` — that is a Global Constraint of this plan, and the Jinja version used `localStorage` precisely because it had no alternative.
 - [ ] **Step 4: Run** → PASS both suites.
-- [ ] **Step 5: Commit** `feat(shell): version, session and scope`
+- [x] **Step 5: Commit** `feat(shell): version, session and scope`
 
 ---
 

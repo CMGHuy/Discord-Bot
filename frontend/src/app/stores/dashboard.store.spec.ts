@@ -55,6 +55,11 @@ const RESPONSE: Dashboard = {
   // SR53. Five counts, PENDING/ACTIVE/PARTIAL all-time and CLOSED/CANCELLED
   // today's only.
   lifecycle: { PENDING: 4, ACTIVE: 2, PARTIAL: 1, CLOSED: 3, CANCELLED: 0 },
+  // SR58. `pct` is deliberately null against a non-null `amount`: the store
+  // must pass each through independently, and a fixture where both have
+  // values cannot catch one being derived from the other.
+  scope: { mode: 'active' as const },
+  realized: { amount: 240.5, pct: null, n: 3, wins: 2, losses: 1 },
   account_balance: 10_000,
   open_pnl_pct: 1.5,
   risk_used_pct: 4,
@@ -91,7 +96,7 @@ describe('DashboardStore', () => {
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
   const respond = (body: Partial<Dashboard> = {}) =>
-    backend.expectOne('/api/v1/dashboard').flush({ ...RESPONSE, ...body });
+    backend.expectOne((req) => req.url === '/api/v1/dashboard').flush({ ...RESPONSE, ...body });
 
   it('loads on creation, with no separate bootstrap call', () => {
     // The first effect run IS the initial load, so the load path and the
@@ -143,7 +148,7 @@ describe('DashboardStore', () => {
     events.raise('account');
     tick();
     backend
-      .expectOne('/api/v1/dashboard')
+      .expectOne((req) => req.url === '/api/v1/dashboard')
       .error(new ProgressEvent('error'), { status: 0 });
 
     // Replacing nine live figures with an error panel because one poll
@@ -156,7 +161,7 @@ describe('DashboardStore', () => {
   it('clears the error once a refetch succeeds', () => {
     tick();
     backend
-      .expectOne('/api/v1/dashboard')
+      .expectOne((req) => req.url === '/api/v1/dashboard')
       .error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();
 
@@ -303,5 +308,60 @@ describe('DashboardStore', () => {
 
     expect(store.balance()).toBeNull();
     expect(store.winRate()).toBeNull();
+  });
+
+  /* -- SR58: the date scope -------------------------------------------- */
+
+  describe('the date scope', () => {
+    it('defaults to active and sends it as a query parameter', () => {
+      tick();
+      const request = backend.expectOne((req) => req.url === '/api/v1/dashboard');
+      expect(request.request.params.get('mode')).toBe('active');
+      request.flush(RESPONSE);
+      expect(store.scope()).toBe('active');
+    });
+
+    it('changing the scope refetches with the new mode', () => {
+      tick();
+      respond();
+
+      store.setScope('all');
+
+      const request = backend.expectOne((req) => req.url === '/api/v1/dashboard');
+      expect(request.request.params.get('mode')).toBe('all');
+      request.flush({ ...RESPONSE, scope: { mode: 'all' } });
+      expect(store.appliedScope()).toBe('all');
+    });
+
+    it('selecting the current scope does not refetch', () => {
+      tick();
+      respond();
+      store.setScope('active');
+      backend.verify();
+    });
+
+    it('reads the realised figures, passing a null through as null', () => {
+      tick();
+      respond();
+      expect(store.realizedAmount()).toBe(240.5);
+      // Not 0: "no percentage to report" and "averaged exactly flat" are
+      // different facts, and only one of them is true here.
+      expect(store.realizedPct()).toBeNull();
+      expect(store.realizedCount()).toBe(3);
+      expect(store.realizedWins()).toBe(2);
+      expect(store.realizedLosses()).toBe(1);
+    });
+
+    it('reports the scope the SERVER applied, not the one requested', () => {
+      // If the two ever disagree the parameter silently did not take.
+      tick();
+      respond();
+      expect(store.appliedScope()).toBe('active');
+    });
+
+    it('reports no applied scope before the first response', () => {
+      expect(store.appliedScope()).toBeNull();
+      expect(store.realizedCount()).toBe(0);
+    });
   });
 });

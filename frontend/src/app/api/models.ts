@@ -41,6 +41,12 @@ export interface Identity {
 export interface Health {
   ok: boolean;
   versions: Versions;
+  /** SR58 — whether the US market is open right now.
+   *
+   *  On `/health` rather than `/dashboard` because "are these prices live"
+   *  is a global fact: the indicator sits beside the connection status in
+   *  the shell, which must not depend on a workspace being open. */
+  market_active: boolean;
 }
 
 export interface Versions {
@@ -218,7 +224,23 @@ export interface Dashboard {
    *  like `position_premium`: the statuses come from `PlanStatus` on the Python
    *  side, and an empty object is what a failed collector returns. */
   lifecycle: Record<string, unknown>;
+  /** SR58 — the date scope the server actually applied, echoed back. */
+  scope: { mode: DashboardScope };
+  /** SR58 — realised P&L over the scoped closes. Amounts are null, never 0,
+   *  when nothing closed: "nothing closed today" and "closed exactly flat"
+   *  are different facts. */
+  realized: {
+    amount: number | null;
+    pct: number | null;
+    n: number;
+    wins: number;
+    losses: number;
+  };
 }
+
+/** The Jinja dashboard's three date scopes. `active` is today plus anything
+ *  still open; `today` is today alone; `all` is every day. */
+export type DashboardScope = 'active' | 'today' | 'all';
 
 /* -- analytics ---------------------------------------------------------- */
 

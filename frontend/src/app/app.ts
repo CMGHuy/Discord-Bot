@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  untracked,
+} from '@angular/core';
+import { Router } from '@angular/router';
 
 import { Login } from './shell/login/login';
 import { Shell } from './shell/shell';
@@ -35,4 +42,25 @@ import { SessionStore } from './stores/session.store';
 })
 export class App {
   protected readonly session = inject(SessionStore);
+
+  private readonly router = inject(Router);
+
+  constructor() {
+    /**
+     * SR58 — return to the deep link once authenticated.
+     *
+     * Here rather than in the login form: a session can also become
+     * authenticated without anyone typing a password (an existing cookie,
+     * or a session established through the Jinja UI), and the visitor
+     * should land where they asked either way.
+     *
+     * The effect runs on every status change but the redirect is consumed,
+     * so it fires at most once per page load.
+     */
+    effect(() => {
+      if (!this.session.isAuthenticated()) return;
+      const target = untracked(() => this.session.takeRedirect());
+      if (target) void this.router.navigateByUrl(target);
+    });
+  }
 }

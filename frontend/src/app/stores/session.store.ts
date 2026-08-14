@@ -24,6 +24,19 @@ interface SessionState {
    *  error and must not populate this. */
   error: string | null;
   submitting: boolean;
+  /**
+   * SR58 — where the visitor was actually trying to go.
+   *
+   * Captured in `boot()`, which runs as an app initializer BEFORE Angular
+   * bootstraps and therefore before the router has had a chance to rewrite
+   * the URL. That timing is the whole trick: `authGuard` is a `CanMatchFn`,
+   * so while logged out no workspace route matches and the `**` fallback
+   * redirects to `/dashboard` -- destroying the deep link before any login
+   * form is on screen.
+   *
+   * Null once consumed, and null for a visitor who arrived at the root.
+   */
+  redirectTo: string | null;
 }
 
 const initial: SessionState = {
@@ -31,6 +44,7 @@ const initial: SessionState = {
   username: null,
   error: null,
   submitting: false,
+  redirectTo: null,
 };
 
 /**
@@ -69,7 +83,23 @@ export const SessionStore = signalStore(
      * right thing to show then is the login form, which is what
      * 'anonymous' renders.
      */
-    async boot(): Promise<void> {
+    /**
+     * @param url The URL the visitor arrived on, defaulting to the real one.
+     *   A parameter rather than a bare `location` read because that global
+     *   cannot be driven from a test -- jsdom's `location` does not follow
+     *   `history.replaceState`, so a test that tried would silently assert
+     *   against `/` and pass for the wrong reason. Production calls it with
+     *   no argument.
+     */
+    async boot(url = `${location.pathname}${location.search}`): Promise<void> {
+      // Capture the deep link FIRST -- see `redirectTo`. Anything that is
+      // already the root or the login-equivalent is not worth remembering,
+      // and remembering it would send every ordinary sign-in through a
+      // redundant navigation.
+      if (url && url !== '/' && !url.startsWith('/?')) {
+        patchState(store, { redirectTo: url });
+      }
+
       try {
         const identity = await firstValueFrom(api.session());
         patchState(store, {
@@ -101,6 +131,19 @@ export const SessionStore = signalStore(
               : 'Could not reach the admin. Is it running?',
         });
       }
+    },
+
+    /**
+     * SR58 — the deep link to return to after signing in, consumed once.
+     *
+     * Consumed rather than merely read: leaving it set would make a later
+     * navigation, or a second sign-in in the same tab, jump back to a URL
+     * the visitor has since moved on from.
+     */
+    takeRedirect(): string | null {
+      const target = store.redirectTo();
+      if (target !== null) patchState(store, { redirectTo: null });
+      return target;
     },
 
     /**

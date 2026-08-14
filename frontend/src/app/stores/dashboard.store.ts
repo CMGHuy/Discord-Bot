@@ -11,12 +11,16 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { Dashboard } from '../api/models';
+import { Dashboard, DashboardScope } from '../api/models';
 
 interface DashboardSlice {
   data: Dashboard | null;
   loading: boolean;
   error: string | null;
+  /** SR58 — the date scope. A fetch parameter, so it lives here rather than
+   *  in the component: the server does the date filtering, and a scope held
+   *  in the component could not narrow the realised figures at all. */
+  scope: DashboardScope;
 }
 
 /**
@@ -66,7 +70,9 @@ function finiteNumber(value: unknown): number | null {
  * event stream reconnects seconds later.
  */
 export const DashboardStore = signalStore(
-  withState<DashboardSlice>({ data: null, loading: false, error: null }),
+  withState<DashboardSlice>({
+    data: null, loading: false, error: null, scope: 'active',
+  }),
   withComputed(({ data }) => ({
     /** True until the first response, and never again. Distinguishes "no
      *  data yet" from "a refetch is in flight", which want different UI:
@@ -79,6 +85,19 @@ export const DashboardStore = signalStore(
     riskCapPct: computed(() => data()?.risk_cap_pct ?? null),
 
     openTrades: computed(() => data()?.open_trades ?? 0),
+
+    /* -- SR58: realised P&L over the scoped closes -------------------- */
+
+    /** The scope the SERVER applied, not the one we asked for. If the two
+     *  ever disagree the parameter silently did not take, which is exactly
+     *  what this echo exists to make visible. */
+    appliedScope: computed(() => data()?.scope?.mode ?? null),
+
+    realizedAmount: computed(() => data()?.realized?.amount ?? null),
+    realizedPct: computed(() => data()?.realized?.pct ?? null),
+    realizedCount: computed(() => data()?.realized?.n ?? 0),
+    realizedWins: computed(() => data()?.realized?.wins ?? 0),
+    realizedLosses: computed(() => data()?.realized?.losses ?? 0),
     avgConfidence: computed(() => data()?.avg_confidence ?? null),
     winRate: computed(() => data()?.win_rate ?? null),
     expectancyR: computed(() => data()?.expectancy_r ?? null),
@@ -164,9 +183,16 @@ export const DashboardStore = signalStore(
     }),
   })),
   withMethods((store, api = inject(ApiClient)) => ({
+    /** SR58 — change the date scope and refetch. */
+    setScope(scope: DashboardScope): void {
+      if (scope === store.scope()) return;
+      patchState(store, { scope });
+      this.load();
+    },
+
     load(): void {
       patchState(store, { loading: true });
-      api.dashboard().subscribe({
+      api.dashboard(store.scope()).subscribe({
         next: (data) => patchState(store, { data, loading: false, error: null }),
         error: (error: ApiError) =>
           patchState(store, {

@@ -102,7 +102,9 @@ def test_health_requires_auth_and_returns_json_401(client):
 def test_health_ok_with_basic_auth(client, auth):
     r = client.get("/api/v1/health", headers=auth)
     assert r.status_code == 200
-    assert_shape(r.get_json(), {"ok": bool, "versions": dict})
+    # SR58 added `market_active`: "are these prices live" is a global fact,
+    # so it rides the shell's own endpoint rather than the dashboard's.
+    assert_shape(r.get_json(), {"ok": bool, "versions": dict, "market_active": bool})
     assert r.get_json()["ok"] is True
     # get_versions() returns ui/bot/last_updated -- NOT VERSION.json verbatim
     # (which also has ui_updated/bot_updated). last_updated is VERSION.json's

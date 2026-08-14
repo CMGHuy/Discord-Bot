@@ -55,7 +55,7 @@ describe('http interceptors', () => {
 
   it('sends the session cookie', () => {
     http.get('/api/v1/dashboard').subscribe();
-    expect(backend.expectOne('/api/v1/dashboard').request.withCredentials).toBe(true);
+    expect(backend.expectOne((req) => req.url === '/api/v1/dashboard').request.withCredentials).toBe(true);
   });
 
   it('reports a 401 to the unauthorized seam', async () => {
@@ -117,7 +117,7 @@ describe('http interceptors', () => {
     const error = await new Promise<ApiError>((resolve) => {
       http.get('/api/v1/dashboard').subscribe({ error: (e: ApiError) => resolve(e) });
       backend
-        .expectOne('/api/v1/dashboard')
+        .expectOne((req) => req.url === '/api/v1/dashboard')
         .error(new ProgressEvent('error'), { status: 0, statusText: '' });
     });
 
@@ -141,7 +141,7 @@ describe('http interceptors', () => {
     http.get('/api/v1/dashboard').subscribe();
     expect(loading.inFlight()).toBe(1);
 
-    backend.expectOne('/api/v1/dashboard').flush({});
+    backend.expectOne((req) => req.url === '/api/v1/dashboard').flush({});
     expect(loading.inFlight()).toBe(0);
     expect(loading.isLoading()).toBe(false);
   });
@@ -154,7 +154,7 @@ describe('http interceptors', () => {
     expect(loading.inFlight()).toBe(2);
 
     // A boolean flag would clear here, while one request is still open.
-    backend.expectOne('/api/v1/dashboard').flush({});
+    backend.expectOne((req) => req.url === '/api/v1/dashboard').flush({});
     expect(loading.isLoading()).toBe(true);
 
     backend.expectOne('/api/v1/risk').flush({});
@@ -191,7 +191,7 @@ describe('http interceptors', () => {
     // Without the clamp the counter would be -1 here, and isLoading() would
     // stay false through this request and the next one.
     expect(loading.isLoading()).toBe(true);
-    backend.expectOne('/api/v1/dashboard').flush({});
+    backend.expectOne((req) => req.url === '/api/v1/dashboard').flush({});
   });
 });
 
@@ -217,7 +217,7 @@ describe('ApiClient', () => {
     // Relative so the same bundle works behind ng serve's proxy, behind
     // Flask, and behind any reverse proxy in front of either.
     api.dashboard().subscribe();
-    expect(backend.expectOne('/api/v1/dashboard').request.method).toBe('GET');
+    expect(backend.expectOne((req) => req.url === '/api/v1/dashboard').request.method).toBe('GET');
   });
 
   it('drops empty query parameters instead of sending them', () => {

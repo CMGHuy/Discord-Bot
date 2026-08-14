@@ -14,6 +14,7 @@ import {
   OhlcvResponse,
   ClearResult,
   Dashboard,
+  DashboardScope,
   Collection,
   Health,
   Identity,
@@ -88,8 +89,13 @@ export class ApiClient {
 
   /* -- dashboard --------------------------------------------------------- */
 
-  dashboard(): Observable<Dashboard> {
-    return this.http.get<Dashboard>(`${this.base}/dashboard`);
+  /** SR58 — the scope is a query parameter, so the server does the date
+   *  filtering. A client-side scope over an all-time payload could not
+   *  narrow the realised figures at all. */
+  dashboard(mode?: DashboardScope): Observable<Dashboard> {
+    let params = new HttpParams();
+    if (mode) params = params.set('mode', mode);
+    return this.http.get<Dashboard>(`${this.base}/dashboard`, { params });
   }
 
   /* -- trades ---------------------------------------------------------- */

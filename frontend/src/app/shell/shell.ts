@@ -37,6 +37,11 @@ interface NavEntry {
  * that could disagree; the design system moves them to the shell precisely
  * so a workspace cannot own a second copy. Do not add them to Dashboard.
  */
+/** The zoom steps the control offers, as root-font percentages. A closed
+ *  set so a stored value can be validated against it. */
+const ZOOM_CHOICES = [90, 100, 110, 125] as const;
+const ZOOM_DEFAULT = 100;
+
 @Component({
   selector: 'sb-shell',
   imports: [
@@ -106,6 +111,46 @@ export class Shell {
   protected closeOverlay(): void {
     this.overlayOpen.set(false);
   }
+
+  /* -- SR58: font zoom ------------------------------------------------ */
+
+  /**
+   * Root font scale, as a percentage.
+   *
+   * **Persisted through `PreferencesStore`, never `localStorage`** -- a
+   * Global Constraint of plan v21. The Jinja version used `localStorage`
+   * because it had no alternative; here that would make a setting follow the
+   * browser rather than the account, so the same person on a second machine
+   * gets a size they never chose and cannot find where it came from.
+   */
+  protected readonly zoom = signal(ZOOM_DEFAULT);
+
+  protected readonly zoomChoices = ZOOM_CHOICES;
+
+  /** Applied to `<html>` rather than to a shell element: the design tokens
+   *  are `rem`-based, so scaling the root scales the whole system --
+   *  including anything rendered into a portal outside this component. */
+  private readonly applyZoom = effect(() => {
+    document.documentElement.style.fontSize = `${this.zoom()}%`;
+  });
+
+  protected setZoom(percent: number): void {
+    this.zoom.set(percent);
+    this.preferences.update((prefs) => ({ ...prefs, 'shell.zoom': percent }));
+  }
+
+  private readonly applyStoredZoom = effect(() => {
+    if (!this.preferences.isLoaded()) return;
+    const stored = this.preferences.values()['shell.zoom'];
+    untracked(() => {
+      // Validated, not trusted: a stale or hand-edited preference must fall
+      // back to 100% rather than set the root font to `NaN%` and collapse
+      // every rem-based size in the app at once.
+      if (typeof stored === 'number' && ZOOM_CHOICES.includes(stored as never)) {
+        this.zoom.set(stored);
+      }
+    });
+  });
 
   private readonly applyStoredSidebar = effect(() => {
     if (!this.preferences.isLoaded()) return;

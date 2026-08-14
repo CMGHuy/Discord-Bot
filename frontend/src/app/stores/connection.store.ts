@@ -10,6 +10,7 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
+import { Health } from '../api/models';
 
 /** What the shell's indicator shows. `dead` is not an EventStream state:
  *  it means the fallback itself is failing, i.e. the admin is unreachable
@@ -21,6 +22,20 @@ interface ConnectionStateSlice {
   botLastSeen: string | null;
   /** True when the most recent poll for bot liveness failed. */
   unreachable: boolean;
+  /**
+   * SR58 — `GET /health`: the version tag, its build time, and whether the
+   * US market is open.
+   *
+   * Read HERE rather than by a new store because it answers the same
+   * question the two facts above do -- "is what I am looking at real" -- and
+   * the shell already refetches this store on the `bot` event. `market_active`
+   * in particular is why "these prices have not moved" is not always a
+   * failure: outside session hours it is the correct behaviour.
+   *
+   * Null until the first answer. `ApiClient.health()` had existed with no
+   * caller since NG4.
+   */
+  health: Health | null;
 }
 
 /**
@@ -37,6 +52,7 @@ export const ConnectionStore = signalStore(
     botAlive: null,
     botLastSeen: null,
     unreachable: false,
+    health: null,
   }),
   withComputed((store, events = inject(EventStream)) => ({
     state: computed<ConnectionState>(() =>
@@ -48,8 +64,31 @@ export const ConnectionStore = signalStore(
     ),
     lastSeq: events.lastSeq,
   })),
+  withComputed(({ health }) => ({
+    /** The `ui`/`bot` pair for the shell footer, or null before the first
+     *  answer -- rendering "0.0.0" while the request is in flight would look
+     *  like a real version rather than an absent one. */
+    versions: computed(() => health()?.versions ?? null),
+    /** When VERSION.json was last written, which doubles as when this image
+     *  last actually changed. */
+    lastUpdated: computed(() => health()?.versions.last_updated ?? null),
+    /**
+     * Three-valued deliberately. `null` means "not asked yet", which is a
+     * different statement from "the market is closed" -- and an indicator
+     * that says CLOSED before it knows is worse than one that says nothing.
+     */
+    marketActive: computed<boolean | null>(() => health()?.market_active ?? null),
+  })),
   withMethods((store, api = inject(ApiClient)) => ({
     refresh(): void {
+      // Its own request and its own silence on failure: a failed health read
+      // must not flip the connection indicator, which is answering a
+      // different question and has its own signal for it.
+      api.health().subscribe({
+        next: (health) => patchState(store, { health }),
+        error: () => undefined,
+      });
+
       api.scanStatus().subscribe({
         next: (scan) =>
           patchState(store, {
