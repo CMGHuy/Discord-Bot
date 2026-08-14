@@ -1,8 +1,35 @@
 # Admin SPA refresh — Implementation Plan (v21)
 
+> ## ✅ COMPLETE — closed 2026-08-14, merged to `main`, `ui` 1.2.1
+>
+> SR1–SR64 are done. The parity audit
+> (`docs/superpowers/results/2026-08-13-jinja-feature-parity.md`) is fully
+> worked through: every *blocks NG57* row closed by SR48–SR58, all 33 cosmetic
+> rows filled by SR59–SR63, none dropped.
+>
+> **Two things are deliberately NOT done, and both gate NG57:**
+>
+> 1. **SR64 Step 3, the end-to-end QA walk**, was not performed — the session
+>    that closed this plan had no browser. It is recorded as *not walked* in
+>    `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`, with the specific
+>    list of what still needs checking, rather than being ticked off a green
+>    suite. NG54 already cost a release to the gap between "the tests pass" and
+>    "the bundle works".
+> 2. **The soak**, no earlier than 2026-08-27.
+>
+> NG57 (deleting the Jinja templates) must wait for both. The migration plan's
+> *second* gate — "v21 must complete first" — is released; that is all.
+>
+> **Unticked boxes below are not a to-do list.** SR1–SR5 and SR48–SR53 were
+> implemented by earlier sessions that committed without ticking; their
+> deliverables were verified to exist when this plan was closed. Ticking them
+> on that basis is what made the boxes unreliable in the first place, so they
+> were left alone. Derive status from the git history, not the checkboxes —
+> the Phase 4 header carries the commit-to-task mapping.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order SR1→SR64 unless the parallel-dispatch table below says otherwise. (SR48–SR63 did not exist when this plan was written — SR47 derived them from the parity audit, as it was always meant to.)
 
-**Version:** ui 1.1.0 · bot 1.1.2
+**Version:** ui 1.1.0 · bot 1.1.2 *(at authoring; shipped as ui 1.2.1)*
 
 **Goal:** Bring the Angular admin SPA to the state the Jinja UI reached and past it — a compact/full table model with an SL→TP status bar, a modern-fintech dark palette, a collapsible icon-rail sidebar, four responsive breakpoints down to 390px, one interactive chart carrying everything the Discord PNG draws, and a feature-level parity audit that proves nothing was lost.
 
