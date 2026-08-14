@@ -42,10 +42,3 @@ frontend/.angular/
 
 __pycache__/
 .pytest_cache/
-
-# The SPA's dependency tree: ~1,100 packages. Grepping for a TS symbol at
-# repo root without this walks all of it and finds Angular's own sources
-# before yours. `frontend/src/` is deliberately still searchable.
-frontend/node_modules/
-frontend/dist/
-frontend/.angular/

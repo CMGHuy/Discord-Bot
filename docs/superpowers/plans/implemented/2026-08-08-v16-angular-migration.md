@@ -110,7 +110,7 @@ Read the spec for a phase before starting it. They contain the reasoning; this p
 - **Merge to `main` once per phase, not per task.** Work accumulates on `worktree-angular-migration` and fast-forwards to `main` at each phase boundary — Phase 1 lands after NG19, Phase 2 after NG24, and so on. Rationale: a phase is the smallest unit that leaves `main` in a coherent state, and `main` is shared with concurrent sessions. Check `git status` on the main tree before merging; other sessions leave it dirty.
 - Windows dev machine: `python`, never `python3`.
 - `python scripts/testrun.py full` green (`0 failed`) before each commit; `... file tests/admin` while iterating. Conventional commits, one per task, `git add <explicit paths>` — never `-A`.
-- New docs follow the `-vN` naming convention in `docs/claude/working-conventions.md`.
+- New docs follow the `-vN` naming convention in `docs/claude/document-conventions.md`.
 
 ## File Structure
 

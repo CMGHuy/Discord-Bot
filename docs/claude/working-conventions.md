@@ -2,6 +2,10 @@
 
 Referenced from the root `CLAUDE.md`.
 
+**Spec and plan authoring — filenames, the `vN` counter, header blocks, length
+budgets, parallelisation, `implemented/` — lives in `document-conventions.md`.**
+This file is session hygiene: commits, shared state, and versioning.
+
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`), one
   commit per task; full suite + `make check` green before each.
 - Active plans live in `docs/superpowers/plans/*.md` with a Progress block at
@@ -9,56 +13,14 @@ Referenced from the root `CLAUDE.md`.
   (gitignored). Update both when completing plan tasks — both have drifted
   before (tasks marked done that weren't), so verify against `git log` and
   actual files before trusting either.
-- **Every spec and plan filename is `YYYY-MM-DD-vN-<name>.md`** — date first,
-  then the version, then the descriptive name. For example
-  `2026-08-08-v16-angular-migration.md` and
-  `2026-08-08-v15-jinja-cutover-design.md`.
+- **Concurrent Claude sessions share this working tree.** Stage specific files,
+  never `git add -A`; commit generated artifacts (especially the registry)
+  immediately — uncommitted generated state has been silently wiped by another
+  session's git operations before.
+- Live git worktrees under `.claude/worktrees/` are full repo copies. Check
+  `git worktree list` before assuming a stray path is dead. Never edit files
+  there from a main-tree session — you will be editing a different branch.
 
-  The version sits immediately after the date rather than at the end (its
-  position until 2026-08-13) so that a directory listing sorts by date and then
-  by version, and so the number is visible without reading to the end of a long
-  name.
-
-- **`vN` comes from one repo-wide counter that only ever increments.** Not
-  per-feature, not per-document-type: specs and plans draw from the same
-  sequence, so `v11` is the eleventh design document written in this repo
-  regardless of which feature it belongs to and whether it is a spec or a plan.
-  Find the next number with
-  `ls docs/superpowers/{specs,plans}/ | grep -oE 'v[0-9]+' | sort -V | tail -1`.
-  A number is never reused. Revising a document in place keeps its number; only
-  a genuinely new document takes the next one. (`v6-gatekeeper_1…_12` are parts
-  of one document, not twelve numbers — a split reuses the parent's number with
-  a `_N` part suffix.)
-
-  **Renaming a document is not renumbering it.** The 2026-08-13 sweep moved
-  every existing file to this layout and rewrote all 151 references across 57
-  files; the numbers themselves were untouched. Two specs that had never had a
-  number and had no sibling plan to inherit one from
-  (`one-trade-per-ticker`, `admin-design-system`) were retro-assigned `v19` and
-  `v20` — the next free values — so no file is left in the old format. Their
-  numbers therefore say nothing about when they were written, which is the one
-  place the counter's chronology does not hold.
-- New specs and plans carry a `**Version:**` line in their header block —
-  `ui X.Y.Z · bot A.B.C`, copied from `VERSION.json` **as of the commit that
-  authors the document**. It records which release the document was written
-  against, so it is never refreshed afterwards; a doc from July keeps July's
-  numbers even while the plan is still active. Documents predating this
-  convention (2026-08-08) were left unstamped rather than backfilled with
-  versions that would have to be reconstructed from git.
-- **Every spec also declares the bump it *implies***, on a `**Bump:**` line in
-  the same header block — `ui minor (1.2.x → 1.3.0)`, `bot patch`, or `none`.
-  That is a different statement from `**Version:**` above it: `Version:` records
-  what the repo was at when the document was written and is never refreshed,
-  while `Bump:` is a prediction about what the work will earn when it ships.
-  Derive the level from "The three levels" below, and argue it from **observable
-  difference, not from the size of the feature** — a 400-line spec whose whole
-  effect is internal is a patch, and a one-flag spec that hands every user a
-  different product is a minor. See "What a spec's `Bump:` line is for".
-- **Every spec states which of its tasks can run in parallel**, in a
-  `## Parallelisation` section. See "Saying what is parallelisable".
-- **Specs and plans have a length budget** — a spec fits in one read, a plan
-  splits into `_N` parts before it becomes a context landmine. See "How long a
-  document may be".
 ## Versioning: when to bump `VERSION.json`
 
 `VERSION.json` carries **two independent version lines**, `ui` and `bot`, and
@@ -79,6 +41,9 @@ Release B is by far the bigger diff and by far the smaller bump. It removed a
 UI nobody was being served any more, so nobody's experience changed. Release A
 changed one flag and every user got a different product. **Observable
 difference is the question; size of change is not.**
+
+A spec predicts its own bump on a `Bump:` header line before the work starts —
+see `document-conventions.md`, "The header block".
 
 ### The three levels
 
@@ -125,37 +90,6 @@ running container does. `0379574` (a 600-line cleanup) and `ab7fe4c` (the deploy
 path fix) correctly bumped nothing: neither alters what the bot or the admin
 *does*.
 
-### What a spec's `Bump:` line is for
-
-The bump used to be decided at release time, by whoever happened to be
-committing, from a diff they were looking at rather than from the impact the
-work was designed for. That is the worst moment to ask the question: the
-reasoning that would answer it — who sees a difference, and what kind — was
-worked out during the brainstorm and has been out of context for days.
-
-So the spec commits to a level up front, and the release commit either honours
-it or overrides it deliberately. Both outcomes are fine; a silent guess is not.
-
-A spec that predicts a minor and lands as a patch is **not a failed
-prediction to hide** — amend the `Bump:` line in the same commit that closes
-the spec and say in one clause why the impact came out smaller. That edit is
-the cheapest possible record of a thing this repo gets wrong often: mistaking
-effort for impact. Release B is the standing example — 20 templates and 10
-test files deleted, and correctly a patch, because nobody was being served
-the thing that was removed.
-
-Two spec-specific cases the levels above do not spell out:
-
-- **A spec that ships no running code bumps nothing.** Documentation, a
-  measurement, a closed pre-registration, a plan that concludes "do not build
-  this" — all `Bump: none`. A negative result is a finished spec, not a
-  release.
-- **A spec split across two components bumps both lines, separately graded.**
-  The chart work is the live example: a data-model change plus a new endpoint
-  that the Discord alert path also reads is a `bot` patch, while a chart the
-  user looks at every day becoming a different chart is a `ui` minor. One
-  document, two levels, and the two release commits stay independent.
-
 ### How
 
 A bump is **its own commit**, touching only `VERSION.json`, in the established
@@ -179,212 +113,6 @@ changed". Under the image-based deploy the file is copied into the image from a
 fresh CI checkout, so its mtime is effectively *when the image was built*. That
 is the useful reading and the one the UI wants, but do not mistake it for a
 release date: it moves on every deploy, including deploys that bump nothing.
-
-- **Concurrent Claude sessions share this working tree.** Stage specific
-  files, never `git add -A`; commit generated artifacts (especially the
-  registry) immediately — uncommitted generated state has been silently wiped
-  by another session's git operations before.
-- Live git worktrees under `.claude/worktrees/` (currently `cockpit-v3` and an
-  agent worktree) are full repo copies. Check `git worktree list` before
-  assuming a stray path is dead. Never edit files there from a main-tree
-  session — you will be editing a different branch.
-
-## How long a document may be
-
-Every session that opens a plan pays for it in context. `CLAUDE.md`'s first
-section exists because three documents in this repo grew past the point where
-reading one is affordable at all — `v3-cockpit` at 652 KB is roughly 170K
-tokens, more than a whole context window for a single file.
-
-**The budget:**
-
-| Document | Budget | Hard limit |
-|---|---|---|
-| Spec | ~350 lines / 20 KB | 500 lines — a spec is read **whole** |
-| Plan | ~15 tasks / 60 KB | 30 tasks or 120 KB, whichever comes first |
-
-Over the limit, **split — do not compress.**
-
-### Why splitting, and not writing less
-
-The measurement that decides this, taken across every plan the repo has:
-
-| Plan | Size | Tasks | Per task |
-|---|---|---|---|
-| `v24-control-alignment` | 48 KB | 14 | 3.4 KB |
-| `v21-spa-refresh` | 136 KB | 51 | 2.7 KB |
-| `v2-unified-plan-engine` | 300 KB | 110 | 2.7 KB |
-| `v3-cockpit` | 652 KB | 115 | 5.7 KB |
-
-Cost per task is near-constant at 2.7–5.7 KB, in the tight plans and the
-landmines alike. **The landmines are not verbose, they are long** — 652 KB is
-115 tasks in one file. So trimming prose inside tasks buys almost nothing, and
-buys it at the worst possible price: `superpowers:writing-plans` requires real
-test code, real implementation code and exact file paths in every task, and a
-task thinned to hit a byte target becomes the "add appropriate error handling"
-placeholder that skill exists to forbid. A vague task costs the *executing*
-session far more than the bytes saved.
-
-So the lever is the number of tasks in one file, never the completeness of one
-task.
-
-### Splitting
-
-Reuse the parent's number with a `_N` part suffix — that is what the suffix is
-for, and `v6-gatekeeper_0-index` … `_11` is the worked example: one document,
-one number, twelve files, each 25–30 tasks. Write a `_0-index` part carrying the
-header block, the goal, the global constraints, the parallelisation map and a
-table of what lives in each part; put the phases in the numbered parts.
-
-A spec over budget usually is not one spec. Before splitting it, check whether
-it is really two subjects sharing a document — `v22` and `v23` were separated
-during their own brainstorm for exactly this reason. Decompose first; split
-only what genuinely cannot be decomposed.
-
-### Being greppable is the other half
-
-A plan is **never read whole** — `/task-brief E53` and
-`grep -n "^### Task E53" -A 120` pull one task. That only works if the document
-is mechanically addressable, so both forms are mandatory regardless of length:
-
-- `### Task N: <name>` — one line, no variations, no prose before the colon.
-- `# Phase N — <name>` for phase boundaries. **One hash, not two**, however
-  wrong that looks next to the `##` sections around it. `CLAUDE.md` documents
-  `grep -n "^# Phase"` as the way to orient in a plan, and every plan in the
-  repo from `v2-unified-plan-engine` onward is written to match it. A plan
-  using `## Phase` returns **zero** matches for that command and is invisible
-  to the tool that exists to keep it out of context — which is the whole point
-  of this section. (`v24` and `v25` were written with `##` and corrected;
-  that is how this was found.)
-
-`grep -c "^### Task"` and `grep -n "^# Phase"` are how a session orients without
-loading the file, and a plan whose headers drift breaks both.
-
-## Saying what is parallelisable
-
-**Every spec carries a `## Parallelisation` section**, and every plan built from
-it repeats the grouping per phase. It names the groups whose tasks can be worked
-at the same time, and — the half that actually matters — what forces everything
-else to be sequential.
-
-Without it the default is serial execution, because a session that cannot prove
-two tasks are independent is right to assume they are not. The cost of that
-default is real: a phase of eight independent frontend tasks executed one at a
-time is eight round trips for work that could have been three.
-
-The dangerous failure is the other one. **Concurrent sessions share this working
-tree** (see above), so two agents dispatched onto tasks that touch the same file
-do not merge — the second overwrites the first, silently, and the loss shows up
-later as a change that "did not take". Naming the groups is what makes
-`superpowers:dispatching-parallel-agents` and `subagent-driven-development` safe
-to use here rather than a gamble.
-
-The test for putting two tasks in one group is **both** of:
-
-1. **Disjoint files.** Not "different features" — different *files*. Two tasks
-   that both edit `tokens.css` are sequential however unrelated they sound.
-2. **No contract dependency.** Neither task consumes a symbol, token, endpoint
-   or type the other one introduces. A task that adds `--control-h` and a task
-   that consumes it are sequential even though they touch different files.
-
-Write it as groups, with the reason on the sequential edges:
-
-```markdown
-## Parallelisation
-
-- **Group 1 (parallel):** A2, A3, A4 — one workspace file each, no shared file.
-- **Sequential:** A1 before everything (introduces `--control-h`, which every
-  other task consumes). A5 after Group 1 (the guard test asserts against rows
-  those tasks convert; running it earlier fails for the right reason at the
-  wrong time).
-```
-
-Be honest about a group of one. A phase that is genuinely a chain says so —
-`Sequential throughout: each task consumes the previous task's payload field` —
-and that sentence is worth as much as a wide group, because it stops the next
-session re-deriving the dependency graph to find out.
-
-## Naming specs and plans
-
-**`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md`** — date,
-then version, then name:
-
-```
-2026-08-08-v16-angular-migration.md          (plan)
-2026-08-08-v15-jinja-cutover-design.md       (spec)
-2026-07-14-v6-gatekeeper_0-index.md          (one document split into parts)
-```
-
-`vN` is one repo-wide counter shared by both directories — `v11` is the eleventh
-design document in this repo, whether spec or plan. Next number:
-
-```bash
-find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
-  | grep -oE 'v[0-9]+' | sort -V | tail -1
-```
-
-Use `find`, not `ls` on the two directories — finished documents live one level
-down in `implemented/`, so an `ls` that misses them returns a stale maximum and
-makes you reuse a number.
-
-Never reuse a number, and never renumber a committed one — commit messages and
-cross-links reference it. Revising a document in place keeps its number; only a
-genuinely new document takes the next. A document split across files reuses the
-parent's number with a `_N` part suffix rather than consuming N numbers.
-
-### Plans that are no longer live move to `implemented/`
-
-**When a plan stops being live work, `git mv` it — and every spec it was built
-from — into `docs/superpowers/plans/implemented/` and
-`docs/superpowers/specs/implemented/` as part of the closing commit.** The top
-level of those two directories then holds exactly the live work: what is in
-flight, and what is designed but still to be built.
-
-- **`implemented/` means "off the live list", not "every box is ticked".** It
-  holds three kinds of document, deliberately: plans that finished; plans
-  abandoned part-way (`v3-cockpit` at 15/467, `v4-edge-engine` at 133/399); and
-  plans whose code was later deleted by a rollback (`v6-gatekeeper`, undone by
-  `c84924a`). Read a moved plan's Progress block before assuming its code ships
-  today — the folder does not promise that.
-- **A plan is done when its own work is done**, not when the checkboxes agree. A
-  plan closing with tasks deliberately cut, deferred to a successor, or left open
-  for manual QA is finished — say so in its Progress block, then move it. `[x]`
-  boxes lie in both directions; derive the verdict from deliverables and merge
-  commits, never from the boxes.
-- **A spec moves only when nothing live still builds from it.** A spec feeding
-  several plans stays put until the last of them closes — `v15-jinja-cutover` is
-  the example: its plan (`v16-angular-migration`) is closed and moved, but the
-  cutover itself was handed to a future plan, so the spec stayed.
-- **Not every spec has a plan.** A multi-component design doc can be executed
-  component-by-component with no plan file at all; it is closed when every
-  component is resolved — and **"resolved" includes a negative result or a
-  component correctly not built because its own gate never opened.**
-  `v17-market-context` is the example: P0/P1 shipped, P2a closed on measured
-  evidence with an *empty* `REGIME_ALLOW`, P2b was gated off by P2a's failure,
-  P3's script shipped. It carries a status table in its header; write one before
-  moving a spec like that, or the next session will read the empty table as
-  unfinished work and re-run a closed pre-registration.
-- **Fix the references in the same commit.** Plans, specs, source docstrings
-  (`swingbot/core/analytics/*.py`, `swingbot/admin/**`), tests and
-  `.claude/skills/task-brief/SKILL.md` all cite these paths; after moving,
-  re-point every reference and confirm none dangle.
-- **The `SessionStart` hook only globs `plans/*.md`**, so a moved plan drops out
-  of the cursor's "active plan" line by design. To resume one, move it back up
-  first.
-
-### Worktrees are named after the plan
-
-**A worktree created to execute a plan takes the plan's file stem**, so the
-branch, the directory and the document always name the same thing:
-
-```
-docs/superpowers/plans/2026-08-13-v21-spa-refresh.md
-  → .claude/worktrees/2026-08-13-v21-spa-refresh/   (branch: same name)
-```
-
-Never invent a fresh topic name — a worktree called `trade-history-filter` takes
-a second lookup to tie back to plan v9. For work that is not executing a plan, a
-short topic name is fine; the rule binds only when a plan exists.
 
 ## Long-running scripts must report progress
 

@@ -3,8 +3,8 @@
 **Version:** ui 1.2.3 · bot 1.1.2
 **Bump:** ui patch — every change here is visible, none of it makes the admin a
 different product. A reader who used the Settings page yesterday finds the same
-page, correctly aligned. (See `docs/claude/working-conventions.md`,
-"What a spec's `Bump:` line is for".)
+page, correctly aligned. (See `docs/claude/document-conventions.md`,
+"The header block".)
 **Date:** 2026-08-14
 **Status:** approved, not yet implemented
 

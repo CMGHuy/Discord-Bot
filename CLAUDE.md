@@ -128,7 +128,7 @@ assuming its code ships. Derive "done" from deliverables and merge commits — t
 **A worktree executing a plan takes that plan's file stem** as both its
 directory and its branch name.
 
-`docs/claude/working-conventions.md` has the rest: when a spec may move (and why
+`docs/claude/document-conventions.md` has the rest: when a spec may move (and why
 one feeding live plans may not), the references to re-point in the same commit,
 and why the `SessionStart` hook stops seeing a moved plan.
 
@@ -177,21 +177,22 @@ Not auto-loaded — read the relevant one before starting work in that area.
   gates, frozen constants, and the table of **closed pre-registrations that
   must not be re-run**. Read before running or interpreting any
   backtest/grid/validation.
-- `docs/claude/working-conventions.md` — commit style, concurrent-session git
-  hygiene, worktrees, the full document-naming convention, and **when to bump
-  `VERSION.json`** (two independent `ui`/`bot` lines; the test is observable
-  difference, not diff size — Release B deleted the entire Jinja UI for a
-  *patch*). Read it before writing any new spec or plan, and before bumping a
-  version. Three rules bind every new spec or plan: a **`Bump:`** header line
-  predicting the release level the work earns; a **`## Parallelisation`** section
-  naming which tasks may run concurrently and what forces the rest to be
-  sequential (the test is disjoint *files* plus no contract dependency — this
-  working tree is shared, so two agents on one file overwrite rather than
-  merge); and a **length budget** — a spec stays under 500 lines because it is
-  read whole, a plan splits into `_N` parts past 30 tasks or 120 KB. Over
-  budget, **split, never compress**: cost per task is a near-constant 2.7–5.7 KB
-  in every plan here, so the landmines are long, not verbose, and thinning a
-  task just recreates the placeholders `writing-plans` forbids.
+- `docs/claude/working-conventions.md` (6 KB) — commit style, concurrent-session
+  git hygiene, worktrees, and **when to bump `VERSION.json`** (two independent
+  `ui`/`bot` lines; the test is observable difference, not diff size — Release B
+  deleted the entire Jinja UI for a *patch*). Read before bumping a version.
+- `docs/claude/document-conventions.md` (13 KB) — everything about authoring a
+  spec or plan: filenames and the `vN` counter, the `implemented/` rule, and the
+  three that bind every new document — a **`Bump:`** header line predicting the
+  release level the work earns; a **`## Parallelisation`** section naming which
+  tasks may run concurrently and what forces the rest sequential (the test is
+  disjoint *files* plus no contract dependency — this working tree is shared, so
+  two agents on one file overwrite rather than merge); and a **length budget**,
+  a spec under 500 lines because it is read whole, a plan split into `_N` parts
+  past 30 tasks or 120 KB. Over budget, **split, never compress**: cost per task
+  is a near-constant 2.7–5.7 KB in every plan here, so the landmines are long,
+  not verbose, and thinning a task just recreates the placeholders
+  `writing-plans` forbids. Read before writing any spec or plan.
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
 - `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats
