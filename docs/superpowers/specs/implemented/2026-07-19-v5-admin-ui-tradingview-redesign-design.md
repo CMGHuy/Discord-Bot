@@ -1,7 +1,7 @@
 # Admin UI + TradingView-Style Charts — Design Spec
 
 **Date:** 2026-07-19 · **Status:** Approved (brainstormed + user-approved in session)
-**Implementation plan:** `docs/superpowers/plans/2026-07-19-v5-admin-ui-tradingview-redesign.md`
+**Implementation plan:** `docs/superpowers/plans/implemented/2026-07-19-v5-admin-ui-tradingview-redesign.md`
 
 ## 1. Goal
 

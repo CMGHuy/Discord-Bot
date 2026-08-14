@@ -1,6 +1,6 @@
 """The /api/v1 blueprint — the SPA's contract with the server.
 
-Spec: `docs/superpowers/specs/2026-08-08-v11-admin-rest-api-design.md`.
+Spec: `docs/superpowers/specs/implemented/2026-08-08-v11-admin-rest-api-design.md`.
 
 This package is deliberately SEPARATE from `swingbot/admin/api.py`. The two
 namespaces coexist for the whole Angular migration: the Jinja UI consumes

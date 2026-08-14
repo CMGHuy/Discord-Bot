@@ -3,7 +3,7 @@
 Referenced from the root `CLAUDE.md`. Read this before optimising, timing, or
 reasoning about how long the suite takes. Every number here was measured on
 2026-08-07 at `main` = `017c777`, 12 logical cores. Full design:
-`docs/superpowers/specs/2026-08-07-v7-test-cost-reduction-design.md`.
+`docs/superpowers/specs/implemented/2026-08-07-v7-test-cost-reduction-design.md`.
 
 ## Baseline
 

@@ -3,7 +3,7 @@
 NG19 TRIAGE: KEEP unchanged. This tests `swingbot/admin/events/watcher.py`,
 which has no Jinja involvement at all and survives the cutover untouched.
 
-Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`,
+Spec: `docs/superpowers/specs/implemented/2026-08-08-v12-realtime-push-design.md`,
 Decisions 2 (never parse; compare `(exists, mtime, size)`) and 4 (250ms
 trailing debounce, per event type).
 

@@ -1,6 +1,6 @@
 """NG2 — the /api/v1 blueprint's shared machinery.
 
-Spec `docs/superpowers/specs/2026-08-08-v11-admin-rest-api-design.md`
+Spec `docs/superpowers/specs/implemented/2026-08-08-v11-admin-rest-api-design.md`
 Decision 3. Every v1 endpoint is built on these four things, so they are
 tested once here rather than re-asserted per endpoint:
 

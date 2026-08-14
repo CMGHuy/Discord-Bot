@@ -70,7 +70,7 @@ Serial. Wide, mechanical, conflict-prone. Nothing fans out until this phase merg
 
 ### Task SR1: Defer NG57 and record the reversals
 
-**Owns:** `docs/superpowers/plans/2026-08-08-v16-angular-migration.md`, `docs/superpowers/specs/2026-08-08-v20-admin-design-system-design.md`, `docs/superpowers/specs/2026-08-08-v14-angular-workspaces-design.md`
+**Owns:** `docs/superpowers/plans/implemented/2026-08-08-v16-angular-migration.md`, `docs/superpowers/specs/implemented/2026-08-08-v20-admin-design-system-design.md`, `docs/superpowers/specs/implemented/2026-08-08-v14-angular-workspaces-design.md`
 **Blocked by:** —
 
 Spec Decision 13. A session resuming NG56 today finds a soak whose end date is approaching and would proceed to delete the templates this plan ports *from*.
@@ -87,7 +87,7 @@ Spec Decision 13. A session resuming NG56 today finds a soak whose end date is a
 ```
 
 - [ ] **Step 2:** Add a `> **Superseded in part by v18**` note directly under the heading of design-system Decision 2 and Decision 3, and under workspaces v14 Decision 5, each naming what changed in one sentence. Do not rewrite the decisions — a superseded decision still records why it was made.
-- [ ] **Step 3: Verify** `grep -n "v21-spa-refresh" docs/superpowers/plans/2026-08-08-v16-angular-migration.md` returns the line.
+- [ ] **Step 3: Verify** `grep -n "v21-spa-refresh" docs/superpowers/plans/implemented/2026-08-08-v16-angular-migration.md` returns the line.
 - [ ] **Step 4: Commit** `docs(plans): defer NG57 until the SPA refresh lands`
 
 ---
@@ -1844,7 +1844,7 @@ The gap list cannot be enumerated before the audit runs, so this task *writes th
 
 ### Task SR48: Release
 
-**Owns:** `VERSION.json`, `README.md`, `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`, `docs/superpowers/plans/2026-08-08-v16-angular-migration.md`
+**Owns:** `VERSION.json`, `README.md`, `docs/superpowers/results/2026-08-13-spa-refresh-qa.md`, `docs/superpowers/plans/implemented/2026-08-08-v16-angular-migration.md`
 **Blocked by:** every appended gap-fill task
 
 - [ ] **Step 1:** Bump `ui` to `1.2.0` in `VERSION.json` and set `ui_updated`. Minor, not patch: the table model, the palette and the chart are user-visible changes.

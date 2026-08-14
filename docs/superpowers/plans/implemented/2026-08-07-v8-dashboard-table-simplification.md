@@ -8,7 +8,7 @@
 
 **Tech Stack:** Jinja2 templates, vanilla ES5-style JS (no build step, no framework), plain CSS, pytest + Flask test client.
 
-**Spec:** `docs/superpowers/specs/2026-08-07-v8-dashboard-table-simplification-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-08-07-v8-dashboard-table-simplification-design.md`
 
 ## Global Constraints
 

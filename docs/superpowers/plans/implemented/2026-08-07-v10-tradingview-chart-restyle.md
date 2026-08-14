@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11, matplotlib (Agg), mplfinance 0.12.10b0, pandas, pytest, PIL (test-side only).
 
-**Spec:** `docs/superpowers/specs/2026-08-07-v10-tradingview-chart-restyle-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-08-07-v10-tradingview-chart-restyle-design.md`
 
 **Version:** ui 1.0.7 · bot 1.1.1 — VERSION.json as of this plan's authoring commit (`6480bef`), not today's. A version stamp records the release a document was written against, so it is never updated after the fact.
 

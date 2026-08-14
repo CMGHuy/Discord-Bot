@@ -37,7 +37,7 @@ bash $s.FullName docs/superpowers/plans/<plan>.md <N>
 If the script is unavailable, extract directly:
 
 ```powershell
-$f='docs/superpowers/plans/2026-07-11-v4-edge-engine.md'
+$f='docs/superpowers/plans/implemented/2026-07-11-v4-edge-engine.md'
 $start=(Select-String -Path $f -Pattern '^### Task E53\b').LineNumber
 Get-Content $f | Select-Object -Skip ($start-1) -First 140
 ```

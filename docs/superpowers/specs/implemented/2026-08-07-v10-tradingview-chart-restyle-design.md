@@ -1,7 +1,7 @@
 # TradingView Chart Restyle — Design Spec
 
 **Date:** 2026-08-07 · **Status:** Approved (brainstormed + user-approved in session)
-**Implementation plan:** `docs/superpowers/plans/2026-08-07-v10-tradingview-chart-restyle.md`
+**Implementation plan:** `docs/superpowers/plans/implemented/2026-08-07-v10-tradingview-chart-restyle.md`
 
 ## 1. Goal
 

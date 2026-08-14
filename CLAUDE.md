@@ -26,6 +26,7 @@ entry that feeds both the env parser and the admin UI's Settings page).
   `grep -n "^### Task E53" -A 120 <plan>`. `gatekeeper-v6` exists only as
   `_0-index.md` + `_1..._11` parts (the 822 KB monolith was deleted; recover it
   from git history if needed). `grep -c "^### Task"` / `grep -n "^# Phase"` to orient.
+  All three now live under `docs/superpowers/plans/implemented/`.
 - **Grep respects the root `.ignore` file (hides `.claude/worktrees/`,
   `market_data/`, `data/`, `logs/`); Glob does not.** Always scope Glob by hand
   (`Glob("swingbot/**/*.py")`, never `**/*.py`) or it returns hundreds of
@@ -46,10 +47,10 @@ entry that feeds both the env parser and the admin UI's Settings page).
 **Current status is not tracked here** (it drifts stale). The `SessionStart`
 hook (`.claude/hooks/session-cursor.ps1`) prints it every session: active plan
 + task count, last/next task, git HEAD and dirty files, live worktrees, and any
-in-progress multi-hour backtest. Completed plans: unified-plan-engine-v2,
-strategy-winrate-redesign, admin-ui-tradingview-redesign-v5 (task IDs
-`U1`-`U36`; manual browser QA left for a future pass). On disk but not
-current focus: cockpit-v3, gatekeeper-v6.
+in-progress multi-hour backtest. **The live plans are whatever sits at the top
+level of `docs/superpowers/plans/`** — everything closed, abandoned or rolled
+back has moved to `plans/implemented/` (see "Naming specs and plans"), so that
+listing is the status, not a paragraph here.
 
 **Don't trust the hook's "NEXT" task ID blind** — it can name IDs (e.g. `E89`)
 that don't exist in the plan file it labels as active (which may use a
@@ -122,8 +123,13 @@ then version, then name:
 eleventh design document in this repo, whether spec or plan. Next number:
 
 ```bash
-ls docs/superpowers/{specs,plans}/ | grep -oE 'v[0-9]+' | sort -V | tail -1
+find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
+  | grep -oE 'v[0-9]+' | sort -V | tail -1
 ```
+
+Use `find`, not `ls` on the two directories — finished documents live one level
+down in `implemented/` (below), and an `ls` that misses them returns a stale
+maximum and makes you reuse a number.
 
 Never reuse a number, and never renumber a committed one — commit messages and
 cross-links reference it. Revising a document in place keeps its number; only a
@@ -132,6 +138,51 @@ parent's number with a `_N` part suffix rather than consuming N numbers.
 
 `docs/claude/working-conventions.md` has the reasoning and the history of the
 2026-08-13 sweep that moved every file to this layout.
+
+### Plans that are no longer live move to `implemented/`
+
+**When a plan stops being live work, `git mv` it — and every spec it was built
+from — into `docs/superpowers/plans/implemented/` and
+`docs/superpowers/specs/implemented/` as part of the closing commit.** The top
+level of those two directories then holds exactly the live work: what is in
+flight, and what is designed but still to be built. Everything else is below.
+
+- **`implemented/` means "off the live list", not "every box is ticked".** It
+  holds three kinds of document, deliberately: plans that finished; plans
+  abandoned part-way (`v3-cockpit` at 15/467, `v4-edge-engine` at 133/399); and
+  plans whose code was later deleted by a rollback (`v6-gatekeeper`, undone by
+  `c84924a`). Read a moved plan's Progress block before assuming its code ships
+  today — the folder does not promise that.
+- **A plan is done when its own work is done**, not when the checkboxes agree.
+  A plan closing with tasks deliberately cut, deferred to a successor, or left
+  open for manual QA is finished — say so in its Progress block, then move it.
+  `[x]` boxes lie in both directions; derive the verdict from deliverables and
+  merge commits, never from the boxes.
+- **A spec moves only when nothing live still builds from it.** A spec feeding
+  several plans stays put until the last of them closes — `v15-jinja-cutover`
+  is the example: its plan (`v16-angular-migration`) is closed and moved, but
+  the cutover itself was handed to a future plan, so the spec stayed.
+- **Fix the references in the same commit.** Plans, specs, source docstrings
+  (`swingbot/core/analytics/*.py`, `swingbot/admin/**`), tests and
+  `.claude/skills/task-brief/SKILL.md` all cite these paths; after moving,
+  re-point every reference and confirm none dangle.
+- **The `SessionStart` hook only globs `plans/*.md`**, so a moved plan drops out
+  of the cursor's "active plan" line by design. To resume one, move it back up
+  first.
+
+### Worktrees are named after the plan
+
+**A worktree created to execute a plan takes the plan's file stem**, so the
+branch, the directory and the document always name the same thing:
+
+```
+docs/superpowers/plans/2026-08-13-v21-spa-refresh.md
+  → .claude/worktrees/2026-08-13-v21-spa-refresh/   (branch: same name)
+```
+
+Never invent a fresh topic name — a worktree called `trade-history-filter`
+takes a second lookup to tie back to plan v9. For work that is not executing a
+plan, a short topic name is fine; the rule binds only when a plan exists.
 
 ## Reference docs
 

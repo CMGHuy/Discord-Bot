@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in order U1→U36.
 
-**Goal:** One terminal-grade visual language across admin pages, mplfinance PNG charts, and new vendored-TradingView interactive charts — per `docs/superpowers/specs/2026-07-19-v5-admin-ui-tradingview-redesign-design.md`.
+**Goal:** One terminal-grade visual language across admin pages, mplfinance PNG charts, and new vendored-TradingView interactive charts — per `docs/superpowers/specs/implemented/2026-07-19-v5-admin-ui-tradingview-redesign-design.md`.
 
 **Architecture:** A CSS design-token layer (`tokens.css`) becomes the single visual source of truth; `style.css` is rebuilt on top of it and `chart_style.py` mirrors the same hex values (sync enforced by a unit test). Interactivity comes from TradingView's open-source `lightweight-charts` (vendored, Apache-2.0) fed by one new read-only authed endpoint `/api/ohlcv/<ticker>`.
 
@@ -1012,7 +1012,7 @@ def test_ohlcv_fetch_failure_uses_cache(client, monkeypatch, tmp_path):
 
 ### Task U34: Cockpit-v3 deviation note
 
-**Files:** Modify `docs/superpowers/plans/2026-07-11-v3-cockpit.md` (Part 3 intro, after the "Notes on assumptions" block)
+**Files:** Modify `docs/superpowers/plans/implemented/2026-07-11-v3-cockpit.md` (Part 3 intro, after the "Notes on assumptions" block)
 
 - [x] **Step 1:** Add:
 

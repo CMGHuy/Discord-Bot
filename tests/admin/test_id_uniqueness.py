@@ -4,7 +4,7 @@ NG19 TRIAGE — **v1-era · KEEP.** Written for this migration, not inherited
 from the Jinja UI; nothing here survives on rendered HTML.
 
 
-Spec `docs/superpowers/specs/2026-08-08-v11-admin-rest-api-design.md`
+Spec `docs/superpowers/specs/implemented/2026-08-08-v11-admin-rest-api-design.md`
 (Decision 2) unifies plans and trades into one collection at the API layer.
 That is only safe if a plan id can never be mistaken for a trade id: the SPA
 sends back a single opaque `id` and the server has to route it to the right

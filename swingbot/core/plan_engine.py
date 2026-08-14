@@ -1,7 +1,7 @@
 """Unified trade-plan engine v2.
 
 Single authority for plan construction and exit policy (spec:
-docs/superpowers/specs/2026-07-11-v2-unified-plan-engine-design.md).
+docs/superpowers/specs/implemented/2026-07-11-v2-unified-plan-engine-design.md).
 Everything that emits a trade plan — scan alerts, strategy signals,
 backtests, the live plan manager — builds and prices it here.
 """

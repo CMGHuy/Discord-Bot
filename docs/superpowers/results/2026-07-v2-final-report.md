@@ -1,7 +1,7 @@
 # Unified Trade-Plan Engine v2 — final report (Task 110)
 
-Closes out `docs/superpowers/plans/2026-07-11-v2-unified-plan-engine.md`
-(110 tasks). Spec: `docs/superpowers/specs/2026-07-11-v2-unified-plan-engine-design.md`.
+Closes out `docs/superpowers/plans/implemented/2026-07-11-v2-unified-plan-engine.md`
+(110 tasks). Spec: `docs/superpowers/specs/implemented/2026-07-11-v2-unified-plan-engine-design.md`.
 
 ## Registry — every source, as of 2026-07-18
 

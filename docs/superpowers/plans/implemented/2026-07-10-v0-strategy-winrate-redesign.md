@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-07-10-v0-strategy-winrate-redesign-design.md` — read it first; it defines every threshold used below.
+**Spec:** `docs/superpowers/specs/implemented/2026-07-10-v0-strategy-winrate-redesign-design.md` — read it first; it defines every threshold used below.
 
 **Goal:** Every strategy in `swingbot/core` achieves ≥ 80% win rate AND positive expectancy on out-of-sample data (2024–2025), with live signals and backtest running identical entry logic.
 

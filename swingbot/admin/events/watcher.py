@@ -1,6 +1,6 @@
 """The `data/` file watcher — modification in, named event type out.
 
-Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`,
+Spec: `docs/superpowers/specs/implemented/2026-08-08-v12-realtime-push-design.md`,
 Decisions 1, 2, 4 and 5.
 
 This is a polling loop wearing a push costume, and the spec says so out

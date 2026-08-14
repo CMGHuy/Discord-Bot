@@ -298,7 +298,7 @@ optional forever; plan completion does not depend on it.
 
 Every checklist line maps to its implementing task in
 "Appendix — Checklist-to-task traceability" at the end of
-`docs/superpowers/plans/2026-07-14-v6-gatekeeper_11.md`.
+`docs/superpowers/plans/implemented/2026-07-14-v6-gatekeeper_11.md`.
 ```
 
 - [ ] **Step 2: Commit**

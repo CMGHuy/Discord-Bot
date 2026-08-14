@@ -1,6 +1,6 @@
 """`GET /api/v1/events` — the SSE endpoint itself.
 
-Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`,
+Spec: `docs/superpowers/specs/implemented/2026-08-08-v12-realtime-push-design.md`,
 Decisions 3, 4 and 5.
 
 The wire format is deliberately dull. An event says *what* changed and

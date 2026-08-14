@@ -1,6 +1,6 @@
 """One watcher, many browsers — fan-out, sequencing, and the connection cap.
 
-Spec: `docs/superpowers/specs/2026-08-08-v12-realtime-push-design.md`,
+Spec: `docs/superpowers/specs/implemented/2026-08-08-v12-realtime-push-design.md`,
 Decisions 4 and 5.
 
 The watcher (NG20) knows how to turn a file modification into an event

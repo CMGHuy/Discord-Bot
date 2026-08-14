@@ -1,7 +1,7 @@
 # Test-Suite Cost Reduction — Design
 
 **Date:** 2026-08-07
-**Status:** Approved for planning (plan: `docs/superpowers/plans/2026-08-07-v7-test-cost-reduction.md`)
+**Status:** Approved for planning (plan: `docs/superpowers/plans/implemented/2026-08-07-v7-test-cost-reduction.md`)
 
 ## Problem
 
