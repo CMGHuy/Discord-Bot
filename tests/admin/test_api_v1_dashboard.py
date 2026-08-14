@@ -169,14 +169,6 @@ def test_the_spa_still_serves_the_old_workspace_url():
     assert "/dashboard" in rules
 
 
-def test_the_jinja_dashboard_kept_its_own_url_under_jinja(logged_in):
-    """SR4 moved it aside rather than letting the flag decide who owns
-    `/dashboard`. Both UIs are live until NG57, and NG53 added a dedicated
-    URL for this page precisely so enabling the SPA could not strand it.
-    """
-    assert logged_in.get("/jinja/dashboard").status_code == 200
-
-
 # --------------------------------------------------------------- SR58
 
 def _closed(trade_id, *, closed_at, amount, pct_entry=100.0, pct_exit=110.0,

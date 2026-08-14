@@ -346,16 +346,6 @@ def test_export_omits_sensitive_fields_entirely(logged_in, env_file):
     assert "LOG_LEVEL=INFO" in text
 
 
-def test_both_exports_are_byte_identical(logged_in, auth, env_file):
-    """The Jinja route and this one share build_settings_export_text. Sub-
-    project 6's acceptance walk byte-compares them, which only means anything
-    if they cannot drift apart in the meantime."""
-    env_file({"LOG_LEVEL": "INFO"})
-    v1 = logged_in.get("/api/v1/system/settings/export").get_data()
-    jinja = logged_in.get("/settings/export", headers=auth).get_data()
-    assert v1 == jinja
-
-
 def test_export_import_round_trip_preserves_values(logged_in, env_file):
     env_file({"LOG_LEVEL": "WARNING", "SESSION_START_HOUR": "11"})
     text = logged_in.get("/api/v1/system/settings/export").get_data(as_text=True)

@@ -45,16 +45,6 @@ def test_is_a_csv_attachment(seed, logged_in):
     assert "trades.csv" in r.headers["Content-Disposition"]
 
 
-def test_matches_the_jinja_export_byte_for_byte(seed, logged_in):
-    """The property sub-project 6's cutover check depends on."""
-    seed(trades=[
-        _trade("aaaaaaaaaaaaaaaa", plan_id=None, status="win"),
-        _trade("bbbbbbbbbbbbbbbb", plan_id=None, status="open"),
-    ])
-    assert (logged_in.get("/api/v1/trades/export.csv").data
-            == logged_in.get("/trades/export.csv").data)
-
-
 def test_header_row_is_present_when_there_are_no_trades(seed, logged_in):
     """An empty export must still be a valid CSV with its columns, not a
     zero-byte file -- a spreadsheet opening it should show the schema."""

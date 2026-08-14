@@ -34,7 +34,7 @@ from .auth import require_auth
 
 
 def _proposals_dir() -> str:
-    from swingbot.admin.pages import TUNING_PROPOSALS_DIR_NAME
+    from swingbot.admin.queries import TUNING_PROPOSALS_DIR_NAME
     return os.path.join(config.DATA_DIR, TUNING_PROPOSALS_DIR_NAME)
 
 
@@ -52,7 +52,7 @@ def get_job(job_id: str):
     """Status plus a log tail, so the SPA can show progress without a
     second round trip. Refetched on the `jobs` event (sub-project 2),
     replacing the Tuning page's polling."""
-    from swingbot.admin.pages import _JOB_ID_RE
+    from swingbot.admin.queries import _JOB_ID_RE
 
     if not _JOB_ID_RE.match(job_id):
         return error("invalid", "Invalid job id.", 400)
@@ -77,7 +77,7 @@ def get_job_result(job_id: str):
     `scripts/tune_strategy.py` prints, and a second copy of it in TypeScript
     is how the two would come to disagree about which rows are worth taking.
     """
-    from swingbot.admin.pages import _JOB_ID_RE, _grid_row_passes, _load_result
+    from swingbot.admin.queries import _JOB_ID_RE, _grid_row_passes, _load_result
 
     if not _JOB_ID_RE.match(job_id):
         return error("invalid", "Invalid job id.", 400)
@@ -129,7 +129,7 @@ def start_tune_job():
 @api_v1.route("/analytics/tuning/proposals", methods=["GET"])
 @require_auth
 def list_proposals():
-    from swingbot.admin.pages import _list_proposals
+    from swingbot.admin.queries import _list_proposals
 
     return jsonify({"proposals": _list_proposals()})
 
@@ -145,7 +145,7 @@ def create_proposal():
     a candidate, it does not change how the bot trades.
     """
     from swingbot.core import entry_filters
-    from swingbot.admin.pages import _load_result
+    from swingbot.admin.queries import _load_result
 
     payload = request.get_json(silent=True) or {}
     job_id = payload.get("job_id", "")
@@ -186,7 +186,7 @@ def create_proposal():
 @api_v1.route("/analytics/tuning/proposals/<filename>", methods=["DELETE"])
 @require_auth
 def delete_proposal(filename: str):
-    from swingbot.admin.pages import _PROPOSAL_FILENAME_RE
+    from swingbot.admin.queries import _PROPOSAL_FILENAME_RE
 
     if not _PROPOSAL_FILENAME_RE.match(filename):
         # See this module's docstring: without this, a backslash or a

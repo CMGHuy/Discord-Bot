@@ -100,7 +100,7 @@ def _lifecycle_counts() -> dict:
     figures.
     """
     try:
-        from swingbot.admin.pages import _plan_rows
+        from swingbot.admin.queries import _plan_rows
         return dict(_plan_rows()["counts"])
     except Exception:
         return {}

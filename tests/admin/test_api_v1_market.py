@@ -126,19 +126,6 @@ def test_the_csv_cache_backs_a_failed_live_fetch(logged_in, tmp_path, monkeypatc
     assert len(logged_in.get("/api/v1/market/ohlcv/ZZZZ").get_json()["bars"]) == 60
 
 
-def test_v1_and_jinja_return_identical_bars(logged_in, auth, frame, monkeypatch):
-    """One serialisation, two charts. If either grows its own, they start
-    disagreeing about rounding while both are live."""
-    monkeypatch.setattr("swingbot.admin.app._trade_for_levels", lambda tid: _TRADE)
-
-    v1 = logged_in.get("/api/v1/market/ohlcv/AAPL?bars=40&trade_id=t1").get_json()
-    jinja = json.loads(
-        logged_in.get("/api/ohlcv/AAPL?bars=40&trade_id=t1", headers=auth).get_data())
-
-    assert v1["bars"] == jinja["bars"]
-    assert v1["levels"] == jinja["levels"]
-
-
 # =====================================================================
 # SR33 -- GET /api/v1/market/chart/{trade_id}
 #

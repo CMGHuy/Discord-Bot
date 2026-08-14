@@ -99,14 +99,6 @@ def test_scan_status_shape(logged_in, scan_files):
     })
 
 
-def test_v1_and_jinja_report_the_same_status(logged_in, auth, scan_files):
-    """Both call app.py's scan_status_payload. If v1 ever grows its own copy,
-    the two drift and the SPA and the old UI disagree about whether the bot
-    is running -- during a migration where both are live."""
-    assert (logged_in.get("/api/v1/system/scan").get_json()
-            == logged_in.get("/scan/status", headers=auth).get_json())
-
-
 # --- scan commands ------------------------------------------------------
 
 def test_pause_then_resume(logged_in, scan_files):

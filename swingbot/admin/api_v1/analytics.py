@@ -244,12 +244,12 @@ def analytics_strategies():
     The rolling win-rate series ships as numbers; the Jinja page renders the
     same data as an inline SVG.
     """
-    from swingbot.admin.pages import (
+    from swingbot.admin.queries import (
         _registry_rows,
         _rolling_win_rate_series,
         _strategy_horizon_heatmap,
-        primary_strategy_label,
     )
+    from swingbot.core.performance import primary_strategy_label
 
     rows = _registry_rows()
     closed = [
@@ -278,6 +278,6 @@ def analytics_calibration():
 @api_v1.route("/analytics/registry", methods=["GET"])
 @require_auth
 def analytics_registry():
-    from swingbot.admin.pages import _registry_rows
+    from swingbot.admin.queries import _registry_rows
 
     return jsonify({"registry": _registry_rows()})

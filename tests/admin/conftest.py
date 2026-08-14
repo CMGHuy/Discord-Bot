@@ -24,8 +24,10 @@ import pytest
 _RELOAD_MODULES = [
     "swingbot.admin.helpers",
     "swingbot.admin.app",
-    "swingbot.admin.api",
-    "swingbot.admin.pages",
+    # `api` and `pages` were here until Release B deleted them. `queries`
+    # takes pages.py's place: it holds the read-side helpers the v1 API kept
+    # using, and it reads DATA_DIR the same way, so it needs the same reload.
+    "swingbot.admin.queries",
     "swingbot.admin.jobs",
 ]
 

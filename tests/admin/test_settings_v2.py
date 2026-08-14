@@ -38,50 +38,6 @@ def test_settings_diff_masks_changed_sensitive_field(admin_app):
     assert row["sensitive"] is True
 
 
-def test_settings_preview_route_renders_diff_table(client, auth):
-    r = client.post("/settings/preview", data={"SCAN_INTERVAL_MINUTES": "45"}, headers=auth)
-    assert r.status_code == 200
-    assert b"SCAN_INTERVAL_MINUTES" in r.data
-
-
-def test_settings_preview_route_no_changes(client, auth):
-    from swingbot.admin.helpers import _read_env_values
-    existing = _read_env_values()
-    r = client.post("/settings/preview", data=existing, headers=auth)
-    assert b"Nothing changed" in r.data
-
-
-def test_settings_save_appends_masked_audit_line(client, auth, admin_app):
-    from swingbot import config
-    r = client.post("/settings/save", data={"SCAN_INTERVAL_MINUTES": "7"}, headers=auth)
-    assert r.status_code == 302
-    audit_path = os.path.join(config.DATA_DIR, "settings_audit.jsonl")
-    assert os.path.exists(audit_path)
-    entry = json.loads(open(audit_path).readlines()[0])
-    changed_keys = [c["key"] for c in entry["changes"]]
-    assert "SCAN_INTERVAL_MINUTES" in changed_keys
-
-
-def test_settings_page_shows_recent_changes_panel(client, auth, admin_app):
-    from swingbot import config
-    audit_path = os.path.join(config.DATA_DIR, "settings_audit.jsonl")
-    entry = {"ts": "2026-07-11T00:00:00+00:00",
-             "changes": [{"key": "SCAN_INTERVAL_MINUTES", "old": "30", "new": "7"}]}
-    with open(audit_path, "w") as f:
-        f.write(json.dumps(entry) + "\n")
-    r = client.get("/settings", headers=auth)
-    html = r.data.decode("utf-8")
-    assert "Recent changes" in html
-    assert "SCAN_INTERVAL_MINUTES" in html
-
-
-def test_settings_export_excludes_sensitive_fields_entirely(client, auth):
-    r = client.get("/settings/export", headers=auth)
-    assert r.status_code == 200
-    assert b"DISCORD_TOKEN" not in r.data
-    assert b"ADMIN_PASSWORD" not in r.data
-
-
 def test_import_env_text_applies_known_skips_unknown(admin_app):
     # admin_app is required (unused directly) -- it monkeypatches
     # config.DATA_DIR/ENV_PATH and reloads helpers.py so import_env_text
@@ -94,19 +50,3 @@ def test_import_env_text_applies_known_skips_unknown(admin_app):
     assert unknown == ["BOGUS"]
 
 
-def test_settings_import_route_applies_and_redirects(client, auth, admin_app):
-    r = client.post("/settings/import", data={"env_text": "SCAN_INTERVAL_MINUTES=7\nBOGUS=1"}, headers=auth)
-    assert r.status_code == 302
-    from swingbot.admin.helpers import _read_env_values
-    assert _read_env_values()["SCAN_INTERVAL_MINUTES"] == "7"
-
-
-def test_settings_page_has_changed_only_toggle_and_reset_buttons(client, auth, admin_app):
-    from swingbot import config
-    with open(config.ENV_PATH, "w") as f:
-        f.write("SCAN_INTERVAL_MINUTES=99\n")
-    r = client.get("/settings", headers=auth)
-    html = r.data.decode("utf-8")
-    assert 'id="settings-only-changed"' in html
-    assert "data-default=" in html
-    assert 'data-target="fld_SCAN_INTERVAL_MINUTES"' in html
