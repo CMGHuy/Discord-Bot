@@ -74,4 +74,34 @@ def session_delete():
 @api_v1.route("/health", methods=["GET"])
 @require_auth
 def health():
-    return jsonify({"ok": True, "versions": _helpers.get_versions()})
+    """The "am I up" probe, and the shell's footer.
+
+    Auth-guarded, unlike a public liveness probe --
+    `test_health_requires_auth_and_returns_json_401` pins that and it is not
+    changed here. The shell only reads it once signed in anyway.
+
+    SR58 adds `market_active`. It belongs HERE rather than on `/dashboard`
+    even though the parity row was found on the dashboard: "are these prices
+    live" is a global fact, the indicator sits beside the connection status
+    in the shell, and a shell that read a workspace's endpoint to render its
+    own chrome would break the moment that workspace is not open.
+
+    (`api_v1/session.py` is outside SR58's declared `Owns:` set. Recorded in
+    the plan rather than worked around: the alternative was putting a
+    shell-level fact on a workspace endpoint, and no concurrent task owns
+    this file.)
+
+    Never raises: an unavailable market check reports False rather than
+    failing the probe that monitoring uses to decide the admin is down.
+    """
+    try:
+        from swingbot.core.data import is_us_market_active
+        market_active = bool(is_us_market_active())
+    except Exception:
+        market_active = False
+
+    return jsonify({
+        "ok": True,
+        "versions": _helpers.get_versions(),
+        "market_active": market_active,
+    })

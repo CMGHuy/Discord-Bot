@@ -57,7 +57,23 @@ _LEGACY_STATUS = {
 _TERMINAL = {"CLOSED", "CANCELLED"}
 
 FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon",
-                     "direction", "tier", "origin", "has_note"})
+                     "direction", "tier", "origin", "has_note",
+                     # SR52. `strategy`, `horizon` and `tier` were already
+                     # accepted and had no control; these two were accepted by
+                     # neither side. `tag` is deliberately NOT here -- journal
+                     # tags are not on a trade row at all, so filtering by one
+                     # needs the journal endpoint SR55 adds.
+                     "badge", "confidence"})
+
+# Query-parameter name -> row key, where the two differ. `confidence` reads
+# better in a URL than `confidence_level` and is what the chip row calls it;
+# the row field keeps its own name.
+_FILTER_KEYS = {"confidence": "confidence_level"}
+
+# Filters compared case-insensitively. These hold vocabulary the UI displays
+# (VALIDATED, bullish, A) rather than free text, and `?badge=validated` failing
+# to match VALIDATED is the exact shape of the NG54 bug.
+_CASELESS_FILTERS = frozenset({"badge", "tier", "direction", "origin"})
 
 # NG54. `status` normalises win and loss to CLOSED, so the two cannot be told
 # apart by it -- but the Jinja UI had an `outcome` filter over exactly that
@@ -84,6 +100,12 @@ _TRUTHY = frozenset({"1", "true", "yes", "on"})
 SORTABLE = frozenset({
     "opened_at", "closed_at", "ticker", "status", "pnl_pct", "r_multiple",
     "entry", "exit_price", "held_hours", "realized_pnl_amount",
+    # SR53. Both are plan-shaped: `created_at` is the only time an unfilled
+    # plan has, and `follow_score` is a ranking, which is a column nobody wants
+    # unsorted. `_sorted_rows` already puts valueless rows last in BOTH
+    # directions, so a legacy row with no score sinks rather than floating to
+    # the top of a descending sort.
+    "created_at", "follow_score",
 })
 
 
@@ -144,6 +166,18 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "opened_at": opened_at,
         "closed_at": closed_at,
         "has_note": plan["plan_id"] in noted or t.get("id") in noted,
+        # SR53 — the plan's own numbers, for a row that has not filled.
+        #
+        # `opened_at` and `held_hours` both describe an execution, so both are
+        # null on a PENDING plan; `created_at` is what it has instead, and it is
+        # what the plans board's Age column showed. `trigger_price` is likewise
+        # the only actionable price before a fill.
+        "created_at": plan.get("created_at"),
+        "trigger_price": plan.get("trigger_price"),
+        # Composite ranking from analytics.rank. Attached by the caller, which
+        # ranks the whole set at once -- scoring one plan in isolation here
+        # would mean loading every other plan per row.
+        "follow_score": None,
     }
 
 
@@ -184,6 +218,13 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "opened_at": t.get("opened_at"),
         "closed_at": t.get("closed_at"),
         "has_note": t.get("id") in noted,
+        # SR53. A legacy trade has no plan, so it has no creation time apart
+        # from its open, no trigger it waited on, and no ranking. Emitted as
+        # null rather than omitted, so both origins return one shape -- the
+        # same rule the detail payload follows.
+        "created_at": t.get("opened_at"),
+        "trigger_price": None,
+        "follow_score": None,
     }
 
 
@@ -231,6 +272,36 @@ def _note_for(trade_id: str | None) -> str | None:
     return None
 
 
+def _attach_follow_scores(rows: list[dict], plans: list[dict]) -> None:
+    """Fill in `follow_score` for the plan-backed rows, in one pass.
+
+    SR53. This is the plans board's ranking column, and the parity audit found
+    it nowhere in the SPA because it was never on the wire.
+
+    Scored for the whole set at once rather than per row: `follow_score` is a
+    composite over the plan population (`analytics.rank`), so scoring one plan
+    in isolation would mean loading every other plan once per row. Failure is
+    silent and leaves every score None -- a ranking is a nicety, and the list
+    itself must not 500 because the ranker did.
+    """
+    try:
+        from swingbot.core.analytics.rank import follow_score
+        from swingbot.core.plan_engine import plan_from_dict
+    except Exception:
+        return
+
+    by_id: dict[str, float] = {}
+    for plan in plans:
+        try:
+            by_id[plan["plan_id"]] = follow_score(plan_from_dict(plan))
+        except Exception:
+            continue
+
+    for row in rows:
+        if row["id"] in by_id:
+            row["follow_score"] = by_id[row["id"]]
+
+
 def build_rows() -> list[dict]:
     """The join. Every row the collection can return, unfiltered."""
     plans = list(PlanStore()._plans.values())
@@ -244,6 +315,7 @@ def build_rows() -> list[dict]:
             by_plan_id[pid] = t
 
     rows = [_row_from_plan(p, by_plan_id.get(p.get("plan_id")), noted) for p in plans]
+    _attach_follow_scores(rows, plans)
 
     # Anything no plan claimed. Structural: a trade cannot be emitted twice
     # because it is only reached when its plan_id matched nothing above.
@@ -368,6 +440,11 @@ def get_trade(trade_id: str):
         )
         row = _row_from_plan(plan, trade, noted)
         row["detail"] = _plan_detail(plan, trade)
+        # SR53. Ranked against the whole plan population, exactly as the list
+        # does -- follow_score is a composite, so scoring this plan alone would
+        # give a different number from the one the list shows for the same row.
+        # `test_detail_row_fields_match_the_list_exactly` is what caught that.
+        _attach_follow_scores([row], list(PlanStore()._plans.values()))
     else:
         trade = log.get_trade_by_id(trade_id)
         if trade is None:
@@ -461,8 +538,14 @@ def list_trades():
             want = str(value).strip().lower()
             rows = [r for r in rows
                     if str(r.get("outcome") or "").lower() == want]
+        elif key in _CASELESS_FILTERS:
+            want = str(value).strip().lower()
+            field = _FILTER_KEYS.get(key, key)
+            rows = [r for r in rows
+                    if str(r.get(field) or "").strip().lower() == want]
         else:
-            rows = [r for r in rows if str(r.get(key) or "") == str(value)]
+            field = _FILTER_KEYS.get(key, key)
+            rows = [r for r in rows if str(r.get(field) or "") == str(value)]
 
     field, direction = params.sort or ("opened_at", "desc")
     # progress_pct is attached AFTER slicing (it needs a live price), so a

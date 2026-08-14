@@ -141,7 +141,9 @@ describe('SystemStore', () => {
   const boot = (settings: Partial<Settings> = {}) => {
     tick();
     backend.expectOne('/api/v1/system/settings').flush({ ...SETTINGS, ...settings });
-    backend.expectOne('/api/v1/system/logs?source=bot').flush({
+    // SR57 sends the line count too, so match on the path rather than on a
+    // literal query string that now has two parameters in it.
+    backend.expectOne((req) => req.url === '/api/v1/system/logs').flush({
       source: 'bot',
       lines: 500,
       path: '/app/logs/bot.log',
@@ -162,6 +164,258 @@ describe('SystemStore', () => {
       'DISCORD_TOKEN',
     ]);
     expect(store.restartAvailable()).toBe(true);
+  });
+
+  /* -- SR57: reading the log ------------------------------------------ */
+
+  describe('log triage', () => {
+    const LOG = [
+      '2026-08-14 10:00:00 [INFO] scan started',
+      '2026-08-14 10:00:01 [WARNING] AAPL data stale',
+      '2026-08-14 10:00:02 [ERROR] fetch failed',
+      'Traceback (most recent call last):',
+      '  File "bot.py", line 1, in <module>',
+      'ValueError: boom',
+      '2026-08-14 10:00:03 [INFO] scan finished',
+    ].join('\n');
+
+    const bootWithLog = (content = LOG, lines = 500) => {
+      tick();
+      backend.expectOne('/api/v1/system/settings').flush(SETTINGS);
+      // SR57 sends the line count too, so match on the path rather than on a
+    // literal query string that now has two parameters in it.
+    backend.expectOne((req) => req.url === '/api/v1/system/logs').flush({
+        source: 'bot', lines, path: '/app/logs/bot.log', content,
+      });
+      backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    };
+
+    it('reloads at the chosen line count', () => {
+      bootWithLog();
+
+      store.setLogLines(2000);
+
+      const request = backend.expectOne(
+        (req) => req.url === '/api/v1/system/logs',
+      );
+      expect(request.request.params.get('lines')).toBe('2000');
+      expect(request.request.params.get('source')).toBe('bot');
+      request.flush({ source: 'bot', lines: 2000, path: 'p', content: '' });
+      expect(store.logLines()).toBe(2000);
+    });
+
+    it('does not refetch when the count is already selected', () => {
+      bootWithLog();
+      store.setLogLines(500);
+      backend.verify();
+    });
+
+    it('shows everything when every level is checked', () => {
+      bootWithLog();
+      expect(store.visibleLog().split('\n')).toHaveLength(7);
+      expect(store.hiddenLogLines()).toBe(0);
+    });
+
+    it('unchecking a level hides its lines and counts them', () => {
+      bootWithLog();
+
+      store.setLogLevel('INFO', false);
+
+      const shown = store.visibleLog().split('\n');
+      expect(shown).not.toContain('2026-08-14 10:00:00 [INFO] scan started');
+      expect(shown).not.toContain('2026-08-14 10:00:03 [INFO] scan finished');
+      expect(store.hiddenLogLines()).toBe(2);
+    });
+
+    it('keeps a traceback with the ERROR line it belongs to', () => {
+      // The continuation lines carry no [LEVEL] marker of their own. Losing
+      // them when filtering to ERROR would eat the thing being read.
+      bootWithLog();
+
+      store.setLogLevel('INFO', false);
+      store.setLogLevel('WARNING', false);
+
+      const shown = store.visibleLog();
+      expect(shown).toContain('[ERROR] fetch failed');
+      expect(shown).toContain('Traceback (most recent call last):');
+      expect(shown).toContain('ValueError: boom');
+    });
+
+    it('keeps an unattributable line visible whenever INFO is checked', () => {
+      // A line before any level marker at all has nothing to inherit. INFO
+      // is the catch-all, so it shows rather than vanishing.
+      bootWithLog('orphan line with no level\n2026-08-14 [ERROR] later');
+
+      store.setLogLevel('ERROR', false);
+
+      expect(store.visibleLog()).toContain('orphan line with no level');
+    });
+
+    it('gives each line its own level, so a whole line can be coloured', () => {
+      bootWithLog();
+
+      const lines = store.visibleLogLines();
+      expect(lines[1].level).toBe('WARNING');
+      expect(lines[2].level).toBe('ERROR');
+    });
+
+    it('a traceback line inherits the level of the error above it', () => {
+      // Colouring only the [ERROR] token would leave the message that matters
+      // indistinguishable from the INFO above it at a glance.
+      bootWithLog();
+
+      const lines = store.visibleLogLines();
+      expect(lines[3].text).toContain('Traceback');
+      expect(lines[3].level).toBe('ERROR');
+      expect(lines[5].level).toBe('ERROR');
+    });
+
+    it('an empty log has no lines rather than one empty one', () => {
+      bootWithLog('');
+      expect(store.visibleLogLines()).toEqual([]);
+    });
+
+    it('an empty log filters to an empty string, not to a stray newline', () => {
+      bootWithLog('');
+      expect(store.visibleLog()).toBe('');
+      expect(store.hiddenLogLines()).toBe(0);
+    });
+
+    it('switching source keeps the chosen line count', () => {
+      bootWithLog();
+      store.setLogLines(100);
+      backend
+        .expectOne((req) => req.url === '/api/v1/system/logs')
+        .flush({ source: 'bot', lines: 100, path: 'p', content: '' });
+
+      store.setLogSource('admin');
+
+      const request = backend.expectOne((req) => req.url === '/api/v1/system/logs');
+      expect(request.request.params.get('lines')).toBe('100');
+      expect(request.request.params.get('source')).toBe('admin');
+      request.flush({ source: 'admin', lines: 100, path: 'p', content: '' });
+    });
+  });
+
+  /* -- SR56: finding a setting again ---------------------------------- */
+
+  describe('settings navigability', () => {
+    it('searches label, key AND help text, like the Jinja page did', () => {
+      boot();
+
+      store.setSettingsQuery('risk per');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['RISK_PCT']);
+
+      store.setSettingsQuery('scale_out');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['SCALE_OUT']);
+
+      store.setSettingsQuery('bot token');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['DISCORD_TOKEN']);
+    });
+
+    it('matches case-insensitively and on a substring', () => {
+      boot();
+      store.setSettingsQuery('RISK');
+      expect(store.visibleFields().map((f) => f.key)).toEqual(['RISK_PCT']);
+    });
+
+    it('hides a section whose every field is filtered out', () => {
+      // Otherwise the page becomes a column of empty headings.
+      boot();
+      store.setSettingsQuery('token');
+      expect(store.visibleSections().map((s) => s.name)).toEqual(['Discord Connection']);
+    });
+
+    it('an empty query shows everything', () => {
+      boot();
+      store.setSettingsQuery('   ');
+      expect(store.visibleSections()).toHaveLength(2);
+      expect(store.visibleFields()).toHaveLength(3);
+    });
+
+    it('marks a field that DIFFERS FROM ITS DEFAULT, not one merely edited', () => {
+      // The whole trap in this task: `isChanged` answered "edited in this
+      // draft", which is a different question from the Jinja page's dot.
+      boot({
+        sections: [{
+          name: 'Risk', icon: '', description: '',
+          fields: [field({ key: 'RISK_PCT', value: '2.5', default: '1.0' })],
+        }],
+      });
+
+      // Untouched this session, but away from the code default.
+      expect(store.differsFromDefault(store.fields()[0])).toBe(true);
+    });
+
+    it('compares numerically, so 0.50 and 0.5 are the same default', () => {
+      // String comparison would mark an untouched float as modified for ever.
+      boot({
+        sections: [{
+          name: 'Risk', icon: '', description: '',
+          fields: [field({ key: 'RISK_PCT', type: 'float', value: 0.5, default: '0.50' })],
+        }],
+      });
+      expect(store.differsFromDefault(store.fields()[0])).toBe(false);
+    });
+
+    it('compares a checkbox against its string default', () => {
+      boot({
+        sections: [{
+          name: 'Risk', icon: '', description: '',
+          fields: [field({ key: 'SCALE_OUT', type: 'checkbox', value: true, default: 'false' })],
+        }],
+      });
+      expect(store.differsFromDefault(store.fields()[0])).toBe(true);
+    });
+
+    it('only-changed hides fields sitting at their default', () => {
+      boot();
+      store.setOnlyChanged(true);
+      // Every fixture field is at its default except the token, whose stored
+      // value is masked and therefore cannot be compared.
+      expect(store.visibleFields().map((f) => f.key)).not.toContain('RISK_PCT');
+    });
+
+    it('never hides a sensitive field, whose stored value cannot be compared', () => {
+      // The server sends bullets, not the secret. Calling that "changed" or
+      // "unchanged" would both be guesses, so it stays visible.
+      boot();
+      store.setOnlyChanged(true);
+      expect(store.visibleFields().map((f) => f.key)).toContain('DISCORD_TOKEN');
+    });
+
+    it('only-changed keeps a field edited in this draft even if it matched', () => {
+      boot();
+      store.edit(store.fields()[0], '3.0');
+      store.setOnlyChanged(true);
+      expect(store.visibleFields().map((f) => f.key)).toContain('RISK_PCT');
+    });
+
+    it('resets one field to its default without touching the rest of the draft', () => {
+      boot();
+      const [risk, flag] = store.fields();
+      store.edit(risk, '4.0');
+      store.edit(flag, true);
+
+      store.resetField(risk);
+
+      expect(store.currentValue(risk)).toBe('1.0');
+      // The other edit survives — a per-field reset is not a discard.
+      expect(store.currentValue(flag)).toBe(true);
+      expect(store.dirtyKeys()).toContain('SCALE_OUT');
+    });
+
+    it('resetting a field already at its default leaves the draft clean', () => {
+      boot();
+      const risk = store.fields()[0];
+      store.edit(risk, '4.0');
+
+      store.resetField(risk);
+
+      // Not "draft it back to the same value" — the key leaves the draft, so
+      // the save bar stops counting a change that is not one.
+      expect(store.dirtyKeys()).not.toContain('RISK_PCT');
+    });
   });
 
   it('shows the server value until a field is edited', () => {
@@ -391,7 +645,8 @@ describe('SystemStore', () => {
     store.setLogSource('admin');
     expect(store.logs()).toBeNull();
 
-    backend.expectOne('/api/v1/system/logs?source=admin').flush({
+    // Matched by path: SR57 added the line count as a second parameter.
+    backend.expectOne((req) => req.url === '/api/v1/system/logs').flush({
       source: 'admin',
       lines: 500,
       path: '/app/logs/admin.log',

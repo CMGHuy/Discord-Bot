@@ -62,6 +62,48 @@ def get_job(job_id: str):
     return jsonify({**status, "log_tail": job_manager.tail(job_id, n=50)})
 
 
+@api_v1.route("/jobs/<job_id>/result", methods=["GET"])
+@require_auth
+def get_job_result(job_id: str):
+    """A finished tuning job's grid, one row per parameter combination.
+
+    SR51. The job has always written this file and `_load_result` has always
+    read it, but only the Jinja page ever rendered it -- so the SPA could
+    launch a grid and never see what it found, which also made the Propose
+    action below unreachable by any route.
+
+    `passes` is computed here rather than left to the client. The acceptance
+    bar is four conditions (`_grid_row_passes`), it is the same bar
+    `scripts/tune_strategy.py` prints, and a second copy of it in TypeScript
+    is how the two would come to disagree about which rows are worth taking.
+    """
+    from swingbot.admin.pages import _JOB_ID_RE, _grid_row_passes, _load_result
+
+    if not _JOB_ID_RE.match(job_id):
+        return error("invalid", "Invalid job id.", 400)
+
+    result = _load_result(job_id)
+    if result is None:
+        # Not an error: a job that is still running has no result yet, and a
+        # 404 here would have the UI report a failure for the ordinary case of
+        # "it has not finished". The caller distinguishes the two by the job's
+        # own state, which it already has.
+        return jsonify({"job_id": job_id, "strategy": None, "grid": []})
+
+    grid = [
+        {**row, "row_index": index, "passes": _grid_row_passes(row)}
+        for index, row in enumerate(result.get("grid", []))
+    ]
+    return jsonify({
+        "job_id": job_id,
+        "strategy": result.get("strategy"),
+        # The index is carried on the row because it is what POST /proposals
+        # identifies a row by. Leaving the client to infer it from array
+        # position would break the moment anything sorted or filtered the grid.
+        "grid": grid,
+    })
+
+
 @api_v1.route("/jobs/tune", methods=["POST"])
 @require_auth
 def start_tune_job():

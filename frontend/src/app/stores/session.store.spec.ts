@@ -158,7 +158,7 @@ describe('SessionStore', () => {
 
     const http = TestBed.inject(HttpClient);
     http.get('/api/v1/dashboard').subscribe({ error: () => {} });
-    backend.expectOne('/api/v1/dashboard').flush(
+    backend.expectOne((req) => req.url === '/api/v1/dashboard').flush(
       { error: { code: 'auth', message: 'Authentication required.' } },
       { status: 401, statusText: 'Unauthorized' },
     );
@@ -214,5 +214,48 @@ describe('SessionStore', () => {
     // must not strand someone inside a session they asked to leave.
     expect(store.isAuthenticated()).toBe(false);
     expect(reload).toHaveBeenCalledOnce();
+  });
+
+  /* -- SR58: the deep link ---------------------------------------------- */
+
+  describe('the deep link a visitor arrived on', () => {
+    /** `boot()` takes the arrival URL as a parameter precisely so this is
+     *  drivable -- jsdom's `location` does not follow `history.replaceState`,
+     *  and a test that pushed history would assert against `/` and pass for
+     *  the wrong reason. */
+    const bootFrom = (url: string, authenticated = false) => {
+      const done = store.boot(url);
+      backend.expectOne('/api/v1/session').flush({ authenticated, username: 'admin' });
+      return done;
+    };
+
+    it('remembers where the visitor was actually trying to go', async () => {
+      await bootFrom('/analytics?tab=tuning');
+
+      expect(store.takeRedirect()).toBe('/analytics?tab=tuning');
+    });
+
+    it('does not remember the root, which is where sign-in lands anyway', async () => {
+      await bootFrom('/');
+
+      expect(store.takeRedirect()).toBeNull();
+    });
+
+    it('consumes the redirect, so a second read does not repeat it', async () => {
+      // Otherwise a later navigation, or a second sign-in in the same tab,
+      // jumps back to a URL the visitor has since moved on from.
+      await bootFrom('/trades/abc');
+
+      expect(store.takeRedirect()).toBe('/trades/abc');
+      expect(store.takeRedirect()).toBeNull();
+    });
+
+    it('captures it even for a visitor who is already signed in', async () => {
+      // The capture happens before the identity is known, and it must: a
+      // reload of a deep link with a live cookie should stay put too.
+      await bootFrom('/risk', true);
+
+      expect(store.takeRedirect()).toBe('/risk');
+    });
   });
 });

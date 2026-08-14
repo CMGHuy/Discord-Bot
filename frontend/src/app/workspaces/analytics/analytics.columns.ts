@@ -1,6 +1,7 @@
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { ABSENT, date } from '../../ui/format';
 import {
+  BreakdownRow,
   ConfidenceRow,
   DecileRow,
   DriftRow,
@@ -99,6 +100,41 @@ export const TIER_COLUMNS: ColumnDef<TierRow>[] = [
   { key: 'expected_band', header: 'Design band' },
   { key: 'ok', header: 'In band' },
 ];
+
+/* -- breakdowns (SR50) ---------------------------------------------------
+ *
+ * One column set for all eight dimensions of the snapshot's `by` block. The
+ * group's own name is the first column and its header changes with the
+ * dimension, which is why it is built rather than declared. */
+export function breakdownColumns(label: string): ColumnDef<BreakdownRow>[] {
+  return [
+    { key: 'key', header: label },
+    { key: 'n', header: 'Trades', numeric: true, value: (r) => count(r.n) },
+    { key: 'wins', header: 'Wins', numeric: true, value: (r) => count(r.wins) },
+    { key: 'losses', header: 'Losses', numeric: true, value: (r) => count(r.losses) },
+    { key: 'win_rate', header: 'Win rate', numeric: true, value: (r) => rate(r.win_rate) },
+    {
+      key: 'expectancy_r',
+      header: 'ExpR',
+      numeric: true,
+      value: (r) => expectancy(r.expectancy_r),
+    },
+    {
+      key: 'profit_factor',
+      header: 'Profit factor',
+      numeric: true,
+      // Two decimals, unsigned: a profit factor is a ratio and is never
+      // negative, so `expectancy`'s sign would be noise here.
+      value: (r) => (r.profit_factor === null ? ABSENT : r.profit_factor.toFixed(2)),
+    },
+    {
+      key: 'total_pnl',
+      header: 'P&L',
+      numeric: true,
+      value: (r) => (r.total_pnl === null ? ABSENT : r.total_pnl.toFixed(2)),
+    },
+  ];
+}
 
 export const DRIFT_COLUMNS: ColumnDef<DriftRow>[] = [
   { key: 'strategy', header: 'Strategy' },

@@ -44,14 +44,31 @@ export function actionConsequence(kind: TradeActionKind, row: TradeRow): string 
 }
 
 /** Which commands make sense for a trade in this state. A cancel offered on a
- *  closed trade is a button that can only ever produce an error. */
+ *  closed trade is a button that can only ever produce an error.
+ *
+ *  **Matches the plan vocabulary, case-insensitively.** `status` on a row is
+ *  always PENDING / ACTIVE / PARTIAL / CLOSED / CANCELLED / EXPIRED — a plan's
+ *  own status passed through verbatim, or a legacy trade's mapped into it
+ *  (`api_v1/trades.py:49-54, 119, 159`). This function used to switch on
+ *  `'open'` / `'planned'` / `'pending'`, none of which any row carries, so
+ *  every row fell through to Delete alone and neither Close nor Cancel ever
+ *  rendered (SR48).
+ *
+ *  `open` stays accepted as an alias because the server uses it as one — it
+ *  means ACTIVE-or-PARTIAL in a query (`_OPEN_STATUSES`) — but nothing here
+ *  depends on it. The case-insensitive compare is the actual guard: it is what
+ *  stops the next serialiser change reproducing the bug silently. */
 export function availableActions(status: string): TradeActionKind[] {
-  switch (status) {
-    case 'open':
+  switch ((status || '').toUpperCase()) {
+    case 'ACTIVE':
+    case 'PARTIAL':
+    // Not a row status, but the server's own alias for the two above.
+    case 'OPEN':
       return ['close', 'delete'];
-    case 'planned':
-    case 'pending':
+    case 'PENDING':
       return ['cancel', 'delete'];
+    // CLOSED, CANCELLED, EXPIRED — and anything a future build adds. Delete is
+    // the floor: a row that can be neither operated nor removed is a dead end.
     default:
       return ['delete'];
   }

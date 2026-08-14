@@ -44,4 +44,52 @@ describe('PlanCell', () => {
     expect(render(178, 195, 170).querySelector('[title]')!.getAttribute('title'))
       .toBe('Entry 178.00 · Target 195.00 · Stop 170.00');
   });
+
+  /* -- SR53: the trigger fallback -------------------------------------- */
+
+  function renderWithTrigger(entry: number | null, trigger: number | null) {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', entry);
+    f.componentRef.setInput('target', 195);
+    f.componentRef.setInput('stop', 170);
+    f.componentRef.setInput('trigger', trigger);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  it('shows the trigger when nothing has filled yet', () => {
+    // A PENDING plan has no entry. Without this the cell read
+    // "— → 195.00 / 170.00": both levels, and no price that would put you in
+    // them, which is the number the old plans board led with.
+    const el = renderWithTrigger(null, 176.5);
+    expect(el.textContent!.replace(/\s+/g, ' ').trim())
+      .toBe('176.50 → 195.00 / 170.00');
+  });
+
+  it('says in the tooltip that the first number is a trigger', () => {
+    // The dashed styling alone does not distinguish a waiting plan from a
+    // filled one, and a trigger read as a fill is a position you think you
+    // have and do not.
+    expect(renderWithTrigger(null, 176.5).querySelector('[title]')!.getAttribute('title'))
+      .toBe('Trigger 176.50 (not yet filled) · Target 195.00 · Stop 170.00');
+  });
+
+  it('marks the trigger as provisional', () => {
+    expect(renderWithTrigger(null, 176.5).querySelector('.entry')!.classList
+      .contains('pending')).toBe(true);
+  });
+
+  it('prefers the fill once there is one', () => {
+    // Both are present on a filled plan: the trigger is history at that point,
+    // and the entry is what the position actually cost.
+    const el = renderWithTrigger(178, 176.5);
+    expect(el.querySelector('.entry')!.textContent!.trim()).toBe('178.00');
+    expect(el.querySelector('.entry')!.classList.contains('pending')).toBe(false);
+  });
+
+  it('still reads an em dash when there is neither', () => {
+    const el = renderWithTrigger(null, null);
+    expect(el.querySelector('.entry')!.textContent!.trim()).toBe('—');
+    expect(el.querySelector('.entry')!.classList.contains('pending')).toBe(false);
+  });
 });

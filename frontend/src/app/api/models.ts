@@ -41,6 +41,12 @@ export interface Identity {
 export interface Health {
   ok: boolean;
   versions: Versions;
+  /** SR58 — whether the US market is open right now.
+   *
+   *  On `/health` rather than `/dashboard` because "are these prices live"
+   *  is a global fact: the indicator sits beside the connection status in
+   *  the shell, which must not depend on a workspace being open. */
+  market_active: boolean;
 }
 
 export interface Versions {
@@ -82,6 +88,12 @@ export interface TradeRow {
   opened_at: string | null;
   closed_at: string | null;
   has_note: boolean;
+  /* SR53 — the plan's own numbers, so a row that has not filled is not mostly
+     nulls. `opened_at` and `held_hours` describe an execution; these describe
+     the plan. Null on a legacy row, which never had a plan. */
+  created_at: string | null;
+  trigger_price: number | null;
+  follow_score: number | null;
   /* SR7 — the status bar, computed server-side so the cell draws rather than
      calculates, and so the arithmetic lives next to the bot's own near-close
      alerts instead of being reimplemented here. `progress_band` names which
@@ -175,11 +187,19 @@ export interface TradeQuery {
   tier?: string;
   origin?: string;
   has_note?: boolean;
+  /** SR52. VALIDATED or WEAK, compared case-insensitively server-side. */
+  badge?: string;
+  /** SR52. The 1-5 level. Named `confidence` in the URL and stored as
+   *  `confidence_level` on the row; `_FILTER_KEYS` bridges the two. */
+  confidence?: string;
 }
 
 export const TRADE_SORTABLE = [
   'opened_at', 'closed_at', 'ticker', 'status', 'pnl_pct', 'r_multiple',
   'entry', 'exit_price', 'held_hours', 'realized_pnl_amount',
+  // SR53. A ranking is a column nobody wants unsorted, and `created_at` is the
+  // only time an unfilled plan has to sort by.
+  'created_at', 'follow_score',
 ] as const;
 
 /* -- dashboard ------------------------------------------------------------ */
@@ -200,25 +220,180 @@ export interface Dashboard {
   expectancy_r: number | null;
   equity_30d: EquitySeries;
   position_premium: Record<string, unknown>;
+  /** SR53 — the five plan-lifecycle counts, keyed by status. Loosely typed
+   *  like `position_premium`: the statuses come from `PlanStatus` on the Python
+   *  side, and an empty object is what a failed collector returns. */
+  lifecycle: Record<string, unknown>;
+  /** SR58 — the date scope the server actually applied, echoed back. */
+  scope: { mode: DashboardScope };
+  /** SR58 — realised P&L over the scoped closes. Amounts are null, never 0,
+   *  when nothing closed: "nothing closed today" and "closed exactly flat"
+   *  are different facts. */
+  realized: {
+    amount: number | null;
+    pct: number | null;
+    n: number;
+    wins: number;
+    losses: number;
+  };
 }
+
+/** The Jinja dashboard's three date scopes. `active` is today plus anything
+ *  still open; `today` is today alone; `all` is every day. */
+export type DashboardScope = 'active' | 'today' | 'all';
 
 /* -- analytics ---------------------------------------------------------- */
 
+/**
+ * `GET /analytics/snapshot` — the pre-built analytics blob, forwarded verbatim
+ * (`api_v1/analytics.py:44-48`).
+ *
+ * **This name used to describe something else entirely.** Until SR50 it held
+ * the six relocated Dashboard metrics — `wins`, `losses`, `avg_realized_pct`
+ * and so on — which are the `relocated` block of `/analytics/performance`, not
+ * this endpoint's response at all. `analyticsSnapshot()` declared that type
+ * and would have mis-shaped every field it returned; the mistype never bit
+ * because no store ever called the method. That is the same fact the parity
+ * audit recorded from the other side.
+ *
+ * Loosely typed on purpose, for the reason the Dashboard's two loose fields
+ * give: `swingbot/core/analytics` owns these shapes, and pinning an interface
+ * to them would make every backend tweak a compile error in the client. The
+ * narrowing happens once, in `AnalyticsStore`.
+ *
+ * `by` is keyed by the ten dimensions in `aggregate.py:DIMENSIONS` — strategy,
+ * horizon, tier, badge, confidence, direction, dow, month, ticker, source —
+ * each holding one `StatRow` per group.
+ */
 export interface AnalyticsSnapshot {
-  wins: number | null;
-  losses: number | null;
-  avg_realized_pct: number | null;
-  best_trade_pct: number | null;
-  worst_trade_pct: number | null;
-  avg_holding_days: number | null;
+  built_at: string | null;
+  overall: Record<string, unknown>;
+  equity_curve: { points?: unknown[]; skipped_n?: number } | null;
+  drawdown: unknown[];
+  rolling_wr: unknown[];
+  by: Record<string, unknown[]>;
+  calibration: Record<string, unknown>;
+  r_multiples: unknown[];
+}
+
+/** A histogram bucket. Empty interior buckets are present with `count: 0` —
+ *  dropping them would let the chart silently redraw its own x-axis. */
+export interface HistogramBucket {
+  lo: number;
+  hi: number;
+  count: number;
+}
+
+/** One holding-period band. `win_rate` is null (never 0) for an empty band. */
+export interface HoldingBucket {
+  bucket: string;
+  n: number;
+  win_rate: number | null;
+  avg_return_pct: number | null;
+}
+
+/**
+ * SR54 — every figure `stats.html` used to derive in browser JS.
+ *
+ * All of it is `number | null`, and null means "not enough data", never zero.
+ * The workspace must render null as an em dash rather than coercing: a fresh
+ * account showing "Calmar 0.00" reads as a measured result, not an empty one.
+ *
+ * `win_rate` and `expectancy_r` appear BOTH here and at the top level of
+ * `AnalyticsPerformance`. That is deliberate, not duplication: the top-level
+ * pair is the account's all-time record, and this pair is scoped by the
+ * selected date range.
+ */
+export interface AnalyticsDerived {
+  avg_win_pct: number | null;
+  avg_loss_pct: number | null;
+  total_return_pct: number | null;
+  annualised_return_pct: number | null;
+  calmar: number | null;
+  volatility_ann_pct: number | null;
+  trades_per_month: number | null;
+  pct_in_market: number | null;
+  sharpe_ann: number | null;
+  sortino_ann: number | null;
+  win_rate: number | null;
+  expectancy_r: number | null;
 }
 
 export interface AnalyticsPerformance {
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
+  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   win_rate: number | null;
+  /** All-time, NOT scoped by the range — see `AnalyticsDerived`. */
   expectancy_r: number | null;
   by_confidence: Record<string, unknown>;
+  range: {
+    from: string | null;
+    to: string | null;
+    span_years: number | null;
+    n: number;
+  };
+  derived: AnalyticsDerived;
+  distributions: { returns: HistogramBucket[]; r_multiples: HistogramBucket[] };
+  rolling_returns: { date: string; return_pct: number }[];
+  holding_period_split: HoldingBucket[];
+  calendar: { month: string; return_pct: number; n: number }[];
+  cumulative_by_strategy: Record<string, { date: string; cum_pct: number }[]>;
+  benchmark: { spy_cum: Record<string, number> };
+}
+
+/**
+ * SR55 — one position's journal entry.
+ *
+ * Every excursion figure is nullable because `build_entry` degrades to null
+ * when the ticker's bars were unavailable at close, rather than raising. A
+ * missing MFE means "we could not measure it", never "it did not move".
+ */
+export interface JournalEntry {
+  trade_id: string;
+  ticker: string;
+  strategy: string;
+  horizon_key: string;
+  direction: string;
+  tier: string | null;
+  badge: string | null;
+  quality_score: number | null;
+  outcome: string;
+  r_realized: number | null;
+  /** Maximum favourable excursion, in R. */
+  mfe_r: number | null;
+  /** Maximum adverse excursion, in R. */
+  mae_r: number | null;
+  /** Share of the favourable move actually captured, 0–1. */
+  exit_efficiency: number | null;
+  holding_days: number | null;
+  tags: string[];
+  auto_lesson: string | null;
+  note: string;
+  opened_at: string | null;
+  closed_at: string | null;
+  created_at: string | null;
+}
+
+/**
+ * `GET /trades/:id/journal`.
+ *
+ * `journaled: false` is a 200, not a 404 — entries are written at close, so
+ * an open position having none is the normal case and must be readable as a
+ * state rather than caught as an error.
+ */
+export interface TradeJournal {
+  journaled: boolean;
+  entry: JournalEntry | null;
+}
+
+/** `GET /analytics/journal` — the trailing-week digest and recurring lessons. */
+export interface AnalyticsJournal {
+  digest: string[];
+  lessons: string[];
+  /** Entries behind both lists, so a digest from three is not read like one
+   *  drawn from three hundred. */
+  entries_n: number;
 }
 
 export interface AnalyticsStrategies {
@@ -263,6 +438,17 @@ export interface Job {
  *  job with `job(id)`, or wait for the `jobs` event. */
 export interface JobStarted {
   job_id: string;
+}
+
+/** `GET /jobs/:id/result` — a finished tuning job's grid.
+ *
+ *  `strategy` is null and `grid` empty while the job is still running: the
+ *  endpoint answers 200 with the same three keys either way, so nothing here
+ *  has to branch on which shape arrived (SR51). */
+export interface JobResult {
+  job_id: string;
+  strategy: string | null;
+  grid: unknown[];
 }
 
 export interface ProposalList {

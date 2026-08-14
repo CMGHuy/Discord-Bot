@@ -73,6 +73,36 @@
         <span class="killswitch" role="alert">KILLSWITCH ENGAGED</span>
       }
       <div class="spacer"></div>
+      <!-- SR58. Beside the connection status because it answers the same
+           question from the other side: "these prices have not moved" is a
+           failure during the session and correct behaviour outside it.
+           Nothing renders until the first answer -- an indicator that says
+           CLOSED before it knows is worse than one that says nothing. -->
+      @if (connection.marketActive() !== null) {
+        <span
+          class="market"
+          [class.market-open]="connection.marketActive()"
+          [attr.title]="connection.marketActive()
+            ? 'US market open — prices are live'
+            : 'US market closed — prices are last close'"
+        >
+          {{ connection.marketActive() ? 'MARKET OPEN' : 'MARKET CLOSED' }}
+        </span>
+      }
+
+      <label class="zoom">
+        <span class="zoom-label">Text</span>
+        <select
+          aria-label="Text size"
+          [value]="zoom()"
+          (change)="setZoom(+$any($event.target).value)"
+        >
+          @for (choice of zoomChoices; track choice) {
+            <option [value]="choice">{{ choice }}%</option>
+          }
+        </select>
+      </label>
+
       <sb-connection-status
         [state]="connection.state()"
         [botAlive]="connection.botAlive()"
@@ -83,6 +113,20 @@
     <main class="workspace">
       <router-outlet />
     </main>
+
+    <!-- SR58. `ApiClient.health()` had existed with no caller since NG4; the
+         Jinja sidebar showed this and the SPA quietly dropped it. -->
+    @if (connection.versions(); as versions) {
+      <footer class="version">
+        <span>ui {{ versions.ui }}</span>
+        <span>bot {{ versions.bot }}</span>
+        @if (connection.lastUpdated(); as updated) {
+          <!-- VERSION.json's own mtime: it is bumped on every real change, so
+               it doubles as "when did this image last actually change". -->
+          <span class="updated">updated {{ updated }}</span>
+        }
+      </footer>
+    }
   </div>
 
   <sb-toast-host />

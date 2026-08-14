@@ -1,4 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { SessionStore } from '../../stores/session.store';
@@ -29,8 +35,15 @@ export class Login {
   protected readonly error = this.session.error;
   protected readonly submitting = this.session.submitting;
 
+  /** SR63 -- both fields were `required` in the Jinja form. Checked here as
+   *  well as marked in the markup, so the button is actually disabled rather
+   *  than relying on native validation the submit handler bypasses. */
+  protected readonly incomplete = computed(
+    () => this.username().trim() === '' || this.password() === '',
+  );
+
   protected submit(): void {
-    if (this.submitting()) return;
+    if (this.submitting() || this.incomplete()) return;
     void this.session.login(this.username(), this.password());
   }
 }

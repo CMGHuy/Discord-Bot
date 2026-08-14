@@ -32,13 +32,13 @@ taken that decision away from it.
 """
 from __future__ import annotations
 
-from flask import jsonify
+from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
 from swingbot.core.performance import TradeLog
 
-from . import api_v1
+from . import ApiError, api_v1
 from .auth import require_auth
 
 
@@ -86,9 +86,77 @@ def _risk_used() -> tuple[float | None, float | None]:
         return None, cap
 
 
+def _lifecycle_counts() -> dict:
+    """The five plan-lifecycle counts the Jinja dashboard's strip showed.
+
+    SR53. PENDING/ACTIVE/PARTIAL are all-time; CLOSED/CANCELLED count only
+    today's, because a lifetime CLOSED count is a number that only ever goes up
+    and says nothing about the session. `_plan_rows` already applies exactly
+    that scoping for the Jinja strip, so this projects its counts rather than
+    recomputing them -- the module's own "nothing is computed here" rule.
+
+    Returns an empty dict on failure rather than raising: this is the landing
+    page, and one degraded panel is better than a 500 for the other nine
+    figures.
+    """
+    try:
+        from swingbot.admin.pages import _plan_rows
+        return dict(_plan_rows()["counts"])
+    except Exception:
+        return {}
+
+
+_SCOPES = ("active", "today", "all")
+
+
+def _scope() -> str:
+    """SR58 -- the dashboard's date scope, from `?mode=`.
+
+    The Jinja dashboard's three modes: `active` (today plus anything still
+    open, the default), `today`, and `all`. An unknown value is a 400 rather
+    than a silent fall back to the default -- a scope that quietly ignores
+    what was asked for makes all-time numbers read as today's, which is the
+    same class of bug SR52 fixed on the Trades list.
+    """
+    raw = (request.args.get("mode") or "").strip() or "active"
+    if raw not in _SCOPES:
+        raise ApiError("invalid", f"mode must be one of {', '.join(_SCOPES)}", 400)
+    return raw
+
+
+def _realized(closed: list[dict], mode: str) -> dict:
+    """Realised P&L over the scoped closes.
+
+    **`active` and `today` are identical here, deliberately.** The only thing
+    separating those two modes is whether still-open positions are included,
+    and an open position has no realised P&L to contribute. `2026-08-07-v9`
+    made the same call for Trade History; asserting it in a test stops a
+    later change inventing a difference.
+
+    Amounts are `None` rather than `0.0` when nothing closed: "nothing closed
+    today" and "closed exactly flat" are different facts and a card must not
+    render them identically.
+    """
+    if mode != "all":
+        closed = [t for t in closed if dash.is_today_berlin(t.get("closed_at"))]
+
+    amounts = [a for a in (t.get("realized_pnl_amount") for t in closed)
+               if isinstance(a, (int, float))]
+    pcts = [p for p in (dash.closed_pnl(t) for t in closed) if p is not None]
+
+    return {
+        "amount": round(sum(amounts), 2) if amounts else None,
+        "pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+        "n": len(closed),
+        "wins": sum(1 for t in closed if t.get("status") == "win"),
+        "losses": sum(1 for t in closed if t.get("status") == "loss"),
+    }
+
+
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
 def dashboard():
+    mode = _scope()
     tl = TradeLog()
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
     open_trades = [t for t in all_raw if t.get("status") == "open"]
@@ -121,4 +189,12 @@ def dashboard():
         "expectancy_r": stats.get("expectancy_r"),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
+        "lifecycle": _lifecycle_counts(),
+        # SR58 -- the date scope, echoed back so the workspace can label the
+        # figures it is showing rather than assume the request applied.
+        "scope": {"mode": mode},
+        "realized": _realized(
+            [t for t in all_raw if t.get("status") in ("win", "loss", "closed")],
+            mode,
+        ),
     })

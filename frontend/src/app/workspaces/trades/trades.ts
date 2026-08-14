@@ -184,6 +184,53 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
         [options]="originOptions"
         (valueChange)="navigate({ origin: $event })"
       />
+
+      <!-- SR52. The five the parity audit found, in the order they narrow a
+           search: what the setup was, then how it was graded, then whether it
+           has been written up. Nine controls is a lot for one bar, which is
+           why the filter bar wraps and reports how many are active. -->
+      <sb-text-input
+        type="search"
+        label="Strategy"
+        placeholder="RSI"
+        [value]="strategy() ?? ''"
+        (valueChange)="navigate({ strategy: $event })"
+      />
+      <sb-select
+        label="Horizon"
+        placeholder="Any"
+        [value]="horizon() ?? ''"
+        [options]="horizonOptions"
+        (valueChange)="navigate({ horizon: $event })"
+      />
+      <sb-select
+        label="Confidence"
+        placeholder="Any"
+        [value]="confidence() ?? ''"
+        [options]="confidenceOptions"
+        (valueChange)="navigate({ confidence: $event })"
+      />
+      <sb-select
+        label="Tier"
+        placeholder="Any"
+        [value]="tier() ?? ''"
+        [options]="tierOptions"
+        (valueChange)="navigate({ tier: $event })"
+      />
+      <sb-select
+        label="Badge"
+        placeholder="Any"
+        [value]="badge() ?? ''"
+        [options]="badgeOptions"
+        (valueChange)="navigate({ badge: $event })"
+      />
+      <sb-select
+        label="Note"
+        placeholder="Any"
+        [value]="has_note() ?? ''"
+        [options]="noteOptions"
+        (valueChange)="navigate({ has_note: $event })"
+      />
     </sb-filter-bar>
 
     @if (store.error(); as message) {
@@ -224,7 +271,12 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
     </ng-template>
 
     <ng-template #planCell let-row>
-      <sb-plan-cell [entry]="row.entry" [target]="row.target" [stop]="row.stop_loss" />
+      <sb-plan-cell
+        [entry]="row.entry"
+        [target]="row.target"
+        [stop]="row.stop_loss"
+        [trigger]="row.trigger_price"
+      />
     </ng-template>
 
     <ng-template #pnlCell let-row>
@@ -384,6 +436,12 @@ export class Trades {
   readonly direction = input<string>();
   readonly tier = input<string>();
   readonly origin = input<string>();
+  // SR52 — the rest of the filters that had no control. `strategy`, `horizon`
+  // and `tier` above were already here and already accepted by the endpoint;
+  // they simply had nothing sending them.
+  readonly badge = input<string>();
+  readonly confidence = input<string>();
+  readonly has_note = input<string>();
 
   protected readonly statusChips = STATUS_CHIPS;
   protected readonly tableId = TRADES_TABLE_ID;
@@ -409,6 +467,39 @@ export class Trades {
     { value: 'plan', label: 'Plan' },
     { value: 'legacy', label: 'Legacy' },
   ];
+  protected readonly tierOptions = [
+    { value: 'A', label: 'Tier A' },
+    { value: 'B', label: 'Tier B' },
+    { value: 'C', label: 'Tier C' },
+  ];
+  protected readonly badgeOptions = [
+    { value: 'VALIDATED', label: 'Validated' },
+    { value: 'WEAK', label: 'Weak' },
+  ];
+  /** Strings, because these travel as query parameters and the server compares
+   *  them as strings. */
+  protected readonly confidenceOptions = [1, 2, 3, 4, 5].map((level) => ({
+    value: String(level),
+    label: 'Lv' + level,
+  }));
+  protected readonly noteOptions = [
+    { value: '1', label: 'Has a note' },
+    { value: '0', label: 'No note' },
+  ];
+  /**
+   * Every horizon the bot trades, from `HORIZONS` in `strategy_types.py`.
+   *
+   * Hard-coded rather than derived from the rows on screen. A horizon with no
+   * trades yet is still a perfectly real thing to filter for, and a list that
+   * grew as trades arrived would leave the control looking broken on a fresh
+   * install — which is the mistake the Jinja page's ticker dropdown avoided by
+   * building its options from the COMPLETE history rather than the page.
+   */
+  protected readonly horizonOptions =
+    ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m', '9m'].map((key) => ({
+      value: key,
+      label: key,
+    }));
 
   /** The visible set for the CURRENT density, in order.
    *
@@ -571,6 +662,15 @@ export class Trades {
         direction: this.direction(),
         tier: this.tier(),
         origin: this.origin(),
+        badge: this.badge(),
+        confidence: this.confidence(),
+        // Tri-state in the URL ('1' / '0' / absent), boolean on the wire.
+        // Absent must stay undefined rather than becoming false: "no note" is
+        // a filter, and not asking is not the same as asking for un-noted
+        // trades. `_BOOLEAN_FILTERS` on the server compares it as a bool for
+        // the same reason a `?has_note=1` string comparison matched nothing.
+        has_note:
+          this.has_note() === undefined ? undefined : this.has_note() === '1',
       };
       this.store.setQuery(query);
     });
@@ -647,6 +747,12 @@ export class Trades {
       direction: null,
       tier: null,
       origin: null,
+      // Every filter, or Clear becomes a control that clears most of them —
+      // which is worse than none, because the count beside it would then
+      // disagree with what is on screen.
+      badge: null,
+      confidence: null,
+      has_note: null,
     });
   }
 

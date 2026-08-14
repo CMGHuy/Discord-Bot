@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 
 import { SettingField } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
@@ -43,15 +43,49 @@ import { Panel } from '../../ui/layout';
       <p class="form-error" role="status">{{ message }}</p>
     }
 
-    @for (section of store.sections(); track section.name) {
+    <!-- SR56. Over a hundred fields had no way to find one by name. The
+         controls sit above the form rather than in the save bar: they change
+         what you are looking at, not what you are about to commit. -->
+    <div class="find" role="search">
+      <sb-text-input
+        label="Find a setting"
+        type="text"
+        [value]="store.settingsQuery()"
+        (valueChange)="store.setSettingsQuery($event)"
+      />
+      <sb-checkbox
+        label="Only changed from default"
+        [checked]="store.onlyChanged()"
+        (checkedChange)="store.setOnlyChanged($event)"
+      />
+      <span class="found">{{ foundLabel() }}</span>
+    </div>
+
+    <!-- SR63. settings.html:101-103. The dot has meant this since SR56; the
+         legend saying so is what makes it readable without guessing. -->
+    <p class="legend"><span class="legend-dot"></span> = changed from default</p>
+
+    @if (!store.visibleSections().length && !store.settingsEmpty()) {
+      <p class="stale-form" role="status">
+        No setting matches. Clear the search or the only-changed filter.
+      </p>
+    }
+
+    @for (section of store.visibleSections(); track section.name) {
       <sb-panel [heading]="section.name">
+        <!-- SR63. settings.html:115. -->
+        <span class="field-count">{{ fieldCount(section.fields.length) }}</span>
         @if (section.description) {
           <p class="section-help">{{ section.description }}</p>
         }
 
         <div class="fields">
           @for (field of section.fields; track field.key) {
-            <div class="field" [class.changed]="isChanged(field)">
+            <div
+              class="field"
+              [class.changed]="isChanged(field)"
+              [class.off-default]="store.differsFromDefault(field)"
+            >
               @switch (controlOf(field)) {
                 @case ('checkbox') {
                   <sb-checkbox
@@ -86,6 +120,28 @@ import { Panel } from '../../ui/layout';
               }
               <p class="meta">
                 <span class="key">{{ field.key }}</span>
+                <!-- SR63. settings.html:50. Without it "what was this before I
+                     touched it" has no answer on screen -- and the per-field
+                     reset SR56 added is far less useful when you cannot see
+                     what it will reset TO. -->
+                @if (field.default) {
+                  <span class="default-badge" title="Default value">{{ field.default }}</span>
+                }
+                @if (store.differsFromDefault(field)) {
+                  <!-- The Jinja page's dot: differs from the CODE default,
+                       which is a different statement from "edited just now"
+                       and the one that survives a reload. -->
+                  <button
+                    sb-button
+                    variant="ghost"
+                    type="button"
+                    class="reset"
+                    [title]="'Reset to ' + field.default"
+                    (click)="store.resetField(field)"
+                  >
+                    reset to default
+                  </button>
+                }
                 @if (!field.hot_reloadable) {
                   <!-- Named per field rather than only in the diff: it is
                        the difference between a change that takes effect and
@@ -234,9 +290,22 @@ import { Panel } from '../../ui/layout';
       <!-- A plain link, not a fetch: the browser then gets a Save dialog and
            the server's filename, both of which an XHR throws away. -->
       <a class="export" [href]="exportUrl" download>Download .env</a>
+      <!-- SR63. settings.html:209. The asymmetry is the reason an exported
+           file is safe to hand around, and it was nowhere on screen. -->
+      <span class="asymmetry">
+        Export omits credentials/tokens entirely; import accepts them.
+      </span>
 
       <details class="import">
-        <summary>Import from text</summary>
+        <summary>Import from text or file</summary>
+        <!-- SR56's fifth gap row. The file is read in the browser and its
+             text goes through the SAME import endpoint as the textarea —
+             no upload route, no second parser, and the user can see and
+             edit what was read before committing it. -->
+        <label class="import-file">
+          <span>Choose a .env file</span>
+          <input type="file" accept=".env,text/plain" (change)="onImportFile($event)" />
+        </label>
         <textarea
           class="import-text"
           rows="6"
@@ -265,12 +334,6 @@ import { Panel } from '../../ui/layout';
   styles: `
     :host { display: grid; gap: var(--space-20); }
 
-    .section-help {
-      margin-bottom: var(--space-10);
-      color: var(--text-secondary);
-      font-size: var(--text-table);
-    }
-
     .fields {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -280,6 +343,69 @@ import { Panel } from '../../ui/layout';
     /* An edited field is marked so a change made three sections up is still
        findable without scrolling for it. */
     .changed { border-left: 2px solid var(--accent); padding-left: var(--space-8); }
+
+    /* -- SR63: badges and the legend --------------------------------- */
+    .field-count {
+      margin-left: var(--space-6);
+      color: var(--text-faint);
+      font-size: var(--text-micro);
+      font-variant-numeric: tabular-nums;
+    }
+    .legend {
+      margin-bottom: var(--space-8);
+      color: var(--text-faint);
+      font-size: var(--text-micro);
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: var(--space-4);
+      border-radius: 50%;
+      background: var(--accent);
+      vertical-align: middle;
+    }
+    .default-badge {
+      color: var(--text-faint);
+      font-family: var(--font-mono);
+      font-size: var(--text-micro);
+    }
+    .asymmetry { color: var(--text-faint); font-size: var(--text-micro); }
+
+    /* -- SR56: finding a setting ------------------------------------- */
+    .find {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-10);
+      margin-bottom: var(--space-10);
+    }
+    .find .found {
+      margin-left: auto;
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+      font-variant-numeric: tabular-nums;
+    }
+    /* Away from the code default. Distinct from .changed, which is "edited
+       in this draft" -- a field can be either, both, or neither. */
+    .off-default .key::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: var(--space-4);
+      border-radius: 50%;
+      background: var(--accent);
+      vertical-align: middle;
+    }
+    .import-file {
+      display: flex;
+      align-items: center;
+      gap: var(--space-6);
+      margin-bottom: var(--space-8);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
 
     .help { color: var(--text-muted); font-size: var(--text-chip); line-height: 1.4; }
     .meta { display: flex; flex-wrap: wrap; gap: var(--space-6); }
@@ -412,12 +538,48 @@ export class SettingsTab {
     return this.store.currentValue(field) === true;
   }
 
+  /** Edited in THIS draft — deliberately a different question from
+   *  `store.differsFromDefault`, which asks whether the value is away from
+   *  the code default. Both are shown, by different marks. */
   protected isChanged(field: SettingField): boolean {
     return field.key in this.store.draft();
+  }
+
+  /** How much of the form the current filters are showing. Worth stating:
+   *  "3 of 118" is the difference between a narrow search and a filter that
+   *  has accidentally hidden the setting being looked for. */
+  protected readonly foundLabel = computed(() => {
+    const shown = this.store.visibleFields().length;
+    const total = this.store.fields().length;
+    return shown === total ? `${total} settings` : `${shown} of ${total}`;
+  });
+
+  /** SR63. settings.html:115 -- pluralised, because "1 fields" is the kind
+   *  of detail that makes a page look unfinished. */
+  protected fieldCount(n: number): string {
+    return `${n} field${n === 1 ? '' : 's'}`;
   }
 
   protected runImport(): void {
     this.store.importSettings(this.importText());
     this.importText.set('');
+  }
+
+  /**
+   * SR56 — read a chosen `.env` into the textarea rather than importing it
+   * straight away.
+   *
+   * Deliberately NOT a one-click import: this endpoint rewrites the whole
+   * configuration, and a mis-clicked file would do it silently. Landing the
+   * contents in the box means the same Import button, the same preview, and
+   * a chance to see what is about to be applied.
+   */
+  protected onImportFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    file.text().then((text) => this.importText.set(text));
+    // Cleared so choosing the SAME file again still fires a change event.
+    input.value = '';
   }
 }

@@ -18,14 +18,23 @@
 > mounted; `ADMIN_UI` chooses which answers `/`. Do not delete Jinja code as a
 > side effect of unrelated work.
 >
-> **A second gate, added 2026-08-13:** that future plan must not run until
-> **`2026-08-13-v21-spa-refresh.md`** completes either. v21 ports the
-> compact/full density model, the SL→TP status bar and the combined plan cell
-> *out of* these templates, and audits all 19 of them for feature parity —
-> the first audit at that level, since NG52 only ever covered routes. Deleting
-> the reference halfway through the port is how details get lost. So NG57 is
-> now gated on two things, not one: the soak (no earlier than 2026-08-27) and
-> v21's completion. See spec v18 Decision 13.
+> **The second gate is RELEASED, 2026-08-14.** It was added on 2026-08-13 to
+> hold NG57 until **`2026-08-13-v21-spa-refresh.md`** completed, because v21
+> ports the compact/full density model, the SL→TP status bar and the combined
+> plan cell *out of* these templates. **v21 is now complete** — SR1–SR64,
+> `ui` 1.2.0.
+>
+> The evidence that nothing is lost by deleting the templates is
+> `docs/superpowers/results/2026-08-13-jinja-feature-parity.md`: all 19
+> templates audited row by row, every gap ranked, and every one either filled
+> or explicitly recorded as dropped on purpose. The 33 cosmetic rows were
+> filled rather than dropped (SR59–SR63); the 88 *blocks NG57* rows were
+> closed by SR48–SR58. **Read that document before deleting anything** — it is
+> the only place the per-template detail exists once the templates are gone.
+>
+> **NG57 therefore remains gated on ONE thing: the soak** (no earlier than
+> 2026-08-27), plus the manual QA still outstanding on v21 — see that plan's
+> SR64 Step 3, which was not walked. See spec v18 Decision 13.
 >
 > Unchecked boxes below are not a to-do list. Sessions committed work without
 > ticking them (NG8–NG53 read as unstarted while their code is in the git log),

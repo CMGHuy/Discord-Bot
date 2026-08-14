@@ -10,6 +10,8 @@ full unfiltered trades.json list is always safe (open trades simply
 contribute nothing, since they lack exit_price/realized_pnl_amount)."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import numpy as np
 
 
@@ -293,3 +295,355 @@ def sortino(returns: list[float]) -> float | None:
     if downside_std == 0:
         return None
     return float(np.mean(arr)) / downside_std
+
+
+# ---------------------------------------------------------------------------
+# SR54 -- the figures stats.html used to derive in browser JS.
+#
+# These moved server-side so there stays exactly one definition per stat (the
+# same Global Constraint that makes aggregate.py delegate every ratio here).
+# Note what is deliberately NOT here: a second Sharpe. stats.html annualised
+# its ratios inline; `sharpe`/`sortino` above stay per-trade and unannualised,
+# and `annualisation_factor` below is the separate, reusable multiplier.
+# ---------------------------------------------------------------------------
+
+_TRADING_DAYS_PER_YEAR = 252
+_MIN_HOLD_DAYS = 0.5  # an intraday round trip must not send the factor to infinity
+_HOLDING_BUCKETS = (("0-2d", 0.0, 2.0), ("3-7d", 2.0, 7.0),
+                    ("8-30d", 7.0, 30.0), ("31d+", 30.0, float("inf")))
+
+
+def _parse(ts):
+    """ISO timestamp -> datetime, or None. Accepts both the bare `YYYY-MM-DD`
+    the fixtures use and the full timestamps the trade log actually writes."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts)
+    except (TypeError, ValueError):
+        return None
+
+
+def _holding_days(trade: dict) -> float | None:
+    """Calendar days held. Calendar, not trading, days -- it is the input to
+    `pct_in_market`, which is a question about wall-clock exposure."""
+    opened, closed_at = _parse(trade.get("opened_at")), _parse(trade.get("closed_at"))
+    if opened is None or closed_at is None:
+        return None
+    return (closed_at - opened).total_seconds() / 86400
+
+
+def _closed_in_order(closed: list[dict]) -> list[dict]:
+    """Trades that actually closed, oldest close first -- the order every
+    compounding walk below depends on. Sorting inside each function rather
+    than trusting the caller is deliberate: `trades.json` is append-ordered by
+    OPEN time, so a long trade opened early can close after a short one
+    opened later, and walking them in file order silently mis-compounds."""
+    return sorted((t for t in closed if t.get("closed_at")),
+                  key=lambda t: t["closed_at"])
+
+
+def _returns(closed: list[dict]) -> list[float]:
+    """Per-trade signed % returns, in close order, skipping anything unpriced."""
+    out = []
+    for t in _closed_in_order(closed):
+        pct = trade_return_pct(t)
+        if pct is not None:
+            out.append(pct)
+    return out
+
+
+def _compound(returns: list[float]) -> float:
+    """Chain % returns multiplicatively and report the result as a %.
+
+    Compounding, not summing: three +10% trades make +33.1%, not +30%. The
+    template summed in one place and compounded in another, which is exactly
+    the drift that having one function for it prevents.
+    """
+    factor = 1.0
+    for r in returns:
+        factor *= (1.0 + r / 100.0)
+    return (factor - 1.0) * 100.0
+
+
+def in_date_range(closed: list[dict], *, start: str | None = None,
+                  end: str | None = None) -> list[dict]:
+    """Scope a trade list to a closing-date window, both bounds INCLUSIVE.
+
+    Scoped on `closed_at`, not `opened_at`: every figure built on top of this
+    is about realised results, and a trade belongs to the window in which it
+    resolved. With neither bound set the input is returned untouched (open
+    trades included) so callers can pass it unconditionally; with a bound set,
+    undated and still-open records drop out, since they have no close to place.
+    """
+    if start is None and end is None:
+        return closed
+    out = []
+    for t in closed:
+        day = (t.get("closed_at") or "")[:10]
+        if not day:
+            continue
+        if start and day < start:
+            continue
+        if end and day > end:
+            continue
+        out.append(t)
+    return out
+
+
+def avg_win_pct(closed: list[dict]) -> float | None:
+    """Mean % return across winners. None (not 0.0) when there are none."""
+    wins = [w for w in (trade_return_pct(t) for t in closed
+                        if t.get("status") == "win") if w is not None]
+    return round(sum(wins) / len(wins), 4) if wins else None
+
+
+def avg_loss_pct(closed: list[dict]) -> float | None:
+    """Mean % return across losers, left NEGATIVE.
+
+    Kept signed on purpose: a card reading "avg loss -7.5%" cannot be misread,
+    whereas a positive 7.5 next to a positive avg win invites exactly that.
+    """
+    losses = [x for x in (trade_return_pct(t) for t in closed
+                          if t.get("status") == "loss") if x is not None]
+    return round(sum(losses) / len(losses), 4) if losses else None
+
+
+def span_years(closed: list[dict]) -> float | None:
+    """Years from the earliest open to the latest close, floored at one day.
+
+    The floor is what keeps `annualised_return_pct` finite for a window whose
+    trades all opened and closed the same day; without it the exponent is a
+    division by zero rather than a very large number.
+    """
+    ordered = _closed_in_order(closed)
+    if not ordered:
+        return None
+    last = _parse(ordered[-1]["closed_at"])
+    if last is None:
+        return None
+    opens = [d for d in (_parse(t.get("opened_at")) for t in ordered) if d]
+    first = min(opens) if opens else last
+    days = (last - first).total_seconds() / 86400
+    return max(days / 365.25, 1 / 365)
+
+
+def total_return_pct(closed: list[dict]) -> float | None:
+    """Compounded % return across the window. None on an empty window."""
+    returns = _returns(closed)
+    return round(_compound(returns), 4) if returns else None
+
+
+def annualised_return_pct(closed: list[dict]) -> float | None:
+    """Total return re-expressed as a yearly rate: (1+total)^(1/years) - 1.
+
+    Deliberately NOT clamped. A +10% fortnight really does annualise to a
+    number in the thousands, and clamping it would hide how little a short
+    window says -- the honest fix is showing the window length beside it,
+    which is why the endpoint returns `span_years` too.
+    """
+    total = total_return_pct(closed)
+    years = span_years(closed)
+    if total is None or years is None:
+        return None
+    growth = 1.0 + total / 100.0
+    if growth <= 0:
+        return -100.0   # account wiped out; the root of a non-positive number is not a rate
+    return round((growth ** (1.0 / years) - 1.0) * 100.0, 4)
+
+
+def annualisation_factor(closed: list[dict]) -> float:
+    """sqrt(trading days per year / average holding days).
+
+    The multiplier that turns this module's per-trade `sharpe`/`sortino` into
+    annualised ones. It is a separate function precisely so those two keep a
+    single definition each -- stats.html folded this into its own Sharpe
+    expression, which is how the client and server drifted apart.
+
+    1.0 when no holding period is knowable: an unknown factor must leave the
+    ratio it multiplies unchanged rather than scaling it by a guess.
+    """
+    holds = [h for h in (_holding_days(t) for t in closed) if h is not None]
+    if not holds:
+        return 1.0
+    avg = max(sum(holds) / len(holds), _MIN_HOLD_DAYS)
+    return (_TRADING_DAYS_PER_YEAR / avg) ** 0.5
+
+
+def volatility_ann_pct(closed: list[dict]) -> float | None:
+    """Annualised standard deviation of per-trade returns. None below two
+    trades, where a sample standard deviation is undefined rather than 0."""
+    returns = _returns(closed)
+    if len(returns) < 2:
+        return None
+    arr = np.asarray(returns, dtype=float)
+    return round(float(np.std(arr, ddof=1)) * annualisation_factor(closed), 4)
+
+
+def _equity_points(closed: list[dict]) -> list[dict]:
+    """The compounded equity walk on a base of 100, with a flat baseline point
+    dated at the first open -- the same shape `drawdown_series` consumes, so
+    drawdown keeps one implementation rather than gaining a second one here."""
+    ordered = _closed_in_order(closed)
+    if not ordered:
+        return []
+    opens = [d for d in (_parse(t.get("opened_at")) for t in ordered) if d]
+    first = min(opens).date().isoformat() if opens else ordered[0]["closed_at"][:10]
+    points = [{"date": first, "balance": 100.0}]
+    balance = 100.0
+    for t in ordered:
+        pct = trade_return_pct(t)
+        if pct is None:
+            continue
+        balance *= (1.0 + pct / 100.0)
+        points.append({"date": t["closed_at"][:10], "balance": round(balance, 6)})
+    return points
+
+
+def calmar(closed: list[dict]) -> float | None:
+    """Annualised return / maximum drawdown.
+
+    None when the curve never drew down: dividing by a zero drawdown is
+    undefined, and reporting a huge number for "never lost" would rank a
+    two-trade sample above a real track record.
+    """
+    ann = annualised_return_pct(closed)
+    if ann is None:
+        return None
+    max_dd = max_drawdown_pct(_equity_points(closed))
+    if not max_dd:          # None (too few points) or 0.0 (no drawdown at all)
+        return None
+    return round(ann / abs(max_dd), 4)
+
+
+def trades_per_month(closed: list[dict]) -> float | None:
+    """Closed trades per month over the window. None on an empty window."""
+    ordered = _closed_in_order(closed)
+    years = span_years(closed)
+    if not ordered or years is None:
+        return None
+    return round(len(ordered) / max(years * 12, 1.0), 4)
+
+
+def pct_in_market(closed: list[dict]) -> float | None:
+    """Share of the window spent holding something, capped at 100%.
+
+    Approximate by construction: it sums holding periods, so concurrent
+    positions double-count and push it up. The cap is what keeps that
+    readable rather than absurd -- a portfolio running three positions at
+    once reports "100% in market", which is true, instead of "300%".
+    """
+    ordered = _closed_in_order(closed)
+    if not ordered:
+        return None
+    last = _parse(ordered[-1]["closed_at"])
+    opens = [d for d in (_parse(t.get("opened_at")) for t in ordered) if d]
+    if last is None or not opens:
+        return None
+    span_days = (last - min(opens)).total_seconds() / 86400
+    if span_days <= 0:
+        return 100.0
+    held = sum(h for h in (_holding_days(t) for t in ordered) if h is not None)
+    return round(min(held / span_days * 100.0, 100.0), 4)
+
+
+def histogram(values: list[float], *, bins: int = 20) -> list[dict]:
+    """Equal-width buckets spanning [min, max], as `{lo, hi, count}` rows.
+
+    Empty interior buckets are KEPT. A histogram that drops them silently
+    redraws its own x-axis and turns a bimodal distribution into a flat one.
+    An empty input is an empty list, not `bins` zero-count rows -- "no data"
+    and "all buckets empty" are different statements.
+    """
+    if not values or bins < 1:
+        return []
+    lo, hi = min(values), max(values)
+    if hi == lo:
+        # Degenerate range: one bucket holding everything beats dividing by 0.
+        return [{"lo": round(lo, 6), "hi": round(hi, 6), "count": len(values)}]
+    width = (hi - lo) / bins
+    counts = [0] * bins
+    for v in values:
+        counts[min(int((v - lo) / width), bins - 1)] += 1   # top edge -> last bucket
+    return [{"lo": round(lo + i * width, 6), "hi": round(lo + (i + 1) * width, 6),
+             "count": c} for i, c in enumerate(counts)]
+
+
+def rolling_return_pct(closed: list[dict], window: int = 20) -> list[dict]:
+    """Compounded return over each trailing `window` of closed trades.
+
+    Trade-indexed, not calendar-indexed, matching `rolling_win_rate` above so
+    the two can be plotted on one axis. Empty when the window is longer than
+    the sample -- a partial window is a different statistic, not this one.
+    """
+    ordered = [t for t in _closed_in_order(closed) if trade_return_pct(t) is not None]
+    if window < 1 or len(ordered) < window:
+        return []
+    returns = [trade_return_pct(t) for t in ordered]
+    return [{"date": ordered[i]["closed_at"][:10],
+             "return_pct": round(_compound(returns[i - window + 1:i + 1]), 4)}
+            for i in range(window - 1, len(ordered))]
+
+
+def holding_period_split(closed: list[dict]) -> list[dict]:
+    """Trades bucketed by days held, each bucket carrying its own win rate.
+
+    Every bucket is reported even at n=0, because the shape of the answer is
+    the point: "the edge is all in the 8-30d band" is only legible next to the
+    bands that are empty. `win_rate` is None for an empty bucket, never 0.
+    """
+    if not closed:
+        return []
+    out = []
+    for name, lo, hi in _HOLDING_BUCKETS:
+        members = []
+        for t in closed:
+            held = _holding_days(t)
+            if held is not None and lo <= held <= hi:
+                members.append(t)
+        rets = [r for r in (trade_return_pct(t) for t in members) if r is not None]
+        out.append({"bucket": name, "n": len(members),
+                    "win_rate": win_rate(members),
+                    "avg_return_pct": round(sum(rets) / len(rets), 4) if rets else None})
+    return out
+
+
+def calendar_returns(closed: list[dict]) -> list[dict]:
+    """Compounded return per calendar month of close, oldest first.
+
+    Months with no closes are OMITTED rather than emitted as 0.0 -- a flat
+    month and a month you did not trade are different facts, and a calendar
+    heatmap that paints them identically is lying about activity.
+    """
+    by_month: dict[str, list[dict]] = {}
+    for t in _closed_in_order(closed):
+        if trade_return_pct(t) is None:
+            continue
+        by_month.setdefault(t["closed_at"][:7], []).append(t)
+    return [{"month": m,
+             "return_pct": round(_compound([trade_return_pct(t) for t in ts]), 4),
+             "n": len(ts)}
+            for m, ts in sorted(by_month.items())]
+
+
+def cumulative_pnl_by_strategy(closed: list[dict]) -> dict[str, list[dict]]:
+    """Per-strategy compounded equity walks, `{strategy: [{date, cum_pct}]}`.
+
+    Each strategy is walked on its OWN sequence rather than sliced out of the
+    portfolio curve, so a strategy that traded twice in 2020 and twice in 2024
+    shows two steps, not a line dragged flat across the gap between them.
+    """
+    by_strategy: dict[str, list[dict]] = {}
+    for t in _closed_in_order(closed):
+        if trade_return_pct(t) is None:
+            continue
+        by_strategy.setdefault(t.get("strategy") or "unknown", []).append(t)
+    out: dict[str, list[dict]] = {}
+    for name, ts in by_strategy.items():
+        factor, points = 1.0, []
+        for t in ts:
+            factor *= (1.0 + trade_return_pct(t) / 100.0)
+            points.append({"date": t["closed_at"][:10],
+                           "cum_pct": round((factor - 1.0) * 100.0, 4)})
+        out[name] = points
+    return out

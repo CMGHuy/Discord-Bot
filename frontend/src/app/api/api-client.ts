@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   AnalyticsCalibration,
+  AnalyticsJournal,
   AnalyticsPerformance,
   AnalyticsRegistry,
   AnalyticsSnapshot,
@@ -13,11 +14,13 @@ import {
   OhlcvResponse,
   ClearResult,
   Dashboard,
+  DashboardScope,
   Collection,
   Health,
   Identity,
   Job,
   JobList,
+  JobResult,
   JobStarted,
   KillswitchResult,
   LogClearResult,
@@ -41,6 +44,7 @@ import {
   TradeNote,
   TradeQuery,
   TradeRow,
+  TradeJournal,
 } from './models';
 
 /** The application's only HTTP surface.
@@ -85,8 +89,13 @@ export class ApiClient {
 
   /* -- dashboard --------------------------------------------------------- */
 
-  dashboard(): Observable<Dashboard> {
-    return this.http.get<Dashboard>(`${this.base}/dashboard`);
+  /** SR58 — the scope is a query parameter, so the server does the date
+   *  filtering. A client-side scope over an all-time payload could not
+   *  narrow the realised figures at all. */
+  dashboard(mode?: DashboardScope): Observable<Dashboard> {
+    let params = new HttpParams();
+    if (mode) params = params.set('mode', mode);
+    return this.http.get<Dashboard>(`${this.base}/dashboard`, { params });
   }
 
   /* -- trades ---------------------------------------------------------- */
@@ -131,6 +140,13 @@ export class ApiClient {
     );
   }
 
+  /** SR55 — one position's excursions, tags and auto-lesson. Never 404s for
+   *  an unjournaled trade; it answers `journaled: false`. */
+  tradeJournal(tradeId: string): Observable<TradeJournal> {
+    return this.http.get<TradeJournal>(
+      `${this.base}/trades/${encodeURIComponent(tradeId)}/journal`);
+  }
+
   /** The CSV export URL. Returned rather than fetched: the browser should
    *  download this through a normal navigation so it gets a Save dialog and
    *  the server's filename, which an XHR would throw away.
@@ -156,8 +172,27 @@ export class ApiClient {
     return this.http.get<AnalyticsSnapshot>(`${this.base}/analytics/snapshot`);
   }
 
-  analyticsPerformance(): Observable<AnalyticsPerformance> {
-    return this.http.get<AnalyticsPerformance>(`${this.base}/analytics/performance`);
+  /**
+   * SR54 — the range is a query parameter, for the same reason the Trades
+   * filters are: it has to reach the arithmetic. A range applied client-side
+   * to an all-time payload would scope the charts and leave every KPI card
+   * reading all-time, which is worse than no range control at all.
+   *
+   * An omitted bound is omitted from the URL rather than sent empty, so the
+   * server sees "unbounded" instead of having to treat `''` as unset.
+   */
+  analyticsPerformance(range?: { from?: string | null; to?: string | null }):
+    Observable<AnalyticsPerformance> {
+    let params = new HttpParams();
+    if (range?.from) params = params.set('from', range.from);
+    if (range?.to) params = params.set('to', range.to);
+    return this.http.get<AnalyticsPerformance>(
+      `${this.base}/analytics/performance`, { params });
+  }
+
+  /** SR55 — the trailing-week digest and recurring lessons. */
+  analyticsJournal(): Observable<AnalyticsJournal> {
+    return this.http.get<AnalyticsJournal>(`${this.base}/analytics/journal`);
   }
 
   analyticsStrategies(): Observable<AnalyticsStrategies> {
@@ -180,6 +215,18 @@ export class ApiClient {
 
   job(id: string): Observable<Job> {
     return this.http.get<Job>(`${this.base}/jobs/${encodeURIComponent(id)}`);
+  }
+
+  /** A finished tuning job's grid — one row per parameter combination, each
+   *  carrying its own `row_index` and whether it cleared the acceptance bar.
+   *
+   *  Returns an empty grid rather than 404ing while the job is still running,
+   *  so the caller distinguishes "not finished" from "failed" by the job's own
+   *  state, which it already has (SR51). */
+  jobResult(id: string): Observable<JobResult> {
+    return this.http.get<JobResult>(
+      `${this.base}/jobs/${encodeURIComponent(id)}/result`,
+    );
   }
 
   startTuneJob(args: Record<string, unknown>): Observable<JobStarted> {

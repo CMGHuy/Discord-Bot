@@ -11,12 +11,16 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { Dashboard } from '../api/models';
+import { Dashboard, DashboardScope } from '../api/models';
 
 interface DashboardSlice {
   data: Dashboard | null;
   loading: boolean;
   error: string | null;
+  /** SR58 — the date scope. A fetch parameter, so it lives here rather than
+   *  in the component: the server does the date filtering, and a scope held
+   *  in the component could not narrow the realised figures at all. */
+  scope: DashboardScope;
 }
 
 /**
@@ -66,7 +70,9 @@ function finiteNumber(value: unknown): number | null {
  * event stream reconnects seconds later.
  */
 export const DashboardStore = signalStore(
-  withState<DashboardSlice>({ data: null, loading: false, error: null }),
+  withState<DashboardSlice>({
+    data: null, loading: false, error: null, scope: 'active',
+  }),
   withComputed(({ data }) => ({
     /** True until the first response, and never again. Distinguishes "no
      *  data yet" from "a refetch is in flight", which want different UI:
@@ -79,6 +85,19 @@ export const DashboardStore = signalStore(
     riskCapPct: computed(() => data()?.risk_cap_pct ?? null),
 
     openTrades: computed(() => data()?.open_trades ?? 0),
+
+    /* -- SR58: realised P&L over the scoped closes -------------------- */
+
+    /** The scope the SERVER applied, not the one we asked for. If the two
+     *  ever disagree the parameter silently did not take, which is exactly
+     *  what this echo exists to make visible. */
+    appliedScope: computed(() => data()?.scope?.mode ?? null),
+
+    realizedAmount: computed(() => data()?.realized?.amount ?? null),
+    realizedPct: computed(() => data()?.realized?.pct ?? null),
+    realizedCount: computed(() => data()?.realized?.n ?? 0),
+    realizedWins: computed(() => data()?.realized?.wins ?? 0),
+    realizedLosses: computed(() => data()?.realized?.losses ?? 0),
     avgConfidence: computed(() => data()?.avg_confidence ?? null),
     winRate: computed(() => data()?.win_rate ?? null),
     expectancyR: computed(() => data()?.expectancy_r ?? null),
@@ -123,6 +142,42 @@ export const DashboardStore = signalStore(
 
     positionPremiumIsCap: computed(() => data()?.position_premium?.['mode'] === 'risk_pct'),
 
+    /** SR59 -- the raw sizing note, for the workspace to write its
+     *  explanation from. Exposed rather than formatted here: the sentence is
+     *  copy and belongs with the other copy, and this store already refuses
+     *  to hold presentation. */
+    sizingNote: computed(() => data()?.position_premium ?? null),
+
+    /**
+     * The five plan-lifecycle counts — SR53.
+     *
+     * The Jinja dashboard had these as a strip of clickable cards; the SPA had
+     * the status chips they navigated to, with no numbers on them. A chip that
+     * says "Pending" and a chip that says "Pending 4" answer different
+     * questions, and the second is the one worth landing on.
+     *
+     * Rendered in lifecycle order rather than by size: PENDING → ACTIVE →
+     * PARTIAL → CLOSED → CANCELLED is the order a plan moves through, and
+     * sorting by count would reshuffle the row every time a trade closed.
+     *
+     * A count of zero is kept, not dropped. "No pending plans" is information;
+     * a strip that shed its empty entries would change width as the session
+     * went on.
+     */
+    lifecycle: computed<{ status: string; count: number }[]>(() => {
+      const raw = data()?.lifecycle;
+      // An EMPTY object, not just a missing one. `_lifecycle_counts` returns
+      // {} rather than raising, because the Dashboard is the landing page and
+      // one degraded panel beats a 500 for the other nine figures — so {} has
+      // to mean "no strip". Rendering five zeros for it would be a claim about
+      // the account rather than an admission the counts are unavailable.
+      if (!raw || Object.keys(raw).length === 0) return [];
+      return ['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED'].map((status) => ({
+        status,
+        count: finiteNumber(raw[status]) ?? 0,
+      }));
+    }),
+
     /** Risk used as a fraction of the cap, for a meter. Null rather than 0
      *  when either side is missing: an empty meter and a meter at zero look
      *  identical and mean opposite things. */
@@ -134,9 +189,16 @@ export const DashboardStore = signalStore(
     }),
   })),
   withMethods((store, api = inject(ApiClient)) => ({
+    /** SR58 — change the date scope and refetch. */
+    setScope(scope: DashboardScope): void {
+      if (scope === store.scope()) return;
+      patchState(store, { scope });
+      this.load();
+    },
+
     load(): void {
       patchState(store, { loading: true });
-      api.dashboard().subscribe({
+      api.dashboard(store.scope()).subscribe({
         next: (data) => patchState(store, { data, loading: false, error: null }),
         error: (error: ApiError) =>
           patchState(store, {

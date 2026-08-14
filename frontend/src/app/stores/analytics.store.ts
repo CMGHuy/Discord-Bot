@@ -11,7 +11,15 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { AnalyticsCalibration, AnalyticsPerformance, AnalyticsStrategies } from '../api/models';
+import {
+  AnalyticsCalibration,
+  AnalyticsDerived,
+  AnalyticsJournal,
+  AnalyticsPerformance,
+  AnalyticsSnapshot,
+  AnalyticsStrategies,
+} from '../api/models';
+import { HistogramBin } from '../ui/histogram';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -174,6 +182,59 @@ export interface RelocatedMetric {
 
 const PNL_METRICS = new Set(['avg_realized_pct', 'best_trade_pct', 'worst_trade_pct']);
 
+/* -- SR54: the derived figures ------------------------------------------ */
+
+/**
+ * The twelve figures `stats.html` derived in browser JS, now served.
+ *
+ * Same rationale as `RELOCATED_METRICS`: driving the render off one array
+ * makes a lost figure a visible defect rather than a card that quietly stops
+ * appearing. `decimals` is per-metric because these have genuinely different
+ * scales — a Calmar of 1.2 and a volatility of 34.6% should not be rounded
+ * the same way, and an expectancy of 0.08R disappears at one decimal.
+ */
+export const DERIVED_METRICS = [
+  { key: 'total_return_pct', label: 'Total return', unit: '%', decimals: 2, pnl: true },
+  { key: 'annualised_return_pct', label: 'Annualised', unit: '%', decimals: 2, pnl: true },
+  { key: 'avg_win_pct', label: 'Avg win', unit: '%', decimals: 2, pnl: true },
+  { key: 'avg_loss_pct', label: 'Avg loss', unit: '%', decimals: 2, pnl: true },
+  { key: 'win_rate', label: 'Win rate', unit: '%', decimals: 1, pnl: false },
+  { key: 'expectancy_r', label: 'Expectancy', unit: 'R', decimals: 3, pnl: true },
+  { key: 'sharpe_ann', label: 'Sharpe (ann)', unit: '', decimals: 2, pnl: false },
+  { key: 'sortino_ann', label: 'Sortino (ann)', unit: '', decimals: 2, pnl: false },
+  { key: 'calmar', label: 'Calmar', unit: '', decimals: 2, pnl: false },
+  { key: 'volatility_ann_pct', label: 'Volatility (ann)', unit: '%', decimals: 1, pnl: false },
+  { key: 'trades_per_month', label: 'Trades / month', unit: '', decimals: 1, pnl: false },
+  { key: 'pct_in_market', label: '% in market', unit: '%', decimals: 1, pnl: false },
+] as const satisfies readonly {
+  key: keyof AnalyticsDerived;
+  label: string;
+  unit: string;
+  decimals: number;
+  pnl: boolean;
+}[];
+
+/** One derived figure, resolved against the payload and ready to render. */
+export interface DerivedMetric {
+  key: keyof AnalyticsDerived;
+  label: string;
+  unit: string;
+  decimals: number;
+  /** Whether green/red P&L colouring applies. A Sharpe is not money. */
+  pnl: boolean;
+  value: number | null;
+}
+
+/** Every figure null — what the cards show before the first response, and
+ *  what an empty date range legitimately returns. The two look identical on
+ *  purpose: both mean "no number to show", not "the number is zero". */
+const EMPTY_DERIVED: AnalyticsDerived = {
+  avg_win_pct: null, avg_loss_pct: null, total_return_pct: null,
+  annualised_return_pct: null, calmar: null, volatility_ann_pct: null,
+  trades_per_month: null, pct_in_market: null, sharpe_ann: null,
+  sortino_ann: null, win_rate: null, expectancy_r: null,
+};
+
 /** A payload number, or null. Not `Number(value)`: the endpoint returns JSON
  *  `null` for "no closed trades yet", and coercing that to 0 would report a
  *  best trade of exactly break-even on a fresh install. */
@@ -196,12 +257,223 @@ export const ANALYTICS_TABS: readonly AnalyticsTab[] = [
   'tuning',
 ] as const;
 
+/* -- the snapshot (SR50) --------------------------------------------------
+ *
+ * `GET /analytics/snapshot` forwards the whole pre-built analytics blob, and
+ * it already carries every figure `stats.html` charted: profit factor, Sharpe,
+ * Sortino, max drawdown, streaks, the equity and drawdown series, R-multiples,
+ * and a `by` block grouped along ten dimensions. `ApiClient.analyticsSnapshot()`
+ * existed and no store called it, so the parity audit found seventeen "missing"
+ * analytics rows whose data was being served the whole time.
+ *
+ * Narrowed here rather than in a template, and every narrower returns null
+ * rather than 0 for anything it cannot read — `ui/format.ts`'s rule, and the
+ * difference between "we don't know" and "it is zero" on a Sharpe ratio.
+ */
+
+/** One `StatRow` out of the `by` block (`aggregate.py:47-57`). */
+export interface BreakdownRow {
+  key: string;
+  n: number | null;
+  wins: number | null;
+  losses: number | null;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  avg_r: number | null;
+  profit_factor: number | null;
+  total_pnl: number | null;
+}
+
+export interface SeriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface Streaks {
+  current: number | null;
+  currentKind: string | null;
+  bestWin: number | null;
+  worstLoss: number | null;
+}
+
+/** The dimensions the Breakdowns table can group by, in the order they are
+ *  offered. A subset of `aggregate.py:DIMENSIONS`: `strategy` has the whole
+ *  Strategies tab and `confidence` has its own table on this one, so offering
+ *  them here as well would be three views of one number. */
+export const BREAKDOWN_DIMENSIONS = [
+  { value: 'ticker', label: 'Ticker' },
+  { value: 'horizon', label: 'Horizon' },
+  { value: 'direction', label: 'Direction' },
+  { value: 'dow', label: 'Day of week' },
+  { value: 'month', label: 'Month' },
+  { value: 'tier', label: 'Tier' },
+  { value: 'badge', label: 'Badge' },
+  { value: 'source', label: 'Source' },
+] as const;
+
+export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number]['value'];
+
+function snapNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function snapText(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** `{date, balance}` / `{date, dd_pct}` points, flattened to one shape. A point
+ *  missing either half is dropped: a gap in a series is not a zero, and
+ *  drawing it as one invents a crash that never happened. */
+function toSeries(raw: unknown[], valueKey: string): SeriesPoint[] {
+  return raw.flatMap((point) => {
+    if (!isPlainRecord(point)) return [];
+    const date = snapText(point['date']);
+    const value = snapNumber(point[valueKey]);
+    return date !== null && value !== null ? [{ date, value }] : [];
+  });
+}
+
+function toBreakdownRows(raw: unknown[]): BreakdownRow[] {
+  return raw.flatMap((row) => {
+    if (!isPlainRecord(row)) return [];
+    const key = snapText(row['key']);
+    if (key === null) return [];
+    return [{
+      key,
+      n: snapNumber(row['n']),
+      wins: snapNumber(row['wins']),
+      losses: snapNumber(row['losses']),
+      win_rate: snapNumber(row['win_rate']),
+      expectancy_r: snapNumber(row['expectancy_r']),
+      avg_r: snapNumber(row['avg_r']),
+      profit_factor: snapNumber(row['profit_factor']),
+      total_pnl: snapNumber(row['total_pnl']),
+    }];
+  });
+}
+
+/** One histogram bin. */
+export interface Bin {
+  label: string;
+  count: number;
+}
+
+/**
+ * R-multiples binned at 0.5R.
+ *
+ * Bins rather than the raw list because the shape is the point: a healthy edge
+ * is a cluster of small losses and a tail of larger wins, and that is a
+ * statement about a distribution, not about any one trade. Clamped at ±5R so a
+ * single outlier cannot flatten every other bin to invisibility.
+ */
+export function binRMultiples(values: number[], width = 0.5): Bin[] {
+  if (!values.length) return [];
+  const LIMIT = 5;
+  const counts = new Map<number, number>();
+  for (const value of values) {
+    const clamped = Math.max(-LIMIT, Math.min(LIMIT, value));
+    const bin = Math.floor(clamped / width) * width;
+    counts.set(bin, (counts.get(bin) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([bin, count]) => ({
+      label: `${bin > 0 ? '+' : ''}${bin.toFixed(1)}R`,
+      count,
+    }));
+}
+
+/**
+ * One row of a tuning grid (SR51).
+ *
+ * `passes` and `row_index` are both computed server-side and carried on the
+ * row. The acceptance bar is four conditions and it is the same bar
+ * `scripts/tune_strategy.py` prints, so restating it here would be a second
+ * definition that could disagree; the index is what `POST /proposals`
+ * identifies a row by, and inferring it from array position would break the
+ * moment anything sorted the table.
+ */
+export interface GridRow {
+  row_index: number;
+  params: Record<string, unknown>;
+  paramLabel: string;
+  n_eval: number | null;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  excluded_share: number | null;
+  passes: boolean;
+}
+
+function toGridRows(raw: unknown[]): GridRow[] {
+  return raw.flatMap((row, index) => {
+    if (!isPlainRecord(row)) return [];
+    const params = isPlainRecord(row['params']) ? row['params'] : {};
+    return [{
+      // The server's index if it sent one; the array position only as a
+      // fallback, so a hand-written fixture still works.
+      row_index: snapNumber(row['row_index']) ?? index,
+      params,
+      // Flattened once here rather than in the template: a cell that iterated
+      // an object would be asserting the wire format.
+      paramLabel: Object.entries(params)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(', '),
+      n_eval: snapNumber(row['n_eval']),
+      win_rate: snapNumber(row['win_rate']),
+      expectancy_r: snapNumber(row['expectancy_r']),
+      excluded_share: snapNumber(row['excluded_share']),
+      passes: row['passes'] === true,
+    }];
+  });
+}
+
 interface AnalyticsSlice {
   /** Which tab is open, projected from the URL's `?tab=`. Held here rather
    *  than in the component because it decides what gets fetched. */
   tab: AnalyticsTab;
 
   performance: AnalyticsPerformance | null;
+  /**
+   * SR54 — the date range scoping every derived figure, as `YYYY-MM-DD` or
+   * null for unbounded.
+   *
+   * Held in the store rather than the component because it is a *fetch*
+   * parameter: changing it re-requests `/analytics/performance`. A range kept
+   * in component state would have to reach back into the store to trigger
+   * that, which is the wiring spec v14 Decision 1 pushes into the store on
+   * purpose.
+   */
+  rangeFrom: string | null;
+  rangeTo: string | null;
+  /** SR55 — the trailing-week digest and recurring lessons. Its own field
+   *  and its own error for the same reason the snapshot has them: it comes
+   *  from a different endpoint, and losing it is not a reason to warn about
+   *  panels that arrived fine. */
+  journal: AnalyticsJournal | null;
+  journalError: string | null;
+  /** SR50 — the pre-built blob, fetched alongside `performance`. */
+  snapshot: AnalyticsSnapshot | null;
+  /** Its own error: the snapshot self-heals on the server and can rebuild on
+   *  the request, so a failure here is not a reason to warn about the rest of
+   *  the tab, which came from a different endpoint that may be fine. */
+  snapshotError: string | null;
+  /** Which dimension the Breakdowns table is grouped by. */
+  breakdown: BreakdownDimension;
+
+  /** SR51 — the tracked job's grid, one row per parameter combination.
+   *  Empty while it is still running, which the endpoint answers with a 200
+   *  rather than a 404 so this never has to mean "something failed". */
+  gridStrategy: string | null;
+  grid: GridRow[];
+  /** The row currently being staged, by index — so only its own button shows
+   *  a pending state rather than the whole table going quiet. */
+  proposing: number | null;
+  proposeError: string | null;
+  proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
   jobs: JobSummary[];
@@ -249,6 +521,18 @@ export const AnalyticsStore = signalStore(
   withState<AnalyticsSlice>({
     tab: 'performance',
     performance: null,
+    rangeFrom: null,
+    rangeTo: null,
+    journal: null,
+    journalError: null,
+    snapshot: null,
+    snapshotError: null,
+    breakdown: 'ticker',
+    gridStrategy: null,
+    grid: [],
+    proposing: null,
+    proposeError: null,
+    proposeResult: null,
     strategies: null,
     calibration: null,
     jobs: [],
@@ -260,7 +544,66 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, jobs, job }) => ({
+  withComputed(({ performance, strategies, calibration, jobs, job, snapshot, breakdown,
+                 journal }) => ({
+    /* -- SR50: the snapshot's own figures ------------------------------- */
+
+    /** When the blob was assembled. Worth showing: the server serves a
+     *  snapshot up to an hour old and rebuilds on demand past that, so "these
+     *  numbers are from 09:15" is a real thing to know. */
+    snapshotBuiltAt: computed(() => snapText(snapshot()?.built_at)),
+
+    profitFactor: computed(() => snapNumber(snapshot()?.overall?.['profit_factor'])),
+    sharpe: computed(() => snapNumber(snapshot()?.overall?.['sharpe'])),
+    sortino: computed(() => snapNumber(snapshot()?.overall?.['sortino'])),
+    maxDrawdownPct: computed(() => snapNumber(snapshot()?.overall?.['max_drawdown_pct'])),
+    totalPnl: computed(() => snapNumber(snapshot()?.overall?.['total_pnl'])),
+
+    /** Current run, and the best and worst ever. Never rendered even by the
+     *  Jinja page, which computed them and dropped them on the floor. */
+    streaks: computed<Streaks | null>(() => {
+      const raw = snapshot()?.overall?.['streaks'];
+      if (!isPlainRecord(raw)) return null;
+      return {
+        current: snapNumber(raw['current']),
+        currentKind: snapText(raw['current_kind']),
+        bestWin: snapNumber(raw['best_win_streak']),
+        worstLoss: snapNumber(raw['worst_loss_streak']),
+      };
+    }),
+
+    /** The account balance over time — the series behind the Dashboard's
+     *  30-day sparkline, in full and in account currency. */
+    equitySeries: computed<SeriesPoint[]>(() =>
+      toSeries((snapshot()?.equity_curve?.points ?? []) as unknown[], 'balance'),
+    ),
+
+    /** How far below its own peak the account sat at each point. */
+    drawdownSeries: computed<SeriesPoint[]>(() =>
+      toSeries((snapshot()?.drawdown ?? []) as unknown[], 'dd_pct'),
+    ),
+
+    rMultipleBins: computed<Bin[]>(() =>
+      binRMultiples(
+        ((snapshot()?.r_multiples ?? []) as unknown[])
+          .map(snapNumber)
+          .filter((value): value is number => value !== null),
+      ),
+    ),
+
+    /** The chosen dimension's rows, busiest group first — `stats_by` already
+     *  sorts by trade count descending, which is the order every table in this
+     *  cockpit wants. */
+    breakdownRows: computed<BreakdownRow[]>(() =>
+      toBreakdownRows((snapshot()?.by?.[breakdown()] ?? []) as unknown[]),
+    ),
+
+    breakdownLabel: computed(
+      () =>
+        BREAKDOWN_DIMENSIONS.find((d) => d.value === breakdown())?.label ??
+        breakdown(),
+    ),
+
     /* -- performance --------------------------------------------------- */
 
     /**
@@ -297,6 +640,99 @@ export const AnalyticsStore = signalStore(
 
     winRate: computed(() => performance()?.win_rate ?? null),
     expectancyR: computed(() => performance()?.expectancy_r ?? null),
+
+    /* -- SR54: the figures that used to be derived in the browser -------- */
+
+    /**
+     * The derived block, or an all-null one before the first response.
+     *
+     * All-null rather than `null` so the KPI grid renders its cards with em
+     * dashes on first paint instead of collapsing and then reflowing when the
+     * payload lands. `DERIVED_METRICS` drives the render off this, the same
+     * pattern (and for the same auditability reason) as `RELOCATED_METRICS`.
+     */
+    derived: computed<AnalyticsDerived>(
+      () => performance()?.derived ?? EMPTY_DERIVED),
+
+    /** The derived figures resolved into render-ready rows. */
+    derivedMetrics: computed<DerivedMetric[]>(() => {
+      const block = performance()?.derived ?? EMPTY_DERIVED;
+      return DERIVED_METRICS.map((metric) => ({
+        ...metric,
+        value: block[metric.key] ?? null,
+      }));
+    }),
+
+    /** What the server says it scoped to — echoed back, not what we asked
+     *  for. If the two ever disagree the range silently did not apply, which
+     *  is exactly the failure this echo exists to make visible. */
+    appliedRange: computed(() => performance()?.range ?? null),
+
+    /** True once a bound is set, so the UI can offer "clear" and label the
+     *  section as scoped rather than all-time. */
+    rangeActive: computed(() => {
+      const range = performance()?.range;
+      return Boolean(range?.from || range?.to);
+    }),
+
+    /** Trades inside the window. Shown beside the figures because a Calmar
+     *  computed on four trades and one computed on four hundred should not
+     *  look equally authoritative. */
+    rangeSampleSize: computed(() => performance()?.range?.n ?? 0),
+
+    /** Server buckets mapped onto `sb-histogram`'s `{label, count}` contract.
+     *  The label is the bucket's LOWER edge, which is what makes the default
+     *  "starts with a minus sign means loss" predicate correct — labelling by
+     *  midpoint would mark the bucket straddling zero as a win. */
+    returnsHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.distributions?.returns ?? []).map((bucket) => ({
+        label: `${bucket.lo.toFixed(1)}%`,
+        count: bucket.count,
+      }))),
+
+    rHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.distributions?.r_multiples ?? []).map((bucket) => ({
+        label: `${bucket.lo.toFixed(2)}R`,
+        count: bucket.count,
+      }))),
+    rollingReturns: computed(() => performance()?.rolling_returns ?? []),
+    holdingSplit: computed(() => performance()?.holding_period_split ?? []),
+    calendarReturns: computed(() => performance()?.calendar ?? []),
+
+    /** `{strategy: points}` flattened into sorted series, so the chart never
+     *  iterates object keys and never redraws in a different order. */
+    cumulativeByStrategy: computed(() => {
+      const block = performance()?.cumulative_by_strategy ?? {};
+      return Object.entries(block)
+        .map(([strategy, points]) => ({ strategy, points }))
+        .sort((a, b) => a.strategy.localeCompare(b.strategy));
+    }),
+
+    /** SPY's cumulative % return, as a sorted series. Empty when the fetch
+     *  was unavailable — the benchmark overlay is best-effort by design. */
+    benchmarkSeries: computed(() => {
+      const block = performance()?.benchmark?.spy_cum ?? {};
+      return Object.entries(block)
+        .map(([date, pct]) => ({ date, pct }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }),
+
+    /* -- SR55: the journal's analytics half ----------------------------- */
+
+    digest: computed<string[]>(() => journal()?.digest ?? []),
+    lessons: computed<string[]>(() => journal()?.lessons ?? []),
+
+    /** Entries behind the two lists above. Shown with them: a digest drawn
+     *  from three entries and one drawn from three hundred read very
+     *  differently, and neither list says so on its own. */
+    journalEntryCount: computed(() => journal()?.entries_n ?? 0),
+
+    /** True once the endpoint has answered with nothing to say — distinct
+     *  from "has not answered yet", which must not render as "no lessons". */
+    journalEmpty: computed(() => {
+      const data = journal();
+      return data !== null && data.digest.length === 0 && data.lessons.length === 0;
+    }),
 
     totals: computed(() => {
       const block = performance()?.totals as Record<string, unknown> | undefined;
@@ -398,10 +834,44 @@ export const AnalyticsStore = signalStore(
 
     const loadPerformance = (): void => {
       patchState(store, { loading: true });
-      api.analyticsPerformance().subscribe({
-        next: (performance) =>
-          patchState(store, { performance, loading: false, error: null }),
-        error: fail,
+      // SR54: the range travels to the server. See ApiClient.analyticsPerformance
+      // for why it cannot be applied to an all-time payload on the client.
+      api.analyticsPerformance({ from: store.rangeFrom(), to: store.rangeTo() })
+        .subscribe({
+          next: (performance) =>
+            patchState(store, { performance, loading: false, error: null }),
+          error: fail,
+        });
+
+      // SR55. A third request, and a third failure mode, for the same reason
+      // the snapshot is separate: the journal lives in its own store and its
+      // own module, and folding it into the performance response would make a
+      // journal read failure empty the KPI cards.
+      api.analyticsJournal().subscribe({
+        next: (journal) => patchState(store, { journal, journalError: null }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            journalError:
+              error.code === 'unavailable'
+                ? 'The admin is not responding.'
+                : error.message,
+          }),
+      });
+
+      // SR50. A second request rather than a widened /analytics/performance:
+      // the snapshot is a whole pre-built blob served by its own endpoint, and
+      // folding it into the summary response would make every Performance
+      // visit carry the equity curve whether or not the panels using it are on
+      // screen. It fails on its own terms -- see `snapshotError`.
+      api.analyticsSnapshot().subscribe({
+        next: (snapshot) => patchState(store, { snapshot, snapshotError: null }),
+        error: (error: ApiError) =>
+          patchState(store, {
+            snapshotError:
+              error.code === 'unavailable'
+                ? 'The admin is not responding.'
+                : error.message,
+          }),
       });
     };
 
@@ -453,6 +923,22 @@ export const AnalyticsStore = signalStore(
         next: (job) => patchState(store, { job: job as JobStatus, error: null }),
         error: fail,
       });
+
+      // SR51. Fetched unconditionally rather than only for a finished job:
+      // the endpoint answers 200 with an empty grid while one is still
+      // running, and branching on state here would mean the results table
+      // stayed blank for a job that finished between the two responses.
+      api.jobResult(id).subscribe({
+        next: (result) =>
+          patchState(store, {
+            gridStrategy: result.strategy,
+            grid: toGridRows(result.grid ?? []),
+          }),
+        // Deliberately quiet. A missing result file is the ordinary state of a
+        // running or failed job, and the panel renders nothing rather than
+        // claiming an error the job's own state already explains.
+        error: () => patchState(store, { grid: [], gridStrategy: null }),
+      });
     };
 
     const loadTuning = (): void => {
@@ -498,6 +984,37 @@ export const AnalyticsStore = signalStore(
         patchState(store, { tab });
       },
 
+      /** Which dimension the Breakdowns table groups by. Local state, not a
+       *  query parameter: it refetches nothing — every dimension is already in
+       *  the one snapshot — so there is no request for the URL to describe. */
+      setBreakdown(breakdown: BreakdownDimension): void {
+        patchState(store, { breakdown });
+      },
+
+      /**
+       * SR54 — set the analytics date range and refetch.
+       *
+       * Unlike `setBreakdown` this DOES refetch, because the arithmetic lives
+       * on the server. Both bounds are set together in one call so a user
+       * picking a range never triggers two requests, the second of which
+       * would race the first and could land older numbers last.
+       *
+       * An out-of-order pair is normalised rather than rejected: a date picker
+       * mid-edit legitimately passes through `from > to`, and refusing it
+       * would surface an error for a state the user is about to fix anyway.
+       */
+      setRange(from: string | null, to: string | null): void {
+        const [lo, hi] = from && to && from > to ? [to, from] : [from, to];
+        patchState(store, { rangeFrom: lo || null, rangeTo: hi || null });
+        loadPerformance();
+      },
+
+      /** Back to all-time. */
+      clearRange(): void {
+        patchState(store, { rangeFrom: null, rangeTo: null });
+        loadPerformance();
+      },
+
       load,
       loadTuning,
 
@@ -525,6 +1042,45 @@ export const AnalyticsStore = signalStore(
               launchError:
                 error.code === 'conflict'
                   ? 'A job is already running — only one at a time.'
+                  : error.message,
+            }),
+        });
+      },
+
+      /**
+       * Stage one grid row as a proposal — SR51, the action that closes the
+       * loop.
+       *
+       * Not an apply, and the server's own note says so: applying means
+       * editing `entry_filters.DEFAULT_PARAMS` by hand, running the suite, and
+       * only then spending a validation shot. This records a candidate.
+       */
+      propose(rowIndex: number): void {
+        const jobId = store.job()?.id;
+        if (!jobId) return;
+
+        patchState(store, {
+          proposing: rowIndex,
+          proposeError: null,
+          proposeResult: null,
+        });
+        api.createProposal({ job_id: jobId, row_index: rowIndex }).subscribe({
+          next: (created) => {
+            patchState(store, {
+              proposing: null,
+              // Named, not just "done": the proposals list below is sorted
+              // newest-first and can be long, and "which one did I just add"
+              // is the immediate next question.
+              proposeResult: `Staged as ${created.filename}.`,
+            });
+            loadProposals();
+          },
+          error: (error: ApiError) =>
+            patchState(store, {
+              proposing: null,
+              proposeError:
+                error.code === 'not_found'
+                  ? 'That job or row is no longer available — reload and try again.'
                   : error.message,
             }),
         });

@@ -203,3 +203,47 @@
 @media (min-width: 1920px) {
   .workspace { max-width: 1760px; margin-inline: auto; }
 }
+
+/* -- SR58: market session, zoom, version footer ---------------------- */
+
+.market {
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: var(--text-micro);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* Open is the noteworthy state, so only it takes a colour. Closed stays
+   faint text -- colouring both would spend two hues on one boolean. */
+.market-open { color: var(--pos); }
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-faint);
+  font-size: var(--text-micro);
+}
+
+.zoom select {
+  font: inherit;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-4);
+}
+
+.version {
+  display: flex;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-10);
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.version .updated { margin-left: auto; }

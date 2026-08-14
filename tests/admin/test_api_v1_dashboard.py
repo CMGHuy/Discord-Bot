@@ -38,6 +38,13 @@ DASHBOARD = {
     "expectancy_r": NULLABLE_NUMBER,
     "equity_30d": dict,
     "position_premium": dict,
+    # SR53. The five plan-lifecycle counts the Jinja dashboard's strip showed.
+    # Not a tenth metric on the header -- the SPA renders them as filter links
+    # into Trades, which is what the Jinja cards were.
+    "lifecycle": dict,
+    # SR58. The date-scope toggle and the realised figures it scopes.
+    "scope": dict,
+    "realized": dict,
 }
 
 RELOCATED = [
@@ -67,6 +74,21 @@ def test_requires_auth(client):
 def test_returns_exactly_the_nine_metrics(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/dashboard").get_json(), DASHBOARD)
+
+
+def test_lifecycle_counts_cover_the_five_plan_statuses(seed, logged_in):
+    """SR53. The strip's counts, which the SPA had as chips with no numbers.
+
+    PENDING/ACTIVE/PARTIAL are all-time and CLOSED/CANCELLED count only today's
+    — a lifetime CLOSED count only ever goes up and says nothing about the
+    session. `_plan_rows` already scopes them that way; this projects rather
+    than recomputes.
+    """
+    seed()
+    lifecycle = logged_in.get("/api/v1/dashboard").get_json()["lifecycle"]
+
+    assert set(lifecycle) == {"PENDING", "ACTIVE", "PARTIAL", "CLOSED", "CANCELLED"}
+    assert all(isinstance(n, int) for n in lifecycle.values())
 
 
 def test_relocated_metrics_are_absent(seed, logged_in):
@@ -153,3 +175,135 @@ def test_the_jinja_dashboard_kept_its_own_url_under_jinja(logged_in):
     URL for this page precisely so enabling the SPA could not strand it.
     """
     assert logged_in.get("/jinja/dashboard").status_code == 200
+
+
+# --------------------------------------------------------------- SR58
+
+def _closed(trade_id, *, closed_at, amount, pct_entry=100.0, pct_exit=110.0,
+            status="win"):
+    """A closed trade with a realised amount and a derivable percentage."""
+    return {
+        "id": trade_id, "plan_id": None, "ticker": "AAPL",
+        "strategy": "RSI Divergence", "horizon_key": "1m",
+        "direction": "bullish", "confidence_level": 4,
+        "confidence_label": "High", "confidence_score": 81.0,
+        "entry": pct_entry, "stop_loss": 95.0, "take_profit": 120.0,
+        "target2": None, "risk_reward_ratio": 1.8, "tier": "A",
+        "badge": "VALIDATED", "quality_score": 72, "source": "strategy",
+        "legs": [], "opened_at": "2026-08-01T10:00:00+00:00", "status": status,
+        "closed_at": closed_at, "exit_price": pct_exit,
+        "realized_pnl_amount": amount, "shares": 10, "position_value": 1000.0,
+        "target_sources": [], "stop_sources": [], "target2_sources": [],
+        "confirmed_by": [], "explanation": None, "confidence_breakdown": None,
+    }
+
+
+def _today_iso():
+    """Today in Europe/Berlin, which is what `is_today_berlin` compares to."""
+    from swingbot.admin.dashboard import is_today_berlin
+    from datetime import datetime, timedelta, timezone as tz
+    now = datetime.now(tz.utc)
+    for delta in (0, 1, -1):
+        candidate = (now + timedelta(hours=delta)).isoformat()
+        if is_today_berlin(candidate):
+            return candidate
+    return now.isoformat()
+
+
+def test_scope_defaults_to_active_and_is_echoed_back(seed, logged_in):
+    seed()
+    body = logged_in.get("/api/v1/dashboard").get_json()
+    assert_shape(body["scope"], {"mode": str}, where="scope")
+    assert body["scope"]["mode"] == "active"
+
+
+def test_realized_block_is_shaped_even_with_no_trades(seed, logged_in):
+    seed()
+    realized = logged_in.get("/api/v1/dashboard").get_json()["realized"]
+    assert_shape(realized, {
+        "amount": NULLABLE_NUMBER, "pct": NULLABLE_NUMBER,
+        "n": int, "wins": int, "losses": int,
+    }, where="realized")
+    # None, not 0.0: "nothing closed" and "closed flat" are different facts.
+    assert realized["amount"] is None
+    assert realized["n"] == 0
+
+
+def test_today_scope_counts_only_todays_closes(seed, logged_in):
+    seed(trades=[
+        _closed("a" * 16, closed_at=_today_iso(), amount=120.0),
+        _closed("b" * 16, closed_at="2026-01-05T15:00:00+00:00", amount=999.0),
+    ])
+    realized = logged_in.get("/api/v1/dashboard?mode=today").get_json()["realized"]
+    assert realized["n"] == 1
+    assert realized["amount"] == 120.0
+
+
+def test_all_scope_counts_every_close(seed, logged_in):
+    seed(trades=[
+        _closed("c" * 16, closed_at=_today_iso(), amount=120.0),
+        _closed("d" * 16, closed_at="2026-01-05T15:00:00+00:00", amount=80.0),
+    ])
+    realized = logged_in.get("/api/v1/dashboard?mode=all").get_json()["realized"]
+    assert realized["n"] == 2
+    assert realized["amount"] == 200.0
+
+
+def test_active_and_today_agree_on_realized(seed, logged_in):
+    """Open trades have no realised P&L, so the only thing separating the two
+    modes cannot show up here. Asserted so a later change does not invent a
+    difference -- the same call `2026-08-07-v9` made for Trade History."""
+    seed(trades=[
+        _closed("e" * 16, closed_at=_today_iso(), amount=50.0),
+        _closed("f" * 16, closed_at="2026-01-05T15:00:00+00:00", amount=70.0),
+    ])
+    active = logged_in.get("/api/v1/dashboard?mode=active").get_json()["realized"]
+    today = logged_in.get("/api/v1/dashboard?mode=today").get_json()["realized"]
+    assert active == today
+
+
+def test_realized_splits_wins_and_losses(seed, logged_in):
+    seed(trades=[
+        _closed("g" * 16, closed_at=_today_iso(), amount=50.0, status="win"),
+        _closed("h" * 16, closed_at=_today_iso(), amount=-20.0, status="loss",
+                pct_exit=90.0),
+    ])
+    realized = logged_in.get("/api/v1/dashboard?mode=today").get_json()["realized"]
+    assert realized["wins"] == 1
+    assert realized["losses"] == 1
+    assert realized["amount"] == 30.0
+
+
+def test_unknown_mode_is_a_400_not_a_silent_fallback(seed, logged_in):
+    seed()
+    assert_error(logged_in.get("/api/v1/dashboard?mode=last-week"), "invalid", 400)
+
+
+def test_health_carries_the_versions_and_the_market_session(logged_in):
+    """SR58. `/health` is where the shell reads its footer from.
+
+    Auth-guarded like every other v1 route -- `test_api_v1_session.py` pins
+    the 401, and this task does not change it.
+    """
+    body = logged_in.get("/api/v1/health").get_json()
+    assert_shape(body, {"ok": bool, "versions": dict, "market_active": bool})
+    assert_shape(body["versions"], {
+        "ui": str, "bot": str, "last_updated": (str, type(None)),
+    }, where="versions")
+
+
+def test_train_window_still_matches_the_dates_the_spa_prints():
+    """SR62 printed the TRAIN window into the Analytics workspace as literal
+    text, because it is a frozen constant and serving it would be an endpoint
+    for two dates that never move.
+
+    "Never move" is the assumption this test holds. If `TRAIN_WINDOW` ever
+    changes, the SPA would keep printing the old dates with nothing to catch
+    it -- copy that states a stale window is worse than no copy.
+    """
+    from swingbot.admin.jobs import TRAIN_WINDOW
+
+    assert TRAIN_WINDOW == ("2020-01-01", "2023-12-31"), (
+        "TRAIN_WINDOW changed. Update the literal dates in "
+        "frontend/src/app/workspaces/analytics/analytics.ts (Run a TRAIN grid)."
+    )

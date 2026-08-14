@@ -67,6 +67,15 @@ TRADE_ROW = {
     "opened_at": NULLABLE_STR,
     "closed_at": NULLABLE_STR,
     "has_note": bool,
+    # SR53 — the plan's own numbers, so a row that has not filled is not
+    # mostly nulls. `created_at` is the only time an unfilled plan has;
+    # `trigger_price` is its only actionable price; `follow_score` is the
+    # plans board's ranking column, which was not on the wire at all.
+    # All three on both origins: a legacy row emits nulls rather than omitting
+    # the keys, so there is one row shape rather than two.
+    "created_at": NULLABLE_STR,
+    "trigger_price": NULLABLE_NUMBER,
+    "follow_score": NULLABLE_NUMBER,
     # SR7 -- the status bar. All five on every row, terminal ones included: a
     # cell that must check whether a field exists has a second render path,
     # and the second one only runs on data nobody tests with.
@@ -330,6 +339,168 @@ def test_second_page_returns_different_rows(seed, logged_in):
 def test_unknown_filter_is_rejected(seed, logged_in):
     seed()
     assert_error(logged_in.get("/api/v1/trades?tikcer=AAPL"), "invalid", 400)
+
+
+# --- SR52: the filters that had no control --------------------------------
+#
+# The parity audit found five list filters the Jinja UI had and the SPA did
+# not. Three -- strategy, horizon, tier -- were already accepted here and
+# merely had nothing sending them. Two were accepted by neither side.
+#
+# `tag` is the one deliberately left out: journal tags are not on a trade row
+# at all, so filtering by one needs the journal endpoint SR55 adds. Recorded
+# here so its absence reads as a decision rather than an oversight.
+
+
+def test_strategy_filter(seed, logged_in):
+    """Already in FILTERS before SR52; pinned now that a control sends it."""
+    seed(plans=[
+        _plan("11111111-1111-4111-8111-111111111111", strategy="RSI Divergence"),
+        _plan("22222222-2222-4222-8222-222222222222", strategy="VWAP"),
+    ])
+    body = logged_in.get("/api/v1/trades?strategy=VWAP").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["strategy"] == "VWAP"
+
+
+def test_horizon_filter(seed, logged_in):
+    seed(plans=[
+        {**_plan("11111111-1111-4111-8111-111111111111"), "horizon_key": "2w"},
+        {**_plan("22222222-2222-4222-8222-222222222222"), "horizon_key": "6m"},
+    ])
+    body = logged_in.get("/api/v1/trades?horizon=6m").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["horizon"] == "6m"
+
+
+def test_tier_filter(seed, logged_in):
+    seed(plans=[
+        {**_plan("11111111-1111-4111-8111-111111111111"), "tier": "A"},
+        {**_plan("22222222-2222-4222-8222-222222222222"), "tier": "C"},
+    ])
+    body = logged_in.get("/api/v1/trades?tier=C").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["tier"] == "C"
+
+
+def test_badge_filter(seed, logged_in):
+    """New in SR52 -- the plans board had it and this endpoint did not."""
+    seed(plans=[
+        {**_plan("11111111-1111-4111-8111-111111111111"), "badge": "VALIDATED"},
+        {**_plan("22222222-2222-4222-8222-222222222222"), "badge": "WEAK"},
+    ])
+    body = logged_in.get("/api/v1/trades?badge=WEAK").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["badge"] == "WEAK"
+
+
+@pytest.mark.parametrize("value", ["weak", "WEAK", "Weak"])
+def test_badge_filter_is_case_insensitive(seed, logged_in, value):
+    """NG54's shape, pre-empted. A `?badge=weak` that quietly matched nothing
+    would read as "no weak-badged trades", which is a perfectly ordinary thing
+    for this UI to say -- and is how the status chips stayed broken for a
+    phase."""
+    seed(plans=[{**_plan("22222222-2222-4222-8222-222222222222"), "badge": "WEAK"}])
+    assert logged_in.get(f"/api/v1/trades?badge={value}").get_json()["total"] == 1
+
+
+def test_confidence_filter(seed, logged_in):
+    """`confidence` in the URL, `confidence_level` on the row.
+
+    The parameter is named for what the chip row calls it; the row field keeps
+    its own name. The alias is what makes both true at once.
+    """
+    seed(trades=[
+        {**_trade("aaaaaaaaaaaaaaaa"), "confidence_level": 5},
+        {**_trade("bbbbbbbbbbbbbbbb"), "confidence_level": 2},
+    ])
+    body = logged_in.get("/api/v1/trades?confidence=5").get_json()
+    assert body["total"] == 1
+    assert body["items"][0]["confidence_level"] == 5
+
+
+def test_an_unsatisfiable_new_filter_is_empty_not_an_error(seed, logged_in):
+    """Same convention as `outcome`: unsatisfiable is not malformed."""
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111")])
+    resp = logged_in.get("/api/v1/trades?badge=NOSUCHBADGE")
+    assert resp.status_code == 200
+    assert resp.get_json()["total"] == 0
+
+
+def test_tag_is_not_a_trade_filter(seed, logged_in):
+    """Deliberately rejected rather than silently ignored.
+
+    A journal tag is not a field on a trade row, and `FILTERS` exists so that a
+    parameter this endpoint cannot honour is a 400 rather than a filter that
+    appears to work and returns everything.
+    """
+    seed()
+    assert_error(logged_in.get("/api/v1/trades?tag=revenge"), "invalid", 400)
+
+
+def test_a_pending_plan_carries_its_creation_time_and_trigger(seed, logged_in):
+    """SR53. The row a PENDING plan produces used to be mostly nulls.
+
+    `opened_at`, `held_hours` and `entry` all describe an execution that has
+    not happened. What the plan HAS is when it was created and the price it is
+    waiting for, and the plans board showed both.
+    """
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111", status="PENDING")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+
+    assert row["created_at"] == "2026-08-01T10:00:00+00:00"
+    assert row["trigger_price"] == 100.0
+
+
+def test_a_plan_row_is_ranked(seed, logged_in):
+    """follow_score is a composite over the plan population, so it is attached
+    for the whole set in one pass rather than scored per row."""
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+
+    assert row["follow_score"] is not None
+    assert 0 <= row["follow_score"] <= 100
+
+
+def test_a_legacy_row_has_no_plan_numbers_but_still_has_the_keys(seed, logged_in):
+    """One row shape for both origins. A client that had to check whether a key
+    exists would have a second render path, and the second one only runs on
+    data nobody tests with."""
+    seed(trades=[_trade("aaaaaaaaaaaaaaaa")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+
+    assert row["origin"] == "legacy"
+    assert row["trigger_price"] is None
+    assert row["follow_score"] is None
+    # A legacy trade has no creation apart from its open, which is what it gets.
+    assert row["created_at"] == row["opened_at"]
+
+
+def test_sorting_by_follow_score_sinks_the_unranked(seed, logged_in):
+    """Valueless rows last in BOTH directions.
+
+    A descending sort that floated every unranked legacy row to the top would
+    make "best-ranked first" show a screenful of rows with no ranking.
+    """
+    seed(
+        plans=[_plan("11111111-1111-4111-8111-111111111111")],
+        trades=[_trade("aaaaaaaaaaaaaaaa")],
+    )
+    items = logged_in.get("/api/v1/trades?sort=-follow_score").get_json()["items"]
+
+    assert items[0]["follow_score"] is not None
+    assert items[-1]["follow_score"] is None
+
+
+def test_new_filters_narrow_the_total_not_just_the_page(seed, logged_in):
+    """`total` stays post-filter, pre-slice for the new filters too."""
+    seed(plans=(
+        [{**_plan(f"{i:08d}-1111-4111-8111-111111111111"), "tier": "A"} for i in range(12)]
+        + [{**_plan(f"{i:08d}-2222-4222-8222-222222222222"), "tier": "C"} for i in range(8)]
+    ))
+    body = logged_in.get("/api/v1/trades?tier=C&per_page=5").get_json()
+    assert body["total"] == 8
+    assert len(body["items"]) == 5
 
 
 def test_unsortable_field_is_rejected(seed, logged_in):

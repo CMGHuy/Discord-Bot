@@ -162,6 +162,12 @@ import { Sparkline } from '../../ui/sparkline';
         @if (store.paused()) {
           <span class="state warn">Scanning paused</span>
         }
+        <!-- SR62. risk.html:125-129. -->
+        <p class="section-help">
+          Derived from the account's own equity curve: the deeper the current
+          drawdown, the smaller every new position, so a losing run compounds
+          down instead of up.
+        </p>
         @if (store.throttled()) {
           <!-- The drawdown throttle sizes new positions down without
                stopping them. It is not the killswitch and must not read as
@@ -206,6 +212,12 @@ import { Sparkline } from '../../ui/sparkline';
       </sb-panel>
 
       <sb-panel heading="Correlated clusters">
+        <!-- SR62. risk.html:97-100. The panel listed the clusters without
+             ever saying why they matter. -->
+        <p class="section-help">
+          Positions in one cluster tend to lose together, so their combined
+          risk is larger than the per-trade numbers suggest.
+        </p>
         @if (store.clusters(); as clusters) {
           @if (clusters.length) {
             <!-- Correlated positions are one bet wearing several tickers:

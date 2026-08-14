@@ -10,9 +10,12 @@ Green means **`0 failed`**. Nothing subtler.
 
 That used to require judgment: the suite carried one wall-clock-dependent
 failure, and every run meant deciding whether the single failure was *that*
-one or a real regression. It is now quarantined `xfail(strict=False)`, so the
-comparison is mechanical. Do not re-litigate it and do not "fix" it — that is
-a forbidden side quest.
+one or a real regression. It was quarantined `xfail(strict=False)` to make the
+comparison mechanical, and **as of 2026-08-14 it is fixed rather than
+quarantined** — the test injects its bar count instead of counting real
+trading days from a fixed 2026-07-11 fixture. The suite now carries **no
+xfail at all**, so `0 failed` and `0 xfailed` are both expected. A new
+`xfailed` is a new quarantine someone added; find out why.
 
 ## Step 1 — Do not fight another session for the CPU
 
@@ -64,7 +67,7 @@ The wrapper prints exactly one of:
 - `VERDICT: UNKNOWN` — the output could not be parsed. A tooling problem, and
   **never** to be read as success. Investigate the wrapper or the exit code.
 
-Reference baseline: **~1015 passed, 136 skipped, 1 xfailed, 0 failed** (1152
+Reference baseline: **1828 passed, 136 skipped, 0 xfailed, 0 failed** (1152
 collected). The pass count drifts upward as tasks land tests and concurrent
 sessions commit — a changed pass count is not itself a failure. `0 failed` is
 the check. An `xpass` on the quarantined test is also fine.

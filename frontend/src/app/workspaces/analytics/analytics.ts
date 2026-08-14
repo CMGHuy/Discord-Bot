@@ -15,10 +15,15 @@ import {
   ANALYTICS_TABS,
   AnalyticsStore,
   AnalyticsTab,
+  BREAKDOWN_DIMENSIONS,
+  BreakdownDimension,
+  BreakdownRow,
   DriftRow,
+  GridRow,
   HeatmapCell,
   JobStatus,
   ProposalRow,
+  Streaks,
   StrategyRow,
   TierRow,
 } from '../../stores/analytics.store';
@@ -28,12 +33,14 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { Select } from '../../ui/form-controls';
-import { ABSENT, dateTime } from '../../ui/format';
+import { ABSENT, date, dateTime, share } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
+import { Histogram } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
 import {
   CONFIDENCE_COLUMNS,
+  breakdownColumns,
   DECILE_COLUMNS,
   DRIFT_COLUMNS,
   STRATEGY_COLUMNS,
@@ -98,6 +105,7 @@ interface ProposalView extends ProposalRow {
     Panel,
     DataTable,
     MetricChip,
+    Histogram,
     Chip,
     QualityChip,
     Sparkline,
@@ -161,6 +169,242 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <!-- SR54. Everything below is scoped by the range control; the two
+             panels above are deliberately all-time, so the heading says which
+             is which rather than leaving the reader to guess. -->
+        <sb-panel [heading]="derivedHeading()">
+          <div class="range" role="group" aria-label="Analytics date range">
+            <label>
+              From
+              <input type="date" [value]="store.rangeFrom() ?? ''"
+                     (change)="onRangeFrom($event)" />
+            </label>
+            <label>
+              To
+              <input type="date" [value]="store.rangeTo() ?? ''"
+                     (change)="onRangeTo($event)" />
+            </label>
+            @if (store.rangeActive()) {
+              <button sb-button type="button" variant="ghost"
+                      (click)="store.clearRange()">
+                Clear
+              </button>
+            }
+            <!-- The sample size sits with the control, not the cards: a Calmar
+                 over four trades and one over four hundred must not read as
+                 equally authoritative. -->
+            <span class="sample">{{ sampleLabel() }}</span>
+          </div>
+
+          @if (store.rangeSampleSize() === 0) {
+            <!-- Not an error. An empty window is a legitimate answer, and the
+                 cards below would otherwise be twelve em dashes with no
+                 explanation of why. -->
+            <p class="stale" role="status">
+              No closed trades in this window.
+            </p>
+          }
+
+          <div class="chips">
+            @for (metric of store.derivedMetrics(); track metric.key) {
+              <sb-metric-chip
+                [label]="metric.label"
+                [value]="metric.value"
+                [unit]="metric.unit"
+                [decimals]="metric.decimals"
+                [tone]="metric.pnl ? 'pnl' : 'plain'"
+              />
+            }
+          </div>
+        </sb-panel>
+
+        <div class="panels">
+          <sb-panel heading="Return distribution">
+            @if (store.returnsHistogram().length) {
+              <sb-histogram [bins]="store.returnsHistogram()" />
+            } @else {
+              <p class="stale">No closed trades to distribute.</p>
+            }
+          </sb-panel>
+
+          <sb-panel heading="R-multiple distribution">
+            @if (store.rHistogram().length) {
+              <sb-histogram [bins]="store.rHistogram()" />
+            } @else {
+              <p class="stale">No R-multiples — trades need an entry and a stop.</p>
+            }
+          </sb-panel>
+        </div>
+
+        <div class="panels">
+          <sb-panel heading="By holding period">
+            <!-- Every band renders, including empty ones: "the edge is all in
+                 8-30d" is only legible next to the bands that are empty. -->
+            <dl>
+              @for (band of store.holdingSplit(); track band.bucket) {
+                <div>
+                  <dt>{{ band.bucket }}</dt>
+                  <dd class="num">
+                    {{ fmtCount(band.n) }} · {{ fmtRate(band.win_rate) }}
+                  </dd>
+                </div>
+              }
+            </dl>
+          </sb-panel>
+
+          <sb-panel heading="By month">
+            @if (store.calendarReturns().length) {
+              <dl>
+                @for (month of store.calendarReturns(); track month.month) {
+                  <div>
+                    <dt>{{ month.month }}</dt>
+                    <dd class="num">
+                      {{ month.return_pct.toFixed(2) }}% · {{ fmtCount(month.n) }}
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <p class="stale">No months with closed trades.</p>
+            }
+          </sb-panel>
+        </div>
+
+        <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
+             that deliberately. The digest and lessons are analytics and live
+             here; a single trade's excursions live beside the note that
+             explains them, on the detail view. -->
+        <sb-panel heading="Journal">
+          @if (store.journalError(); as message) {
+            <p class="stale" role="status">Journal unavailable — {{ message }}</p>
+          } @else if (store.journalEmpty()) {
+            <p class="stale" role="status">
+              No journal entries yet — they are written when a trade closes.
+            </p>
+          } @else {
+            <p class="series-note">
+              From {{ store.journalEntryCount() }}
+              {{ store.journalEntryCount() === 1 ? 'entry' : 'entries' }}.
+            </p>
+            @if (store.digest().length) {
+              <h3 class="sub">This week</h3>
+              <ul class="lines">
+                @for (line of store.digest(); track line) {
+                  <li>{{ line }}</li>
+                }
+              </ul>
+            }
+            @if (store.lessons().length) {
+              <h3 class="sub">Recurring lessons</h3>
+              <ul class="lines">
+                @for (lesson of store.lessons(); track lesson) {
+                  <li>{{ lesson }}</li>
+                }
+              </ul>
+            }
+          }
+        </sb-panel>
+
+        @if (store.cumulativeByStrategy().length) {
+          <sb-panel heading="Cumulative return by strategy">
+            <dl>
+              @for (series of store.cumulativeByStrategy(); track series.strategy) {
+                <div>
+                  <dt>{{ series.strategy }}</dt>
+                  <dd class="num">{{ fmtCumulative(series.points) }}</dd>
+                </div>
+              }
+            </dl>
+          </sb-panel>
+        }
+
+        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
+             the server has been building and serving all along. -->
+        @if (store.snapshotError(); as message) {
+          <!-- Its own line, not the tab-wide error: the panels above came from
+               a different endpoint and are not implicated. -->
+          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
+        }
+
+        <div class="panels">
+          <sb-panel heading="Risk-adjusted">
+            <div class="chips">
+              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
+              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
+              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
+              <!-- Max drawdown is always a loss, and always reported positive
+                   by the server. Amber, not red: it is the cost of the track
+                   record, not a loss happening now. -->
+              <sb-metric-chip
+                label="Max drawdown"
+                [value]="store.maxDrawdownPct()"
+                unit="%"
+                [decimals]="1"
+                tone="caution"
+              />
+              <sb-metric-chip
+                label="Total P&L"
+                [value]="store.totalPnl()"
+                tone="pnl"
+                unit=" USD"
+              />
+            </div>
+          </sb-panel>
+
+          @if (store.streaks(); as streaks) {
+            <sb-panel heading="Streaks">
+              <dl>
+                <div>
+                  <dt>Current</dt>
+                  <dd class="num">{{ currentStreak(streaks) }}</dd>
+                </div>
+                <div>
+                  <dt>Best win run</dt>
+                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
+                </div>
+                <div>
+                  <dt>Worst loss run</dt>
+                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
+                </div>
+              </dl>
+            </sb-panel>
+          }
+        </div>
+
+        @if (store.equitySeries().length) {
+          <div class="panels">
+            <sb-panel heading="Account balance">
+              <sb-sparkline
+                [points]="equityPoints()"
+                label="Account balance over the whole record"
+              />
+              <p class="series-note">
+                {{ store.equitySeries().length }} points ·
+                {{ seriesRange(store.equitySeries()) }}
+              </p>
+            </sb-panel>
+
+            <sb-panel heading="Drawdown">
+              <sb-sparkline
+                [points]="drawdownPoints()"
+                label="Percentage below the running peak balance"
+              />
+              <p class="series-note">
+                Peak-to-trough, as a share of the running high. Higher is worse.
+              </p>
+            </sb-panel>
+          </div>
+        }
+
+        @if (store.rMultipleBins().length) {
+          <sb-panel heading="R-multiple distribution">
+            <!-- Bars, not a pie and not a line: this is a distribution, and
+                 the shape IS the finding -- a healthy edge is a cluster of
+                 small losses with a tail of larger wins. -->
+            <sb-histogram [bins]="store.rMultipleBins()" />
+          </sb-panel>
+        }
+
         <sb-panel heading="By confidence level" [flush]="true">
           <sb-data-table
             [rows]="store.byConfidence()"
@@ -169,6 +413,29 @@ interface ProposalView extends ProposalRow {
             [rowKey]="confidenceKey"
             [loading]="store.loading()"
             [emptyState]="confidenceEmpty"
+          />
+        </sb-panel>
+
+        <sb-panel [heading]="'By ' + store.breakdownLabel().toLowerCase()" [flush]="true">
+          <!-- One table with a dimension picker rather than eight tables. The
+               Jinja page had three of these plus seven pie charts over the
+               same by-dimension block; the picker says outright they are one
+               question asked eight ways. -->
+          <div panel-actions class="dimension">
+            <sb-select
+              label="Group by"
+              [value]="store.breakdown()"
+              [options]="dimensions"
+              (valueChange)="onBreakdown($event)"
+            />
+          </div>
+          <sb-data-table
+            [rows]="store.breakdownRows()"
+            [columns]="breakdownColumns()"
+            [visible]="breakdownKeys"
+            [rowKey]="breakdownKey"
+            [loading]="store.loading()"
+            [emptyState]="breakdownEmpty()"
           />
         </sb-panel>
       }
@@ -184,7 +451,22 @@ interface ProposalView extends ProposalRow {
           }
         }
 
+        <!-- SR61. strategies.html:10-18, copied rather than paraphrased --
+             it states exactly how a badge is earned and what it feeds. -->
+        <p class="section-help">
+          This page answers "is this strategy's edge still working?" for every
+          confirming method the bot trades. Each was backtested once on a
+          held-out out-of-sample (OOS) window and given a
+          <strong>VALIDATED</strong> badge if it cleared the acceptance bar, or
+          <strong>WEAK</strong> if it didn't — that badge feeds directly into a
+          live plan's quality score and A/B/C tier (see the Calibration tab's
+          Tier calibration table). The Live columns then track how that
+          strategy is actually doing right now; a DECAY chip means live win
+          rate has fallen meaningfully below what OOS testing promised.
+        </p>
+
         <sb-panel heading="Strategy registry" [flush]="true">
+          <p class="panel-subtitle">out-of-sample validation status per strategy</p>
           <sb-data-table
             [rows]="store.strategyRows()"
             [columns]="strategyColumns()"
@@ -193,6 +475,19 @@ interface ProposalView extends ProposalRow {
             [loading]="store.loading()"
             [emptyState]="strategyEmpty"
           />
+
+          <!-- SR61. The twelve column tips from strategies.html:30-41. A
+               glossary under the table rather than a tip icon per header,
+               per this task's Step 2: the SPA has no tip-icon component and
+               adding one would be a design decision, not a copy task. -->
+          <details class="glossary">
+            <summary>What these columns mean</summary>
+            <dl>
+              @for (entry of strategyGlossary; track entry.term) {
+                <div><dt>{{ entry.term }}</dt><dd>{{ entry.gloss }}</dd></div>
+              }
+            </dl>
+          </details>
         </sb-panel>
 
         @if (store.heatmap(); as heatmap) {
@@ -227,7 +522,26 @@ interface ProposalView extends ProposalRow {
 
       <!-- -- calibration ---------------------------------------------- -->
       @case ('calibration') {
+        <!-- SR61. calibration.html:5-15. The tab used to open straight into
+             a table whose numbers mean nothing without this. -->
+        <p class="section-help">
+          Calibration asks one question: does a higher confidence score
+          actually win more? Every closed trade is bucketed into a decile by
+          its confidence score at entry, and each decile's realised win rate is
+          judged against the 80% target. A well-calibrated system produces a
+          roughly upward-sloping staircase — top-decile trades should win
+          noticeably more often than bottom-decile trades. A flat or inverted
+          staircase means the score isn't actually predictive yet and needs
+          revisiting before it's trusted for sizing or filtering decisions.
+        </p>
+
         <sb-panel heading="Quality score vs outcome" [flush]="true">
+          <!-- SR61. The Jinja chart drew an 80% line across the deciles; this
+               table has no chart to draw it on, so it says the target instead.
+               80 is calibration.py:_meets_band's A-tier bar, verified. -->
+          <p class="panel-subtitle">
+            Each decile's realised win rate, against an 80% target.
+          </p>
           <sb-data-table
             [rows]="store.deciles()"
             [columns]="decileColumns"
@@ -239,6 +553,26 @@ interface ProposalView extends ProposalRow {
         </sb-panel>
 
         <sb-panel heading="Tier calibration" [flush]="true">
+          <!-- SR61. stats.html:19 and :21. Both numbers verified against code
+               before being written down: the A/B/C SCORE bands are
+               quality.py:_tier (>=75, 50-74, <50) and the win-rate bands
+               each tier is judged against are calibration.py:EXPECTED_BAND
+               (A >=80, B 70-80, C <70). They are different scales and the
+               original copy was right to name only the first. -->
+          <p class="panel-subtitle">
+            Every plan is graded A (score ≥75), B (50–74) or C (below 50) when
+            it is built. This table checks whether that grading holds up: does
+            tier A actually win more often live than tier C? "Pass" means the
+            tier's live win rate falls inside the band it is supposed to
+            deliver — and a verdict needs at least 10 closed trades, below
+            which it reads as unknown rather than as a failure.
+          </p>
+          <p class="section-help">
+            If A/B rows stay empty or thin (N small), it usually means too few
+            trades have closed yet at that tier — not that the tiering is
+            broken. See the Strategies tab for why a strategy's badge
+            (VALIDATED vs WEAK) may be dragging its tier down.
+          </p>
           <sb-data-table
             [rows]="store.tiers()"
             [columns]="tierColumns()"
@@ -250,6 +584,21 @@ interface ProposalView extends ProposalRow {
         </sb-panel>
 
         <sb-panel heading="Badge drift" [flush]="true">
+          <!-- SR61. stats.html:48 and :50. The rule is
+               calibration.py:DRIFT_LIVE_N_FLOOR (20) and
+               DRIFT_THRESHOLD_POINTS (10.0), both verified. -->
+          <p class="panel-subtitle">
+            "Decay" = edge decay. A strategy earns a VALIDATED badge from a
+            historical out-of-sample backtest with a committed win rate; this
+            table compares that to how it is actually performing live. A decay
+            flag is an early warning that the edge may no longer hold in
+            current market conditions.
+          </p>
+          <p class="section-help">
+            Flagged only once a strategy has at least 20 closed live trades
+            (fewer than that is too noisy to judge) AND live win rate is more
+            than 10 percentage points below its out-of-sample win rate.
+          </p>
           <sb-data-table
             [rows]="store.drift()"
             [columns]="driftColumns()"
@@ -266,7 +615,8 @@ interface ProposalView extends ProposalRow {
         <sb-panel heading="Run a TRAIN grid">
           <p class="note">
             A grid search runs one strategy's parameters through every
-            combination in its tuning grid against the fixed TRAIN window —
+            combination in its tuning grid against the fixed TRAIN window
+            (2020-01-01 .. 2023-12-31) —
             never the VALIDATION window the badges on the Strategies tab are
             measured against. That firewall is what keeps those badges honest,
             so no date input exists here or anywhere in this workbench.
@@ -312,6 +662,71 @@ interface ProposalView extends ProposalRow {
             <p class="note">
               Progress arrives on the <code>jobs</code> event. Nothing on this
               page polls, and the log stays put when the job ends.
+            </p>
+          </sb-panel>
+        }
+
+        <!-- SR51. The results table, and the Propose button that lived in it.
+             Without this the tab could start work and file work away but not
+             act on what a run found -- which left the Proposals panel below
+             unreachable by any normal route. -->
+        @if (store.grid().length) {
+          <sb-panel [heading]="gridHeading()" [flush]="true">
+            @if (store.proposeResult(); as message) {
+              <p class="note" role="status">{{ message }}</p>
+            }
+            @if (store.proposeError(); as message) {
+              <p class="alert" role="alert">{{ message }}</p>
+            }
+
+            <div class="scroller">
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th>Parameters</th>
+                    <th class="num">N</th>
+                    <th class="num">Win rate</th>
+                    <th class="num">ExpR</th>
+                    <th class="num">Excluded</th>
+                    <th>Bar</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of store.grid(); track row.row_index) {
+                    <tr [class.passes]="row.passes">
+                      <td class="params">{{ row.paramLabel }}</td>
+                      <td class="num">{{ fmtCount(row.n_eval) }}</td>
+                      <td class="num">{{ fmtRate(row.win_rate) }}</td>
+                      <td class="num">{{ fmtExpectancy(row.expectancy_r) }}</td>
+                      <td class="num">{{ fmtExcluded(row.excluded_share) }}</td>
+                      <td>
+                        @if (row.passes) {
+                          <sb-chip label="Clears" tone="q5" />
+                        }
+                      </td>
+                      <td>
+                        <button
+                          sb-button
+                          variant="secondary"
+                          type="button"
+                          [loading]="store.proposing() === row.row_index"
+                          (click)="askPropose(row)"
+                        >
+                          Propose
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <p class="note">
+              A row clears the bar at 30 or more evaluated trades, a win rate of
+              80% or better, positive expectancy, and no more than half the
+              candidate signals excluded. Among the rows that clear it, prefer
+              the highest expectancy.
             </p>
           </sb-panel>
         }
@@ -442,6 +857,20 @@ interface ProposalView extends ProposalRow {
       (confirmed)="confirmDelete()"
       (cancelled)="pendingDelete.set(null)"
     />
+
+    <!-- Proposing writes a file that stages a change to how the bot trades.
+         It is not destructive, but it is not nothing either, and the dialog is
+         where the difference between staging and applying gets said out loud
+         rather than left to a panel note further down the page. -->
+    <sb-confirm-dialog
+      [open]="pendingPropose() !== null"
+      title="Stage these parameters?"
+      [consequence]="proposeConsequence()"
+      confirmLabel="Propose"
+      [working]="store.proposing() !== null"
+      (confirmed)="confirmPropose()"
+      (cancelled)="pendingPropose.set(null)"
+    />
   `,
   styles: `
     .head {
@@ -481,6 +910,89 @@ interface ProposalView extends ProposalRow {
     }
 
     dl { display: grid; gap: var(--space-6); }
+
+    /* -- SR54: the range control ---------------------------------------- */
+
+    .range {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: var(--space-8);
+      margin-bottom: var(--space-8);
+    }
+
+    .range label {
+      display: grid;
+      gap: var(--space-4);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+
+    .range input {
+      /* Matches the shared form controls rather than inheriting the browser's
+         date input, which sets its own font and breaks the row's baseline. */
+      font: inherit;
+      color: var(--text-primary);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-4) var(--space-6);
+    }
+
+    .range .sample {
+      margin-left: auto;
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* -- SR55/SR61: explanatory copy ------------------------------------ */
+
+    .glossary, .sub {
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+    }
+    .glossary { margin-top: var(--space-8); }
+    .glossary summary { cursor: pointer; color: var(--text-faint); }
+    .glossary dl, .lines { display: grid; margin: 0; }
+    .glossary dl { gap: var(--space-6); margin-top: var(--space-8); }
+    .glossary dt { color: var(--text-primary); font-weight: 600; }
+    .glossary dd { margin: 0; line-height: 1.5; }
+    .sub {
+      margin: var(--space-8) 0 var(--space-4);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .lines {
+      gap: var(--space-4);
+      padding-left: var(--space-8);
+      color: var(--text-primary);
+    }
+
+    /* -- SR50: the snapshot's panels ------------------------------------ */
+
+    .series-note { margin-top: var(--space-6); color: var(--text-faint); }
+    .series-note { font-size: var(--text-chip); }
+    .dimension { min-width: 160px; }
+
+
+    /* -- SR51: the grid results ----------------------------------------- */
+
+    /* Reuses .heat's cell rules where it can; only what differs is set here.
+       A row that cleared the bar is marked on the left as well as by its chip,
+       so the signal survives greyscale and does not depend on spotting one
+       chip among twelve. The parameters cell is the only one allowed to wrap. */
+    .grid { width: 100%; border-collapse: collapse; }
+    .grid th, .grid td {
+      padding: var(--space-6) var(--space-10);
+      text-align: left;
+      font-size: var(--text-table);
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .grid th { color: var(--text-secondary); font-size: var(--text-micro); }
+    .grid tr.passes td:first-child { box-shadow: inset 2px 0 0 var(--pos); }
+    .grid td.params { white-space: normal; min-width: 18rem; }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
@@ -613,6 +1125,96 @@ export class Analytics {
     return value === null ? ABSENT : String(value);
   }
 
+  /* -- SR61: the column glossary --------------------------------------- */
+
+  /**
+   * The twelve `?` tips from `strategies.html:30-41`.
+   *
+   * Copied rather than paraphrased, with ONE correction. The original said the
+   * R:R override "falls back to a 0.35 default when not set". It does not:
+   * `plan_engine._rr_for` falls back to the HORIZON's `reward_risk_ratio`,
+   * floored at `RR_FLOOR` (0.30). Every strategy currently carries an override
+   * so the fallback is unreachable today, but copy that states a wrong rule is
+   * worse than no copy — this task's Step 3.
+   */
+  protected readonly strategyGlossary: { term: string; gloss: string }[] = [
+    {
+      term: 'Rolling WR',
+      gloss: 'Win rate over just the last 10 closed trades for this strategy — '
+        + 'a short-window sanity check, separate from the full Live WR column.',
+    },
+    {
+      term: 'Badge',
+      gloss: 'VALIDATED = this strategy cleared its out-of-sample acceptance '
+        + 'bar in a one-shot backtest. WEAK = it did not. A live plan only '
+        + 'gets full badge-quality points when its primary confirming method '
+        + 'is VALIDATED.',
+    },
+    {
+      term: 'R:R',
+      gloss: "This strategy's override for the entry-to-TP1 risk:reward ratio. "
+        + "With no override the horizon's own ratio applies, floored at 0.30 — "
+        + 'below that floor a strategy can clear an 80% win rate and still '
+        + 'lose money.',
+    },
+    { term: 'OOS N', gloss: 'Number of trades in the out-of-sample backtest this badge is based on.' },
+    {
+      term: 'OOS WR',
+      gloss: 'Win rate achieved in that one-shot out-of-sample backtest — the '
+        + 'number the badge and the live comparison are measured against.',
+    },
+    {
+      term: 'OOS ExpR',
+      gloss: 'Expectancy in R-multiples from the same backtest — average return '
+        + 'per trade as a multiple of planned risk.',
+    },
+    { term: 'Live N', gloss: 'Number of closed live trades attributed to this strategy so far.' },
+    { term: 'Live WR', gloss: 'Actual win rate from live closed trades attributed to this strategy.' },
+    {
+      term: 'Δ vs OOS',
+      gloss: 'Live WR minus OOS WR. Decay is flagged once Live N reaches at '
+        + 'least 20 trades AND this delta drops below −10 points — enough live '
+        + 'sample to trust, and a large enough gap to call it decay rather '
+        + 'than noise.',
+    },
+    { term: 'Window', gloss: 'The date range of historical data the OOS backtest was run over.' },
+    { term: 'Run date', gloss: "When this strategy's OOS validation was last run and committed." },
+    { term: 'Gate', gloss: 'The entry-confirmation rule this strategy must satisfy to fire a signal at all.' },
+  ];
+
+  /* -- SR54: the range control ----------------------------------------- */
+
+  /** Says out loud which figures the range covers. The two panels above it
+   *  are all-time, and a heading that just said "Derived" would leave the
+   *  reader to work that out from the numbers. */
+  protected readonly derivedHeading = computed(() =>
+    this.store.rangeActive() ? 'Derived (selected range)' : 'Derived (all time)',
+  );
+
+  /** Trades in the window, so a figure computed on a handful is not read with
+   *  the confidence of one computed on hundreds. */
+  protected readonly sampleLabel = computed(() => {
+    const n = this.store.rangeSampleSize();
+    return `${n} closed ${n === 1 ? 'trade' : 'trades'}`;
+  });
+
+  protected onRangeFrom(event: Event): void {
+    this.store.setRange((event.target as HTMLInputElement).value || null,
+                        this.store.rangeTo());
+  }
+
+  protected onRangeTo(event: Event): void {
+    this.store.setRange(this.store.rangeFrom(),
+                        (event.target as HTMLInputElement).value || null);
+  }
+
+  /** The last point of a per-strategy walk — where that strategy ended up.
+   *  The full series is in the payload for whoever plots it; this is the
+   *  one number a list row can carry honestly. */
+  protected fmtCumulative(points: readonly { cum_pct: number }[]): string {
+    return points.length ? `${points[points.length - 1].cum_pct.toFixed(2)}%` : ABSENT;
+  }
+
   /* -- cell templates --------------------------------------------------- */
 
   private readonly rollingCell = viewChild.required<TemplateRef<unknown>>('rollingCell');
@@ -667,6 +1269,54 @@ export class Analytics {
     title: 'No trades to break down',
     hint: 'Levels appear once trades have been logged against them.',
   };
+
+  /* -- SR50: the snapshot's panels ------------------------------------- */
+
+  protected readonly dimensions = BREAKDOWN_DIMENSIONS.map((d) => ({
+    value: d.value,
+    label: d.label,
+  }));
+
+  protected readonly breakdownColumns = computed(() =>
+    breakdownColumns(this.store.breakdownLabel()),
+  );
+  protected readonly breakdownKeys = allKeys(breakdownColumns(''));
+  protected readonly breakdownKey = (row: BreakdownRow) => row.key;
+
+  protected readonly breakdownEmpty = computed(() => ({
+    title: `Nothing grouped by ${this.store.breakdownLabel().toLowerCase()} yet`,
+    hint: 'Groups appear once trades close against them.',
+  }));
+
+  protected onBreakdown(value: string): void {
+    this.store.setBreakdown(value as BreakdownDimension);
+  }
+
+  /** Sparklines take bare numbers; the dates are the series-note's job. */
+  protected readonly equityPoints = computed(() =>
+    this.store.equitySeries().map((point) => point.value),
+  );
+  protected readonly drawdownPoints = computed(() =>
+    this.store.drawdownSeries().map((point) => point.value),
+  );
+
+
+  /** "3 wins" rather than "3". The number alone does not say which way the run
+   *  is going, and a current streak is the one figure here where that is the
+   *  whole point. */
+  protected currentStreak(streaks: Streaks): string {
+    if (streaks.current === null || streaks.current === 0 || !streaks.currentKind) {
+      return 'none';
+    }
+    const plural = streaks.current === 1 ? '' : 's';
+    const noun = streaks.currentKind === 'win' ? 'win' : 'loss';
+    return `${streaks.current} ${noun === 'loss' ? (plural ? 'losses' : 'loss') : noun + plural}`;
+  }
+
+  protected seriesRange(series: { date: string }[]): string {
+    if (!series.length) return ABSENT;
+    return `${date(series[0].date)} → ${date(series[series.length - 1].date)}`;
+  }
   protected readonly decileEmpty = {
     title: 'No scored trades yet',
     hint: 'Only closed trades carrying a quality score can be bucketed.',
@@ -746,6 +1396,48 @@ export class Analytics {
   protected launch(): void {
     const strategy = this.strategy();
     if (strategy) this.store.startTune(strategy);
+  }
+
+  /* -- SR51: the grid results ------------------------------------------- */
+
+  protected readonly pendingPropose = signal<GridRow | null>(null);
+
+  protected readonly gridHeading = computed(() => {
+    const strategy = this.store.gridStrategy();
+    return strategy ? `Grid results — ${strategy}` : 'Grid results';
+  });
+
+  /** The excluded share arrives as a fraction and is a share, not a change,
+   *  so it takes `share` rather than the signing `pct`. */
+  protected readonly fmtExcluded = (value: number | null) =>
+    value === null ? ABSENT : share(value * 100);
+
+  protected askPropose(row: GridRow): void {
+    this.pendingPropose.set(row);
+  }
+
+  protected readonly proposeConsequence = computed(() => {
+    const row = this.pendingPropose();
+    if (!row) return '';
+    const strategy = this.store.gridStrategy() ?? 'this strategy';
+    // Says outright what staging is and is not. The Jinja page put this in a
+    // tip icon on a card heading, where it was read once.
+    return (
+      `Records ${row.paramLabel} as a candidate for ${strategy}. ` +
+      'Nothing changes about how the bot trades: applying means editing ' +
+      'entry_filters.DEFAULT_PARAMS by hand, running the suite, and only then ' +
+      'spending a validation shot.' +
+      (row.passes
+        ? ''
+        : ' This row did NOT clear the acceptance bar.')
+    );
+  });
+
+  protected confirmPropose(): void {
+    const row = this.pendingPropose();
+    if (!row) return;
+    this.store.propose(row.row_index);
+    this.pendingPropose.set(null);
   }
 
   /* -- proposals -------------------------------------------------------- */
