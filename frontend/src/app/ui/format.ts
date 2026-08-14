@@ -21,6 +21,17 @@ export function pct(value: number | null | undefined, decimals = 2): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(decimals)}%`;
 }
 
+/** An unsigned percentage: a share or a level, not a movement.
+ *
+ *  Deliberately not `pct`. That one signs its output because it formats a
+ *  CHANGE, and a sign is how a gain is told from a loss without reading the
+ *  colour. "TP1 closes +50%" reads as a gain of fifty percent; it means half
+ *  the position. Same reasoning as `analytics.columns.ts`'s `rate()`. */
+export function share(value: number | null | undefined, decimals = 0): string {
+  if (value === null || value === undefined) return ABSENT;
+  return `${value.toFixed(decimals)}%`;
+}
+
 export function rMultiple(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;

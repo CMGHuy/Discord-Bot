@@ -19,7 +19,7 @@ import { QualityChip } from '../../ui/chip';
 import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { TradeChart } from '../../ui/chart/trade-chart';
-import { dateTime, held, num, pct, text } from '../../ui/format';
+import { dateTime, held, num, pct, rMultiple, share, text } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
 import {
@@ -136,7 +136,49 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                   <dt>R:R</dt>
                   <dd class="num">{{ fmt(trade.risk_reward) }}</dd>
                 </div>
+                <!-- The trigger is the only actionable price on a PENDING
+                     plan: the entry price stays null until it fills. Shown only when
+                     there is one, so a filled position does not carry a row
+                     about a threshold it crossed days ago. -->
+                @if (store.triggerPrice() !== null) {
+                  <div>
+                    <dt>Trigger</dt>
+                    <dd class="num">{{ fmt(store.triggerPrice()) }}</dd>
+                  </div>
+                }
+                @if (store.tp1Pct() !== null) {
+                  <div>
+                    <dt>TP1 closes</dt>
+                    <dd class="num">{{ fmtShare(store.tp1Pct()) }}</dd>
+                  </div>
+                }
+                @if (store.breakevenTriggerPct() !== null) {
+                  <div>
+                    <dt>Break-even at</dt>
+                    <dd class="num">{{ fmtShare(store.breakevenTriggerPct()) }} of TP1</dd>
+                  </div>
+                }
               </dl>
+
+              <!-- What put each level where it is. Separate lists rather than
+                   the Jinja tooltip's merged one: there is room here to say
+                   which level a source justifies, which the tooltip could not. -->
+              @if (store.targetSources().length || store.stopSources().length) {
+                <div class="sources">
+                  @if (store.targetSources().length) {
+                    <p><span class="src-label">Target confirmed by</span>
+                      {{ store.targetSources().join(', ') }}</p>
+                  }
+                  @if (store.stopSources().length) {
+                    <p><span class="src-label">Stop confirmed by</span>
+                      {{ store.stopSources().join(', ') }}</p>
+                  }
+                  @if (store.target2Sources().length) {
+                    <p><span class="src-label">Target 2 confirmed by</span>
+                      {{ store.target2Sources().join(', ') }}</p>
+                  }
+                </div>
+              }
             </sb-panel>
 
             <sb-panel heading="Per share">
@@ -202,6 +244,62 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               </dl>
             </sb-panel>
           </div>
+
+          <!-- The reasoning. Everything above is a number; this is the only
+               part of the screen that says why any of them were chosen. -->
+          @if (store.detailAbsent()) {
+            <!-- Not an error and not an empty panel per field: this record
+                 predates the detail capture entirely, and nine em dashes read
+                 as a failed load rather than as a fact about an old trade. -->
+            <p class="no-detail">
+              This trade was logged before the admin UI captured the full alert
+              detail — only the plan above is available for it.
+            </p>
+          } @else {
+            @if (store.explanation(); as why) {
+              <sb-panel heading="Why this trade">
+                <p class="prose">{{ why }}</p>
+              </sb-panel>
+            }
+
+            @if (store.confirmedBy().length) {
+              <sb-panel heading="Confirmed by">
+                <ul class="confirmations">
+                  @for (c of store.confirmedBy(); track c.strategy + (c.horizon ?? '')) {
+                    <li>
+                      {{ c.strategy }}
+                      @if (c.horizon) {
+                        <span class="muted">({{ c.horizon }})</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </sb-panel>
+            }
+
+            @if (store.confidenceFactors().length) {
+              <sb-panel heading="Confidence breakdown">
+                <dl class="factors">
+                  @for (f of store.confidenceFactors(); track f.factor) {
+                    <div><dt>{{ f.factor }}</dt><dd>{{ f.note }}</dd></div>
+                  }
+                </dl>
+              </sb-panel>
+            }
+
+            @if (store.qualityFactors().length) {
+              <sb-panel heading="Quality breakdown">
+                <dl class="factors">
+                  @for (f of store.qualityFactors(); track f.label) {
+                    <div>
+                      <dt>{{ f.label }}</dt>
+                      <dd class="num">{{ signed(f.points) }}</dd>
+                    </div>
+                  }
+                </dl>
+              </sb-panel>
+            }
+          }
         }
       }
       @case ('live') {
@@ -271,6 +369,59 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               </div>
             </sb-panel>
           </div>
+
+          <!-- Scale-out legs. A position that took TP1 and is riding a runner
+               is TWO results, and a single P&L figure describes neither. -->
+          @if (store.legs().length > 1) {
+            <sb-panel heading="Scale-out">
+              <dl class="factors">
+                @for (leg of store.legs(); track $index) {
+                  <div>
+                    <dt>
+                      @if ($index === 0) { First } @else { Runner }
+                      @if (leg.fraction !== null) {
+                        <span class="muted">{{ fmtShare(leg.fraction * 100) }}</span>
+                      }
+                    </dt>
+                    <dd class="num">
+                      @if (leg.exitPrice !== null) {
+                        {{ fmt(leg.exitPrice) }}
+                        @if (leg.r !== null) {
+                          <span [class]="pnlClass(leg.r)">{{ fmtR(leg.r) }}</span>
+                        }
+                        @if (leg.reason) {
+                          <span class="muted">{{ leg.reason }}</span>
+                        }
+                      } @else {
+                        <span class="muted">still open</span>
+                      }
+                    </dd>
+                  </div>
+                }
+              </dl>
+            </sb-panel>
+          }
+
+          <!-- The plan's audit trail. Every transition carries the reason it
+               happened, which is the only place "why did this cancel" is
+               answered. -->
+          @if (store.timeline().length) {
+            <sb-panel heading="Timeline">
+              <ol class="timeline">
+                @for (event of store.timeline(); track $index) {
+                  <li>
+                    <span class="tl-status">{{ event.status }}</span>
+                    @if (event.reason) {
+                      <span class="tl-reason">{{ event.reason }}</span>
+                    }
+                    @if (event.at) {
+                      <span class="tl-at">{{ fmtDate(event.at) }}</span>
+                    }
+                  </li>
+                }
+              </ol>
+            </sb-panel>
+          }
         }
       }
       @case ('chart') {
@@ -480,6 +631,106 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       color: var(--neg);
     }
 
+    /* -- SR49: the plan's reasoning ------------------------------------- */
+
+    /* Prose, not data. Wider measure than a table cell and a real line
+       height, because this is the one part of the screen meant to be read
+       rather than scanned. */
+    .prose {
+      max-width: 68ch;
+      color: var(--text);
+      font-size: var(--text-table);
+      line-height: 1.6;
+    }
+    .no-detail {
+      margin-top: var(--space-14);
+      max-width: 68ch;
+      color: var(--text-faint);
+      font-size: var(--text-table);
+      line-height: 1.6;
+    }
+
+    .sources {
+      margin-top: var(--space-10);
+      padding-top: var(--space-10);
+      border-top: 1px solid var(--border);
+    }
+    .sources p {
+      color: var(--text);
+      font-size: var(--text-chip);
+      line-height: 1.5;
+    }
+    .src-label {
+      display: block;
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .confirmations {
+      display: grid;
+      gap: var(--space-6);
+      list-style: none;
+    }
+    .confirmations li {
+      color: var(--text);
+      font-size: var(--text-table);
+    }
+
+    /* The two breakdowns and the scale-out legs share a shape: a label and a
+       value that is usually a sentence, so the value is allowed to wrap where
+       the plain definition list above keeps everything on one line. */
+    .factors > div {
+      align-items: baseline;
+      gap: var(--space-14);
+    }
+    .factors dd {
+      text-align: right;
+    }
+    .muted {
+      margin-left: var(--space-6);
+      color: var(--text-faint);
+    }
+
+    /* A rule down the left with a node per event: the shape says "these
+       happened in order", which a plain list does not. */
+    .timeline {
+      display: grid;
+      gap: var(--space-8);
+      margin-left: var(--space-6);
+      padding-left: var(--space-14);
+      border-left: 1px solid var(--border-strong);
+      list-style: none;
+    }
+    .timeline li {
+      position: relative;
+      font-size: var(--text-table);
+    }
+    .timeline li::before {
+      content: '';
+      position: absolute;
+      left: calc(-1 * var(--space-14) - 3px);
+      top: 0.45em;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--border-strong);
+    }
+    .tl-status {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .tl-reason {
+      margin-left: var(--space-6);
+      color: var(--text-secondary);
+    }
+    .tl-at {
+      margin-left: var(--space-6);
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+    }
+
     .chart {
       margin-top: var(--space-14);
     }
@@ -567,6 +818,8 @@ export class TradeDetail {
   protected readonly fmtDate = dateTime;
   protected readonly fmtPct = pct;
   protected readonly fmtHeld = held;
+  protected readonly fmtShare = share;
+  protected readonly fmtR = rMultiple;
 
   /** An unknown or absent `?tab=` falls back to Plan rather than rendering
    *  nothing, so a hand-edited or stale URL still shows the trade. */
@@ -665,6 +918,13 @@ export class TradeDetail {
     effect(() => {
       this.chart.setTrade(this.store.trade()?.id ?? null);
     });
+  }
+
+  /** Quality-score points, signed. These are contributions to a total, and a
+   *  factor that cost the plan points is as informative as one that earned
+   *  them — an unsigned "5" beside "Badge" would read as a credit either way. */
+  protected signed(points: number): string {
+    return `${points > 0 ? '+' : ''}${points}`;
   }
 
   protected pnlClass(value: number | null | undefined): string {
