@@ -262,7 +262,11 @@ Not auto-loaded — read the relevant one before starting work in that area.
   `VERSION.json`** (two independent `ui`/`bot` lines; the test is observable
   difference, not diff size — Release B deleted the entire Jinja UI for a
   *patch*). Read it before writing any new spec or plan, and before bumping a
-  version.
+  version. Two rules bind every new spec: a **`Bump:`** header line predicting
+  the release level the work earns, and a **`## Parallelisation`** section naming
+  which tasks may run concurrently and what forces the rest to be sequential
+  (the test is disjoint *files* plus no contract dependency — this working tree
+  is shared, so two agents on one file overwrite rather than merge).
 - `docs/claude/skills-tools.md` — which Superpowers skill or subagent to reach
   for on a given kind of task in this repo.
 - `docs/claude/testing-cost.md` — measured suite timings, why `-n 4` beats

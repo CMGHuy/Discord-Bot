@@ -45,6 +45,17 @@ Referenced from the root `CLAUDE.md`.
   numbers even while the plan is still active. Documents predating this
   convention (2026-08-08) were left unstamped rather than backfilled with
   versions that would have to be reconstructed from git.
+- **Every spec also declares the bump it *implies***, on a `**Bump:**` line in
+  the same header block — `ui minor (1.2.x → 1.3.0)`, `bot patch`, or `none`.
+  That is a different statement from `**Version:**` above it: `Version:` records
+  what the repo was at when the document was written and is never refreshed,
+  while `Bump:` is a prediction about what the work will earn when it ships.
+  Derive the level from "The three levels" below, and argue it from **observable
+  difference, not from the size of the feature** — a 400-line spec whose whole
+  effect is internal is a patch, and a one-flag spec that hands every user a
+  different product is a minor. See "What a spec's `Bump:` line is for".
+- **Every spec states which of its tasks can run in parallel**, in a
+  `## Parallelisation` section. See "Saying what is parallelisable".
 ## Versioning: when to bump `VERSION.json`
 
 `VERSION.json` carries **two independent version lines**, `ui` and `bot`, and
@@ -111,6 +122,37 @@ running container does. `0379574` (a 600-line cleanup) and `ab7fe4c` (the deploy
 path fix) correctly bumped nothing: neither alters what the bot or the admin
 *does*.
 
+### What a spec's `Bump:` line is for
+
+The bump used to be decided at release time, by whoever happened to be
+committing, from a diff they were looking at rather than from the impact the
+work was designed for. That is the worst moment to ask the question: the
+reasoning that would answer it — who sees a difference, and what kind — was
+worked out during the brainstorm and has been out of context for days.
+
+So the spec commits to a level up front, and the release commit either honours
+it or overrides it deliberately. Both outcomes are fine; a silent guess is not.
+
+A spec that predicts a minor and lands as a patch is **not a failed
+prediction to hide** — amend the `Bump:` line in the same commit that closes
+the spec and say in one clause why the impact came out smaller. That edit is
+the cheapest possible record of a thing this repo gets wrong often: mistaking
+effort for impact. Release B is the standing example — 20 templates and 10
+test files deleted, and correctly a patch, because nobody was being served
+the thing that was removed.
+
+Two spec-specific cases the levels above do not spell out:
+
+- **A spec that ships no running code bumps nothing.** Documentation, a
+  measurement, a closed pre-registration, a plan that concludes "do not build
+  this" — all `Bump: none`. A negative result is a finished spec, not a
+  release.
+- **A spec split across two components bumps both lines, separately graded.**
+  The chart work is the live example: a data-model change plus a new endpoint
+  that the Discord alert path also reads is a `bot` patch, while a chart the
+  user looks at every day becoming a different chart is a `ui` minor. One
+  document, two levels, and the two release commits stay independent.
+
 ### How
 
 A bump is **its own commit**, touching only `VERSION.json`, in the established
@@ -143,3 +185,47 @@ release date: it moves on every deploy, including deploys that bump nothing.
   agent worktree) are full repo copies. Check `git worktree list` before
   assuming a stray path is dead. Never edit files there from a main-tree
   session — you will be editing a different branch.
+
+## Saying what is parallelisable
+
+**Every spec carries a `## Parallelisation` section**, and every plan built from
+it repeats the grouping per phase. It names the groups whose tasks can be worked
+at the same time, and — the half that actually matters — what forces everything
+else to be sequential.
+
+Without it the default is serial execution, because a session that cannot prove
+two tasks are independent is right to assume they are not. The cost of that
+default is real: a phase of eight independent frontend tasks executed one at a
+time is eight round trips for work that could have been three.
+
+The dangerous failure is the other one. **Concurrent sessions share this working
+tree** (see above), so two agents dispatched onto tasks that touch the same file
+do not merge — the second overwrites the first, silently, and the loss shows up
+later as a change that "did not take". Naming the groups is what makes
+`superpowers:dispatching-parallel-agents` and `subagent-driven-development` safe
+to use here rather than a gamble.
+
+The test for putting two tasks in one group is **both** of:
+
+1. **Disjoint files.** Not "different features" — different *files*. Two tasks
+   that both edit `tokens.css` are sequential however unrelated they sound.
+2. **No contract dependency.** Neither task consumes a symbol, token, endpoint
+   or type the other one introduces. A task that adds `--control-h` and a task
+   that consumes it are sequential even though they touch different files.
+
+Write it as groups, with the reason on the sequential edges:
+
+```markdown
+## Parallelisation
+
+- **Group 1 (parallel):** A2, A3, A4 — one workspace file each, no shared file.
+- **Sequential:** A1 before everything (introduces `--control-h`, which every
+  other task consumes). A5 after Group 1 (the guard test asserts against rows
+  those tasks convert; running it earlier fails for the right reason at the
+  wrong time).
+```
+
+Be honest about a group of one. A phase that is genuinely a chain says so —
+`Sequential throughout: each task consumes the previous task's payload field` —
+and that sentence is worth as much as a wide group, because it stops the next
+session re-deriving the dependency graph to find out.
