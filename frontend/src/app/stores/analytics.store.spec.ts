@@ -179,9 +179,18 @@ describe('AnalyticsStore', () => {
     respondProposals();
     respondStrategies();
     if (jobs.length) {
+      const id = (jobs[0] as { id: string }).id;
       backend
-        .expectOne(`/api/v1/jobs/${(jobs[0] as { id: string }).id}`)
+        .expectOne(`/api/v1/jobs/${id}`)
         .flush({ ...(jobs[0] as object), log_tail: 'grid 3/12\n' });
+      // SR51 fetches the tracked job's grid alongside its status, so that the
+      // results table is populated for a job that finished between the two
+      // responses. Settled here so `backend.verify()` below still means
+      // "nothing ELSE went out"; the grid's own behaviour is exercised in
+      // `analytics.snapshot.spec.ts`.
+      backend
+        .expectOne(`/api/v1/jobs/${id}/result`)
+        .flush({ job_id: id, strategy: null, grid: [] });
     }
   };
 

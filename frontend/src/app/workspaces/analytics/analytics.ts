@@ -19,6 +19,7 @@ import {
   BreakdownDimension,
   BreakdownRow,
   DriftRow,
+  GridRow,
   HeatmapCell,
   JobStatus,
   ProposalRow,
@@ -32,8 +33,9 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { Select } from '../../ui/form-controls';
-import { ABSENT, date, dateTime } from '../../ui/format';
+import { ABSENT, date, dateTime, share } from '../../ui/format';
 import { Panel, Tab, TabBar } from '../../ui/layout';
+import { Histogram } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
 import {
@@ -103,6 +105,7 @@ interface ProposalView extends ProposalRow {
     Panel,
     DataTable,
     MetricChip,
+    Histogram,
     Chip,
     QualityChip,
     Sparkline,
@@ -249,21 +252,7 @@ interface ProposalView extends ProposalRow {
             <!-- Bars, not a pie and not a line: this is a distribution, and
                  the shape IS the finding -- a healthy edge is a cluster of
                  small losses with a tail of larger wins. -->
-            <ul class="histogram">
-              @for (bin of store.rMultipleBins(); track bin.label) {
-                <li>
-                  <span class="bin-label num">{{ bin.label }}</span>
-                  <span class="bin-track">
-                    <span
-                      class="bin-fill"
-                      [class.loss]="bin.label.startsWith('-')"
-                      [style.width.%]="binWidth(bin.count)"
-                    ></span>
-                  </span>
-                  <span class="bin-count num">{{ bin.count }}</span>
-                </li>
-              }
-            </ul>
+            <sb-histogram [bins]="store.rMultipleBins()" />
           </sb-panel>
         }
 
@@ -445,6 +434,71 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         }
 
+        <!-- SR51. The results table, and the Propose button that lived in it.
+             Without this the tab could start work and file work away but not
+             act on what a run found -- which left the Proposals panel below
+             unreachable by any normal route. -->
+        @if (store.grid().length) {
+          <sb-panel [heading]="gridHeading()" [flush]="true">
+            @if (store.proposeResult(); as message) {
+              <p class="note" role="status">{{ message }}</p>
+            }
+            @if (store.proposeError(); as message) {
+              <p class="alert" role="alert">{{ message }}</p>
+            }
+
+            <div class="scroller">
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th>Parameters</th>
+                    <th class="num">N</th>
+                    <th class="num">Win rate</th>
+                    <th class="num">ExpR</th>
+                    <th class="num">Excluded</th>
+                    <th>Bar</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of store.grid(); track row.row_index) {
+                    <tr [class.passes]="row.passes">
+                      <td class="params">{{ row.paramLabel }}</td>
+                      <td class="num">{{ fmtCount(row.n_eval) }}</td>
+                      <td class="num">{{ fmtRate(row.win_rate) }}</td>
+                      <td class="num">{{ fmtExpectancy(row.expectancy_r) }}</td>
+                      <td class="num">{{ fmtExcluded(row.excluded_share) }}</td>
+                      <td>
+                        @if (row.passes) {
+                          <sb-chip label="Clears" tone="q5" />
+                        }
+                      </td>
+                      <td>
+                        <button
+                          sb-button
+                          variant="secondary"
+                          type="button"
+                          [loading]="store.proposing() === row.row_index"
+                          (click)="askPropose(row)"
+                        >
+                          Propose
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <p class="note">
+              A row clears the bar at 30 or more evaluated trades, a win rate of
+              80% or better, positive expectancy, and no more than half the
+              candidate signals excluded. Among the rows that clear it, prefer
+              the highest expectancy.
+            </p>
+          </sb-panel>
+        }
+
         @if (store.pastJobs(); as past) {
           @if (past.length) {
             <sb-panel heading="Earlier jobs">
@@ -571,6 +625,20 @@ interface ProposalView extends ProposalRow {
       (confirmed)="confirmDelete()"
       (cancelled)="pendingDelete.set(null)"
     />
+
+    <!-- Proposing writes a file that stages a change to how the bot trades.
+         It is not destructive, but it is not nothing either, and the dialog is
+         where the difference between staging and applying gets said out loud
+         rather than left to a panel note further down the page. -->
+    <sb-confirm-dialog
+      [open]="pendingPropose() !== null"
+      title="Stage these parameters?"
+      [consequence]="proposeConsequence()"
+      confirmLabel="Propose"
+      [working]="store.proposing() !== null"
+      (confirmed)="confirmPropose()"
+      (cancelled)="pendingPropose.set(null)"
+    />
   `,
   styles: `
     .head {
@@ -613,49 +681,28 @@ interface ProposalView extends ProposalRow {
 
     /* -- SR50: the snapshot's panels ------------------------------------ */
 
-    .series-note {
-      margin-top: var(--space-6);
-      color: var(--text-faint);
-      font-size: var(--text-chip);
-    }
+    .series-note { margin-top: var(--space-6); color: var(--text-faint); }
+    .series-note { font-size: var(--text-chip); }
     .dimension { min-width: 160px; }
 
-    /* A horizontal histogram, because the bin labels are the axis and a
-       vertical one would set them on their side. One row per bin, the bar
-       scaled against the tallest bin so a long tail stays visible. */
-    .histogram {
-      display: grid;
-      gap: 2px;
-      list-style: none;
+
+    /* -- SR51: the grid results ----------------------------------------- */
+
+    /* Reuses .heat's cell rules where it can; only what differs is set here.
+       A row that cleared the bar is marked on the left as well as by its chip,
+       so the signal survives greyscale and does not depend on spotting one
+       chip among twelve. The parameters cell is the only one allowed to wrap. */
+    .grid { width: 100%; border-collapse: collapse; }
+    .grid th, .grid td {
+      padding: var(--space-6) var(--space-10);
+      text-align: left;
+      font-size: var(--text-table);
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
     }
-    .histogram li {
-      display: grid;
-      grid-template-columns: 4rem 1fr 2.5rem;
-      align-items: center;
-      gap: var(--space-8);
-    }
-    .bin-label,
-    .bin-count {
-      color: var(--text-secondary);
-      font-size: var(--text-chip);
-    }
-    .bin-count { text-align: right; }
-    .bin-track {
-      height: 10px;
-      background: var(--bg);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .bin-fill {
-      display: block;
-      height: 100%;
-      /* Wins and losses are P&L direction, the one place the green/red pair
-         is allowed. The label carries the sign too, so the colour is not
-         doing the work alone. */
-      background: var(--pos);
-      border-radius: 2px;
-    }
-    .bin-fill.loss { background: var(--neg); }
+    .grid th { color: var(--text-secondary); font-size: var(--text-micro); }
+    .grid tr.passes td:first-child { box-shadow: inset 2px 0 0 var(--pos); }
+    .grid td.params { white-space: normal; min-width: 18rem; }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
@@ -873,14 +920,6 @@ export class Analytics {
     this.store.drawdownSeries().map((point) => point.value),
   );
 
-  /** The tallest bin is full width and the rest are relative to it. Scaling to
-   *  the largest COUNT rather than to the total is what keeps a long tail
-   *  visible — against the total, a bin holding two trades out of ninety is
-   *  two percent of the track and invisible. */
-  protected binWidth(count: number): number {
-    const tallest = Math.max(...this.store.rMultipleBins().map((bin) => bin.count), 1);
-    return (count / tallest) * 100;
-  }
 
   /** "3 wins" rather than "3". The number alone does not say which way the run
    *  is going, and a current streak is the one figure here where that is the
@@ -977,6 +1016,48 @@ export class Analytics {
   protected launch(): void {
     const strategy = this.strategy();
     if (strategy) this.store.startTune(strategy);
+  }
+
+  /* -- SR51: the grid results ------------------------------------------- */
+
+  protected readonly pendingPropose = signal<GridRow | null>(null);
+
+  protected readonly gridHeading = computed(() => {
+    const strategy = this.store.gridStrategy();
+    return strategy ? `Grid results — ${strategy}` : 'Grid results';
+  });
+
+  /** The excluded share arrives as a fraction and is a share, not a change,
+   *  so it takes `share` rather than the signing `pct`. */
+  protected readonly fmtExcluded = (value: number | null) =>
+    value === null ? ABSENT : share(value * 100);
+
+  protected askPropose(row: GridRow): void {
+    this.pendingPropose.set(row);
+  }
+
+  protected readonly proposeConsequence = computed(() => {
+    const row = this.pendingPropose();
+    if (!row) return '';
+    const strategy = this.store.gridStrategy() ?? 'this strategy';
+    // Says outright what staging is and is not. The Jinja page put this in a
+    // tip icon on a card heading, where it was read once.
+    return (
+      `Records ${row.paramLabel} as a candidate for ${strategy}. ` +
+      'Nothing changes about how the bot trades: applying means editing ' +
+      'entry_filters.DEFAULT_PARAMS by hand, running the suite, and only then ' +
+      'spending a validation shot.' +
+      (row.passes
+        ? ''
+        : ' This row did NOT clear the acceptance bar.')
+    );
+  });
+
+  protected confirmPropose(): void {
+    const row = this.pendingPropose();
+    if (!row) return;
+    this.store.propose(row.row_index);
+    this.pendingPropose.set(null);
   }
 
   /* -- proposals -------------------------------------------------------- */

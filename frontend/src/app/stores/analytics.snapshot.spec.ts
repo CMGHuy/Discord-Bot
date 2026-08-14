@@ -270,6 +270,144 @@ describe('AnalyticsStore — the snapshot', () => {
   });
 });
 
+/* SR51 — the grid results and Propose.
+ *
+ * Before this the Tuning tab could launch a grid and delete proposals, but
+ * nothing could create one: the Propose button lived in the results table that
+ * never migrated. POST /analytics/tuning/proposals already existed and took a
+ * job_id and a row_index; what was missing was any way to see the rows.
+ */
+describe('AnalyticsStore — the tuning grid', () => {
+  let store: InstanceType<typeof AnalyticsStore>;
+  let backend: HttpTestingController;
+
+  const JOBS = {
+    jobs: [{ id: 'job1', state: 'done', started_at: '2026-08-14T05:00:00Z' }],
+  };
+
+  const GRID = {
+    job_id: 'job1',
+    strategy: 'RSI Divergence',
+    grid: [
+      { row_index: 0, params: { rsi_reclaim: 30, atr_mult: 1.5 }, n_eval: 40,
+        win_rate: 82, expectancy_r: 0.4, excluded_share: 0.2, passes: true },
+      { row_index: 1, params: { rsi_reclaim: 35 }, n_eval: 12,
+        win_rate: 90, expectancy_r: 0.6, excluded_share: 0.1, passes: false },
+    ],
+  };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        AnalyticsStore,
+      ],
+    });
+    store = TestBed.inject(AnalyticsStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  /** Open Tuning and settle every request it makes. */
+  function openTuning(grid: object = GRID) {
+    const tick = () => TestBed.inject(ApplicationRef).tick();
+    tick();
+    backend.expectOne('/api/v1/analytics/performance').flush(PERFORMANCE);
+    backend.expectOne('/api/v1/analytics/snapshot').flush(SNAPSHOT);
+
+    store.setTab('tuning');
+    tick();
+    backend.expectOne('/api/v1/jobs').flush(JOBS);
+    backend.expectOne('/api/v1/jobs/job1').flush({
+      id: 'job1', state: 'done', log_tail: 'grid 12/12',
+    });
+    backend.expectOne('/api/v1/jobs/job1/result').flush(grid);
+    backend.expectOne('/api/v1/analytics/tuning/proposals').flush({ proposals: [] });
+    backend.expectOne('/api/v1/analytics/strategies').flush({ strategies: [], heatmap: null });
+  }
+
+  it('fetches the tracked job result and reads its rows', () => {
+    openTuning();
+    expect(store.gridStrategy()).toBe('RSI Divergence');
+    expect(store.grid()).toHaveLength(2);
+  });
+
+  it('flattens the parameters into one label', () => {
+    // Done in the store because a template that iterated the object would be
+    // asserting the wire format of something the Python side owns.
+    openTuning();
+    expect(store.grid()[0].paramLabel).toBe('rsi_reclaim=30, atr_mult=1.5');
+  });
+
+  it('trusts the server on which rows cleared the bar', () => {
+    // The bar is four conditions and the same one tune_strategy.py prints. A
+    // second copy in TypeScript is how the two come to disagree.
+    openTuning();
+    expect(store.grid().map((row) => row.passes)).toEqual([true, false]);
+  });
+
+  it('keeps each row own index for Propose to post', () => {
+    openTuning();
+    expect(store.grid().map((row) => row.row_index)).toEqual([0, 1]);
+  });
+
+  it('shows no grid while a job is still running', () => {
+    // The endpoint answers 200 with an empty grid rather than 404ing, so this
+    // is not an error state and must not read as one.
+    openTuning({ job_id: 'job1', strategy: null, grid: [] });
+    expect(store.grid()).toEqual([]);
+    expect(store.error()).toBeNull();
+  });
+
+  it('proposes a row against the tracked job, then refetches the list', () => {
+    openTuning();
+    store.propose(1);
+
+    const posted = backend.expectOne('/api/v1/analytics/tuning/proposals');
+    expect(posted.request.method).toBe('POST');
+    expect(posted.request.body).toEqual({ job_id: 'job1', row_index: 1 });
+    posted.flush({ filename: '20260814-rsi.json', proposal: {} });
+
+    // Refetched rather than spliced in locally: the store holds one server
+    // response and derives everything else.
+    backend.expectOne('/api/v1/analytics/tuning/proposals').flush({ proposals: [] });
+    expect(store.proposeResult()).toContain('20260814-rsi.json');
+    expect(store.proposing()).toBeNull();
+  });
+
+  it('marks only the row being proposed as pending', () => {
+    openTuning();
+    store.propose(1);
+    expect(store.proposing()).toBe(1);
+    backend.expectOne('/api/v1/analytics/tuning/proposals')
+      .flush({ filename: 'x.json', proposal: {} });
+    backend.expectOne('/api/v1/analytics/tuning/proposals').flush({ proposals: [] });
+  });
+
+  it('reports a stale job or row in words someone can act on', () => {
+    openTuning();
+    store.propose(9);
+    backend.expectOne('/api/v1/analytics/tuning/proposals').flush(
+      { error: { code: 'not_found', message: 'Could not find that job/row.' } },
+      { status: 404, statusText: 'Not Found' },
+    );
+
+    expect(store.proposeError()).toContain('reload');
+    expect(store.proposing()).toBeNull();
+  });
+
+  it('does nothing when there is no tracked job to propose against', () => {
+    // No job means no job_id, and posting without one would 404 on the server
+    // for a reason the user could do nothing about.
+    store.propose(0);
+    backend.verify();
+  });
+});
+
 describe('binRMultiples', () => {
   it('bins at half an R, labelling each bin by its lower edge', () => {
     // The label is the edge, not a value, so the bin starting at zero is

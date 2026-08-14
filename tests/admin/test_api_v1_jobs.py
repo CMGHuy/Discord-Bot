@@ -134,6 +134,123 @@ def test_job_detail_carries_a_log_tail(logged_in, monkeypatch):
     assert body["log_tail"] == "line one\nline two"
 
 
+# --- SR51: the grid result ------------------------------------------------
+#
+# The job has always written this file and _load_result has always read it,
+# but only the Jinja page rendered it. Without a route the SPA could launch a
+# grid and never see what it found -- which also left POST /proposals, which
+# takes a job_id and a row_index, unreachable by any normal route.
+
+
+@pytest.fixture
+def results_dir(admin_app, tmp_path):
+    d = tmp_path / "tuning_results"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def _write_grid(results_dir, rows, strategy="RSI Divergence"):
+    (results_dir / "job1.json").write_text(
+        json.dumps({"strategy": strategy, "grid": rows}), encoding="utf-8")
+
+
+def test_job_result_requires_auth(client):
+    assert_error(client.get("/api/v1/jobs/job1/result"), "auth", 401)
+
+
+@pytest.mark.parametrize("bad", ["..\secrets", "a.b", "a;b"])
+def test_job_result_rejects_a_traversal_id(logged_in, bad):
+    """Same guard as GET /jobs/<id>: this id also reaches a filesystem path."""
+    assert_error(logged_in.get(f"/api/v1/jobs/{bad}/result"), "invalid", 400)
+
+
+def test_job_result_is_empty_not_404_while_a_job_is_still_running(logged_in, results_dir):
+    """A running job has written no result yet, and that is the ordinary case.
+
+    A 404 would have the UI report a failure for "it has not finished",
+    which is the reading that sends someone looking for a bug.
+    """
+    body = logged_in.get("/api/v1/jobs/stillgoing/result").get_json()
+    # The empty response carries the same three keys as a full one, so a
+    # client never has to branch on which shape it got.
+    assert_shape(body, {"job_id": str, "strategy": type(None), "grid": list})
+    assert body["grid"] == []
+
+
+def test_job_result_returns_the_grid(logged_in, results_dir):
+    _write_grid(results_dir, [
+        {"params": {"rsi_reclaim": 30}, "n_eval": 40, "win_rate": 82.0,
+         "expectancy_r": 0.4, "excluded_share": 0.2},
+        {"params": {"rsi_reclaim": 35}, "n_eval": 12, "win_rate": 90.0,
+         "expectancy_r": 0.6, "excluded_share": 0.1},
+    ])
+    body = logged_in.get("/api/v1/jobs/job1/result").get_json()
+
+    assert body["strategy"] == "RSI Divergence"
+    assert len(body["grid"]) == 2
+    assert body["grid"][0]["params"] == {"rsi_reclaim": 30}
+
+
+def test_job_result_marks_which_rows_cleared_the_bar(logged_in, results_dir):
+    """`passes` is computed server-side on purpose.
+
+    The bar is four conditions -- n_eval >= 30, win rate >= 80, positive
+    expectancy, excluded share <= 0.5 -- and it is the same bar
+    scripts/tune_strategy.py prints. A second copy of it in TypeScript is how
+    the two would come to disagree about which rows are worth taking.
+    """
+    _write_grid(results_dir, [
+        # Clears everything.
+        {"params": {"a": 1}, "n_eval": 40, "win_rate": 82.0,
+         "expectancy_r": 0.4, "excluded_share": 0.2},
+        # Great win rate on far too few trades.
+        {"params": {"a": 2}, "n_eval": 12, "win_rate": 90.0,
+         "expectancy_r": 0.6, "excluded_share": 0.1},
+        # Enough trades, but it threw away most of the candidates to get there.
+        {"params": {"a": 3}, "n_eval": 40, "win_rate": 85.0,
+         "expectancy_r": 0.4, "excluded_share": 0.9},
+        # Wins often and still loses money.
+        {"params": {"a": 4}, "n_eval": 40, "win_rate": 81.0,
+         "expectancy_r": -0.1, "excluded_share": 0.2},
+    ])
+    grid = logged_in.get("/api/v1/jobs/job1/result").get_json()["grid"]
+
+    assert [row["passes"] for row in grid] == [True, False, False, False]
+
+
+def test_job_result_carries_each_row_index(logged_in, results_dir):
+    """POST /proposals identifies a row by index. Carrying it on the row means
+    a client that sorts or filters the grid still proposes the right one."""
+    _write_grid(results_dir, [
+        {"params": {"a": 1}, "n_eval": 40, "win_rate": 82.0,
+         "expectancy_r": 0.4, "excluded_share": 0.2},
+        {"params": {"a": 2}, "n_eval": 40, "win_rate": 83.0,
+         "expectancy_r": 0.5, "excluded_share": 0.2},
+    ])
+    grid = logged_in.get("/api/v1/jobs/job1/result").get_json()["grid"]
+
+    assert [row["row_index"] for row in grid] == [0, 1]
+
+
+def test_a_row_from_the_result_can_be_proposed(logged_in, results_dir, proposals_dir):
+    """The whole point of the endpoint: the loop closes.
+
+    Before SR51 a grid could be launched and proposals could be deleted, but
+    nothing could create one -- the Propose button lived in the results table
+    that never migrated.
+    """
+    _write_grid(results_dir, [
+        {"params": {"rsi_reclaim": 30}, "n_eval": 40, "win_rate": 82.0,
+         "expectancy_r": 0.4, "excluded_share": 0.2},
+    ])
+    row = logged_in.get("/api/v1/jobs/job1/result").get_json()["grid"][0]
+
+    r = logged_in.post("/api/v1/analytics/tuning/proposals",
+                       json={"job_id": "job1", "row_index": row["row_index"]})
+    assert r.status_code == 200
+    assert r.get_json()["proposal"]["proposed_params"] == {"rsi_reclaim": 30}
+
+
 def test_list_proposals_empty(logged_in):
     assert_shape(logged_in.get("/api/v1/analytics/tuning/proposals").get_json(),
                  {"proposals": list})

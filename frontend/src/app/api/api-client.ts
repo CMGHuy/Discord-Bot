@@ -18,6 +18,7 @@ import {
   Identity,
   Job,
   JobList,
+  JobResult,
   JobStarted,
   KillswitchResult,
   LogClearResult,
@@ -180,6 +181,18 @@ export class ApiClient {
 
   job(id: string): Observable<Job> {
     return this.http.get<Job>(`${this.base}/jobs/${encodeURIComponent(id)}`);
+  }
+
+  /** A finished tuning job's grid — one row per parameter combination, each
+   *  carrying its own `row_index` and whether it cleared the acceptance bar.
+   *
+   *  Returns an empty grid rather than 404ing while the job is still running,
+   *  so the caller distinguishes "not finished" from "failed" by the job's own
+   *  state, which it already has (SR51). */
+  jobResult(id: string): Observable<JobResult> {
+    return this.http.get<JobResult>(
+      `${this.base}/jobs/${encodeURIComponent(id)}/result`,
+    );
   }
 
   startTuneJob(args: Record<string, unknown>): Observable<JobStarted> {

@@ -331,6 +331,50 @@ export function binRMultiples(values: number[], width = 0.5): Bin[] {
     }));
 }
 
+/**
+ * One row of a tuning grid (SR51).
+ *
+ * `passes` and `row_index` are both computed server-side and carried on the
+ * row. The acceptance bar is four conditions and it is the same bar
+ * `scripts/tune_strategy.py` prints, so restating it here would be a second
+ * definition that could disagree; the index is what `POST /proposals`
+ * identifies a row by, and inferring it from array position would break the
+ * moment anything sorted the table.
+ */
+export interface GridRow {
+  row_index: number;
+  params: Record<string, unknown>;
+  paramLabel: string;
+  n_eval: number | null;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  excluded_share: number | null;
+  passes: boolean;
+}
+
+function toGridRows(raw: unknown[]): GridRow[] {
+  return raw.flatMap((row, index) => {
+    if (!isPlainRecord(row)) return [];
+    const params = isPlainRecord(row['params']) ? row['params'] : {};
+    return [{
+      // The server's index if it sent one; the array position only as a
+      // fallback, so a hand-written fixture still works.
+      row_index: snapNumber(row['row_index']) ?? index,
+      params,
+      // Flattened once here rather than in the template: a cell that iterated
+      // an object would be asserting the wire format.
+      paramLabel: Object.entries(params)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(', '),
+      n_eval: snapNumber(row['n_eval']),
+      win_rate: snapNumber(row['win_rate']),
+      expectancy_r: snapNumber(row['expectancy_r']),
+      excluded_share: snapNumber(row['excluded_share']),
+      passes: row['passes'] === true,
+    }];
+  });
+}
+
 interface AnalyticsSlice {
   /** Which tab is open, projected from the URL's `?tab=`. Held here rather
    *  than in the component because it decides what gets fetched. */
@@ -345,6 +389,17 @@ interface AnalyticsSlice {
   snapshotError: string | null;
   /** Which dimension the Breakdowns table is grouped by. */
   breakdown: BreakdownDimension;
+
+  /** SR51 — the tracked job's grid, one row per parameter combination.
+   *  Empty while it is still running, which the endpoint answers with a 200
+   *  rather than a 404 so this never has to mean "something failed". */
+  gridStrategy: string | null;
+  grid: GridRow[];
+  /** The row currently being staged, by index — so only its own button shows
+   *  a pending state rather than the whole table going quiet. */
+  proposing: number | null;
+  proposeError: string | null;
+  proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
   jobs: JobSummary[];
@@ -395,6 +450,11 @@ export const AnalyticsStore = signalStore(
     snapshot: null,
     snapshotError: null,
     breakdown: 'ticker',
+    gridStrategy: null,
+    grid: [],
+    proposing: null,
+    proposeError: null,
+    proposeResult: null,
     strategies: null,
     calibration: null,
     jobs: [],
@@ -673,6 +733,22 @@ export const AnalyticsStore = signalStore(
         next: (job) => patchState(store, { job: job as JobStatus, error: null }),
         error: fail,
       });
+
+      // SR51. Fetched unconditionally rather than only for a finished job:
+      // the endpoint answers 200 with an empty grid while one is still
+      // running, and branching on state here would mean the results table
+      // stayed blank for a job that finished between the two responses.
+      api.jobResult(id).subscribe({
+        next: (result) =>
+          patchState(store, {
+            gridStrategy: result.strategy,
+            grid: toGridRows(result.grid ?? []),
+          }),
+        // Deliberately quiet. A missing result file is the ordinary state of a
+        // running or failed job, and the panel renders nothing rather than
+        // claiming an error the job's own state already explains.
+        error: () => patchState(store, { grid: [], gridStrategy: null }),
+      });
     };
 
     const loadTuning = (): void => {
@@ -752,6 +828,45 @@ export const AnalyticsStore = signalStore(
               launchError:
                 error.code === 'conflict'
                   ? 'A job is already running — only one at a time.'
+                  : error.message,
+            }),
+        });
+      },
+
+      /**
+       * Stage one grid row as a proposal — SR51, the action that closes the
+       * loop.
+       *
+       * Not an apply, and the server's own note says so: applying means
+       * editing `entry_filters.DEFAULT_PARAMS` by hand, running the suite, and
+       * only then spending a validation shot. This records a candidate.
+       */
+      propose(rowIndex: number): void {
+        const jobId = store.job()?.id;
+        if (!jobId) return;
+
+        patchState(store, {
+          proposing: rowIndex,
+          proposeError: null,
+          proposeResult: null,
+        });
+        api.createProposal({ job_id: jobId, row_index: rowIndex }).subscribe({
+          next: (created) => {
+            patchState(store, {
+              proposing: null,
+              // Named, not just "done": the proposals list below is sorted
+              // newest-first and can be long, and "which one did I just add"
+              // is the immediate next question.
+              proposeResult: `Staged as ${created.filename}.`,
+            });
+            loadProposals();
+          },
+          error: (error: ApiError) =>
+            patchState(store, {
+              proposing: null,
+              proposeError:
+                error.code === 'not_found'
+                  ? 'That job or row is no longer available — reload and try again.'
                   : error.message,
             }),
         });

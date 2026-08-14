@@ -288,6 +288,17 @@ export interface JobStarted {
   job_id: string;
 }
 
+/** `GET /jobs/:id/result` — a finished tuning job's grid.
+ *
+ *  `strategy` is null and `grid` empty while the job is still running: the
+ *  endpoint answers 200 with the same three keys either way, so nothing here
+ *  has to branch on which shape arrived (SR51). */
+export interface JobResult {
+  job_id: string;
+  strategy: string | null;
+  grid: unknown[];
+}
+
 export interface ProposalList {
   proposals: unknown[];
 }
