@@ -18,11 +18,15 @@
 #   4. Bot logs:   docker compose logs -f bot
 #      Admin UI:   http://localhost:1234  (or your server's address)
 #
-# Upgrading an existing stack: use
-#   docker compose up -d --build --renew-anon-volumes
-# The extra flag is not optional -- without it the admin keeps serving the
-# SPA bundle from the anonymous volume created by the FIRST run, not the one
-# your rebuild just produced. See the volumes: comment on each service.
+# Development builds locally; PRODUCTION DOES NOT BUILD. CI builds the image,
+# pushes it to GHCR, and deploy/deploy.sh pulls it and runs `up --no-build`
+# with SWING_BOT_IMAGE pointing at the exact tag. Set that variable yourself
+# to run a specific published build locally:
+#   SWING_BOT_IMAGE=ghcr.io/<owner>/swing-bot:<sha> docker compose up -d
+#
+# Only state is mounted from the host (data/, logs/, exports/, market_data/,
+# .env). The code and the SPA bundle come from the image and nothing on the
+# host may shadow them -- see the volumes: comment on the bot service.
 #
 # After editing .env from the admin UI, restart the bot to pick up the
 # change: click "Restart bot container" in the UI (requires the Docker
@@ -30,45 +34,51 @@
 
 services:
   bot:
+    # The image is the deployable. CI builds it, pushes it to GHCR, and the
+    # server pulls it by digest-pinned tag -- SWING_BOT_IMAGE is exported by
+    # deploy/deploy.sh. The local default keeps `docker compose up --build`
+    # working unchanged for development.
+    image: ${SWING_BOT_IMAGE:-swing-bot:latest}
+    # Kept so a developer can still build locally. The server never builds:
+    # deploy.sh pulls and runs `up --no-build`.
     build: .
-    image: swing-bot:latest
     container_name: swing-bot
     restart: unless-stopped
     env_file:
       - .env
+    # STATE ONLY. Never mount the source tree over /app.
+    #
+    # This used to be `.:/app` plus an anonymous volume to punch the SPA
+    # bundle back through it, and that pairing is what froze the admin UI on
+    # a months-old bundle: an anonymous volume is initialised from the image
+    # exactly once, and Compose carries it to every replacement container.
+    # Mounting the repo also makes an image pull meaningless -- the host
+    # checkout simply overwrites whatever the image shipped, so you would
+    # deploy an artifact and then replace it at runtime.
+    #
+    # So the code, the SPA bundle and scripts/ all come from the image, and
+    # the host contributes only things that must OUTLIVE it. Every path here
+    # is _PROJECT_ROOT-relative in swingbot/config.py:63-67.
     volumes:
-      - .:/app
-      # Keep the SPA bundle that lives INSIDE the image.
+      - ./data:/app/data                 # trades.json, account.json, state.json, watchlist.json
+      - ./logs:/app/logs
+      - ./exports:/app/exports           # generated charts
+      - ./market_data:/app/market_data   # OHLCV cache (MARKET_DATA_AUTO_REFRESH)
+      # Two FILE mounts, not the directory that holds them -- mounting the
+      # project root is what this whole comment exists to prevent.
       #
-      # `.:/app` above replaces the whole of /app with the host directory, and
-      # the host has no swingbot/admin/static/app -- it is gitignored and
-      # built only by the Dockerfile's frontend stage. So the bind mount was
-      # hiding the bundle the image had correctly built, `spa.is_built()`
-      # returned False, and every workspace URL 404ed. The site did not go
-      # down (spa.py falls back to the Jinja UI, deliberately) but Release A
-      # silently did not take effect.
+      # .env is read at startup, watched by mtime for SIGHUP reloads, and
+      # REWRITTEN IN PLACE by the admin UI's settings page
+      # (admin/helpers.py:114). In-place truncate-and-write keeps the inode,
+      # which is what makes a single-file bind mount safe here.
       #
-      # An anonymous volume at this path is initialised from the image and
-      # takes precedence over the bind mount underneath it -- the same trick
-      # used to keep a container's node_modules. Nothing needs to be built on
-      # the host, which is the point.
-      #
-      # AND IT IS INITIALISED FROM THE IMAGE EXACTLY ONCE, when the volume is
-      # first created. Compose then carries that same volume over to every
-      # replacement container, by design, so a rebuilt image does NOT refresh
-      # it -- the bundle stays pinned to whatever the first deploy put there
-      # while the Python code (bind-mounted) keeps updating around it. That
-      # shipped: the admin served the pre-SR4 "Cockpit" nav for weeks against
-      # an API that had already renamed it. deploy/deploy.sh passes
-      # --renew-anon-volumes for this reason; if you bring the stack up by
-      # hand, pass it too, or you are not running what you just built.
-      #
-      # Worth knowing: CI could not catch this. container-healthcheck uses
-      # plain `docker run` with no bind mount, so the bundle was visible there
-      # and the SPA smoke test passed on an image that behaves differently
-      # under compose. The post-deploy verification in deploy/deploy.sh is
-      # what found it.
-      - /app/swingbot/admin/static/app
+      # .env.bak is the backup that same code writes beside it. Without its
+      # own mount it lands in the container's writable layer and is lost on
+      # the next deploy -- i.e. the backup would silently not be a backup.
+      # deploy.sh touches both before `up`, because Docker creates a
+      # DIRECTORY at a bind-mount source that does not exist yet.
+      - ./.env:/app/.env
+      - ./.env.bak:/app/.env.bak
     # Chart generation (matplotlib/mplfinance) is CPU-only and headless;
     # no GPU or display needed.
     #
@@ -85,11 +95,11 @@ services:
       start_period: 30s
 
   admin:
-    # No 'build:' here -- reuses the image the bot service just built.
-    # Without this, docker compose up --build would compile everything twice
-    # (identical layers, wasted time). The bot service's image: tag ensures
-    # both services share the same already-built layer cache.
-    image: swing-bot:latest
+    # No 'build:' here -- same image as the bot, so a local `up --build`
+    # compiles once rather than twice and a deploy pulls one artifact for
+    # both services. This is also what guarantees the two can never drift
+    # onto different versions of the code.
+    image: ${SWING_BOT_IMAGE:-swing-bot:latest}
     container_name: swing-bot-admin
     restart: unless-stopped
     command: ["python", "admin_ui.py"]
@@ -102,39 +112,17 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       ADMIN_PORT: ${ADMIN_PORT:-1234}
       BOT_CONTAINER_NAME: swing-bot
+    # Identical state mounts to the bot service, and that is the point: the
+    # two processes share one data/ directory, so the admin UI reads exactly
+    # the trades.json the bot is writing. See the bot service above for why
+    # the source tree is NOT mounted and why .env/.env.bak are file mounts.
     volumes:
-      - .:/app
-      # Keep the SPA bundle that lives INSIDE the image.
-      #
-      # `.:/app` above replaces the whole of /app with the host directory, and
-      # the host has no swingbot/admin/static/app -- it is gitignored and
-      # built only by the Dockerfile's frontend stage. So the bind mount was
-      # hiding the bundle the image had correctly built, `spa.is_built()`
-      # returned False, and every workspace URL 404ed. The site did not go
-      # down (spa.py falls back to the Jinja UI, deliberately) but Release A
-      # silently did not take effect.
-      #
-      # An anonymous volume at this path is initialised from the image and
-      # takes precedence over the bind mount underneath it -- the same trick
-      # used to keep a container's node_modules. Nothing needs to be built on
-      # the host, which is the point.
-      #
-      # AND IT IS INITIALISED FROM THE IMAGE EXACTLY ONCE, when the volume is
-      # first created. Compose then carries that same volume over to every
-      # replacement container, by design, so a rebuilt image does NOT refresh
-      # it -- the bundle stays pinned to whatever the first deploy put there
-      # while the Python code (bind-mounted) keeps updating around it. That
-      # shipped: the admin served the pre-SR4 "Cockpit" nav for weeks against
-      # an API that had already renamed it. deploy/deploy.sh passes
-      # --renew-anon-volumes for this reason; if you bring the stack up by
-      # hand, pass it too, or you are not running what you just built.
-      #
-      # Worth knowing: CI could not catch this. container-healthcheck uses
-      # plain `docker run` with no bind mount, so the bundle was visible there
-      # and the SPA smoke test passed on an image that behaves differently
-      # under compose. The post-deploy verification in deploy/deploy.sh is
-      # what found it.
-      - /app/swingbot/admin/static/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./exports:/app/exports
+      - ./market_data:/app/market_data
+      - ./.env:/app/.env
+      - ./.env.bak:/app/.env.bak
       # Optional: lets the admin UI's "Restart bot container" button
       # actually restart the bot service via the Docker API. Remove this
       # line if you'd rather not grant the admin container access to the

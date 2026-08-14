@@ -14,18 +14,33 @@ git push origin main
         │
         ▼
 GitHub Actions (.github/workflows/deploy.yml)
-  1. sanity-check job: installs requirements.txt, imports every module
-     -- fails the whole run here if something's broken, before touching
-     the server at all
-  2. deploy job: SSHs into your Hetzner server as the `deploy` user and
-     runs /opt/swing-bot/deploy/deploy.sh
+  1. test      -- the Python suite
+  2. frontend  -- ng test + a real production build of the SPA
+  3. container-healthcheck
+        builds the image ONCE, starts it, runs the auth/route/SPA smoke
+        tests against that exact image, and only then pushes it to GHCR as
+        ghcr.io/<owner>/<repo>:sha-<12> and :latest
+  4. deploy    -- SSHes in as `deploy` and runs deploy.sh with
+                  SWING_BOT_IMAGE pinned to the sha- tag just published
         │
         ▼
 deploy/deploy.sh (on the server)
-  git fetch + reset --hard origin/main
-  docker compose up -d --build
-  docker image prune -f
+  git fetch + reset --hard origin/main   # compose file, scripts, .env only
+  docker pull $SWING_BOT_IMAGE
+  docker compose up -d --no-build --wait
+  verify: SPA loads, and both containers run the pulled image digest
 ```
+
+**The server does not build.** The image is built once in CI, proven there,
+and pulled here — so the artifact that was tested is the artifact that runs.
+The git checkout on the server still exists, but only for the things that
+live *outside* the image: `docker-compose.yml`, `deploy/`, and `.env`.
+
+**Only state is mounted from the host** — `data/`, `logs/`, `exports/`,
+`market_data/` and `.env`. The application code and the SPA bundle come from
+the image and nothing on the host may shadow them. Both containers mount the
+same `data/`, which is how the admin UI reads the very `trades.json` the bot
+is writing.
 
 The bot needs **no inbound networking at all** to run — Discord bots
 connect *outbound* to Discord's Gateway, so the whole pipeline above
@@ -92,14 +107,32 @@ something real (not the defaults). See `.env.example` for the full list
 with explanations, or edit later from the admin UI's Settings page
 (once it's running).
 
+Also add the published image, so the deploy script knows what to pull
+(step 4 covers where the path comes from):
+
+```bash
+echo 'SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:latest' | sudo -u deploy tee -a /opt/swing-bot/.env
+```
+
+Then log in to GHCR once (step 4 explains the token) and start it through
+the deploy script, which pulls the published image rather than building:
+
 ```bash
 cd /opt/swing-bot
-sudo -u deploy docker compose up -d --build
+sudo -u deploy ./deploy/deploy.sh
 sudo -u deploy docker compose logs -f bot
 ```
 
 Confirm the bot logs in and `!ping` responds in Discord, then Ctrl-C out
 of the log tail (the bot keeps running in the background).
+
+This needs a published image to exist, so let CI run at least once first.
+To bring it up before that — or to debug without the registry — build
+locally on the server instead:
+
+```bash
+sudo -u deploy docker compose up -d --build
+```
 
 ## 4. Wire up GitHub Actions
 
@@ -113,30 +146,79 @@ repository secret**. Add:
 | `HETZNER_SSH_KEY` | The **private** key the bootstrap script printed — paste the entire block |
 | `HETZNER_SSH_PORT` | Optional, only needed if you changed SSH off port 22 |
 
-That's it — `.github/workflows/deploy.yml` is already in the repo. Push
-to `main` (or go to **Actions → Deploy to Hetzner → Run workflow** to
-trigger it manually) and watch it deploy.
+**No registry secret is needed for pushing.** GHCR authenticates with the
+`GITHUB_TOKEN` that Actions mints per run; the workflow just declares
+`permissions: packages: write`. Nothing to create, nothing to rotate.
+
+**The server does need one credential to pull**, because the package is
+private. Create a classic PAT with only `read:packages`, then, once:
+
+```bash
+ssh deploy@167.233.26.185
+echo <the-PAT> | docker login ghcr.io -u <your-github-username> --password-stdin
+```
+
+It persists in `~/.docker/config.json`, so every later deploy runs
+unattended. Also record the image in the server's `.env`, so a manual
+`deploy.sh` knows what to pull:
+
+```bash
+echo 'SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:latest' >> /opt/swing-bot/.env
+```
+
+The exact path is printed as `Publishing as …` by every CI run — GHCR
+lowercases it, so `Discord-Bot` becomes `discord-bot`. A CI deploy overrides
+this with the immutable `sha-` tag it just published and does not depend on
+the value; it is the fallback for a by-hand deploy.
+
+(If you'd rather make the package public, skip the PAT entirely — `docker
+pull` on a public GHCR package needs no login.)
+
+Then push to `main` (or **Actions → Deploy to Hetzner → Run workflow**) and
+watch it deploy.
+
+### What CI must *not* have
+
+The application's `.env` — Discord token, admin password, FMP key — stays on
+the server and nowhere else. The pipeline never needs it: the test jobs run
+against literal stubs (`DISCORD_TOKEN=ci-stub`), and the containers read the
+real file from disk at runtime, where the admin UI's settings page also
+rewrites it.
+
+Resist base64-ing `.env` into a GitHub Secret. It puts production
+credentials in reach of every workflow and every fork's logs, and it
+immediately desynchronises from what the admin UI writes on the server, so
+the next settings change is silently reverted by the following deploy. If a
+single value is genuinely needed at *build* time, add that one value as its
+own secret and pass it as a build arg.
 
 ## Rolling back
 
-Deploys are just `git reset --hard origin/main` on the server, so
-rolling back is reverting on GitHub and letting the pipeline redeploy:
+Every build is published under an immutable `sha-<12>` tag, so a rollback is
+a pull of an older tag — no rebuild, no revert commit, seconds not minutes:
+
+```bash
+ssh deploy@167.233.26.185
+cd /opt/swing-bot
+SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh
+```
+
+Find the tag under **your profile → Packages → <repo> → versions**, or in
+the "Publishing as …" line of the run that shipped it.
+
+That leaves `main` ahead of production, which is deliberate — it's a
+stop-the-bleeding move. Follow it with the real fix:
 
 ```bash
 git revert <bad-commit-sha>
 git push origin main
 ```
 
-...which triggers the same pipeline against the reverted code. For an
-immediate rollback without waiting on CI, SSH in and do it directly:
+...which runs the full pipeline and publishes a new tag as normal.
 
-```bash
-ssh deploy@167.233.26.185
-cd /opt/swing-bot
-git fetch origin
-git reset --hard <good-commit-sha>
-docker compose up -d --build
-```
+Note the retention policy (`.github/workflows/registry-retention.yml`)
+prunes builds older than 14 days, keeping the 10 most recent plus `latest`.
+Rolling back further than that means rebuilding from the tag instead.
 
 ## Accessing the admin UI
 
@@ -227,6 +309,14 @@ to keep a single-server setup simple, but the pieces are all reusable.
   *private* key completely into `HETZNER_SSH_KEY`.
 - **Deploy succeeds but the bot doesn't come up**: SSH in and check
   `docker compose logs bot` — almost always a `.env` problem (missing
-  token, bad channel ID) rather than a deploy problem, since the same
-  `docker compose up -d --build` step that CI ran is what you'd run by
-  hand.
+  token, bad channel ID) rather than a deploy problem, since the image
+  itself was already started and smoke-tested in CI before it shipped.
+- **`docker pull` fails with `denied` / `unauthorized`**: the server's
+  GHCR login has expired or was never done. Re-run the `docker login
+  ghcr.io` from step 4 with a `read:packages` PAT. Note a PAT belonging to
+  someone without access to the package fails the same way.
+- **The UI is stale but the API is current**: this was the anonymous-volume
+  bug, and it cannot recur — nothing on the host mounts over the image's
+  code any more, and `deploy.sh` fails the deploy if either container is
+  not running the digest it just pulled. If you see it, check that nobody
+  has re-added a `.:/app` mount to `docker-compose.yml`.

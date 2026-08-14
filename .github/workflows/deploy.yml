@@ -136,11 +136,37 @@ jobs:
   #     which renders its own login form; /api/v1/* must still 401; wrong
   #     Basic Auth credentials still 401).
   #   - Any route returning 5xx instead of 200.
+  #
+  # It also PUBLISHES the image, and the ordering is the point: the artifact
+  # that gets pushed is byte-identical to the one every check below ran
+  # against. Build once, prove it, then push that -- never rebuild for the
+  # push, which would ship an image nothing tested.
   container-healthcheck:
     needs: [test, frontend]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write        # GITHUB_TOKEN needs this to push to GHCR
+    outputs:
+      image: ${{ steps.imagename.outputs.image }}
+      tag: ${{ steps.imagename.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
+
+      # GHCR rejects uppercase in a repository path and github.repository
+      # preserves whatever case the repo was created with, so it cannot be
+      # interpolated directly -- "Discord-Bot" would 400 on push.
+      - name: Resolve image name
+        id: imagename
+        run: |
+          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          # Immutable, and the thing the deploy pins. `latest` moves; this
+          # never does, so a rollback is re-running deploy.sh with an older
+          # tag and nothing else.
+          TAG="sha-$(echo '${{ github.sha }}' | cut -c1-12)"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "Publishing as $IMAGE:$TAG"
 
       # BuildKit is required for --mount=type=cache in the Dockerfile.
       - name: Set up Docker Buildx
@@ -344,13 +370,47 @@ jobs:
         if: always()
         run: docker rm -f swing-bot-admin-ci || true
 
+      # ── Publish ─────────────────────────────────────────────────────────
+      # Last, and only on a green run: everything above proved THIS image
+      # works, and re-tagging the local one is what guarantees the bytes
+      # that ship are the bytes that passed. A second `docker build` here
+      # would look equivalent and would not be -- a cache miss, a moved
+      # base-image tag or a dependency resolving differently all produce a
+      # different artifact from the one just tested.
+      #
+      # Only on a real push to main. A pull_request or a manual run against
+      # a branch still gets every check above, it just doesn't publish.
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # No secret to create: GITHUB_TOKEN is minted per-run and scoped by
+          # the `packages: write` permission above.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the tested image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          IMAGE="${{ steps.imagename.outputs.image }}"
+          TAG="${{ steps.imagename.outputs.tag }}"
+          docker tag swing-bot:ci "$IMAGE:$TAG"
+          docker tag swing-bot:ci "$IMAGE:latest"
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "Pushed $IMAGE:$TAG and $IMAGE:latest"
+
   # ── 4. Deploy ──────────────────────────────────────────────────────────────
-  # Only runs after all three check jobs pass. SSHes into the Hetzner
-  # server and runs the deploy script, which pulls latest, rebuilds, and
-  # restarts both services -- waiting for health checks to pass before
-  # returning (see deploy/deploy.sh).
+  # Only runs after all three check jobs pass. SSHes into the Hetzner server,
+  # which PULLS the image published above and restarts both services --
+  # waiting for health checks to pass before returning (see deploy/deploy.sh).
+  # The server no longer builds anything.
   deploy:
     needs: [container-healthcheck]
+    # Skip on a manual run against a branch, where nothing was published --
+    # deploying would silently re-run whatever :latest currently points at.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
@@ -361,5 +421,21 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
           script_stop: true
+          # envs= is how appleboy/ssh-action forwards a value into the remote
+          # shell; interpolating it into the script text directly would put
+          # the tag in the command line of a process on the server.
+          envs: SWING_BOT_IMAGE,APP_DIR
           script: |
-            bash /opt/swing-bot/deploy/deploy.sh
+            bash "$APP_DIR/deploy/deploy.sh"
+        env:
+          # The immutable SHA tag, never :latest. This is what makes the
+          # deploy reproducible: the server runs exactly the artifact this
+          # run tested, even if another push lands while this one is in
+          # flight and moves :latest underneath it.
+          SWING_BOT_IMAGE: ${{ needs.container-healthcheck.outputs.image }}:${{ needs.container-healthcheck.outputs.tag }}
+          # Where the checkout lives on the server. This was hardcoded to
+          # /opt/swing-bot while the running server actually uses
+          # /opt/swingbot -- a deploy against the wrong path fails outright
+          # (best case) rather than deploying anything. Set the
+          # HETZNER_APP_DIR secret to override without editing this file.
+          APP_DIR: ${{ secrets.HETZNER_APP_DIR || '/opt/swingbot' }}

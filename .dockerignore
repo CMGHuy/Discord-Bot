@@ -1,4 +1,4 @@
-# Runtime/state files -- these live on the host via the bind mount in
+# Runtime/state files -- these live on the host via the bind mounts in
 # docker-compose.yml, not baked into the image.
 data/
 logs/
@@ -6,6 +6,10 @@ logs/
 .env.bak
 .env.example
 exports/
+# The OHLCV cache. Gigabytes on a warmed-up machine, and a state directory
+# like the rest: mounted from the host, never shipped. Without this line a
+# local `docker compose build` uploads the whole cache as build context.
+market_data/
 
 # Python/dev cruft
 __pycache__/
