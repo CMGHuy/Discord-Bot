@@ -121,6 +121,19 @@ export const OPEN_POSITIONS_CAP = 6;
       </div>
     </header>
 
+    <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
+         a specific rule about what does and does not reach this screen, and a
+         looser wording would describe a looser rule. -->
+    <p class="explainer">
+      <strong>What appears here:</strong>
+      Only trades that meet <em>every</em> configured requirement (min reward,
+      stop distance, risk:reward, min strategies confirmed, min confidence) are
+      logged here as paper trades. Trade plans shown by <code>!check</code> that
+      don't clear all requirements appear in Discord but are <strong>not</strong>
+      logged — they're marked in bold red in the Discord embed. The automatic
+      background scan only ever posts and logs fully-qualifying setups.
+    </p>
+
     <!-- SR58. Realised, scoped by the toggle above -- distinct from the
          Open P&L card, which is unrealised and always all-open. -->
     <div class="realized">
@@ -137,7 +150,7 @@ export const OPEN_POSITIONS_CAP = 6;
         unit="%"
       />
       <span class="realized-count">
-        {{ store.realizedCount() }} closed ·
+        {{ store.realizedCount() }} closed{{ closedQualifier() }} ·
         {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
       </span>
     </div>
@@ -192,6 +205,12 @@ export const OPEN_POSITIONS_CAP = 6;
       />
     </div>
 
+    <!-- SR59. The chip carries the number and the "max" qualifier; this is
+         the reasoning behind it, from dashboard_fragment.html:81-87. -->
+    @if (premiumExplanation(); as explanation) {
+      <p class="section-help">{{ explanation }}</p>
+    }
+
     <!-- SR53. The lifecycle strip: five counts, each a link into Trades
          filtered to that status. The Jinja dashboard had exactly this and the
          SPA had the chips it navigated to with no numbers on them. -->
@@ -202,12 +221,25 @@ export const OPEN_POSITIONS_CAP = 6;
             class="lc"
             routerLink="/trades"
             [queryParams]="{ status: entry.status, outcome: null }"
+            [attr.title]="lifecycleTip(entry.status)"
           >
             <span class="lc-count num">{{ entry.count }}</span>
             <span class="lc-label">{{ entry.status }}</span>
           </a>
         }
       </nav>
+
+      <!-- SR59. _plans_board.html:22-27, verbatim. The per-status wording
+           from lc_tips rides each card's title attribute: the SPA has no
+           tip-icon component, and adding one would be a design decision
+           rather than a copy task. -->
+      <p class="section-help">
+        A plan moves PENDING → ACTIVE → PARTIAL → CLOSED as price hits its
+        entry trigger, TP1, then TP2/stop (or CANCELLED if it expires or
+        invalidates before filling). PENDING/ACTIVE/PARTIAL counts are
+        all-time; CLOSED/CANCELLED only count today's — click a card to filter
+        the board below by that status.
+      </p>
     }
 
     <sb-panel heading="Open positions" [flush]="true">
@@ -226,6 +258,19 @@ export const OPEN_POSITIONS_CAP = 6;
         <p class="table-error" role="status">{{ message }}</p>
       }
 
+      <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's
+           shares tooltip. A panel note rather than a per-cell title, per this
+           task's Step 2 — and because the per-trade half of it (which sizing
+           mode a position was opened under, and whether that still matches
+           today's setting) reads from sizing_mode, which lives on the
+           detail payload and belongs on the detail view. -->
+      <p class="section-help">
+        Share counts are snapshotted when a position opens. A trade logged
+        before that snapshot existed shows an estimate instead, and a position
+        opened under a different sizing mode will not match the premium note
+        above.
+      </p>
+
       <sb-data-table
         [rows]="openPositions()"
         [columns]="columns()"
@@ -238,6 +283,21 @@ export const OPEN_POSITIONS_CAP = 6;
         (reorder)="onReorder($event)"
       />
     </sb-panel>
+
+    <!-- SR59. dashboard_fragment.html:443-445, with ONE claim deliberately
+         changed rather than copied: that line said "live prices refresh
+         approximately every 15 seconds", which was true of the Jinja page's
+         polling timer. DASHBOARD_REFRESH_SECONDS is read only by
+         admin/app.py and admin/pages.py -- both Jinja. This SPA refreshes
+         on server events, so copying the sentence would have stated a stale
+         threshold, which the task's Step 3 calls worse than no copy. -->
+    <p class="footnote">
+      Prices and P&L update when the bot reports a change, not on a timer.
+      @if (riskSizingNote(); as note) {
+        · {{ note }}
+      }
+      · <code>!account</code> to change
+    </p>
 
     <ng-template #statusCell let-row>
       <sb-status-cell [row]="row" />
@@ -270,6 +330,26 @@ export const OPEN_POSITIONS_CAP = 6;
     </ng-template>
   `,
   styles: `
+    /* -- SR59: explanatory copy ----------------------------------- */
+    .explainer {
+      margin-bottom: var(--space-10);
+      padding: var(--space-8) var(--space-10);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+      line-height: 1.5;
+    }
+    .explainer code { font-family: var(--font-mono); }
+    .footnote {
+      margin-top: var(--space-8);
+      color: var(--text-faint);
+      font-size: var(--text-chip);
+      text-align: right;
+    }
+    .footnote code { font-family: var(--font-mono); }
+
     /* -- SR58: scope toggle and realised row ---------------------- */
     .scope { display: flex; gap: var(--space-4); margin-left: auto; }
     .realized {
@@ -530,6 +610,78 @@ export class Dashboard {
   /** Amber once exposure is most of the cap. Amber means caution, which is
    *  what "nearly out of risk budget" is -- it is not a loss, so it must
    *  not be red. */
+  /* -- SR59: the copy ------------------------------------------------- */
+
+  /** The Jinja page appended "· closed today" only in the today/active
+   *  modes, because in All days the count is not today's. Same rule here. */
+  protected readonly closedQualifier = computed(() =>
+    this.store.scope() === 'all' ? '' : ' today',
+  );
+
+  /**
+   * The premium chip's reasoning, from `dashboard_fragment.html:81-87`.
+   *
+   * Assembled here rather than server-side because it is a sentence, and
+   * `build_sizing_note` deliberately returns numbers. Null in account-%
+   * mode's simple case where the chip's own number already says everything.
+   */
+  protected readonly premiumExplanation = computed<string | null>(() => {
+    const note = this.store.sizingNote();
+    if (!note) return null;
+
+    if (note['mode'] === 'account_pct') {
+      const pct = note['position_pct'];
+      return typeof pct === 'number'
+        ? `Account % mode — every trade is sized at ${pct}% of balance, `
+          + 'regardless of stop distance.'
+        : null;
+    }
+
+    const risk = note['risk_amount'];
+    const riskPct = note['risk_pct'];
+    const maxPct = note['max_position_pct'];
+    const maxAbs = note['max_position_value_absolute'];
+    if (typeof risk !== 'number' || typeof riskPct !== 'number') return null;
+
+    const cap = typeof maxAbs === 'number' && maxAbs > 0
+      ? `${maxPct}% of balance or ${maxAbs.toLocaleString()} absolute, whichever is tighter`
+      : `${maxPct}% of balance`;
+
+    return `Risk % mode — risks ${risk.toLocaleString()} (${riskPct}%) if stopped `
+      + `out, capped at ${cap}. Varies per trade with stop distance — switch to `
+      + '!account sizing account for a fixed premium instead.';
+  });
+
+  /** The risk-% half of the footer note, present only when that is the mode
+   *  actually in use. */
+  protected readonly riskSizingNote = computed<string | null>(() => {
+    const note = this.store.sizingNote();
+    const riskPct = note?.['risk_pct'];
+    return typeof riskPct === 'number' ? `Sizing based on ${riskPct}% risk` : null;
+  });
+
+  /** `_plans_board.html`'s `lc_tips`, verbatim. */
+  private readonly lifecycleTips: Record<string, string> = {
+    PENDING:
+      'Plan built and posted, but price has not yet reached the entry trigger. '
+      + 'Cancelled automatically if it expires or the setup is invalidated first.',
+    ACTIVE:
+      'Entry has filled — position is open and being tracked toward TP1/stop.',
+    PARTIAL:
+      'TP1 hit: half the position was closed for a partial win, the remainder '
+      + 'rides toward TP2 with its stop moved to break-even.',
+    CLOSED:
+      'Fully closed today (win, loss, or scratch) — see Trade History for the '
+      + 'full log.',
+    CANCELLED:
+      'Cancelled today, before ever filling — either it expired waiting for '
+      + 'entry, or the setup was invalidated.',
+  };
+
+  protected lifecycleTip(status: string): string | null {
+    return this.lifecycleTips[status] ?? null;
+  }
+
   /* -- SR58: the date scope ------------------------------------------- */
 
   /** The Jinja dashboard's three, in its order. `active` first because it is

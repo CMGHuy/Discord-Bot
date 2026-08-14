@@ -142,6 +142,12 @@ export const DashboardStore = signalStore(
 
     positionPremiumIsCap: computed(() => data()?.position_premium?.['mode'] === 'risk_pct'),
 
+    /** SR59 -- the raw sizing note, for the workspace to write its
+     *  explanation from. Exposed rather than formatted here: the sentence is
+     *  copy and belongs with the other copy, and this store already refuses
+     *  to hold presentation. */
+    sizingNote: computed(() => data()?.position_premium ?? null),
+
     /**
      * The five plan-lifecycle counts — SR53.
      *
