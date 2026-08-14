@@ -13,8 +13,11 @@ everything as **paper trades only** — it never places orders. Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
 `data/`; no database.
 
-Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (Flask
-admin UI). Deployed as two Docker containers off one image (`DOCKER.md`,
+Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
+admin). The admin is a Flask **API** plus an Angular SPA served from
+`frontend/` — the Jinja UI it used to render was deleted on 2026-08-14
+(Release B). Flask now serves only `/api/v1/*`, the SPA's routes and `/`;
+the SPA is built by a Node stage in the Dockerfile, so a deploy needs it. Deployed as two Docker containers off one image (`DOCKER.md`,
 `DEPLOY_HETZNER.md`); `.env` is the single config source, hot-reloaded via
 SIGHUP (schema lives in `swingbot/config.py` — every setting is one `Field`
 entry that feeds both the env parser and the admin UI's Settings page).
@@ -82,7 +85,14 @@ make up / make logs / make restart         # docker compose lifecycle
 ```
 
 **Green means `0 failed`, and now also `0 xfailed`.** Reference baseline:
-`1828 passed, 136 skipped, 0 failed`. The pass count drifts up as tasks land
+`1680 passed, 66 skipped, 0 failed`.
+
+**That count dropped from 1898 on 2026-08-14 and the drop is correct**, not
+lost coverage: Release B deleted the Jinja UI, and with it the tests whose
+subject was rendered HTML — 10 whole files plus 45 individually-removed tests
+that asserted v1-against-Jinja parity or "the Jinja page still owns this URL".
+Builder-level tests were kept untouched, which is what they were extracted
+for. An unexplained drop from here is a different matter; investigate it. The pass count drifts up as tasks land
 tests and concurrent sessions commit — a *changed count* is not a failure;
 only `failed` is.
 

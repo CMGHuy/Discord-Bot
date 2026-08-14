@@ -47,34 +47,24 @@ scale-out + manager only after ≥5 clean `on` sessions.
 
 ## Admin UI
 
-### Which UI is served — `ADMIN_UI`, and how to roll back
+### One UI — the Angular SPA
 
-There are two admin UIs in the image right now: the Angular SPA and the
-original Jinja one. `ADMIN_UI` in `.env` decides which answers `/`:
+Release B (2026-08-14) deleted the Jinja UI: its 20 templates, its routes, the
+legacy `/api/*` blueprint, and the `ADMIN_UI` flag that used to choose between
+them. `/` redirects to the SPA and there is nothing else to serve.
 
-| Value | `/` serves | Everything else |
-|---|---|---|
-| `spa` (default) | redirects to `/cockpit`, the SPA | every Jinja page stays mounted and reachable |
-| `jinja` | the Jinja dashboard | the SPA's workspace URLs stay mounted too |
+**There is no longer a flag-and-restart rollback.** That was the mitigation
+the cutover rested on, and it is gone with the thing it rolled back to. If the
+SPA is broken, the rollback is now a git revert and a redeploy — which is
+slower, so `scripts/smoke_spa.py` below matters more than it used to, not
+less.
 
-**Rolling back is a restart, not a rebuild or a deploy** — that is the entire
-point of the flag, and it is the mitigation the cutover rests on:
-
-```bash
-sed -i 's/^ADMIN_UI=.*/ADMIN_UI=jinja/' .env   # or edit it by hand
-docker compose restart admin
-```
-
-The flag is deliberately **not** hot-reloadable over SIGHUP: which UI is
-served changing under a live session is worse than a restart.
-
-Two things worth knowing while both UIs are mounted:
-
-- The Jinja dashboard keeps its own URL, `/dashboard`, in *both* modes.
-- A hard reload of `/risk` or of a trade detail (`/trades/<id>`) lands on the
-  **Jinja** page, because those URLs were already taken. Navigating to them
-  inside the SPA works normally. This resolves itself when the Jinja routes
-  are deleted.
+The admin now exposes exactly three kinds of route: `/api/v1/*`, the SPA's
+workspace URLs and its asset directory, and `/`. Anything else is a bug; the
+check is in `docs/superpowers/specs/implemented/2026-08-08-v15-jinja-cutover-design.md`
+Appendix C3, and it reads the live `url_map` rather than grepping for
+`.route(` — `spa.py` mounts its routes with `add_url_rule`, which a grep does
+not see.
 
 ### Verifying a deploy actually works
 
@@ -95,7 +85,7 @@ docker compose exec admin python scripts/smoke_spa.py \
 It fetches the real `index.html` and follows every asset URL the page
 declares, resolved through its `<base href>` — which is the specific thing
 that breaks when the build and the server disagree about where the bundle
-lives. Add `--expect jinja` when checking a rolled-back instance.
+lives. (`--expect jinja` is gone with the Jinja UI.)
 
 ### The pages
 

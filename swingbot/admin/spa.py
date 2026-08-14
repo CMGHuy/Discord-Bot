@@ -60,32 +60,17 @@ def is_built() -> bool:
 
 
 def serves_root() -> bool:
-    """Whether `/` should hand over to the SPA — the `ADMIN_UI` flag (NG53).
+    """Whether `/` should hand over to the SPA. Release B: always.
 
-    The flag decides ONE thing: what `/` answers with. Every Jinja route
-    stays mounted in both modes, and the dashboard keeps its own
-    `/dashboard` URL, so flipping the value back is a restart and nothing
-    more. That is the rollback the whole two-release cutover rests on.
+    This used to consult `ADMIN_UI` and fall back to the Jinja dashboard when
+    the bundle was missing. Both halves are gone: the flag was deleted with
+    the UI it selected, and there is no longer a second UI to fall back TO.
 
-    An unbuilt bundle falls back to Jinja rather than redirecting into a
-    404. This is the one place that fallback is right -- elsewhere in this
-    module an unbuilt SPA answers 404 precisely so it cannot be mistaken for
-    a working deploy -- because here the alternative is a site whose front
-    door is broken while a perfectly good UI sits behind it. It is logged at
-    WARNING for the same reason: silently serving the old UI when the flag
-    says otherwise is exactly the kind of thing nobody notices for a week.
+    Kept as a function rather than inlined at its one call site because
+    `app.index` reads better asking a named question, and because an unbuilt
+    bundle still has a meaningful answer -- `_index()` below 404s on it
+    deliberately, so a broken deploy cannot be mistaken for a working one.
     """
-    from swingbot import config
-
-    if getattr(config, "ADMIN_UI", "spa") != "spa":
-        return False
-    if not is_built():
-        log.warning(
-            "ADMIN_UI=spa but %s has no index.html -- serving the Jinja "
-            "dashboard at / instead. Build the frontend, or set ADMIN_UI=jinja "
-            "to make this deliberate.", APP_DIR,
-        )
-        return False
     return True
 
 

@@ -72,26 +72,6 @@ def test_each_workspace_serves_the_spa(client, workspace, built):
     assert b"sb-root" in response.data
 
 
-@pytest.mark.parametrize("path", ["/risk", "/trades/PLAN-1"])
-def test_a_url_the_jinja_ui_still_owns_stays_jinja(client, path, built):
-    """Both UIs are live until Phase 5, so a colliding URL keeps its
-    existing owner rather than being taken over mid-migration.
-
-    **This test is expected to fail at NG57** and that is its job: when the
-    Jinja routes are deleted, these paths start serving the SPA, and the
-    failure is the reminder to move them into SPA_WORKSPACES above.
-
-    Two different mechanisms produce the same outcome. `/risk` is an exact
-    duplicate rule and `spa.register` skips it. `/trades/PLAN-1` matches
-    Jinja's `/trades/<trade_id>` rather than the SPA's
-    `/trades/<path:_rest>`, because Werkzeug ranks the narrower converter
-    first -- nothing skipped it.
-    """
-    response = client.get(path)
-
-    assert response.status_code != 200 or b"sb-root" not in response.data
-
-
 @pytest.mark.parametrize("path", ["/universe/AAPL"])
 def test_a_detail_url_reloads_into_the_spa(client, path, built):
     """Refreshing on /trades/:id must not 404 -- the route only exists in
@@ -117,20 +97,6 @@ def test_an_api_typo_does_not_return_html(client, built):
 
     assert response.status_code == 404
     assert response.mimetype == "application/json"
-
-
-def test_the_jinja_ui_is_untouched(client, auth, built):
-    """Both UIs are live until Phase 5, and every Jinja page stays reachable.
-
-    NG53 moved which UI answers `/` behind the `ADMIN_UI` flag, so the
-    dashboard's own URL is `/dashboard` -- see `test_admin_ui_flag.py` for
-    the flag itself. What this asserts is the part that has not changed:
-    the Jinja dashboard still renders, whatever `/` is doing.
-    """
-    response = client.get("/jinja/dashboard", headers=auth)
-
-    assert response.status_code == 200
-    assert b"sb-root" not in response.data
 
 
 # --------------------------------------------------------------------------

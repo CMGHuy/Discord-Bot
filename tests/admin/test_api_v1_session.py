@@ -62,21 +62,6 @@ def test_login_accepts_a_missing_body_without_crashing(client):
     assert_error(client.post("/api/v1/session"), "auth", 401)
 
 
-def test_login_grants_access_to_the_jinja_ui_too(client):
-    """One session mechanism, two front doors -- the SPA and the Jinja UI
-    must not diverge into separate notions of 'logged in' while both exist."""
-    client.post("/api/v1/session", json=_LOGIN)
-    # /dashboard rather than /: since NG53 the root's answer depends on the
-    # ADMIN_UI flag, and this is about the session, not about which UI won.
-    assert client.get("/jinja/dashboard").status_code == 200
-
-
-def test_jinja_login_grants_access_to_the_v1_api(client):
-    """The same property in the other direction."""
-    client.post("/login", data=_LOGIN)
-    assert client.get("/api/v1/session").get_json()["authenticated"] is True
-
-
 # --- DELETE /api/v1/session ----------------------------------------------
 
 def test_logout_clears_the_session(client):
@@ -114,22 +99,6 @@ def test_health_ok_with_basic_auth(client, auth):
         {"ui": str, "bot": str, "last_updated": (str, type(None))},
         where="versions",
     )
-
-
-def test_v1_and_legacy_401_bodies_deliberately_differ(client):
-    """The two namespaces do NOT share an error shape, and that is intended.
-
-    Legacy `/api/*` answers `{"error": "auth"}` -- a bare string -- and
-    dashboard.js branches on it today. v1's contract is
-    `{"error": {"code", "message"}}`. Reusing api.py's require_auth_json on
-    v1 routes would have leaked the old shape into the new namespace; the
-    contract assertions caught it, and this test stops it coming back while
-    also pinning that the legacy shape is left untouched.
-    """
-    assert client.get("/api/health").get_json() == {"error": "auth"}
-    assert client.get("/api/v1/health").get_json() == {
-        "error": {"code": "auth", "message": "Authentication required."}
-    }
 
 
 def test_v1_401_does_not_send_a_basic_auth_challenge(client):

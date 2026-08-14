@@ -50,41 +50,6 @@ class _FakeManagerBusy:
         raise RuntimeError("job already running")
 
 
-def test_api_jobs_tune_returns_job_id(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
-    r = client.post("/api/jobs/tune", data={"strategy": "RSI"}, headers=auth)
-    assert r.get_json() == {"job_id": "job123"}
-
-
-def test_api_jobs_tune_409_when_busy(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerBusy())
-    r = client.post("/api/jobs/tune", data={"strategy": "RSI"}, headers=auth)
-    assert r.status_code == 409
-    assert r.get_json() == {"error": "busy"}
-
-
-def test_api_jobs_tune_400_on_malformed_params_json(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
-    r = client.post("/api/jobs/tune", data={"strategy": "RSI", "params": "not-json"}, headers=auth)
-    assert r.status_code == 400
-
-
-def test_api_jobs_tune_400_on_non_dict_params(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
-    r = client.post("/api/jobs/tune", data={"strategy": "RSI", "params": "42"}, headers=auth)
-    assert r.status_code == 400
-
-
-def test_api_jobs_tune_400_on_non_numeric_be_trigger(client, auth, monkeypatch):
-    monkeypatch.setattr("swingbot.admin.api.job_manager", _FakeManagerOK())
-    r = client.post(
-        "/api/jobs/tune",
-        data={"strategy": "RSI", "params": '{"be_trigger": [1,2,3]}'},
-        headers=auth,
-    )
-    assert r.status_code == 400
-
-
 def test_guardrail_blocks_validation_window():
     from swingbot.admin.jobs import assert_train_only, build_tune_args
     with pytest.raises(ValueError):
@@ -147,77 +112,19 @@ import json
 import os
 
 
-def test_tuning_results_table_renders_and_highlights_passing_rows(client, auth):
-    from swingbot import config
-    results_dir = os.path.join(config.DATA_DIR, "tuning_results")
-    os.makedirs(results_dir, exist_ok=True)
-    payload = {
-        "strategy": "MACD",
-        "grid": [
-            {"params": {"ext_atr": 0.75}, "n_eval": 40, "win_rate": 82.0, "expectancy_r": 0.09, "excluded_share": 0.2},
-            {"params": {"ext_atr": 1.5}, "n_eval": 10, "win_rate": 60.0, "expectancy_r": -0.02, "excluded_share": 0.6},
-        ],
-        "best": None,
-    }
-    with open(os.path.join(results_dir, "job1.json"), "w") as f:
-        json.dump(payload, f)
-
-    r = client.get("/tuning?job_id=job1", headers=auth)
-    html = r.data.decode("utf-8")
-    assert "82.0" in html
-    assert 'class="diff-add"' in html  # the passing row (N=40, WR=82, ExpR>0, excl=20%)
-
-
 def test_load_result_rejects_path_traversal_job_id(admin_app):
     """job_id="../secret" resolves (via os.path.join(DATA_DIR, "tuning_results",
     "../secret.json")) to DATA_DIR/secret.json, one level above tuning_results/.
     Plant a real file exactly there so a regression here would leak it, proving
     the guard -- not just an absent-file coincidence -- is what blocks the read."""
     from swingbot import config
-    from swingbot.admin.pages import _load_result
+    from swingbot.admin.queries import _load_result
 
     os.makedirs(os.path.join(config.DATA_DIR, "tuning_results"), exist_ok=True)
     with open(os.path.join(config.DATA_DIR, "secret.json"), "w") as f:
         json.dump({"strategy": "LEAKED_SECRET", "grid": [], "best": None}, f)
 
     assert _load_result("../secret") is None
-
-
-def test_tuning_page_ignores_path_traversal_job_id(client, auth):
-    from swingbot import config
-
-    os.makedirs(os.path.join(config.DATA_DIR, "tuning_results"), exist_ok=True)
-    with open(os.path.join(config.DATA_DIR, "secret.json"), "w") as f:
-        json.dump({"strategy": "LEAKED_SECRET", "grid": [], "best": None}, f)
-
-    r = client.get("/tuning?job_id=" + "..%2fsecret", headers=auth)
-    assert r.status_code == 200
-    html = r.data.decode("utf-8")
-    assert "LEAKED_SECRET" not in html  # the planted file must never be read/rendered
-    assert "Results —" not in html  # no result card rendered for a rejected id
-
-
-def test_tuning_propose_writes_file_with_all_keys(client, auth):
-    from swingbot import config
-    results_dir = os.path.join(config.DATA_DIR, "tuning_results")
-    os.makedirs(results_dir, exist_ok=True)
-    payload = {"strategy": "MACD", "grid": [
-        {"params": {"ext_atr": 0.75}, "n_eval": 40, "win_rate": 82.0, "expectancy_r": 0.09, "excluded_share": 0.2},
-    ], "best": None}
-    with open(os.path.join(results_dir, "job1.json"), "w") as f:
-        json.dump(payload, f)
-
-    r = client.post("/tuning/propose", data={"job_id": "job1", "row_index": "0"}, headers=auth)
-    assert r.status_code == 302
-
-    proposals_dir = os.path.join(config.DATA_DIR, "tuning_proposals")
-    files = os.listdir(proposals_dir)
-    assert len(files) == 1
-    proposal = json.load(open(os.path.join(proposals_dir, files[0])))
-    assert set(proposal) == {
-        "strategy", "proposed_params", "train_stats", "current_params", "job_id", "created_at", "note",
-    }
-    assert "Apply by editing" in proposal["note"] and "entry_filters.DEFAULT_PARAMS" in proposal["note"]
 
 
 def test_tuning_propose_404_for_bad_row_index(client, auth):

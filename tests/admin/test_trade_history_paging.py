@@ -189,70 +189,6 @@ def _get(client, auth, **params):
     return r.get_json()
 
 
-def test_endpoint_requires_auth(client, seeded):
-    r = client.get("/api/trade-history")
-    assert r.status_code == 401
-    assert r.get_json()["error"] == "auth"
-
-
-def test_endpoint_all_mode_totals_and_pages(client, auth, seeded):
-    d = _get(client, auth, mode="all", page=1, per_page=25)
-    assert d["total"] == 62
-    assert d["pages"] == 3
-    assert d["shown"] == 25
-    assert d["rows_html"].count("<tr") >= 25
-
-
-def test_endpoint_today_mode_scopes_to_today(client, auth, seeded):
-    d = _get(client, auth, mode="today", per_page=25)
-    assert d["total"] == 2
-    assert "NVDA" in d["rows_html"]
-
-
-def test_endpoint_active_matches_today(client, auth, seeded):
-    assert (_get(client, auth, mode="active")["total"]
-            == _get(client, auth, mode="today")["total"] == 2)
-
-
-def test_endpoint_filter_reaches_beyond_the_first_page(client, auth, seeded):
-    """NVDA trades sort newest-first so they are on page 1 here; the point is
-    that filtering narrows the TOTAL, i.e. it ran server-side over everything
-    rather than over one page's DOM."""
-    d = _get(client, auth, mode="all", ticker="NVDA", per_page=25)
-    assert d["total"] == 2 and d["pages"] == 1
-
-
-def test_endpoint_pages_are_disjoint(client, auth, seeded):
-    import re
-    seen = []
-    for page in (1, 2, 3):
-        html = _get(client, auth, mode="all", page=page, per_page=25)["rows_html"]
-        seen += re.findall(r'id="ct-row-([^"]+)"', html)
-    assert len(seen) == len(set(seen)) == 62
-
-
-def test_endpoint_row_numbers_continue_across_pages(client, auth, seeded):
-    p2 = _get(client, auth, mode="all", page=2, per_page=25)["rows_html"]
-    assert '<span class="row-num">26</span>' in p2
-
-
-def test_endpoint_rejects_junk_params_without_500(client, auth, seeded):
-    for params in ({"page": "abc"}, {"per_page": "9999"}, {"page": "-5"},
-                   {"mode": "bogus"}, {"per_page": "0.5"}):
-        r = client.get("/api/trade-history", query_string=params, headers=auth)
-        assert r.status_code == 200, (params, r.status_code)
-
-
-def test_endpoint_per_page_clamped_to_allowed_set(client, auth, seeded):
-    # 9999 is not offered by the selector; must fall back to 25, not honour it
-    assert _get(client, auth, mode="all", per_page=9999)["shown"] == 25
-
-
-def test_endpoint_out_of_range_page_is_empty_not_an_error(client, auth, seeded):
-    d = _get(client, auth, mode="all", page=99, per_page=25)
-    assert d["shown"] == 0 and d["total"] == 62
-
-
 # ── Dashboard page integration (H5/H6) ──────────────────────────────────────
 
 def _row_ids(html):
@@ -261,48 +197,8 @@ def _row_ids(html):
     return re.findall(r'id="ct-row-([^"]+)"', m.group(1)) if m else []
 
 
-def test_dashboard_today_mode_renders_only_todays_history(client, auth, seeded):
-    html = client.get("/jinja/dashboard?mode=today", headers=auth).get_data(as_text=True)
-    ids = _row_ids(html)
-    assert set(ids) == {"today1", "today2"}, ids
-
-
-def test_dashboard_active_mode_renders_only_todays_history(client, auth, seeded):
-    assert set(_row_ids(client.get("/jinja/dashboard?mode=active", headers=auth).get_data(as_text=True))) \
-        == {"today1", "today2"}
-
-
-def test_dashboard_all_mode_renders_first_page_only(client, auth, seeded):
-    ids = _row_ids(client.get("/jinja/dashboard?mode=all", headers=auth).get_data(as_text=True))
-    assert len(ids) == 25, len(ids)          # first page, not all 62
-    assert "today1" in ids                    # newest-closed first
-
-
 def test_dashboard_no_longer_advertises_a_truncated_history(client, auth, seeded):
     html = client.get("/jinja/dashboard?mode=all", headers=auth).get_data(as_text=True)
     assert "Showing latest" not in html
 
 
-def test_filter_dropdown_options_still_come_from_full_history(client, auth, seeded):
-    """Regression guard: options must reflect every ticker in the log, not
-    just the ones on the current page. AAPL only exists in older trades."""
-    html = client.get("/jinja/dashboard?mode=today", headers=auth).get_data(as_text=True)
-    import re
-    sel = re.search(r'id="ct-filter-ticker".*?</select>', html, re.S).group(0)
-    assert "AAPL" in sel and "NVDA" in sel
-
-
-def test_endpoint_sorting_is_server_side(client, auth, seeded):
-    asc = _get(client, auth, mode="all", sort_by="closed", sort_dir="asc", per_page=10)
-    desc = _get(client, auth, mode="all", sort_by="closed", sort_dir="desc", per_page=10)
-    import re
-    a = re.findall(r'id="ct-row-([^"]+)"', asc["rows_html"])
-    d = re.findall(r'id="ct-row-([^"]+)"', desc["rows_html"])
-    assert a and d and a[0] != d[0]
-    assert a[0] == "old59"      # oldest close
-    assert d[0] in ("today1", "today2")
-
-
-def test_endpoint_unknown_sort_column_falls_back(client, auth, seeded):
-    d = _get(client, auth, mode="all", sort_by="not_a_column", per_page=10)
-    assert d["total"] == 62

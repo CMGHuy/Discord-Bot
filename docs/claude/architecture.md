@@ -5,7 +5,12 @@ Referenced from the root `CLAUDE.md`. Read this before touching
 
 - `swingbot/core/` is business logic with **no Discord dependency**;
   `swingbot/commands/` is the Discord command layer; `swingbot/admin/` is the
-  Flask UI. `bot_core.py` owns the shared bot instance and hot-reload handler.
+  Flask **API** (`admin/api_v1/`) plus the server side of the Angular SPA
+  (`admin/spa.py`), whose source lives in `frontend/` and is built by a Node
+  stage in the Dockerfile. The Jinja UI `admin/` used to render was deleted
+  2026-08-14; `admin/queries.py` holds the read-side helpers the API kept
+  using when `pages.py` went. `bot_core.py` owns the shared bot instance and
+  hot-reload handler.
   Subpackages: `core/edge/`, `core/scanning/`, `core/analytics/`, `core/charts/`.
 - **`swingbot/core/edge/`** (edge-engine-v4, current active work area) is
   growth/risk math, mostly pure functions: `sizing.py` (fractional-Kelly, vol
