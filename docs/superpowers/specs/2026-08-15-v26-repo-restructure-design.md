@@ -106,10 +106,27 @@ Rather than fix the three and leave eleven modules whose correctness depends on
 two files happening to stay in the same package, **every relative import in a
 moving module is rewritten to absolute** (`from swingbot.core.market.indicators
 import atr`). The surviving ones are not left alone as a shortcut; the point is
-that the next move should not be able to break them silently. Absolute imports
-also make the rewrite mechanically verifiable: after the move,
-`grep -rE '^\s*from \.' swingbot/core/*/` over the six new packages returns
-nothing.
+that the next move should not be able to break them silently.
+
+**The reverse direction breaks too, and it is easy to miss.** The packages that
+are *not* moving reach upward into ones that are, via parent-relative imports —
+ten of them, all in `charts/`:
+
+```
+charts/chart_geometry.py       from ..fvg / ..indicators / ..strategy / ..volatility
+charts/chart_volume_profile.py from ..strategy
+charts/trade_chart.py          from ..indicators / ..trendlines / ..volatility
+charts/trade_chart.py          from .. import levels
+```
+
+Every target lands in `market/`, so all ten need `..X` → `swingbot.core.market.X`.
+`trade_chart.py`'s `from .. import levels` is the package-attribute form again,
+in relative dress. Note that four of the ten are in `trade_chart.py`, which v25
+edits — another reason v26 waits for it.
+
+Absolute imports make the whole rewrite mechanically verifiable: afterwards,
+`grep -rE '^\s*from \.\.?[a-z]' swingbot/core/` returns nothing but same-package
+imports inside `analytics/`, `charts/`, `edge/` and `scanning/`.
 
 `validation_registry.json` moves alongside its loader into `backtesting/`, and it
 **must move in the same commit**: `registry.py:13` resolves it as
