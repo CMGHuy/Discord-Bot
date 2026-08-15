@@ -50,3 +50,6 @@ frontend/.angular/
 # served by Flask. A build artefact -- never committed, or the image would
 # ship whichever bundle someone last built by hand.
 swingbot/admin/static/app/
+
+# Brainstorming visual-companion sessions: mockups and server state, not source.
+.superpowers/
