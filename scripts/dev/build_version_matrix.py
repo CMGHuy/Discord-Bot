@@ -39,6 +39,21 @@ OUT = ROOT / "swingbot" / "admin" / "version_history.json"
 TRACKED = "VERSION.json"
 
 
+def _components(doc: dict) -> list[str]:
+    """Component keys in a VERSION.json document, in file order.
+
+    Every key that is not a `*_updated` stamp. This is the ENTIRE interface for
+    adding a component: put a key in VERSION.json and it appears here, in the
+    payload, and on the admin page. No code change, no migration.
+
+    The cost of that convenience: a component may never be named
+    `<something>_updated`. It would be filtered out here and simply never
+    appear, with no error raised anywhere -- which is why this is written down
+    rather than left to be rediscovered.
+    """
+    return [k for k in doc if not k.endswith("_updated")]
+
+
 def _semver_key(v: str) -> tuple:
     """Sort '1.10.2' after '1.9.0'. Non-numeric parts sort last, not crash."""
     parts = []
@@ -69,11 +84,15 @@ def _states() -> list[dict]:
             doc = json.loads(blob.stdout)
         except json.JSONDecodeError:
             continue                      # a malformed intermediate state
-        ui, bot = doc.get("ui"), doc.get("bot")
-        if not ui or not bot:
+        versions = {k: str(v) for k, v in doc.items()
+                    if not k.endswith("_updated") and v}
+        # AT LEAST ONE, never all. A release predating a component simply does
+        # not carry its key; requiring every known component here would drop
+        # every historical release the first time anyone extends VERSION.json.
+        if not versions:
             continue
         states.append({"sha": sha[:8], "date": date, "subject": subject,
-                       "ui": ui, "bot": bot})
+                       "versions": versions})
 
     # The working tree's own VERSION.json, when it differs from the newest
     # COMMITTED state. Without this the generator can never see the bump it is
@@ -87,12 +106,13 @@ def _states() -> list[dict]:
             live = json.loads(live_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             live = {}
-        ui, bot = live.get("ui"), live.get("bot")
-        if ui and bot and (not states or (states[-1]["ui"], states[-1]["bot"]) != (ui, bot)):
+        live_versions = {k: str(v) for k, v in live.items()
+                         if not k.endswith("_updated") and v}
+        if live_versions and (not states or states[-1]["versions"] != live_versions):
             states.append({
                 "sha": "uncommitted",
                 "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                "subject": "working tree", "ui": ui, "bot": bot,
+                "subject": "working tree", "versions": live_versions,
             })
     return states
 

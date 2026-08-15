@@ -18,6 +18,43 @@ sys.path.insert(0, str(ROOT / "scripts" / "dev"))
 import build_version_matrix as bvm  # noqa: E402
 
 
+def _fake_git(monkeypatch, blobs: dict[str, str]):
+    """Stub `subprocess.run` for both calls the walk makes: the log, then one
+    `git show` per commit. Keys of `blobs` are shas, in log order."""
+    log = "\n".join(f"{sha}0000000|2026-07-{i+1:02d}|subject {i}"
+                    for i, sha in enumerate(blobs))
+
+    class R:
+        def __init__(self, stdout, code=0):
+            self.stdout, self.returncode = stdout, code
+
+    def fake_run(cmd, **kwargs):
+        if cmd[1] == "log":
+            return R(log)
+        sha = cmd[2].split(":")[0][:8]
+        return R(blobs.get(sha, ""), 0 if sha in blobs else 1)
+
+    monkeypatch.setattr(bvm.subprocess, "run", fake_run)
+    monkeypatch.setattr(bvm.Path, "exists", lambda self: False)
+
+
+def test_components_are_every_key_that_is_not_a_timestamp():
+    doc = {"ui": "1.3.1", "bot": "1.1.2",
+           "ui_updated": "2026-08-15 11-58-58", "bot_updated": "2026-08-07 20-59-24"}
+    assert bvm._components(doc) == ["ui", "bot"]
+
+
+def test_a_new_component_needs_no_code_change():
+    """The whole interface for adding a component is a key in VERSION.json."""
+    doc = {"ui": "1.3.1", "bot": "1.1.2", "worker": "0.2.0", "ui_updated": "x"}
+    assert bvm._components(doc) == ["ui", "bot", "worker"]
+
+
+def test_a_component_named_like_a_stamp_is_invisible():
+    """Documents the trap rather than fixing it: `_updated` is reserved."""
+    assert bvm._components({"ui": "1.0.0", "cache_updated": "0.1.0"}) == ["ui"]
+
+
 def test_semver_sorts_numerically_not_lexically():
     versions = ["1.0.5", "1.0.10", "1.0.2", "1.1.0", "1.0.9"]
     assert sorted(versions, key=bvm._semver_key) == [
@@ -35,6 +72,26 @@ def test_semver_tolerates_a_non_numeric_part():
     out = sorted(["1.0.2", "1.0.0-rc1", "1.0.1"], key=bvm._semver_key)
     assert out[0] == "1.0.1" or out[0] == "1.0.2"
     assert "1.0.0-rc1" in out
+
+
+def test_a_release_missing_one_component_is_kept_not_skipped(monkeypatch):
+    """The guard is at-least-one. Requiring EVERY component would delete all
+    history predating a component the day someone adds one."""
+    blobs = {
+        "aaaaaaa1": '{"ui": "1.0.0", "bot": "1.0.0"}',
+        "aaaaaaa2": '{"ui": "1.1.0", "bot": "1.0.0", "worker": "0.1.0"}',
+    }
+    _fake_git(monkeypatch, blobs)
+    states = bvm._states()
+    assert len(states) == 2, "the pre-worker release must survive"
+    assert states[0]["versions"] == {"ui": "1.0.0", "bot": "1.0.0"}
+    assert "worker" not in states[0]["versions"]
+
+
+def test_a_release_with_no_components_at_all_is_skipped(monkeypatch):
+    _fake_git(monkeypatch, {"aaaaaaa1": '{"ui_updated": "x"}',
+                            "aaaaaaa2": '{"ui": "1.0.0"}'})
+    assert [s["versions"] for s in bvm._states()] == [{"ui": "1.0.0"}]
 
 
 def test_build_derives_pairs_and_ranges(monkeypatch):
