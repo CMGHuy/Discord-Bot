@@ -7,7 +7,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { FilterBar, FilterChip, FilterChips } from './filter-bar';
 import { Checkbox, Select, TextInput } from './form-controls';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
-import { Drawer, Tab, TabBar } from './layout';
+import { ControlRow, Drawer, Tab, TabBar } from './layout';
 
 /* NG41 — input and layout.
  *
@@ -39,6 +39,7 @@ const TABS: Tab[] = [
     Checkbox,
     TabBar,
     Drawer,
+    ControlRow,
   ],
   template: `
     <button sb-button [variant]="variant()" [loading]="working()" (click)="onClick()">Go</button>
@@ -67,6 +68,12 @@ const TABS: Tab[] = [
     />
 
     <sb-drawer [open]="drawerOpen()" heading="Details" (closed)="drawerOpen.set(false)" />
+
+    <sb-control-row>
+      <sb-text-input label="Search" [(value)]="query" />
+      <button sb-button>Go</button>
+    </sb-control-row>
+    <sb-control-row [stacked]="true"><button sb-button>Kill</button></sb-control-row>
   `,
 })
 class Host {
@@ -84,6 +91,7 @@ class Host {
   readonly ticker = signal('');
   readonly noted = signal(false);
   readonly flagged = signal(false);
+  readonly query = signal('');
 
   clicks = 0;
   cleared = 0;
@@ -232,6 +240,20 @@ describe('input and layout components', () => {
     const stacked = boxes.find((el) => el.querySelector('.top-label'));
     const caption = stacked?.querySelector('.box span');
     expect(caption?.textContent?.trim()).toBe('Only changed');
+  });
+
+  /* -- control row -------------------------------------------------------- */
+
+  it('projects its controls', () => {
+    const row = fixture.nativeElement.querySelector('sb-control-row .row');
+    expect(row?.querySelector('sb-text-input')).toBeTruthy();
+    expect(row?.querySelector('button[sb-button]')).toBeTruthy();
+  });
+
+  it('marks a stacked row so it can collapse at narrow widths', () => {
+    const rows = fixture.nativeElement.querySelectorAll('sb-control-row .row');
+    expect(rows[0].classList.contains('stacked')).toBe(false);
+    expect(rows[1].classList.contains('stacked')).toBe(true);
   });
 
   it('omits the top label element entirely when unset', () => {

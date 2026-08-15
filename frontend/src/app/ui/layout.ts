@@ -142,6 +142,54 @@ export class TabBar {
 
 
 /**
+ * The one sanctioned control row.
+ *
+ * Before this, 47 rows across the workspaces each picked their own
+ * `align-items` — `center`, `baseline`, `flex-start`, `stretch` — and a row
+ * mixing a labelled input with a bare button could not align under any of
+ * them, because the two controls disagreed about where their label went and
+ * differed by 4px in height. `--control-h` and the checkbox's top label fixed
+ * the controls; this fixes the container.
+ *
+ * **`flex-end`, and the reason matters.** A labelled control is label-band +
+ * control-band; a bare button is control-band only. Aligning on the BOTTOM
+ * edge is the only rule under which both land on the same line, whatever the
+ * label does above it.
+ *
+ * Flexbox already aligns per-line when wrapping — `align-items` applies within
+ * each flex line, not across the container — so a wrapped second line aligns
+ * with itself for free. That was never the bug; mismatched control heights
+ * inside one line was.
+ *
+ * `stacked` collapses the row to a full-width column below `sm` (640px).
+ * `scan-tab`'s kill row hand-rolled exactly this; it belongs here instead.
+ */
+@Component({
+  selector: 'sb-control-row',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `<div class="row" [class.stacked]="stacked()"><ng-content /></div>`,
+  styles: `
+    .row {
+      display: flex;
+      align-items: flex-end;
+      align-content: flex-start;
+      flex-wrap: wrap;
+      gap: var(--space-10);
+    }
+    /* 640 is breakpoints.ts's sm floor, repeated as a literal because
+       @media cannot evaluate var() -- the same reason the breakpoints are
+       not tokens. breakpoints.spec.ts pins the arithmetic. */
+    @media (max-width: 639px) {
+      .stacked { flex-direction: column; align-items: stretch; }
+    }
+  `,
+})
+export class ControlRow {
+  readonly stacked = input(false);
+}
+
+
+/**
  * A panel that slides in from the right — row detail that is too big to
  * expand inline, without navigating away from the list behind it.
  *
