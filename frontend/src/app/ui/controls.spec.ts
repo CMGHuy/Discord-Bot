@@ -49,6 +49,11 @@ const TABS: Tab[] = [
       <sb-checkbox [(checked)]="noted" label="Has note" />
     </sb-filter-bar>
 
+    <!-- Placed AFTER the filter bar on purpose: the existing checkbox
+         assertions use querySelector, which takes the first match in document
+         order, so the bare checkbox above stays the one they mean. -->
+    <sb-checkbox label="Only changed" topLabel="Filter" [(checked)]="flagged" />
+
     <sb-filter-chips [chips]="chips" [selected]="status()" (selectedChange)="status.set($event)" />
 
     <sb-tab-bar [tabs]="tabs" [active]="tab()" (activeChange)="tab.set($event)" />
@@ -78,6 +83,7 @@ class Host {
   readonly strategy = signal('');
   readonly ticker = signal('');
   readonly noted = signal(false);
+  readonly flagged = signal(false);
 
   clicks = 0;
   cleared = 0;
@@ -210,6 +216,31 @@ describe('input and layout components', () => {
     expect(q('sb-select label')).not.toBeNull();
     expect(q('sb-text-input label')).not.toBeNull();
     expect(q('sb-checkbox label')).not.toBeNull();
+  });
+
+  it('renders a top label above the box when one is given', () => {
+    const top = fixture.nativeElement.querySelector('sb-checkbox .top-label');
+    expect(top?.textContent?.trim()).toBe('Filter');
+  });
+
+  it('keeps the inline caption as the checkbox own name', () => {
+    // Scoped to the checkbox that HAS a top label -- the template holds two,
+    // and the bare one in the filter bar is first in document order.
+    const boxes: Element[] = Array.from(
+      fixture.nativeElement.querySelectorAll('sb-checkbox'),
+    );
+    const stacked = boxes.find((el) => el.querySelector('.top-label'));
+    const caption = stacked?.querySelector('.box span');
+    expect(caption?.textContent?.trim()).toBe('Only changed');
+  });
+
+  it('omits the top label element entirely when unset', () => {
+    const bare = fixture.nativeElement.querySelectorAll('sb-checkbox');
+    // The template's other checkbox has no topLabel.
+    const without = Array.from(bare).find(
+      (el) => !(el as Element).querySelector('.top-label'),
+    );
+    expect(without).toBeTruthy();
   });
 
   /* -- tab bar ------------------------------------------------------------ */

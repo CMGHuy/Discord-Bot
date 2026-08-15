@@ -153,14 +153,19 @@ export class TextInput {
   selector: 'sb-checkbox',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <label class="field">
-      <input
-        type="checkbox"
-        [checked]="checked()"
-        [disabled]="disabled()"
-        (change)="checked.set($any($event.target).checked)"
-      />
-      <span>{{ label() }}</span>
+    <label class="field" [class.stacked]="topLabel()">
+      @if (topLabel(); as text) {
+        <span class="top-label">{{ text }}</span>
+      }
+      <span class="box">
+        <input
+          type="checkbox"
+          [checked]="checked()"
+          [disabled]="disabled()"
+          (change)="checked.set($any($event.target).checked)"
+        />
+        <span>{{ label() }}</span>
+      </span>
     </label>
   `,
   styles: `
@@ -172,6 +177,18 @@ export class TextInput {
       color: var(--text);
       cursor: pointer;
     }
+    /* Label above, control below -- the same two bands sb-select and
+       sb-text-input have, so a checkbox can share a row with them. */
+    .stacked { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+    .top-label {
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    /* The control band. Height matched to every other control so the row
+       aligns on the box, not on the caption's text. */
+    .box { display: inline-flex; align-items: center; gap: var(--space-6); height: var(--control-h); }
     .field:has(input:disabled) { color: var(--text-faint); cursor: default; }
     input { accent-color: var(--accent); }
   `,
@@ -180,4 +197,8 @@ export class Checkbox {
   readonly checked = model(false);
   readonly label = input.required<string>();
   readonly disabled = input(false);
+  /** Rendered above the box, matching sb-select and sb-text-input, so a
+   *  checkbox can sit in a control row without breaking its alignment. The
+   *  inline `label` stays either way -- it is the checkbox's own name. */
+  readonly topLabel = input<string | null>(null);
 }
