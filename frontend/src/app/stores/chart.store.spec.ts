@@ -22,12 +22,13 @@ import { ChartStore } from './chart.store';
  * slices of one frame at one window. So the store has one loading flag and
  * one error, not five.
  *
- * The refetch policy is the part worth pinning. OhlcvStore deliberately does
- * NOT refetch on `trades` — refetching a year of candles to pick up four
- * horizontal lines is the wrong trade. This store must, and for a reason that
- * does not apply there: its payload carries `working_stop`, which moves on
- * every breakeven and trail step, and an overlay derived from the trade's own
- * confirming sources. A stale chart here shows the wrong stop.
+ * The refetch policy is the part worth pinning. It refetches on `trades`
+ * because the payload carries `working_stop`, which moves on every breakeven
+ * and trail step, and overlays derived from the trade's own confirming
+ * sources — a stale chart here shows the wrong stop. It also refetches on
+ * `scan`, which is when the OHLCV cache behind the endpoint has new bars, and
+ * which is the ONLY event a plain ticker chart can ride on: this store serves
+ * the watchlist too, since it absorbed `OhlcvStore`.
  */
 
 class FakeEventStream {
@@ -52,6 +53,7 @@ class FakeEventStream {
 }
 
 const RESPONSE: ChartResponse = {
+  ticker: 'AAPL',
   ohlcv: [
     { t: 1_767_312_000, o: 1, h: 2, l: 0.5, c: 1.5, v: 100 },
     { t: 1_767_398_400, o: 1.5, h: 2.5, l: 1, c: 2, v: 120 },
@@ -63,11 +65,14 @@ const RESPONSE: ChartResponse = {
   },
   volume_profile: [{ price: 1.5, volume: 220 }],
   levels: { entry: 1.4, stop: 1.1, target1: 2.2, target2: null, working_stop: 1.2 },
-  overlay: {
-    side: 'target',
-    source: 'EMA20',
-    shape: { kind: 'curve', label: 'EMA20', points: [[1_767_312_000, 1.2]] },
-  },
+  overlays: [
+    {
+      side: 'target',
+      source: 'EMA20',
+      shape: { kind: 'curve', label: 'EMA20', points: [[1_767_312_000, 1.2]] },
+    },
+  ],
+  notes: [],
   currency: '$',
 };
 
@@ -95,18 +100,33 @@ describe('ChartStore', () => {
 
   const tick = () => TestBed.inject(ApplicationRef).tick();
 
-  const load = (tradeId = 't1') => {
-    store.setTrade(tradeId);
+  const load = (tradeId: string | null = 't1', ticker = 'AAPL') => {
+    store.setTarget(ticker, tradeId);
     tick();
-    return backend.expectOne((req) => req.url === `/api/v1/market/chart/${tradeId}`);
+    return backend.expectOne((req) => req.url === `/api/v1/market/chart/${ticker}`);
   };
 
-  it('issues no request until it has a trade', () => {
+  it('issues no request until it has a ticker', () => {
     // The Chart tab is built before the trade has loaded. A request for
     // `/chart/null` is a 404 the user would read as "this chart is broken".
     tick();
     backend.verify();
     expect(store.data()).toBeNull();
+  });
+
+  it('loads a ticker with no trade at all', () => {
+    // The watchlist's case, and the reason this store replaced OhlcvStore:
+    // a chart of an instrument nobody holds is an ordinary request, not an
+    // error and not a second endpoint.
+    const request = load(null);
+
+    expect(request.request.params.has('trade_id')).toBe(false);
+    request.flush({ ...RESPONSE, levels: null, overlays: [] });
+    expect(store.data()?.levels).toBeNull();
+  });
+
+  it('sends the trade id as a parameter, not in the path', () => {
+    expect(load('t1').request.params.get('trade_id')).toBe('t1');
   });
 
   it('loads once a trade is set', () => {
@@ -125,32 +145,49 @@ describe('ChartStore', () => {
     expect(store.error()).toBeNull();
   });
 
-  it('setting the same trade twice does not refetch', () => {
+  it('setting the same target twice does not refetch', () => {
     load().flush(RESPONSE);
 
-    store.setTrade('t1');
+    store.setTarget('AAPL', 't1');
     tick();
     backend.verify();
   });
 
   it('refetches when the trade changes, and drops the previous payload', () => {
     load('t1').flush(RESPONSE);
-    store.setTrade('t2');
+    store.setTarget('AAPL', 't2');
     tick();
 
     // The old chart must not linger under the new trade's header while the
     // request is out -- that is a chart of the wrong position.
     expect(store.data()).toBeNull();
-    backend.expectOne((req) => req.url === '/api/v1/market/chart/t2').flush(RESPONSE);
+    const request = backend.expectOne((req) => req.url === '/api/v1/market/chart/AAPL');
+    expect(request.request.params.get('trade_id')).toBe('t2');
+    request.flush(RESPONSE);
     expect(store.data()?.ohlcv.length).toBe(2);
   });
 
+  it('refetches when only the ticker changes', () => {
+    load(null, 'AAPL').flush(RESPONSE);
+    store.setTarget('MSFT', null);
+    tick();
+    backend.expectOne((req) => req.url === '/api/v1/market/chart/MSFT').flush(RESPONSE);
+  });
+
   it('sends the window when one is set', () => {
-    store.setTrade('t1');
+    store.setTarget('AAPL', 't1');
     store.setWindow(200);
     tick();
-    const request = backend.expectOne((req) => req.url === '/api/v1/market/chart/t1');
+    const request = backend.expectOne((req) => req.url === '/api/v1/market/chart/AAPL');
     expect(request.request.params.get('window')).toBe('200');
+  });
+
+  it('is not empty before the first response, only after one with no bars', () => {
+    // Null data is the wait, not an answer about the data. Reporting it as
+    // "no price history" is a claim this store cannot yet make.
+    expect(store.isEmpty()).toBe(false);
+    load().flush({ ...RESPONSE, ohlcv: [] });
+    expect(store.isEmpty()).toBe(true);
   });
 
   it('refetches on a trades event', () => {
@@ -158,7 +195,18 @@ describe('ChartStore', () => {
 
     events.raise('trades');
     tick();
-    backend.expectOne((req) => req.url === '/api/v1/market/chart/t1').flush(RESPONSE);
+    backend.expectOne((req) => req.url === '/api/v1/market/chart/AAPL').flush(RESPONSE);
+  });
+
+  it('refetches on a scan event', () => {
+    // A completed scan is when the cache behind this endpoint has new bars.
+    // A plain ticker chart has no trade events to ride on, so without this
+    // the watchlist's chart would never refresh at all.
+    load().flush(RESPONSE);
+
+    events.raise('scan');
+    tick();
+    backend.expectOne((req) => req.url === '/api/v1/market/chart/AAPL').flush(RESPONSE);
   });
 
   it('does not refetch on unrelated events', () => {
@@ -202,7 +250,7 @@ describe('ChartStore', () => {
 
     store.retry();
     tick();
-    backend.expectOne((req) => req.url === '/api/v1/market/chart/t1').flush(RESPONSE);
+    backend.expectOne((req) => req.url === '/api/v1/market/chart/AAPL').flush(RESPONSE);
     expect(store.error()).toBeNull();
     expect(store.data()?.ohlcv.length).toBe(2);
   });

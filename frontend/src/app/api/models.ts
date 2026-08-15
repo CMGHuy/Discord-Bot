@@ -671,49 +671,12 @@ export interface ScanCommandResult {
   scan: ScanStatus;
 }
 
-/* -- market ------------------------------------------------------------- */
+/* -- market: the interactive chart (SR33, v25) -------------------------- */
 
-export interface Candle {
-  /** `YYYY-MM-DD`, which is also what lightweight-charts accepts directly. */
-  time: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-/** The plan lines a chart draws. Present ONLY when `trade_id` was supplied
- *  and resolved -- an unresolvable id is a 404 rather than a chart quietly
- *  missing its levels, because a plain chart that looks complete is how a
- *  reader concludes the lines were never set. */
-export interface TradeLevels {
-  entry: number | null;
-  stop_loss: number | null;
-  tp1: number | null;
-  tp2: number | null;
-  direction: string | null;
-}
-
-/** `GET /market/ohlcv/:ticker`.
+/** A bar in `GET /market/chart/:ticker`.
  *
- *  An ENVELOPE, not a bare array. This was previously typed as `Candle[]`,
- *  which compiled fine and would have handed the chart `undefined` at
- *  runtime -- NG45 is the first consumer, so it is the first thing that
- *  would have noticed. `tests/admin/test_api_v1_market.py` is the contract
- *  and it asserts `body["bars"]`. */
-export interface OhlcvResponse {
-  ticker: string;
-  bars: Candle[];
-  levels?: TradeLevels;
-}
-
-/* -- market: the interactive trade chart (SR33) -------------------------- */
-
-/** A bar in `GET /market/chart/:tradeId`.
- *
- *  Note `t` -- an int Unix epoch in SECONDS, NOT the `YYYY-MM-DD` string
- *  `Candle` carries. One time type across this whole payload: the overlay
+ *  Note `t` -- an int Unix epoch in SECONDS, not a `YYYY-MM-DD` string. One
+ *  time type across this whole payload: the overlay
  *  shapes below carry epochs too, and lightweight-charts converts both
  *  through the same `timeToCoordinate`. Mixing the two representations in
  *  one chart is how an overlay lands a year away from its candle, which
@@ -852,8 +815,16 @@ export interface MarkerShape {
 }
 
 /** A diagonal support/resistance line, with the pivots it was fitted
- *  through. Only ever present when the caller supplied an existing fit --
- *  `/market/chart` does not fit trendlines, so it never returns this. */
+ *  through.
+ *
+ *  `p1`/`p2` are the segment's ENDS -- two extrapolated positions at the fit
+ *  window's edges, which no candle need ever have visited. `pivots` are the
+ *  bars that actually touched the line and earned it the `Nx` in its label,
+ *  so there are `strength` of them and not two. Drawing the ends as the
+ *  diamonds is a bug the PNG renderer has already had once.
+ *
+ *  The line is never fitted at request time -- it is read off the trade,
+ *  which is what makes this line and the PNG's line the same line. */
 export interface TrendlineShape {
   kind: 'trendline';
   p1: ChartPoint;
@@ -873,9 +844,11 @@ export type ChartShape =
   | MarkerShape
   | TrendlineShape;
 
-/** The ONE confirming method drawn for this trade. Target side preferred --
- *  it is the side the trade aims at -- falling back to the stop side, and
- *  `null` when neither has anything drawable (an older trade with no
+/** One confirming method drawn for one side of the trade. Both sides are
+ *  returned when both have something drawable, target first -- the method
+ *  that confirmed the target and the one holding the stop are different
+ *  methods, and one overlay could only ever tell half of it. The list is
+ *  empty when neither side has anything to draw (an older trade with no
  *  recorded sources, or one confirmed only by a candlestick pattern). */
 export interface ChartOverlay {
   side: 'target' | 'stop';
@@ -884,19 +857,34 @@ export interface ChartOverlay {
   shape: ChartShape;
 }
 
-/** `GET /market/chart/:tradeId?window=<bars>`.
+/** `GET /market/chart/:ticker?trade_id=<id>&window=<bars>`.
  *
  *  Everything the interactive chart draws, in one request, computed by the
  *  same Python that draws the PNG posted to Discord (spec Decision 10).
+ *
+ *  Keyed by TICKER, with the trade optional: the subject of a chart is the
+ *  instrument, and a plan is an annotation on top of it. Keyed by trade there
+ *  was no way to chart a watchlist ticker at all, which is what forced the
+ *  second, thinner chart component this type replaced.
+ *
  *  `window` defaults to 120 and must be 20-500 -- out of range is a 400, NOT
  *  a clamp, so a caller asking for 5000 bars finds out rather than silently
  *  receiving a chart it did not ask for. */
 export interface ChartResponse {
+  ticker: string;
   ohlcv: ChartBar[];
   indicators: ChartIndicators;
   volume_profile: VolumeProfileBin[];
-  levels: ChartLevels;
-  overlay: ChartOverlay | null;
+  /** Null without a `trade_id` -- no plan, no lines. Not an object of nulls:
+   *  "there is no plan here" and "the plan has no target" are different
+   *  answers and the chart draws them differently. */
+  levels: ChartLevels | null;
+  /** Empty, never null. Both sides when both are drawable, target first. */
+  overlays: ChartOverlay[];
+  /** The legend's fit notes, verbatim from the same helpers the PNG prints:
+   *  the dates and prices a line was fitted between. Empty without a trade,
+   *  because there is then no fit to explain. */
+  notes: string[];
   /** The symbol this ticker actually trades in (`$`, `€`, ...). */
   currency: string;
 }

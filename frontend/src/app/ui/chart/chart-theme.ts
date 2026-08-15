@@ -1,4 +1,4 @@
-import { DeepPartial } from 'lightweight-charts';
+import { CrosshairMode, DeepPartial } from 'lightweight-charts';
 import type { ChartOptions } from 'lightweight-charts';
 
 /**
@@ -19,8 +19,15 @@ import type { ChartOptions } from 'lightweight-charts';
  *
  * Read once per chart creation rather than cached at module load, so a chart
  * built after a token change gets the new values.
+ *
+ * Exported for `legend-primitive.ts` (v25 Task 9): it is the one other canvas
+ * primitive that paints anything besides a colour — its font family and size
+ * come from `--font-sans`/`--text-table` the same way every colour here comes
+ * from `--pos`/`--accent`/etc. A second copy of this function would be exactly
+ * the drift risk the paragraph above warns about for a stale hex fallback: it
+ * would stop matching the moment this one's behaviour changed, silently.
  */
-function token(name: string): string {
+export function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
@@ -124,6 +131,7 @@ export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
     rightPriceScale: { borderColor: palette.border },
     timeScale: { borderColor: palette.border, timeVisible: false },
     crosshair: {
+      mode: CrosshairMode.Magnet,
       vertLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },
       horzLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },
     },

@@ -341,18 +341,34 @@ describe('StrategyOverlay', () => {
 
   it('attaches what the dispatcher produced', () => {
     const series = fakeSeries();
-    new StrategyOverlay(series as never).render(wrap(CURVE), PALETTE);
+    new StrategyOverlay(series as never).render([wrap(CURVE)], PALETTE);
 
     expect(series.primitives).toHaveLength(1);
+  });
+
+  it('draws every side it is given, not just the first', () => {
+    // Both sides arrive together: the method that confirmed the target and
+    // the one holding the stop are different methods, and drawing one of them
+    // tells half the story with nothing on screen saying so.
+    const series = fakeSeries();
+    new StrategyOverlay(series as never).render(
+      [
+        wrap(CURVE),
+        { ...wrap(CURVE), side: 'stop' },
+      ],
+      PALETTE,
+    );
+
+    expect(series.primitives).toHaveLength(2);
   });
 
   it('clears the previous overlay before drawing the next', () => {
     const series = fakeSeries();
     const overlay = new StrategyOverlay(series as never);
 
-    overlay.render(wrap(CURVE), PALETTE);
+    overlay.render([wrap(CURVE)], PALETTE);
     overlay.render(
-      wrap({ kind: 'marker', t: 1, price: 2, label: 'P', pivot_kind: 'low' }),
+      [wrap({ kind: 'marker', t: 1, price: 2, label: 'P', pivot_kind: 'low' })],
       PALETTE,
     );
 
@@ -361,14 +377,14 @@ describe('StrategyOverlay', () => {
   });
 
   it('draws nothing at all for a trade with no confirming source', () => {
-    // `overlay: null` is spec Decision 10's second degraded state: an older
+    // An empty list is spec Decision 10's second degraded state: an older
     // trade with no recorded sources renders candles, indicators and plan
     // lines, and nothing else.
     const series = fakeSeries();
     const overlay = new StrategyOverlay(series as never);
 
-    overlay.render(wrap(CURVE), PALETTE);
-    overlay.render(null, PALETTE);
+    overlay.render([wrap(CURVE)], PALETTE);
+    overlay.render([], PALETTE);
 
     expect(series.primitives).toEqual([]);
   });

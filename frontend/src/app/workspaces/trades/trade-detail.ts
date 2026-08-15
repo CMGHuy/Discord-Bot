@@ -958,17 +958,21 @@ export class TradeDetail {
   protected readonly chartCaption = computed(() => {
     const trade = this.store.trade();
     if (!trade) return null;
-    // The confirming method, when the trade has one. `overlay: null` is an
-    // ordinary state — an older trade with no recorded sources — so the caption
-    // simply says less rather than announcing an absence.
-    const source = this.chart.data()?.overlay?.source;
+    // The confirming methods, when the trade has any. An empty list is an
+    // ordinary state — an older trade with no recorded sources — so the
+    // caption simply says less rather than announcing an absence. Both sides
+    // are named when both are drawn: they are different methods, and the
+    // legend below is the only other place that says which.
+    const source = (this.chart.data()?.overlays ?? [])
+      .map((overlay) => overlay.source)
+      .join(' · ');
     const base = `${trade.ticker} — daily, with this plan's levels`;
     return source ? `${base} · ${source}` : base;
   });
 
   /** No bars is distinct from an error and from still loading: the request
    *  succeeded and the window is empty. */
-  protected readonly chartEmpty = computed(() => (this.chart.data()?.ohlcv.length ?? 0) === 0);
+  protected readonly chartEmpty = this.chart.isEmpty;
 
   /** Autosave delay. Long enough that ordinary typing does not generate a
    *  request per word, short enough that the note is stored before attention
@@ -1016,11 +1020,13 @@ export class TradeDetail {
       this.noteTimer = null;
     });
 
-    // Keyed by TRADE, not by ticker: the plan lines, the working stop and the
-    // overlay only exist relative to a position. Only once the trade has
-    // loaded — `/chart/null` is a 404 the reader would take for a broken chart.
+    // Both, and both from the trade: the ticker is what is charted, and the
+    // trade id is what adds the plan lines, the working stop and the overlays.
+    // Only once the trade has loaded — a chart of `null` is a 404 the reader
+    // would take for a broken chart.
     effect(() => {
-      this.chart.setTrade(this.store.trade()?.id ?? null);
+      const trade = this.store.trade();
+      this.chart.setTarget(trade?.ticker ?? null, trade?.id ?? null);
     });
   }
 

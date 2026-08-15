@@ -11,14 +11,14 @@ import {
 import { RouterLink } from '@angular/router';
 
 import { TradeRow } from '../../api/models';
-import { OhlcvStore } from '../../stores/ohlcv.store';
+import { ChartStore } from '../../stores/chart.store';
 import { TradesStore } from '../../stores/trades.store';
 import { ChartContainer } from '../../ui/chart-container';
+import { TradeChart } from '../../ui/chart/trade-chart';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
 import { held, num, pct } from '../../ui/format';
 import { Panel } from '../../ui/layout';
-import { PriceChart } from '../../ui/price-chart';
 
 /** How many of this ticker's trades the table shows.
  *
@@ -32,10 +32,15 @@ export const TICKER_TRADES_CAP = 25;
  *
  * **Builds nothing new** (spec v14 Decision 9). The table is
  * `DataTableComponent` over `TradesStore` with the ticker filter set; the
- * chart is `ChartContainer` + `PriceChart` over `OhlcvStore` with no
+ * chart is `ChartContainer` + `TradeChart` over `ChartStore` with no
  * `trade_id`, so it draws price without any one plan's levels. Both stores
  * are the same ones Trades and the trade detail use — a second loader here
  * would give this screen its own subtly different empty and error states.
+ *
+ * The chart used to be a different COMPONENT here (`PriceChart`) reading a
+ * different endpoint, because the full one could not be asked for a ticker
+ * without a trade. It can now, so this screen and the trade detail draw with
+ * the same code and cannot drift apart on screen.
  *
  * There is no ticker-level summary endpoint and this view does not invent
  * one: the counts come from the rows it already has.
@@ -43,8 +48,8 @@ export const TICKER_TRADES_CAP = 25;
 @Component({
   selector: 'sb-ticker-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Panel, DataTable, ChartContainer, PriceChart],
-  providers: [TradesStore, OhlcvStore],
+  imports: [RouterLink, Panel, DataTable, ChartContainer, TradeChart],
+  providers: [TradesStore, ChartStore],
   template: `
     <header class="head">
       <a class="back" routerLink="/watchlist">← Watchlist</a>
@@ -61,7 +66,7 @@ export const TICKER_TRADES_CAP = 25;
       [height]="380"
       [caption]="symbol() + ' — daily'"
     >
-      <sb-price-chart [bars]="chart.bars()" />
+      <sb-trade-chart [data]="chart.data()" />
     </sb-chart-container>
 
     <sb-panel [heading]="'Trades on ' + symbol()" [flush]="true">
@@ -133,7 +138,7 @@ export class TickerDetail {
   readonly symbol = input.required<string>();
 
   protected readonly trades = inject(TradesStore);
-  protected readonly chart = inject(OhlcvStore);
+  protected readonly chart = inject(ChartStore);
 
   protected readonly rowKey = (row: TradeRow) => row.id;
 

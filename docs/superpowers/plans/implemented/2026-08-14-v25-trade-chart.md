@@ -21,6 +21,43 @@ canvas, reversing `strategy-overlay.ts`'s "No text" rule deliberately.
 **Tech Stack:** Python 3.11 (pandas, mplfinance, Flask), Angular 21 signals,
 `lightweight-charts` 5.x, pytest, vitest.
 
+## Progress — closed 2026-08-15, merged to main
+
+All 11 tasks complete; shipped as `ui` 1.4.0 (not the `1.3.0` first predicted
+here — `main` shipped an unrelated `1.3.0` while this branch was in flight)
+and `bot` 1.1.3. Final whole-branch review found 3 Important findings, all
+fixed before merge (`5acf74f`): `regenerate_chart_for_trade()` wasn't passing
+the stored fit to the Discord PNG on a re-view; the SPA legend printed
+trendline notes on non-trendline trades; those notes' dates were re-derived
+from today's frame instead of the stored fit's own dates.
+
+**Two items deliberately NOT fixed here — real gaps, follow-up work:**
+
+1. **No UI control calls `ChartPrefs.toggle()` anywhere.** Task 10 built the
+   persistence/toggle logic, Task 11 wired chart rendering to read it, but no
+   task in this plan ever built the actual clickable control the spec's
+   Decision 10 describes. `activeLayers` in `trade-chart.ts` is exercised
+   only by its own spec today. Degrades gracefully (everything stays
+   visible), so not merge-blocking — but "hiding a pane survives a reload"
+   is only reachable by hand-editing `localStorage` until this lands.
+2. **`ChartPrefs` persists to `localStorage`, not the server-backed
+   `Preferences` model** every other UI preference in this app uses
+   (`ui/table-prefs.ts`, cited as this feature's own precedent in the spec).
+   This plan's Task 10 steered it there; the final reviewer judged it a plan
+   defect, not an implementation defect. Bundle with item 1 — the control
+   and its backing store are one decision.
+
+Also logged, left as-is (Minor, reviewer: "fine to leave"): legend text can
+paint past its clamped box at narrow widths (`legend-primitive.ts`); the
+legend captures its palette once at creation instead of re-reading it each
+render, so a theme switch doesn't recolor it; a Plan-Engine-v2 comment in
+`engine.py` overclaims exactness between two prices that happen to agree in
+effect; the lazy-backfill docstring in `market.py` overclaims that a
+backfilled line is identical to the original rather than merely stable;
+`README.md:612` still documents the retired `/market/ohlcv/<ticker>` route;
+"stop dimmed" in `strategy-overlay.ts` is hue-only, no opacity/width
+difference (pre-existing from SR39).
+
 ## Global Constraints
 
 - **NO-LOOKAHEAD.** Indicators are computed over the full frame and sliced
@@ -93,7 +130,7 @@ canvas, reversing `strategy-overlay.ts`'s "No text" rule deliberately.
   - `TRENDLINE_FIT_KEY = "trendline_fit"`
   Tasks 2, 3 and 4 all import from here.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_trendline_fit.py`:
 
@@ -143,12 +180,12 @@ def test_a_bull_trade_fits_support_and_a_bear_fits_resistance():
     assert bear["side"] == "resistance"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_trendline_fit.py -v`
 Expected: FAIL — `ModuleNotFoundError: swingbot.core.charts.trendline_fit`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `swingbot/core/charts/trendline_fit.py`:
 
@@ -241,12 +278,12 @@ def _epoch(stamp) -> int:
     return int(pd.Timestamp(stamp).tz_localize(None).timestamp())
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_trendline_fit.py -v`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/trendline_fit.py tests/test_trendline_fit.py
@@ -266,7 +303,7 @@ git commit -m "feat(charts): one trendline fit, stored as absolute points"
 - Produces: a `trendline_fit` key on newly written trade records, shaped exactly
   as Task 1 returns. Tasks 3, 4 and 6 read it.
 
-- [ ] **Step 1: Locate the writer**
+- [x] **Step 1: Locate the writer**
 
 Run:
 
@@ -280,7 +317,7 @@ write; its callers are where a plan first exists with a ticker, a direction and
 the frame it was built from. Read the caller that has all three in scope — that
 is the fit site. Record the file and line before editing.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/test_trendline_fit_persistence.py`. Use the same `_frame()` helper
 as Task 1 (repeat it — the two files are read independently):
@@ -318,12 +355,12 @@ Then add, in the same file, a test that exercises the real writer found in
 Step 1 — construct a plan through that path with a fittable frame and assert
 the stored record has a `trendline_fit` whose `points` have integer `t`.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_trendline_fit_persistence.py -v`
 Expected: FAIL on the writer test — the stored record has no `trendline_fit`.
 
-- [ ] **Step 4: Write the fit at creation**
+- [x] **Step 4: Write the fit at creation**
 
 At the site found in Step 1, before the record is stored:
 
@@ -343,7 +380,7 @@ if fit:
 `if fit:` — an unfittable plan stores nothing rather than a null, so "absent"
 has one meaning (no line) instead of two.
 
-- [ ] **Step 5: Run the full suite and commit**
+- [x] **Step 5: Run the full suite and commit**
 
 Run: `python scripts/testrun.py full`
 Expected: `0 failed, 0 xfailed`.
@@ -367,7 +404,7 @@ git commit -m "feat(plans): persist the trendline fit at plan creation"
 - Produces: `generate_trade_chart(..., trendline_fit: dict | None = None)` — a
   new keyword-only-in-practice parameter appended to the existing signature.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_trade_chart_stored_fit.py`:
 
@@ -418,13 +455,13 @@ def test_without_a_stored_fit_it_still_renders(monkeypatch):
     assert path
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_trade_chart_stored_fit.py -v`
 Expected: FAIL — `generate_trade_chart() got an unexpected keyword argument
 'trendline_fit'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add `trendline_fit: dict = None,` to the signature after `markers: dict = None,`.
 Where the function currently fits its own pair, take the stored line first:
@@ -452,7 +489,7 @@ Then convert the display-window logic to read the line's endpoints from
 coordinates. The window is still widened to fit the line's touches — that
 framing decision stays local to this file; only the geometry moved.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_trade_chart_stored_fit.py -v`
 Expected: PASS.
@@ -460,7 +497,7 @@ Then: `python scripts/testrun.py full`
 Expected: `0 failed, 0 xfailed`. **This is the alert path — do not proceed on a
 partial run.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/trade_chart.py tests/test_trade_chart_stored_fit.py
@@ -488,68 +525,77 @@ git commit -m "release(bot): 1.1.3 -- one stored trendline fit"
 - Produces: `_trendline_shape` accepting a stored fit; `overlay_geometry(...)`
   gains a `trend_fit: dict | None = None` keyword. Task 5 passes it.
 
-- [ ] **Step 1: Write the failing test**
+> **Corrected during execution.** Two errors, both caught against the real
+> code rather than the plan's sketch of it.
+>
+> 1. **Pivots are not the endpoints.** This task asserted
+>    `shape["pivots"] == stored["points"]` and called them "the same two
+>    points by construction". `points` are the segment's ENDS, two
+>    extrapolated positions at the window edges no candle need have visited;
+>    `pivots` are the bars that actually touched the line and earned it its
+>    `strength`. Drawing the ends would put two diamonds under a label
+>    reading "Trendline (6x)" — the bug `trade_chart.py:752-760` records
+>    being fixed once already. Task 1's module now stores a separate
+>    `pivots` list, and the `pair` verbatim (a6fb782).
+> 2. **The shape is `p1`/`p2`/`pivots`/`label`, not `points`/`strength`.**
+>    `_trendline_shape` already existed and already emitted that shape;
+>    `models.ts:852` types it and `strategy-overlay.ts:68` draws it. The
+>    rewrite this task proposed would have broken the client to no purpose.
+>    What was missing was never the shape — it was that a caller with no
+>    live `trend_info` (which is every API caller: `market.py:316` leaves it
+>    unset deliberately) got None back.
+>
+> **As built:** `overlay_geometry(..., trend_fit=None)` threads the stored
+> fit down to `_trendline_shape`, which reads the fit's `pair` in place of
+> `trend_info` and, for the fit's OWN side, copies the absolute epochs out
+> of `points`/`pivots` instead of converting window-relative coordinates.
+> That conversion is exactly what the API path cannot do safely: it serves
+> whatever bar range the browser asked for, and converting against a
+> different frame slides the line off its own pivots. The opposite side has
+> no stored points — a fit is taken for the side the trade rests on — so it
+> still comes from the stored pair, converted. Tests:
+> `tests/test_chart_geometry.py::test_a_stored_fit_*` and
+> `::test_the_stored_fit_wins_over_a_live_one`.
 
-Add to `tests/test_chart_geometry.py`:
+- [x] **Step 1: Write the failing test**
 
-```python
-def test_trendline_shape_uses_the_stored_points_verbatim():
-    """Numbers off the record, drawn unchanged -- the browser and the PNG
-    cannot disagree about where the line sits if neither recomputes it."""
-    from swingbot.core.charts.chart_geometry import _trendline_shape
+Add to `tests/test_chart_geometry.py`, alongside the three existing trendline
+contract tests (which stay: the live-`trend_info` conversion path is still
+what the opposite side goes through):
 
-    stored = {
-        "slope": -0.3, "intercept": 200.0,
-        "points": [{"t": 1767225600, "price": 200.0},
-                   {"t": 1779235200, "price": 158.3}],
-        "side": "support", "strength": 4, "window_bars": 120,
-        "lookback": 120, "fit_at": "2026-08-14T10:00:00Z",
-    }
-    shape = _trendline_shape(stored)
-    assert shape["kind"] == "trendline"
-    assert shape["points"] == stored["points"]
-    assert shape["pivots"] == stored["points"]
-```
+- `test_a_stored_fit_draws_its_own_side_from_absolute_points` — `p1`/`p2`
+  and every pivot come out of the fit unchanged, and the label reads the
+  pair's `strength`.
+- `test_a_stored_fit_draws_the_other_side_from_its_pair` — the side the fit
+  was not taken for is still drawable, converted from the stored pair.
+- `test_a_stored_fit_without_pivots_still_draws_its_line` — no touches is
+  normal (pre-`pivots` fits, and the trendln fallback), and yields a line
+  with no diamonds rather than no line.
+- `test_the_stored_fit_wins_over_a_live_one` — both passed is not a conflict
+  to resolve at render time.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
-Run: `python -m pytest tests/test_chart_geometry.py -k trendline_shape -v`
-Expected: FAIL — signature mismatch.
+Run: `python -m pytest tests/test_chart_geometry.py -k stored_fit -v`
+Expected: FAIL — `overlay_geometry() got an unexpected keyword argument
+'trend_fit'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
-Rewrite `_trendline_shape` to take the stored fit and emit the shape the client
-already knows how to draw, with `pivots` for the diamond markers the PNG draws:
+Add `trend_fit: dict = None` to `overlay_geometry`, thread it through
+`_shape_for` into `_trendline_shape`. There, before the side is chosen, let
+the fit's `pair` stand in for `trend_info` (and its `window_bars` for
+`trendline_window_bars`); then, when the chosen side IS the fit's own side,
+return `_stored_trendline_shape(fit, info)` — `p1`/`p2` from `points` and the
+diamonds from `pivots`, copied as absolute epochs, no frame arithmetic.
+Everything else falls through to the existing conversion unchanged.
 
-```python
-def _trendline_shape(fit: dict) -> dict:
-    """The stored fit, as a drawable shape.
-
-    Every number is copied, not derived. This function used to re-fit from a
-    frame; it no longer sees one, which is the point -- there is exactly one
-    place a trendline is computed and it is `charts/trendline_fit.py`.
-    """
-    points = [{"t": int(p["t"]), "price": float(p["price"])} for p in fit["points"]]
-    return {
-        "kind": "trendline",
-        "points": points,
-        # The swing pivots the line was fit through, drawn as diamonds. Same
-        # two points as the segment's ends by construction.
-        "pivots": points,
-        "strength": int(fit.get("strength", 0)),
-    }
-```
-
-Add `trend_fit: dict = None` to `overlay_geometry`'s keyword arguments and pass
-it to `_shape_for` so a `Trendline` source resolves to this shape instead of
-being skipped.
-
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python scripts/testrun.py file tests/test_chart_geometry.py`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/chart_geometry.py tests/test_chart_geometry.py
@@ -572,87 +618,48 @@ git commit -m "feat(charts): trendline geometry from the stored fit"
   `{ticker, ohlcv, indicators, volume_profile, levels?, overlays, notes}`.
   `overlays` is a list. Task 6 types it; Task 7 draws it.
 
-- [ ] **Step 1: Add the trade fixtures**
+> **Corrected during execution.** Step 1 below wanted three trade fixtures in
+> `tests/admin/conftest.py`, seeded through `PlanStore.add`. The endpoint does
+> not read PlanStore: it resolves a trade with `app._trade_for_levels`, which
+> is `TradeLog().get_trade_by_id` over `trades.json`. Fixtures built that way
+> would never be found, and the tests would pass only by asserting the 404.
+> `tests/admin/test_api_v1_market.py` also already has the mechanism —
+> `chart_trade`, which monkeypatches `_trade_for_levels` and returns a setter
+> for per-test overrides, alongside `frame` for the OHLCV source. The new
+> cases extend those rather than adding a second, non-working seeding path.
 
-`tests/admin/conftest.py` provides `admin_app`, `client` and `auth` and nothing
-trade-shaped, so the three fixtures these tests and Task 6's need must be
-created first. Append to `tests/admin/conftest.py`:
+- [x] **Step 1: Reuse the fixtures the file already has**
 
-```python
-@pytest.fixture
-def a_trade(admin_app):
-    """An open plan on AAPL with a target confirmed by EMA20."""
-    return _seed_trade(admin_app, target_sources=["EMA20"], stop_sources=[])
+`chart_trade(**overrides)` and `frame(n)` in
+`tests/admin/test_api_v1_market.py` cover every case this task and Task 6
+need. No `tests/admin/conftest.py` change.
 
+- [x] **Step 2: Write the failing test**
 
-@pytest.fixture
-def a_two_sided_trade(admin_app):
-    """Different confirming methods above and below -- the case a single
-    overlay could only ever tell half of."""
-    return _seed_trade(admin_app, target_sources=["EMA20"], stop_sources=["Donchian"])
+`_chart()` now targets `/api/v1/market/chart/AAPL?trade_id=c1`, so every
+existing chart test moves to the new key and its `window` queries ride behind
+`&`. New cases:
 
+- `test_chart_by_ticker_needs_no_trade` — no `trade_id` gives `levels: null`
+  and `overlays: []`, not an error.
+- `test_a_plain_ticker_chart_never_reads_a_trade` — `_trade_for_levels` is
+  replaced with a raiser, proving no lookup happens at all.
+- `test_a_ticker_with_no_data_is_404_without_a_trade`.
+- `test_the_window_contract_holds_without_a_trade` — the validation must not
+  have been left behind on the trade branch.
+- `test_the_trade_ticker_does_not_override_the_path` — a `trade_id` on
+  another ticker is a 400, not a plan drawn over the wrong instrument.
 
-@pytest.fixture
-def a_legacy_trade(admin_app):
-    """Written the way every record on disk today was: no trendline_fit."""
-    return _seed_trade(admin_app, target_sources=["Trendline"], stop_sources=[],
-                       with_fit=False)
+The top-level shape assertion gains `ticker`, turns `levels` nullable, and
+replaces `overlay` with `overlays` (Task 6 fills the second entry; doing the
+rename here keeps those three tests from being rewritten twice).
 
-
-@pytest.fixture
-def plan_store(admin_app):
-    from swingbot.core.plan_store import PlanStore
-    return PlanStore()
-```
-
-Write `_seed_trade(admin_app, *, target_sources, stop_sources, with_fit=True)`
-as a module-level helper in the same file: it builds a plan record on `AAPL`
-with entry/stop/target set, stores it through `PlanStore.add`, and returns its
-id. When `with_fit` is false it omits `trendline_fit` entirely — absent, not
-null, so "no fit" has one representation.
-
-- [ ] **Step 2: Write the failing test**
-
-Add to `tests/admin/test_api_v1_market.py`:
-
-```python
-def test_chart_by_ticker_needs_no_trade(client, auth):
-    r = client.get("/api/v1/market/chart/AAPL", headers=auth)
-    assert r.status_code == 200
-    body = r.get_json()
-    assert body["ticker"] == "AAPL"
-    assert body["ohlcv"]
-    assert "indicators" in body
-    assert body.get("levels") is None
-    assert body["overlays"] == []
-
-
-def test_chart_with_a_trade_id_adds_the_plan(client, auth, a_trade):
-    r = client.get(f"/api/v1/market/chart/AAPL?trade_id={a_trade}", headers=auth)
-    body = r.get_json()
-    assert body["levels"]["entry"] is not None
-    assert len(body["overlays"]) <= 2
-
-
-def test_every_timestamp_is_an_epoch_integer(client, auth):
-    """One time type. A string here is how an overlay lands a year from its
-    candle -- see models.ts."""
-    body = client.get("/api/v1/market/chart/AAPL", headers=auth).get_json()
-    for bar in body["ohlcv"]:
-        assert isinstance(bar["t"], int)
-
-
-def test_an_unresolvable_trade_id_is_a_404(client, auth):
-    r = client.get("/api/v1/market/chart/AAPL?trade_id=nope", headers=auth)
-    assert r.status_code == 404
-```
-
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `python scripts/testrun.py file tests/admin/test_api_v1_market.py`
 Expected: FAIL — 404 on `/market/chart/AAPL`, the route is keyed by trade.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Change the route to `@api_v1.route("/market/chart/<ticker>", methods=["GET"])`
 and `def chart(ticker: str):`. Read `trade_id` from `request.args`. When absent,
@@ -663,12 +670,12 @@ complete is how a user reads a chart believing the levels are simply missing).
 
 Keep `window`'s contract exactly: default 120, valid 20–500, out of range 400.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `python scripts/testrun.py file tests/admin/test_api_v1_market.py`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/market.py tests/admin/test_api_v1_market.py
@@ -688,92 +695,59 @@ git commit -m "feat(api): one chart endpoint, keyed by ticker"
   `overlay_geometry(..., trend_fit=…)` (Task 4).
 - Produces: `overlays: list`, `notes: list[str]` on the payload.
 
-- [ ] **Step 1: Write the failing test**
+> **Corrected during execution.** Three things, all found against the real
+> code.
+>
+> 1. **The backfill writes through `TradeLog`, not `PlanStore`.** The
+>    endpoint resolves trades with `app._trade_for_levels` over
+>    `trades.json`; `_store.update(trade)` names a store this path never
+>    touches. `TradeLog` had no general update either, so the write is a new
+>    `store_trendline_fit(trade_id, fit)` mutator built like
+>    `mark_near_close` — same `_LOCK`, because the bot's scan loop writes the
+>    same file from another process. It refuses to overwrite an existing fit,
+>    which is where idempotence actually lives.
+> 2. **The backfill fits with the trade's ENTRY and its horizon's
+>    `fib_lookback`**, not this endpoint's `window` and the last close as
+>    sketched. Those are `scanning/engine.py`'s arguments; any others produce
+>    a different line from the one that trade's PNG already drew — the exact
+>    failure this plan exists to end. `test_the_backfill_uses_the_trades_own
+>    _entry_not_the_last_close` pins it.
+> 3. **These tests use a real `TradeLog` record, not `chart_trade`.** A
+>    stubbed `_trade_for_levels` returns a dict no store owns, so the
+>    backfill write would land nowhere and the test would prove nothing. They
+>    also need a frame a trendline can be fitted to at all — oscillating,
+>    with volume spikes at the turns (see `tests/test_trendline_fit.py`), not
+>    the random walk `frame` serves.
 
-```python
-def test_both_sides_are_returned_target_first(client, auth, a_two_sided_trade):
-    body = client.get(
-        f"/api/v1/market/chart/AAPL?trade_id={a_two_sided_trade}", headers=auth
-    ).get_json()
-    sides = [o["side"] for o in body["overlays"]]
-    assert sides[0] == "target"
-    assert set(sides) == {"target", "stop"}
+- [x] **Step 1: Write the failing test**
 
+In `tests/admin/test_api_v1_market.py`: both sides returned target-first and
+the one-drawable-side case; the stored fit drawn from its own points with its
+pivots as diamonds; backfill on first read; idempotence across two reads; the
+fit arguments above; a write failure still serving a 200; and notes naming
+the points the line connects (empty without a trade).
 
-def test_a_trade_without_a_stored_fit_is_backfilled(client, auth, a_legacy_trade, plan_store):
-    """Lazy backfill: fitted once on first read, then written back."""
-    assert plan_store.get(a_legacy_trade).get("trendline_fit") is None
-    client.get(f"/api/v1/market/chart/AAPL?trade_id={a_legacy_trade}", headers=auth)
-    assert plan_store.get(a_legacy_trade)["trendline_fit"]["points"]
-
-
-def test_the_backfill_is_idempotent(client, auth, a_legacy_trade, plan_store):
-    url = f"/api/v1/market/chart/AAPL?trade_id={a_legacy_trade}"
-    client.get(url, headers=auth)
-    first = plan_store.get(a_legacy_trade)["trendline_fit"]["fit_at"]
-    client.get(url, headers=auth)
-    assert plan_store.get(a_legacy_trade)["trendline_fit"]["fit_at"] == first
-
-
-def test_a_failed_backfill_write_still_serves_the_chart(client, auth, a_legacy_trade, monkeypatch, plan_store):
-    """A cache fill that cannot write degrades to 'fitted again next time',
-    never to a 500."""
-    monkeypatch.setattr(plan_store, "update", lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
-    r = client.get(f"/api/v1/market/chart/AAPL?trade_id={a_legacy_trade}", headers=auth)
-    assert r.status_code == 200
-
-
-def test_notes_carry_the_fit_explanation(client, auth, a_trade):
-    body = client.get(f"/api/v1/market/chart/AAPL?trade_id={a_trade}", headers=auth).get_json()
-    assert isinstance(body["notes"], list)
-```
-
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/testrun.py file tests/admin/test_api_v1_market.py`
-Expected: FAIL — `overlays` has at most one entry; no backfill.
+Expected: FAIL — 8 failures: `overlays` holds one entry, there is no `notes`
+key, and nothing backfills.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
-Replace the single-overlay loop (`market.py:311-323`) with both sides, target
-first, and pass the stored fit through:
+Both sides appended instead of the first one breaking the loop, with
+`trend_fit=fit` passed to `overlay_geometry`. `_chart_trendline_fit(trade,
+df, horizon, is_bull)` returns the stored fit or backfills one;
+`_chart_notes(...)` builds the legend text from `trade_chart`'s own
+`_trendline_note_lines` / `_fib_note_lines`, so the image and the browser
+cannot describe the same line differently.
 
-```python
-    fit = trade.get(TRENDLINE_FIT_KEY)
-    if not fit:
-        # Lazy backfill. Written back so this cost is paid once per trade,
-        # ever -- and so the line stops moving between two viewings of the
-        # same old trade. A write on a GET, deliberately: it is a cache fill,
-        # it is idempotent, and a failure means "fitted again next time".
-        fit = fit_trendline(
-            df, lookback=window,
-            current_price=float(df["Close"].iloc[-1]), is_bull=is_bull,
-        )
-        if fit:
-            try:
-                trade[TRENDLINE_FIT_KEY] = fit
-                _store.update(trade)
-            except Exception:
-                log.warning("trendline backfill write failed for %s", trade_id)
-
-    overlays = []
-    for side, key in (("target", "target_sources"), ("stop", "stop_sources")):
-        shape = overlay_geometry(df, side, trade.get(key) or [], horizon=horizon,
-                                 recent_len=window, is_bull=is_bull, trend_fit=fit)
-        if shape is not None:
-            overlays.append(shape)
-```
-
-Add `notes`, built from the same helpers the PNG prints
-(`trade_chart._trendline_note_lines`, `_fib_note_lines`) so the legend and the
-image cannot disagree.
-
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `python scripts/testrun.py full`
 Expected: `0 failed, 0 xfailed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/market.py tests/admin/test_api_v1_market.py
@@ -784,109 +758,81 @@ git commit -m "feat(api): both overlays, the trendline, and lazy fit backfill"
 
 # Phase 3 — One component
 
-### Task 7: Retype the payload and delete the old route
+### Tasks 7 & 8: One payload type, one route, one component
+
+**Done as one commit, because they cannot be separated.** Task 7 deletes
+`Candle`, `TradeLevels` and `OhlcvResponse`; their only consumers are
+`PriceChart` and `OhlcvStore`, which Task 8 deletes. Landing Task 7 alone
+would mean committing a tree that does not compile.
 
 **Files:**
-- Modify: `frontend/src/app/api/models.ts:699-890`
-- Modify: `swingbot/admin/api_v1/market.py` (delete the `ohlcv` route)
-- Modify: `frontend/src/app/stores/` — whichever store called `/market/ohlcv`
+- Modify: `frontend/src/app/api/models.ts`, `api-client.ts`,
+  `stores/chart.store.ts` (+ spec), `ui/chart/trade-chart.ts`,
+  `ui/chart/strategy-overlay.ts` (+ spec), `ui/chart/plan-lines.ts`,
+  `workspaces/watchlist/ticker-detail.ts`,
+  `workspaces/trades/trade-detail.ts`, `testing/match-media-polyfill.ts`,
+  `app.routes.spec.ts`, `chart-harness/main.ts`
+- Modify: `swingbot/admin/api_v1/market.py`, `swingbot/admin/app.py`,
+  `scripts/dump_chart_payloads.py`, `tests/admin/test_api_v1_market.py`
+- Delete: `frontend/src/app/ui/price-chart.ts`,
+  `frontend/src/app/stores/ohlcv.store.ts` (+ spec)
 
-**Interfaces:**
-- Consumes: Task 6's payload.
-- Produces: `ChartResponse { ticker; ohlcv: ChartBar[]; indicators: ChartIndicators;
-  volume_profile: VolumeBin[]; levels: ChartLevels | null; overlays: ChartOverlay[];
-  notes: string[] }`. `Candle`, `OhlcvResponse` and `TradeLevels` are deleted.
+- [x] **Step 1: Retype the payload**
 
-- [ ] **Step 1: Delete the dead types and widen `ChartResponse`**
+`ChartResponse` gains `ticker` and `notes`, turns `levels` nullable and
+replaces `overlay` with `overlays: ChartOverlay[]`. `Candle`,
+`TradeLevels` and `OhlcvResponse` are deleted. `ApiClient.ohlcv` goes;
+`ApiClient.chart` takes a ticker and passes `trade_id` through `toParams`.
 
-In `models.ts`, remove `Candle`, `OhlcvResponse` and `TradeLevels`. Change
-`ChartResponse`'s `overlay?: ChartOverlay` to `overlays: ChartOverlay[]` and add
-`ticker: string;` and `notes: string[];`. Update the docstring above it to name
-the ticker-keyed route.
+- [x] **Step 2: Collapse the two stores into one**
 
-- [ ] **Step 2: Run the build to find every consumer**
+Not "repoint the store that fetched `/market/ohlcv`" — **delete it**.
+`OhlcvStore` existed only because the chart endpoint could not be asked for a
+ticker without a trade, so `ChartStore` absorbed it: `setTrade(id)` becomes
+`setTarget(ticker, tradeId = null)`, and its `isEmpty` computed moves across
+(trade-detail's own `chartEmpty` now reads it, so one definition serves both
+screens).
 
-Run: `cd frontend && npx tsc --noEmit`
-Expected: FAIL, with an error at each site that referenced a deleted type. That
-list is the work for Step 3 — it is more reliable than grepping.
+`ChartStore` now also refetches on `scan`, which it did not before. A plain
+ticker chart has no `trades` events to ride on, so without it the watchlist's
+chart would never refresh at all. The reason `OhlcvStore` gave for skipping
+`trades` (a year of candles refetched for four horizontal lines) does not
+transfer — this store already makes that request for `working_stop`.
 
-- [ ] **Step 3: Repoint the store and delete the route**
+- [x] **Step 3: Delete the second component and the second route**
 
-Point the store method that fetched `/market/ohlcv/{ticker}` at
-`/market/chart/{ticker}`, returning `ChartResponse`. Delete the `ohlcv` route
-and its helpers from `market.py` if nothing else calls them.
+`PriceChart` deleted; `ticker-detail.ts` renders `sb-trade-chart` over
+`ChartStore`. The plan's `hasPlan` computed turned out to be unnecessary:
+`PlanLines.render` takes `ChartLevels | null` and returns early, which puts
+the "no plan at all" case in the same place as the existing "this level is
+unset" case rather than in a second one in the component.
 
-- [ ] **Step 4: Verify**
+`StrategyOverlay.render` takes a list instead of `overlay | null`.
 
-Run: `cd frontend && npx tsc --noEmit && npm test`
-Expected: PASS.
-Run: `python scripts/testrun.py full`
-Expected: `0 failed`.
+On the Python side the `/market/ohlcv` route goes, and with it `DEFAULT_BARS`
+/`MAX_BARS` — and `app.py`'s `ohlcv_bars`/`trade_levels`, which the plan did
+not mention and which now have no callers at all. They were shared with the
+Jinja UI (deleted in Release B) and with the deleted route; kept as dead code
+they would be a second `tp1`/`tp2` mapping waiting to be picked up by
+mistake, which is exactly what they were written to prevent.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Verify**
 
-```bash
-git add frontend/src/app/api/models.ts frontend/src/app/stores/ swingbot/admin/api_v1/market.py
-git commit -m "refactor(chart): one payload type, one route"
-```
+`npx tsc --noEmit` clean; `npm test` 42 files / 717 tests (was 43/725 —
+`ohlcv.store.spec.ts` went with its store, and the chart store spec gained
+cases for the ticker-only load, the trade_id parameter, `isEmpty` and the
+`scan` refetch). `python scripts/testrun.py full` 1709 passed, 0 failed.
 
----
+The `/market/ohlcv` tests were not simply deleted: the two that were about
+the ENDPOINT rather than its narrower payload — ticker normalisation and the
+offline CSV-cache fallback — were ported onto `/market/chart`.
+`scripts/dump_chart_payloads.py` and `chart-harness/main.ts` read the payload
+too, and both were repointed.
 
-### Task 8: Merge the two chart components
-
-**Files:**
-- Modify: `frontend/src/app/ui/chart/trade-chart.ts`
-- Delete: `frontend/src/app/ui/price-chart.ts`
-- Modify: `frontend/src/app/workspaces/watchlist/ticker-detail.ts:46,64`
-- Modify: `frontend/src/app/workspaces/trades/trade-detail.ts:70-71,474`
-
-**Interfaces:**
-- Consumes: Task 7's `ChartResponse`.
-- Produces: `TradeChart` with a single required input `data: ChartResponse`, and
-  no plan-specific inputs. Selector stays `sb-trade-chart`.
-
-- [ ] **Step 1: Establish green**
-
-Run: `cd frontend && npm test`
-Expected: PASS.
-
-- [ ] **Step 2: Make the plan layer conditional**
-
-In `trade-chart.ts`, guard the plan layer on the payload rather than on a
-separate input:
-
-```ts
-  private readonly hasPlan = computed(() => this.data().levels !== null);
-```
-
-`PlanLines` already treats a null level as undrawn rather than drawn at zero;
-this extends that rule to the whole layer. Nothing else in the component changes
-— the panes, indicators and volume profile were never plan-dependent.
-
-- [ ] **Step 3: Repoint both call sites and delete `PriceChart`**
-
-In `ticker-detail.ts`, replace the `PriceChart` import and
-`<sb-price-chart [bars]="chart.bars()" />` with `TradeChart` and
-`<sb-trade-chart [data]="chart.data()" />`. `trade-detail.ts:474` already uses
-that markup and needs no change beyond its import staying valid.
-
-Delete `frontend/src/app/ui/price-chart.ts`. Update
-`frontend/src/app/testing/match-media-polyfill.ts:7`, whose comment names
-`PriceChart` as the reason it exists — the polyfill is still needed, by the
-merged component now.
-
-- [ ] **Step 4: Verify**
-
-Run: `cd frontend && npx tsc --noEmit && npm test`
-Expected: PASS. The routing spec that rendered `PriceChart` now renders
-`TradeChart`; if it asserts on a selector, update it.
-
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add frontend/src/app/ui/chart/trade-chart.ts frontend/src/app/workspaces/watchlist/ticker-detail.ts frontend/src/app/workspaces/trades/trade-detail.ts frontend/src/app/testing/match-media-polyfill.ts
-git rm frontend/src/app/ui/price-chart.ts
-git commit -m "refactor(chart): one chart component for trades and tickers"
+git commit -m "refactor(chart): one payload, one route, one component"
 ```
 
 ---
@@ -1154,7 +1100,8 @@ In `chart-theme.ts`, add TradingView's magnet behaviour to `chartOptions`:
 Run: `cd frontend && npm test`
 Expected: PASS.
 Run: `cd frontend && npm start`, open a trade whose confirmation is a trendline,
-and confirm: the line draws, its two pivots are diamonds, both overlays appear
+and confirm: the line draws, its swing pivots are diamonds and there are as
+many of them as the strength label claims, both overlays appear
 with the stop side dimmed, and the legend prints the fit note naming the two
 dates the line connects.
 
@@ -1168,17 +1115,23 @@ git commit -m "feat(chart): legend, magnet crosshair and layer toggles"
 Then the ui release marker, its own commit, last:
 
 ```bash
-# VERSION.json: ui -> next minor (1.3.0 if v24 landed 1.2.4), ui_updated to now
+# VERSION.json: ui -> next minor, ui_updated to now
 git add VERSION.json
-git commit -m "release(ui): 1.3.0 -- the annotated interactive trade chart"
+git commit -m "release(ui): 1.4.0 -- the annotated interactive trade chart"
 ```
+
+**`1.4.0`, not the `1.3.0` this plan first predicted.** This worktree branched
+at ui `1.2.4`; `main` has since shipped `1.3.0` (the Versions workspace,
+43296cf), so `VERSION.json` here is stale and *will* conflict on merge. Take
+`main`'s side, then apply this bump on top — never resolve it by keeping the
+worktree's copy, which would silently un-ship 1.3.0.
 
 ---
 
 ## Definition of done
 
-- A trendline-confirmed trade draws its line, with both swing pivots as
-  diamonds, in the SPA.
+- A trendline-confirmed trade draws its line in the SPA, with one diamond per
+  swing pivot the line was fit through — `strength` of them, not two.
 - The Discord PNG and the SPA chart draw the *same* line for the same trade.
 - An old trade renders a line on first view and does not refit on the second.
 - Both sides' overlays appear, stop dimmed.

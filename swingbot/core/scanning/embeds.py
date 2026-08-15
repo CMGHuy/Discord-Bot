@@ -774,6 +774,15 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
             horizon=h,
             market_price=current_price,
             markers=markers,
+            # The line the trade was planned on and the PNG originally drew
+            # (charts/trendline_fit.py) -- without this, re-viewing an older
+            # trade would refit a fresh trendline against today's data while
+            # the SPA (market.py) keeps reading the one stored fit, so the
+            # two would show different lines for the same trade. None for
+            # every trade logged before the fit was stored, or one never
+            # trendline-confirmed -- generate_trade_chart falls back to its
+            # own live fit exactly as it always has.
+            trendline_fit=trade.get("trendline_fit"),
         )
     except Exception as e:
         log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e)

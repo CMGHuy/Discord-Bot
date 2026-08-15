@@ -65,7 +65,11 @@ for name in sorted(FIXTURES):
     admin_app._ohlcv_frame = lambda ticker, _df=df: _df
     admin_app._trade_for_levels = lambda tid, _t=trade: _t
 
-    response = client.get(f"/api/v1/market/chart/{name}?window={len(df)}")
+    # The route is keyed by ticker now, with the trade as a parameter. The
+    # fixture name serves as both -- `_trade_for_levels` is stubbed above, so
+    # any id resolves to this trade.
+    response = client.get(
+        f"/api/v1/market/chart/{name}?trade_id={name}&window={len(df)}")
     if response.status_code != 200:
         print(f"  {name}: HTTP {response.status_code} {response.get_data(as_text=True)[:120]}")
         continue
@@ -74,9 +78,9 @@ for name in sorted(FIXTURES):
     path = os.path.join(OUT, f"{name}.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh)
-    overlay = payload.get("overlay")
+    overlays = payload.get("overlays") or []
     print(f"  {name}: {len(payload['ohlcv'])} bars, "
-          f"overlay={overlay['shape']['kind'] if overlay else None}, "
+          f"overlays={[o['shape']['kind'] for o in overlays] or None}, "
           f"indicators={sorted(payload['indicators'])}, "
           f"profile={len(payload['volume_profile'])}")
     written.append(name)

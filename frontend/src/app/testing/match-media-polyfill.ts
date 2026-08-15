@@ -4,9 +4,10 @@
  * `lightweight-charts` reaches it through `fancy-canvas`, which watches the
  * device pixel ratio with `matchMedia('all and (resolution: Ndppx)')` the
  * moment a chart is created. jsdom 28 has no `matchMedia` whatsoever, so
- * every spec that renders `PriceChart` — today that is the routing spec, by
- * way of the trade and ticker detail views — produced an unhandled rejection
- * reading "this._window.matchMedia is not a function".
+ * every spec that renders `TradeChart` — today that is the routing spec, by
+ * way of the trade and ticker detail views, which since v25 draw with the
+ * same component — produced an unhandled rejection reading
+ * "this._window.matchMedia is not a function".
  *
  * Those rejections did not fail anything, which is the reason to fix them
  * rather than live with them: seven errors that are always in the output are

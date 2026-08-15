@@ -34,6 +34,7 @@ except Exception:
 
 from swingbot import config
 from swingbot.core import account as account_module
+from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
 from swingbot.core.jsonio import atomic_write_json, read_json
 from swingbot.core.strategy_types import HORIZONS as _HORIZONS
 
@@ -266,7 +267,8 @@ class TradeLog:
                   confidence_score=None, confidence_breakdown=None, target_sources=None,
                   stop_sources=None, target2_sources=None, risk_reward_ratio=None,
                   explanation=None, confirmed_by=None, plan_id=None,
-                  tier=None, badge=None, quality_score=None, source=None) -> str:
+                  tier=None, badge=None, quality_score=None, source=None,
+                  trendline_fit=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -322,6 +324,16 @@ class TradeLog:
             "near_tp_snapshots": [],       # [iso_ts, price] pairs used for the near-TP stall check -- see
                                            # check_near_tp_timeout(). Reset whenever near_tp_since resets.
         }
+
+        # The trendline fitted when this plan was created, as absolute
+        # (epoch, price) points -- see charts/trendline_fit.py. Set ONLY when
+        # there was a line to fit, so the key's absence means "no trendline"
+        # and nothing else; a stored null would mean that AND "written before
+        # this field existed", which are different facts. Every trade logged
+        # before this change simply has no key, and every reader treats it as
+        # optional forever.
+        if trendline_fit:
+            record[TRENDLINE_FIT_KEY] = trendline_fit
 
         # Snapshot position sizing NOW, at the moment the trade is opened --
         # not recomputed later from whatever the account balance happens to
@@ -806,6 +818,30 @@ class TradeLog:
                     t["near_close_alerted"] = alerted
                     self._save()
                     return
+
+    def store_trendline_fit(self, trade_id: str, fit: dict) -> bool:
+        """Write a backfilled trendline fit onto an existing trade.
+
+        For trades logged before the fit was stored at creation
+        (scanning/engine.py). Returns False and writes nothing if the trade
+        already HAS a fit: re-fitting an old trade on every read would move
+        its line between two viewings of the same chart, and the stored line
+        is the one its PNG was drawn from.
+
+        Locked like every other mutator here -- the bot's scan loop writes
+        the same trades.json from a different process.
+        """
+        if not fit:
+            return False
+        with _LOCK:
+            for t in self._trades:
+                if t["id"] == trade_id:
+                    if t.get("trendline_fit"):
+                        return False
+                    t["trendline_fit"] = fit
+                    self._save()
+                    return True
+        return False
 
     def close_trade_manual(self, trade_id: str, reason: str = "manual") -> bool:
         """

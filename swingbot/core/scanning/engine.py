@@ -85,6 +85,7 @@ from swingbot.core.strategy import HORIZONS, MIN_BARS
 from swingbot.core import universe
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
+from swingbot.core.charts.trendline_fit import fit_trendline
 from swingbot.core.watchlist import load_watchlist
 # Several of these are unused HERE and re-exported on purpose: core/scan_engine.py
 # is an `import *` shim over this module, and callers reach them through it
@@ -1467,6 +1468,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "take_profit": plan.take_profit, "target2": plan.target2_price})
 
         trade_id = None
+        # Bound out here, not inside the branch below, because the chart is
+        # rendered further down for EVERY alert -- including the snapshot
+        # ones that log no trade. Left inside, those alerts would raise
+        # NameError into the chart try/except and silently lose their PNG.
+        trendline_fit = None
         if item.all_requirements_met and not already_open:
             # v2 plan pedigree (tier/badge/quality/source) rides along with
             # plan_id -- same cutover guard: only a live "on" plan is real
@@ -1474,6 +1480,28 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             plan_v2 = (item.plan_v2
                        if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None
                        else None)
+
+            # Fit the trendline ONCE, here, against the frame the decision was
+            # made on, and store it on the trade. The PNG and the chart
+            # endpoint both read this; neither fits again.
+            #
+            # The two arguments match generate_trade_chart()'s own call
+            # (trade_chart.py:268) exactly -- the horizon's fib_lookback, and
+            # the ENTRY price rather than the last close. A fit taken with
+            # different arguments would be a different line from the one the
+            # PNG draws, which is the whole failure this consolidation exists
+            # to end.
+            try:
+                trendline_fit = fit_trendline(
+                    df,
+                    lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
+                    current_price=plan.entry,
+                    is_bull=result.trend == "bullish",
+                )
+            except Exception:
+                log.warning("Trendline fit failed for %s (%s) -- trade stores no fit",
+                            result.ticker, result.horizon_key, exc_info=True)
+
             trade_id = trade_log.log_trade(
                 ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
                 direction=result.trend, confidence_level=conf.level, confidence_label=conf.label,
@@ -1491,6 +1519,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 badge=plan_v2.badge if plan_v2 is not None else None,
                 quality_score=plan_v2.quality_score if plan_v2 is not None else None,
                 source=plan_v2.source if plan_v2 is not None else None,
+                trendline_fit=trendline_fit,
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
             if plan_v2 is not None:
@@ -1540,6 +1569,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     stop_sources=list(dict.fromkeys(plan.stop_sources)),
                     horizon=h,
                     market_price=plan.market_price,
+                    # The fit taken above, drawn rather than recomputed. This
+                    # is the point of storing it: the PNG and the chart
+                    # endpoint now read the same numbers. None here (fit
+                    # failed, or no line exists) simply restores the old
+                    # behaviour of fitting inline.
+                    trendline_fit=trendline_fit,
                 )
             log.info("Chart generated for %s -> %s", result.ticker, chart_filename)
         except Exception as e:

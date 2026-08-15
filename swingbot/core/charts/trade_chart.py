@@ -225,6 +225,7 @@ def generate_trade_chart(
     market_price: float = None,
     plan_v2=None,
     markers: dict = None,
+    trendline_fit: dict = None,
 ) -> str:
     # Pick the single most informative confirming method per side (see
     # _pick_primary_source) -- this is what actually gets drawn instead
@@ -263,9 +264,24 @@ def generate_trade_chart(
     need_stop_trendline = bool(stop_primary) and stop_primary.startswith("Trendline")
     trend_info = None
     if need_target_trendline or need_stop_trendline or (target_primary is None and stop_primary is None):
-        # Also fit it as the fallback path (no drawable confirming
-        # source on either side) so old behavior is preserved exactly.
-        trend_info = strongest_trendline_pair(df, trendline_lookback, entry)
+        # The fit comes off the trade's record when there is one -- see
+        # charts/trendline_fit.py on why it is stored rather than computed.
+        # It is read as `["pair"]`, not used whole: this function and the
+        # seven sites below want strongest_trendline_pair()'s support/
+        # resistance shape, which is exactly why the fit stores that pair
+        # verbatim alongside its own trade-side summary.
+        #
+        # Falling back to a live fit is not a second implementation -- it is
+        # the same call with the same arguments, kept for the callers that
+        # have no record to read from: trades logged before the fit was
+        # stored, and the !strategycharts diagnostic, which has no trade at
+        # all. Note it stays `strongest_trendline_pair` rather than
+        # `fit_trendline`: the latter returns None when the TRADE's own side
+        # has no line, which would stop the fallback drawing the other
+        # side's -- a behaviour change on the alert path, not a
+        # consolidation.
+        stored_pair = (trendline_fit or {}).get("pair")
+        trend_info = stored_pair or strongest_trendline_pair(df, trendline_lookback, entry)
     trendline_window_bars = trend_info["window_bars"] if trend_info else 0
 
     # Same idea for a Fibonacci fan: if it's actually what's being drawn,

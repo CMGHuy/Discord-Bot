@@ -1,31 +1,31 @@
-"""GET /api/v1/market/ohlcv/{ticker} and /api/v1/market/chart/{trade_id}.
+"""GET /api/v1/market/chart/{ticker}.
 
-Read-only, 260 bars by default (~1 trading year), capped at 1000. The cap is
-not a tuning knob: the client picks how much work this request does, and a
-chart cannot usefully draw more than that anyway.
+Read-only. THE chart endpoint, singular: bars, indicator panes, the volume
+profile, the plan lines and the confirming-method overlays in ONE request,
+keyed by ticker with the trade as an optional `trade_id`.
 
-Both the frame lookup and the level mapping come from `app.py`
-(`_ohlcv_frame`, `trade_levels`, `ohlcv_bars`) rather than being rebuilt
-here. The Angular and Jinja charts are both live for the whole migration; a
-second bar serialisation would let them disagree about rounding, and a
-second level mapping would let one of them draw a take-profit line at the
-wrong price -- which looks entirely plausible on screen.
+It used to be two. `/market/ohlcv/{ticker}` served plain bars and
+`/market/chart/{trade_id}` served everything else, which meant a chart of a
+watchlist ticker could only be the thin one -- and that split propagated all
+the way up into two Angular stores and two chart components that had to be
+kept in visual agreement by hand. Making the trade optional collapsed all
+six into one. `ohlcv_bars`/`trade_levels` in `app.py` are what the deleted
+route shared with the Jinja UI; the Jinja UI is gone (Release B), so this
+module now carries the only serialisation.
+
+Every number here is produced by the same Python that draws the PNG the bot
+posts to Discord -- `swingbot.core.indicators`,
+`signals.compute_volume_profile`, `charts.chart_geometry.overlay_geometry`
+and `charts.trendline_fit`. A browser-side reimplementation of "where does
+the 61.8% retracement sit" or "what is the 20-EMA here" would be a guarantee
+that the chart a user zooms into eventually disagrees with the image they
+were alerted with, and neither would look wrong on its own.
 
 `_ohlcv_frame` tries a live fetch and falls back to the backtest CSV cache,
 so the chart still renders offline. That is one of the repo's TWO parallel
 OHLCV caches (`data/backtest_cache/`, flat per-ticker dailies -- not
 `market_data/`, which is timeframe-first and belongs to the edge engine).
 Reusing the accessor is also how this endpoint avoids having to know that.
-
-`/market/chart/{trade_id}` (SR33, spec Decision 10) is the SPA's interactive
-trade chart in ONE request: bars, indicator panes, the volume profile, the
-plan lines and the confirming-method overlay. Every one of those numbers is
-produced by the same Python that draws the PNG the bot posts to Discord --
-`swingbot.core.indicators`, `signals.compute_volume_profile` and
-`charts.chart_geometry.overlay_geometry`. A browser-side reimplementation of
-"where does the 61.8% retracement sit" or "what is the 20-EMA here" would be
-a guarantee that the chart a user zooms into eventually disagrees with the
-image they were alerted with, and neither would look wrong on its own.
 """
 from __future__ import annotations
 
@@ -35,9 +35,6 @@ from flask import jsonify
 
 from . import api_v1, error
 from .auth import require_auth
-
-DEFAULT_BARS = 260
-MAX_BARS = 1000
 
 # --- /market/chart -------------------------------------------------------
 #
@@ -183,55 +180,174 @@ def _volume_profile(df, window: int) -> list:
             for i, vol in enumerate(profile["bin_volumes"])]
 
 
-@api_v1.route("/market/ohlcv/<ticker>", methods=["GET"])
-@require_auth
-def ohlcv(ticker: str):
-    """`levels` is present only when `trade_id` is given AND resolves.
+def _is_trendline_confirmed(trade: dict | None) -> bool:
+    """Whether `trade`'s chart would actually draw a trendline -- the single
+    condition the backfill gate and the legend-note gate below both share, so
+    a trade confirmed by (say) an EMA and a Fib level alone never gets a
+    trendline fitted, stored, or captioned for it.
 
-    An unresolvable `trade_id` is a 404 rather than a chart with the levels
-    quietly missing. The request was "this trade's chart"; answering with a
-    plain one that looks complete is how a user reads a chart believing the
-    lines are simply not set. A client wanting bars regardless just omits
-    the parameter.
+    Mirrors trade_chart.py's own gate in `generate_trade_chart` (its
+    `need_target_trendline`/`need_stop_trendline` locals, just before it
+    decides whether to fit `trend_info` at all): true when either side's
+    picked confirming source is a Trendline, OR -- the same "nothing else to
+    draw" fallback the PNG falls back to -- when the trade carries no source
+    info on either side at all (every trade logged before source tracking
+    existed draws a trendline as its only option, same as the PNG).
     """
-    from flask import request
+    if not trade:
+        return False
+    from swingbot.core.charts.chart_geometry import _pick_primary_source
 
-    from swingbot.admin.app import (_ohlcv_frame, _trade_for_levels,
-                                    ohlcv_bars, trade_levels)
+    target_primary = _pick_primary_source(trade.get("target_sources") or [])
+    stop_primary = _pick_primary_source(trade.get("stop_sources") or [])
+    if target_primary is None and stop_primary is None:
+        return True
+    return bool(
+        (target_primary and target_primary.startswith("Trendline"))
+        or (stop_primary and stop_primary.startswith("Trendline"))
+    )
 
-    raw_bars = request.args.get("bars")
-    if raw_bars is None:
-        bars = DEFAULT_BARS
-    else:
+
+def _chart_trendline_fit(trade: dict, df, horizon: dict, is_bull: bool) -> dict | None:
+    """The trade's stored trendline fit, backfilling it once if absent.
+
+    Every trade logged before the fit was written at plan creation has none,
+    and until it does the SPA draws no trendline for it at all. So it is
+    fitted here on first read and written back: the cost is paid once per
+    trade ever, and -- more importantly -- the line stops moving between two
+    viewings of the same old chart.
+
+    A write on a GET, deliberately. It is a cache fill: idempotent (the store
+    refuses to overwrite an existing fit), and a failure to write means
+    "fitted again next time", never a failed request. The chart is served
+    from the in-memory fit either way.
+
+    The fit arguments are the trade's OWN entry and its horizon's
+    fib_lookback -- scanning/engine.py's arguments, not this endpoint's
+    `window` and last close. A backfill taken with different arguments would
+    be a different line from the one the trade's PNG already drew, which is
+    the failure this consolidation exists to end.
+    """
+    import logging
+
+    from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS
+    from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY, fit_trendline
+    from swingbot.core.performance import TradeLog
+
+    fit = trade.get(TRENDLINE_FIT_KEY)
+    if fit:
+        return fit
+
+    entry = _num(trade.get("entry"))
+    if entry is None:
+        return None
+    try:
+        fit = fit_trendline(
+            df,
+            lookback=int(horizon.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS)),
+            current_price=float(entry),
+            is_bull=is_bull,
+        )
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Trendline backfill fit failed for %s", trade.get("id"), exc_info=True)
+        return None
+
+    if fit:
         try:
-            bars = int(raw_bars)
-        except (TypeError, ValueError):
-            return error("invalid", f"bars must be an integer, got {raw_bars!r}", 400)
-        # Clamped, not rejected: "more than the cap" means "as much as you
-        # have", which is what the caller gets.
-        bars = max(1, min(bars, MAX_BARS))
-
-    ticker = ticker.upper()
-    df = _ohlcv_frame(ticker)
-    if df is None or not len(df):
-        return error("not_found", f"No OHLCV data for {ticker!r}.", 404)
-
-    payload = {"ticker": ticker, "bars": ohlcv_bars(df.tail(bars))}
-
-    trade_id = request.args.get("trade_id")
-    if trade_id:
-        trade = _trade_for_levels(trade_id)
-        if not trade:
-            return error("not_found", f"No trade with id {trade_id!r}", 404)
-        payload["levels"] = trade_levels(trade)
-
-    return jsonify(payload)
+            TradeLog().store_trendline_fit(trade.get("id"), fit)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Trendline backfill write failed for %s", trade.get("id"), exc_info=True)
+    return fit
 
 
-@api_v1.route("/market/chart/<trade_id>", methods=["GET"])
+def _stored_trendline_note_lines(fit: dict, label: str) -> list:
+    """The stored fit's own two endpoints, captioned with the DATES THEY
+    CARRY -- never re-derived from `df.index`.
+
+    `trade_chart.py`'s `_trendline_note_lines` reads its dates off
+    `df.index[len(df) - window_bars]`/`df.index[-1]`, which is correct there
+    because the fit and the render share one frame in one call. It is wrong
+    here: this endpoint's `df` is TODAY's frame, but `fit`
+    (`trade["trendline_fit"]`) can be months old -- `_chart_trendline_fit`
+    exists precisely so the line stops moving between two viewings, and a
+    date re-derived from today's `df` would silently claim the line ends
+    today when it doesn't. The prices come out right either way (they're
+    derived from slope/intercept, which are frame-independent) -- only the
+    dates need the fit's own `points` (see charts/trendline_fit.py) instead.
+    """
+    from datetime import datetime
+
+    from swingbot.core.charts.trade_chart import _fmt_note_date
+
+    points = fit.get("points") or []
+    if len(points) != 2:
+        return []
+    pts = sorted(
+        ((float(p["price"]), datetime.fromtimestamp(int(p["t"]))) for p in points),
+        key=lambda t: t[0],
+    )
+    lo_price, lo_date = pts[0]
+    hi_price, hi_date = pts[1]
+    return [
+        f"{label}: 2 pts used",
+        f"  low  {_fmt_note_date(lo_date)}  {lo_price:.2f}",
+        f"  high {_fmt_note_date(hi_date)}  {hi_price:.2f}",
+    ]
+
+
+def _chart_notes(trade: dict, df, fit: dict, overlays: list, horizon: dict) -> list:
+    """The legend's fit notes, from the helpers the PNG prints.
+
+    Same functions, so the image and the browser cannot describe the same
+    line with different dates or prices. A note is only produced for a method
+    that HAS one -- a trendline names the two points its segment connects, a
+    fib fan its 0%/100% anchors, and everything else draws without a note
+    rather than with an empty one.
+
+    `fit` is already None for a trade that is not trendline-confirmed (see
+    `_is_trendline_confirmed` and its call site in `chart()`), so the
+    trendline note below is gated for free -- it only ever fires for a trade
+    whose chart actually draws the line it would be captioning.
+    """
+    from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, _fib_note_lines
+
+    notes = []
+    if fit and fit.get("points"):
+        try:
+            notes += _stored_trendline_note_lines(
+                fit, f"Trendline ({int(fit.get('strength', 0))}x)")
+        except Exception:
+            pass
+
+    for overlay in overlays:
+        source = overlay.get("source") or ""
+        if source.startswith("Fib") or source in ("Swing high", "Swing low"):
+            try:
+                notes += _fib_note_lines(
+                    df, int(horizon.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS)),
+                    source)
+            except Exception:
+                pass
+    return notes
+
+
+@api_v1.route("/market/chart/<ticker>", methods=["GET"])
 @require_auth
-def chart(trade_id: str):
-    """Everything the SPA's interactive trade chart draws, in one request.
+def chart(ticker: str):
+    """Everything the SPA's interactive chart draws, in one request.
+
+    Keyed by TICKER, with the trade as an optional `trade_id` parameter. The
+    subject of a chart is the instrument; a plan is an annotation on top of
+    it. Keyed by trade instead, there was no way to chart a watchlist ticker
+    at all, which is what forced the second, thinner chart component this
+    consolidation deletes.
+
+    No `trade_id` means no plan: `levels` is null and `overlays` is empty,
+    and no trade is looked up at all. Falling back to "some trade on this
+    ticker" would draw plan lines nobody asked for, and which one it picked
+    would be invisible on screen.
 
     One request rather than five because the panes must agree: the bars, the
     indicator series, the volume profile and the overlay are all slices of
@@ -275,11 +391,28 @@ def chart(trade_id: str):
                 400,
             )
 
-    trade = _trade_for_levels(trade_id)
-    if not trade:
-        return error("not_found", f"No trade with id {trade_id!r}", 404)
+    ticker = (ticker or "").upper()
+    trade_id = request.args.get("trade_id")
+    trade = None
+    if trade_id:
+        trade = _trade_for_levels(trade_id)
+        if not trade:
+            # An unresolvable id stays a 404 rather than degrading to a plain
+            # chart. The request was "this trade's chart"; answering with a
+            # complete-looking one without its lines is how someone reads a
+            # chart believing the levels are simply not set.
+            return error("not_found", f"No trade with id {trade_id!r}", 404)
+        trade_ticker = (trade.get("ticker") or "").upper()
+        if trade_ticker and trade_ticker != ticker:
+            # The path names what is charted. Drawing a trade's levels over
+            # another instrument's bars produces a chart that is wrong in a
+            # way nothing on screen shows.
+            return error(
+                "invalid",
+                f"Trade {trade_id!r} is on {trade_ticker!r}, not {ticker!r}",
+                400,
+            )
 
-    ticker = (trade.get("ticker") or "").upper()
     df = _ohlcv_frame(ticker)
     if df is None or not len(df):
         return error("not_found", f"No OHLCV data for {ticker!r}.", 404)
@@ -290,8 +423,8 @@ def chart(trade_id: str):
     # geometry helpers each carry their own documented default, and picking
     # some other horizon's numbers here would draw a method the trade was
     # never confirmed by.
-    horizon = HORIZONS.get(trade.get("horizon_key")) or {}
-    is_bull = trade.get("direction") == "bullish"
+    horizon = HORIZONS.get((trade or {}).get("horizon_key")) or {}
+    is_bull = (trade or {}).get("direction") == "bullish"
 
     visible = df.tail(window)
     bars = [
@@ -308,25 +441,40 @@ def chart(trade_id: str):
         for t, (_idx, r) in zip(bar_epochs(visible), visible.iterrows())
     ]
 
-    # ONE overlay per chart, target side preferred: it is the side the trade
-    # is aiming at. A trade confirmed only on its stop still gets its method
-    # drawn rather than nothing. `recent_len=window` makes a curve's points
-    # line up 1:1 with `bars`.
+    # BOTH sides, target first: the method that confirmed the target and the
+    # one holding the stop are different methods, and one overlay could only
+    # ever tell half of it. Target leads because it is the side the trade is
+    # aiming at. `recent_len=window` makes a curve's points line up 1:1 with
+    # `bars`.
     #
-    # `trend_info` is deliberately left unset. generate_trade_chart() fits
-    # the trendline pair once, before it decides its display window (the
-    # window is then expanded to fit the line's own touches); re-fitting here
-    # would be a second source of truth for the same line. A Trendline-only
-    # source therefore yields no overlay here, which is the same "nothing
-    # drawable" outcome as a candlestick-pattern-only source.
-    overlay = None
+    # `trend_info` stays unset and `trend_fit` carries the line instead: the
+    # fit is read off the trade, never computed here. A second fit at render
+    # time is what let the browser and the PNG disagree about the same line;
+    # see charts/trendline_fit.py.
+    #
+    # Gated on `_is_trendline_confirmed`: a trade whose chart draws no
+    # trendline at all (an EMA/Fib/etc.-only confirmation) has nothing for a
+    # fit to be drawn or captioned FROM, so fitting and storing one for it on
+    # first view would be a wasted computation and a locked file rewrite for
+    # a line that never reaches the page.
+    fit = (
+        _chart_trendline_fit(trade, df, horizon, is_bull)
+        if trade and _is_trendline_confirmed(trade) else None
+    )
+
+    overlays = []
     for side, key in (("target", "target_sources"), ("stop", "stop_sources")):
-        overlay = overlay_geometry(df, side, trade.get(key) or [], horizon=horizon,
-                                   recent_len=window, is_bull=is_bull)
+        overlay = overlay_geometry(df, side, (trade or {}).get(key) or [],
+                                   horizon=horizon, recent_len=window,
+                                   is_bull=is_bull, trend_fit=fit)
         if overlay is not None:
-            break
+            overlays.append(overlay)
 
     payload = {
+        # Echoed back because the client asks by ticker and renders many
+        # charts: a response that does not say what it is of cannot be
+        # matched to its request once two are in flight.
+        "ticker": ticker,
         "ohlcv": bars,
         # Computed over the full loaded frame, then sliced -- see `_series`.
         "indicators": _indicators(df, window),
@@ -336,7 +484,10 @@ def chart(trade_id: str):
         # breakeven/trail floor) has no equivalent there at all. A missing
         # level stays null and is never substituted with 0 -- a target line
         # at 0.0 rescales the whole price axis and reads as a real level.
-        "levels": {
+        # Null without a trade -- no plan, no lines. Not an empty dict of
+        # nulls: "there is no plan here" and "the plan has no target" are
+        # different answers and the client draws them differently.
+        "levels": None if trade is None else {
             "entry": _num(trade.get("entry")),
             "stop": _num(trade.get("stop_loss")),
             "target1": _num(trade.get("take_profit")),
@@ -347,7 +498,11 @@ def chart(trade_id: str):
         # reshaping it here would be the second implementation the module
         # exists to prevent, and `source` is the method label the legend
         # prints.
-        "overlay": overlay,
+        "overlays": overlays,
+        # What the PNG prints under its legend, from the same helpers -- the
+        # dates and prices a line was fitted between. Empty without a trade:
+        # there is no fit to explain.
+        "notes": _chart_notes(trade, df, fit, overlays, horizon) if trade else [],
         "currency": get_currency_symbol(ticker, config.CURRENCY_SYMBOL),
     }
     return jsonify(_json_safe(payload))
