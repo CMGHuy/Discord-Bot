@@ -92,10 +92,9 @@ path fix) correctly bumped nothing: neither alters what the bot or the admin
 
 ### How
 
-A bump is **its own commit**, touching only `VERSION.json`, in the established
-format — and it goes **last**, after the work it names is committed and green,
-so the version commit is a release marker rather than a guess about what will
-land:
+A bump is **its own commit**, in the established format — and it goes **last**,
+after the work it names is committed and green, so the version commit is a
+release marker rather than a guess about what will land:
 
 ```
 release(ui): 1.2.0 -- the SPA refresh
@@ -104,6 +103,29 @@ release(bot): 1.1.0 -- plan engine v2
 
 Set the matching `ui_updated` / `bot_updated` stamp alongside it
 (`YYYY-MM-DD HH-MM-SS`, UTC).
+
+**Then run `python scripts/build_version_matrix.py` and commit
+`swingbot/admin/version_history.json`.** This is not optional and it is not
+cosmetic: `test_the_committed_file_matches_the_current_generator` asserts the
+frozen file's `current` pair equals `VERSION.json`, so a bump without a
+regeneration is a red suite. This paragraph used to read "touching only
+`VERSION.json`", and following it exactly is what produced that failure at
+`123d244`.
+
+**The local gate cannot catch this one, structurally.** The rule above says the
+bump goes last, *after* green — so the suite you ran was green against the old
+version and the mismatch only exists afterwards. Either re-run
+`python scripts/testrun.py file tests/scripts/test_build_version_matrix.py`
+after bumping (1s), or treat the regeneration as part of the bump rather than
+as a follow-up. Do not conclude from a green pre-bump run that the release
+commit is safe.
+
+Regenerating also wants the bump **already committed**: the generator walks
+`git log` for `VERSION.json` and records the working tree's uncommitted value
+as `"commit": "uncommitted", "subject": "working tree"`. Release 1.3.0 committed
+exactly that placeholder as its own newest pair, and it stayed there until the
+next release regenerated over it. Order is: bump commit, then regenerate, then
+commit the artifact.
 
 ### What `last_updated` in the sidebar actually is
 
