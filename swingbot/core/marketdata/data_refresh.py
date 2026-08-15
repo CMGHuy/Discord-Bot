@@ -22,7 +22,7 @@ import time
 
 import pandas as pd
 
-from .. import config
+from ... import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.marketdata.data_store import (
     DATA_DIR,
