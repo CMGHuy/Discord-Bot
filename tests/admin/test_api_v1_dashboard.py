@@ -278,7 +278,14 @@ def test_health_carries_the_versions_and_the_market_session(logged_in):
     the 401, and this task does not change it.
     """
     body = logged_in.get("/api/v1/health").get_json()
-    assert_shape(body, {"ok": bool, "versions": dict, "market_active": bool})
+    # `currency` joined them for the same reason `market_active` is here: the
+    # account's symbol applies to every money figure the SPA renders, so it is
+    # a shell-level fact rather than one workspace's field. The SPA used to
+    # hardcode "USD" beside three of them.
+    assert_shape(
+        body,
+        {"ok": bool, "versions": dict, "market_active": bool, "currency": str},
+    )
     assert_shape(body["versions"], {
         "ui": str, "bot": str, "last_updated": (str, type(None)),
     }, where="versions")

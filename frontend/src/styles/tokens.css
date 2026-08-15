@@ -89,13 +89,26 @@
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  --text-micro: 9px;      /* micro-label */
-  --text-chip: 10px;      /* chip */
-  --text-table: 11px;     /* table body */
-  --text-body: 12px;      /* body */
-  --text-subhead: 14px;   /* subheading */
-  --text-title: 18px;     /* section title */
-  --text-metric: 23px;    /* primary metric */
+  /* The shell's "Text" control multiplies this, and the scale is the ONLY
+   * thing it touches.
+   *
+   * It used to set `document.documentElement.style.fontSize` instead, on the
+   * stated belief that these tokens were `rem`-based. They are not and never
+   * have been -- every size on the list below is an absolute px -- so the
+   * control moved the root font size and nothing on screen changed. A
+   * multiplier here is what actually reaches the type, and it deliberately
+   * leaves --space-* and --control-h alone: a "Text size" control that also
+   * re-flowed every gutter would be a zoom, which the browser already has.
+   */
+  --text-scale: 1;
+
+  --text-micro: calc(9px * var(--text-scale));      /* micro-label */
+  --text-chip: calc(10px * var(--text-scale));      /* chip */
+  --text-table: calc(11px * var(--text-scale));     /* table body */
+  --text-body: calc(12px * var(--text-scale));      /* body */
+  --text-subhead: calc(14px * var(--text-scale));   /* subheading */
+  --text-title: calc(18px * var(--text-scale));     /* section title */
+  --text-metric: calc(23px * var(--text-scale));    /* primary metric */
 
   /* -- spacing ---------------------------------------------------------
    * Closed scale, named by value on purpose. An indirection table

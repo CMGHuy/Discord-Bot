@@ -260,12 +260,34 @@ import {
       border-collapse: collapse;
       font-size: var(--text-table);
     }
+    /* Wrapping is the default now, and it is what keeps a wide column set
+     * inside the workspace instead of behind a scrollbar.
+     *
+     * Everything here used to be white-space: nowrap, which made the table's
+     * minimum width the sum of its longest cells -- so the scroller below
+     * engaged on almost any column set, and its scrollbar sits at the BOTTOM
+     * of the table, a page-scroll away from the header someone is trying to
+     * line data up with. A scrollbar you have to leave the data to reach is
+     * not a scrollbar you can use.
+     *
+     * Only multi-word cells actually wrap: a ticker, a price and a date are
+     * single tokens and render exactly as before. What gives is the long
+     * stuff -- status phrases, plan names, strategy labels -- which is width
+     * the table did not need. The scroller stays as the backstop for the
+     * genuinely un-shrinkable case. */
     th, td {
       padding: var(--space-6) var(--space-10);
       text-align: left;
       border-bottom: 1px solid var(--border);
-      white-space: nowrap;
+      overflow-wrap: break-word;
     }
+    /* Figures are the exception and have to be. A price broken across two
+       lines stops reading as one number, and the right-alignment that makes
+       a column of magnitudes scannable only works on a single line.
+       The HEADER above them is deliberately not exempt: "Realized pnl
+       amount" is three times the width of the numbers under it, and letting
+       it wrap is most of what the change above buys back. */
+    td.num { white-space: nowrap; }
     th {
       color: var(--text-secondary);
       font-size: var(--text-micro);

@@ -64,12 +64,6 @@
 
 .mark .avatar { border-radius: 50%; display: block; flex: none; }
 
-.nav a {
-  display: flex;
-  align-items: center;
-  gap: var(--space-10);
-}
-
 /* The bottom of the sidebar. This box owns the bottom anchor so its children
    do not have to -- see the note in shell.html. */
 .sidebar-foot {
@@ -96,7 +90,27 @@
   .shell, .shell.overlay .sidebar { transition: none; }
 }
 
+/* Sticky and exactly one viewport tall.
+ *
+ * As a plain grid item the sidebar was as tall as the ROW, i.e. as tall as
+ * whichever workspace happened to be open, so its foot -- the collapse
+ * toggle and the ui/bot version block -- sat at the bottom of a 4000px
+ * document and was only visible after scrolling a table to its end. Pinning
+ * it to the viewport is what makes `margin-top: auto` on `.sidebar-foot`
+ * mean "the bottom of the screen" rather than "the bottom of the page".
+ *
+ * `height`, not `min-height`: the foot's bottom anchor needs a definite box
+ * to push against, and `overflow-y: auto` then handles the one case a fixed
+ * height creates -- a viewport too short for seven nav entries plus the
+ * foot. The overlay variant above keeps `position: fixed` on its own higher
+ * specificity, so the phone sheet is untouched.
+ */
 .sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-20);
@@ -137,14 +151,28 @@
   list-style: none;
 }
 
+/* Flex, not block: the icon and the label are two boxes of different heights
+   and only a shared cross-axis centre keeps the glyph on the label's line.
+   There used to be two `.nav a` rules -- a flex one further up the file and
+   a `display: block` one here -- and being later at equal specificity, this
+   one silently won. That is what left every icon riding above its word, and
+   what stopped `justify-content: center` working on the rail. One rule now,
+   so there is nothing left to disagree. */
 .nav a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
   padding: var(--space-6) var(--space-8);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--text-body);
   transition: color var(--transition), background var(--transition);
 }
+
+/* The glyph keeps its box rather than being squeezed by a long label.
+   `sb-icon` already sets its own `display: inline-flex; line-height: 0`, so
+   this only has to say "do not shrink". */
+.nav a sb-icon { flex: none; }
 
 .nav a:hover {
   color: var(--text);

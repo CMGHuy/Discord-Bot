@@ -27,6 +27,7 @@ import {
   StrategyRow,
   TierRow,
 } from '../../stores/analytics.store';
+import { ConnectionStore } from '../../stores/connection.store';
 import { Button } from '../../ui/button';
 import { Chip, QualityChip, qualityTone } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -347,7 +348,7 @@ interface ProposalView extends ProposalRow {
                 label="Total P&L"
                 [value]="store.totalPnl()"
                 tone="pnl"
-                unit=" USD"
+                [unit]="currencyUnit()"
               />
             </div>
           </sb-panel>
@@ -1091,6 +1092,12 @@ interface ProposalView extends ProposalRow {
 export class Analytics {
   private readonly router = inject(Router);
   protected readonly store = inject(AnalyticsStore);
+  private readonly connection = inject(ConnectionStore);
+
+  /** The account's currency symbol, as a metric-chip unit. Same fix as the
+   *  Dashboard's: `" USD"` was written into the template while
+   *  `CURRENCY_SYMBOL` has defaulted to `€`. */
+  protected readonly currencyUnit = computed(() => ` ${this.connection.currency()}`);
 
   /** The active tab, as a query parameter — arriving through
    *  `withComponentInputBinding` rather than `ActivatedRoute`, so this

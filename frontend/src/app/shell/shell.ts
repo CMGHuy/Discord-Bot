@@ -128,11 +128,23 @@ export class Shell {
 
   protected readonly zoomChoices = ZOOM_CHOICES;
 
-  /** Applied to `<html>` rather than to a shell element: the design tokens
-   *  are `rem`-based, so scaling the root scales the whole system --
-   *  including anything rendered into a portal outside this component. */
+  /**
+   * Applied to `<html>` rather than to a shell element, so it also reaches
+   * anything rendered into a portal outside this component -- dialogs, the
+   * drawer, the toast host.
+   *
+   * **`--text-scale`, not `font-size`.** This used to set the root font size
+   * on the belief that the design tokens were `rem`-based. They are not:
+   * every `--text-*` in `styles/tokens.css` is an absolute px, so the root
+   * font size reached nothing and the control was inert -- you could pick
+   * 125% and watch the page not move. The tokens now multiply through this
+   * custom property, which is the thing that actually resizes the type.
+   */
   private readonly applyZoom = effect(() => {
-    document.documentElement.style.fontSize = `${this.zoom()}%`;
+    document.documentElement.style.setProperty(
+      '--text-scale',
+      String(this.zoom() / 100),
+    );
   });
 
   protected setZoom(percent: number): void {

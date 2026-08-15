@@ -89,7 +89,12 @@ def test_health_ok_with_basic_auth(client, auth):
     assert r.status_code == 200
     # SR58 added `market_active`: "are these prices live" is a global fact,
     # so it rides the shell's own endpoint rather than the dashboard's.
-    assert_shape(r.get_json(), {"ok": bool, "versions": dict, "market_active": bool})
+    # `currency` rides along for the same reason: the account's symbol applies
+    # to every money figure the SPA renders, so no one workspace owns it.
+    assert_shape(
+        r.get_json(),
+        {"ok": bool, "versions": dict, "market_active": bool, "currency": str},
+    )
     assert r.get_json()["ok"] is True
     # get_versions() returns ui/bot/last_updated -- NOT VERSION.json verbatim
     # (which also has ui_updated/bot_updated). last_updated is VERSION.json's

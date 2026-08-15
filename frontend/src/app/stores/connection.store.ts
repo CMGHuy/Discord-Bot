@@ -78,6 +78,19 @@ export const ConnectionStore = signalStore(
      * that says CLOSED before it knows is worse than one that says nothing.
      */
     marketActive: computed<boolean | null>(() => health()?.market_active ?? null),
+    /**
+     * The account's currency symbol, for every card that renders a money
+     * amount.
+     *
+     * Falls back to `€` rather than to `null`, unlike the three-valued
+     * signals above, because a metric card cannot render "currency unknown":
+     * it would have to drop the unit entirely and show a bare number, which
+     * is the ambiguity the unit exists to remove. `€` is what
+     * `CURRENCY_SYMBOL` defaults to on the server, so the fallback and the
+     * default agree -- the brief window before the first `/health` lands
+     * shows the same symbol it will settle on.
+     */
+    currency: computed(() => health()?.currency ?? '€'),
   })),
   withMethods((store, api = inject(ApiClient)) => ({
     refresh(): void {

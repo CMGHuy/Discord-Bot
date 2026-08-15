@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from flask import jsonify, request, session
 
+from swingbot import config
+
 # The app/helpers MODULES, not names out of them -- see the note in auth.py.
 from swingbot.admin import app as _app
 from swingbot.admin import helpers as _helpers
@@ -104,4 +106,17 @@ def health():
         "ok": True,
         "versions": _helpers.get_versions(),
         "market_active": market_active,
+        # The account's currency symbol, for the same reason `market_active`
+        # is here: it is a global fact about every figure the SPA renders, not
+        # a property of one workspace's response. The SPA had "USD" hardcoded
+        # beside the balance, the realised P&L and the total P&L, which was
+        # simply wrong -- CURRENCY_SYMBOL has defaulted to EUR since it was
+        # introduced, and nothing was reading it.
+        #
+        # This is the FALLBACK symbol, i.e. the account's own currency. It is
+        # not per-ticker: `/market/chart` resolves that per instrument through
+        # `get_currency_symbol`, because a Euronext listing and a NASDAQ one
+        # genuinely price in different units. Account-level totals have one
+        # currency and this is it.
+        "currency": config.CURRENCY_SYMBOL,
     })

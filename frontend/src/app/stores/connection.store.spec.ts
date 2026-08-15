@@ -65,6 +65,7 @@ const HEALTH = {
   ok: true,
   versions: { ui: '1.2.0', bot: '1.3.1', last_updated: '2026-08-14T06:00:00Z' },
   market_active: true,
+  currency: '€',
 };
 
 const SCAN = {

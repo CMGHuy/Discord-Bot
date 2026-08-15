@@ -124,15 +124,20 @@
         </span>
       }
 
+      <!-- The selected size is bound on the OPTIONS, not as `[value]` on the
+           select. Angular updates a host element's property bindings before
+           it materialises the embedded views inside it, so `[value]="zoom()"`
+           ran against a select that had no options yet: the assignment was
+           discarded and the control sat on whichever option rendered first,
+           reporting 90% no matter what was stored. -->
       <label class="zoom">
         <span class="zoom-label">Text</span>
         <select
           aria-label="Text size"
-          [value]="zoom()"
           (change)="setZoom(+$any($event.target).value)"
         >
           @for (choice of zoomChoices; track choice) {
-            <option [value]="choice">{{ choice }}%</option>
+            <option [value]="choice" [selected]="choice === zoom()">{{ choice }}%</option>
           }
         </select>
       </label>
@@ -140,6 +145,7 @@
       <sb-connection-status
         [state]="connection.state()"
         [botAlive]="connection.botAlive()"
+        [marketActive]="connection.marketActive()"
       />
       <sb-profile-menu (signedOut)="logout()" />
     </header>

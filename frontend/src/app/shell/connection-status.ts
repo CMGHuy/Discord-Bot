@@ -25,7 +25,7 @@ import { ConnectionState } from '../stores/connection.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="status" [class]="state()" [title]="hint()">
-      <span class="dot" [class]="state()"></span>
+      <span class="dot" [class]="state()" [class.resting]="resting()"></span>
       <span class="label">{{ label() }}</span>
       @if (botAlive() === false) {
         <span class="bot">bot offline</span>
@@ -59,6 +59,14 @@ import { ConnectionState } from '../stores/connection.store';
        because both mean the same caution — what you are reading may be
        stale — and the label is what tells them apart. */
     .dot.live { background: var(--text); animation: pulse 2s ease-out infinite; }
+    /* Out of session hours the stream is still up but nothing is coming down
+       it, and a pulse in that state claims activity that is not happening --
+       it reads as "prices are moving" on an evening when they are not. The
+       dot stays lit, because the connection genuinely is live; it just stops
+       announcing traffic. Same reasoning as the reduced-motion rule below:
+       the colour carries the state, the animation only ever carried the
+       liveliness. */
+    .dot.live.resting { animation: none; }
     .dot.degraded { background: var(--warn); }
     .dot.dead { background: var(--warn); }
     .dot.connecting { background: var(--text-faint); }
@@ -76,18 +84,30 @@ export class ConnectionStatus {
   readonly state = input.required<ConnectionState>();
   /** Null until the bot has ever reported -- distinct from "offline". */
   readonly botAlive = input<boolean | null>(null);
+  /** Whether the US market is open. Three-valued for the same reason
+   *  `ConnectionStore.marketActive` is: `null` means "not asked yet", and
+   *  stilling the dot on a fact we do not have yet would be guessing. */
+  readonly marketActive = input<boolean | null>(null);
+
+  /** Connected, but with nothing to announce. Only an explicit `false`
+   *  qualifies -- see the input's note. */
+  protected readonly resting = computed(() => this.marketActive() === false);
 
   protected readonly label = computed(
     () => ({ connecting: 'connecting', live: 'live', degraded: 'polling', dead: 'offline' })[this.state()],
   );
 
-  protected readonly hint = computed(
-    () =>
-      ({
-        connecting: 'Opening the event stream…',
-        live: 'Receiving changes as they happen.',
-        degraded: 'Event stream unavailable — refreshing every 5 seconds instead.',
-        dead: 'Not receiving updates. The admin may be down.',
-      })[this.state()],
-  );
+  protected readonly hint = computed(() => {
+    if (this.state() === 'live' && this.resting()) {
+      // Says why the dot went still, so a stopped pulse cannot be mistaken
+      // for a stream that quietly died.
+      return 'Connected. The market is closed, so no changes are expected.';
+    }
+    return {
+      connecting: 'Opening the event stream…',
+      live: 'Receiving changes as they happen.',
+      degraded: 'Event stream unavailable — refreshing every 5 seconds instead.',
+      dead: 'Not receiving updates. The admin may be down.',
+    }[this.state()];
+  });
 }

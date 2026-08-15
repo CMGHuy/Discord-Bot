@@ -64,7 +64,8 @@ export class MetricCard {
   readonly label = input.required<string>();
   readonly value = input.required<number | null>();
   readonly tone = input<MetricTone>('plain');
-  /** Rendered after the number: '%', ' USD', and so on. */
+  /** Rendered after the number: '%', ' €', and so on. Money units come from
+   *  `ConnectionStore.currency()` — never a literal, see its note. */
   readonly unit = input('');
   readonly sub = input<string | null>(null);
   readonly decimals = input(2);

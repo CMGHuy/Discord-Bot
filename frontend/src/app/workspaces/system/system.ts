@@ -70,7 +70,13 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
     }
   `,
   styles: `
-    :host { display: grid; gap: var(--space-20); }
+    /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
+       at its widest child's min-content, so one un-shrinkable panel stretched
+       the workspace past the viewport and took the page sideways with it.
+       Clamping the track is what makes the children's own overflow-x
+       containers the thing that scrolls instead.
+       No backticks in here: these styles live in a TS template literal. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
     .head { display: flex; align-items: baseline; gap: var(--space-14); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     .dirty { color: var(--warn); font-size: var(--text-table); }

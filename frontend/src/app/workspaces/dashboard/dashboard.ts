@@ -12,6 +12,7 @@ import {
 import { Router, RouterLink } from '@angular/router';
 
 import { DashboardScope, TradeRow } from '../../api/models';
+import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { TradesStore } from '../../stores/trades.store';
@@ -141,7 +142,7 @@ export const OPEN_POSITIONS_CAP = 6;
         [label]="realizedLabel()"
         [value]="store.realizedAmount()"
         tone="pnl"
-        unit=" USD"
+        [unit]="currencyUnit()"
       />
       <sb-metric-card
         label="Realised, average"
@@ -159,7 +160,7 @@ export const OPEN_POSITIONS_CAP = 6;
       <sb-metric-card
         label="Account balance"
         [value]="store.balance()"
-        unit=" USD"
+        [unit]="currencyUnit()"
       />
       <sb-metric-card
         label="Open P&L"
@@ -366,7 +367,13 @@ export const OPEN_POSITIONS_CAP = 6;
       font-variant-numeric: tabular-nums;
     }
 
-    :host { display: grid; gap: var(--space-20); }
+    /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
+       at its widest child's min-content, so one un-shrinkable panel stretched
+       the workspace past the viewport and took the page sideways with it.
+       Clamping the track is what makes the children's own overflow-x
+       containers the thing that scrolls instead.
+       No backticks in here: these styles live in a TS template literal. */
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); }
 
     .head {
       display: flex;
@@ -482,6 +489,14 @@ export const OPEN_POSITIONS_CAP = 6;
 export class Dashboard {
   private readonly router = inject(Router);
   protected readonly store = inject(DashboardStore);
+  /** For the currency symbol alone. `ConnectionStore` is root-provided and
+   *  the shell already keeps it fresh, so reading it here costs no request. */
+  private readonly connection = inject(ConnectionStore);
+
+  /** The suffix a money card renders after its number — a leading space, then
+   *  the account's symbol. Three cards had `" USD"` written into the template
+   *  while `CURRENCY_SYMBOL` has defaulted to `€` all along. */
+  protected readonly currencyUnit = computed(() => ` ${this.connection.currency()}`);
   /** The open-positions table's data. Same component, same store shape and
    *  the same `trades` event as the Trades workspace -- what differs is only
    *  the query, which is set once below and never changes. */
@@ -721,7 +736,9 @@ export class Dashboard {
    *  trade with the stop distance, up to the max-position cap -- so the chip
    *  says "max" rather than presenting a ceiling as a typical cost. */
   protected readonly premiumUnit = computed(() =>
-    this.store.positionPremiumIsCap() ? ' USD max' : ' USD',
+    this.store.positionPremiumIsCap()
+      ? `${this.currencyUnit()} max`
+      : this.currencyUnit(),
   );
 
   constructor() {

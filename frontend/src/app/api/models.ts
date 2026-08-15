@@ -47,6 +47,12 @@ export interface Health {
    *  is a global fact: the indicator sits beside the connection status in
    *  the shell, which must not depend on a workspace being open. */
   market_active: boolean;
+  /** The account's currency symbol — `CURRENCY_SYMBOL`, which defaults to
+   *  `€`. Here for the same reason `market_active` is: it applies to every
+   *  account-level figure the SPA renders, so a workspace endpoint would be
+   *  the wrong owner. NOT per-ticker — `ChartResponse.currency` is that, and
+   *  it can legitimately differ per instrument. */
+  currency: string;
 }
 
 export interface Versions {
