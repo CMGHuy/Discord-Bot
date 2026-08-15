@@ -228,10 +228,21 @@ def ohlcv(ticker: str):
     return jsonify(payload)
 
 
-@api_v1.route("/market/chart/<trade_id>", methods=["GET"])
+@api_v1.route("/market/chart/<ticker>", methods=["GET"])
 @require_auth
-def chart(trade_id: str):
-    """Everything the SPA's interactive trade chart draws, in one request.
+def chart(ticker: str):
+    """Everything the SPA's interactive chart draws, in one request.
+
+    Keyed by TICKER, with the trade as an optional `trade_id` parameter. The
+    subject of a chart is the instrument; a plan is an annotation on top of
+    it. Keyed by trade instead, there was no way to chart a watchlist ticker
+    at all, which is what forced the second, thinner chart component this
+    consolidation deletes.
+
+    No `trade_id` means no plan: `levels` is null and `overlays` is empty,
+    and no trade is looked up at all. Falling back to "some trade on this
+    ticker" would draw plan lines nobody asked for, and which one it picked
+    would be invisible on screen.
 
     One request rather than five because the panes must agree: the bars, the
     indicator series, the volume profile and the overlay are all slices of
@@ -275,11 +286,28 @@ def chart(trade_id: str):
                 400,
             )
 
-    trade = _trade_for_levels(trade_id)
-    if not trade:
-        return error("not_found", f"No trade with id {trade_id!r}", 404)
+    ticker = (ticker or "").upper()
+    trade_id = request.args.get("trade_id")
+    trade = None
+    if trade_id:
+        trade = _trade_for_levels(trade_id)
+        if not trade:
+            # An unresolvable id stays a 404 rather than degrading to a plain
+            # chart. The request was "this trade's chart"; answering with a
+            # complete-looking one without its lines is how someone reads a
+            # chart believing the levels are simply not set.
+            return error("not_found", f"No trade with id {trade_id!r}", 404)
+        trade_ticker = (trade.get("ticker") or "").upper()
+        if trade_ticker and trade_ticker != ticker:
+            # The path names what is charted. Drawing a trade's levels over
+            # another instrument's bars produces a chart that is wrong in a
+            # way nothing on screen shows.
+            return error(
+                "invalid",
+                f"Trade {trade_id!r} is on {trade_ticker!r}, not {ticker!r}",
+                400,
+            )
 
-    ticker = (trade.get("ticker") or "").upper()
     df = _ohlcv_frame(ticker)
     if df is None or not len(df):
         return error("not_found", f"No OHLCV data for {ticker!r}.", 404)
@@ -290,8 +318,8 @@ def chart(trade_id: str):
     # geometry helpers each carry their own documented default, and picking
     # some other horizon's numbers here would draw a method the trade was
     # never confirmed by.
-    horizon = HORIZONS.get(trade.get("horizon_key")) or {}
-    is_bull = trade.get("direction") == "bullish"
+    horizon = HORIZONS.get((trade or {}).get("horizon_key")) or {}
+    is_bull = (trade or {}).get("direction") == "bullish"
 
     visible = df.tail(window)
     bars = [
@@ -319,14 +347,19 @@ def chart(trade_id: str):
     # would be a second source of truth for the same line. A Trendline-only
     # source therefore yields no overlay here, which is the same "nothing
     # drawable" outcome as a candlestick-pattern-only source.
-    overlay = None
+    overlays = []
     for side, key in (("target", "target_sources"), ("stop", "stop_sources")):
-        overlay = overlay_geometry(df, side, trade.get(key) or [], horizon=horizon,
-                                   recent_len=window, is_bull=is_bull)
+        overlay = overlay_geometry(df, side, (trade or {}).get(key) or [],
+                                   horizon=horizon, recent_len=window, is_bull=is_bull)
         if overlay is not None:
+            overlays.append(overlay)
             break
 
     payload = {
+        # Echoed back because the client asks by ticker and renders many
+        # charts: a response that does not say what it is of cannot be
+        # matched to its request once two are in flight.
+        "ticker": ticker,
         "ohlcv": bars,
         # Computed over the full loaded frame, then sliced -- see `_series`.
         "indicators": _indicators(df, window),
@@ -336,7 +369,10 @@ def chart(trade_id: str):
         # breakeven/trail floor) has no equivalent there at all. A missing
         # level stays null and is never substituted with 0 -- a target line
         # at 0.0 rescales the whole price axis and reads as a real level.
-        "levels": {
+        # Null without a trade -- no plan, no lines. Not an empty dict of
+        # nulls: "there is no plan here" and "the plan has no target" are
+        # different answers and the client draws them differently.
+        "levels": None if trade is None else {
             "entry": _num(trade.get("entry")),
             "stop": _num(trade.get("stop_loss")),
             "target1": _num(trade.get("take_profit")),
@@ -346,8 +382,9 @@ def chart(trade_id: str):
         # Passed through from chart_geometry unchanged, `source` included:
         # reshaping it here would be the second implementation the module
         # exists to prevent, and `source` is the method label the legend
-        # prints.
-        "overlay": overlay,
+        # prints. A list because Task 6 returns both sides; one entry at
+        # most today.
+        "overlays": overlays,
         "currency": get_currency_symbol(ticker, config.CURRENCY_SYMBOL),
     }
     return jsonify(_json_safe(payload))

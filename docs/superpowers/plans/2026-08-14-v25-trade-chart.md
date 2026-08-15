@@ -581,87 +581,48 @@ git commit -m "feat(charts): trendline geometry from the stored fit"
   `{ticker, ohlcv, indicators, volume_profile, levels?, overlays, notes}`.
   `overlays` is a list. Task 6 types it; Task 7 draws it.
 
-- [ ] **Step 1: Add the trade fixtures**
+> **Corrected during execution.** Step 1 below wanted three trade fixtures in
+> `tests/admin/conftest.py`, seeded through `PlanStore.add`. The endpoint does
+> not read PlanStore: it resolves a trade with `app._trade_for_levels`, which
+> is `TradeLog().get_trade_by_id` over `trades.json`. Fixtures built that way
+> would never be found, and the tests would pass only by asserting the 404.
+> `tests/admin/test_api_v1_market.py` also already has the mechanism —
+> `chart_trade`, which monkeypatches `_trade_for_levels` and returns a setter
+> for per-test overrides, alongside `frame` for the OHLCV source. The new
+> cases extend those rather than adding a second, non-working seeding path.
 
-`tests/admin/conftest.py` provides `admin_app`, `client` and `auth` and nothing
-trade-shaped, so the three fixtures these tests and Task 6's need must be
-created first. Append to `tests/admin/conftest.py`:
+- [x] **Step 1: Reuse the fixtures the file already has**
 
-```python
-@pytest.fixture
-def a_trade(admin_app):
-    """An open plan on AAPL with a target confirmed by EMA20."""
-    return _seed_trade(admin_app, target_sources=["EMA20"], stop_sources=[])
+`chart_trade(**overrides)` and `frame(n)` in
+`tests/admin/test_api_v1_market.py` cover every case this task and Task 6
+need. No `tests/admin/conftest.py` change.
 
+- [x] **Step 2: Write the failing test**
 
-@pytest.fixture
-def a_two_sided_trade(admin_app):
-    """Different confirming methods above and below -- the case a single
-    overlay could only ever tell half of."""
-    return _seed_trade(admin_app, target_sources=["EMA20"], stop_sources=["Donchian"])
+`_chart()` now targets `/api/v1/market/chart/AAPL?trade_id=c1`, so every
+existing chart test moves to the new key and its `window` queries ride behind
+`&`. New cases:
 
+- `test_chart_by_ticker_needs_no_trade` — no `trade_id` gives `levels: null`
+  and `overlays: []`, not an error.
+- `test_a_plain_ticker_chart_never_reads_a_trade` — `_trade_for_levels` is
+  replaced with a raiser, proving no lookup happens at all.
+- `test_a_ticker_with_no_data_is_404_without_a_trade`.
+- `test_the_window_contract_holds_without_a_trade` — the validation must not
+  have been left behind on the trade branch.
+- `test_the_trade_ticker_does_not_override_the_path` — a `trade_id` on
+  another ticker is a 400, not a plan drawn over the wrong instrument.
 
-@pytest.fixture
-def a_legacy_trade(admin_app):
-    """Written the way every record on disk today was: no trendline_fit."""
-    return _seed_trade(admin_app, target_sources=["Trendline"], stop_sources=[],
-                       with_fit=False)
+The top-level shape assertion gains `ticker`, turns `levels` nullable, and
+replaces `overlay` with `overlays` (Task 6 fills the second entry; doing the
+rename here keeps those three tests from being rewritten twice).
 
-
-@pytest.fixture
-def plan_store(admin_app):
-    from swingbot.core.plan_store import PlanStore
-    return PlanStore()
-```
-
-Write `_seed_trade(admin_app, *, target_sources, stop_sources, with_fit=True)`
-as a module-level helper in the same file: it builds a plan record on `AAPL`
-with entry/stop/target set, stores it through `PlanStore.add`, and returns its
-id. When `with_fit` is false it omits `trendline_fit` entirely — absent, not
-null, so "no fit" has one representation.
-
-- [ ] **Step 2: Write the failing test**
-
-Add to `tests/admin/test_api_v1_market.py`:
-
-```python
-def test_chart_by_ticker_needs_no_trade(client, auth):
-    r = client.get("/api/v1/market/chart/AAPL", headers=auth)
-    assert r.status_code == 200
-    body = r.get_json()
-    assert body["ticker"] == "AAPL"
-    assert body["ohlcv"]
-    assert "indicators" in body
-    assert body.get("levels") is None
-    assert body["overlays"] == []
-
-
-def test_chart_with_a_trade_id_adds_the_plan(client, auth, a_trade):
-    r = client.get(f"/api/v1/market/chart/AAPL?trade_id={a_trade}", headers=auth)
-    body = r.get_json()
-    assert body["levels"]["entry"] is not None
-    assert len(body["overlays"]) <= 2
-
-
-def test_every_timestamp_is_an_epoch_integer(client, auth):
-    """One time type. A string here is how an overlay lands a year from its
-    candle -- see models.ts."""
-    body = client.get("/api/v1/market/chart/AAPL", headers=auth).get_json()
-    for bar in body["ohlcv"]:
-        assert isinstance(bar["t"], int)
-
-
-def test_an_unresolvable_trade_id_is_a_404(client, auth):
-    r = client.get("/api/v1/market/chart/AAPL?trade_id=nope", headers=auth)
-    assert r.status_code == 404
-```
-
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `python scripts/testrun.py file tests/admin/test_api_v1_market.py`
 Expected: FAIL — 404 on `/market/chart/AAPL`, the route is keyed by trade.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Change the route to `@api_v1.route("/market/chart/<ticker>", methods=["GET"])`
 and `def chart(ticker: str):`. Read `trade_id` from `request.args`. When absent,
@@ -672,12 +633,12 @@ complete is how a user reads a chart believing the levels are simply missing).
 
 Keep `window`'s contract exactly: default 120, valid 20–500, out of range 400.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `python scripts/testrun.py file tests/admin/test_api_v1_market.py`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/market.py tests/admin/test_api_v1_market.py

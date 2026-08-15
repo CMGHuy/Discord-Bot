@@ -156,7 +156,10 @@ def chart_trade(monkeypatch):
 
 
 def _chart(logged_in, query=""):
-    return logged_in.get(f"/api/v1/market/chart/c1{query}")
+    """The endpoint is keyed by TICKER; the trade is a query parameter. A
+    chart of a ticker exists whether or not a trade does, which is what lets
+    one component serve the watchlist and the trade detail alike."""
+    return logged_in.get(f"/api/v1/market/chart/AAPL?trade_id=c1{query}")
 
 
 def test_chart_requires_auth(client, frame):
@@ -169,9 +172,11 @@ def test_chart_top_level_shape(logged_in, frame, chart_trade):
     change the SPA will grow a dependency on."""
     body = _chart(logged_in).get_json()
     assert_shape(body, {
-        "ohlcv": list, "indicators": dict, "volume_profile": list,
-        "levels": dict, "overlay": (dict, type(None)), "currency": str,
+        "ticker": str, "ohlcv": list, "indicators": dict,
+        "volume_profile": list, "levels": (dict, type(None)),
+        "overlays": list, "currency": str,
     }, where="chart")
+    assert body["ticker"] == "AAPL"
 
 
 def test_chart_bar_shape_is_epoch_seconds(logged_in, frame, chart_trade):
@@ -187,7 +192,7 @@ def test_chart_bar_shape_is_epoch_seconds(logged_in, frame, chart_trade):
 
 def test_chart_window_defaults_and_bounds(logged_in, frame, chart_trade):
     assert len(_chart(logged_in).get_json()["ohlcv"]) == 120
-    assert len(_chart(logged_in, "?window=60").get_json()["ohlcv"]) == 60
+    assert len(_chart(logged_in, "&window=60").get_json()["ohlcv"]) == 60
 
 
 @pytest.mark.parametrize("bad", ["19", "501", "0", "-5"])
@@ -196,16 +201,65 @@ def test_a_window_outside_the_range_is_rejected_not_clamped(logged_in, frame, ch
     cap" sensibly means "all you have". Here the window is what the chart
     SHOWS, and silently handing back 500 bars to a caller that asked for
     5000 gives it a chart it did not ask for and no way to know."""
-    assert_error(_chart(logged_in, f"?window={bad}"), "invalid", 400)
+    assert_error(_chart(logged_in, f"&window={bad}"), "invalid", 400)
 
 
 def test_a_non_integer_window_is_rejected(logged_in, frame, chart_trade):
-    assert_error(_chart(logged_in, "?window=banana"), "invalid", 400)
+    assert_error(_chart(logged_in, "&window=banana"), "invalid", 400)
 
 
 def test_an_unknown_trade_id_is_404(logged_in, frame, monkeypatch):
+    """Asking for a named trade's chart and getting a plain one back is how
+    someone reads a chart believing the lines are simply not set. Only an
+    UNRESOLVABLE id is an error -- an omitted one is a plain ticker chart,
+    tested below."""
     monkeypatch.setattr("swingbot.admin.app._trade_for_levels", lambda tid: None)
-    assert_error(logged_in.get("/api/v1/market/chart/nope"), "not_found", 404)
+    assert_error(logged_in.get("/api/v1/market/chart/AAPL?trade_id=nope"),
+                 "not_found", 404)
+
+
+def test_chart_by_ticker_needs_no_trade(logged_in, frame):
+    """The endpoint's subject is the TICKER. Without a trade there is no plan
+    to draw, which is a chart with no levels and no overlays -- not an error,
+    and not a second endpoint."""
+    body = logged_in.get("/api/v1/market/chart/AAPL").get_json()
+    assert body["ticker"] == "AAPL"
+    assert body["ohlcv"]
+    assert body["indicators"]
+    assert body["levels"] is None
+    assert body["overlays"] == []
+
+
+def test_a_plain_ticker_chart_never_reads_a_trade(logged_in, frame, monkeypatch):
+    """No trade_id means no lookup at all. Falling back to "some trade on
+    this ticker" would draw plan lines the caller never asked for, and which
+    one it picked would be invisible on screen."""
+    def _boom(tid):
+        raise AssertionError(f"looked up trade {tid!r} for a plain chart")
+    monkeypatch.setattr("swingbot.admin.app._trade_for_levels", _boom)
+    assert logged_in.get("/api/v1/market/chart/AAPL").status_code == 200
+
+
+def test_a_ticker_with_no_data_is_404_without_a_trade(logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.app._ohlcv_frame", lambda t: None)
+    assert_error(logged_in.get("/api/v1/market/chart/ZZZZ"), "not_found", 404)
+
+
+def test_the_window_contract_holds_without_a_trade(logged_in, frame):
+    """`window` is a property of the chart, not of the trade, so re-keying
+    must not have left its validation on the trade branch."""
+    assert len(logged_in.get(
+        "/api/v1/market/chart/AAPL?window=60").get_json()["ohlcv"]) == 60
+    assert_error(logged_in.get("/api/v1/market/chart/AAPL?window=501"),
+                 "invalid", 400)
+
+
+def test_the_trade_ticker_does_not_override_the_path(logged_in, frame, chart_trade):
+    """The path names what is charted. A trade_id pointing at a different
+    ticker adds ITS levels to THIS ticker's bars -- a plan drawn over the
+    wrong instrument -- so the mismatch is refused."""
+    chart_trade(ticker="MSFT")
+    assert_error(_chart(logged_in), "invalid", 400)
 
 
 def test_a_trade_whose_ticker_has_no_data_is_404(logged_in, chart_trade, monkeypatch):
@@ -238,7 +292,7 @@ def test_a_null_second_target_stays_null(logged_in, frame, chart_trade):
 
 
 def test_indicator_series_are_aligned_to_the_bars(logged_in, frame, chart_trade):
-    body = _chart(logged_in, "?window=60").get_json()
+    body = _chart(logged_in, "&window=60").get_json()
     ind = body["indicators"]
     assert set(ind) == {"macd", "rsi", "kc"}
     assert set(ind["macd"]) == {"line", "signal", "hist"}
@@ -261,7 +315,7 @@ def test_an_indicator_without_enough_history_is_omitted(logged_in, frame, chart_
     drawn empty. Mirrors what the PNG generator already does, so a trade
     that renders without MACD in Discord renders without it here."""
     frame(25)
-    ind = _chart(logged_in, "?window=20").get_json()["indicators"]
+    ind = _chart(logged_in, "&window=20").get_json()["indicators"]
     assert "macd" not in ind
 
 
@@ -271,8 +325,8 @@ def test_no_lookahead_the_last_value_does_not_move_with_the_window(logged_in, fr
     value near its left edge -- and, for an EMA-based series, every value
     everywhere. The last bar is the same bar in both requests, so its RSI
     and MACD must be identical."""
-    narrow = _chart(logged_in, "?window=30").get_json()["indicators"]
-    wide = _chart(logged_in, "?window=250").get_json()["indicators"]
+    narrow = _chart(logged_in, "&window=30").get_json()["indicators"]
+    wide = _chart(logged_in, "&window=250").get_json()["indicators"]
     assert narrow["rsi"][-1] == wide["rsi"][-1]
     assert narrow["macd"]["line"][-1] == wide["macd"]["line"][-1]
     assert narrow["kc"]["upper"][-1] == wide["kc"]["upper"][-1]
@@ -288,7 +342,7 @@ def test_volume_profile_bins(logged_in, frame, chart_trade):
 def test_overlay_comes_from_the_geometry_module(logged_in, frame, chart_trade):
     """Not a second implementation. The same call the PNG renderer makes,
     so the browser and the image draw the same EMA."""
-    overlay = _chart(logged_in).get_json()["overlay"]
+    overlay = _chart(logged_in).get_json()["overlays"][0]
     assert overlay["side"] == "target"
     assert overlay["shape"]["kind"] == "curve"
     assert overlay["shape"]["label"] == "EMA20"
@@ -298,7 +352,7 @@ def test_overlay_is_null_without_drawable_sources(logged_in, frame, chart_trade)
     """Spec Decision 10's second degraded state -- an older trade with no
     `target_sources` draws candles, indicators and plan lines only."""
     chart_trade(target_sources=[], stop_sources=[])
-    assert _chart(logged_in).get_json()["overlay"] is None
+    assert _chart(logged_in).get_json()["overlays"] == []
 
 
 def test_overlay_falls_back_to_the_stop_side(logged_in, frame, chart_trade):
@@ -306,16 +360,16 @@ def test_overlay_falls_back_to_the_stop_side(logged_in, frame, chart_trade):
     is aiming at. A trade confirmed only on its stop still gets its
     method drawn rather than nothing."""
     chart_trade(target_sources=["Hammer"], stop_sources=["EMA20"])
-    overlay = _chart(logged_in).get_json()["overlay"]
+    overlay = _chart(logged_in).get_json()["overlays"][0]
     assert overlay["side"] == "stop"
 
 
 def test_overlay_timestamps_line_up_with_the_bars(logged_in, frame, chart_trade):
     """The whole point of one time type: every overlay anchor must be a
     real bar the client can convert to a coordinate."""
-    body = _chart(logged_in, "?window=60").get_json()
+    body = _chart(logged_in, "&window=60").get_json()
     stamps = {bar["t"] for bar in body["ohlcv"]}
-    points = body["overlay"]["shape"]["points"]
+    points = body["overlays"][0]["shape"]["points"]
     assert [t for t, _p in points] == sorted(stamps)
 
 
