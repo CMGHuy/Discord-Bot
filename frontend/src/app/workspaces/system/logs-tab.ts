@@ -17,7 +17,7 @@ import {
 } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { Panel } from '../../ui/layout';
+import { ControlRow, Panel } from '../../ui/layout';
 
 /**
  * The log tail — bot or admin, with a raw view and a clear action.
@@ -30,10 +30,10 @@ import { Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog],
+  imports: [Panel, Button, ConfirmDialog, ControlRow],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
-      <div panel-actions class="actions">
+      <sb-control-row panel-actions class="actions">
         @for (source of sources; track source) {
           <button
             sb-button
@@ -60,7 +60,7 @@ import { Panel } from '../../ui/layout';
         <button sb-button variant="danger" type="button" (click)="asking.set(true)">
           Clear
         </button>
-      </div>
+      </sb-control-row>
 
       @if (store.logsError(); as message) {
         <p class="error" role="status">{{ message }}</p>
@@ -141,7 +141,11 @@ import { Panel } from '../../ui/layout';
     />
   `,
   styles: `
-    .actions { display: flex; align-items: center; gap: var(--space-6); }
+    /* .actions keeps its class as a marker only -- sb-control-row supplies
+       display, alignment, wrap and gap.
+       .triage, .levels, .level and .count below are NOT converted: .level and
+       .count are <label> elements whose native checkbox/select association
+       depends on staying a label, and .triage/.levels only group them. */
 
     /* -- SR57: triage controls --------------------------------------- */
     .triage {
