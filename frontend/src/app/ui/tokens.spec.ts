@@ -94,3 +94,19 @@ describe('design tokens', () => {
     expect(CSS).toMatch(/^\s*--transition:/m);
   });
 });
+
+const UI = join(process.cwd(), 'src/app/ui');
+
+describe('control height', () => {
+  for (const file of ['form-controls.ts', 'button.ts']) {
+    it(`${file} sizes its controls from --control-h`, () => {
+      const source = readFileSync(join(UI, file), 'utf8');
+      expect(source).toContain('var(--control-h)');
+    });
+  }
+
+  it('no control hardcodes a vertical padding any more', () => {
+    const source = readFileSync(join(UI, 'form-controls.ts'), 'utf8');
+    expect(source).not.toMatch(/padding:\s*var\(--space-4\)\s+var\(--space-8\)/);
+  });
+});

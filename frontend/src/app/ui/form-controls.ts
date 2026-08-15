@@ -51,7 +51,8 @@ export interface SelectOption {
       letter-spacing: 0.1em;
     }
     select {
-      padding: var(--space-4) var(--space-8);
+      height: var(--control-h);
+      padding: 0 var(--space-8);
       background: var(--surface-raised);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -105,7 +106,8 @@ export class Select {
       letter-spacing: 0.1em;
     }
     input {
-      padding: var(--space-4) var(--space-8);
+      height: var(--control-h);
+      padding: 0 var(--space-8);
       background: var(--surface-raised);
       border: 1px solid var(--border);
       border-radius: var(--radius);
