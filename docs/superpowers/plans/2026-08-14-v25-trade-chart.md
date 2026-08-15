@@ -93,7 +93,7 @@ canvas, reversing `strategy-overlay.ts`'s "No text" rule deliberately.
   - `TRENDLINE_FIT_KEY = "trendline_fit"`
   Tasks 2, 3 and 4 all import from here.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_trendline_fit.py`:
 
@@ -143,12 +143,12 @@ def test_a_bull_trade_fits_support_and_a_bear_fits_resistance():
     assert bear["side"] == "resistance"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_trendline_fit.py -v`
 Expected: FAIL — `ModuleNotFoundError: swingbot.core.charts.trendline_fit`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `swingbot/core/charts/trendline_fit.py`:
 
@@ -241,12 +241,12 @@ def _epoch(stamp) -> int:
     return int(pd.Timestamp(stamp).tz_localize(None).timestamp())
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/test_trendline_fit.py -v`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/trendline_fit.py tests/test_trendline_fit.py
@@ -266,7 +266,7 @@ git commit -m "feat(charts): one trendline fit, stored as absolute points"
 - Produces: a `trendline_fit` key on newly written trade records, shaped exactly
   as Task 1 returns. Tasks 3, 4 and 6 read it.
 
-- [ ] **Step 1: Locate the writer**
+- [x] **Step 1: Locate the writer**
 
 Run:
 
@@ -280,7 +280,7 @@ write; its callers are where a plan first exists with a ticker, a direction and
 the frame it was built from. Read the caller that has all three in scope — that
 is the fit site. Record the file and line before editing.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/test_trendline_fit_persistence.py`. Use the same `_frame()` helper
 as Task 1 (repeat it — the two files are read independently):
@@ -318,12 +318,12 @@ Then add, in the same file, a test that exercises the real writer found in
 Step 1 — construct a plan through that path with a fittable frame and assert
 the stored record has a `trendline_fit` whose `points` have integer `t`.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_trendline_fit_persistence.py -v`
 Expected: FAIL on the writer test — the stored record has no `trendline_fit`.
 
-- [ ] **Step 4: Write the fit at creation**
+- [x] **Step 4: Write the fit at creation**
 
 At the site found in Step 1, before the record is stored:
 
@@ -343,7 +343,7 @@ if fit:
 `if fit:` — an unfittable plan stores nothing rather than a null, so "absent"
 has one meaning (no line) instead of two.
 
-- [ ] **Step 5: Run the full suite and commit**
+- [x] **Step 5: Run the full suite and commit**
 
 Run: `python scripts/testrun.py full`
 Expected: `0 failed, 0 xfailed`.
