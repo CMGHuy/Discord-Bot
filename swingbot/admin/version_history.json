@@ -1,385 +1,400 @@
 {
-  "generated_at": "2026-08-15 17:56:10 UTC",
+  "generated_at": "2026-08-15 19:19:04 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
+  "components": [
+    "ui",
+    "bot",
+    "updated"
+  ],
   "current": {
     "ui": "1.4.0",
     "bot": "1.1.4"
   },
-  "ui_versions": [
-    "1.0.1",
-    "1.0.3",
-    "1.0.4",
-    "1.0.5",
-    "1.0.6",
-    "1.0.7",
-    "1.0.8",
-    "1.0.9",
-    "1.1.0",
-    "1.2.0",
-    "1.2.1",
-    "1.2.2",
-    "1.2.3",
-    "1.2.4",
-    "1.4.0"
-  ],
-  "bot_versions": [
-    "1.0.1",
-    "1.0.2",
-    "1.0.3",
-    "1.0.4",
-    "1.0.5",
-    "1.0.6",
-    "1.0.7",
-    "1.0.9",
-    "1.0.10",
-    "1.0.11",
-    "1.0.12",
-    "1.0.13",
-    "1.0.15",
-    "1.1.0",
-    "1.1.1",
-    "1.1.2",
-    "1.1.3",
-    "1.1.4"
-  ],
-  "pairs": [
+  "releases": [
     {
-      "ui": "1.0.1",
-      "bot": "1.0.1",
-      "first_seen": "2026-07-05",
+      "date": "2026-07-05",
       "last_seen": "2026-07-05",
       "commit": "d2c7e4e1",
-      "subject": "First commit"
+      "subject": "First commit",
+      "versions": {
+        "ui": "1.0.1",
+        "bot": "1.0.1",
+        "updated": null
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.3",
-      "bot": "1.0.2",
-      "first_seen": "2026-07-07",
+      "date": "2026-07-07",
       "last_seen": "2026-07-07",
       "commit": "e3b2b3e3",
-      "subject": "Update bot messages and add more emojs icons"
+      "subject": "Update bot messages and add more emojs icons",
+      "versions": {
+        "ui": "1.0.3",
+        "bot": "1.0.2",
+        "updated": null
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.3",
-      "bot": "1.0.3",
-      "first_seen": "2026-07-07",
+      "date": "2026-07-07",
       "last_seen": "2026-07-07",
       "commit": "e4e4424b",
-      "subject": "Enhance performance of making a trade plan"
+      "subject": "Enhance performance of making a trade plan",
+      "versions": {
+        "ui": "1.0.3",
+        "bot": "1.0.3",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.3",
-      "bot": "1.0.4",
-      "first_seen": "2026-07-07",
+      "date": "2026-07-07",
       "last_seen": "2026-07-07",
       "commit": "af6d5eba",
-      "subject": "Avoid duplicated trades"
+      "subject": "Avoid duplicated trades",
+      "versions": {
+        "ui": "1.0.3",
+        "bot": "1.0.4",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.4",
-      "bot": "1.0.5",
-      "first_seen": "2026-07-08",
+      "date": "2026-07-08",
       "last_seen": "2026-07-08",
       "commit": "44792dd9",
-      "subject": "Add more progress message for the bot and hard reload button in Logs page"
+      "subject": "Add more progress message for the bot and hard reload button in Logs page",
+      "versions": {
+        "ui": "1.0.4",
+        "bot": "1.0.5",
+        "updated": null
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.4",
-      "bot": "1.0.6",
-      "first_seen": "2026-07-08",
+      "date": "2026-07-08",
       "last_seen": "2026-07-08",
       "commit": "3d00ff64",
-      "subject": "Lower the tension a bit to find more trade"
+      "subject": "Lower the tension a bit to find more trade",
+      "versions": {
+        "ui": "1.0.4",
+        "bot": "1.0.6",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.4",
-      "bot": "1.0.7",
-      "first_seen": "2026-07-08",
+      "date": "2026-07-08",
       "last_seen": "2026-07-08",
       "commit": "fd741b64",
-      "subject": "Lower the tension more"
+      "subject": "Lower the tension more",
+      "versions": {
+        "ui": "1.0.4",
+        "bot": "1.0.7",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.4",
-      "bot": "1.0.9",
-      "first_seen": "2026-07-09",
+      "date": "2026-07-09",
       "last_seen": "2026-07-09",
       "commit": "b9270a87",
-      "subject": "Fix Discord does not run scanning and add healthcheck message now"
+      "subject": "Fix Discord does not run scanning and add healthcheck message now",
+      "versions": {
+        "ui": "1.0.4",
+        "bot": "1.0.9",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.4",
-      "bot": "1.0.10",
-      "first_seen": "2026-07-09",
+      "date": "2026-07-09",
       "last_seen": "2026-07-09",
       "commit": "12b1ad5a",
-      "subject": "Lower the tension more"
+      "subject": "Lower the tension more",
+      "versions": {
+        "ui": "1.0.4",
+        "bot": "1.0.10",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.5",
-      "bot": "1.0.11",
-      "first_seen": "2026-07-09",
+      "date": "2026-07-09",
       "last_seen": "2026-07-09",
       "commit": "3f8fb647",
-      "subject": "Simplify display and make more animation and beautiful"
+      "subject": "Simplify display and make more animation and beautiful",
+      "versions": {
+        "ui": "1.0.5",
+        "bot": "1.0.11",
+        "updated": null
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.6",
-      "bot": "1.0.12",
-      "first_seen": "2026-07-09",
+      "date": "2026-07-09",
       "last_seen": "2026-07-09",
       "commit": "f5055012",
-      "subject": "Also show trendline points and fib retracement 0 100% points"
+      "subject": "Also show trendline points and fib retracement 0 100% points",
+      "versions": {
+        "ui": "1.0.6",
+        "bot": "1.0.12",
+        "updated": null
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.6",
-      "bot": "1.0.13",
-      "first_seen": "2026-07-09",
+      "date": "2026-07-09",
       "last_seen": "2026-07-09",
       "commit": "cad056fb",
-      "subject": "Silent healthcheck message"
+      "subject": "Silent healthcheck message",
+      "versions": {
+        "ui": "1.0.6",
+        "bot": "1.0.13",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.6",
-      "bot": "1.0.15",
-      "first_seen": "2026-07-10",
+      "date": "2026-07-10",
       "last_seen": "2026-07-10",
       "commit": "9059bed6",
-      "subject": "Add welcome and goodbye message"
+      "subject": "Add welcome and goodbye message",
+      "versions": {
+        "ui": "1.0.6",
+        "bot": "1.0.15",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.6",
-      "bot": "1.1.0",
-      "first_seen": "2026-07-18",
+      "date": "2026-07-18",
       "last_seen": "2026-07-18",
       "commit": "9b979be8",
-      "subject": "docs: unified plan engine v2 \u00e2\u20ac\u201d final report (Task 110)"
+      "subject": "docs: unified plan engine v2 \u00e2\u20ac\u201d final report (Task 110)",
+      "versions": {
+        "ui": "1.0.6",
+        "bot": "1.1.0",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.7",
-      "bot": "1.1.0",
-      "first_seen": "2026-08-07",
+      "date": "2026-08-07",
       "last_seen": "2026-08-07",
       "commit": "7a61431f",
-      "subject": "chore: VERSION.json ui 1.0.6 -> 1.0.7"
+      "subject": "chore: VERSION.json ui 1.0.6 -> 1.0.7",
+      "versions": {
+        "ui": "1.0.7",
+        "bot": "1.1.0",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.0.7",
-      "bot": "1.1.1",
-      "first_seen": "2026-08-07",
+      "date": "2026-08-07",
       "last_seen": "2026-08-07",
       "commit": "d80512f9",
-      "subject": "chore: VERSION.json bot 1.1.0 -> 1.1.1, stamp update time"
+      "subject": "chore: VERSION.json bot 1.1.0 -> 1.1.1, stamp update time",
+      "versions": {
+        "ui": "1.0.7",
+        "bot": "1.1.1",
+        "updated": "2026-08-07 19-44-19"
+      },
+      "changed": [
+        "bot",
+        "updated"
+      ]
     },
     {
-      "ui": "1.0.8",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-07",
+      "date": "2026-08-07",
       "last_seen": "2026-08-07",
       "commit": "0e63f9c2",
-      "subject": "chore: VERSION.json ui 1.0.7 -> 1.0.8, bot 1.1.1 -> 1.1.2"
+      "subject": "chore: VERSION.json ui 1.0.7 -> 1.0.8, bot 1.1.1 -> 1.1.2",
+      "versions": {
+        "ui": "1.0.8",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
     },
     {
-      "ui": "1.0.9",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-08",
+      "date": "2026-08-08",
       "last_seen": "2026-08-08",
       "commit": "28aec49e",
-      "subject": "refactor(admin): move dashboard JS and view-models out of the polled fragment"
+      "subject": "refactor(admin): move dashboard JS and view-models out of the polled fragment",
+      "versions": {
+        "ui": "1.0.9",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.1.0",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-13",
+      "date": "2026-08-13",
       "last_seen": "2026-08-13",
       "commit": "8ad637c2",
-      "subject": "release(ui): 1.1.0 -- Release A, the SPA becomes the default admin UI"
+      "subject": "release(ui): 1.1.0 -- Release A, the SPA becomes the default admin UI",
+      "versions": {
+        "ui": "1.1.0",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.2.0",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-14",
+      "date": "2026-08-14",
       "last_seen": "2026-08-14",
       "commit": "1e5521b7",
-      "subject": "release(ui): 1.2.0 -- the SPA refresh"
+      "subject": "release(ui): 1.2.0 -- the SPA refresh",
+      "versions": {
+        "ui": "1.2.0",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.2.1",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-14",
+      "date": "2026-08-14",
       "last_seen": "2026-08-14",
       "commit": "511d586f",
-      "subject": "release(ui): 1.2.1 -- close plan v21"
+      "subject": "release(ui): 1.2.1 -- close plan v21",
+      "versions": {
+        "ui": "1.2.1",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.2.2",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-14",
+      "date": "2026-08-14",
       "last_seen": "2026-08-14",
       "commit": "8bfd0507",
-      "subject": "release(ui): 1.2.2 -- Release B, the Jinja UI is deleted"
+      "subject": "release(ui): 1.2.2 -- Release B, the Jinja UI is deleted",
+      "versions": {
+        "ui": "1.2.2",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.2.3",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-14",
+      "date": "2026-08-14",
       "last_seen": "2026-08-14",
       "commit": "93100e2a",
-      "subject": "release(ui): 1.2.3 -- the version moves into the sidebar"
+      "subject": "release(ui): 1.2.3 -- the version moves into the sidebar",
+      "versions": {
+        "ui": "1.2.3",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.2.4",
-      "bot": "1.1.2",
-      "first_seen": "2026-08-15",
+      "date": "2026-08-15",
       "last_seen": "2026-08-15",
       "commit": "49ac181f",
-      "subject": "release(ui): 1.2.4 -- control alignment and grouped settings"
+      "subject": "release(ui): 1.2.4 -- control alignment and grouped settings",
+      "versions": {
+        "ui": "1.2.4",
+        "bot": "1.1.2",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.2.4",
-      "bot": "1.1.3",
-      "first_seen": "2026-08-15",
+      "date": "2026-08-15",
       "last_seen": "2026-08-15",
       "commit": "3c1c7429",
-      "subject": "release(bot): 1.1.3 -- one stored trendline fit"
+      "subject": "release(bot): 1.1.3 -- one stored trendline fit",
+      "versions": {
+        "ui": "1.2.4",
+        "bot": "1.1.3",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     },
     {
-      "ui": "1.4.0",
-      "bot": "1.1.3",
-      "first_seen": "2026-08-15",
+      "date": "2026-08-15",
       "last_seen": "2026-08-15",
       "commit": "273fb1a2",
-      "subject": "release(ui): 1.4.0 -- the annotated interactive trade chart"
+      "subject": "release(ui): 1.4.0 -- the annotated interactive trade chart",
+      "versions": {
+        "ui": "1.4.0",
+        "bot": "1.1.3",
+        "updated": null
+      },
+      "changed": [
+        "ui"
+      ]
     },
     {
-      "ui": "1.4.0",
-      "bot": "1.1.4",
-      "first_seen": "2026-08-15",
+      "date": "2026-08-15",
       "last_seen": "2026-08-15",
       "commit": "564edd24",
-      "subject": "release(bot): 1.1.4 -- the v27 repo restructure"
-    }
-  ],
-  "ranges": [
-    {
-      "ui": "1.0.1",
-      "bot_min": "1.0.1",
-      "bot_max": "1.0.1",
-      "bot_count": 1,
-      "first_seen": "2026-07-05",
-      "last_seen": "2026-07-05"
-    },
-    {
-      "ui": "1.0.3",
-      "bot_min": "1.0.2",
-      "bot_max": "1.0.4",
-      "bot_count": 3,
-      "first_seen": "2026-07-07",
-      "last_seen": "2026-07-07"
-    },
-    {
-      "ui": "1.0.4",
-      "bot_min": "1.0.5",
-      "bot_max": "1.0.10",
-      "bot_count": 5,
-      "first_seen": "2026-07-08",
-      "last_seen": "2026-07-09"
-    },
-    {
-      "ui": "1.0.5",
-      "bot_min": "1.0.11",
-      "bot_max": "1.0.11",
-      "bot_count": 1,
-      "first_seen": "2026-07-09",
-      "last_seen": "2026-07-09"
-    },
-    {
-      "ui": "1.0.6",
-      "bot_min": "1.0.12",
-      "bot_max": "1.1.0",
-      "bot_count": 4,
-      "first_seen": "2026-07-09",
-      "last_seen": "2026-07-18"
-    },
-    {
-      "ui": "1.0.7",
-      "bot_min": "1.1.0",
-      "bot_max": "1.1.1",
-      "bot_count": 2,
-      "first_seen": "2026-08-07",
-      "last_seen": "2026-08-07"
-    },
-    {
-      "ui": "1.0.8",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-07",
-      "last_seen": "2026-08-07"
-    },
-    {
-      "ui": "1.0.9",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-08",
-      "last_seen": "2026-08-08"
-    },
-    {
-      "ui": "1.1.0",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-13",
-      "last_seen": "2026-08-13"
-    },
-    {
-      "ui": "1.2.0",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-14",
-      "last_seen": "2026-08-14"
-    },
-    {
-      "ui": "1.2.1",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-14",
-      "last_seen": "2026-08-14"
-    },
-    {
-      "ui": "1.2.2",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-14",
-      "last_seen": "2026-08-14"
-    },
-    {
-      "ui": "1.2.3",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.2",
-      "bot_count": 1,
-      "first_seen": "2026-08-14",
-      "last_seen": "2026-08-14"
-    },
-    {
-      "ui": "1.2.4",
-      "bot_min": "1.1.2",
-      "bot_max": "1.1.3",
-      "bot_count": 2,
-      "first_seen": "2026-08-15",
-      "last_seen": "2026-08-15"
-    },
-    {
-      "ui": "1.4.0",
-      "bot_min": "1.1.3",
-      "bot_max": "1.1.4",
-      "bot_count": 2,
-      "first_seen": "2026-08-15",
-      "last_seen": "2026-08-15"
+      "subject": "release(bot): 1.1.4 -- the v27 repo restructure",
+      "versions": {
+        "ui": "1.4.0",
+        "bot": "1.1.4",
+        "updated": null
+      },
+      "changed": [
+        "bot"
+      ]
     }
   ]
 }

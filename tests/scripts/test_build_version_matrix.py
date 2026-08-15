@@ -147,17 +147,21 @@ def test_a_component_is_null_before_it_existed(monkeypatch):
 def test_the_committed_file_matches_the_current_generator():
     """The frozen file is committed; this notices when it drifts from what the
     generator would produce today — the same drift the endpoint's `stale` flag
-    reports at runtime, caught earlier."""
+    reports at runtime, caught earlier.
+
+    Compares the whole component dict, not two hardcoded keys: with components
+    discovered from VERSION.json, a NEW component appearing in the live file and
+    not in the frozen one is exactly the drift worth catching."""
     import json
 
     frozen_path = ROOT / "swingbot" / "admin" / "version_history.json"
     assert frozen_path.exists(), "run: python scripts/dev/build_version_matrix.py"
     frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
 
-    live = json.loads((ROOT / "VERSION.json").read_text(encoding="utf-8"))
-    assert frozen["current"]["ui"] == live["ui"], (
-        "VERSION.json moved without regenerating: run "
-        "python scripts/dev/build_version_matrix.py")
-    assert frozen["current"]["bot"] == live["bot"], (
+    live_doc = json.loads((ROOT / "VERSION.json").read_text(encoding="utf-8"))
+    live = {k: str(v) for k, v in live_doc.items()
+            if not k.endswith("_updated") and v}
+
+    assert frozen["current"] == live, (
         "VERSION.json moved without regenerating: run "
         "python scripts/dev/build_version_matrix.py")
