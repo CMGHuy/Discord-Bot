@@ -6,7 +6,7 @@ import type {
   Time,
 } from 'lightweight-charts';
 
-import { ChartPalette } from '../chart-theme';
+import { ChartPalette, token } from '../chart-theme';
 
 /**
  * The pane's top-left legend (spec v23 Decision 8): the method's name and its
@@ -59,20 +59,6 @@ const CHAR_WIDTH = 0.62;
  *  instead of explaining them — the plan's "clamps rather than covering
  *  candles at the narrow breakpoints" acceptance criterion. */
 const MAX_WIDTH_FRACTION = 0.4;
-
-/**
- * The same technique `chart-theme.ts`'s `token()` reads colours with, kept as
- * its own copy rather than an import: `token()` is private to that module
- * (nothing outside `chartPalette()` has ever needed a token by name before
- * this file), and font family/size are not part of `ChartPalette` — this
- * primitive is the only caller in `ui/chart/` that reads a *type* token
- * rather than a colour one. Two two-line readers of `getComputedStyle` is a
- * smaller risk than widening `ChartPalette`'s shape or exporting a helper
- * every other chart file would then have visibility into.
- */
-function token(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
 
 /**
  * The legend's size for a block of lines, measured from the longest one.
