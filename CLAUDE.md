@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Discord swing-trade alert bot ("swingbot"): it scans a watchlist of stock/ETF
 tickers through the trading session, looks for multi-method-confirmed
 support/resistance setups across 10 swing horizons (`2w`…`9m`, defined in
-`swingbot/core/strategy_types.py:HORIZONS` — code is authoritative when the
+`swingbot/core/market/strategy_types.py:HORIZONS` — code is authoritative when the
 README's tables lag), and posts trade-plan alerts with charts. It tracks
 everything as **paper trades only** — it never places orders. Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest. JSON persistence under
@@ -36,8 +36,18 @@ entry that feeds both the env parser and the admin UI's Settings page).
   worktree-copy matches. For symbol lookups prefer `git grep -n "def foo"`
   (tracked files only, can't see worktrees). Never edit files under
   `.claude/worktrees/` from a main-tree session.
-- **README.md is 645 lines** — grep its `^## ` headers and read the one section
-  you need. Same for `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
+- **README.md is now a 97-line overview + documentation index** (the v27 repo
+  restructure split the old 645-line file into `docs/strategy.md` (how the bot
+  decides), `docs/setup.md` (creating/configuring/running the bot),
+  `docs/commands.md` (Discord command reference), and `docs/features.md` (Plan
+  Engine v2, analytics, admin cockpit, growth playbook)) — read the one file
+  that covers what you need, not README.md itself. Same for
+  `.superpowers/sdd/progress.md`: `tail` it, never `cat` it.
+- **`swingbot/core/` is ten packages, no flat modules.** Six from the v27
+  restructure — `marketdata/`, `market/`, `planning/`, `backtesting/`,
+  `tracking/`, `infra/` — plus the four that predate it — `edge/`,
+  `scanning/`, `analytics/`, `charts/`. See `docs/claude/architecture.md` for
+  which modules live where.
 - **Don't re-run the full suite to check a local change** — use
   `python scripts/dev/testrun.py file tests/test_edge_gates.py` (~7s) or
   `... fast` (~27s, skips the render-heavy tier), and save `... full` for the

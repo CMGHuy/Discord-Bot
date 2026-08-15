@@ -8,7 +8,7 @@ recognized instead of rationalized.
 
 ## Killer 1: Regime break — the edge was 2018–2023-shaped
 
-Every strategy in `swingbot/core/registry.py`'s validation registry was
+Every strategy in `swingbot/core/backtesting/registry.py`'s validation registry was
 validated on 2020-2023 (TRAIN) and 2024-2025 (VALIDATION) data — six years
 that included a specific character: a 2020 crash-and-V-recovery, a 2022
 bear market, and a 2023-2025 bull run. If the market's future regime looks
@@ -38,7 +38,7 @@ the level the plan was sized against. This system models frictions
 against normal conditions; it has no live mechanism that widens that
 assumption when real liquidity is actually drying up.
 
-**Tripwire:** `swingbot/core/universe.py`'s liquidity screen
+**Tripwire:** `swingbot/core/marketdata/universe.py`'s liquidity screen
 (`liquidity_ok`/`liquidity_reason`) is re-checked every scan, not once at
 onboarding — a ticker that was liquid last month and isn't anymore drops
 out before a new entry is even considered. And the kill switch

@@ -5,7 +5,7 @@ Scans a watchlist of stocks/ETFs throughout the trading session across
 five swing horizons (2 weeks, 4 weeks, 2 months, 3 months, 6 months --
 capped at 6 months max). For each ticker/horizon, finds the next
 support and resistance level using every method at once (EMA, VWAP,
-Fibonacci, rolling structure, zigzag pivots -- see swingbot/core/levels.py)
+Fibonacci, rolling structure, zigzag pivots -- see swingbot/core/market/levels.py)
 and, if either is at least MIN_REWARD_PCT (default 5%) away from today's
 price, builds a trade plan: LONG toward resistance, SHORT toward
 support, with a second target beyond that and both the continuation and

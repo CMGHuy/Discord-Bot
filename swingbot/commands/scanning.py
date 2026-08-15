@@ -332,7 +332,7 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
 
     Notification policy: the alerts channel (DISCORD_CHANNEL_TRADES_ID)
     never notifies at all -- it is resolved through silence()
-    (swingbot/core/silent_channel.py), which forces silent=True on every
+    (swingbot/core/infra/silent_channel.py), which forces silent=True on every
     send regardless of the `silent` kwarg built below. Alerts are still
     delivered and still rendered in full there; they just don't ping.
 
@@ -641,7 +641,7 @@ async def _session_scan_tick():
     channel = None
     if config.DISCORD_CHANNEL_TRADES_ID:
         # silence() -> nothing posted to the alerts channel notifies; see
-        # swingbot/core/silent_channel.py. Wrapped here, at the single place
+        # swingbot/core/infra/silent_channel.py. Wrapped here, at the single place
         # this tick resolves the channel, so the session transition, the
         # healthcheck and every alert below inherit it.
         channel = silence(bot.get_channel(int(config.DISCORD_CHANNEL_TRADES_ID)))

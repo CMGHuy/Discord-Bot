@@ -85,8 +85,12 @@ Also: Yahoo's intraday depth is a hard ceiling — 1h serves ~730 trading days,
 15m/30m/5m ~60 days, 1m ~30 days. If a task assumes deeper intraday history than
 that, flag it rather than implementing it.
 
-**3e. Real module, not the shim.** `core/scan_engine.py`, `core/scan_embeds.py` are
-`import *` shims; `core/trade_plan.py` is a deprecated adapter. Edit the real module.
+**3e. Real module, not a shim that no longer exists.** `core/scan_engine.py`,
+`core/scan_embeds.py`, `core/confidence.py`, `core/regime.py` and
+`core/trade_plan.py` were all removed 2026-08-15 by the v27 repo restructure.
+A task naming one of those paths is naming a deleted shim — point it at the
+real module instead (`core/scanning/engine.py`, `core/scanning/embeds.py`,
+`planning/plan_engine.build_strategy_plan`).
 
 **3f. Is it meant to be wired at all?** Many `core/edge/` functions ship
 deliberately unwired, wired in a later task. Grep the plan for the wiring task

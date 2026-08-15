@@ -27,7 +27,7 @@ python-dotenv==1.2.2
 mplfinance==0.12.10b0
 matplotlib==3.11.0
 
-# Diagonal support/resistance trendlines (swingbot/core/trendlines.py),
+# Diagonal support/resistance trendlines (swingbot/core/market/trendlines.py),
 # on top of the horizontal levels every other method in levels.py finds.
 # Only needs numpy/pandas at runtime with the extraction/fit methods
 # this project uses (METHOD_NAIVECONSEC/METHOD_NSQUREDLOGN) -- no
@@ -45,7 +45,7 @@ trendln==0.1.18
 # falls back to win-rate-only stats, exactly as before this feature existed.
 quantstats==0.0.81
 
-# Candlestick pattern recognition (swingbot/core/candlestick_patterns.py)
+# Candlestick pattern recognition (swingbot/core/market/candlestick_patterns.py)
 # used as one more confidence factor (see confidence.py) -- 62 native
 # reversal/continuation patterns in pure Python, no TA-Lib/C compilation
 # needed (same reasoning volatility.py already gives for avoiding

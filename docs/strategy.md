@@ -53,7 +53,7 @@ biggest factor in how confident an alert is (see below).
 ## Three extra filters for genuine 5%+ move candidates
 
 On top of the level-confluence engine, three additional, purely
-mathematical checks (`swingbot/core/volatility.py`) target whether a
+mathematical checks (`swingbot/core/market/volatility.py`) target whether a
 stock is even *capable* of a fast move right now:
 
 - **Filter 1 — Historical volatility floor** (ticker-level, hard

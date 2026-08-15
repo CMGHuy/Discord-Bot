@@ -28,10 +28,12 @@ For each symbol report exactly one verdict:
 - **MISSING** — not found anywhere tracked. Search for near-misses
   (`git grep -in "<partial>"`) and name the likely intended symbol.
 - **WRONG MODULE** — exists, but not in the module the plan claims. Give both.
-- **SHIM** — found in `core/scan_engine.py`, `core/scan_embeds.py` (both `import *`
-  shims) or `core/trade_plan.py` (deprecated adapter). Name the real module:
-  `core/scanning/engine.py`, `core/scanning/embeds.py`,
-  `plan_engine.build_strategy_plan`.
+  `core/scan_engine.py`, `core/scan_embeds.py`, `core/confidence.py`,
+  `core/regime.py` and `core/trade_plan.py` were removed 2026-08-15 by the
+  v27 repo restructure — a plan naming one of those paths is naming a shim
+  that no longer exists at all; point it at the real module instead
+  (`core/scanning/engine.py`, `core/scanning/embeds.py`,
+  `planning/plan_engine.build_strategy_plan`).
 
 ## Known fabrications
 

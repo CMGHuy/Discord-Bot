@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from swingbot.config import DATA_DIR  # noqa: E402
 
-# The real shadow log is shadow_plans.jsonl (swingbot/core/shadow_log.py),
+# The real shadow log is shadow_plans.jsonl (swingbot/core/backtesting/shadow_log.py),
 # not the "shadow_log.jsonl" the plan brief names -- there is no such file.
 SHADOW_LOG = os.path.join(DATA_DIR, "shadow_plans.jsonl")
 

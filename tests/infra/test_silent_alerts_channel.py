@@ -2,7 +2,7 @@
 DISCORD_CHANNEL_TRADES_ID never notifies.
 
 The policy is enforced by wrapping the resolved channel in SilentChannel
-(swingbot/core/silent_channel.py) rather than by passing silent=True at each
+(swingbot/core/infra/silent_channel.py) rather than by passing silent=True at each
 send site, so these tests cover both halves:
 
   * the proxy itself -- forces the flag on, overrides a caller that asked for

@@ -1107,7 +1107,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # Market context (P0): stamp every crawled frame with the ctx_* block so
     # entry_filters.entries_for() can read the regime straight off `df`. This
     # is the live half of the channel that leaves apply_regime_gate inert
-    # otherwise -- see swingbot/core/market_context.py's module docstring.
+    # otherwise -- see swingbot/core/market/market_context.py's module docstring.
     #
     # Reuses the spy_df already fetched above; adds no network call. With
     # REGIME_GATES_ENABLED off this is inert decoration, so a failure here

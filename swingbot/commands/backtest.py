@@ -1,7 +1,7 @@
 """!backtest, !backtestwatchlist.
 
 !backtestconfluence was retired (Task 44): its engine, backtest_confluence.py,
-is superseded by the scenario backtest (swingbot/core/backtest_scenarios.py,
+is superseded by the scenario backtest (swingbot/core/backtesting/backtest_scenarios.py,
 Tasks 34-38), which replays the live confluence scan itself instead of an
 approximation of it. The scenario backtest is offline-only -- measured at
 ~296s to replay a single ticker/single horizon (1906 daily bars) -- so it

@@ -2,7 +2,7 @@
 """Task 13: full-corpus sizing-parity harness.
 
 Compares `backtest._trade_plan_at` (CURRENT -- it already delegates to
-`plan_engine`, see swingbot/core/backtest.py) against
+`plan_engine`, see swingbot/core/backtesting/backtest.py) against
 `tests.fixtures.legacy_trade_plan_at.legacy_trade_plan_at`, a FROZEN copy of
 `_trade_plan_at` as it stood pre-extraction (commit ac91654, before Task 14
 rewired it to call plan_engine). See that module's docstring for why it must

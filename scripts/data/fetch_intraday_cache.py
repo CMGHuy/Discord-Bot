@@ -16,7 +16,7 @@ the bot.
 HARD LIMIT (Yahoo's, not ours): 60m/1h bars are only served for the trailing
 ~730 days. There is no "since IPO" hourly history available from this source
 at any price tier we use -- see the module docstring of
-swingbot/core/data_store.py. This script pulls the maximum Yahoo actually
+swingbot/core/marketdata/data_store.py. This script pulls the maximum Yahoo actually
 has and reports each ticker's real coverage window so the gap is visible
 rather than implied.
 

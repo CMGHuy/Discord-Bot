@@ -494,7 +494,7 @@ FIELDS: list[Field] = [
           type="float", default="20000000",
           help="20-day average of Close x Volume must clear this floor or the ticker is skipped for NEW "
                "signals this scan (existing open trades keep being monitored regardless -- see "
-               "swingbot/core/universe.py). $20M/day is what makes the E11 slippage assumption (5 bps) "
+               "swingbot/core/marketdata/universe.py). $20M/day is what makes the E11 slippage assumption (5 bps) "
                "defensible; thinner names would see much worse real-world fills than that models."),
     Field("UNIVERSE_MIN_PRICE", "UNIVERSE_MIN_PRICE", "Universe & Scanning", "Min last close price ($)",
           type="float", default="5.0", min=0, step=0.5,
@@ -543,16 +543,16 @@ FIELDS: list[Field] = [
           "Auto-refreshed timeframes",
           type="text", default="monthly,weekly,daily,hourly",
           help="Comma-separated timeframe folders to keep current. Names come from "
-               "swingbot/core/data_store.py:TIMEFRAMES. Sub-hourly ones (15min, 5min, 1min) "
+               "swingbot/core/marketdata/data_store.py:TIMEFRAMES. Sub-hourly ones (15min, 5min, 1min) "
                "are accepted but Yahoo only serves them for the trailing 30-60 days, so they "
                "cannot support training -- leave them out unless you want live entry timing."),
     Field("REGIME_GATES_ENABLED", "REGIME_GATES_ENABLED", "Universe & Scanning",
           "Per-strategy regime gates enabled",
           type="checkbox", default="false",
           help="Restricts each strategy's entries to the market regimes listed for it in "
-               "swingbot/core/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
+               "swingbot/core/market/strategy_types.py:REGIME_ALLOW (entry_filters.apply_regime_gate). "
                "The market-context channel that feeds this is wired in both the live scan "
-               "and the backtest (swingbot/core/market_context.py), so the gate DOES bite -- but "
+               "and the backtest (swingbot/core/market/market_context.py), so the gate DOES bite -- but "
                "REGIME_ALLOW ships empty BY EVIDENCE, not as a placeholder: the v17 P2a fold ran "
                "the pre-registered rule on TRAIN and no cell cleared it (see "
                "docs/superpowers/results/2026-08-08-regime-allow-train.md). Enabling this today "
@@ -565,7 +565,7 @@ FIELDS: list[Field] = [
           type="checkbox", default="true",
           help="Moves a stop out beyond a support/resistance level that price has actually "
                "tested and held, instead of leaving it at the ATR default inside that noise "
-               "(swingbot/core/levels_lifecycle.py). Only ever widens, never tightens, is "
+               "(swingbot/core/market/levels_lifecycle.py). Only ever widens, never tightens, is "
                "capped by the horizon's max_risk_pct, and re-derives the target so the frozen "
                "R:R table is preserved. Costs a level build per entry bar in backtests. "
                "DEFAULT-ON since 2026-08-08 -- and the evidence behind that is deliberately "
@@ -600,7 +600,7 @@ FIELDS: list[Field] = [
           "Pyramid-add suggestions enabled",
           type="checkbox", default="false",
           help="Once per plan, at PARTIAL and +1R, posts a SUGGESTION to add size with the "
-               "add's stop at the original entry (swingbot/core/plan_manager.py:maybe_pyramid). "
+               "add's stop at the original entry (swingbot/core/planning/plan_manager.py:maybe_pyramid). "
                "Never sizes money and never moves a stop. The add fraction is DERIVED from the "
                "plan's own banked TP1 (tp1_fraction x TP1 distance / 1R, capped at 0.50) so a "
                "clean stop-out always nets at or above breakeven -- a fixed half-size add would "
@@ -610,7 +610,7 @@ FIELDS: list[Field] = [
           "Volume-profile HVN/LVN levels enabled",
           type="checkbox", default="false",
           help="Adds every high- and low-volume node of the 180-day volume-at-price histogram "
-               "(swingbot/core/levels.py:volume_profile_nodes) to the candidate level map, on "
+               "(swingbot/core/market/levels.py:volume_profile_nodes) to the candidate level map, on "
                "top of the single highest-volume node already used. They register under the "
                "existing Volume Profile strategy family, so confluence COUNTS don't inflate -- "
                "but the extra candidates do move clustered level prices. Off until the E33 "

@@ -17,7 +17,7 @@ to every command that fetches data or renders a chart: `!check`,
 ## Plan Engine v2: validated trade plans with badges and scale-out
 
 Every trade plan the bot emits can be produced by one shared engine
-(`swingbot/core/plan_engine.py`) whose exit behavior was backtested under a
+(`swingbot/core/planning/plan_engine.py`) whose exit behavior was backtested under a
 train/validation split — so live behavior equals backtested behavior by
 construction. Rollout is gated by three flags (all in `.env` / the admin
 UI's "Plan Engine v2" section, hot-reloadable):
@@ -215,7 +215,7 @@ actually trading at — never a projection dressed up as a promise.
 - **Expectancy** — the strategy/entry-filter layer (`entry_filters.py`,
   `strategy_types.py`'s `STRATEGY_GATES`/`STRATEGY_RR_OVERRIDE`), the
   quality scoring in `quality.py` that tiers signals, and the validation
-  registry (`swingbot/core/registry.py`) that badges which strategies have
+  registry (`swingbot/core/backtesting/registry.py`) that badges which strategies have
   actually earned trust out-of-sample. Nothing here can invent edge that
   isn't real — E33's component-adoption process ran, found zero components
   that cleared the pre-registered fold gate, and adopted zero. That's not a

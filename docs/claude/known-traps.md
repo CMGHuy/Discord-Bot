@@ -4,13 +4,14 @@ Referenced from the root `CLAUDE.md`. Each of these has already cost a
 session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 `embeds.py`, or the scan loop.
 
-- **Two parallel OHLCV cache subsystems — do not conflate them.**
-  `backtest_cache.py` → `data/backtest_cache/` (flat `TICKER.csv`, daily only,
-  ~77 tickers, what every existing backtest/grid script reads). `data_store.py`
-  → `market_data/` (grouped by candle timeframe: `{timeframe}/{TICKER}.csv`,
-  e.g. `market_data/daily/AAPL.csv`, ~521 daily + 78 hourly, what the
-  edge-engine tasks depend on). Both are gitignored. Check which one a script
-  reads before pointing it at a path.
+- **Two parallel OHLCV cache subsystems — do not conflate them.** Both now
+  live in `swingbot/core/marketdata/` (v27 repo restructure, 2026-08-15).
+  `marketdata/backtest_cache.py` → `data/backtest_cache/` (flat `TICKER.csv`,
+  daily only, ~77 tickers, what every existing backtest/grid script reads).
+  `marketdata/data_store.py` → `market_data/` (grouped by candle timeframe:
+  `{timeframe}/{TICKER}.csv`, e.g. `market_data/daily/AAPL.csv`, ~521 daily +
+  78 hourly, what the edge-engine tasks depend on). Both are gitignored.
+  Check which one a script reads before pointing it at a path.
 - **`market_data/` is timeframe-first, not ticker-first.** Folders are the
   semantic names in `data_store.TIMEFRAMES` (`monthly`, `weekly`, `daily`,
   `hourly`, `15min`, …); filenames are sanitized (`GC=F` → `GC_F.csv`, same
@@ -18,8 +19,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   or the yfinance code — `load_from_disk(t, "1h")` and
   `load_from_disk(t, "hourly")` resolve to the same file. Go through
   `cache_path()`/`load_from_disk()`; never hand-build the path.
-- **The bot self-refreshes this cache while running** (`core/data_refresh.py`,
-  driven by the `market_data_refresh` task loop in `commands/scanning.py`).
+- **The bot self-refreshes this cache while running**
+  (`core/marketdata/data_refresh.py`, driven by the `market_data_refresh`
+  task loop in `commands/scanning.py`).
   Incremental and staleness-gated per timeframe (hourly 4h, daily 12h,
   weekly/monthly 24h), so most wake-ups cost no network. Flags:
   `MARKET_DATA_AUTO_REFRESH`, `MARKET_DATA_REFRESH_MINUTES`,
@@ -29,14 +31,16 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   1m ~30 days. "Since IPO" hourly data does not exist from this source at any
   tier — only daily and coarser reach the listing date. Do not write a task
   that assumes otherwise.
-- **Legacy shims that are not the real module.** `core/scan_engine.py` is an
-  `import *` shim over `core/scanning/engine.py`; `core/trade_plan.py` is a
-  deprecated adapter over `plan_engine.build_strategy_plan`. Edit the real
-  module.
-  (`core/scan_embeds.py`, `core/confidence.py` and `core/regime.py` were the
-  same thing and are **gone** — nothing imported them, so they were only ever
-  a way to edit the wrong file. `scan_engine.py` stays because it still has
-  real callers.)
+- **The legacy shims are gone — do not go looking for them.**
+  `core/scan_engine.py` (an `import *` shim over `core/scanning/engine.py`)
+  and `core/trade_plan.py` (a deprecated adapter over
+  `planning/plan_engine.build_strategy_plan`) were both removed 2026-08-15 by
+  the v27 repo restructure, alongside the `core/scan_embeds.py`,
+  `core/confidence.py` and `core/regime.py` shims that predated them (those
+  three had no callers left even before v27). Every call site now imports the
+  real module directly — `from swingbot.core.scanning import engine as
+  scan_engine` is the live equivalent of the old `scan_engine.py` shim import,
+  keeping the `scan_engine.*` vocabulary at usage sites unchanged.
 - **Sizing and embed-building happen in `core/scanning/engine.py`'s
   alert-building loop**, right before `build_embed()` — *not* in
   `commands/scanning.py::_send_alerts`, which only posts already-built
@@ -60,11 +64,12 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   table or default-off flag, grep `docs/superpowers/results/` for its name.**
 - **An "unused import" here is often a deliberate re-export — check before
   deleting one.** A linter's unused-import list is not a delete list in this
-  repo: `core/strategy.py` re-exports its `signals`/`strategy_types` split so
-  `from swingbot.core.strategy import <anything>` keeps working,
-  `core/scanning/engine.py` re-exports embeds symbols that callers reach
-  through the `core/scan_engine.py` `import *` shim, and `admin/app.py`
-  re-exports `docker_sdk`/`_SECTION_META` purely for `api_v1/system.py`. A
+  repo: `core/market/strategy.py` re-exports its `signals`/`strategy_types`
+  split so `from swingbot.core.market.strategy import <anything>` keeps
+  working, `core/scanning/engine.py` re-exports embeds symbols that callers
+  reach directly now that the `core/scan_engine.py` `import *` shim is gone
+  (removed 2026-08-15 by v27), and `admin/app.py` re-exports
+  `docker_sdk`/`_SECTION_META` purely for `api_v1/system.py`. A
   2026-08-14 cleanup pass found **4 of 29** flagged imports were load-bearing
   this way. Before removing one, grep for both `from <module> import <name>`
   and `<module>.<name>` across `swingbot/`, `tests/` and `scripts/`. The known
@@ -103,17 +108,19 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   v12 Decision 2 asserted the whole directory was; the NG23 audit found
   otherwise, which is why that task existed. Atomic, via
   `jsonio.atomic_write_json` (`<path>.tmp` → fsync → `os.replace`):
-  `trades.json` (`core/performance.py:225`), `plans.json` (`plan_store.py`),
-  `starred_plans.json` (`commands/views.py:36`), `account.json`
-  (`core/account.py:174`), `state.json` (`core/state.py:31`),
-  `analytics_snapshot.json` (`core/analytics/snapshots.py:71`),
-  `journal.json` (`core/analytics/journal.py:32`), `killswitch.json`
+  `trades.json` (`core/tracking/performance.py:225`), `plans.json`
+  (`planning/plan_store.py`), `starred_plans.json` (`commands/views.py:36`),
+  `account.json` (`core/planning/account.py:174`), `state.json`
+  (`core/infra/state.py:31`), `analytics_snapshot.json`
+  (`core/analytics/snapshots.py:71`), `journal.json`
+  (`core/analytics/journal.py:32`), `killswitch.json`
   (`core/edge/throttle.py:94`). **Plain `open(path, "w")` + `json.dump`**
   — truncate first, then fill, so a reader inside that window gets a
   truncated document: `scan_snapshots.json` (`core/scanning/embeds.py:58`),
   `bot_heartbeat.json` (`commands/scanning.py:172`), `watchlist.json`
-  (`core/watchlist.py:21`), `ticker_directory.json`
-  (`core/ticker_directory.py:108`), `admin_jobs.json` (`admin/jobs.py:120`),
+  (`core/marketdata/watchlist.py:21`), `ticker_directory.json`
+  (`core/marketdata/ticker_directory.py:108`), `admin_jobs.json`
+  (`admin/jobs.py:120`),
   and `.env` (`admin/helpers.py:114`). `tuning_results/<job>.json` uses
   `Path.write_text` (`scripts/backtest/tune_strategy.py:171`) — a fresh file per job,
   so nothing is truncated, but it is listed in the directory before it is

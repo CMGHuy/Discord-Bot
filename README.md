@@ -68,7 +68,7 @@ swingbot/
 - `ticker_utils.py` — ticker alias resolution
 - `data.py` — Yahoo Finance daily-bar fetch + per-ticker currency detection
 - `watchlist.py` / `state.py` — watchlist storage / signal confirmation debounce
-- `scan_engine.py` — the core scan/dedup/confidence-filter/alert-building logic, shared by the automatic scan and `!check`
+- `scanning/engine.py` — the core scan/dedup/confidence-filter/alert-building logic, shared by the automatic scan and `!check`
 
 **`swingbot/commands/` (Discord command handlers):**
 - `scanning.py` — `!check`, `!session`, `!status`, the background scan loop
@@ -87,11 +87,11 @@ swingbot/
 
 ## Customizing
 
-- `swingbot/core/levels.py` → `CLUSTER_TOLERANCE_PCT` (how close two levels must be to merge), `MAX_RECENT_PIVOTS`
-- `swingbot/core/trendlines.py` → `MIN_TRENDLINE_STRENGTH`, `MAX_TRENDLINES_PER_SIDE`, fit method
-- `swingbot/core/volatility.py` → Bollinger window/std-dev, squeeze lookback window, squeeze tolerance
-- `swingbot/core/candlestick_patterns.py` → `BULLISH_PATTERNS`/`BEARISH_PATTERNS` lists, `CHECK_LAST_N_BARS`
-- `swingbot/core/strategy.py` → `HORIZONS` (per-horizon EMA/VWAP/Fibonacci/structure settings, shared by both engines)
-- `swingbot/core/confidence.py` → point weights for each of the 5+1 scoring factors, the honesty-gate thresholds
-- `swingbot/core/risk_metrics.py` → `MIN_CLOSED_TRADES` (how many closed trades before Sharpe/Sortino/etc. are shown)
+- `swingbot/core/market/levels.py` → `CLUSTER_TOLERANCE_PCT` (how close two levels must be to merge), `MAX_RECENT_PIVOTS`
+- `swingbot/core/market/trendlines.py` → `MIN_TRENDLINE_STRENGTH`, `MAX_TRENDLINES_PER_SIDE`, fit method
+- `swingbot/core/market/volatility.py` → Bollinger window/std-dev, squeeze lookback window, squeeze tolerance
+- `swingbot/core/market/candlestick_patterns.py` → `BULLISH_PATTERNS`/`BEARISH_PATTERNS` lists, `CHECK_LAST_N_BARS`
+- `swingbot/core/market/strategy.py` → `HORIZONS` (per-horizon EMA/VWAP/Fibonacci/structure settings, shared by both engines)
+- `swingbot/core/scanning/confidence.py` → point weights for each of the 5+1 scoring factors, the honesty-gate thresholds
+- `swingbot/core/tracking/risk_metrics.py` → `MIN_CLOSED_TRADES` (how many closed trades before Sharpe/Sortino/etc. are shown)
 - `swingbot/config.py` (or the admin UI's Settings page) → `MIN_ALERT_CONFIDENCE_LEVEL`, `MIN_REWARD_PCT`, `MAX_STOP_LOSS_PCT`, `MIN_RISK_REWARD_RATIO`, `MIN_ANNUALIZED_VOLATILITY_PCT`, `DEDUP_TOLERANCE_PCT`, `DEFAULT_HISTORY_PERIOD`, session/scan timing
