@@ -148,8 +148,12 @@ export class PlanLines {
 
   constructor(private readonly series: ISeriesApi<SeriesType>) {}
 
-  render(levels: ChartLevels, palette: ChartPalette, from: Time, to: Time): void {
+  render(levels: ChartLevels | null, palette: ChartPalette, from: Time, to: Time): void {
     this.detach();
+    // `null` is a chart with no plan at all -- a watchlist ticker rather than
+    // a position. Distinct from a plan whose individual levels are null,
+    // which `planLineSpecs` already drops one by one.
+    if (!levels) return;
     for (const spec of planLineSpecs(levels, palette)) {
       this.lines.push(this.series.createPriceLine(spec));
     }

@@ -11,7 +11,6 @@ import {
   AnalyticsStrategies,
   BotRestartResult,
   ChartResponse,
-  OhlcvResponse,
   ClearResult,
   Dashboard,
   DashboardScope,
@@ -383,24 +382,18 @@ export class ApiClient {
 
   /* -- market ---------------------------------------------------------- */
 
-  ohlcv(ticker: string, params: Record<string, unknown> = {}): Observable<OhlcvResponse> {
-    return this.http.get<OhlcvResponse>(
-      `${this.base}/market/ohlcv/${encodeURIComponent(ticker)}`,
-      { params: toParams(params) },
-    );
-  }
-
-  /** Everything the interactive chart draws, keyed by TRADE and not by ticker
-   *  -- the plan lines, the working stop and the overlay only exist relative to
-   *  a position, so there is no ticker-only form of this request.
+  /** Everything any chart draws, keyed by TICKER. The plan is an optional
+   *  `trade_id` on top: its lines, its working stop and its overlays only
+   *  exist relative to a position, but the candles, indicators and volume
+   *  profile do not, and requiring a trade for them is what forced a second
+   *  endpoint and a second chart component.
    *
-   *  `window` is the only parameter the endpoint takes today, and it is passed
-   *  through `toParams` like every other query rather than being baked into the
-   *  path: an out-of-range value is a 400 the caller must see, so nothing here
-   *  clamps or defaults it. */
-  chart(tradeId: string, params: Record<string, unknown> = {}): Observable<ChartResponse> {
+   *  `trade_id` and `window` both ride through `toParams` rather than being
+   *  baked into the path: an out-of-range window is a 400 the caller must
+   *  see, so nothing here clamps or defaults it. */
+  chart(ticker: string, params: Record<string, unknown> = {}): Observable<ChartResponse> {
     return this.http.get<ChartResponse>(
-      `${this.base}/market/chart/${encodeURIComponent(tradeId)}`,
+      `${this.base}/market/chart/${encodeURIComponent(ticker)}`,
       { params: toParams(params) },
     );
   }

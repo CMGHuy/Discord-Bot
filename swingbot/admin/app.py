@@ -263,28 +263,13 @@ def _trade_for_levels(trade_id: str):
     return TradeLog().get_trade_by_id(trade_id)
 
 
-def trade_levels(trade: dict) -> dict:
-    """The plan lines a chart draws, from a trade record.
-
-    Shared with /api/v1/market/ohlcv (NG17). Two charts read these keys
-    during the migration; a second mapping here would let one of them draw a
-    take-profit line at the wrong price, which looks entirely plausible.
-    """
-    return {"entry": trade.get("entry"), "stop_loss": trade.get("stop_loss"),
-            "tp1": trade.get("take_profit"), "tp2": trade.get("target2_price"),
-            "direction": trade.get("direction")}
-
-
-def ohlcv_bars(df) -> list:
-    """DataFrame rows -> the bar objects a chart consumes. One definition,
-    shared with /api/v1/market/ohlcv so the Angular and Jinja charts cannot
-    disagree about rounding or field names."""
-    return [
-        {"time": idx.strftime("%Y-%m-%d"), "open": round(float(r["Open"]), 4),
-         "high": round(float(r["High"]), 4), "low": round(float(r["Low"]), 4),
-         "close": round(float(r["Close"]), 4), "volume": float(r["Volume"])}
-        for idx, r in df.iterrows()
-    ]
+# `trade_levels` and `ohlcv_bars` lived here so the Jinja chart and
+# /api/v1/market/ohlcv could not disagree about rounding or about which key a
+# take-profit line reads. Release B deleted the Jinja UI and v25 deleted the
+# ohlcv route, leaving both with no callers -- and a `tp1`/`tp2` mapping that
+# the surviving payload deliberately does not use (it carries Decision 10's
+# names). Kept as dead code they would be a second mapping waiting to be
+# picked up by mistake, which is the exact failure they were written against.
 
 
 def scan_status_payload() -> dict:

@@ -20,7 +20,7 @@ import { createPricePane } from './price-pane';
 import { StrategyOverlay } from './strategy-overlay';
 
 /**
- * The interactive trade chart — the scaffold (SR35).
+ * The interactive chart — the scaffold (SR35).
  *
  * Three panes, candles and the volume histogram. The plan lines (SR36), the
  * MACD and RSI series (SR37), the Keltner channels and volume profile (SR38)
@@ -41,10 +41,13 @@ import { StrategyOverlay } from './strategy-overlay';
  * the panes below it, since their indices are a property of the payload rather
  * than of the design.
  *
- * The imperative-canvas discipline is `PriceChart`'s, for the same three
- * reasons, and this component does not replace it: `PriceChart` draws the
- * ticker-detail sparkline chart from `/market/ohlcv`, which is a different
- * endpoint with a different time type (`YYYY-MM-DD` strings, not epochs).
+ * **This is the only chart component.** It used to have a twin, `PriceChart`,
+ * which drew the ticker detail's candles from `/market/ohlcv` — a different
+ * endpoint with a different time type (`YYYY-MM-DD` strings, not epochs) and a
+ * separate implementation of the same canvas discipline. The two were kept
+ * looking alike by hand. The chart endpoint no longer needs a trade, so the
+ * twin was deleted rather than maintained: the plan layer is conditional on
+ * the payload, and a ticker with no position simply has no lines to draw.
  *
  *  - **The chart is created once**, in an effect that never re-runs. Rebuilding
  *    it on a data change would throw away pan and zoom on every `trades` event,
@@ -166,9 +169,9 @@ export class TradeChart {
     }
 
     // `t` is an epoch in SECONDS, the one time type across this payload — the
-    // overlay anchors SR39 draws are epochs too, and mixing them with the
-    // `YYYY-MM-DD` strings `/market/ohlcv` returns is how a shape lands a year
-    // from its candle while rendering perfectly happily.
+    // overlay anchors SR39 draws are epochs too, and mixing them with
+    // `YYYY-MM-DD` strings is how a shape lands a year from its candle while
+    // rendering perfectly happily.
     candles.setData(
       data.ohlcv.map((bar) => ({
         time: bar.t as UTCTimestamp,
@@ -182,14 +185,18 @@ export class TradeChart {
 
     this.panes?.render(data.indicators, data.ohlcv, chartPalette());
     this.overlays?.render(data, chartPalette());
-    this.strategy?.render(data.overlay, chartPalette());
+    this.strategy?.render(data.overlays, chartPalette());
     this.renderPlan(data);
     this.chart?.timeScale().fitContent();
   }
 
   /** The bands span the whole loaded frame, first bar to last, because risk and
    *  reward apply for as long as the position does — a band bounded by
-   *  something narrower would claim the plan only held over those bars. */
+   *  something narrower would claim the plan only held over those bars.
+   *
+   *  `levels: null` is a chart with no plan — a watchlist ticker rather than a
+   *  position. The whole layer is then absent, which is not the same thing as
+   *  a plan whose individual levels happen to be unset. */
   private renderPlan(data: ChartResponse): void {
     // Before the early return: an empty frame still has levels, and the field
     // is what the autoscale provider reads.

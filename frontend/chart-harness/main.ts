@@ -46,7 +46,7 @@ async function main(): Promise<void> {
 
   new IndicatorPanes(chart).render(data.indicators, data.ohlcv, palette);
   new BasicOverlays(chart, candles).render(data, palette);
-  new StrategyOverlay(candles).render(data.overlay, palette);
+  new StrategyOverlay(candles).render(data.overlays, palette);
   new PlanLines(candles).render(
     data.levels,
     palette,
@@ -58,10 +58,12 @@ async function main(): Promise<void> {
 
   const caption = document.getElementById('caption') as HTMLElement;
   caption.textContent =
-    `${name} · ${data.ohlcv.length} bars · overlay: ` +
-    (data.overlay ? `${data.overlay.side} ${data.overlay.shape.kind} (${data.overlay.source})` : 'none') +
-    ` · entry ${data.levels.entry?.toFixed(2)} stop ${data.levels.stop?.toFixed(2)}` +
-    ` t1 ${data.levels.target1?.toFixed(2)} t2 ${data.levels.target2?.toFixed(2)}`;
+    `${name} · ${data.ohlcv.length} bars · overlays: ` +
+    (data.overlays.length
+      ? data.overlays.map((o) => `${o.side} ${o.shape.kind} (${o.source})`).join(', ')
+      : 'none') +
+    ` · entry ${data.levels?.entry?.toFixed(2)} stop ${data.levels?.stop?.toFixed(2)}` +
+    ` t1 ${data.levels?.target1?.toFixed(2)} t2 ${data.levels?.target2?.toFixed(2)}`;
 
   // Polled by the screenshot driver: a canvas that has not painted yet
   // screenshots as an empty box, which looks exactly like a broken chart.

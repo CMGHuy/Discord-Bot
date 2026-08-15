@@ -10,7 +10,7 @@ import { SessionStore } from './stores/session.store';
 import { installMatchMediaPolyfill } from './testing/match-media-polyfill';
 import { TradeDetail } from './workspaces/trades/trade-detail';
 
-// The detail routes render PriceChart, and lightweight-charts asks for
+// The detail routes render TradeChart, and lightweight-charts asks for
 // matchMedia the moment a chart exists. See the polyfill for why.
 installMatchMediaPolyfill();
 

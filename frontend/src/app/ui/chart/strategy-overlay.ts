@@ -185,15 +185,16 @@ export class StrategyOverlay {
 
   constructor(private readonly series: ISeriesApi<SeriesType>) {}
 
-  render(overlay: ChartOverlay | null, palette: ChartPalette): void {
+  render(overlays: readonly ChartOverlay[], palette: ChartPalette): void {
     this.detach();
-    // `overlay: null` is spec Decision 10's second degraded state -- an older
-    // trade with no recorded sources. Candles, indicators and plan lines only.
-    if (!overlay) return;
-
-    for (const primitive of overlayPrimitives(overlay, palette)) {
-      this.series.attachPrimitive(primitive);
-      this.attached.push(primitive);
+    // An empty list is spec Decision 10's second degraded state -- an older
+    // trade with no recorded sources, or none at all. Candles, indicators and
+    // plan lines only.
+    for (const overlay of overlays) {
+      for (const primitive of overlayPrimitives(overlay, palette)) {
+        this.series.attachPrimitive(primitive);
+        this.attached.push(primitive);
+      }
     }
   }
 

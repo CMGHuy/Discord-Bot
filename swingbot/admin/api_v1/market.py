@@ -1,31 +1,31 @@
-"""GET /api/v1/market/ohlcv/{ticker} and /api/v1/market/chart/{trade_id}.
+"""GET /api/v1/market/chart/{ticker}.
 
-Read-only, 260 bars by default (~1 trading year), capped at 1000. The cap is
-not a tuning knob: the client picks how much work this request does, and a
-chart cannot usefully draw more than that anyway.
+Read-only. THE chart endpoint, singular: bars, indicator panes, the volume
+profile, the plan lines and the confirming-method overlays in ONE request,
+keyed by ticker with the trade as an optional `trade_id`.
 
-Both the frame lookup and the level mapping come from `app.py`
-(`_ohlcv_frame`, `trade_levels`, `ohlcv_bars`) rather than being rebuilt
-here. The Angular and Jinja charts are both live for the whole migration; a
-second bar serialisation would let them disagree about rounding, and a
-second level mapping would let one of them draw a take-profit line at the
-wrong price -- which looks entirely plausible on screen.
+It used to be two. `/market/ohlcv/{ticker}` served plain bars and
+`/market/chart/{trade_id}` served everything else, which meant a chart of a
+watchlist ticker could only be the thin one -- and that split propagated all
+the way up into two Angular stores and two chart components that had to be
+kept in visual agreement by hand. Making the trade optional collapsed all
+six into one. `ohlcv_bars`/`trade_levels` in `app.py` are what the deleted
+route shared with the Jinja UI; the Jinja UI is gone (Release B), so this
+module now carries the only serialisation.
+
+Every number here is produced by the same Python that draws the PNG the bot
+posts to Discord -- `swingbot.core.indicators`,
+`signals.compute_volume_profile`, `charts.chart_geometry.overlay_geometry`
+and `charts.trendline_fit`. A browser-side reimplementation of "where does
+the 61.8% retracement sit" or "what is the 20-EMA here" would be a guarantee
+that the chart a user zooms into eventually disagrees with the image they
+were alerted with, and neither would look wrong on its own.
 
 `_ohlcv_frame` tries a live fetch and falls back to the backtest CSV cache,
 so the chart still renders offline. That is one of the repo's TWO parallel
 OHLCV caches (`data/backtest_cache/`, flat per-ticker dailies -- not
 `market_data/`, which is timeframe-first and belongs to the edge engine).
 Reusing the accessor is also how this endpoint avoids having to know that.
-
-`/market/chart/{trade_id}` (SR33, spec Decision 10) is the SPA's interactive
-trade chart in ONE request: bars, indicator panes, the volume profile, the
-plan lines and the confirming-method overlay. Every one of those numbers is
-produced by the same Python that draws the PNG the bot posts to Discord --
-`swingbot.core.indicators`, `signals.compute_volume_profile` and
-`charts.chart_geometry.overlay_geometry`. A browser-side reimplementation of
-"where does the 61.8% retracement sit" or "what is the 20-EMA here" would be
-a guarantee that the chart a user zooms into eventually disagrees with the
-image they were alerted with, and neither would look wrong on its own.
 """
 from __future__ import annotations
 
@@ -35,9 +35,6 @@ from flask import jsonify
 
 from . import api_v1, error
 from .auth import require_auth
-
-DEFAULT_BARS = 260
-MAX_BARS = 1000
 
 # --- /market/chart -------------------------------------------------------
 #
@@ -181,51 +178,6 @@ def _volume_profile(df, window: int) -> list:
     edges = profile["bin_edges"]
     return [{"price": _num((edges[i] + edges[i + 1]) / 2), "volume": _num(vol)}
             for i, vol in enumerate(profile["bin_volumes"])]
-
-
-@api_v1.route("/market/ohlcv/<ticker>", methods=["GET"])
-@require_auth
-def ohlcv(ticker: str):
-    """`levels` is present only when `trade_id` is given AND resolves.
-
-    An unresolvable `trade_id` is a 404 rather than a chart with the levels
-    quietly missing. The request was "this trade's chart"; answering with a
-    plain one that looks complete is how a user reads a chart believing the
-    lines are simply not set. A client wanting bars regardless just omits
-    the parameter.
-    """
-    from flask import request
-
-    from swingbot.admin.app import (_ohlcv_frame, _trade_for_levels,
-                                    ohlcv_bars, trade_levels)
-
-    raw_bars = request.args.get("bars")
-    if raw_bars is None:
-        bars = DEFAULT_BARS
-    else:
-        try:
-            bars = int(raw_bars)
-        except (TypeError, ValueError):
-            return error("invalid", f"bars must be an integer, got {raw_bars!r}", 400)
-        # Clamped, not rejected: "more than the cap" means "as much as you
-        # have", which is what the caller gets.
-        bars = max(1, min(bars, MAX_BARS))
-
-    ticker = ticker.upper()
-    df = _ohlcv_frame(ticker)
-    if df is None or not len(df):
-        return error("not_found", f"No OHLCV data for {ticker!r}.", 404)
-
-    payload = {"ticker": ticker, "bars": ohlcv_bars(df.tail(bars))}
-
-    trade_id = request.args.get("trade_id")
-    if trade_id:
-        trade = _trade_for_levels(trade_id)
-        if not trade:
-            return error("not_found", f"No trade with id {trade_id!r}", 404)
-        payload["levels"] = trade_levels(trade)
-
-    return jsonify(payload)
 
 
 def _chart_trendline_fit(trade: dict, df, horizon: dict, is_bull: bool) -> dict | None:

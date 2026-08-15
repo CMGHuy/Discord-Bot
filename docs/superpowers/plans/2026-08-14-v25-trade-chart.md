@@ -721,109 +721,81 @@ git commit -m "feat(api): both overlays, the trendline, and lazy fit backfill"
 
 # Phase 3 — One component
 
-### Task 7: Retype the payload and delete the old route
+### Tasks 7 & 8: One payload type, one route, one component
+
+**Done as one commit, because they cannot be separated.** Task 7 deletes
+`Candle`, `TradeLevels` and `OhlcvResponse`; their only consumers are
+`PriceChart` and `OhlcvStore`, which Task 8 deletes. Landing Task 7 alone
+would mean committing a tree that does not compile.
 
 **Files:**
-- Modify: `frontend/src/app/api/models.ts:699-890`
-- Modify: `swingbot/admin/api_v1/market.py` (delete the `ohlcv` route)
-- Modify: `frontend/src/app/stores/` — whichever store called `/market/ohlcv`
+- Modify: `frontend/src/app/api/models.ts`, `api-client.ts`,
+  `stores/chart.store.ts` (+ spec), `ui/chart/trade-chart.ts`,
+  `ui/chart/strategy-overlay.ts` (+ spec), `ui/chart/plan-lines.ts`,
+  `workspaces/watchlist/ticker-detail.ts`,
+  `workspaces/trades/trade-detail.ts`, `testing/match-media-polyfill.ts`,
+  `app.routes.spec.ts`, `chart-harness/main.ts`
+- Modify: `swingbot/admin/api_v1/market.py`, `swingbot/admin/app.py`,
+  `scripts/dump_chart_payloads.py`, `tests/admin/test_api_v1_market.py`
+- Delete: `frontend/src/app/ui/price-chart.ts`,
+  `frontend/src/app/stores/ohlcv.store.ts` (+ spec)
 
-**Interfaces:**
-- Consumes: Task 6's payload.
-- Produces: `ChartResponse { ticker; ohlcv: ChartBar[]; indicators: ChartIndicators;
-  volume_profile: VolumeBin[]; levels: ChartLevels | null; overlays: ChartOverlay[];
-  notes: string[] }`. `Candle`, `OhlcvResponse` and `TradeLevels` are deleted.
+- [x] **Step 1: Retype the payload**
 
-- [ ] **Step 1: Delete the dead types and widen `ChartResponse`**
+`ChartResponse` gains `ticker` and `notes`, turns `levels` nullable and
+replaces `overlay` with `overlays: ChartOverlay[]`. `Candle`,
+`TradeLevels` and `OhlcvResponse` are deleted. `ApiClient.ohlcv` goes;
+`ApiClient.chart` takes a ticker and passes `trade_id` through `toParams`.
 
-In `models.ts`, remove `Candle`, `OhlcvResponse` and `TradeLevels`. Change
-`ChartResponse`'s `overlay?: ChartOverlay` to `overlays: ChartOverlay[]` and add
-`ticker: string;` and `notes: string[];`. Update the docstring above it to name
-the ticker-keyed route.
+- [x] **Step 2: Collapse the two stores into one**
 
-- [ ] **Step 2: Run the build to find every consumer**
+Not "repoint the store that fetched `/market/ohlcv`" — **delete it**.
+`OhlcvStore` existed only because the chart endpoint could not be asked for a
+ticker without a trade, so `ChartStore` absorbed it: `setTrade(id)` becomes
+`setTarget(ticker, tradeId = null)`, and its `isEmpty` computed moves across
+(trade-detail's own `chartEmpty` now reads it, so one definition serves both
+screens).
 
-Run: `cd frontend && npx tsc --noEmit`
-Expected: FAIL, with an error at each site that referenced a deleted type. That
-list is the work for Step 3 — it is more reliable than grepping.
+`ChartStore` now also refetches on `scan`, which it did not before. A plain
+ticker chart has no `trades` events to ride on, so without it the watchlist's
+chart would never refresh at all. The reason `OhlcvStore` gave for skipping
+`trades` (a year of candles refetched for four horizontal lines) does not
+transfer — this store already makes that request for `working_stop`.
 
-- [ ] **Step 3: Repoint the store and delete the route**
+- [x] **Step 3: Delete the second component and the second route**
 
-Point the store method that fetched `/market/ohlcv/{ticker}` at
-`/market/chart/{ticker}`, returning `ChartResponse`. Delete the `ohlcv` route
-and its helpers from `market.py` if nothing else calls them.
+`PriceChart` deleted; `ticker-detail.ts` renders `sb-trade-chart` over
+`ChartStore`. The plan's `hasPlan` computed turned out to be unnecessary:
+`PlanLines.render` takes `ChartLevels | null` and returns early, which puts
+the "no plan at all" case in the same place as the existing "this level is
+unset" case rather than in a second one in the component.
 
-- [ ] **Step 4: Verify**
+`StrategyOverlay.render` takes a list instead of `overlay | null`.
 
-Run: `cd frontend && npx tsc --noEmit && npm test`
-Expected: PASS.
-Run: `python scripts/testrun.py full`
-Expected: `0 failed`.
+On the Python side the `/market/ohlcv` route goes, and with it `DEFAULT_BARS`
+/`MAX_BARS` — and `app.py`'s `ohlcv_bars`/`trade_levels`, which the plan did
+not mention and which now have no callers at all. They were shared with the
+Jinja UI (deleted in Release B) and with the deleted route; kept as dead code
+they would be a second `tp1`/`tp2` mapping waiting to be picked up by
+mistake, which is exactly what they were written to prevent.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Verify**
 
-```bash
-git add frontend/src/app/api/models.ts frontend/src/app/stores/ swingbot/admin/api_v1/market.py
-git commit -m "refactor(chart): one payload type, one route"
-```
+`npx tsc --noEmit` clean; `npm test` 42 files / 717 tests (was 43/725 —
+`ohlcv.store.spec.ts` went with its store, and the chart store spec gained
+cases for the ticker-only load, the trade_id parameter, `isEmpty` and the
+`scan` refetch). `python scripts/testrun.py full` 1709 passed, 0 failed.
 
----
+The `/market/ohlcv` tests were not simply deleted: the two that were about
+the ENDPOINT rather than its narrower payload — ticker normalisation and the
+offline CSV-cache fallback — were ported onto `/market/chart`.
+`scripts/dump_chart_payloads.py` and `chart-harness/main.ts` read the payload
+too, and both were repointed.
 
-### Task 8: Merge the two chart components
-
-**Files:**
-- Modify: `frontend/src/app/ui/chart/trade-chart.ts`
-- Delete: `frontend/src/app/ui/price-chart.ts`
-- Modify: `frontend/src/app/workspaces/watchlist/ticker-detail.ts:46,64`
-- Modify: `frontend/src/app/workspaces/trades/trade-detail.ts:70-71,474`
-
-**Interfaces:**
-- Consumes: Task 7's `ChartResponse`.
-- Produces: `TradeChart` with a single required input `data: ChartResponse`, and
-  no plan-specific inputs. Selector stays `sb-trade-chart`.
-
-- [ ] **Step 1: Establish green**
-
-Run: `cd frontend && npm test`
-Expected: PASS.
-
-- [ ] **Step 2: Make the plan layer conditional**
-
-In `trade-chart.ts`, guard the plan layer on the payload rather than on a
-separate input:
-
-```ts
-  private readonly hasPlan = computed(() => this.data().levels !== null);
-```
-
-`PlanLines` already treats a null level as undrawn rather than drawn at zero;
-this extends that rule to the whole layer. Nothing else in the component changes
-— the panes, indicators and volume profile were never plan-dependent.
-
-- [ ] **Step 3: Repoint both call sites and delete `PriceChart`**
-
-In `ticker-detail.ts`, replace the `PriceChart` import and
-`<sb-price-chart [bars]="chart.bars()" />` with `TradeChart` and
-`<sb-trade-chart [data]="chart.data()" />`. `trade-detail.ts:474` already uses
-that markup and needs no change beyond its import staying valid.
-
-Delete `frontend/src/app/ui/price-chart.ts`. Update
-`frontend/src/app/testing/match-media-polyfill.ts:7`, whose comment names
-`PriceChart` as the reason it exists — the polyfill is still needed, by the
-merged component now.
-
-- [ ] **Step 4: Verify**
-
-Run: `cd frontend && npx tsc --noEmit && npm test`
-Expected: PASS. The routing spec that rendered `PriceChart` now renders
-`TradeChart`; if it asserts on a selector, update it.
-
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add frontend/src/app/ui/chart/trade-chart.ts frontend/src/app/workspaces/watchlist/ticker-detail.ts frontend/src/app/workspaces/trades/trade-detail.ts frontend/src/app/testing/match-media-polyfill.ts
-git rm frontend/src/app/ui/price-chart.ts
-git commit -m "refactor(chart): one chart component for trades and tickers"
+git commit -m "refactor(chart): one payload, one route, one component"
 ```
 
 ---
