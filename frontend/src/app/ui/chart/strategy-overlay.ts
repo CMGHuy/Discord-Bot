@@ -24,10 +24,12 @@ import { PolylinePrimitive, PolylineSpec } from './primitives/polyline-primitive
  * and a client that has not learned it must render a chart without an overlay,
  * never no chart.
  *
- * **No text.** The PNG labels its overlay in the plot; here the method's name
- * is `overlay.source`, which the chart's own chrome prints (SR40). Drawing
- * text on the canvas would mean re-solving font tokens, DPR scaling and label
- * collision inside a primitive, for a string the page can render in HTML.
+ * **Text lives in the legend, not on the overlay.** This module still draws
+ * no strings: the method's name and its fit notes are rendered by
+ * `LegendPrimitive` in the pane's corner (v23 Decision 8), which is where
+ * TradingView puts them. That decision reversed this file's original "No
+ * text" rule and accepted its costs — font tokens, DPR scaling and label
+ * collision — in one place rather than per shape.
  */
 
 /** The fixed accent-per-side rule the PNG uses: the overlay explains one side
