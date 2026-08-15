@@ -6,7 +6,11 @@ different product. A reader who used the Settings page yesterday finds the same
 page, correctly aligned. (See `docs/claude/document-conventions.md`,
 "The header block".)
 **Date:** 2026-08-14
-**Status:** approved, not yet implemented
+**Status:** implemented and merged 2026-08-15 as ui 1.2.4, via plan
+`docs/superpowers/plans/implemented/2026-08-14-v24-control-alignment.md`. Its
+Tasks 1–13 shipped; Task 14's manual responsive pass was never run, so nothing
+in this design has been verified at a real viewport. Read that plan's Status
+block before trusting any layout claim here.
 
 ---
 

@@ -2,9 +2,47 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-08-14-v22-control-alignment-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-08-14-v22-control-alignment-design.md`
 **Version:** ui 1.2.3 · bot 1.1.2
 **Bump:** ui patch, applied last, after Task 14 is green.
+
+## Status: CLOSED 2026-08-15 — merged, ui 1.2.4 shipped
+
+Tasks 1–13 implemented and merged to `main`. **Task 14 (the manual responsive
+pass) was never run**, by explicit decision — the version was bumped anyway on
+the plan's own expectation of "few or none" changes from it. Nothing has walked
+the converted rows at 375/640/1024/1440/1920px, so no `[stacked]="true"` was
+applied anywhere; the Settings grid at 375px in particular is unverified, and
+that is where a band-count mistake in Task 7 would show. The checkboxes below
+are left unticked — read this block, not them.
+
+**Four places this plan was wrong, corrected during execution:**
+
+- `.kill` is in `risk/risk.ts`, **not** `system/scan-tab.ts` (Task 11 Step 2),
+  and it was deliberately **not** converted. It is a multi-paragraph block
+  beside one button, held by `align-items: flex-start` and
+  `justify-content: space-between`, collapsing at **720px** — not the
+  primitive's 640. The plan calls that conversion identical behaviour; it is
+  three visible changes.
+- `logs-tab`'s `.level` (Task 11 Step 3) is a `<label>` wrapping a native
+  checkbox. Converting it to a component host breaks the implicit label
+  association `controls.spec.ts` guards. Same for `.count` and `settings-tab`'s
+  `.import-file`.
+- Task 13's prefix exemptions have a hole: `head` exempts `head-actions`, which
+  is a genuine control row Task 9 converts. Shipped as an exact-name allowlist,
+  each entry carrying its reason.
+- Task 8's list of rows is incomplete — `settings-tab`'s `.import-actions` is a
+  control row named by no task. Task 13's guard caught it; it is converted.
+
+**Two mechanical corrections:** `sb-control-row` needs `:host { display: block }`
+(Task 8's `.find { margin-bottom }` and `.bar { position: sticky }` are both
+no-ops on an inline box), and Task 5 breaks Task 4's tests, because `FilterBar`
+becomes a `sb-control-row` consumer and the unscoped `querySelector` then finds
+its row first.
+
+**The test command in every task is wrong.** `npx vitest run <file>` bypasses
+the Angular builder's jsdom setup and dies with `document is not defined`. Use
+`npx ng test --include=<file>`.
 
 **Goal:** Give every interactive control one shared height and one sanctioned
 row layout, and rebuild the Settings form so each section groups its fields by
