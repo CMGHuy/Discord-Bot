@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-15 07:56:40 UTC",
+  "generated_at": "2026-08-15 07:57:07 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "current": {
-    "ui": "1.2.4",
+    "ui": "1.3.0",
     "bot": "1.1.2"
   },
   "ui_versions": [
@@ -19,7 +19,8 @@
     "1.2.1",
     "1.2.2",
     "1.2.3",
-    "1.2.4"
+    "1.2.4",
+    "1.3.0"
   ],
   "bot_versions": [
     "1.0.1",
@@ -231,6 +232,14 @@
       "last_seen": "2026-08-15",
       "commit": "49ac181f",
       "subject": "release(ui): 1.2.4 -- control alignment and grouped settings"
+    },
+    {
+      "ui": "1.3.0",
+      "bot": "1.1.2",
+      "first_seen": "2026-08-15",
+      "last_seen": "2026-08-15",
+      "commit": "uncommitted",
+      "subject": "working tree"
     }
   ],
   "ranges": [
@@ -340,6 +349,14 @@
     },
     {
       "ui": "1.2.4",
+      "bot_min": "1.1.2",
+      "bot_max": "1.1.2",
+      "bot_count": 1,
+      "first_seen": "2026-08-15",
+      "last_seen": "2026-08-15"
+    },
+    {
+      "ui": "1.3.0",
       "bot_min": "1.1.2",
       "bot_max": "1.1.2",
       "bot_count": 1,
