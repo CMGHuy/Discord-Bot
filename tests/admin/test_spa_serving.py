@@ -220,3 +220,35 @@ def test_logged_out_api_is_still_guarded(client):
     stay closed is the data.
     """
     assert client.get("/api/v1/dashboard").status_code == 401
+
+
+def test_every_angular_route_is_served_on_reload():
+    """`app.routes.ts` and `spa.WORKSPACES` must name the same top-level paths.
+
+    A route added to the SPA and not to `WORKSPACES` works when reached by
+    clicking — Angular handles it client-side and Flask never sees it — and
+    404s when reached by reload, bookmark or a pasted link. The symptom looks
+    like an SPA routing bug and is a server one, which is why this is checked
+    mechanically rather than remembered.
+
+    Parsed from the TypeScript rather than duplicated: a hand-copied list here
+    would be a third place to forget.
+    """
+    import re
+
+    routes_ts = os.path.join(
+        os.path.dirname(spa.__file__), "..", "..", "frontend", "src", "app", "app.routes.ts",
+    )
+    source = open(os.path.abspath(routes_ts), encoding="utf-8").read()
+
+    declared = set()
+    for raw in re.findall(r"path:\s*'([^']*)'", source):
+        if not raw or raw == "**":       # the empty and catch-all routes
+            continue
+        declared.add(raw.split("/", 1)[0])   # 'trades/:id' is served by 'trades'
+
+    missing = sorted(declared - set(spa.WORKSPACES))
+    assert not missing, (
+        f"routes in app.routes.ts that Flask will 404 on reload: {missing}. "
+        f"Add them to spa.WORKSPACES."
+    )

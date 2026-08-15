@@ -78,6 +78,11 @@ export const routes: Routes = [
     canMatch: [authGuard],
     loadComponent: () => import('./workspaces/system/system').then((m) => m.System),
   },
+  {
+    path: 'versions',
+    canMatch: [authGuard],
+    loadComponent: () => import('./workspaces/versions/versions').then((m) => m.Versions),
+  },
   // A typo'd URL lands on the Dashboard rather than a blank outlet. There is
   // no 404 view: with six destinations and no external links into the app,
   // a dedicated not-found page would be a page nobody ever means to reach.

@@ -32,7 +32,7 @@ spa = Blueprint("spa", __name__)
 #: Where the Dockerfile's frontend stage lands the bundle.
 APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 
-#: The six workspaces. Detail views live under their workspace's prefix, so
+#: The seven workspaces. Detail views live under their workspace's prefix, so
 #: `/trades/abc` and `/watchlist/AAPL` are covered by `trades` and `watchlist`.
 #:
 #: `cockpit` and `universe` are the pre-SR4/SR5 names, kept as prefixes on
@@ -40,8 +40,13 @@ APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 #: them client-side to `/dashboard` and `/watchlist`. Dropping them would make
 #: a bookmark or an open tab 404 at the server before Angular ever loaded,
 #: which a client-side redirect cannot rescue. They come out at NG57.
+#:
+#: A route added to `app.routes.ts` and NOT added here works when reached by
+#: clicking, and 404s when reached by reload or bookmark — the failure looks
+#: like a routing bug in the SPA and is not one.
 WORKSPACES = (
     "dashboard", "trades", "analytics", "watchlist", "risk", "system",
+    "versions",
     "cockpit", "universe",
 )
 

@@ -913,3 +913,43 @@ export interface Preferences {
    *  what makes a stale preference degrade instead of break. */
   [key: string]: unknown;
 }
+
+/* -- versions ----------------------------------------------------------- */
+
+/** One ui/bot pair that was released together, recovered from the git
+ *  history of VERSION.json by `scripts/build_version_matrix.py`. */
+export interface VersionPair {
+  ui: string;
+  bot: string;
+  first_seen: string;
+  last_seen: string;
+  commit?: string;
+  subject?: string;
+}
+
+/** The span of bot versions one ui version was ever released alongside. */
+export interface VersionRange {
+  ui: string;
+  bot_min: string;
+  bot_max: string;
+  bot_count: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface VersionHistory {
+  /** When the frozen file was generated; null if it was never generated. */
+  generated_at: string | null;
+  /** The server's own sentence about what the pairing data does and does not
+   *  claim. Rendered verbatim rather than restated in the template, so the
+   *  page cannot drift into promising "tested" where the API says "shipped". */
+  basis: string | null;
+  /** Read from VERSION.json per request, so it always matches the sidebar. */
+  live: { ui: string; bot: string };
+  /** VERSION.json has moved on since the frozen file was generated. */
+  stale: boolean;
+  ui_versions: string[];
+  bot_versions: string[];
+  pairs: VersionPair[];
+  ranges: VersionRange[];
+}

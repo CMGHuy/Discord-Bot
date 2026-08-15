@@ -69,6 +69,7 @@ export class Shell {
     { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
     { path: '/risk', label: 'Risk', icon: 'risk' },
     { path: '/system', label: 'System', icon: 'system' },
+    { path: '/versions', label: 'Versions', icon: 'versions' },
   ];
 
   /**

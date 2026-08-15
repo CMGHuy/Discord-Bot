@@ -25,6 +25,7 @@ export const ICON_NAMES = [
   'watchlist',
   'risk',
   'system',
+  'versions',
   'collapse',
   'expand',
   'profile',
@@ -49,6 +50,8 @@ const PATHS: Record<IconName, string> = {
   // A cog, drawn as a ring plus four teeth rather than twelve points -- at
   // 16px the fine-toothed version is mud.
   system: 'M8 10.2A2.2 2.2 0 1 0 8 5.8a2.2 2.2 0 0 0 0 4.4z M8 1.5v2 M8 12.5v2 M1.5 8h2 M12.5 8h2 M3.4 3.4l1.4 1.4 M11.2 11.2l1.4 1.4 M12.6 3.4l-1.4 1.4 M4.8 11.2l-1.4 1.4',
+  // Stacked layers: two components released as one image, over and over.
+  versions: 'M8 1.5 1.5 5 8 8.5 14.5 5z M1.5 8.2 8 11.7l6.5-3.5 M1.5 11.4 8 14.9l6.5-3.5',
   collapse: 'M10 4 6 8l4 4',
   expand: 'M6 4l4 4-4 4',
   // A head and shoulders.

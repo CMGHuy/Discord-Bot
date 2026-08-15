@@ -45,6 +45,7 @@ import {
   TradeQuery,
   TradeRow,
   TradeJournal,
+  VersionHistory,
 } from './models';
 
 /** The application's only HTTP surface.
@@ -270,6 +271,14 @@ export class ApiClient {
     return this.http.get<TickerSuggestions>(`${this.base}/watchlist/suggest`, {
       params: { q },
     });
+  }
+
+  /* -- versions -------------------------------------------------------- */
+
+  /** The ui/bot pairing history behind the Versions workspace. Served from a
+   *  committed file, so it is cheap and never touches git at runtime. */
+  versionHistory(): Observable<VersionHistory> {
+    return this.http.get<VersionHistory>(`${this.base}/versions`);
   }
 
   /* -- risk ------------------------------------------------------------ */
