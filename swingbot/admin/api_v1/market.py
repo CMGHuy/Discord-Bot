@@ -180,6 +180,34 @@ def _volume_profile(df, window: int) -> list:
             for i, vol in enumerate(profile["bin_volumes"])]
 
 
+def _is_trendline_confirmed(trade: dict | None) -> bool:
+    """Whether `trade`'s chart would actually draw a trendline -- the single
+    condition the backfill gate and the legend-note gate below both share, so
+    a trade confirmed by (say) an EMA and a Fib level alone never gets a
+    trendline fitted, stored, or captioned for it.
+
+    Mirrors trade_chart.py's own gate in `generate_trade_chart` (its
+    `need_target_trendline`/`need_stop_trendline` locals, just before it
+    decides whether to fit `trend_info` at all): true when either side's
+    picked confirming source is a Trendline, OR -- the same "nothing else to
+    draw" fallback the PNG falls back to -- when the trade carries no source
+    info on either side at all (every trade logged before source tracking
+    existed draws a trendline as its only option, same as the PNG).
+    """
+    if not trade:
+        return False
+    from swingbot.core.charts.chart_geometry import _pick_primary_source
+
+    target_primary = _pick_primary_source(trade.get("target_sources") or [])
+    stop_primary = _pick_primary_source(trade.get("stop_sources") or [])
+    if target_primary is None and stop_primary is None:
+        return True
+    return bool(
+        (target_primary and target_primary.startswith("Trendline"))
+        or (stop_primary and stop_primary.startswith("Trendline"))
+    )
+
+
 def _chart_trendline_fit(trade: dict, df, horizon: dict, is_bull: bool) -> dict | None:
     """The trade's stored trendline fit, backfilling it once if absent.
 
@@ -234,6 +262,41 @@ def _chart_trendline_fit(trade: dict, df, horizon: dict, is_bull: bool) -> dict 
     return fit
 
 
+def _stored_trendline_note_lines(fit: dict, label: str) -> list:
+    """The stored fit's own two endpoints, captioned with the DATES THEY
+    CARRY -- never re-derived from `df.index`.
+
+    `trade_chart.py`'s `_trendline_note_lines` reads its dates off
+    `df.index[len(df) - window_bars]`/`df.index[-1]`, which is correct there
+    because the fit and the render share one frame in one call. It is wrong
+    here: this endpoint's `df` is TODAY's frame, but `fit`
+    (`trade["trendline_fit"]`) can be months old -- `_chart_trendline_fit`
+    exists precisely so the line stops moving between two viewings, and a
+    date re-derived from today's `df` would silently claim the line ends
+    today when it doesn't. The prices come out right either way (they're
+    derived from slope/intercept, which are frame-independent) -- only the
+    dates need the fit's own `points` (see charts/trendline_fit.py) instead.
+    """
+    from datetime import datetime
+
+    from swingbot.core.charts.trade_chart import _fmt_note_date
+
+    points = fit.get("points") or []
+    if len(points) != 2:
+        return []
+    pts = sorted(
+        ((float(p["price"]), datetime.fromtimestamp(int(p["t"]))) for p in points),
+        key=lambda t: t[0],
+    )
+    lo_price, lo_date = pts[0]
+    hi_price, hi_date = pts[1]
+    return [
+        f"{label}: 2 pts used",
+        f"  low  {_fmt_note_date(lo_date)}  {lo_price:.2f}",
+        f"  high {_fmt_note_date(hi_date)}  {hi_price:.2f}",
+    ]
+
+
 def _chart_notes(trade: dict, df, fit: dict, overlays: list, horizon: dict) -> list:
     """The legend's fit notes, from the helpers the PNG prints.
 
@@ -242,17 +305,19 @@ def _chart_notes(trade: dict, df, fit: dict, overlays: list, horizon: dict) -> l
     that HAS one -- a trendline names the two points its segment connects, a
     fib fan its 0%/100% anchors, and everything else draws without a note
     rather than with an empty one.
+
+    `fit` is already None for a trade that is not trendline-confirmed (see
+    `_is_trendline_confirmed` and its call site in `chart()`), so the
+    trendline note below is gated for free -- it only ever fires for a trade
+    whose chart actually draws the line it would be captioning.
     """
-    from swingbot.core.charts.trade_chart import (
-        DEFAULT_TRENDLINE_LOOKBACK_DAYS, _fib_note_lines, _trendline_note_lines,
-    )
+    from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, _fib_note_lines
 
     notes = []
-    if fit and fit.get("window_bars"):
+    if fit and fit.get("points"):
         try:
-            notes += _trendline_note_lines(
-                df, int(fit["window_bars"]), float(fit["slope"]),
-                float(fit["intercept"]), f"Trendline ({int(fit.get('strength', 0))}x)")
+            notes += _stored_trendline_note_lines(
+                fit, f"Trendline ({int(fit.get('strength', 0))}x)")
         except Exception:
             pass
 
@@ -386,7 +451,16 @@ def chart(ticker: str):
     # fit is read off the trade, never computed here. A second fit at render
     # time is what let the browser and the PNG disagree about the same line;
     # see charts/trendline_fit.py.
-    fit = _chart_trendline_fit(trade, df, horizon, is_bull) if trade else None
+    #
+    # Gated on `_is_trendline_confirmed`: a trade whose chart draws no
+    # trendline at all (an EMA/Fib/etc.-only confirmation) has nothing for a
+    # fit to be drawn or captioned FROM, so fitting and storing one for it on
+    # first view would be a wasted computation and a locked file rewrite for
+    # a line that never reaches the page.
+    fit = (
+        _chart_trendline_fit(trade, df, horizon, is_bull)
+        if trade and _is_trendline_confirmed(trade) else None
+    )
 
     overlays = []
     for side, key in (("target", "target_sources"), ("stop", "stop_sources")):

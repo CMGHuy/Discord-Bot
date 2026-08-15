@@ -8,6 +8,7 @@ import datetime as dt
 import types
 
 import discord
+import pandas as pd
 import pytest
 
 from swingbot import config
@@ -17,6 +18,7 @@ from swingbot.core.plan_engine import TradePlanV2
 from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed, confidence_color,
+    regenerate_chart_for_trade,
 )
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.engine import ScanItem
@@ -583,3 +585,77 @@ def test_no_intraday_reading_adds_no_field():
     item.intraday = None
     assert _intraday_field(_build(item)) is None
     assert _intraday_field(_build(make_item())) is None
+
+
+# =====================================================================
+# Final-review Finding 1 -- regenerate_chart_for_trade() must hand its
+# trade's stored trendline fit to generate_trade_chart(), the same way
+# scanning/engine.py does on the alert path (see
+# tests/test_trade_chart_stored_fit.py::test_the_scan_hands_its_stored_fit_to_the_png).
+# Without this, re-viewing an older trade in Discord refits a fresh line
+# against today's data while the SPA (market.py) keeps drawing the one
+# stored fit -- the two disagree about the same trade's line.
+# =====================================================================
+
+def _regen_frame(n=30):
+    idx = pd.bdate_range("2024-01-01", periods=n)
+    return pd.DataFrame({"Open": 100.0, "High": 101.0, "Low": 99.0,
+                         "Close": 100.0, "Volume": 1_000.0}, index=idx)
+
+
+def _make_trade(**overrides):
+    trade = {
+        "id": "t1", "ticker": "AAPL", "horizon_key": "4w",
+        "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0,
+        "direction": "bullish", "strategy": "RSI", "status": "open",
+        "opened_at": "2026-01-01T00:00:00+00:00",
+    }
+    trade.update(overrides)
+    return trade
+
+
+def _stub_regenerate_deps(monkeypatch, df):
+    """get_daily_data and currency lookup, stubbed so the test never touches
+    the network -- captures generate_trade_chart's kwargs instead of
+    actually rendering a PNG."""
+    from swingbot.core.scanning import embeds as embeds_mod
+
+    monkeypatch.setattr(embeds_mod, "get_daily_data", lambda ticker: df)
+    monkeypatch.setattr(embeds_mod, "get_currency_symbol", lambda ticker, default: default)
+    captured = {}
+
+    def _fake_generate(*args, **kwargs):
+        captured.update(kwargs)
+        return "/tmp/fake_view.png"
+
+    monkeypatch.setattr(embeds_mod, "generate_trade_chart", _fake_generate)
+    return captured
+
+
+def test_regenerate_chart_passes_the_stored_trendline_fit(monkeypatch):
+    stored_fit = {
+        "slope": 0.1, "intercept": 99.0, "side": "support", "strength": 3,
+        "points": [{"t": 1704067200, "price": 99.0}, {"t": 1705276800, "price": 100.0}],
+    }
+    captured = _stub_regenerate_deps(monkeypatch, _regen_frame())
+    trade = _make_trade(trendline_fit=stored_fit)
+
+    path = regenerate_chart_for_trade(trade)
+
+    assert path == "/tmp/fake_view.png"
+    assert captured.get("trendline_fit") is stored_fit
+
+
+def test_regenerate_chart_passes_none_without_a_stored_fit(monkeypatch):
+    # A trade logged before this feature (or never trendline-confirmed) has
+    # no trendline_fit key at all -- the kwarg must still be PASSED as None,
+    # not omitted, so generate_trade_chart falls back to its own live fit
+    # exactly as it always has (see trade_chart.py's need_target_trendline /
+    # need_stop_trendline fallback).
+    captured = _stub_regenerate_deps(monkeypatch, _regen_frame())
+    trade = _make_trade()
+
+    regenerate_chart_for_trade(trade)
+
+    assert "trendline_fit" in captured
+    assert captured["trendline_fit"] is None

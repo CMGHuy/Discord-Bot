@@ -473,6 +473,71 @@ def test_notes_are_empty_without_a_trade(logged_in, frame):
     assert logged_in.get("/api/v1/market/chart/AAPL").get_json()["notes"] == []
 
 
+# ---------------------------------------------------------------------
+# Final-review Finding 2 -- the legend must not caption a trendline for a
+# trade whose chart draws no trendline at all. `fittable_frame` is used
+# throughout (the same frame the trendline-confirmed tests above prove IS
+# fittable), which rules out "no fit could be found" as the reason for an
+# empty note -- only the confirming-source gate can be responsible.
+# ---------------------------------------------------------------------
+
+def test_a_non_trendline_trade_gets_no_trendline_note(
+        logged_in, fittable_frame, seed_trade):
+    tid = seed_trade(target_sources=["EMA20"], stop_sources=["Rolling support"])
+    notes = logged_in.get(
+        f"/api/v1/market/chart/AAPL?trade_id={tid}").get_json()["notes"]
+    assert not any("Trendline" in n for n in notes)
+
+
+def test_a_non_trendline_trade_is_not_backfilled(
+        logged_in, fittable_frame, seed_trade, trade_log):
+    """Finding 2's Related fix: computing and storing a fit that will never
+    be drawn or noted is wasted work and a locked file rewrite for nothing."""
+    tid = seed_trade(target_sources=["EMA20"], stop_sources=["Rolling support"])
+    logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={tid}")
+    assert _stored_fit(trade_log, tid) is None
+
+
+def test_a_trade_with_no_source_info_still_gets_a_note(
+        logged_in, fittable_frame, seed_trade):
+    """The PNG's own fallback (trade_chart.py: `target_primary is None and
+    stop_primary is None`) still applies here: a trade logged before source
+    tracking existed has nothing else to draw, so it still gets a trendline
+    fitted and captioned, same as the image."""
+    tid = seed_trade(target_sources=[], stop_sources=[])
+    notes = logged_in.get(
+        f"/api/v1/market/chart/AAPL?trade_id={tid}").get_json()["notes"]
+    assert any("Trendline" in n for n in notes)
+
+
+def test_notes_dates_come_from_the_stored_fit_not_todays_frame(
+        logged_in, fittable_frame, seed_trade, trade_log, monkeypatch):
+    """Final-review Finding 3: the caption must name the fit's OWN dates
+    (`fit["points"]`), not `df.index[-1]` -- which is TODAY's frame and
+    drifts every time it is re-fetched, while a stored fit (once backfilled)
+    never does. The price comes out right either way (frame-independent);
+    only the date was wrong.
+    """
+    tid = seed_trade()
+    logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={tid}")
+    fit = _stored_fit(trade_log, tid)
+    assert fit and fit.get("points"), "fixture must produce a fit for this test to mean anything"
+
+    # A LATER frame, same shape. If the notes re-derived their dates from
+    # `df.index` (the bug this test catches), this second read would print
+    # 2030 dates -- not the 2024 dates the persisted fit was actually taken
+    # on -- even though the persisted fit itself (idempotent) never changes.
+    later_df = _fittable_df(200)
+    later_df.index = pd.bdate_range("2030-01-01", periods=200)
+    monkeypatch.setattr("swingbot.admin.app._ohlcv_frame", lambda t: later_df)
+
+    notes = logged_in.get(
+        f"/api/v1/market/chart/AAPL?trade_id={tid}").get_json()["notes"]
+    joined = "\n".join(notes)
+    assert "2030" not in joined
+    assert "2024" in joined
+
+
 def test_overlay_timestamps_line_up_with_the_bars(logged_in, frame, chart_trade):
     """The whole point of one time type: every overlay anchor must be a
     real bar the client can convert to a coordinate."""
