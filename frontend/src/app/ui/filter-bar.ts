@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { Button } from './button';
+import { ControlRow } from './layout';
 
 /** One choice in a filter chip row. */
 export interface FilterChip {
@@ -24,10 +25,10 @@ export interface FilterChip {
 @Component({
   selector: 'sb-filter-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button],
+  imports: [Button, ControlRow],
   template: `
-    <div class="bar">
-      <div class="controls"><ng-content /></div>
+    <sb-control-row>
+      <ng-content />
 
       @if (activeCount() > 0) {
         <span class="active num">{{ activeCount() }} active</span>
@@ -35,17 +36,10 @@ export interface FilterChip {
           Clear all
         </button>
       }
-    </div>
+    </sb-control-row>
   `,
   styles: `
-    .bar {
-      display: flex;
-      align-items: flex-end;
-      gap: var(--space-10);
-      flex-wrap: wrap;
-      padding: var(--space-10) 0;
-    }
-    .controls { display: flex; align-items: flex-end; gap: var(--space-10); flex-wrap: wrap; }
+    :host { display: block; padding: var(--space-10) 0; }
     .active { margin-left: auto; color: var(--text-secondary); font-size: var(--text-table); }
   `,
 })

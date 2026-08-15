@@ -7,7 +7,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { FilterBar, FilterChip, FilterChips } from './filter-bar';
 import { Checkbox, Select, TextInput } from './form-controls';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
-import { Drawer, Tab, TabBar } from './layout';
+import { ControlRow, Drawer, Tab, TabBar } from './layout';
 
 /* NG41 — input and layout.
  *
@@ -39,6 +39,7 @@ const TABS: Tab[] = [
     Checkbox,
     TabBar,
     Drawer,
+    ControlRow,
   ],
   template: `
     <button sb-button [variant]="variant()" [loading]="working()" (click)="onClick()">Go</button>
@@ -48,6 +49,11 @@ const TABS: Tab[] = [
       <sb-text-input [(value)]="ticker" label="Ticker" />
       <sb-checkbox [(checked)]="noted" label="Has note" />
     </sb-filter-bar>
+
+    <!-- Placed AFTER the filter bar on purpose: the existing checkbox
+         assertions use querySelector, which takes the first match in document
+         order, so the bare checkbox above stays the one they mean. -->
+    <sb-checkbox label="Only changed" topLabel="Filter" [(checked)]="flagged" />
 
     <sb-filter-chips [chips]="chips" [selected]="status()" (selectedChange)="status.set($event)" />
 
@@ -62,6 +68,12 @@ const TABS: Tab[] = [
     />
 
     <sb-drawer [open]="drawerOpen()" heading="Details" (closed)="drawerOpen.set(false)" />
+
+    <sb-control-row>
+      <sb-text-input label="Search" [(value)]="query" />
+      <button sb-button>Go</button>
+    </sb-control-row>
+    <sb-control-row [stacked]="true"><button sb-button>Kill</button></sb-control-row>
   `,
 })
 class Host {
@@ -78,6 +90,8 @@ class Host {
   readonly strategy = signal('');
   readonly ticker = signal('');
   readonly noted = signal(false);
+  readonly flagged = signal(false);
+  readonly query = signal('');
 
   clicks = 0;
   cleared = 0;
@@ -210,6 +224,54 @@ describe('input and layout components', () => {
     expect(q('sb-select label')).not.toBeNull();
     expect(q('sb-text-input label')).not.toBeNull();
     expect(q('sb-checkbox label')).not.toBeNull();
+  });
+
+  it('renders a top label above the box when one is given', () => {
+    const top = fixture.nativeElement.querySelector('sb-checkbox .top-label');
+    expect(top?.textContent?.trim()).toBe('Filter');
+  });
+
+  it('keeps the inline caption as the checkbox own name', () => {
+    // Scoped to the checkbox that HAS a top label -- the template holds two,
+    // and the bare one in the filter bar is first in document order.
+    const boxes: Element[] = Array.from(
+      fixture.nativeElement.querySelectorAll('sb-checkbox'),
+    );
+    const stacked = boxes.find((el) => el.querySelector('.top-label'));
+    const caption = stacked?.querySelector('.box span');
+    expect(caption?.textContent?.trim()).toBe('Only changed');
+  });
+
+  /* -- control row -------------------------------------------------------- */
+
+  /* Scoped to the host's OWN rows. sb-filter-bar and sb-confirm-dialog are
+     themselves sb-control-row consumers now, and their rows come first in
+     document order -- an unscoped querySelector would assert against the
+     filter bar instead of the two rows this block declares. */
+  const ownRows = (): Element[] =>
+    Array.from(fixture.nativeElement.children as HTMLCollection).filter(
+      (el) => el.tagName.toLowerCase() === 'sb-control-row',
+    );
+
+  it('projects its controls', () => {
+    const row = ownRows()[0].querySelector('.row');
+    expect(row?.querySelector('sb-text-input')).toBeTruthy();
+    expect(row?.querySelector('button[sb-button]')).toBeTruthy();
+  });
+
+  it('marks a stacked row so it can collapse at narrow widths', () => {
+    const rows = ownRows().map((el) => el.querySelector('.row')!);
+    expect(rows[0].classList.contains('stacked')).toBe(false);
+    expect(rows[1].classList.contains('stacked')).toBe(true);
+  });
+
+  it('omits the top label element entirely when unset', () => {
+    const bare = fixture.nativeElement.querySelectorAll('sb-checkbox');
+    // The template's other checkbox has no topLabel.
+    const without = Array.from(bare).find(
+      (el) => !(el as Element).querySelector('.top-label'),
+    );
+    expect(without).toBeTruthy();
   });
 
   /* -- tab bar ------------------------------------------------------------ */

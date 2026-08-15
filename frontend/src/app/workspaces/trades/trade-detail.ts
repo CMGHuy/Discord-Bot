@@ -21,7 +21,7 @@ import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { dateTime, held, num, pct, rMultiple, share, text } from '../../ui/format';
-import { Panel, Tab, TabBar } from '../../ui/layout';
+import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
 import {
   ACTION_LABELS,
@@ -63,6 +63,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     RouterLink,
     TabBar,
     Panel,
+    ControlRow,
     StatusIndicator,
     QualityChip,
     Button,
@@ -391,7 +392,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
             </sb-panel>
 
             <sb-panel heading="Actions">
-              <div class="commands">
+              <sb-control-row class="commands">
                 @for (kind of actionsFor(trade.status); track kind) {
                   <button
                     sb-button
@@ -402,7 +403,7 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
                     {{ actionLabels[kind] }}
                   </button>
                 }
-              </div>
+              </sb-control-row>
             </sb-panel>
           </div>
 
@@ -807,11 +808,8 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     .progress {
       margin-bottom: var(--space-10);
     }
-    .commands {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-8);
-    }
+    /* .commands keeps its class as a marker only -- sb-control-row supplies
+       display, alignment, wrap and gap. */
 
     .notes,
     .strategy {

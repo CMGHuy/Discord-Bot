@@ -4,7 +4,7 @@ import { SystemStore } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
-import { Panel } from '../../ui/layout';
+import { ControlRow, Panel } from '../../ui/layout';
 
 /**
  * Scan control and bot restart.
@@ -23,7 +23,7 @@ import { Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-scan-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog],
+  imports: [Panel, Button, ConfirmDialog, ControlRow],
   template: `
     <sb-panel heading="Scan">
       <div class="states">
@@ -45,7 +45,7 @@ import { Panel } from '../../ui/layout';
         <p class="meta">Bot last seen {{ seen }}</p>
       }
 
-      <div class="commands">
+      <sb-control-row class="commands">
         <button
           sb-button
           variant="primary"
@@ -88,7 +88,7 @@ import { Panel } from '../../ui/layout';
             Pause automatic scanning
           </button>
         }
-      </div>
+      </sb-control-row>
 
       @if (store.scanMessage(); as message) {
         <!-- The server's own words: "queued -- the bot picks it up within 30
@@ -161,7 +161,7 @@ import { Panel } from '../../ui/layout';
     .state.warn { color: var(--warn); border-color: var(--warn); }
 
     .meta { margin-top: var(--space-8); color: var(--text-faint); font-size: var(--text-chip); }
-    .commands { display: flex; flex-wrap: wrap; gap: var(--space-8); margin-top: var(--space-14); }
+    .commands { margin-top: var(--space-14); }
     .explain {
       max-width: 60ch;
       margin-bottom: var(--space-10);

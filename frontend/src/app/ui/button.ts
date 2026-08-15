@@ -31,7 +31,8 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon
       align-items: center;
       justify-content: center;
       gap: var(--space-6);
-      padding: var(--space-6) var(--space-14);
+      min-height: var(--control-h);
+      padding: 0 var(--space-14);
       border: 1px solid transparent;
       border-radius: var(--radius);
       font-family: var(--font-sans);
@@ -73,6 +74,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'icon
     :host(.ghost:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
 
     :host(.icon) {
+      min-height: 0;
       padding: var(--space-4);
       background: transparent;
       color: var(--text-muted);

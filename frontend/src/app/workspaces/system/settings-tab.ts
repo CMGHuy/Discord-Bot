@@ -5,7 +5,8 @@ import { SystemStore } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { dateTime } from '../../ui/format';
-import { Panel } from '../../ui/layout';
+import { ControlRow, Panel } from '../../ui/layout';
+import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 
 /**
  * The settings form — rendered from the schema, with no field list anywhere.
@@ -23,7 +24,7 @@ import { Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-settings-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -46,20 +47,24 @@ import { Panel } from '../../ui/layout';
     <!-- SR56. Over a hundred fields had no way to find one by name. The
          controls sit above the form rather than in the save bar: they change
          what you are looking at, not what you are about to commit. -->
-    <div class="find" role="search">
+    <sb-control-row class="find" role="search">
       <sb-text-input
         label="Find a setting"
         type="text"
         [value]="store.settingsQuery()"
         (valueChange)="store.setSettingsQuery($event)"
       />
+      <!-- topLabel is what lets the checkbox sit beside the labelled search
+           input: both now have a label band above a 28px control band, so
+           their boxes land on the same line. -->
       <sb-checkbox
+        topLabel="Filter"
         label="Only changed from default"
         [checked]="store.onlyChanged()"
         (checkedChange)="store.setOnlyChanged($event)"
       />
       <span class="found">{{ foundLabel() }}</span>
-    </div>
+    </sb-control-row>
 
     <!-- SR63. settings.html:101-103. The dot has meant this since SR56; the
          legend saying so is what makes it readable without guessing. -->
@@ -79,13 +84,20 @@ import { Panel } from '../../ui/layout';
           <p class="section-help">{{ section.description }}</p>
         }
 
-        <div class="fields">
-          @for (field of section.fields; track field.key) {
+        @for (group of groupsOf(section.fields); track group.kind) {
+        <div class="fields" [class.compact]="group.kind === 'checkbox'">
+          @for (field of group.fields; track field.key) {
             <div
               class="field"
               [class.changed]="isChanged(field)"
               [class.off-default]="store.differsFromDefault(field)"
             >
+              <!-- The label band is empty because each control renders its own
+                   label; it exists so all four rows of every cell map onto the
+                   parent's four rows, which is what makes the subgrid align. -->
+              <span class="band-label"></span>
+
+              <div class="band-control">
               @switch (controlOf(field)) {
                 @case ('checkbox') {
                   <sb-checkbox
@@ -114,10 +126,12 @@ import { Panel } from '../../ui/layout';
                   />
                 }
               }
+              </div>
 
-              @if (field.help) {
-                <p class="help">{{ field.help }}</p>
-              }
+              <!-- Unguarded on purpose: an empty <p> collapses visually but
+                   keeps the band count at four, and a missing band would shift
+                   every later band of that cell up a row. -->
+              <p class="help">{{ field.help }}</p>
               <p class="meta">
                 <span class="key">{{ field.key }}</span>
                 <!-- SR63. settings.html:50. Without it "what was this before I
@@ -155,12 +169,13 @@ import { Panel } from '../../ui/layout';
             </div>
           }
         </div>
+        }
       </sb-panel>
     }
 
     <!-- the save bar --------------------------------------------------- -->
 
-    <div class="bar">
+    <sb-control-row class="bar">
       <span class="count">
         @if (store.dirty()) {
           {{ store.dirtyKeys().length }} changed
@@ -169,7 +184,7 @@ import { Panel } from '../../ui/layout';
         }
       </span>
 
-      <div class="bar-actions">
+      <sb-control-row class="bar-actions">
         <button
           sb-button
           variant="ghost"
@@ -199,8 +214,8 @@ import { Panel } from '../../ui/layout';
         >
           Save
         </button>
-      </div>
-    </div>
+      </sb-control-row>
+    </sb-control-row>
 
     @if (store.formError(); as message) {
       <!-- The server validates against the schema this form was built from,
@@ -313,7 +328,7 @@ import { Panel } from '../../ui/layout';
           (input)="importText.set($any($event.target).value)"
           placeholder="KEY=value, one per line — as exported."
         ></textarea>
-        <div class="import-actions">
+        <sb-control-row class="import-actions">
           <button
             sb-button
             variant="secondary"
@@ -327,7 +342,7 @@ import { Panel } from '../../ui/layout';
           @if (store.importMessage(); as message) {
             <span class="import-message">{{ message }}</span>
           }
-        </div>
+        </sb-control-row>
       </details>
     </sb-panel>
   `,
@@ -338,11 +353,38 @@ import { Panel } from '../../ui/layout';
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: var(--space-14);
+      /* Between groups, against --space-14 between fields. The grouping is
+         signposted by this gap and nothing else: sub-headings here would be
+         widget-shape names ("Toggles", "Values") under a panel that already
+         has a real one, and every section would carry three. */
+      margin-bottom: var(--space-20);
     }
-    .field { display: grid; gap: var(--space-4); align-content: start; }
+    /* A checkbox has no 260px-wide control to hold. */
+    .compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+    /* Four bands -- label, control, help, meta -- mapped onto four parent
+       rows. The parent then sizes each band to the TALLEST cell across the
+       row, so every control starts at the same y and every meta line bottoms
+       out together, with the help text unclamped.
+       Without subgrid the two requirements fight: fixed per-cell rows need
+       the help clamped, and unclamped help puts every control at its own
+       offset. */
+    .field {
+      grid-row: span 4;
+      display: grid;
+      grid-template-rows: subgrid;
+      gap: var(--space-4);
+      /* A CONSTANT gutter on every cell. Before this, .changed added a 2px
+         border plus 8px of padding to edited fields only, so typing in a
+         field shoved its contents 10px right of its neighbours -- the change
+         marker was itself an alignment offender. */
+      border-left: 2px solid transparent;
+      padding-left: var(--space-8);
+    }
     /* An edited field is marked so a change made three sections up is still
        findable without scrolling for it. */
-    .changed { border-left: 2px solid var(--accent); padding-left: var(--space-8); }
+    .changed { border-left-color: var(--accent); }
+    .band-control { display: flex; align-items: flex-end; }
 
     /* -- SR63: badges and the legend --------------------------------- */
     .field-count {
@@ -373,13 +415,7 @@ import { Panel } from '../../ui/layout';
     .asymmetry { color: var(--text-faint); font-size: var(--text-micro); }
 
     /* -- SR56: finding a setting ------------------------------------- */
-    .find {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-10);
-      margin-bottom: var(--space-10);
-    }
+    .find { margin-bottom: var(--space-10); }
     .find .found {
       margin-left: auto;
       color: var(--text-faint);
@@ -417,11 +453,10 @@ import { Panel } from '../../ui/layout';
     .restart, .secret { color: var(--warn); font-size: var(--text-chip); }
     .secret { color: var(--text-faint); }
 
+    /* No justify-content: space-between any more. It lived on the flex rule
+       the primitive now owns, and .bar-actions' margin-left: auto states the
+       same intent on the element that actually has to move. */
     .bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-14);
       padding: var(--space-10) var(--space-14);
       background: var(--surface);
       border: 1px solid var(--border);
@@ -430,7 +465,7 @@ import { Panel } from '../../ui/layout';
       bottom: 0;
     }
     .count { color: var(--text-secondary); font-size: var(--text-table); }
-    .bar-actions { display: flex; gap: var(--space-8); }
+    .bar-actions { margin-left: auto; }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);
@@ -482,12 +517,7 @@ import { Panel } from '../../ui/layout';
       font-size: var(--text-chip);
       resize: vertical;
     }
-    .import-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-8);
-      margin-top: var(--space-8);
-    }
+    .import-actions { margin-top: var(--space-8); }
     .import-message { color: var(--text-secondary); }
   `,
 })
@@ -502,13 +532,11 @@ export class SettingsTab {
 
   protected readonly fmtDateTime = dateTime;
 
-  /** Which control a field gets. Three shapes cover the schema's six types,
-   *  and the mapping is by `type` alone — never by key. */
-  protected controlOf(field: SettingField): 'checkbox' | 'select' | 'input' {
-    if (field.type === 'checkbox') return 'checkbox';
-    if (field.type === 'select') return 'select';
-    return 'input';
-  }
+  /** Which control a field gets, and a section's fields partitioned by it.
+   *  Both live in `settings-grouping.ts` so they are pure functions with
+   *  their own tests rather than methods on a 585-line component. */
+  protected readonly groupsOf = groupByControl;
+  protected readonly controlOf = controlOf;
 
   protected inputTypeOf(field: SettingField): 'text' | 'number' | 'password' {
     if (field.sensitive || field.type === 'password') return 'password';
