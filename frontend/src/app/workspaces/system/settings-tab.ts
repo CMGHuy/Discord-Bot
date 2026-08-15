@@ -6,6 +6,7 @@ import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { dateTime } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 
 /**
  * The settings form — rendered from the schema, with no field list anywhere.
@@ -79,13 +80,20 @@ import { Panel } from '../../ui/layout';
           <p class="section-help">{{ section.description }}</p>
         }
 
-        <div class="fields">
-          @for (field of section.fields; track field.key) {
+        @for (group of groupsOf(section.fields); track group.kind) {
+        <div class="fields" [class.compact]="group.kind === 'checkbox'">
+          @for (field of group.fields; track field.key) {
             <div
               class="field"
               [class.changed]="isChanged(field)"
               [class.off-default]="store.differsFromDefault(field)"
             >
+              <!-- The label band is empty because each control renders its own
+                   label; it exists so all four rows of every cell map onto the
+                   parent's four rows, which is what makes the subgrid align. -->
+              <span class="band-label"></span>
+
+              <div class="band-control">
               @switch (controlOf(field)) {
                 @case ('checkbox') {
                   <sb-checkbox
@@ -114,10 +122,12 @@ import { Panel } from '../../ui/layout';
                   />
                 }
               }
+              </div>
 
-              @if (field.help) {
-                <p class="help">{{ field.help }}</p>
-              }
+              <!-- Unguarded on purpose: an empty <p> collapses visually but
+                   keeps the band count at four, and a missing band would shift
+                   every later band of that cell up a row. -->
+              <p class="help">{{ field.help }}</p>
               <p class="meta">
                 <span class="key">{{ field.key }}</span>
                 <!-- SR63. settings.html:50. Without it "what was this before I
@@ -155,6 +165,7 @@ import { Panel } from '../../ui/layout';
             </div>
           }
         </div>
+        }
       </sb-panel>
     }
 
@@ -338,11 +349,38 @@ import { Panel } from '../../ui/layout';
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: var(--space-14);
+      /* Between groups, against --space-14 between fields. The grouping is
+         signposted by this gap and nothing else: sub-headings here would be
+         widget-shape names ("Toggles", "Values") under a panel that already
+         has a real one, and every section would carry three. */
+      margin-bottom: var(--space-20);
     }
-    .field { display: grid; gap: var(--space-4); align-content: start; }
+    /* A checkbox has no 260px-wide control to hold. */
+    .compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
+    /* Four bands -- label, control, help, meta -- mapped onto four parent
+       rows. The parent then sizes each band to the TALLEST cell across the
+       row, so every control starts at the same y and every meta line bottoms
+       out together, with the help text unclamped.
+       Without subgrid the two requirements fight: fixed per-cell rows need
+       the help clamped, and unclamped help puts every control at its own
+       offset. */
+    .field {
+      grid-row: span 4;
+      display: grid;
+      grid-template-rows: subgrid;
+      gap: var(--space-4);
+      /* A CONSTANT gutter on every cell. Before this, .changed added a 2px
+         border plus 8px of padding to edited fields only, so typing in a
+         field shoved its contents 10px right of its neighbours -- the change
+         marker was itself an alignment offender. */
+      border-left: 2px solid transparent;
+      padding-left: var(--space-8);
+    }
     /* An edited field is marked so a change made three sections up is still
        findable without scrolling for it. */
-    .changed { border-left: 2px solid var(--accent); padding-left: var(--space-8); }
+    .changed { border-left-color: var(--accent); }
+    .band-control { display: flex; align-items: flex-end; }
 
     /* -- SR63: badges and the legend --------------------------------- */
     .field-count {
@@ -502,13 +540,11 @@ export class SettingsTab {
 
   protected readonly fmtDateTime = dateTime;
 
-  /** Which control a field gets. Three shapes cover the schema's six types,
-   *  and the mapping is by `type` alone — never by key. */
-  protected controlOf(field: SettingField): 'checkbox' | 'select' | 'input' {
-    if (field.type === 'checkbox') return 'checkbox';
-    if (field.type === 'select') return 'select';
-    return 'input';
-  }
+  /** Which control a field gets, and a section's fields partitioned by it.
+   *  Both live in `settings-grouping.ts` so they are pure functions with
+   *  their own tests rather than methods on a 585-line component. */
+  protected readonly groupsOf = groupByControl;
+  protected readonly controlOf = controlOf;
 
   protected inputTypeOf(field: SettingField): 'text' | 'number' | 'password' {
     if (field.sensitive || field.type === 'password') return 'password';
