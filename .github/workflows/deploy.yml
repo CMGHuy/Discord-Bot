@@ -445,3 +445,46 @@ jobs:
           # from a probe that used it, got ENOENT for that reason, and was
           # read as evidence for the layout it was actually disproving.
           APP_DIR: ${{ secrets.HETZNER_APP_DIR || '/opt/swing-bot' }}
+
+  # ── 5. Clean up old images on the server ────────────────────────────────────
+  # deploy.sh already runs `docker image prune -f` after every deploy, but
+  # that is DANGLING images only (untagged, no container). It never touches
+  # the image this deploy just superseded: each deploy pulls a NEW immutable
+  # sha-* tag alongside the OLD one, and the old tag stays on disk, still
+  # tagged, forever -- `docker image prune -f` cannot see it. On a small
+  # instance that is an unbounded disk leak, one sha-tagged layer set per
+  # push to main.
+  #
+  # `-a` (all unused images, not just dangling) is what actually reaches
+  # those old tags, and it is safe by construction: Docker refuses to remove
+  # any image still referenced by a container, running or stopped, so the
+  # image `bot`/`admin` are currently running can never be pruned out from
+  # under them. No age filter or keep-N logic needed here -- unlike GHCR
+  # (registry-retention.yml), where a version can outlive every container
+  # that used it, the host always has at most the running image plus
+  # whatever compose most recently recreated, so "unused" and "safe to
+  # delete" are the same test.
+  #
+  # A separate job rather than another deploy.sh line: this can fail
+  # (network hiccup, docker daemon busy) without that ever blocking a
+  # deploy, which is why it runs after and does not gate on anything but
+  # `deploy` having succeeded.
+  cleanup:
+    needs: [deploy]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune unused images over SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            echo "Disk usage before prune:"
+            docker system df
+            docker image prune -af
+            echo "Disk usage after prune:"
+            docker system df

@@ -220,6 +220,14 @@ Note the retention policy (`.github/workflows/registry-retention.yml`)
 prunes builds older than 14 days, keeping the 10 most recent plus `latest`.
 Rolling back further than that means rebuilding from the tag instead.
 
+Separately, the `cleanup` job in `.github/workflows/deploy.yml` runs
+`docker image prune -af` on the Hetzner box itself after every deploy, to
+stop old locally-cached `sha-*` images (each deploy pulls a new one and
+never removes the last) from filling the disk. This only touches the
+server's local image cache, not GHCR — a rollback still works exactly as
+above, since `docker pull` fetches whatever tag you ask for regardless of
+what's cached locally.
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`). The firewall keeps
