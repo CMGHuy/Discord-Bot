@@ -328,7 +328,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
           (input)="importText.set($any($event.target).value)"
           placeholder="KEY=value, one per line — as exported."
         ></textarea>
-        <div class="import-actions">
+        <sb-control-row class="import-actions">
           <button
             sb-button
             variant="secondary"
@@ -342,7 +342,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
           @if (store.importMessage(); as message) {
             <span class="import-message">{{ message }}</span>
           }
-        </div>
+        </sb-control-row>
       </details>
     </sb-panel>
   `,
@@ -517,12 +517,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
       font-size: var(--text-chip);
       resize: vertical;
     }
-    .import-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-8);
-      margin-top: var(--space-8);
-    }
+    .import-actions { margin-top: var(--space-8); }
     .import-message { color: var(--text-secondary); }
   `,
 })

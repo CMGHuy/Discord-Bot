@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -109,4 +109,67 @@ describe('control height', () => {
     const source = readFileSync(join(UI, 'form-controls.ts'), 'utf8');
     expect(source).not.toMatch(/padding:\s*var\(--space-4\)\s+var\(--space-8\)/);
   });
+});
+
+const WORKSPACES = join(process.cwd(), 'src/app/workspaces');
+
+function workspaceSources(): { name: string; source: string }[] {
+  const out: { name: string; source: string }[] = [];
+  for (const dir of readdirSync(WORKSPACES)) {
+    for (const file of readdirSync(join(WORKSPACES, dir))) {
+      if (!file.endsWith('.ts') || file.endsWith('.spec.ts')) continue;
+      out.push({
+        name: `${dir}/${file}`,
+        source: readFileSync(join(WORKSPACES, dir, file), 'utf8'),
+      });
+    }
+  }
+  return out;
+}
+
+const CONTROLS = /sb-button|sb-select|sb-text-input|sb-checkbox|sb-filter-bar/;
+
+/**
+ * Rows that align by hand and are RIGHT to.
+ *
+ * Exact names, not prefixes: a prefix list would exempt `head-actions` under
+ * `head`, and `head-actions` is a genuine control row (it is converted).
+ * Every entry below is a row that is not a row of controls, or one whose
+ * layout would regress if it were bottom-aligned. Adding a name here is a
+ * claim about the row, so it needs a reason on the line.
+ */
+const NOT_CONTROL_ROWS = new Set([
+  // Text and figures. Baseline or centre on running text is correct.
+  'head', 'meta', 'cell', 'count', 'figures', 'tags',
+  'jobhead', // a chip beside a timestamp
+  'realized', // two metric cards beside a closed-trade tally
+  'chip', // the inside of a bordered chip, not a row of controls
+  'scan', // the scan-duration figures beside their sparkline
+  'command-error', // <p role="alert">: message text with a dismiss affordance
+  'triage', // groups the two <label> rows below; owns neither control
+  // <label> elements. Converting one to a component host would break the
+  // implicit association that makes clicking the text focus the control.
+  'level', 'import-file',
+  // The killswitch row: a multi-paragraph block beside one button, held by
+  // align-items: flex-start and justify-content: space-between, collapsing at
+  // 720px rather than the primitive's 640. Bottom-aligning the button against
+  // a variable-height paragraph is a regression, not the fix.
+  'kill',
+]);
+
+describe('no workspace hand-rolls a control row', () => {
+  for (const { name, source } of workspaceSources()) {
+    if (!CONTROLS.test(source)) continue;
+
+    it(`${name} routes its control rows through sb-control-row`, () => {
+      // Every flex rule that also declares an alignment is a row that took a
+      // position on the question sb-control-row exists to answer.
+      const offenders = [...source.matchAll(/\.([\w-]+)\s*\{[^}]*display:\s*flex[^}]*\}/g)]
+        .filter(([rule]) => /align-items:\s*(center|flex-start|stretch)/.test(rule))
+        .map(([, className]) => className)
+        .filter((className) => !NOT_CONTROL_ROWS.has(className));
+
+      expect(offenders).toEqual([]);
+    });
+  }
 });
