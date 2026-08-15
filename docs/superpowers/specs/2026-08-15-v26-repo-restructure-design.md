@@ -62,16 +62,56 @@ The four existing sub-packages are untouched. The 46 flat modules become six:
 
 | Package | Modules |
 |---|---|
-| `data/` | `data`, `data_store`, `data_refresh`, `backtest_cache`, `fmp_client`, `export_data`, `ticker_directory`, `ticker_utils`, `universe`, `watchlist` |
+| `marketdata/` | `data`, `data_store`, `data_refresh`, `backtest_cache`, `fmp_client`, `export_data`, `ticker_directory`, `ticker_utils`, `universe`, `watchlist` |
 | `market/` | `indicators`, `candlestick_patterns`, `fvg`, `levels`, `levels_lifecycle`, `trendlines`, `volatility`, `market_context`, `signals`, `strategy`, `strategy_types`, `entry_filters`, `reversal`, `explain`, `events`, `market_events` |
 | `planning/` | `plan_engine`, `plan_manager`, `plan_store`, `quality`, `account` |
-| `backtest/` | `backtest`, `backtest_wf`, `backtest_scenarios`, `registry`, `shadow_log` |
+| `backtesting/` | `backtest`, `backtest_wf`, `backtest_scenarios`, `registry`, `shadow_log` |
 | `tracking/` | `performance`, `retrospective`, `risk_metrics` |
 | `infra/` | `jsonio`, `state`, `notifier`, `silent_channel` |
 
+**No package may share a name with a module inside it.** `marketdata/` and
+`backtesting/` carry the awkward names for this reason, not for style: the
+obvious `data/` would contain `data.py` and `backtest/` would contain
+`backtest.py`, giving `swingbot.core.data.data`.
+
+That is not merely ugly — it is a silent-failure generator. **105 imports use the
+package-attribute form `from swingbot.core import X`**, among them
+`from swingbot.core import data as data_module` and
+`from swingbot.core import backtest`. Under a colliding name those keep importing
+successfully and bind the *package* instead of the module, so the failure surfaces
+later as `AttributeError: module 'swingbot.core.data' has no attribute
+'fetch_ohlc'` — and a `mock.patch("swingbot.core.data.…")` target would patch a
+package. An import error is a good failure; this is the bad one.
+
+`marketdata/` also mirrors the on-disk `market_data/` CSV cache it manages, which
+makes the pairing with the sibling `market/` (which computes on bars rather than
+fetching them) easier to keep straight.
+
 `scan_engine.py` and `trade_plan.py` are deleted rather than placed.
 
-`validation_registry.json` moves alongside its loader into `backtest/`, and it
+### Relative imports become absolute
+
+Fourteen of the moving modules import siblings relatively (`from .indicators
+import atr`). Most survive the move untouched because their target lands in the
+same package — all five of `levels.py`'s relative imports stay inside `market/`.
+Three do not, and these break at import time:
+
+| Module | Broken relative imports |
+|---|---|
+| `backtest.py` → `backtesting/` | `.entry_filters`, `.indicators`, `.levels`, `.plan_engine`, `.strategy`, `.strategy_types` |
+| `events.py` → `market/` | `.ticker_utils`, `.universe` (both → `marketdata/`) |
+| `data_refresh.py` → `marketdata/` | `.jsonio` (→ `infra/`) |
+
+Rather than fix the three and leave eleven modules whose correctness depends on
+two files happening to stay in the same package, **every relative import in a
+moving module is rewritten to absolute** (`from swingbot.core.market.indicators
+import atr`). The surviving ones are not left alone as a shortcut; the point is
+that the next move should not be able to break them silently. Absolute imports
+also make the rewrite mechanically verifiable: after the move,
+`grep -rE '^\s*from \.' swingbot/core/*/` over the six new packages returns
+nothing.
+
+`validation_registry.json` moves alongside its loader into `backtesting/`, and it
 **must move in the same commit**: `registry.py:13` resolves it as
 `Path(__file__).with_name("validation_registry.json")`, so the two are coupled by
 directory adjacency rather than by an import the rewrite would catch. This is the
@@ -81,7 +121,7 @@ only `__file__`-relative lookup among the moving modules — the one other in
 Two boundaries are deliberate and worth stating, because both look wrong at a
 glance:
 
-**`data_store` and `backtest_cache` sit side by side in `data/`.** These are the
+**`data_store` and `backtest_cache` sit side by side in `marketdata/`.** These are the
 two parallel OHLCV caches that `known-traps.md` warns about — `market_data/`
 keyed by timeframe, and `data/backtest_cache/` keyed by ticker. Filing them
 adjacently makes the trap visible in the directory listing rather than only in a
@@ -276,9 +316,9 @@ Any file present on disk but absent from the corresponding table is placed by th
 **grouping rule**, not by guesswork, and the plan records where it went:
 
 - **`core/`** — by what the module *owns*: fetching or caching market data →
-  `data/`; computing an indicator, level or signal from bars → `market/`;
+  `marketdata/`; computing an indicator, level or signal from bars → `market/`;
   constructing or tracking a live plan → `planning/`; offline replay and
-  validation → `backtest/`; writing or reporting the trade log → `tracking/`;
+  validation → `backtesting/`; writing or reporting the trade log → `tracking/`;
   JSON, locks and delivery channels → `infra/`.
 - **`tests/`** — mirrors whichever package the module under test now lives in.
 - **`scripts/`** — `backtest/`, `data/`, `reports/`, `dev/` by primary purpose.
@@ -304,8 +344,8 @@ exit model, `210415e` per-fold progress output).
 - **Sequential throughout: steps 1 → 5.** Every step edits `CLAUDE.md` and
   `README.md` to re-point paths, so no two steps have disjoint files — the first
   half of the two-part test fails before dependencies are even considered.
-- **Within step 5 (parallel):** the six package moves — `data/`, `market/`,
-  `planning/`, `backtest/`, `tracking/`, `infra/` — may be prepared
+- **Within step 5 (parallel):** the six package moves — `marketdata/`, `market/`,
+  `planning/`, `backtesting/`, `tracking/`, `infra/` — may be prepared
   concurrently, since each owns a disjoint set of source files. The call-site
   rewrite that follows is **not** parallelisable: `commands/scanning.py`,
   `admin/helpers.py` and `bot.py` each import from several of the six, so
