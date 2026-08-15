@@ -21,8 +21,10 @@ This file just wires everything together -- the actual implementation
 lives under swingbot/:
   - swingbot/config.py            all settings
   - swingbot/bot_core.py           shared bot instance, session window, error handling
-  - swingbot/core/scan_engine.py    the core scan/dedup/alert-building logic
-  - swingbot/core/*.py              indicators, levels, strategies, trade plans, charts, etc.
+  - swingbot/core/scanning/engine.py  the core scan/dedup/alert-building logic
+  - swingbot/core/*/                indicators, levels, strategies, trade plans, charts, etc.,
+                                     grouped by package (marketdata, market, planning,
+                                     backtesting, tracking, infra, edge, charts, scanning, analytics)
   - swingbot/commands/*.py          Discord commands, grouped by area
   - swingbot/admin/app.py           the admin web UI (run via admin_ui.py)
 

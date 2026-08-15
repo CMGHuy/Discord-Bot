@@ -7,7 +7,7 @@ import discord
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
-from swingbot.core import scan_engine
+from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics

@@ -45,7 +45,7 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask, Response, redirect, request, session, url_for
 
 from swingbot import config
-from swingbot.core.scan_engine import is_scan_running
+from swingbot.core.scanning.engine import is_scan_running
 # `docker_sdk` is re-exported: api_v1/system.py imports it from here rather
 # than from helpers, so it is used even though nothing in this file calls it.
 from .helpers import docker_sdk, _load_or_create_secret_key

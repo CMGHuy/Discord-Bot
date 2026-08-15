@@ -1,21 +1,18 @@
-import pytest
-from swingbot.core.market.strategy_types import SignalResult
-from swingbot.core.trade_plan import compute_trade_plan
 from swingbot.core.planning.plan_engine import build_strategy_plan
 from tests.helpers import make_ohlcv
 
 
-def _result(df, strategy="MACD"):
-    return SignalResult(ticker="AAPL", strategy=strategy, horizon_key="4w",
-                        horizon_label="4-week swing", trend="bullish",
-                        triggered=True, close=float(df["Close"].iloc[-1]))
-
-
-def test_shim_warns_and_matches_plan_engine():
+def test_build_strategy_plan_produces_a_correctly_ordered_bullish_plan():
+    """Was test_shim_warns_and_matches_plan_engine, a parity check between
+    the now-deleted swingbot.core.trade_plan.compute_trade_plan shim and
+    plan_engine.build_strategy_plan (Task 14 of the v27 repo restructure --
+    the shim was a thin adapter that called build_strategy_plan and reshaped
+    its output, so the parity it proved is no longer checkable once it's
+    gone). What's left is the real behaviour the shim's assertions were
+    actually pinning: a bullish plan's stop sits below the trigger, which
+    sits below the target."""
     df = make_ohlcv([100 + i * 0.5 for i in range(80)])
-    with pytest.warns(DeprecationWarning):
-        legacy = compute_trade_plan(_result(df), df)
-    v2 = build_strategy_plan(df, len(df) - 1, ticker="AAPL", strategy="MACD",
-                             horizon_key="4w", direction="bullish")
-    assert legacy.stop_loss == pytest.approx(v2.stop_loss)
-    assert legacy.take_profit == pytest.approx(v2.tp1)
+    plan = build_strategy_plan(df, len(df) - 1, ticker="AAPL", strategy="MACD",
+                               horizon_key="4w", direction="bullish")
+    assert plan is not None
+    assert plan.stop_loss < plan.trigger_price < plan.tp1

@@ -11,7 +11,7 @@ from discord.ext import tasks
 
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
-from swingbot.core import scan_engine
+from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
 from swingbot.core.marketdata.data import get_current_price

@@ -17,7 +17,7 @@ from discord.ext import commands
 
 from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
 from swingbot.core.market.strategy import HORIZONS
-from swingbot.core import scan_engine
+from swingbot.core.scanning import engine as scan_engine
 
 # ──────────────────────────────────────────────
 # Choice lists
@@ -148,7 +148,7 @@ async def slash_pnl(interaction: discord.Interaction):
     await interaction.response.defer()
     # Delegate to the prefix command by posting it in the channel
     # (slash and prefix share no ctx; easiest bridge is to re-use the engine directly)
-    from swingbot.core.scan_engine import get_all_unrealized_pnl
+    from swingbot.core.scanning.engine import get_all_unrealized_pnl
     rows = await asyncio.to_thread(get_all_unrealized_pnl)
     if not rows:
         await interaction.followup.send("No open trades right now.")

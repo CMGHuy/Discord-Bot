@@ -21,7 +21,7 @@ from swingbot import config
 # import `_primary_strategy_label` from here, so this alias is used even
 # though nothing in this file calls it.
 from swingbot.core.tracking.performance import primary_strategy_label as _primary_strategy_label
-from swingbot.core.scan_engine import CONFIDENCE_COLORS
+from swingbot.core.scanning.engine import CONFIDENCE_COLORS
 
 try:
     import docker as docker_sdk

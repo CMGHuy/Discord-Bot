@@ -16,7 +16,7 @@ import asyncio
 from collections import defaultdict
 
 from swingbot.bot_core import bot
-from swingbot.core import scan_engine
+from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_daily_data, get_currency_symbol
 from swingbot import config
 from swingbot.core.market.strategy import HORIZONS

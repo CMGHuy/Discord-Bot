@@ -5,7 +5,7 @@ import os
 import discord
 
 from swingbot import config
-from swingbot.core import scan_engine
+from swingbot.core.scanning import engine as scan_engine
 from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all
