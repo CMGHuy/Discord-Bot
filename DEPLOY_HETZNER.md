@@ -20,7 +20,12 @@ GitHub Actions (.github/workflows/deploy.yml)
         builds the image ONCE, starts it, runs the auth/route/SPA smoke
         tests against that exact image, and only then pushes it to GHCR as
         ghcr.io/<owner>/<repo>:sha-<12> and :latest
-  4. deploy    -- SSHes in as `deploy` and runs deploy.sh with
+  4. cleanup   -- starts immediately alongside 1-3 (needs nothing they
+                  build) and prunes old sha-* images already on the
+                  Hetzner box, so disk is freed BEFORE deploy asks it
+                  to pull a new one
+  5. deploy    -- waits on BOTH container-healthcheck and cleanup, then
+                  SSHes in as `deploy` and runs deploy.sh with
                   SWING_BOT_IMAGE pinned to the sha- tag just published
         │
         ▼
@@ -221,12 +226,15 @@ prunes builds older than 14 days, keeping the 10 most recent plus `latest`.
 Rolling back further than that means rebuilding from the tag instead.
 
 Separately, the `cleanup` job in `.github/workflows/deploy.yml` runs
-`docker image prune -af` on the Hetzner box itself after every deploy, to
-stop old locally-cached `sha-*` images (each deploy pulls a new one and
-never removes the last) from filling the disk. This only touches the
-server's local image cache, not GHCR — a rollback still works exactly as
-above, since `docker pull` fetches whatever tag you ask for regardless of
-what's cached locally.
+`docker image prune -af` on the Hetzner box itself **before** every deploy
+pulls — it starts as soon as the workflow does, alongside `test`/`frontend`/
+`container-healthcheck`, and `deploy` waits for it to finish before pulling.
+That order is deliberate: it stops old locally-cached `sha-*` images (each
+deploy pulls a new one and never removes the last) from filling the disk
+right when the next pull needs the space, rather than tidying up after the
+fact. This only touches the server's local image cache, not GHCR — a
+rollback still works exactly as above, since `docker pull` fetches whatever
+tag you ask for regardless of what's cached locally.
 
 ## Accessing the admin UI
 

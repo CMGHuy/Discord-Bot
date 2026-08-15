@@ -400,13 +400,71 @@ jobs:
           docker push "$IMAGE:latest"
           echo "Pushed $IMAGE:$TAG and $IMAGE:latest"
 
-  # ── 4. Deploy ──────────────────────────────────────────────────────────────
-  # Only runs after all three check jobs pass. SSHes into the Hetzner server,
-  # which PULLS the image published above and restarts both services --
-  # waiting for health checks to pass before returning (see deploy/deploy.sh).
-  # The server no longer builds anything.
+  # ── 4. Clean up old images on the server ────────────────────────────────────
+  # Runs BEFORE deploy, not after, and does not wait on container-healthcheck
+  # -- it needs nothing this run built, so it starts immediately alongside
+  # test/frontend/container-healthcheck instead of sitting on the critical
+  # path behind them. The point is to free disk on the Hetzner box before
+  # deploy tries to pull the new image, not to tidy up afterwards: on a small
+  # instance, a disk that's already full from old images is exactly what
+  # makes a `docker pull` fail, and finding that out mid-deploy is worse than
+  # finding it out here.
+  #
+  # deploy.sh also runs `docker image prune -f` after every deploy, but that
+  # is DANGLING images only (untagged, no container) -- it never touches the
+  # image the PREVIOUS deploy pulled. Each deploy pulls a new immutable
+  # sha-* tag alongside the old one, and the old tag stays on disk, still
+  # tagged, forever; `docker image prune -f` cannot see it. That's the
+  # unbounded leak this job closes: one sha-tagged layer set per push to
+  # main, otherwise.
+  #
+  # `-a` (all unused images, not just dangling) is what actually reaches
+  # those old tags, and it is safe unconditionally: Docker refuses to remove
+  # any image still referenced by a container, running or stopped, so
+  # whatever `bot`/`admin` are running RIGHT NOW when this job runs can never
+  # be pruned out from under them -- deploy hasn't pulled the new one yet, so
+  # the currently-live containers are exactly what's protected. No age
+  # filter or keep-N bookkeeping needed here -- unlike GHCR
+  # (registry-retention.yml), where a version can outlive every container
+  # that used it, the host always has at most one running image per service,
+  # so "unused" and "safe to delete" are the same test.
+  cleanup:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune unused images over SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            echo "Disk usage before prune:"
+            docker system df
+            docker image prune -af
+            echo "Disk usage after prune:"
+            docker system df
+
+  # ── 5. Deploy ────────────────────────────────────────────────────────────
+  # SSHes into the Hetzner server, which PULLS the image container-healthcheck
+  # published and restarts both services -- waiting for health checks to pass
+  # before returning (see deploy/deploy.sh). The server no longer builds
+  # anything.
+  #
+  # needs BOTH container-healthcheck (the image to pull) AND cleanup (the
+  # disk space to pull it into). Cleanup moved to run from the start of the
+  # workflow rather than after deploy specifically so the box's disk is freed
+  # BEFORE this job asks it to pull a new image -- a disk that's already full
+  # is exactly what makes a `docker pull` fail, and finding that out
+  # mid-deploy is worse than finding it out before. That guarantee only holds
+  # if this job actually waits for cleanup to finish rather than merely
+  # starting after it by convention: without this in `needs`, the two jobs
+  # race, and nothing stops the pull from landing before the prune does on
+  # the exact disk-is-nearly-full run this ordering exists to protect.
   deploy:
-    needs: [container-healthcheck]
+    needs: [container-healthcheck, cleanup]
     # Skip on a manual run against a branch, where nothing was published --
     # deploying would silently re-run whatever :latest currently points at.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -445,46 +503,3 @@ jobs:
           # from a probe that used it, got ENOENT for that reason, and was
           # read as evidence for the layout it was actually disproving.
           APP_DIR: ${{ secrets.HETZNER_APP_DIR || '/opt/swing-bot' }}
-
-  # ── 5. Clean up old images on the server ────────────────────────────────────
-  # deploy.sh already runs `docker image prune -f` after every deploy, but
-  # that is DANGLING images only (untagged, no container). It never touches
-  # the image this deploy just superseded: each deploy pulls a NEW immutable
-  # sha-* tag alongside the OLD one, and the old tag stays on disk, still
-  # tagged, forever -- `docker image prune -f` cannot see it. On a small
-  # instance that is an unbounded disk leak, one sha-tagged layer set per
-  # push to main.
-  #
-  # `-a` (all unused images, not just dangling) is what actually reaches
-  # those old tags, and it is safe by construction: Docker refuses to remove
-  # any image still referenced by a container, running or stopped, so the
-  # image `bot`/`admin` are currently running can never be pruned out from
-  # under them. No age filter or keep-N logic needed here -- unlike GHCR
-  # (registry-retention.yml), where a version can outlive every container
-  # that used it, the host always has at most the running image plus
-  # whatever compose most recently recreated, so "unused" and "safe to
-  # delete" are the same test.
-  #
-  # A separate job rather than another deploy.sh line: this can fail
-  # (network hiccup, docker daemon busy) without that ever blocking a
-  # deploy, which is why it runs after and does not gate on anything but
-  # `deploy` having succeeded.
-  cleanup:
-    needs: [deploy]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Prune unused images over SSH
-        uses: appleboy/ssh-action@v1.2.5
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            echo "Disk usage before prune:"
-            docker system df
-            docker image prune -af
-            echo "Disk usage after prune:"
-            docker system df
