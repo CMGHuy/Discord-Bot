@@ -488,6 +488,17 @@ git commit -m "release(bot): 1.1.3 -- one stored trendline fit"
 - Produces: `_trendline_shape` accepting a stored fit; `overlay_geometry(...)`
   gains a `trend_fit: dict | None = None` keyword. Task 5 passes it.
 
+> **Corrected during execution (a6fb782).** This task as written drew the
+> diamonds from `fit["points"]` — `shape["pivots"] == stored["points"]`, with
+> a comment calling them "the same two points by construction". They are not
+> the same thing. `points` are the segment's ENDS, two extrapolated positions
+> at the window edges that no candle need ever have visited; `pivots` are the
+> bars that actually touched the line and earned it its `strength`. Drawing
+> the ends would put two diamonds under a label reading "Trendline (6x)" —
+> the exact bug `trade_chart.py:752-760` records being fixed once already.
+> Task 1's module now stores a separate `pivots` list (and the `pair`
+> verbatim); the steps below read it.
+
 - [ ] **Step 1: Write the failing test**
 
 Add to `tests/test_chart_geometry.py`:
@@ -502,13 +513,30 @@ def test_trendline_shape_uses_the_stored_points_verbatim():
         "slope": -0.3, "intercept": 200.0,
         "points": [{"t": 1767225600, "price": 200.0},
                    {"t": 1779235200, "price": 158.3}],
+        "pivots": [{"t": 1769040000, "price": 194.0},
+                   {"t": 1773878400, "price": 176.6},
+                   {"t": 1777420800, "price": 163.9}],
         "side": "support", "strength": 4, "window_bars": 120,
         "lookback": 120, "fit_at": "2026-08-14T10:00:00Z",
     }
     shape = _trendline_shape(stored)
     assert shape["kind"] == "trendline"
     assert shape["points"] == stored["points"]
-    assert shape["pivots"] == stored["points"]
+    assert shape["pivots"] == stored["pivots"]
+
+
+def test_a_fit_without_pivots_still_draws_its_line():
+    """Fits stored before the pivots key existed, and the trendln fallback,
+    both arrive with no touches. A line with no diamonds beats no line."""
+    from swingbot.core.charts.chart_geometry import _trendline_shape
+
+    shape = _trendline_shape({
+        "points": [{"t": 1767225600, "price": 200.0},
+                   {"t": 1779235200, "price": 158.3}],
+        "strength": 0,
+    })
+    assert len(shape["points"]) == 2
+    assert shape["pivots"] == []
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -533,9 +561,14 @@ def _trendline_shape(fit: dict) -> dict:
     return {
         "kind": "trendline",
         "points": points,
-        # The swing pivots the line was fit through, drawn as diamonds. Same
-        # two points as the segment's ends by construction.
-        "pivots": points,
+        # The swing pivots the line was fit through, drawn as diamonds. NOT
+        # `points`: those are the segment's extrapolated ends, which no candle
+        # need have visited. These are the bars that touched the line and
+        # earned it its strength -- `strength` diamonds under a "(Nx)" label.
+        # Absent on fits stored before this key existed; a line with no
+        # diamonds is the correct degradation.
+        "pivots": [{"t": int(p["t"]), "price": float(p["price"])}
+                   for p in fit.get("pivots") or []],
         "strength": int(fit.get("strength", 0)),
     }
 ```
@@ -1154,7 +1187,8 @@ In `chart-theme.ts`, add TradingView's magnet behaviour to `chartOptions`:
 Run: `cd frontend && npm test`
 Expected: PASS.
 Run: `cd frontend && npm start`, open a trade whose confirmation is a trendline,
-and confirm: the line draws, its two pivots are diamonds, both overlays appear
+and confirm: the line draws, its swing pivots are diamonds and there are as
+many of them as the strength label claims, both overlays appear
 with the stop side dimmed, and the legend prints the fit note naming the two
 dates the line connects.
 
@@ -1168,17 +1202,23 @@ git commit -m "feat(chart): legend, magnet crosshair and layer toggles"
 Then the ui release marker, its own commit, last:
 
 ```bash
-# VERSION.json: ui -> next minor (1.3.0 if v24 landed 1.2.4), ui_updated to now
+# VERSION.json: ui -> next minor, ui_updated to now
 git add VERSION.json
-git commit -m "release(ui): 1.3.0 -- the annotated interactive trade chart"
+git commit -m "release(ui): 1.4.0 -- the annotated interactive trade chart"
 ```
+
+**`1.4.0`, not the `1.3.0` this plan first predicted.** This worktree branched
+at ui `1.2.4`; `main` has since shipped `1.3.0` (the Versions workspace,
+43296cf), so `VERSION.json` here is stale and *will* conflict on merge. Take
+`main`'s side, then apply this bump on top — never resolve it by keeping the
+worktree's copy, which would silently un-ship 1.3.0.
 
 ---
 
 ## Definition of done
 
-- A trendline-confirmed trade draws its line, with both swing pivots as
-  diamonds, in the SPA.
+- A trendline-confirmed trade draws its line in the SPA, with one diamond per
+  swing pivot the line was fit through — `strength` of them, not two.
 - The Discord PNG and the SPA chart draw the *same* line for the same trade.
 - An old trade renders a line on first view and does not refit on the second.
 - Both sides' overlays appear, stop dimmed.
