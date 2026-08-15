@@ -34,6 +34,7 @@ except Exception:
 
 from swingbot import config
 from swingbot.core import account as account_module
+from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
 from swingbot.core.jsonio import atomic_write_json, read_json
 from swingbot.core.strategy_types import HORIZONS as _HORIZONS
 
@@ -266,7 +267,8 @@ class TradeLog:
                   confidence_score=None, confidence_breakdown=None, target_sources=None,
                   stop_sources=None, target2_sources=None, risk_reward_ratio=None,
                   explanation=None, confirmed_by=None, plan_id=None,
-                  tier=None, badge=None, quality_score=None, source=None) -> str:
+                  tier=None, badge=None, quality_score=None, source=None,
+                  trendline_fit=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -322,6 +324,16 @@ class TradeLog:
             "near_tp_snapshots": [],       # [iso_ts, price] pairs used for the near-TP stall check -- see
                                            # check_near_tp_timeout(). Reset whenever near_tp_since resets.
         }
+
+        # The trendline fitted when this plan was created, as absolute
+        # (epoch, price) points -- see charts/trendline_fit.py. Set ONLY when
+        # there was a line to fit, so the key's absence means "no trendline"
+        # and nothing else; a stored null would mean that AND "written before
+        # this field existed", which are different facts. Every trade logged
+        # before this change simply has no key, and every reader treats it as
+        # optional forever.
+        if trendline_fit:
+            record[TRENDLINE_FIT_KEY] = trendline_fit
 
         # Snapshot position sizing NOW, at the moment the trade is opened --
         # not recomputed later from whatever the account balance happens to
