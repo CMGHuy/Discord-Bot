@@ -228,6 +228,94 @@ def ohlcv(ticker: str):
     return jsonify(payload)
 
 
+def _chart_trendline_fit(trade: dict, df, horizon: dict, is_bull: bool) -> dict | None:
+    """The trade's stored trendline fit, backfilling it once if absent.
+
+    Every trade logged before the fit was written at plan creation has none,
+    and until it does the SPA draws no trendline for it at all. So it is
+    fitted here on first read and written back: the cost is paid once per
+    trade ever, and -- more importantly -- the line stops moving between two
+    viewings of the same old chart.
+
+    A write on a GET, deliberately. It is a cache fill: idempotent (the store
+    refuses to overwrite an existing fit), and a failure to write means
+    "fitted again next time", never a failed request. The chart is served
+    from the in-memory fit either way.
+
+    The fit arguments are the trade's OWN entry and its horizon's
+    fib_lookback -- scanning/engine.py's arguments, not this endpoint's
+    `window` and last close. A backfill taken with different arguments would
+    be a different line from the one the trade's PNG already drew, which is
+    the failure this consolidation exists to end.
+    """
+    import logging
+
+    from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS
+    from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY, fit_trendline
+    from swingbot.core.performance import TradeLog
+
+    fit = trade.get(TRENDLINE_FIT_KEY)
+    if fit:
+        return fit
+
+    entry = _num(trade.get("entry"))
+    if entry is None:
+        return None
+    try:
+        fit = fit_trendline(
+            df,
+            lookback=int(horizon.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS)),
+            current_price=float(entry),
+            is_bull=is_bull,
+        )
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Trendline backfill fit failed for %s", trade.get("id"), exc_info=True)
+        return None
+
+    if fit:
+        try:
+            TradeLog().store_trendline_fit(trade.get("id"), fit)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Trendline backfill write failed for %s", trade.get("id"), exc_info=True)
+    return fit
+
+
+def _chart_notes(trade: dict, df, fit: dict, overlays: list, horizon: dict) -> list:
+    """The legend's fit notes, from the helpers the PNG prints.
+
+    Same functions, so the image and the browser cannot describe the same
+    line with different dates or prices. A note is only produced for a method
+    that HAS one -- a trendline names the two points its segment connects, a
+    fib fan its 0%/100% anchors, and everything else draws without a note
+    rather than with an empty one.
+    """
+    from swingbot.core.charts.trade_chart import (
+        DEFAULT_TRENDLINE_LOOKBACK_DAYS, _fib_note_lines, _trendline_note_lines,
+    )
+
+    notes = []
+    if fit and fit.get("window_bars"):
+        try:
+            notes += _trendline_note_lines(
+                df, int(fit["window_bars"]), float(fit["slope"]),
+                float(fit["intercept"]), f"Trendline ({int(fit.get('strength', 0))}x)")
+        except Exception:
+            pass
+
+    for overlay in overlays:
+        source = overlay.get("source") or ""
+        if source.startswith("Fib") or source in ("Swing high", "Swing low"):
+            try:
+                notes += _fib_note_lines(
+                    df, int(horizon.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS)),
+                    source)
+            except Exception:
+                pass
+    return notes
+
+
 @api_v1.route("/market/chart/<ticker>", methods=["GET"])
 @require_auth
 def chart(ticker: str):
@@ -336,24 +424,25 @@ def chart(ticker: str):
         for t, (_idx, r) in zip(bar_epochs(visible), visible.iterrows())
     ]
 
-    # ONE overlay per chart, target side preferred: it is the side the trade
-    # is aiming at. A trade confirmed only on its stop still gets its method
-    # drawn rather than nothing. `recent_len=window` makes a curve's points
-    # line up 1:1 with `bars`.
+    # BOTH sides, target first: the method that confirmed the target and the
+    # one holding the stop are different methods, and one overlay could only
+    # ever tell half of it. Target leads because it is the side the trade is
+    # aiming at. `recent_len=window` makes a curve's points line up 1:1 with
+    # `bars`.
     #
-    # `trend_info` is deliberately left unset. generate_trade_chart() fits
-    # the trendline pair once, before it decides its display window (the
-    # window is then expanded to fit the line's own touches); re-fitting here
-    # would be a second source of truth for the same line. A Trendline-only
-    # source therefore yields no overlay here, which is the same "nothing
-    # drawable" outcome as a candlestick-pattern-only source.
+    # `trend_info` stays unset and `trend_fit` carries the line instead: the
+    # fit is read off the trade, never computed here. A second fit at render
+    # time is what let the browser and the PNG disagree about the same line;
+    # see charts/trendline_fit.py.
+    fit = _chart_trendline_fit(trade, df, horizon, is_bull) if trade else None
+
     overlays = []
     for side, key in (("target", "target_sources"), ("stop", "stop_sources")):
         overlay = overlay_geometry(df, side, (trade or {}).get(key) or [],
-                                   horizon=horizon, recent_len=window, is_bull=is_bull)
+                                   horizon=horizon, recent_len=window,
+                                   is_bull=is_bull, trend_fit=fit)
         if overlay is not None:
             overlays.append(overlay)
-            break
 
     payload = {
         # Echoed back because the client asks by ticker and renders many
@@ -382,9 +471,12 @@ def chart(ticker: str):
         # Passed through from chart_geometry unchanged, `source` included:
         # reshaping it here would be the second implementation the module
         # exists to prevent, and `source` is the method label the legend
-        # prints. A list because Task 6 returns both sides; one entry at
-        # most today.
+        # prints.
         "overlays": overlays,
+        # What the PNG prints under its legend, from the same helpers -- the
+        # dates and prices a line was fitted between. Empty without a trade:
+        # there is no fit to explain.
+        "notes": _chart_notes(trade, df, fit, overlays, horizon) if trade else [],
         "currency": get_currency_symbol(ticker, config.CURRENCY_SYMBOL),
     }
     return jsonify(_json_safe(payload))

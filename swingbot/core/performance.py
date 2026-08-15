@@ -819,6 +819,30 @@ class TradeLog:
                     self._save()
                     return
 
+    def store_trendline_fit(self, trade_id: str, fit: dict) -> bool:
+        """Write a backfilled trendline fit onto an existing trade.
+
+        For trades logged before the fit was stored at creation
+        (scanning/engine.py). Returns False and writes nothing if the trade
+        already HAS a fit: re-fitting an old trade on every read would move
+        its line between two viewings of the same chart, and the stored line
+        is the one its PNG was drawn from.
+
+        Locked like every other mutator here -- the bot's scan loop writes
+        the same trades.json from a different process.
+        """
+        if not fit:
+            return False
+        with _LOCK:
+            for t in self._trades:
+                if t["id"] == trade_id:
+                    if t.get("trendline_fit"):
+                        return False
+                    t["trendline_fit"] = fit
+                    self._save()
+                    return True
+        return False
+
     def close_trade_manual(self, trade_id: str, reason: str = "manual") -> bool:
         """
         Marks an open trade as closed without an exit price (used by the

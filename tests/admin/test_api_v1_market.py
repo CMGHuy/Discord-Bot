@@ -174,7 +174,7 @@ def test_chart_top_level_shape(logged_in, frame, chart_trade):
     assert_shape(body, {
         "ticker": str, "ohlcv": list, "indicators": dict,
         "volume_profile": list, "levels": (dict, type(None)),
-        "overlays": list, "currency": str,
+        "overlays": list, "notes": list, "currency": str,
     }, where="chart")
     assert body["ticker"] == "AAPL"
 
@@ -362,6 +362,174 @@ def test_overlay_falls_back_to_the_stop_side(logged_in, frame, chart_trade):
     chart_trade(target_sources=["Hammer"], stop_sources=["EMA20"])
     overlay = _chart(logged_in).get_json()["overlays"][0]
     assert overlay["side"] == "stop"
+
+
+# ---------------------------------------------------------------------
+# Both overlays, the stored trendline, and the lazy backfill.
+#
+# These use a REAL TradeLog record rather than the `chart_trade` stub: the
+# backfill writes the fit back through TradeLog, and a stubbed
+# _trade_for_levels returns a dict that no store owns, so the write would
+# land nowhere and the test would prove nothing.
+# ---------------------------------------------------------------------
+
+_PERIOD = 20
+_AMPLITUDE = 8.0
+_DRIFT = -0.3
+_VOLUME_SPIKE = 2.5
+
+
+def _fittable_df(n=200):
+    """Oscillating, with volume spikes at the turns -- the shape a trendline
+    can actually be fitted to. See tests/test_trendline_fit.py: on flat
+    volume the scanner finds no pivots and drops to the touch-less trendln
+    fallback, and a clean ramp has no pivots at all."""
+    idx = pd.bdate_range("2024-01-01", periods=n)
+    values, volumes = [], []
+    for i in range(n):
+        phase = (i % _PERIOD) / _PERIOD
+        triangle = 1.0 - abs(2.0 * phase - 1.0) * 2.0
+        values.append(200.0 + _DRIFT * i + _AMPLITUDE * triangle)
+        at_turn = i % _PERIOD == 0 or i % _PERIOD == _PERIOD // 2
+        volumes.append(1_000_000.0 * (_VOLUME_SPIKE if at_turn else 1.0))
+    close = pd.Series(values, index=idx)
+    return pd.DataFrame({
+        "Open": close, "High": close + 1.0, "Low": close - 1.0,
+        "Close": close, "Volume": pd.Series(volumes, index=idx),
+    }, index=idx)
+
+
+@pytest.fixture
+def fittable_frame(monkeypatch):
+    monkeypatch.setattr("swingbot.admin.app._ohlcv_frame", lambda t: _fittable_df())
+
+
+@pytest.fixture
+def trade_log(admin_app):
+    from swingbot.core.performance import TradeLog
+    return TradeLog
+
+
+@pytest.fixture
+def seed_trade(trade_log):
+    """A real open trade in the tmp trades.json. Returns its id."""
+    def _seed(**over):
+        kwargs = dict(ticker="AAPL", strategy="RSI", horizon_key="4w",
+                      direction="bullish", confidence_level=4,
+                      confidence_label="Strong", entry=160.0, stop_loss=150.0,
+                      take_profit=180.0, target_sources=["Trendline (resistance)"],
+                      stop_sources=["Trendline (support)"])
+        kwargs.update(over)
+        return trade_log().log_trade(**kwargs)
+    return _seed
+
+
+def _stored_fit(trade_log, trade_id):
+    return trade_log().get_trade_by_id(trade_id).get("trendline_fit")
+
+
+def test_both_sides_are_returned_target_first(logged_in, frame, chart_trade):
+    """One overlay could only ever tell half the story: the method that
+    confirmed the target and the one holding the stop are different methods,
+    and a trader reading the chart needs both. Target first because it is the
+    side the trade is aiming at."""
+    chart_trade(target_sources=["EMA20"], stop_sources=["Rolling support"])
+    overlays = _chart(logged_in).get_json()["overlays"]
+    assert [o["side"] for o in overlays] == ["target", "stop"]
+
+
+def test_one_drawable_side_still_returns_one(logged_in, frame, chart_trade):
+    chart_trade(target_sources=["EMA20"], stop_sources=["Hammer"])
+    overlays = _chart(logged_in).get_json()["overlays"]
+    assert [o["side"] for o in overlays] == ["target"]
+
+
+def test_a_trendline_trade_draws_its_stored_fit(logged_in, fittable_frame,
+                                                seed_trade, trade_log):
+    """The line the trade was planned on and the PNG drew, not a re-fit."""
+    tid = seed_trade()
+    body = logged_in.get(
+        f"/api/v1/market/chart/AAPL?trade_id={tid}").get_json()
+    fit = _stored_fit(trade_log, tid)
+    shapes = [o["shape"] for o in body["overlays"] if o["shape"]["kind"] == "trendline"]
+    assert shapes, "a Trendline-confirmed trade must draw a trendline"
+    own = [s for s in shapes if s["p1"] == [fit["points"][0]["t"],
+                                            fit["points"][0]["price"]]]
+    assert own, "the fit's own side must be drawn from its stored points"
+    assert own[0]["pivots"], "the touches that earned the label are the diamonds"
+
+
+def test_a_trade_without_a_stored_fit_is_backfilled(logged_in, fittable_frame,
+                                                    seed_trade, trade_log):
+    """Lazy backfill: fitted once on first read, then written back. Before
+    this, a Trendline-confirmed trade drew no overlay at all in the SPA."""
+    tid = seed_trade()
+    assert _stored_fit(trade_log, tid) is None
+    logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={tid}")
+    assert _stored_fit(trade_log, tid)["points"]
+
+
+def test_the_backfill_is_idempotent(logged_in, fittable_frame, seed_trade, trade_log):
+    """Re-fitting on every read would move an old trade's line between two
+    viewings of the same chart."""
+    tid = seed_trade()
+    url = f"/api/v1/market/chart/AAPL?trade_id={tid}"
+    logged_in.get(url)
+    first = _stored_fit(trade_log, tid)
+    logged_in.get(url)
+    assert _stored_fit(trade_log, tid)["fit_at"] == first["fit_at"]
+    assert _stored_fit(trade_log, tid)["points"] == first["points"]
+
+
+def test_the_backfill_uses_the_trades_own_entry_not_the_last_close(
+        logged_in, fittable_frame, seed_trade, monkeypatch):
+    """The arguments that reproduce the line the PNG drew: the ENTRY price
+    and the horizon's fib_lookback (engine.py's own call). Fitting with the
+    last close instead would store a different line from the image -- the
+    exact failure this consolidation exists to end."""
+    from swingbot.core.charts import trendline_fit as fit_mod
+    from swingbot.core.strategy_types import HORIZONS
+
+    seen = {}
+    real = fit_mod.fit_trendline
+
+    def _spy(df, **kw):
+        seen.update(kw)
+        return real(df, **kw)
+
+    monkeypatch.setattr(fit_mod, "fit_trendline", _spy)
+    tid = seed_trade(entry=163.5)
+    logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={tid}")
+
+    assert seen["current_price"] == 163.5
+    assert seen["lookback"] == HORIZONS["4w"]["fib_lookback"]
+
+
+def test_a_failed_backfill_write_still_serves_the_chart(
+        logged_in, fittable_frame, seed_trade, monkeypatch):
+    """A cache fill that cannot write degrades to "fitted again next time",
+    never to a 500."""
+    from swingbot.core.performance import TradeLog
+    monkeypatch.setattr(TradeLog, "store_trendline_fit",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
+    tid = seed_trade()
+    r = logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={tid}")
+    assert r.status_code == 200
+    assert r.get_json()["overlays"], "the fit is still drawn, just not saved"
+
+
+def test_notes_name_the_points_the_line_connects(logged_in, fittable_frame, seed_trade):
+    """The legend prints what the PNG prints, from the same helper -- the
+    image and the browser cannot describe the same line differently."""
+    tid = seed_trade()
+    notes = logged_in.get(
+        f"/api/v1/market/chart/AAPL?trade_id={tid}").get_json()["notes"]
+    assert isinstance(notes, list)
+    assert any("pts used" in n for n in notes)
+
+
+def test_notes_are_empty_without_a_trade(logged_in, frame):
+    assert logged_in.get("/api/v1/market/chart/AAPL").get_json()["notes"] == []
 
 
 def test_overlay_timestamps_line_up_with_the_bars(logged_in, frame, chart_trade):

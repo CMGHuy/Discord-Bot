@@ -658,92 +658,59 @@ git commit -m "feat(api): one chart endpoint, keyed by ticker"
   `overlay_geometry(..., trend_fit=…)` (Task 4).
 - Produces: `overlays: list`, `notes: list[str]` on the payload.
 
-- [ ] **Step 1: Write the failing test**
+> **Corrected during execution.** Three things, all found against the real
+> code.
+>
+> 1. **The backfill writes through `TradeLog`, not `PlanStore`.** The
+>    endpoint resolves trades with `app._trade_for_levels` over
+>    `trades.json`; `_store.update(trade)` names a store this path never
+>    touches. `TradeLog` had no general update either, so the write is a new
+>    `store_trendline_fit(trade_id, fit)` mutator built like
+>    `mark_near_close` — same `_LOCK`, because the bot's scan loop writes the
+>    same file from another process. It refuses to overwrite an existing fit,
+>    which is where idempotence actually lives.
+> 2. **The backfill fits with the trade's ENTRY and its horizon's
+>    `fib_lookback`**, not this endpoint's `window` and the last close as
+>    sketched. Those are `scanning/engine.py`'s arguments; any others produce
+>    a different line from the one that trade's PNG already drew — the exact
+>    failure this plan exists to end. `test_the_backfill_uses_the_trades_own
+>    _entry_not_the_last_close` pins it.
+> 3. **These tests use a real `TradeLog` record, not `chart_trade`.** A
+>    stubbed `_trade_for_levels` returns a dict no store owns, so the
+>    backfill write would land nowhere and the test would prove nothing. They
+>    also need a frame a trendline can be fitted to at all — oscillating,
+>    with volume spikes at the turns (see `tests/test_trendline_fit.py`), not
+>    the random walk `frame` serves.
 
-```python
-def test_both_sides_are_returned_target_first(client, auth, a_two_sided_trade):
-    body = client.get(
-        f"/api/v1/market/chart/AAPL?trade_id={a_two_sided_trade}", headers=auth
-    ).get_json()
-    sides = [o["side"] for o in body["overlays"]]
-    assert sides[0] == "target"
-    assert set(sides) == {"target", "stop"}
+- [x] **Step 1: Write the failing test**
 
+In `tests/admin/test_api_v1_market.py`: both sides returned target-first and
+the one-drawable-side case; the stored fit drawn from its own points with its
+pivots as diamonds; backfill on first read; idempotence across two reads; the
+fit arguments above; a write failure still serving a 200; and notes naming
+the points the line connects (empty without a trade).
 
-def test_a_trade_without_a_stored_fit_is_backfilled(client, auth, a_legacy_trade, plan_store):
-    """Lazy backfill: fitted once on first read, then written back."""
-    assert plan_store.get(a_legacy_trade).get("trendline_fit") is None
-    client.get(f"/api/v1/market/chart/AAPL?trade_id={a_legacy_trade}", headers=auth)
-    assert plan_store.get(a_legacy_trade)["trendline_fit"]["points"]
-
-
-def test_the_backfill_is_idempotent(client, auth, a_legacy_trade, plan_store):
-    url = f"/api/v1/market/chart/AAPL?trade_id={a_legacy_trade}"
-    client.get(url, headers=auth)
-    first = plan_store.get(a_legacy_trade)["trendline_fit"]["fit_at"]
-    client.get(url, headers=auth)
-    assert plan_store.get(a_legacy_trade)["trendline_fit"]["fit_at"] == first
-
-
-def test_a_failed_backfill_write_still_serves_the_chart(client, auth, a_legacy_trade, monkeypatch, plan_store):
-    """A cache fill that cannot write degrades to 'fitted again next time',
-    never to a 500."""
-    monkeypatch.setattr(plan_store, "update", lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
-    r = client.get(f"/api/v1/market/chart/AAPL?trade_id={a_legacy_trade}", headers=auth)
-    assert r.status_code == 200
-
-
-def test_notes_carry_the_fit_explanation(client, auth, a_trade):
-    body = client.get(f"/api/v1/market/chart/AAPL?trade_id={a_trade}", headers=auth).get_json()
-    assert isinstance(body["notes"], list)
-```
-
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/testrun.py file tests/admin/test_api_v1_market.py`
-Expected: FAIL — `overlays` has at most one entry; no backfill.
+Expected: FAIL — 8 failures: `overlays` holds one entry, there is no `notes`
+key, and nothing backfills.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
-Replace the single-overlay loop (`market.py:311-323`) with both sides, target
-first, and pass the stored fit through:
+Both sides appended instead of the first one breaking the loop, with
+`trend_fit=fit` passed to `overlay_geometry`. `_chart_trendline_fit(trade,
+df, horizon, is_bull)` returns the stored fit or backfills one;
+`_chart_notes(...)` builds the legend text from `trade_chart`'s own
+`_trendline_note_lines` / `_fib_note_lines`, so the image and the browser
+cannot describe the same line differently.
 
-```python
-    fit = trade.get(TRENDLINE_FIT_KEY)
-    if not fit:
-        # Lazy backfill. Written back so this cost is paid once per trade,
-        # ever -- and so the line stops moving between two viewings of the
-        # same old trade. A write on a GET, deliberately: it is a cache fill,
-        # it is idempotent, and a failure means "fitted again next time".
-        fit = fit_trendline(
-            df, lookback=window,
-            current_price=float(df["Close"].iloc[-1]), is_bull=is_bull,
-        )
-        if fit:
-            try:
-                trade[TRENDLINE_FIT_KEY] = fit
-                _store.update(trade)
-            except Exception:
-                log.warning("trendline backfill write failed for %s", trade_id)
-
-    overlays = []
-    for side, key in (("target", "target_sources"), ("stop", "stop_sources")):
-        shape = overlay_geometry(df, side, trade.get(key) or [], horizon=horizon,
-                                 recent_len=window, is_bull=is_bull, trend_fit=fit)
-        if shape is not None:
-            overlays.append(shape)
-```
-
-Add `notes`, built from the same helpers the PNG prints
-(`trade_chart._trendline_note_lines`, `_fib_note_lines`) so the legend and the
-image cannot disagree.
-
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `python scripts/testrun.py full`
 Expected: `0 failed, 0 xfailed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/market.py tests/admin/test_api_v1_market.py
