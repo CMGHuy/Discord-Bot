@@ -1,4 +1,4 @@
-import { DeepPartial } from 'lightweight-charts';
+import { CrosshairMode, DeepPartial } from 'lightweight-charts';
 import type { ChartOptions } from 'lightweight-charts';
 
 /**
@@ -131,6 +131,7 @@ export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
     rightPriceScale: { borderColor: palette.border },
     timeScale: { borderColor: palette.border, timeVisible: false },
     crosshair: {
+      mode: CrosshairMode.Magnet,
       vertLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },
       horzLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },
     },
