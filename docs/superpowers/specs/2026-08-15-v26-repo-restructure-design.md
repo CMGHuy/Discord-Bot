@@ -4,6 +4,11 @@ Version: ui 1.2.3 · bot 1.1.2
 Bump: `bot patch (1.1.2 → 1.1.3)` · `ui none` — the work ships running code but
 zero observable difference: no endpoint, embed, chart or setting changes. The
 Angular SPA is not touched at all, so its line does not move.
+Blocked on: `v24-control-alignment` and `v25-trade-chart`, both of which must be
+merged to `main` first. **Do not start this spec while either is live** — v26
+renames the files v25 edits. See "Ordering" before executing anything, and run
+its reconciliation step before the first move: the inventories below were taken
+on 2026-08-15 and v25 adds files to them.
 
 ## Goal
 
@@ -124,7 +129,8 @@ risk.
 
 ### `tests/`
 
-The 157 flat files are grouped to mirror the new core packages —
+The flat files (157 as of 2026-08-15, plus whatever v25 adds) are grouped to
+mirror the new core packages —
 `tests/market/`, `tests/planning/`, `tests/backtest/`, `tests/tracking/`,
 `tests/data/`, `tests/edge/`, `tests/charts/`, `tests/scanning/` — with
 `tests/admin/`, `tests/scripts/` and `tests/fixtures/` left where they are.
@@ -205,8 +211,10 @@ rebase across it once rather than repeatedly.
 ## Verification
 
 The gate after every commit is `python scripts/testrun.py full` (the path itself
-changes at step 3 to `scripts/dev/testrun.py`), against the reference baseline
-**`1686 passed, 66 skipped, 0 failed`**. Green means `0 failed` *and* `0 xfailed`.
+changes at step 3 to `scripts/dev/testrun.py`), against the count recorded on a
+clean `main` immediately before step 1 — **not** against the 2026-08-15 figure of
+`1686 passed, 66 skipped, 0 failed`, which v25 will have moved (see "The
+verification baseline moves too"). Green means `0 failed` *and* `0 xfailed`.
 
 A changed pass count is not automatically a failure, but in this spec it is
 suspicious in a way it normally is not: nothing here should add, remove or skip a
@@ -223,20 +231,73 @@ covered by `tests/admin/test_jobs.py`; `quarterly_revalidation.py` by
 is covered by nothing** — no test executes it — so its `testrun.py` path must be
 confirmed by eye before the commit lands.
 
-## Known collision
+## Ordering: v26 runs last, after v24 and v25
 
-The `.claude/worktrees/2026-08-14-v24-control-alignment` worktree is being
-actively committed to by another session (it advanced from `7d8918e` to `c0d1cb9`
-during this design). Step 5 renames most of `swingbot/core` underneath it.
+**This spec does not execute until `v24-control-alignment` and `v25-trade-chart`
+have both landed on `main`.** That ordering is a requirement, not a preference:
+v26 renames the files those plans are editing, and a restructure that races an
+in-flight feature turns every one of that feature's hunks into a rename conflict.
 
-Git tracks these renames well because content is unchanged — the moves are pure
-`git mv` plus import-line edits, so similarity detection has an easy job. The
-cost is real but bounded, and it lands on whoever owns v24. It is named here so
-that it is a known cost rather than a surprise.
+Running last removes the git conflict entirely. What it does *not* remove is
+staleness — v24 and v25 change the ground this spec measured.
 
-The `worktree-backtest-frictions` worktree was removed on 2026-08-15 as unused.
-Its branch was **kept**: it carries two commits not on `main` (`359a25e`
-frictions in the v2 exit model, `210415e` per-fold progress output).
+**v24 is a non-issue.** Its 14 tasks touch `frontend/src/app/**` exclusively;
+its Python footprint is empty. The only path it names outside the SPA is
+`scripts/testrun.py` as its test command, and since it runs first it will have
+finished using that path before step 3 renames it.
+
+**v25 overlaps in three specific places**, all benign given the ordering:
+
+| v25 does | v26 effect |
+|---|---|
+| Creates `swingbot/core/charts/trendline_fit.py` | None — `charts/` is not a moving package |
+| Edits `swingbot/core/charts/{trade_chart,chart_geometry}.py` | None — same reason |
+| Edits `swingbot/core/plan_store.py` | Moves it to `planning/`, after v25 is done with it |
+| Creates `tests/test_trendline_fit.py`, `tests/test_trade_chart_stored_fit.py`, `tests/test_trendline_fit_persistence.py` | Step 4 must place all three |
+| Edits `swingbot/admin/api_v1/market.py`, `tests/admin/conftest.py` | None — neither moves |
+
+### The tables in this spec are inputs, not inventories
+
+The module lists above were derived on 2026-08-15, before v24 and v25 landed.
+By execution time they will be **wrong in the safe direction** — missing files
+rather than naming absent ones — and the four v25 files above are only the ones
+predictable today.
+
+So the first task of the implementation plan is a **reconciliation step**, run
+before any file moves:
+
+```bash
+git ls-files 'swingbot/core' | awk -F/ 'NF==3' | grep '\.py$'   # vs the core table
+git ls-files 'tests'         | awk -F/ 'NF==2'                  # vs the tests grouping
+git ls-files 'scripts'       | awk -F/ 'NF==2'                  # vs the scripts table
+```
+
+Any file present on disk but absent from the corresponding table is placed by the
+**grouping rule**, not by guesswork, and the plan records where it went:
+
+- **`core/`** — by what the module *owns*: fetching or caching market data →
+  `data/`; computing an indicator, level or signal from bars → `market/`;
+  constructing or tracking a live plan → `planning/`; offline replay and
+  validation → `backtest/`; writing or reporting the trade log → `tracking/`;
+  JSON, locks and delivery channels → `infra/`.
+- **`tests/`** — mirrors whichever package the module under test now lives in.
+- **`scripts/`** — `backtest/`, `data/`, `reports/`, `dev/` by primary purpose.
+
+### The verification baseline moves too
+
+`1686 passed, 66 skipped, 0 failed` is the baseline **as of 2026-08-15**. v25
+alone adds at least three test files, so the number will be higher by the time
+v26 runs.
+
+The gate is therefore not the literal 1686. It is: **record the count on a clean
+`main` immediately before step 1, and require every one of the five commits to
+match that recorded number exactly.** `0 failed` and `0 xfailed` remain absolute.
+
+### Worktree note
+
+`worktree-backtest-frictions` was removed on 2026-08-15 as unused. Its branch was
+**kept**: it carries two commits not on `main` (`359a25e` frictions in the v2
+exit model, `210415e` per-fold progress output).
 
 ## Parallelisation
 
@@ -250,4 +311,6 @@ frictions in the v2 exit model, `210415e` per-fold progress output).
   `admin/helpers.py` and `bot.py` each import from several of the six, so
   concurrent agents would overwrite one another in this shared working tree.
 - **Within step 3 (parallel):** the four script folders are disjoint, but the
-  20-file reference sweep afterwards is single-threaded for the same reason.
+  77-file reference sweep afterwards is single-threaded for the same reason.
+- **Nothing in v26 may run concurrently with v24 or v25.** They are predecessors,
+  not peers — see "Ordering" above.
