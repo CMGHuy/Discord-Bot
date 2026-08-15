@@ -199,7 +199,7 @@ class JobManager:
             log_path = os.path.join(_log_dir(), f"{job_id}.log")
             result_path = None
             if kind == "tune":
-                script = os.path.join(config._PROJECT_ROOT, "scripts", "tune_strategy.py")
+                script = os.path.join(config._PROJECT_ROOT, "scripts", "backtest", "tune_strategy.py")
                 results_dir = os.path.join(config.DATA_DIR, "tuning_results")
                 os.makedirs(results_dir, exist_ok=True)
                 result_path = os.path.join(results_dir, f"{job_id}.json")

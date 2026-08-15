@@ -133,7 +133,7 @@ def test_set_sizing_mode_accepts_the_three_edge_modes(tmp_path):
 
 
 def test_sizing_shadow_report_compares_modes():
-    from scripts.sizing_shadow_report import sizing_shadow_report
+    from scripts.reports.sizing_shadow_report import sizing_shadow_report
     trades = [
         {"r_multiple": 1.0, "risk_pct": 1.0,
          "shadow_sizing": {"kelly": 2.0, "vol_target": 0.7, "min_of_all": 0.7}},
@@ -149,7 +149,7 @@ def test_sizing_shadow_report_compares_modes():
 
 
 def test_sizing_shadow_report_ignores_trades_without_shadow_data():
-    from scripts.sizing_shadow_report import sizing_shadow_report
+    from scripts.reports.sizing_shadow_report import sizing_shadow_report
     trades = [{"r_multiple": 1.0, "risk_pct": 1.0}]  # no shadow_sizing at all
     rep = sizing_shadow_report(trades)
     for mode in ("actual", "kelly", "vol_target", "min_of_all"):

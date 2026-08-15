@@ -158,7 +158,7 @@ echo "==> Verifying the admin UI actually serves a working SPA"
 # Windows leaves a trailing CR on every value. Both give a 401 for a password
 # that is perfectly correct in the file, and both did exactly that on a real
 # deploy before this used --from-config.
-if docker compose exec -T admin python scripts/smoke_spa.py --from-config; then
+if docker compose exec -T admin python scripts/dev/smoke_spa.py --from-config; then
   echo "==> Admin UI verified."
 else
   echo "" >&2

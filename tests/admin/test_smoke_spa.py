@@ -15,7 +15,7 @@ import urllib.parse
 
 import pytest
 
-from scripts.smoke_spa import _ASSET_RE
+from scripts.dev.smoke_spa import _ASSET_RE
 
 # The real shape of an Angular-built index.html, trimmed. Both the module
 # script and the modulepreload links matter: the preloads are how the bundle's

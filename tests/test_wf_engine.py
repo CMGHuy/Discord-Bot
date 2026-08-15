@@ -266,7 +266,7 @@ def _shadow_report():
     import sys
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(root / "scripts"))
+    sys.path.insert(0, str(root / "scripts" / "reports"))
     from shadow_component_report import shadow_component_report
     return shadow_component_report
 
@@ -388,7 +388,7 @@ def test_forward_return_backfill_only_resolves_matured_entries(tmp_path):
 
 
 def test_p_value_math():
-    from scripts.permutation_test import p_value
+    from scripts.backtest.permutation_test import p_value
     permuted = [0.01, 0.02, 0.03, 0.20]
     assert p_value(0.15, permuted) == 0.25      # 1 of 4 >= real
     assert p_value(0.30, permuted) == 0.0
@@ -397,7 +397,7 @@ def test_p_value_math():
 
 def test_planted_signal_beats_noise(monkeypatch):
     import numpy as np
-    from scripts.permutation_test import permuted_expectancies, p_value
+    from scripts.backtest.permutation_test import permuted_expectancies, p_value
     rng = np.random.default_rng(0)
     # a run_fn with real skill: expectancy 0.15 unshifted, ~0 shifted
     def run_fn(shift):

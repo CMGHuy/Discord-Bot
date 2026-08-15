@@ -11,7 +11,7 @@ import types
 import pandas as pd
 import pytest
 
-from scripts import record_option_snapshots as ros
+from scripts.data import record_option_snapshots as ros
 
 
 class _FakeChain:

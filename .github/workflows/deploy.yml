@@ -60,7 +60,7 @@ jobs:
       # Not piped: testrun.py exits 1 on failure, and a pipe would substitute
       # the exit status of whatever it fed.
       - name: Test suite
-        run: python scripts/testrun.py full
+        run: python scripts/dev/testrun.py full
 
       # testrun.py prints a one-line verdict and writes the tracebacks to a
       # file -- which is right for a terminal and useless in CI, where a red
@@ -347,7 +347,7 @@ jobs:
       # asset URL it declares, which is the one thing that catches that.
       - name: SPA smoke test — the built bundle actually loads
         run: |
-          python scripts/smoke_spa.py \
+          python scripts/dev/smoke_spa.py \
             --url http://127.0.0.1:1234 \
             --user ci --password ci-secret
 

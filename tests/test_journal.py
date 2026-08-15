@@ -146,7 +146,7 @@ def test_has_note_filter(tmp_path):
     assert [e["trade_id"] for e in store.entries(has_note=False)] == ["t2"]
 
 
-from scripts.backfill_journal import backfill
+from scripts.data.backfill_journal import backfill
 
 
 def test_backfill_skips_already_journaled(tmp_path):

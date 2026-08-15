@@ -9,7 +9,7 @@ import types
 
 import pytest
 
-from scripts.fill_regime_allow import decide, MIN_N_CELL, MIN_N_SUBFOLD, MIN_FOLD_AGREEMENT
+from scripts.data.fill_regime_allow import decide, MIN_N_CELL, MIN_N_SUBFOLD, MIN_FOLD_AGREEMENT
 
 
 def _trade(year, r, outcome="win"):
@@ -131,7 +131,7 @@ def test_every_strategy_regime_pair_is_reported():
 # --- the guard that keeps the measurement honest ----------------------------
 
 def test_the_run_refuses_to_measure_through_its_own_gate(monkeypatch, capsys):
-    from scripts import fill_regime_allow
+    from scripts.data import fill_regime_allow
 
     monkeypatch.setattr("swingbot.config.REGIME_GATES_ENABLED", True, raising=False)
     rc = fill_regime_allow.main([])

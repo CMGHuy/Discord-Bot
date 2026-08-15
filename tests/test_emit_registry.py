@@ -3,7 +3,7 @@ import json
 import pathlib
 
 spec = importlib.util.spec_from_file_location(
-    "rbr", pathlib.Path(__file__).parent.parent / "scripts" / "run_backtest_range.py")
+    "rbr", pathlib.Path(__file__).parent.parent / "scripts" / "backtest" / "run_backtest_range.py")
 rbr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rbr)
 

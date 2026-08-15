@@ -2,7 +2,7 @@ import importlib.util
 import pathlib
 
 spec = importlib.util.spec_from_file_location(
-    "spr", pathlib.Path("scripts/shadow_parity_report.py"))
+    "spr", pathlib.Path("scripts/reports/shadow_parity_report.py"))
 spr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(spr)
 

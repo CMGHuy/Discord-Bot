@@ -74,7 +74,7 @@ def test_refresh_snapshot_never_raises_on_failure(monkeypatch):
 import csv
 import os
 
-from scripts.export_analytics import export_all
+from scripts.reports.export_analytics import export_all
 
 
 def _fixture_snapshot():
