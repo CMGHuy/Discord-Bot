@@ -61,6 +61,8 @@ const REQUIRED = [
   '--dur-slow',
   '--ease-out',
   '--ease-spring',
+
+  '--control-h',
 ];
 
 describe('design tokens', () => {
@@ -69,6 +71,10 @@ describe('design tokens', () => {
       expect(CSS).toMatch(new RegExp(`^\\s*${name}:`, 'm'));
     });
   }
+
+  it('sizes controls with a single height token', () => {
+    expect(CSS).toMatch(/^\s*--control-h:\s*28px;/m);
+  });
 
   it('honours prefers-reduced-motion', () => {
     expect(CSS).toContain('prefers-reduced-motion: reduce');

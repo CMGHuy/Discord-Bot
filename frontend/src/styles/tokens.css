@@ -112,6 +112,23 @@
   --space-10: 10px;
   --space-14: 14px;
   --space-20: 20px;
+
+  /* -- controls --------------------------------------------------------
+   * ONE height for every interactive control, so a button beside a field
+   * is flush. The two were 29px (button, padding 6px 14px) and 25px
+   * (input, 4px 8px) -- a 4px difference that no row could reconcile
+   * because neither side owned it.
+   *
+   * 28 splits the difference: the input gains 3px, the button loses 1,
+   * nothing visibly moves, and it lands on the 4px grid the spacing scale
+   * implies. 26 (the input's height) is below a comfortable click target;
+   * 30 (the button's) costs a row of visible data in every table toolbar
+   * on a dashboard built for 11px type.
+   *
+   * `.icon` buttons are exempt -- square by construction, sized by glyph.
+   */
+  --control-h: 28px;
+
   /* Breakpoints are deliberately NOT tokens: @media cannot evaluate var(),
      so each one would have to be repeated as a literal in every query and
      the two copies would drift silently. They live in ui/breakpoints.ts --
