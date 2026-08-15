@@ -16,7 +16,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
 import { text } from '../../ui/format';
-import { Panel } from '../../ui/layout';
+import { ControlRow, Panel } from '../../ui/layout';
 
 /**
  * Watchlist — the watchlist the scanner walks.
@@ -38,7 +38,7 @@ import { Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog],
+  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow],
   providers: [WatchlistStore],
   template: `
     <header class="head">
@@ -61,7 +61,7 @@ import { Panel } from '../../ui/layout';
         a ticker, the change takes effect on the next <code>!check</code> or
         scheduled background scan.
       </p>
-      <div class="add">
+      <sb-control-row class="add">
         <div class="box">
           <input
             class="input"
@@ -106,7 +106,7 @@ import { Panel } from '../../ui/layout';
         >
           Add
         </button>
-      </div>
+      </sb-control-row>
 
       @if (store.addResult(); as message) {
         <p class="result" role="status">{{ message }}</p>
@@ -160,7 +160,9 @@ import { Panel } from '../../ui/layout';
     .count { color: var(--text-secondary); font-size: var(--text-table); }
     .stale { color: var(--warn); font-size: var(--text-table); }
 
-    .add { display: flex; align-items: flex-start; gap: var(--space-8); }
+    /* Was align-items: flex-start, which is why the Add button sat level with
+       the input's top edge rather than its box. sb-control-row's flex-end is
+       the fix; nothing here is the row's own any more. */
     .box { position: relative; flex: 1 1 auto; max-width: 420px; }
     .input {
       width: 100%;

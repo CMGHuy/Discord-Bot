@@ -36,7 +36,7 @@ import {
   tradeColumns,
 } from '../trades/trades.columns';
 import { held, num, pct } from '../../ui/format';
-import { Panel } from '../../ui/layout';
+import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
@@ -82,7 +82,7 @@ export const OPEN_POSITIONS_CAP = 6;
   selector: 'sb-dashboard',
   imports: [
     RouterLink, MetricCard, MetricChip, Sparkline, Panel, DataTable,
-    StatusCell, DirectionArrow, PlanCell, ConfidenceCell, Button,
+    StatusCell, DirectionArrow, PlanCell, ConfidenceCell, Button, ControlRow,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the stores are created on entry and
@@ -106,7 +106,7 @@ export const OPEN_POSITIONS_CAP = 6;
            not a client filter: the realised figures below are computed from
            the scoped set, and a client-side scope over an all-time payload
            could not narrow them at all. -->
-      <div class="scope" role="group" aria-label="Date scope">
+      <sb-control-row class="scope" role="group" aria-label="Date scope">
         @for (option of scopes; track option.mode) {
           <button
             sb-button
@@ -118,7 +118,7 @@ export const OPEN_POSITIONS_CAP = 6;
             {{ option.label }}
           </button>
         }
-      </div>
+      </sb-control-row>
     </header>
 
     <!-- SR59. Copied from dashboard.html:60-68, not paraphrased: it states
@@ -351,7 +351,7 @@ export const OPEN_POSITIONS_CAP = 6;
     .footnote code { font-family: var(--font-mono); }
 
     /* -- SR58: scope toggle and realised row ---------------------- */
-    .scope { display: flex; gap: var(--space-4); margin-left: auto; }
+    .scope { margin-left: auto; }
     .realized {
       display: flex;
       flex-wrap: wrap;
