@@ -7,7 +7,7 @@ Jan/Apr/Jul/Oct (see README's "The growth playbook"), read the output,
 and prune anything that's degraded.
 
 Orchestrates:
-    1. Refresh the OHLCV cache (scripts/fetch_backtest_data.py --force)
+    1. Refresh the OHLCV cache (scripts/data/fetch_backtest_data.py --force)
     2. Data quality sweep over every cached ticker (universe.data_quality_issues)
     3. Check whether the anchored fold set is due for a rollover (flagged
        only -- ANCHORED_FOLDS is a frozen, pre-registered constant per the
@@ -18,9 +18,9 @@ Orchestrates:
        PASS/DEGRADED verdict
 
 Usage:
-    python scripts/quarterly_revalidation.py
-    python scripts/quarterly_revalidation.py --skip-refresh   # cache already fresh
-    python scripts/quarterly_revalidation.py --permutation-n 200
+    python scripts/backtest/quarterly_revalidation.py
+    python scripts/backtest/quarterly_revalidation.py --skip-refresh   # cache already fresh
+    python scripts/backtest/quarterly_revalidation.py --permutation-n 200
 """
 import argparse
 import datetime

@@ -37,8 +37,8 @@ vitest.
   reversal, in the store.
 - **`--date=short` means day resolution.** Same-day releases are real (four on
   2026-08-14, three on 2026-08-15) and must not collapse to zero width.
-- Run the suite via `python scripts/testrun.py file <path>` while iterating and
-  `python scripts/testrun.py full` at the gate — never raw pytest for a full run.
+- Run the suite via `python scripts/dev/testrun.py file <path>` while iterating and
+  `python scripts/dev/testrun.py full` at the gate — never raw pytest for a full run.
 - Frontend tests run via `npx ng test`, never `npx vitest run` (the latter loses
   the jsdom environment and every file errors with `document is not defined`).
 - **Never edit files under `.claude/worktrees/`** from this working tree.
@@ -57,7 +57,7 @@ the dependency graph.
 ## Task 1: Component discovery and a generic state walk
 
 **Files:**
-- Modify: `scripts/build_version_matrix.py:50-97` (`_states`), add `_components`
+- Modify: `scripts/dev/build_version_matrix.py:50-97` (`_states`), add `_components`
 - Test: `tests/scripts/test_build_version_matrix.py`
 
 **Interfaces:**
@@ -197,7 +197,7 @@ And replace lines 90-96 (the working-tree append) with:
 
 - [ ] **Step 8: Run the whole generator test file**
 
-Run: `python scripts/testrun.py file tests/scripts/test_build_version_matrix.py`
+Run: `python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py`
 Expected: the `_components` and `_states` tests pass; the `build()` tests FAIL
 (they read `doc["pairs"]`, which Task 2 replaces). That is the expected
 intermediate state — do not fix them here.
@@ -205,7 +205,7 @@ intermediate state — do not fix them here.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add scripts/build_version_matrix.py tests/scripts/test_build_version_matrix.py
+git add scripts/dev/build_version_matrix.py tests/scripts/test_build_version_matrix.py
 git commit -m "feat(versions): discover components from VERSION.json keys
 
 The generator hardcoded ui and bot and skipped any release missing either.
@@ -217,7 +217,7 @@ component would delete all history predating a newly added one."
 ## Task 2: The release payload and `changed` derivation
 
 **Files:**
-- Modify: `scripts/build_version_matrix.py:100-158` (`build`, `main`)
+- Modify: `scripts/dev/build_version_matrix.py:100-158` (`build`, `main`)
 - Test: `tests/scripts/test_build_version_matrix.py`
 
 **Interfaces:**
@@ -354,7 +354,7 @@ two tasks later is churn. Add one line above it:
 
 - [ ] **Step 6: Run the generator tests**
 
-Run: `python scripts/testrun.py file tests/scripts/test_build_version_matrix.py`
+Run: `python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py`
 Expected: the old `test_build_derives_pairs_and_ranges` FAILS (it asserts
 `doc["pairs"]`). Delete that test — it asserts a payload that no longer exists,
 and its behaviour is covered by `test_build_derives_components_releases_and_changed`.
@@ -363,7 +363,7 @@ and its behaviour is covered by `test_build_derives_components_releases_and_chan
 - [ ] **Step 7: Commit**
 
 ```bash
-git add scripts/build_version_matrix.py tests/scripts/test_build_version_matrix.py
+git add scripts/dev/build_version_matrix.py tests/scripts/test_build_version_matrix.py
 git commit -m "feat(versions): emit releases with derived changed, not a cross-product
 
 ui_versions/bot_versions/pairs/ranges were artefacts of a 2D matrix: 256
@@ -396,7 +396,7 @@ def test_the_committed_file_matches_the_current_generator():
     import json
 
     frozen_path = ROOT / "swingbot" / "admin" / "version_history.json"
-    assert frozen_path.exists(), "run: python scripts/build_version_matrix.py"
+    assert frozen_path.exists(), "run: python scripts/dev/build_version_matrix.py"
     frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
 
     live_doc = json.loads((ROOT / "VERSION.json").read_text(encoding="utf-8"))
@@ -405,12 +405,12 @@ def test_the_committed_file_matches_the_current_generator():
 
     assert frozen["current"] == live, (
         "VERSION.json moved without regenerating: run "
-        "python scripts/build_version_matrix.py")
+        "python scripts/dev/build_version_matrix.py")
 ```
 
 - [ ] **Step 2: Regenerate**
 
-Run: `python scripts/build_version_matrix.py`
+Run: `python scripts/dev/build_version_matrix.py`
 Expected on stderr: `wrote swingbot\admin\version_history.json: 2 components, N releases`
 
 - [ ] **Step 3: Eyeball the output before trusting it**
@@ -424,7 +424,7 @@ Constraints in `working-conventions.md`.
 
 - [ ] **Step 4: Run the generator tests**
 
-Run: `python scripts/testrun.py file tests/scripts/test_build_version_matrix.py`
+Run: `python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py`
 Expected: PASS, all tests
 
 - [ ] **Step 5: Commit**
@@ -493,7 +493,7 @@ def test_stale_is_false_when_live_matches_frozen(logged_in, monkeypatch):
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `python scripts/testrun.py file tests/admin/test_api_v1_versions.py`
+Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_versions.py`
 Expected: FAIL — `missing components`, and `_helpers` has no `get_component_versions`
 
 - [ ] **Step 3: Add the helper**
@@ -559,7 +559,7 @@ def get_versions():
 
 - [ ] **Step 6: Run the endpoint tests**
 
-Run: `python scripts/testrun.py file tests/admin/test_api_v1_versions.py`
+Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_versions.py`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -1432,7 +1432,7 @@ Expected: no output. Any hit is a leftover — remove it before proceeding.
 
 - [ ] **Step 2: Run both suites**
 
-Run: `python scripts/testrun.py full`
+Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`. The passed/skipped counts will have moved and
 that is not a failure — see `docs/claude/testing-cost.md`.
 
@@ -1460,8 +1460,8 @@ committed and the newest release records as `"commit": "uncommitted"`, which is
 what shipped in 1.3.0. See `working-conventions.md`.
 
 ```bash
-python scripts/build_version_matrix.py
-python scripts/testrun.py file tests/scripts/test_build_version_matrix.py
+python scripts/dev/build_version_matrix.py
+python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py
 git add swingbot/admin/version_history.json
 git commit -m "chore(versions): regenerate version_history.json for 1.4.0"
 ```

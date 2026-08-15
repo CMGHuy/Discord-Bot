@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fill strategy_types.REGIME_ALLOW from TRAIN evidence (P2a).
 
-    python scripts/fill_regime_allow.py                       # watchlist
-    python scripts/fill_regime_allow.py --universe sp500
-    python scripts/fill_regime_allow.py --json out.json
+    python scripts/data/fill_regime_allow.py                       # watchlist
+    python scripts/data/fill_regime_allow.py --universe sp500
+    python scripts/data/fill_regime_allow.py --json out.json
 
 THE PRE-REGISTERED SELECTION RULE
 ---------------------------------
@@ -229,7 +229,7 @@ def main(argv=None) -> int:
 
     spy_df = load_cached(benchmark)
     if spy_df is None:
-        print(f"REFUSING: {benchmark} is not cached; run scripts/fetch_backtest_data.py first.",
+        print(f"REFUSING: {benchmark} is not cached; run scripts/data/fetch_backtest_data.py first.",
               flush=True)
         return 2
 

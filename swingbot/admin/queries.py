@@ -204,7 +204,7 @@ def _load_result(job_id: str) -> dict | None:
 
 
 def _grid_row_passes(stats: dict) -> bool:
-    """Same acceptance gate scripts/tune_strategy.py itself already prints
+    """Same acceptance gate scripts/backtest/tune_strategy.py itself already prints
     -- restated here purely to color a table row, never to decide anything."""
     return (
         stats.get("n_eval", 0) >= 30 and (stats.get("win_rate") or 0) >= 80

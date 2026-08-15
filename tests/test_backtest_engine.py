@@ -203,7 +203,7 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
 
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_scale_out_stamps_per_trade_runner_outcome():
-    # Regression pin: scripts/run_backtest_range.py's runner_by_strategy
+    # Regression pin: scripts/backtest/run_backtest_range.py's runner_by_strategy
     # table must be built from a per-trade field so it can be filtered to
     # the --from/--to date window (via window_trades()), unlike the
     # unfiltered run-level BacktestSummary.runner_tp2/trail/be/timeout

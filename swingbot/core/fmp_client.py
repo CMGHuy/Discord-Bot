@@ -21,7 +21,7 @@ Usage:
 
 Endpoint paths target FMP's current "stable" API. They're collected in one
 registry (`_endpoints`) so any path FMP renames is a one-line fix; run
-`probe()` (or `scripts/fmp_crawl.py --probe`) to see exactly which resolve on
+`probe()` (or `scripts/data/fmp_crawl.py --probe`) to see exactly which resolve on
 your key.
 """
 import json

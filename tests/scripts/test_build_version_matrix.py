@@ -1,4 +1,4 @@
-"""scripts/build_version_matrix.py's pure logic.
+"""scripts/dev/build_version_matrix.py's pure logic.
 
 Only the sorting and the pair/range derivation are tested directly — walking
 git is subprocess orchestration, matching this codebase's convention of testing
@@ -105,13 +105,13 @@ def test_the_committed_file_matches_the_current_generator():
     import json
 
     frozen_path = ROOT / "swingbot" / "admin" / "version_history.json"
-    assert frozen_path.exists(), "run: python scripts/build_version_matrix.py"
+    assert frozen_path.exists(), "run: python scripts/dev/build_version_matrix.py"
     frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
 
     live = json.loads((ROOT / "VERSION.json").read_text(encoding="utf-8"))
     assert frozen["current"]["ui"] == live["ui"], (
         "VERSION.json moved without regenerating: run "
-        "python scripts/build_version_matrix.py")
+        "python scripts/dev/build_version_matrix.py")
     assert frozen["current"]["bot"] == live["bot"], (
         "VERSION.json moved without regenerating: run "
-        "python scripts/build_version_matrix.py")
+        "python scripts/dev/build_version_matrix.py")

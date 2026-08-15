@@ -4,7 +4,7 @@ hook itself failed to journal for any reason. Idempotent -- JournalStore.add
 replaces by trade_id, so re-running this after Task A22 is live is always
 safe and simply does nothing for trades already journaled.
 
-Run: python scripts/backfill_journal.py [--dry-run]
+Run: python scripts/data/backfill_journal.py [--dry-run]
 """
 from __future__ import annotations
 

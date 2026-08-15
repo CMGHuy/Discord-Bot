@@ -1,4 +1,4 @@
-# scripts/tune_exit_v2.py
+# scripts/backtest/tune_exit_v2.py
 """TRAIN-only grid for exit-model-v2 runner params + breakout entry-type.
 
 Selection rule is PRE-REGISTERED (see plan Task 30) and printed with the

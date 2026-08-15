@@ -51,7 +51,7 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 - **An empty config table is not automatically an unfinished one.**
   `strategy_types.REGIME_ALLOW = {}` with `REGIME_GATES_ENABLED` defaulting off
   reads like a stub someone forgot to fill. It is the **measured answer**: the
-  v17 P2a harness (`scripts/fill_regime_allow.py`) ran the pre-registered rule
+  v17 P2a harness (`scripts/data/fill_regime_allow.py`) ran the pre-registered rule
   across 78 tickers × 11 strategies × 10 horizons on TRAIN and no cell cleared
   it, recorded in `docs/superpowers/results/2026-08-08-regime-allow-train.md`.
   The spec pre-committed to accepting that outcome. Filling the table by hand,
@@ -115,7 +115,7 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   (`core/watchlist.py:21`), `ticker_directory.json`
   (`core/ticker_directory.py:108`), `admin_jobs.json` (`admin/jobs.py:120`),
   and `.env` (`admin/helpers.py:114`). `tuning_results/<job>.json` uses
-  `Path.write_text` (`scripts/tune_strategy.py:171`) — a fresh file per job,
+  `Path.write_text` (`scripts/backtest/tune_strategy.py:171`) — a fresh file per job,
   so nothing is truncated, but it is listed in the directory before it is
   complete. **The event watcher is not the exposure** — it compares
   `(mtime, size)` and never opens a watched file. The exposure is the SPA,

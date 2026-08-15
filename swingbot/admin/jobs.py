@@ -1,5 +1,5 @@
 """Subprocess job runner for admin-launched long-running work (currently:
-TRAIN-window strategy tuning grids via scripts/tune_strategy.py). At most
+TRAIN-window strategy tuning grids via scripts/backtest/tune_strategy.py). At most
 ONE job runs at a time -- tuning is deliberately serialized, both because
 concurrent grid sweeps would contend for the same OHLCV cache/CPU and
 because the workbench UI (Task C33+) only has room to show one running
@@ -28,11 +28,11 @@ from swingbot.core.backtest import ALL_STRATEGIES
 # parameter SELECTION is silent overfitting: any "improvement" measured
 # against a window whose numbers already informed strategy/gate choices
 # is no longer really out-of-sample. Tuning stays on TRAIN below;
-# VALIDATION is run once, manually, via the CLI (scripts/run_backtest_range.py
+# VALIDATION is run once, manually, via the CLI (scripts/backtest/run_backtest_range.py
 # --validation), never through this admin UI.
 VALIDATION_WINDOW = ("2024-01-01", "2025-12-31")
 
-# What scripts/tune_strategy.py itself hard-codes as TRAIN today (see this
+# What scripts/backtest/tune_strategy.py itself hard-codes as TRAIN today (see this
 # plan's ground-truth deviation #3 -- the script has no date CLI flag at
 # all yet; this constant is shown on the Tuning page so the window is
 # visible even though it can't be changed from here).
@@ -51,7 +51,7 @@ def _date_tuple_if_matches(tok: str) -> tuple[int, int, int] | None:
 
 
 def assert_train_only(args: list[str]) -> None:
-    """The ONLY gate standing between the admin UI and scripts/tune_strategy.py
+    """The ONLY gate standing between the admin UI and scripts/backtest/tune_strategy.py
     ever being pointed at the VALIDATION window. Today's tune_strategy.py CLI
     doesn't even accept a date flag (ground-truth deviation #3) -- this is
     defense-in-depth against a FUTURE version of the script gaining one, not
@@ -72,7 +72,7 @@ def assert_train_only(args: list[str]) -> None:
 def build_tune_args(strategy: str, params: dict | None) -> list[str]:
     """THE only constructor of a tuning job's argv. Whitelists strategy
     against backtest.ALL_STRATEGIES, appends only the flags
-    scripts/tune_strategy.py actually accepts today (--strategy,
+    scripts/backtest/tune_strategy.py actually accepts today (--strategy,
     optional --be-trigger), and accepts no date argument at all. Every
     call site (api.py's /api/jobs/tune) must route through this. Also the
     single place that validates params' own shape -- callers only need to

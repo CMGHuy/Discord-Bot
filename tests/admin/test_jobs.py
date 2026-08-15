@@ -1,6 +1,6 @@
 """JobManager: subprocess job lifecycle. `kind="test"` allows a raw argv
 (interpreter-relative) for tests -- `kind="tune"` (C31) always routes
-through scripts/tune_strategy.py and the TRAIN-only guardrail.
+through scripts/backtest/tune_strategy.py and the TRAIN-only guardrail.
 
 NG19 TRIAGE — **MIXED · mostly KEEP.** The JobManager and build_tune_args
 tests are unit-level over swingbot/admin/jobs.py, which /api/v1/jobs calls

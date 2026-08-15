@@ -10,10 +10,10 @@ refactor is that the PNGs the bot posts to Discord do not change by a
 single byte, and "looks the same" is not a check anyone can run twice.
 So: render the full set before, render it again after, compare hashes.
 
-    python scripts/render_chart_fixtures.py --out /tmp/chart-baseline
+    python scripts/dev/render_chart_fixtures.py --out /tmp/chart-baseline
     # ... refactor ...
-    python scripts/render_chart_fixtures.py --out /tmp/chart-after
-    python scripts/render_chart_fixtures.py --check /tmp/chart-baseline/SHA256 --out /tmp/chart-after
+    python scripts/dev/render_chart_fixtures.py --out /tmp/chart-after
+    python scripts/dev/render_chart_fixtures.py --check /tmp/chart-baseline/SHA256 --out /tmp/chart-after
 
 The manifest is written in `sha256sum` format so `sha256sum -c SHA256`
 works too, but --check is the portable path (this repo runs on Windows,

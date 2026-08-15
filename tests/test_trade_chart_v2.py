@@ -8,7 +8,7 @@ from tests.test_plan_engine_model import _plan
 from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
-# the fast tier (scripts/testrun.py fast). See docs/claude/testing-cost.md.
+# the fast tier (scripts/dev/testrun.py fast). See docs/claude/testing-cost.md.
 pytestmark = pytest.mark.slow
 
 

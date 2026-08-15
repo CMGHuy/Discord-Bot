@@ -2,9 +2,9 @@
 """Acceptance harness: runs every strategy x horizon x cached ticker and
 pools results per strategy over an entry-date window.
 
-    python scripts/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
-    python scripts/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
-    python scripts/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
+    python scripts/backtest/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
+    python scripts/backtest/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
+    python scripts/backtest/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
 
 PASS gate per spec: win_rate >= 80, expectancy_r > 0, N >= 30 (train) / 15
 (validation), scratches+timeouts <= 50% of closed trades."""
@@ -46,7 +46,7 @@ def _market_frame():
         if df is None:
             print(f"WARNING: {ticker} is not in the backtest cache -- no market "
                   f"context this run. With REGIME_GATES_ENABLED on, every entry "
-                  f"will be blocked. Run scripts/fetch_backtest_data.py first.",
+                  f"will be blocked. Run scripts/data/fetch_backtest_data.py first.",
                   flush=True)
         _SPY_CACHE["df"] = df
     return _SPY_CACHE["df"]

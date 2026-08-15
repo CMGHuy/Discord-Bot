@@ -1,7 +1,7 @@
 """4-week shadow forward-gate for fold-passing components (Task E40).
 
-Run: python scripts/shadow_component_report.py --component AVWAP_LEVELS_ENABLED
-     python scripts/shadow_component_report.py --component X --backfill
+Run: python scripts/reports/shadow_component_report.py --component AVWAP_LEVELS_ENABLED
+     python scripts/reports/shadow_component_report.py --component X --backfill
 
 PROMOTION IS NOT AUTOMATIC. This prints a verdict; a human reads it and
 decides whether to flip the flag. Nothing here writes config.

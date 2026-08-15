@@ -2,8 +2,8 @@
 
 Run against a container, a staging box, or production:
 
-    python scripts/smoke_spa.py --url http://localhost:1234 --user ci --password ci-secret
-    python scripts/smoke_spa.py --url https://admin.example.com --user admin --password "$PW"
+    python scripts/dev/smoke_spa.py --url http://localhost:1234 --user ci --password ci-secret
+    python scripts/dev/smoke_spa.py --url https://admin.example.com --user admin --password "$PW"
 
 **Why this exists.** NG54's acceptance walk found the SPA served a black
 screen: the build stamped `<base href="/">` while Flask serves the bundle from

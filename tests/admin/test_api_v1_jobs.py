@@ -196,7 +196,7 @@ def test_job_result_marks_which_rows_cleared_the_bar(logged_in, results_dir):
 
     The bar is four conditions -- n_eval >= 30, win rate >= 80, positive
     expectancy, excluded share <= 0.5 -- and it is the same bar
-    scripts/tune_strategy.py prints. A second copy of it in TypeScript is how
+    scripts/backtest/tune_strategy.py prints. A second copy of it in TypeScript is how
     the two would come to disagree about which rows are worth taking.
     """
     _write_grid(results_dir, [

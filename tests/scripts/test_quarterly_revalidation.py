@@ -1,4 +1,4 @@
-"""scripts/quarterly_revalidation.py's pure diffing logic (Task E96).
+"""scripts/backtest/quarterly_revalidation.py's pure diffing logic (Task E96).
 
 Only diff_and_verdict is tested directly -- everything else in the script
 is subprocess orchestration (cache refresh, wf_run.py, permutation_test.py),

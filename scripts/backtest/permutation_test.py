@@ -5,7 +5,7 @@ while preserving entry count, autocorrelation and the exit engine -- if
 the un-shifted expectancy doesn't beat ~95% of shifted runs, the
 'component' is noise wearing a lab coat.
 
-Run: python scripts/permutation_test.py --component-json '{...}' [--n 200]
+Run: python scripts/backtest/permutation_test.py --component-json '{...}' [--n 200]
 """
 import argparse
 import json

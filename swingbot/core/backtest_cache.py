@@ -4,7 +4,7 @@ daily bars from the beginning of the ticker's history until now.
 This is the single source of truth for the cache's location, filename
 scheme, and CSV shape (Date index + Open/High/Low/Close/Volume,
 split/dividend adjusted). Both the one-time bulk populator
-(scripts/fetch_backtest_data.py) and the auto-cache-on-add path import from
+(scripts/data/fetch_backtest_data.py) and the auto-cache-on-add path import from
 here so the two can never drift.
 
 `ensure_cached_background()` is the entry point wired into the watchlist add

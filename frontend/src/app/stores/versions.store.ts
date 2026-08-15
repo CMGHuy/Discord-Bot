@@ -46,7 +46,7 @@ interface VersionsSlice {
  *
  * Read-only and loaded once. There is no event wiring and no refetch: the
  * underlying file changes only when someone cuts a release and re-runs
- * `scripts/build_version_matrix.py`, which cannot happen while the page is
+ * `scripts/dev/build_version_matrix.py`, which cannot happen while the page is
  * open in front of them.
  *
  * **The geometry is computed here, not in the template.** A matrix row needs

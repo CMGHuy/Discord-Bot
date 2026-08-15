@@ -1,5 +1,5 @@
 """What would each sizing mode have done with the SAME trades?
-Run: python scripts/sizing_shadow_report.py"""
+Run: python scripts/reports/sizing_shadow_report.py"""
 import json
 import os
 import sys

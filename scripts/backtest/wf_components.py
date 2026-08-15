@@ -6,7 +6,7 @@ in >= 2 of 3 folds, no fold degrades baseline by > 0.05R, N >= 30 per
 fold. Components that fail are documented and DROPPED -- no second grid
 on the same hypothesis.
 
-Run: python scripts/wf_components.py [--component NAME] [--universe watchlist]
+Run: python scripts/backtest/wf_components.py [--component NAME] [--universe watchlist]
                                      [--out docs/superpowers/results/...md]
 
 WHY THIS SCRIPT AND NOT `wf_run.py` PER COMPONENT: run_backtest_daterange

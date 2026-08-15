@@ -12,7 +12,7 @@ layer of indirection and can no longer prove extraction correctness on its
 own.
 
 Runs on 3 fixed cached tickers x all 11 strategies x horizons {"4w", "3m"}
-for speed; `scripts/parity_sizing.py` runs the same comparison over every
+for speed; `scripts/reports/parity_sizing.py` runs the same comparison over every
 cached ticker, every strategy, every horizon, every TRAIN-window entry bar.
 
 Skipped (not failed) when data/backtest_cache/ is absent, so CI without the
@@ -89,7 +89,7 @@ def _lifecycle_off(monkeypatch):
     feature that is already measured in
     docs/superpowers/results/2026-08-08-level-lifecycle-*.md.
 
-    scripts/parity_sizing.py (the full-corpus version of this comparison)
+    scripts/reports/parity_sizing.py (the full-corpus version of this comparison)
     forces the same two flags off in main(), for the same reason.
     """
     monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_STOPS_ENABLED", False,

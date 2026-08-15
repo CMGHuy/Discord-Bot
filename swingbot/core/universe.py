@@ -120,7 +120,7 @@ def is_etf(symbol: str) -> bool:
 # number a lie, so this flags a ticker's cached df rather than trusting it.
 # Wired into the same three call sites as the E12 liquidity skip (scanning/
 # engine.py's _sync_run_scan, and both ticker loops in
-# scripts/run_backtest_range.py) -- skip + log, same pattern.
+# scripts/backtest/run_backtest_range.py) -- skip + log, same pattern.
 
 def data_quality_issues(df: pd.DataFrame, symbol: str) -> list[str]:
     """Bad data makes every downstream number a lie -- flag, skip, report."""

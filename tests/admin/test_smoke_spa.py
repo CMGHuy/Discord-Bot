@@ -1,6 +1,6 @@
 """NG54 — the deploy smoke test's parsing.
 
-`scripts/smoke_spa.py` is what stands between a broken bundle and production,
+`scripts/dev/smoke_spa.py` is what stands between a broken bundle and production,
 so the part of it that decides WHICH URLs to check is worth testing. The rest
 of the script is HTTP orchestration, which this repo's convention leaves
 untested (same reasoning as `test_run_backtest_range.py`).

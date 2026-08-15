@@ -7,7 +7,7 @@ data/backtest_cache/. Re-running skips tickers already cached; pass --force
 (or delete the folder) to overwrite and re-fetch.
 
 Range is configurable:
-    python scripts/fetch_backtest_data.py --start 2010-01-01 --end today --force
+    python scripts/data/fetch_backtest_data.py --start 2010-01-01 --end today --force
 'today' / 'now' for --end resolves to the current date. yfinance daily bars
 go back decades; intraday (1h/1m) history is NOT available this far back.
 
@@ -19,7 +19,7 @@ DIFFERENT cache location from the default data/backtest_cache/ path above
 (owned by swingbot.core.backtest_cache) and the two are NOT unified: today's
 run_backtest_range.py / backtest_scenarios.py / this script's default mode
 still only read data/backtest_cache/, not market_data/.
-    python scripts/fetch_backtest_data.py --universe sp500"""
+    python scripts/data/fetch_backtest_data.py --universe sp500"""
 import argparse
 import datetime as dt
 import json

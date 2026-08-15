@@ -9,8 +9,8 @@ granularity. This moves whatever the old per-ticker layout already had.
 Idempotent: re-running after a successful migration finds nothing to do.
 Refuses to clobber an existing destination unless --force.
 
-    python scripts/migrate_market_data.py --dry-run
-    python scripts/migrate_market_data.py
+    python scripts/data/migrate_market_data.py --dry-run
+    python scripts/data/migrate_market_data.py
 """
 import argparse
 import os

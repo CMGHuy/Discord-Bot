@@ -1,7 +1,7 @@
 """Export the analytics snapshot + journal to CSV/JSON for spreadsheet
 analysis or an external dashboard.
 
-Run: python scripts/export_analytics.py [--out exports/analytics]
+Run: python scripts/reports/export_analytics.py [--out exports/analytics]
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 ---
 name: gate
-description: Pre-commit verification gate — syntax pass plus the full suite via scripts/testrun.py, where green means literally zero failures.
+description: Pre-commit verification gate — syntax pass plus the full suite via scripts/dev/testrun.py, where green means literally zero failures.
 disable-model-invocation: true
 ---
 
@@ -41,14 +41,14 @@ python -c "import compileall,sys; sys.exit(0 if compileall.compile_dir('swingbot
 ## Step 3 — Suite
 
 ```powershell
-python scripts/testrun.py full
+python scripts/dev/testrun.py full
 ```
 
 Full output is parked in `.pytest-last-run.log`; stdout is a one-line verdict
 and stderr is progress. Never run bare `pytest` for a gate — `pytest.ini` sets
 `addopts = -q`, and pytest 9.1.1 prints **no summary counts line** under `-q`.
 
-Iterating rather than gating? `python scripts/testrun.py fast` (~27s, skips
+Iterating rather than gating? `python scripts/dev/testrun.py fast` (~27s, skips
 the render-heavy tier and auto-escalates to `full` if you touched
 charts/templates/static), or `... file tests/test_edge_gates.py` for one file.
 Do not re-run the full suite to check a local change.

@@ -44,7 +44,7 @@ import { VersionsStore } from '../../stores/versions.store';
              point: a matrix silently missing the newest release looks
              complete, which is the one way this page could mislead. -->
         <span class="stale" role="status">
-          History not regenerated — run <code>scripts/build_version_matrix.py</code>
+          History not regenerated — run <code>scripts/dev/build_version_matrix.py</code>
         </span>
       }
     </header>
@@ -58,7 +58,7 @@ import { VersionsStore } from '../../stores/versions.store';
     } @else if (!store.rows().length) {
       <p class="muted">
         No version history recorded. Run
-        <code>python scripts/build_version_matrix.py</code> to generate it.
+        <code>python scripts/dev/build_version_matrix.py</code> to generate it.
       </p>
     } @else {
       @if (store.basis(); as basis) {

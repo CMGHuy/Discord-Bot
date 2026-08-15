@@ -23,9 +23,9 @@ rather than implied.
 A ticker whose coverage starts AFTER the 730-day floor is genuinely complete
 from its IPO/listing date; one that starts AT the floor is truncated by Yahoo.
 
-    python scripts/fetch_intraday_cache.py                    # watchlist, hourly
-    python scripts/fetch_intraday_cache.py --interval 30min   # 30min (60-day cap)
-    python scripts/fetch_intraday_cache.py --force            # ignore existing cache
+    python scripts/data/fetch_intraday_cache.py                    # watchlist, hourly
+    python scripts/data/fetch_intraday_cache.py --interval 30min   # 30min (60-day cap)
+    python scripts/data/fetch_intraday_cache.py --force            # ignore existing cache
 """
 import argparse
 import datetime as dt
@@ -65,7 +65,7 @@ def max_days_for(timeframe: str) -> int:
     if cfg["max_days"] is None:
         raise SystemExit(
             f"'{timeframe}' is a daily-or-coarser timeframe with full history; "
-            "use the bot's auto-refresh or scripts/fetch_backtest_data.py."
+            "use the bot's auto-refresh or scripts/data/fetch_backtest_data.py."
         )
     return cfg["max_days"]
 

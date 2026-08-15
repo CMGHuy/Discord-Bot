@@ -22,7 +22,7 @@ stop to 4dp shifts the tiny risk-per-share enough to move rr by >5e-4,
 which the rounded-reconstruction approach cannot tell apart from a real
 simulate_exit bug. The unrounded approach removes that ambiguity entirely.
 
-    python scripts/parity_exits.py
+    python scripts/reports/parity_exits.py
 """
 import sys
 import warnings

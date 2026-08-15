@@ -1,6 +1,6 @@
 """Shadow-mode plan log: one JSONL line per scan item comparing the v2 plan
 against the legacy scenario numbers it would replace. Read by
-scripts/shadow_parity_report.py; the cutover decision (Task 88) is made on
+scripts/reports/shadow_parity_report.py; the cutover decision (Task 88) is made on
 this file's evidence."""
 import json
 import os
@@ -20,7 +20,7 @@ def append(plan, legacy_scenario_summary: dict, path: str | None = None,
            component: str | None = None, variant: str | None = None) -> None:
     """`component`/`variant` (edge E40) tag a line as belonging to one side
     of a component's shadow forward-gate cohort. They are only written when
-    supplied: scripts/shadow_parity_report.py already reads this file for
+    supplied: scripts/reports/shadow_parity_report.py already reads this file for
     the v2 cutover decision, and an untagged line has to stay byte-for-byte
     what it was."""
     path = path or _default_path()

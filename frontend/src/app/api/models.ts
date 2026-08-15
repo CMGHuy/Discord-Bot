@@ -911,7 +911,7 @@ export interface Preferences {
 /* -- versions ----------------------------------------------------------- */
 
 /** One ui/bot pair that was released together, recovered from the git
- *  history of VERSION.json by `scripts/build_version_matrix.py`. */
+ *  history of VERSION.json by `scripts/dev/build_version_matrix.py`. */
 export interface VersionPair {
   ui: string;
   bot: string;

@@ -104,7 +104,7 @@ release(bot): 1.1.0 -- plan engine v2
 Set the matching `ui_updated` / `bot_updated` stamp alongside it
 (`YYYY-MM-DD HH-MM-SS`, UTC).
 
-**Then run `python scripts/build_version_matrix.py` and commit
+**Then run `python scripts/dev/build_version_matrix.py` and commit
 `swingbot/admin/version_history.json`.** This is not optional and it is not
 cosmetic: `test_the_committed_file_matches_the_current_generator` asserts the
 frozen file's `current` pair equals `VERSION.json`, so a bump without a
@@ -115,7 +115,7 @@ regeneration is a red suite. This paragraph used to read "touching only
 **The local gate cannot catch this one, structurally.** The rule above says the
 bump goes last, *after* green — so the suite you ran was green against the old
 version and the mismatch only exists afterwards. Either re-run
-`python scripts/testrun.py file tests/scripts/test_build_version_matrix.py`
+`python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py`
 after bumping (1s), or treat the regeneration as part of the bump rather than
 as a follow-up. Do not conclude from a green pre-bump run that the release
 commit is safe.
@@ -142,7 +142,7 @@ release date: it moves on every deploy, including deploys that bump nothing.
 must print incremental progress** — one flushed line per unit of work
 (fold/ticker/chunk), not just a final summary once everything is done.
 
-`scripts/wf_run.py --full` is the counterexample that cost a whole monitoring
+`scripts/backtest/wf_run.py --full` is the counterexample that cost a whole monitoring
 session: it only prints the fold table after `run_folds()` fully returns, so a
 multi-hour run gives zero signal beyond OS-level CPU time until the very end.
 When writing or invoking a new long-running script, either confirm it already

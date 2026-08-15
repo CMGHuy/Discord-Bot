@@ -1,7 +1,7 @@
 """Dump the REAL /api/v1/market/chart payload for each SR32 chart fixture.
 
 SR40 step 4 needs the browser and the PNG drawing the same trade. The PNG
-side is `scripts/render_chart_fixtures.py`; this is the other side, and it
+side is `scripts/dev/render_chart_fixtures.py`; this is the other side, and it
 goes through the actual Flask route rather than reassembling the payload,
 so what the harness draws is what the endpoint would serve.
 

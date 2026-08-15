@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """A/B the reversal rule over one window, on ONE shared signal set.
 
-    python scripts/reversal_ab.py --train
-    python scripts/reversal_ab.py --from 2020-01-01 --to 2023-12-31 --json out.json
+    python scripts/backtest/reversal_ab.py --train
+    python scripts/backtest/reversal_ab.py --from 2020-01-01 --to 2023-12-31 --json out.json
 
 Signals are collected ONCE and replayed three ways, so the arms differ only in
 the position rule -- not in the data, the window, the frictions, or the exit

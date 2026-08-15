@@ -6,7 +6,7 @@ Tasks 34-38), which replays the live confluence scan itself instead of an
 approximation of it. The scenario backtest is offline-only -- measured at
 ~296s to replay a single ticker/single horizon (1906 daily bars) -- so it
 is not wired up here; run it via
-`python scripts/run_backtest_range.py --train --scenarios` (or --validation)
+`python scripts/backtest/run_backtest_range.py --train --scenarios` (or --validation)
 instead of an interactive command.
 """
 import asyncio

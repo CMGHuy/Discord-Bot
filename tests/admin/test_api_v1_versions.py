@@ -4,7 +4,7 @@ The endpoint reads a COMMITTED file (`swingbot/admin/version_history.json`)
 rather than live git, because the deployed container has no history to walk.
 That makes two things worth pinning: the payload keeps its shape when the file
 is missing entirely, and `stale` notices when someone bumps VERSION.json without
-re-running `scripts/build_version_matrix.py`.
+re-running `scripts/dev/build_version_matrix.py`.
 
 These tests deliberately do NOT assert specific version numbers from the real
 committed file. That file changes on every release, and a test that hardcodes

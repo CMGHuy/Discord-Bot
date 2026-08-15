@@ -19,7 +19,7 @@ alerts that no longer have real edge, and nothing in the live scan path
 stops to ask "does this still work?" on its own.
 
 **Tripwire:** the quarterly re-validation ritual
-(`scripts/quarterly_revalidation.py`, Task E96) exists specifically to
+(`scripts/backtest/quarterly_revalidation.py`, Task E96) exists specifically to
 catch this — it re-runs the fold sweep and permutation test every quarter
 and prints a PASS/DEGRADED verdict against the previous quarter's numbers.
 It is a human-run script, not a cron job, for exactly this reason: a
@@ -100,10 +100,10 @@ validation registry.
 **Tripwire:** any future component adoption is required to clear
 `run_folds`'s pre-registered gate (`GATE_MIN_IMPROVING_FOLDS=2`,
 `GATE_MAX_DEGRADATION_R=0.05`, `GATE_MIN_N_PER_FOLD=30`) AND a permutation
-test (`scripts/permutation_test.py`) before being adopted, and the
+test (`scripts/backtest/permutation_test.py`) before being adopted, and the
 quarterly re-validation ritual re-runs the permutation test on whatever
 *is* adopted every quarter, not just once at adoption time. Ablation
-(`scripts/ablation.py`) exists to find and drop the weakest-contributing
+(`scripts/backtest/ablation.py`) exists to find and drop the weakest-contributing
 adopted component the moment one starts dragging on the pooled numbers.
 
 ## Killer 6: Operator overriding throttles in a drawdown

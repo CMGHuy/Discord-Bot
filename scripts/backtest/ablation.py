@@ -1,6 +1,6 @@
-# scripts/ablation.py
+# scripts/backtest/ablation.py
 """Leave-one-out ablation over the adopted component set.
-Run: python scripts/ablation.py"""
+Run: python scripts/backtest/ablation.py"""
 import json
 import os
 import sys

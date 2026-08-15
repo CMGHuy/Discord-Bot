@@ -8,9 +8,9 @@ endpoints. Use --probe to just print what your tier can reach without writing.
 
 Examples:
     export FMP_API_KEY=xxxx           # (PowerShell: $env:FMP_API_KEY="xxxx")
-    python scripts/fmp_crawl.py --probe AAPL
-    python scripts/fmp_crawl.py AAPL MSFT
-    python scripts/fmp_crawl.py --watchlist --intervals 1hour,15min
+    python scripts/data/fmp_crawl.py --probe AAPL
+    python scripts/data/fmp_crawl.py AAPL MSFT
+    python scripts/data/fmp_crawl.py --watchlist --intervals 1hour,15min
 """
 import argparse
 import csv

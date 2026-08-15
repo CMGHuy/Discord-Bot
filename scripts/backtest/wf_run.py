@@ -1,7 +1,7 @@
 """CLI for the walk-forward harness (Task E39).
 
-Run: python scripts/wf_run.py --component-json '{"REGIME_GATES_ENABLED": true}'
-     python scripts/wf_run.py --full     # everything adopted, portfolio mode
+Run: python scripts/backtest/wf_run.py --component-json '{"REGIME_GATES_ENABLED": true}'
+     python scripts/backtest/wf_run.py --full     # everything adopted, portfolio mode
 
 WARNING -- this is a LONG run. The default sweep is every cached universe
 symbol x every strategy x every horizon, twice (baseline + component) per

@@ -7,11 +7,11 @@ companies" Wikipedia article's constituent table) into
 data/universe/sp500_raw.csv with the header `Symbol,Name,Sector`
 (GICS sector names). Then:
 
-    python scripts/build_universe.py --raw data/universe/sp500_raw.csv
-    python scripts/build_universe.py --raw data/universe/sp500_raw.csv --top 150
+    python scripts/data/build_universe.py --raw data/universe/sp500_raw.csv
+    python scripts/data/build_universe.py --raw data/universe/sp500_raw.csv --top 150
 
 --top N ranks by 20-day average dollar volume using the local OHLCV cache
-(fetch it first: python scripts/fetch_backtest_data.py --universe sp500).
+(fetch it first: python scripts/data/fetch_backtest_data.py --universe sp500).
 
 NOTE (Task E13): the --top path is implemented and ready to use, but was NOT
 run as part of E13 -- `fetch_backtest_data.py` has no `--universe` flag today

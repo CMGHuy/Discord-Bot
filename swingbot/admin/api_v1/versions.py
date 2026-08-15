@@ -2,7 +2,7 @@
 
 `VERSION.json` carries two independently-bumped lines and has never recorded
 which values of one go with which values of the other. That pairing exists only
-in the file's own git history, so `scripts/build_version_matrix.py` freezes it
+in the file's own git history, so `scripts/dev/build_version_matrix.py` freezes it
 into `swingbot/admin/version_history.json`, which this endpoint serves. The
 frozen file is committed because the deployed container has no git history to
 re-derive it from.

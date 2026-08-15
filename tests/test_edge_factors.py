@@ -493,7 +493,7 @@ def _v1_inputs():
 def test_score_plan_is_bit_identical_without_edge_inputs():
     """The registry badges and the A/B/C tier thresholds were built on the
     current scoring. A caller that supplies no edge inputs -- which is
-    every caller today, including scripts/audit_quality_score.py -- must
+    every caller today, including scripts/reports/audit_quality_score.py -- must
     get exactly the score it got before."""
     from swingbot.core.quality import score_plan
     base = score_plan(**_v1_inputs())

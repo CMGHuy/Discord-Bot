@@ -8,8 +8,8 @@ coordinate-conversion error — unit tests cannot see one, and it found three.
 ## Running it
 
 ```bash
-python scripts/render_chart_fixtures.py --out /tmp/chart-png      # the PNG side
-python scripts/dump_chart_payloads.py frontend/chart-harness/payloads   # the browser side
+python scripts/dev/render_chart_fixtures.py --out /tmp/chart-png      # the PNG side
+python scripts/dev/dump_chart_payloads.py frontend/chart-harness/payloads   # the browser side
 cd frontend
 npx esbuild chart-harness/main.ts --bundle --format=esm --outfile=chart-harness/bundle.js
 python -m http.server 8899 --bind 127.0.0.1
@@ -17,7 +17,7 @@ python -m http.server 8899 --bind 127.0.0.1
 
 Then open `http://127.0.0.1:8899/chart-harness/index.html?f=<fixture>` and put it
 beside `/tmp/chart-png/<fixture>.png`. Fixture names are the keys of `FIXTURES`
-in `scripts/render_chart_fixtures.py`.
+in `scripts/dev/render_chart_fixtures.py`.
 
 ## What it does and does not prove
 

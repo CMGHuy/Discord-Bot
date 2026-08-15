@@ -24,7 +24,7 @@ UI's "Plan Engine v2" section, hot-reloadable):
 
 | Flag | Values | Meaning |
 |---|---|---|
-| `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
+| `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/reports/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
 | `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 with a chandelier ATR trail. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
 | `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
 
@@ -32,7 +32,7 @@ UI's "Plan Engine v2" section, hot-reloadable):
 `INTRADAY_MANAGER_V2=true`) so a fresh deployment runs the validated engine
 immediately with no staged rollout required. If you'd rather stage it
 yourself: `shadow` for ≥5 scan sessions (compare against legacy numbers via
-`python scripts/shadow_parity_report.py`) → `on` for ≥5 clean sessions →
+`python scripts/reports/shadow_parity_report.py`) → `on` for ≥5 clean sessions →
 enable scale-out + manager.
 
 **Badges: what they legally claim.** Every v2 plan is stamped from
@@ -49,7 +49,7 @@ enable scale-out + manager.
   out-of-sample number, never a train number.
 
 The registry regenerates only from validation runs
-(`python scripts/run_backtest_range.py --validation --exit-model v2
+(`python scripts/backtest/run_backtest_range.py --validation --exit-model v2
 --scale-out --emit-registry swingbot/core/validation_registry.json
 --run-date <date>`), never by hand.
 
@@ -92,9 +92,9 @@ than the staleness guard.
 
 **`data/journal.json`** holds one entry per closed trade: MFE/MAE, exit
 efficiency, auto-generated tags, and an `auto_lesson` sentence templated
-from the trade's outcome shape. `scripts/backfill_journal.py` journals any
+from the trade's outcome shape. `scripts/data/backfill_journal.py` journals any
 already-closed trade that predates the auto-journal hook (idempotent — safe
-to re-run any time). `python scripts/export_analytics.py` writes the
+to re-run any time). `python scripts/reports/export_analytics.py` writes the
 current snapshot + journal out as CSV/JSON for spreadsheet analysis.
 
 **`follow_score`** (badge 40 + quality 40 + regime 10 + freshness 10) is the
@@ -140,13 +140,13 @@ recomputed per-view:
 | **Strategies** (`/strategies`) | Registry provenance per strategy (badge, R:R override, OOS N/WR/expectancy, validation window/run date), a strategy×horizon live win-rate heatmap, drift chips, and rolling-WR sparklines. |
 | **Calibration** (`/calibration`) | Does a higher quality score actually win more? Score-decile chart vs the 80% target line, tier-vs-design-band pass/fail, and the badge-drift table (see the edge-decay rule above). |
 | **Journal** (`/journal`) | Browses `JournalStore` entries (MFE/MAE, exit efficiency, tags, auto-lesson) with tag/outcome/strategy filters and inline note editing, plus a Weekly digest tab. |
-| **Tuning** (`/tuning`) | A workbench over `scripts/tune_strategy.py`: current per-strategy parameters, a grid-launch form, live job-progress streaming, and a results/proposal browser. See the TRAIN-only guardrail below — this page can only ever *propose* a parameter change. |
+| **Tuning** (`/tuning`) | A workbench over `scripts/backtest/tune_strategy.py`: current per-strategy parameters, a grid-launch form, live job-progress streaming, and a results/proposal browser. See the TRAIN-only guardrail below — this page can only ever *propose* a parameter change. |
 
 **Job system.** `swingbot/admin/jobs.py`'s `JobManager` runs at most one
 tuning grid at a time as a background subprocess; live progress streams to
 the Tuning page via polling. Job logs live under `logs/jobs/<job_id>.log`,
 grid results under `data/tuning_results/<job_id>.json`
-(`scripts/tune_strategy.py --json`), and a proposed parameter change (never
+(`scripts/backtest/tune_strategy.py --json`), and a proposed parameter change (never
 auto-applied) under `data/tuning_proposals/`.
 
 **TRAIN-only guardrail.** The tuning workbench physically cannot touch the
@@ -258,7 +258,7 @@ genuinely believe a rung is wrong, that's a deliberate `.env` edit to
 override), never a one-off bypass during an actual drawdown. The weekly
 risk report calls out any operator override, on purpose.
 
-**The quarterly re-validation ritual** (`scripts/quarterly_revalidation.py`,
+**The quarterly re-validation ritual** (`scripts/backtest/quarterly_revalidation.py`,
 Task E96): the first weekend of January, April, July, and October, run it,
 read every line it prints, and prune anything it flags DEGRADED. It's
 deliberately a human-run script, not a cron job — a re-validation result

@@ -17,10 +17,10 @@ hundreds of lines, and `pytest.ini` sets `addopts = -q`, under which pytest
 9.1.1 emits **no summary counts line at all**.
 
 ```bash
-python scripts/testrun.py full              # -n 4, whole suite    ~40-65s
-python scripts/testrun.py fast              # -m "not slow"        ~27s
-python scripts/testrun.py file tests/x.py   # one file              ~7s
-python scripts/testrun.py lf                # last failed        seconds
+python scripts/dev/testrun.py full              # -n 4, whole suite    ~40-65s
+python scripts/dev/testrun.py fast              # -m "not slow"        ~27s
+python scripts/dev/testrun.py file tests/x.py   # one file              ~7s
+python scripts/dev/testrun.py lf                # last failed        seconds
 ```
 
 `fast` auto-escalates to `full` when anything under `swingbot/core/charts/`

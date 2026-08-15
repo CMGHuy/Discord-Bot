@@ -392,7 +392,7 @@ export function binRMultiples(values: number[], width = 0.5): Bin[] {
  *
  * `passes` and `row_index` are both computed server-side and carried on the
  * row. The acceptance bar is four conditions and it is the same bar
- * `scripts/tune_strategy.py` prints, so restating it here would be a second
+ * `scripts/backtest/tune_strategy.py` prints, so restating it here would be a second
  * definition that could disagree; the index is what `POST /proposals`
  * identifies a row by, and inferring it from array position would break the
  * moment anything sorted the table.

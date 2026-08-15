@@ -17,8 +17,8 @@ Dual-mode, mirroring the E15 precedent in fetch_backtest_data.py's
     script (same disclosed gap as fetch_backtest_data.py's --universe mode).
 
 Run:
-    python scripts/validate_data.py
-    python scripts/validate_data.py --universe sp500
+    python scripts/data/validate_data.py
+    python scripts/data/validate_data.py --universe sp500
 """
 import argparse
 import glob
@@ -32,7 +32,7 @@ from swingbot.core.universe import data_quality_issues  # noqa: E402
 
 def _validate_backtest_cache() -> int:
     """Default mode: data/backtest_cache/, flat {TICKER}.csv files, read the
-    same way scripts/fetch_backtest_data.py's own load_cached() does."""
+    same way scripts/data/fetch_backtest_data.py's own load_cached() does."""
     import pandas as pd
     from swingbot.core.backtest_cache import CACHE_DIR
 

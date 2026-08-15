@@ -21,7 +21,7 @@ and last seen.
 
 Run after any VERSION.json bump:
 
-    python scripts/build_version_matrix.py
+    python scripts/dev/build_version_matrix.py
 
 Writes `swingbot/admin/version_history.json`, which is committed — the deployed
 container has no git history to re-derive it from.

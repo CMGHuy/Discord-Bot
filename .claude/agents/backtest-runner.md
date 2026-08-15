@@ -26,7 +26,7 @@ lines per leg across multiple legs and can run three hours.
    `market_data/`, which is **timeframe-first**: `{timeframe}/{TICKER}.csv`, e.g.
    `market_data/daily/AAPL.csv` (521 daily + 78 hourly), filenames sanitized
    (`GC=F` -> `GC_F.csv`). A missing cache means
-   `python scripts/fetch_backtest_data.py` must run first (network).
+   `python scripts/data/fetch_backtest_data.py` must run first (network).
 
 3. **Log to a file and background it.** Never stream a multi-hour job into your
    context:

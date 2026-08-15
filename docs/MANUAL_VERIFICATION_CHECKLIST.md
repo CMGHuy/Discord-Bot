@@ -44,11 +44,11 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 **Record result:** the Progress block of the E77 task itself.
 
 ### Task E89 — Full-system walk-forward re-run
-**How:** `python scripts/wf_run.py --full --portfolio` (writes `data/replay_result.json` and `data/replay_r_sequence.json` by default via `--json`/`--r-sequence-json` — pass explicit paths if you want to keep multiple runs). This is long-running; consider using a `backtest-runner` subagent so the per-symbol output doesn't flood your context.
+**How:** `python scripts/backtest/wf_run.py --full --portfolio` (writes `data/replay_result.json` and `data/replay_r_sequence.json` by default via `--json`/`--r-sequence-json` — pass explicit paths if you want to keep multiple runs). This is long-running; consider using a `backtest-runner` subagent so the per-symbol output doesn't flood your context.
 **Record result:** render the output into an evidence doc under `docs/superpowers/results/`.
 
 ### Task E90 — Full-system permutation test (pre-registered stop rule)
-**How:** `python scripts/permutation_test.py --n 200` (also accepts `--component-json` if isolating a component).
+**How:** `python scripts/backtest/permutation_test.py --n 200` (also accepts `--component-json` if isolating a component).
 **Pre-registered rule — do not skip:** if p > 0.05, **stop** — strip components and re-run until the remaining system's edge is distinguishable from luck. No second attempt at the same hypothesis without stripping something first.
 **Record result:** results doc, p-value quoted verbatim.
 
@@ -73,7 +73,7 @@ Every plan under `docs/superpowers/plans/` has steps that can't be run unattende
 **How:** flip the promoted flags in production `.env` **one scan-cycle apart** (not all at once), watching the E82 scan-health telemetry between each flip for anomalies before proceeding to the next.
 
 ### Task E96 — Quarterly re-validation ritual
-**How:** `python scripts/quarterly_revalidation.py` (add `--skip-refresh` if the OHLCV cache is already fresh, `--permutation-n 200` to control the permutation-test sample size). **Deliberately human-run, not cron** — run it the first weekend of Jan/Apr/Jul/Oct, read the PASS/DEGRADED verdict yourself, prune anything degraded.
+**How:** `python scripts/backtest/quarterly_revalidation.py` (add `--skip-refresh` if the OHLCV cache is already fresh, `--permutation-n 200` to control the permutation-test sample size). **Deliberately human-run, not cron** — run it the first weekend of Jan/Apr/Jul/Oct, read the PASS/DEGRADED verdict yourself, prune anything degraded.
 
 ### Task E99 — One full live trading day review
 **How:** pick one full trading day once the system's been live a while; review end-to-end — alerts posted, charts rendered correctly, `!portfolio` accurate, scan telemetry clean, zero ERROR-level log lines.

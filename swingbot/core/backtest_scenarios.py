@@ -32,7 +32,7 @@ LEVEL_REFRESH_BARS = 5
 # source stays WEAK everywhere and Tasks 41-42 record that honestly"), this
 # is NOT the grid winner -- there wasn't one. min_reward_pct/min_stop_
 # distance_pct/max_stop_distance_pct/min_risk_reward mirror the pre-existing
-# SCENARIO_GATES in scripts/run_backtest_range.py (the closest existing
+# SCENARIO_GATES in scripts/backtest/run_backtest_range.py (the closest existing
 # precedent, itself never grid-validated). min_confluence uses the least
 # restrictive value the Task 39 grid tested (2), not a tuned choice. horizons
 # lists every horizon the grid covered -- NOT a "qualifying" subset, since

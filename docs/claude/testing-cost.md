@@ -214,7 +214,7 @@ empty is a property of the *strategy at that horizon*, consistent across all
 three tickers — VWAP/3m, Volume Profile at both, Support/Resistance 4w, RSI at
 both, MACD 4w, EMA Crossover 3m, Elliott Wave 3m. `RSI Divergence` never skips.
 **The number is therefore a function of `data/backtest_cache/`**: refresh it via
-`scripts/fetch_backtest_data.py` and 66 moves without anything being wrong.
+`scripts/data/fetch_backtest_data.py` and 66 moves without anything being wrong.
 
 **Why deleting them would be expensive.** `test_sizing_parity.py` compares the
 current `backtest._trade_plan_at` against `tests/fixtures/legacy_trade_plan_at.py`

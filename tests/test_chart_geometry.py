@@ -6,7 +6,7 @@ draws cannot disagree about where a level sits.
 
 These assert the SHAPE OF THE DATA. That the extraction left the PNG
 byte-identical is a separate check with a separate instrument --
-`python scripts/render_chart_fixtures.py --check <baseline>/SHA256`.
+`python scripts/dev/render_chart_fixtures.py --check <baseline>/SHA256`.
 """
 import json
 

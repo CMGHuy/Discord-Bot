@@ -11,7 +11,7 @@ earlier (`shift(+n)`, trailing `rolling`). Never `shift(-n)`, never
 centered windows. Every boolean Series is `.fillna(False)` -- a gate that
 cannot be computed yet (short history) BLOCKS entries, it never passes.
 
-Tunables live in DEFAULT_PARAMS (per strategy); scripts/tune_strategy.py
+Tunables live in DEFAULT_PARAMS (per strategy); scripts/backtest/tune_strategy.py
 sweeps them on the train window only. STRATEGY_GATES (strategy_types.py)
 lets tuning disable a direction or horizons per strategy.
 """

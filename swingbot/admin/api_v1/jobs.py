@@ -75,7 +75,7 @@ def get_job_result(job_id: str):
 
     `passes` is computed here rather than left to the client. The acceptance
     bar is four conditions (`_grid_row_passes`), it is the same bar
-    `scripts/tune_strategy.py` prints, and a second copy of it in TypeScript
+    `scripts/backtest/tune_strategy.py` prints, and a second copy of it in TypeScript
     is how the two would come to disagree about which rows are worth taking.
     """
     from swingbot.admin.queries import _JOB_ID_RE, _grid_row_passes, _load_result

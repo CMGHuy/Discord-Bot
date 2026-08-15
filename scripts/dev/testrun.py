@@ -8,10 +8,10 @@ Reading a run then costs ~50 tokens.
 
 Profiles (see docs/claude/testing-cost.md for the measurements behind them):
 
-    python scripts/testrun.py fast              # -m "not slow", serial   ~27s
-    python scripts/testrun.py full              # -n 4                    ~40s
-    python scripts/testrun.py file tests/x.py   # one path, serial         ~7s
-    python scripts/testrun.py lf                # --lf, serial          seconds
+    python scripts/dev/testrun.py fast              # -m "not slow", serial   ~27s
+    python scripts/dev/testrun.py full              # -n 4                    ~40s
+    python scripts/dev/testrun.py file tests/x.py   # one path, serial         ~7s
+    python scripts/dev/testrun.py lf                # --lf, serial          seconds
 
 `fast` runs serial on purpose: measured 27.1s serial vs 27.2s at -n 4, i.e. it
 is already at the fixed per-invocation overhead floor and workers only add

@@ -24,9 +24,9 @@ NOT IMPORTED BY THE BOT. Nothing under swingbot/ may import this module -- it
 must not be able to affect the live path.
 
 Usage:
-    python scripts/record_option_snapshots.py                 # default symbols
-    python scripts/record_option_snapshots.py --symbols SPY,QQQ
-    python scripts/record_option_snapshots.py --max-dte 45 --out market_data/options
+    python scripts/data/record_option_snapshots.py                 # default symbols
+    python scripts/data/record_option_snapshots.py --symbols SPY,QQQ
+    python scripts/data/record_option_snapshots.py --max-dte 45 --out market_data/options
 """
 from __future__ import annotations
 

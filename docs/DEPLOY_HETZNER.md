@@ -287,7 +287,7 @@ The CI pipeline above is for *code* changes.
 
 ## Not scheduled yet: the option-chain archive
 
-`scripts/record_option_snapshots.py` is built and tested but **nothing runs
+`scripts/data/record_option_snapshots.py` is built and tested but **nothing runs
 it** — not compose, not cron, not the bot loop — so `market_data/options/` is
 still empty.
 

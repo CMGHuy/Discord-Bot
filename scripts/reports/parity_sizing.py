@@ -11,10 +11,10 @@ stay independent of plan_engine.py.
 Runs every ticker cached under data/backtest_cache/ x every strategy in
 backtest.ALL_STRATEGIES x every horizon in HORIZONS x every entry bar whose
 entry date falls in the TRAIN window (2020-01-01..2023-12-31, same window
-scripts/run_backtest_range.py and scripts/tune_strategy.py use), comparing
+scripts/backtest/run_backtest_range.py and scripts/backtest/tune_strategy.py use), comparing
 (stop, tp1) old vs new.
 
-    python scripts/parity_sizing.py
+    python scripts/reports/parity_sizing.py
 
 Prints the count compared, the max abs deviation seen, and the mismatch
 count (deviation > 1e-6); exits 1 if any mismatch is found. A mismatch here

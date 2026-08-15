@@ -42,7 +42,7 @@ three **default to fully live** (`on`/`true`/`true`) so a fresh deployment
 runs the validated engine immediately — flipping them requires no
 container restart (hot reload picks them up). If you'd rather stage the
 rollout yourself: run `shadow` for ≥5 scan sessions and check
-`python scripts/shadow_parity_report.py` before flipping `on`, then enable
+`python scripts/reports/shadow_parity_report.py` before flipping `on`, then enable
 scale-out + manager only after ≥5 clean `on` sessions.
 
 ## Admin UI
@@ -56,7 +56,7 @@ them. `/` redirects to the SPA and there is nothing else to serve.
 **There is no longer a flag-and-restart rollback.** That was the mitigation
 the cutover rested on, and it is gone with the thing it rolled back to. If the
 SPA is broken, the rollback is now a git revert and a redeploy — which is
-slower, so `scripts/smoke_spa.py` below matters more than it used to, not
+slower, so `scripts/dev/smoke_spa.py` below matters more than it used to, not
 less.
 
 The admin now exposes exactly three kinds of route: `/api/v1/*`, the SPA's
@@ -78,7 +78,7 @@ browser, with both test suites green.
 run it by hand against any instance:
 
 ```bash
-docker compose exec admin python scripts/smoke_spa.py \
+docker compose exec admin python scripts/dev/smoke_spa.py \
   --url http://127.0.0.1:1234 --user "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD"
 ```
 
