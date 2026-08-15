@@ -4,7 +4,7 @@ from swingbot.core.plan_engine import PlanStatus, record_transition
 from swingbot.core.plan_manager import PlanManager
 from swingbot.core.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def _active(**kw):

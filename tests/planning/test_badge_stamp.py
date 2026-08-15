@@ -1,7 +1,7 @@
 from swingbot.core.plan_engine import badge_stats_line, stamp_badge
 from swingbot.core.registry import get_badge
 
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def test_stamp_validated():

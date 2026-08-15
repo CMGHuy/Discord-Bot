@@ -6,7 +6,7 @@ from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.plan_engine import TradePlanV2, PlanStatus, simulate_exit
 from swingbot.core.strategy_types import HORIZONS
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 CACHE_DIR = ROOT / "data" / "backtest_cache"
 SAMPLE_TICKERS = ["AAPL", "MSFT", "TSLA"]
 HORIZON_KEYS = ["4w", "3m"]

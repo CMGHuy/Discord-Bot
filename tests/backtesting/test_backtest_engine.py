@@ -119,7 +119,7 @@ import pandas as pd
 from swingbot.core.backtest import run_backtest
 import swingbot.core.entry_filters as ef
 
-CACHE = Path(__file__).resolve().parent.parent / "data" / "backtest_cache"
+CACHE = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 
 # NOTE: MACD/4w produces zero raw entry signals on every cached ticker checked
 # on this branch (AAPL, MSFT, TSLA, NVDA, AMD, AMZN) -- a pre-existing

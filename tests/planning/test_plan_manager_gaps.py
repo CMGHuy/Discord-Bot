@@ -3,7 +3,7 @@ import pytest
 from swingbot.core.plan_store import PlanStore
 from swingbot.core.plan_manager import PlanManager
 from tests.fake_feed import FakePriceFeed
-from tests.test_plan_manager_active import _active
+from tests.planning.test_plan_manager_active import _active
 
 
 def _env(tmp_path):

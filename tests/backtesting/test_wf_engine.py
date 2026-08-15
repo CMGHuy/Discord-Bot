@@ -265,7 +265,7 @@ def _shadow_report():
     for the same dance) -- put it on the path and import by module name."""
     import sys
     from pathlib import Path
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parent.parent.parent
     sys.path.insert(0, str(root / "scripts" / "reports"))
     from shadow_component_report import shadow_component_report
     return shadow_component_report

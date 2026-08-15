@@ -4,7 +4,7 @@ from swingbot.core.plan_engine import PlanStatus
 from swingbot.core.plan_manager import PlanManager
 from swingbot.core.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
-from tests.test_plan_manager_active import _active
+from tests.planning.test_plan_manager_active import _active
 
 
 def _partial_env(tmp_path, prices, tp2=None, atr_fn=None):

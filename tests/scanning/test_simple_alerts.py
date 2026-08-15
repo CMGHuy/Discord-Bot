@@ -25,7 +25,7 @@ from swingbot.commands.scanning import _send_alerts
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.embeds import build_simple_alert
 
-from tests.test_embeds_v3 import make_item, make_plan_v2
+from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
 
 
 # --------------------------------------------------------------------------

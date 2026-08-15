@@ -1,7 +1,7 @@
 import dataclasses
 
 from swingbot.core.plan_engine import plan_to_dict, plan_from_dict
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def test_exact_round_trip():

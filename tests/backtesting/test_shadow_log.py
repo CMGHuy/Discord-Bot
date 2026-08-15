@@ -2,7 +2,7 @@ import json
 import os
 
 from swingbot.core import shadow_log
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 LEGACY = {"entry": 100.0, "stop": 95.0, "tp": 106.0, "target2": None,
           "confidence": 4}

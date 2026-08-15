@@ -1,6 +1,6 @@
 from swingbot.core.plan_engine import PlanStatus, record_transition
 from swingbot.commands.plans import format_plans_board
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def test_empty_board():

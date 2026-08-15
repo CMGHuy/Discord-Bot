@@ -1,6 +1,6 @@
 from swingbot.core.plan_manager import PlanEvent
 from swingbot.core.scanning.embeds import build_plan_event_embed
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def _embed(transition, detail=None, **plan_kw):

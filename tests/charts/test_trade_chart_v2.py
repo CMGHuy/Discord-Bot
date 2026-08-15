@@ -4,7 +4,7 @@ import pytest
 
 from swingbot.core.charts.trade_chart import generate_trade_chart
 from tests.helpers import make_ohlcv
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 from tests.conftest import assert_rendered
 
 # ~85% of suite runtime lives in nine files like this one; excluded from

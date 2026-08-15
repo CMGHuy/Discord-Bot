@@ -9,7 +9,7 @@ coverage.
 import pytest
 
 from swingbot.core.plan_engine import simulate_exit
-from tests.test_exit_sim_single import _plan
+from tests.planning.test_exit_sim_single import _plan
 from tests.helpers import make_ohlcv
 
 

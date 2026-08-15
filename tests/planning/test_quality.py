@@ -98,7 +98,7 @@ def test_tier_boundaries():
 
 def test_audit_script_never_imported_by_swingbot():
     from pathlib import Path
-    root = Path(__file__).resolve().parent.parent / "swingbot"
+    root = Path(__file__).resolve().parent.parent.parent / "swingbot"
     offenders = [p for p in root.rglob("*.py")
                  if "audit_quality_score" in p.read_text(encoding="utf-8")]
     assert offenders == [], offenders

@@ -37,7 +37,7 @@ def test_flag_on_polls_open_plans(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     pm._MANAGER = None
     from swingbot.core.plan_store import PlanStore
-    from tests.test_plan_manager_pending import _pending
+    from tests.planning.test_plan_manager_pending import _pending
     PlanStore().add(_pending())
     monkeypatch.setattr(pm, "_price_fn", lambda t: 106.0)   # injectable feed
     # Fresh plan: no bars have elapsed, so expiry is not what is under test.
@@ -56,7 +56,7 @@ def test_flag_on_still_expires_a_stale_pending_plan(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     pm._MANAGER = None
     from swingbot.core.plan_store import PlanStore
-    from tests.test_plan_manager_pending import _pending
+    from tests.planning.test_plan_manager_pending import _pending
     PlanStore().add(_pending())
     monkeypatch.setattr(pm, "_price_fn", lambda t: 106.0)
     # Past its 5-bar window: expiry wins even though price crossed the trigger.

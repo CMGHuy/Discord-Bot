@@ -2,7 +2,7 @@ from swingbot.core.plan_engine import PlanStatus
 from swingbot.core.plan_manager import PlanManager
 from swingbot.core.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def _pending(**kw):
@@ -83,7 +83,7 @@ def test_pending_invalidates_when_price_breaks_stop(tmp_path):
 
 
 def test_bearish_pending_invalidates_above_stop(tmp_path):
-    from tests.test_plan_engine_model import _plan
+    from tests.planning.test_plan_engine_model import _plan
     feed = FakePriceFeed([("AAPL", 106.0)])
     store, mgr = _mgr(tmp_path, feed)
     store.add(_plan(entry_type="stop_entry", direction="bearish",

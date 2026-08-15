@@ -1,5 +1,5 @@
 from swingbot.commands.info import format_signal_plan_line
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def test_plan_line_validated_with_tp2():

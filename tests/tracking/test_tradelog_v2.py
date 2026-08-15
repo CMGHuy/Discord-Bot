@@ -2,7 +2,7 @@ from swingbot.core.performance import TradeLog
 from swingbot.core.plan_manager import PlanManager
 from swingbot.core.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
-from tests.test_plan_manager_pending import _pending
+from tests.planning.test_plan_manager_pending import _pending
 
 
 def test_full_lifecycle_writes_two_leg_win(tmp_path):

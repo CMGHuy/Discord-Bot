@@ -1,7 +1,7 @@
 from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, stamp_badge
 from swingbot.core.scanning.embeds import (badge_field_for, entry_line,
                                            leg_rows, quality_lines)
-from tests.test_plan_engine_model import _plan
+from tests.planning.test_plan_engine_model import _plan
 
 
 def test_validated_badge_line_carries_registry_numbers():

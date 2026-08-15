@@ -31,7 +31,7 @@ from swingbot.core.strategy_types import HORIZONS, MIN_BARS
 
 from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 CACHE_DIR = ROOT / "data" / "backtest_cache"
 TOLERANCE = 1e-6
 HORIZON_KEYS = ["4w", "3m"]
