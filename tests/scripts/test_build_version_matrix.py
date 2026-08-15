@@ -94,58 +94,6 @@ def test_a_release_with_no_components_at_all_is_skipped(monkeypatch):
     assert [s["versions"] for s in bvm._states()] == [{"ui": "1.0.0"}]
 
 
-def test_build_derives_pairs_and_ranges(monkeypatch):
-    states = [
-        {"sha": "aaaaaaa1", "date": "2026-07-01", "subject": "a", "ui": "1.0.0", "bot": "1.0.0"},
-        {"sha": "aaaaaaa2", "date": "2026-07-02", "subject": "b", "ui": "1.0.0", "bot": "1.0.1"},
-        # Repeat of an existing pair: must extend last_seen, not duplicate.
-        {"sha": "aaaaaaa3", "date": "2026-07-03", "subject": "c", "ui": "1.0.0", "bot": "1.0.1"},
-        {"sha": "aaaaaaa4", "date": "2026-07-04", "subject": "d", "ui": "1.1.0", "bot": "1.0.10"},
-    ]
-    monkeypatch.setattr(bvm, "_states", lambda: states)
-    doc = bvm.build()
-
-    assert doc["current"] == {"ui": "1.1.0", "bot": "1.0.10"}
-    assert len(doc["pairs"]) == 3, "the repeated pair must be deduplicated"
-
-    repeated = [p for p in doc["pairs"] if p["bot"] == "1.0.1"][0]
-    assert repeated["first_seen"] == "2026-07-02"
-    assert repeated["last_seen"] == "2026-07-03"
-
-    ranges = {r["ui"]: r for r in doc["ranges"]}
-    assert ranges["1.0.0"]["bot_min"] == "1.0.0"
-    assert ranges["1.0.0"]["bot_max"] == "1.0.1"
-    assert ranges["1.0.0"]["bot_count"] == 2
-    assert ranges["1.1.0"]["bot_min"] == ranges["1.1.0"]["bot_max"] == "1.0.10"
-
-
-def test_bot_axis_is_sorted_numerically(monkeypatch):
-    """The axis order is what the page's column indices are built from."""
-    states = [
-        {"sha": "a", "date": "2026-07-01", "subject": "s", "ui": "1.0.0", "bot": "1.0.9"},
-        {"sha": "b", "date": "2026-07-02", "subject": "s", "ui": "1.0.0", "bot": "1.0.10"},
-        {"sha": "c", "date": "2026-07-03", "subject": "s", "ui": "1.0.0", "bot": "1.0.2"},
-    ]
-    monkeypatch.setattr(bvm, "_states", lambda: states)
-    assert bvm.build()["bot_versions"] == ["1.0.2", "1.0.9", "1.0.10"]
-
-
-def test_every_pair_falls_inside_its_ui_range(monkeypatch):
-    """The property the admin page's bars depend on."""
-    states = [
-        {"sha": "a", "date": "2026-07-01", "subject": "s", "ui": "1.0.0", "bot": "1.0.1"},
-        {"sha": "b", "date": "2026-07-02", "subject": "s", "ui": "1.0.0", "bot": "1.0.12"},
-        {"sha": "c", "date": "2026-07-03", "subject": "s", "ui": "1.0.0", "bot": "1.0.3"},
-    ]
-    monkeypatch.setattr(bvm, "_states", lambda: states)
-    doc = bvm.build()
-    order = {v: i for i, v in enumerate(doc["bot_versions"])}
-    spans = {r["ui"]: (order[r["bot_min"]], order[r["bot_max"]]) for r in doc["ranges"]}
-    for pair in doc["pairs"]:
-        low, high = spans[pair["ui"]]
-        assert low <= order[pair["bot"]] <= high
-
-
 def test_no_states_fails_loudly(monkeypatch):
     monkeypatch.setattr(bvm, "_states", lambda: [])
     try:
@@ -153,6 +101,47 @@ def test_no_states_fails_loudly(monkeypatch):
     except SystemExit:
         return
     raise AssertionError("an empty history must abort, not write an empty file")
+
+
+def test_build_derives_components_releases_and_changed(monkeypatch):
+    states = [
+        {"sha": "aaaaaaa1", "date": "2026-07-01", "subject": "a",
+         "versions": {"ui": "1.0.0", "bot": "1.0.0"}},
+        {"sha": "aaaaaaa2", "date": "2026-07-02", "subject": "b",
+         "versions": {"ui": "1.0.0", "bot": "1.0.1"}},
+        # Repeat of the whole tuple: extends last_seen, does not add a release.
+        {"sha": "aaaaaaa3", "date": "2026-07-03", "subject": "c",
+         "versions": {"ui": "1.0.0", "bot": "1.0.1"}},
+        # A component appearing for the first time, mid-history.
+        {"sha": "aaaaaaa4", "date": "2026-07-04", "subject": "d",
+         "versions": {"ui": "1.0.0", "bot": "1.0.1", "worker": "0.1.0"}},
+    ]
+    monkeypatch.setattr(bvm, "_states", lambda: states)
+    doc = bvm.build()
+
+    assert doc["components"] == ["ui", "bot", "worker"], "first-appearance order"
+    assert doc["current"] == {"ui": "1.0.0", "bot": "1.0.1", "worker": "0.1.0"}
+    assert len(doc["releases"]) == 3, "the repeated tuple must not add a release"
+
+    first, second, third = doc["releases"]
+    assert first["changed"] == ["ui", "bot"], "everything is new at the first release"
+    assert second["changed"] == ["bot"]
+    assert second["last_seen"] == "2026-07-03", "the repeat extended it"
+    assert third["changed"] == ["worker"]
+
+
+def test_a_component_is_null_before_it_existed(monkeypatch):
+    """null distinguishes 'did not exist yet' from 'unchanged' -- the strip
+    draws those differently and cannot recover the difference from equality."""
+    monkeypatch.setattr(bvm, "_states", lambda: [
+        {"sha": "a1", "date": "2026-07-01", "subject": "a",
+         "versions": {"ui": "1.0.0"}},
+        {"sha": "a2", "date": "2026-07-02", "subject": "b",
+         "versions": {"ui": "1.0.0", "worker": "0.1.0"}},
+    ])
+    releases = bvm.build()["releases"]
+    assert releases[0]["versions"] == {"ui": "1.0.0", "worker": None}
+    assert "worker" not in releases[0]["changed"], "absent is not changed"
 
 
 def test_the_committed_file_matches_the_current_generator():

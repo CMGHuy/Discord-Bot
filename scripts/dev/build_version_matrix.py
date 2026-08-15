@@ -54,6 +54,8 @@ def _components(doc: dict) -> list[str]:
     return [k for k in doc if not k.endswith("_updated")]
 
 
+# Retained for the SPA-side version filter (v29 Task 6); no caller in this
+# module since the cross-product fields were removed.
 def _semver_key(v: str) -> tuple:
     """Sort '1.10.2' after '1.9.0'. Non-numeric parts sort last, not crash."""
     parts = []
@@ -122,51 +124,45 @@ def build() -> dict:
     if not states:
         raise SystemExit(f"no committed states of {TRACKED} found — is this a git checkout?")
 
-    # Distinct (ui, bot) pairs, in the order they first appeared.
-    pairs: dict[tuple[str, str], dict] = {}
+    # First-appearance order, oldest release first. NOT sorted: lane order on
+    # the page should be stable as components are added, and alphabetical order
+    # re-sorts every existing lane the day someone adds `api`. Appending only.
+    components: list[str] = []
     for st in states:
-        key = (st["ui"], st["bot"])
-        if key in pairs:
-            pairs[key]["last_seen"] = st["date"]
-        else:
-            pairs[key] = {
-                "ui": st["ui"], "bot": st["bot"],
-                "first_seen": st["date"], "last_seen": st["date"],
-                "commit": st["sha"], "subject": st["subject"],
-            }
+        for name in st["versions"]:
+            if name not in components:
+                components.append(name)
 
-    ui_versions = sorted({p["ui"] for p in pairs.values()}, key=_semver_key)
-    bot_versions = sorted({p["bot"] for p in pairs.values()}, key=_semver_key)
-
-    # Per-UI span across the bot line: the answer to "this UI ran against which
-    # backends". Contiguous in practice, but computed as min/max of what was
-    # actually observed rather than assumed.
-    ranges = []
-    for ui in ui_versions:
-        bots = sorted((p["bot"] for p in pairs.values() if p["ui"] == ui), key=_semver_key)
-        seen = [p for p in pairs.values() if p["ui"] == ui]
-        ranges.append({
-            "ui": ui,
-            "bot_min": bots[0],
-            "bot_max": bots[-1],
-            "bot_count": len(bots),
-            "first_seen": min(p["first_seen"] for p in seen),
-            "last_seen": max(p["last_seen"] for p in seen),
+    # One entry per DISTINCT tuple. `changed` is derived here rather than in the
+    # SPA because it is a property of the sequence: a client would recompute it
+    # on every render, would need the whole ordered list in hand to draw any
+    # single row (breaking pagination), and would have to special-case the
+    # first release in a second place.
+    releases: list[dict] = []
+    previous: dict[str, str | None] = {}
+    for st in states:
+        versions = {c: st["versions"].get(c) for c in components}
+        changed = [c for c in components
+                   if versions[c] is not None and versions[c] != previous.get(c)]
+        if releases and not changed:
+            releases[-1]["last_seen"] = st["date"]     # same tuple, still current
+            continue
+        releases.append({
+            "date": st["date"], "last_seen": st["date"],
+            "commit": st["sha"], "subject": st["subject"],
+            "versions": versions, "changed": changed,
         })
+        previous = versions
 
-    current = states[-1]
     return {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
         "basis": "Versions observed together in VERSION.json. Both containers "
                  "build from one image, so a pair here shipped as a unit. This "
                  "is a record of what was released together, not a statement "
                  "that the pair was tested.",
-        "current": {"ui": current["ui"], "bot": current["bot"]},
-        "ui_versions": ui_versions,
-        "bot_versions": bot_versions,
-        "pairs": sorted(pairs.values(),
-                        key=lambda p: (_semver_key(p["ui"]), _semver_key(p["bot"]))),
-        "ranges": ranges,
+        "components": components,
+        "current": {c: v for c, v in releases[-1]["versions"].items() if v is not None},
+        "releases": releases,
     }
 
 
@@ -174,8 +170,8 @@ def main() -> None:
     doc = build()
     OUT.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {OUT.relative_to(ROOT)}: "
-          f"{len(doc['ui_versions'])} ui x {len(doc['bot_versions'])} bot, "
-          f"{len(doc['pairs'])} shipped pairs", file=sys.stderr)
+          f"{len(doc['components'])} components, "
+          f"{len(doc['releases'])} releases", file=sys.stderr)
 
 
 if __name__ == "__main__":
