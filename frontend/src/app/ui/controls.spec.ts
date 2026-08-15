@@ -244,14 +244,23 @@ describe('input and layout components', () => {
 
   /* -- control row -------------------------------------------------------- */
 
+  /* Scoped to the host's OWN rows. sb-filter-bar and sb-confirm-dialog are
+     themselves sb-control-row consumers now, and their rows come first in
+     document order -- an unscoped querySelector would assert against the
+     filter bar instead of the two rows this block declares. */
+  const ownRows = (): Element[] =>
+    Array.from(fixture.nativeElement.children as HTMLCollection).filter(
+      (el) => el.tagName.toLowerCase() === 'sb-control-row',
+    );
+
   it('projects its controls', () => {
-    const row = fixture.nativeElement.querySelector('sb-control-row .row');
+    const row = ownRows()[0].querySelector('.row');
     expect(row?.querySelector('sb-text-input')).toBeTruthy();
     expect(row?.querySelector('button[sb-button]')).toBeTruthy();
   });
 
   it('marks a stacked row so it can collapse at narrow widths', () => {
-    const rows = fixture.nativeElement.querySelectorAll('sb-control-row .row');
+    const rows = ownRows().map((el) => el.querySelector('.row')!);
     expect(rows[0].classList.contains('stacked')).toBe(false);
     expect(rows[1].classList.contains('stacked')).toBe(true);
   });

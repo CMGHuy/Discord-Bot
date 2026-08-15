@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { Button } from './button';
+import { ControlRow } from './layout';
 
 /**
  * The gate in front of every destructive action — close, cancel, delete,
@@ -29,13 +30,13 @@ import { Button } from './button';
 @Component({
   selector: 'sb-confirm-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button],
+  imports: [Button, ControlRow],
   template: `
     <dialog #dialog (close)="cancelled.emit()" (cancel)="cancelled.emit()">
       <h2>{{ title() }}</h2>
       <p class="consequence">{{ consequence() }}</p>
 
-      <div class="actions">
+      <sb-control-row class="actions">
         <button sb-button variant="ghost" type="button" (click)="close()">
           {{ cancelLabel() }}
         </button>
@@ -48,7 +49,7 @@ import { Button } from './button';
         >
           {{ confirmLabel() }}
         </button>
-      </div>
+      </sb-control-row>
     </dialog>
   `,
   styles: `
@@ -69,10 +70,14 @@ import { Button } from './button';
       font-size: var(--text-body);
       line-height: 1.5;
     }
+    /* sb-control-row supplies alignment, wrap and gap; only the right-hand
+       justification and the standoff from the consequence line are this
+       dialog's own. display:flex stays because sb-control-row's host is an
+       inline element -- an inline box ignores justify-content outright, and
+       the buttons would sit left. */
     .actions {
       display: flex;
       justify-content: flex-end;
-      gap: var(--space-8);
       margin-top: var(--space-20);
     }
   `,
