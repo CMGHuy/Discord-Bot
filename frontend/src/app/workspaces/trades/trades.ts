@@ -35,6 +35,7 @@ import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
 import { dateTime, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
+import { ControlRow } from '../../ui/layout';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell } from '../../ui/plan-cell';
@@ -78,6 +79,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   providers: [TradesStore],
   imports: [
     RouterLink,
+    ControlRow,
     DataTable,
     ColumnPickerComponent,
     FilterBar,
@@ -95,7 +97,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
   template: `
     <header class="head">
       <h1>Trades</h1>
-      <div class="head-actions">
+      <sb-control-row class="head-actions">
         <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
              the server's filename, both of which an XHR throws away.
              The title names what comes out, because it is NOT what is on
@@ -143,7 +145,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
           [visible]="visible()"
           (visibleChange)="visible.set($event)"
         />
-      </div>
+      </sb-control-row>
     </header>
 
     @if (store.clearResult(); as message) {
@@ -374,7 +376,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       gap: var(--space-10);
     }
     h1 { font-size: var(--text-title); font-weight: 600; }
-    .head-actions { display: flex; align-items: center; gap: var(--space-8); }
+    /* sb-control-row supplies display, alignment, wrap and gap. */
     .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .export:hover { text-decoration: underline; }
 
