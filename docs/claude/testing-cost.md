@@ -196,6 +196,43 @@ drop from here is a different matter; investigate it.
 The pass count drifts up as tasks land tests and concurrent sessions commit — a
 *changed count* is not a failure; only `failed` is.
 
+### The 66 skips are two parity files, and they are NOT dead weight
+
+Every one of the 66 comes from `tests/test_exit_parity.py` and
+`tests/test_sizing_parity.py`. Each is `3 tickers x 11 strategies x 2 horizons
+= 66` cases; each skips exactly half. Run the pair alone and you get **66
+passed, 66 skipped in 4.4s** — so half of this matrix is asserting real parity,
+and "it mostly skips" is not a reason to delete it. That conclusion has been
+reached once and reversed on the evidence; the numbers are here so it does not
+get reached again.
+
+The skip is at the END of the test body, not a guard at the top: when a
+ticker/strategy/horizon produces no entry signals over the cached history there
+is nothing to compare, so it skips rather than passing vacuously
+(`test_sizing_parity.py:145`, `test_exit_parity.py:47`). Which combinations go
+empty is a property of the *strategy at that horizon*, consistent across all
+three tickers — VWAP/3m, Volume Profile at both, Support/Resistance 4w, RSI at
+both, MACD 4w, EMA Crossover 3m, Elliott Wave 3m. `RSI Divergence` never skips.
+**The number is therefore a function of `data/backtest_cache/`**: refresh it via
+`scripts/fetch_backtest_data.py` and 66 moves without anything being wrong.
+
+**Why deleting them would be expensive.** `test_sizing_parity.py` compares the
+current `backtest._trade_plan_at` against `tests/fixtures/legacy_trade_plan_at.py`
+— a frozen pre-extraction copy, and per that file's own docstring the *only
+remaining independent old implementation*. `test_plan_engine_sizing.py` looks
+like it covers the same ground and does not: it compares `plan_engine` against
+the post-delegation `_trade_plan_at`, which is `plan_engine` calling itself
+through one layer of indirection. Drop the parity file and nothing proves the
+extraction preserved sizing behaviour.
+
+**The real gap is CI, not the skips.** `data/backtest_cache/` is gitignored
+(`.gitignore:20`, zero tracked files), so on CI the module-level `skipif` fires
+and **all 132 cases skip** — CI reports ~136 skipped against a local 66. A
+regression in sizing or exit parity cannot turn CI red. That guarantee is
+currently enforced only on a machine that has run `fetch_backtest_data.py`, so
+run the pair locally (4.4s) before trusting a green CI on anything touching
+`plan_engine` sizing or `simulate_exit`.
+
 ### The long-standing `xfail` quarantine is gone (2026-08-14)
 
 `test_flag_on_polls_open_plans` was quarantined as "wall-clock dependent", which
