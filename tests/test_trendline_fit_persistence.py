@@ -2,28 +2,32 @@ import pandas as pd
 
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY, fit_trendline
 
-_PERIOD = 10
-_AMPLITUDE = 4.0
+_PERIOD = 20
+_AMPLITUDE = 8.0
 _DRIFT = -0.3
+_VOLUME_SPIKE = 2.5
 
 
 def _frame(n=140):
     """Same shape as tests/test_trendline_fit.py's helper, repeated on purpose
     -- the two files are read independently.
 
-    It oscillates because a straight ramp has no swing pivots and so has no
-    trendline to fit at all; see that file for the longer note.
+    It oscillates, clears the 3% pivot threshold, and spikes volume at the
+    turns; all three are needed to reach the real scanner rather than the
+    touch-less trendln fallback. See that file for the longer note.
     """
     idx = pd.date_range("2026-01-01", periods=n, freq="B")
-    values = []
+    values, volumes = [], []
     for i in range(n):
         phase = (i % _PERIOD) / _PERIOD
         triangle = 1.0 - abs(2.0 * phase - 1.0) * 2.0  # in [-1, 1]
         values.append(200.0 + _DRIFT * i + _AMPLITUDE * triangle)
+        at_turn = i % _PERIOD == 0 or i % _PERIOD == _PERIOD // 2
+        volumes.append(1_000_000.0 * (_VOLUME_SPIKE if at_turn else 1.0))
     close = pd.Series(values, index=idx)
     return pd.DataFrame({
         "Open": close, "High": close + 1.0, "Low": close - 1.0,
-        "Close": close, "Volume": 1_000_000.0,
+        "Close": close, "Volume": pd.Series(volumes, index=idx),
     }, index=idx)
 
 
