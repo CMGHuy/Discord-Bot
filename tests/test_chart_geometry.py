@@ -295,6 +295,83 @@ def test_trendline_without_a_fit_returns_none():
     assert _geom(df, ["Trendline (support)"], recent_len=60) is None
 
 
+def _stored_fit(**over):
+    """A trade's persisted fit, in charts/trendline_fit.py's shape."""
+    fit = {
+        "slope": 0.5, "intercept": 100.0, "side": "support", "strength": 4,
+        "window_bars": 60, "lookback": 120, "fit_at": "2026-08-15T08:00:00Z",
+        "points": [{"t": 1767225600, "price": 100.0},
+                   {"t": 1779235200, "price": 129.5}],
+        "pivots": [{"t": 1769040000, "price": 106.2},
+                   {"t": 1773878400, "price": 118.4},
+                   {"t": 1777420800, "price": 125.1}],
+        "pair": {
+            "support": {"slope": 0.5, "intercept": 100.0, "strength": 4,
+                        "touches": [(0, 100.0), (30, 115.0), (59, 129.5)]},
+            "resistance": {"slope": 0.6, "intercept": 110.0, "strength": 3,
+                           "touches": []},
+            "window_bars": 60,
+        },
+    }
+    fit.update(over)
+    return fit
+
+
+def test_a_stored_fit_draws_its_own_side_from_absolute_points():
+    """The stored numbers, drawn unchanged. The endpoint's frame is whatever
+    range the browser asked for, so converting window-relative bar
+    coordinates against it would slide the line; the stored points are
+    absolute epochs and cannot slide. This is what makes the SPA and the PNG
+    draw the same line."""
+    df = _trending(n=120, daily_pct=0.3)
+    g = _geom(df, ["Trendline (support)"], side="stop", recent_len=60,
+              trend_fit=_stored_fit())
+    shape = g["shape"]
+    assert shape["kind"] == "trendline"
+    assert shape["p1"] == [1767225600, pytest.approx(100.0)]
+    assert shape["p2"] == [1779235200, pytest.approx(129.5)]
+    assert shape["pivots"] == [[1769040000, pytest.approx(106.2)],
+                               [1773878400, pytest.approx(118.4)],
+                               [1777420800, pytest.approx(125.1)]]
+    assert shape["label"] == "Trendline (4x)"
+
+
+def test_a_stored_fit_draws_the_other_side_from_its_pair():
+    """A fit is taken for the side the trade rests on, so only that side has
+    absolute points. The opposite side still has to be drawable -- both
+    overlays appear on the chart -- and comes from the pair the fit stored
+    verbatim, converted the same way the PNG converts it."""
+    df = _trending(n=120, daily_pct=0.3)
+    g = _geom(df, ["Trendline (resistance)"], side="target", is_bull=True,
+              recent_len=60, trend_fit=_stored_fit())
+    shape = g["shape"]
+    assert shape["label"] == "Trendline (3x)"
+    assert shape["p1"] == [_epoch(df.index[-60]), pytest.approx(110.0)]
+
+
+def test_a_stored_fit_without_pivots_still_draws_its_line():
+    """Fits taken before the pivots key existed, and the trendln fallback,
+    both arrive with no touches. A line with no diamonds beats no line."""
+    df = _trending(n=120, daily_pct=0.3)
+    g = _geom(df, ["Trendline (support)"], side="stop", recent_len=60,
+              trend_fit=_stored_fit(pivots=[]))
+    assert g["shape"]["pivots"] == []
+    assert g["shape"]["p1"] == [1767225600, pytest.approx(100.0)]
+
+
+def test_the_stored_fit_wins_over_a_live_one():
+    """Both supplied is not a conflict to resolve at render time: the stored
+    fit is the one the trade was planned on and the PNG already drew."""
+    df = _trending(n=120, daily_pct=0.3)
+    live = {"support": {"slope": 99.0, "intercept": 0.0, "strength": 1,
+                        "touches": []},
+            "window_bars": 60}
+    g = _geom(df, ["Trendline (support)"], side="stop", recent_len=60,
+              trend_info=live, trendline_window_bars=60, trend_fit=_stored_fit())
+    assert g["shape"]["p1"] == [1767225600, pytest.approx(100.0)]
+    assert g["shape"]["label"] == "Trendline (4x)"
+
+
 def test_trendline_side_selects_support_for_stop_and_resistance_for_target():
     df = _trending(n=120, daily_pct=0.3)
     trend_info = {

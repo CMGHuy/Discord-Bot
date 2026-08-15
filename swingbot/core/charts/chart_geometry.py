@@ -193,7 +193,8 @@ def _fib_fan_shape(df: pd.DataFrame, source: str, fib_lookback: int) -> dict:
 
 
 def _trendline_shape(df: pd.DataFrame, side: str, trend_info: dict,
-                     trendline_window_bars: int, is_bull: bool) -> dict | None:
+                     trendline_window_bars: int, is_bull: bool,
+                     trend_fit: dict = None) -> dict | None:
     """
     The diagonal support/resistance line, CONVERTED from the fit the
     caller already did rather than re-fit here.
@@ -209,7 +210,23 @@ def _trendline_shape(df: pd.DataFrame, side: str, trend_info: dict,
     Which side of the fit belongs to which scenario side mirrors
     levels.py's build_scenarios(): a bullish setup targets resistance
     and stops at support, a bearish one the other way round.
+
+    `trend_fit` is the trade's PERSISTED fit (charts/trendline_fit.py). It
+    supersedes `trend_info` when present, and for the fit's own side it is
+    read as absolute epochs rather than converted: this function's caller in
+    the API serves whatever bar range the browser asked for, and converting
+    window-relative coordinates against a different frame slides the line
+    off its own pivots. The stored points cannot slide, which is what makes
+    the SPA's line and the PNG's line the same line.
+
+    The other side has no stored points -- a fit is taken for the side the
+    trade rests on -- so it comes from the pair the fit stored verbatim, on
+    the conversion path below.
     """
+    if trend_fit and trend_fit.get("pair"):
+        trend_info = trend_fit["pair"]
+        trendline_window_bars = trendline_window_bars or int(
+            trend_fit.get("window_bars") or 0)
     if not trend_info:
         return None
     if is_bull:
@@ -219,6 +236,9 @@ def _trendline_shape(df: pd.DataFrame, side: str, trend_info: dict,
     info = trend_info.get(side_key)
     if not info:
         return None
+
+    if trend_fit and trend_fit.get("side") == side_key and trend_fit.get("points"):
+        return _stored_trendline_shape(trend_fit, info)
 
     window_bars = int(trendline_window_bars or trend_info.get("window_bars") or 0)
     if window_bars <= 0 or window_bars > len(df):
@@ -252,8 +272,35 @@ def _trendline_shape(df: pd.DataFrame, side: str, trend_info: dict,
     }
 
 
+def _stored_trendline_shape(fit: dict, info: dict) -> dict:
+    """The persisted fit, as a drawable shape. Every number is copied, not
+    derived -- there is exactly one place a trendline is computed and it is
+    `charts/trendline_fit.py`.
+
+    `pivots` are NOT the endpoints. `p1`/`p2` are where the drawn segment
+    starts and stops, two extrapolated positions at the window edges that no
+    candle need ever have visited; the pivots are the bars that actually
+    touched the line and earned it the `Nx` in its label. Drawing the ends as
+    the diamonds would put two markers under a label reading "(6x)" -- the
+    bug trade_chart.py:752-760 records being fixed once already.
+
+    Missing pivots are normal, not an error: fits stored before that key
+    existed, and trendlines.py's trendln fallback, both carry no touches. A
+    line with no diamonds is the right degradation.
+    """
+    points = [[int(p["t"]), _price(p["price"])] for p in fit["points"]]
+    return {
+        "kind": "trendline",
+        "p1": points[0],
+        "p2": points[-1],
+        "pivots": [[int(p["t"]), _price(p["price"])] for p in fit.get("pivots") or []],
+        "label": f"Trendline ({int(info.get('strength', fit.get('strength', 0)))}x)",
+    }
+
+
 def _shape_for(df: pd.DataFrame, source: str, h: dict, recent_len: int, side: str,
-               trend_info: dict | None, trendline_window_bars: int, is_bull: bool) -> dict | None:
+               trend_info: dict | None, trendline_window_bars: int, is_bull: bool,
+               trend_fit: dict | None = None) -> dict | None:
     """Dispatches one confirming-source label to its shape. Branch order
     and every period/window default match what levels.py used to produce
     the level in the first place -- `h` is the scenario's own horizon
@@ -364,14 +411,16 @@ def _shape_for(df: pd.DataFrame, source: str, h: dict, recent_len: int, side: st
         }
 
     if source.startswith("Trendline"):
-        return _trendline_shape(df, side, trend_info, trendline_window_bars, is_bull)
+        return _trendline_shape(df, side, trend_info, trendline_window_bars, is_bull,
+                                trend_fit)
 
     return None
 
 
 def overlay_geometry(df: pd.DataFrame, side: str, sources: list, *, horizon: dict = None,
                      recent_len: int = None, trend_info: dict = None,
-                     trendline_window_bars: int = 0, is_bull: bool = True) -> dict | None:
+                     trendline_window_bars: int = 0, is_bull: bool = True,
+                     trend_fit: dict = None) -> dict | None:
     """
     The geometry of the ONE confirming method that gets drawn for this
     scenario side, as plain data.
@@ -384,8 +433,10 @@ def overlay_geometry(df: pd.DataFrame, side: str, sources: list, *, horizon: dic
     horizontals, and nothing else (every other shape carries the real
     bars it was measured between, in or out of the window).
 
-    `trend_info`/`trendline_window_bars`/`is_bull` are only consulted
-    for a Trendline source; see `_trendline_shape`.
+    `trend_info`/`trendline_window_bars`/`is_bull`/`trend_fit` are only
+    consulted for a Trendline source; see `_trendline_shape`. `trend_fit` is
+    the trade's stored fit and wins over a live `trend_info` when both are
+    passed -- it is the line the trade was planned on and the PNG drew.
 
     Returns None when nothing is drawable. Callers must handle that --
     it is the normal outcome for a scenario confirmed only by
@@ -404,7 +455,7 @@ def overlay_geometry(df: pd.DataFrame, side: str, sources: list, *, horizon: dic
 
     try:
         shape = _shape_for(df, source, horizon or {}, recent_len, side,
-                           trend_info, trendline_window_bars, is_bull)
+                           trend_info, trendline_window_bars, is_bull, trend_fit)
     except Exception:
         # Deliberately blanket, matching the drawing code this was
         # extracted from: an unparseable label, a frame too short for an

@@ -367,7 +367,7 @@ git commit -m "feat(plans): persist the trendline fit at plan creation"
 - Produces: `generate_trade_chart(..., trendline_fit: dict | None = None)` — a
   new keyword-only-in-practice parameter appended to the existing signature.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_trade_chart_stored_fit.py`:
 
@@ -418,13 +418,13 @@ def test_without_a_stored_fit_it_still_renders(monkeypatch):
     assert path
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_trade_chart_stored_fit.py -v`
 Expected: FAIL — `generate_trade_chart() got an unexpected keyword argument
 'trendline_fit'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add `trendline_fit: dict = None,` to the signature after `markers: dict = None,`.
 Where the function currently fits its own pair, take the stored line first:
@@ -452,7 +452,7 @@ Then convert the display-window logic to read the line's endpoints from
 coordinates. The window is still widened to fit the line's touches — that
 framing decision stays local to this file; only the geometry moved.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/test_trade_chart_stored_fit.py -v`
 Expected: PASS.
@@ -460,7 +460,7 @@ Then: `python scripts/testrun.py full`
 Expected: `0 failed, 0 xfailed`. **This is the alert path — do not proceed on a
 partial run.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/trade_chart.py tests/test_trade_chart_stored_fit.py
@@ -488,101 +488,77 @@ git commit -m "release(bot): 1.1.3 -- one stored trendline fit"
 - Produces: `_trendline_shape` accepting a stored fit; `overlay_geometry(...)`
   gains a `trend_fit: dict | None = None` keyword. Task 5 passes it.
 
-> **Corrected during execution (a6fb782).** This task as written drew the
-> diamonds from `fit["points"]` — `shape["pivots"] == stored["points"]`, with
-> a comment calling them "the same two points by construction". They are not
-> the same thing. `points` are the segment's ENDS, two extrapolated positions
-> at the window edges that no candle need ever have visited; `pivots` are the
-> bars that actually touched the line and earned it its `strength`. Drawing
-> the ends would put two diamonds under a label reading "Trendline (6x)" —
-> the exact bug `trade_chart.py:752-760` records being fixed once already.
-> Task 1's module now stores a separate `pivots` list (and the `pair`
-> verbatim); the steps below read it.
+> **Corrected during execution.** Two errors, both caught against the real
+> code rather than the plan's sketch of it.
+>
+> 1. **Pivots are not the endpoints.** This task asserted
+>    `shape["pivots"] == stored["points"]` and called them "the same two
+>    points by construction". `points` are the segment's ENDS, two
+>    extrapolated positions at the window edges no candle need have visited;
+>    `pivots` are the bars that actually touched the line and earned it its
+>    `strength`. Drawing the ends would put two diamonds under a label
+>    reading "Trendline (6x)" — the bug `trade_chart.py:752-760` records
+>    being fixed once already. Task 1's module now stores a separate
+>    `pivots` list, and the `pair` verbatim (a6fb782).
+> 2. **The shape is `p1`/`p2`/`pivots`/`label`, not `points`/`strength`.**
+>    `_trendline_shape` already existed and already emitted that shape;
+>    `models.ts:852` types it and `strategy-overlay.ts:68` draws it. The
+>    rewrite this task proposed would have broken the client to no purpose.
+>    What was missing was never the shape — it was that a caller with no
+>    live `trend_info` (which is every API caller: `market.py:316` leaves it
+>    unset deliberately) got None back.
+>
+> **As built:** `overlay_geometry(..., trend_fit=None)` threads the stored
+> fit down to `_trendline_shape`, which reads the fit's `pair` in place of
+> `trend_info` and, for the fit's OWN side, copies the absolute epochs out
+> of `points`/`pivots` instead of converting window-relative coordinates.
+> That conversion is exactly what the API path cannot do safely: it serves
+> whatever bar range the browser asked for, and converting against a
+> different frame slides the line off its own pivots. The opposite side has
+> no stored points — a fit is taken for the side the trade rests on — so it
+> still comes from the stored pair, converted. Tests:
+> `tests/test_chart_geometry.py::test_a_stored_fit_*` and
+> `::test_the_stored_fit_wins_over_a_live_one`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
-Add to `tests/test_chart_geometry.py`:
+Add to `tests/test_chart_geometry.py`, alongside the three existing trendline
+contract tests (which stay: the live-`trend_info` conversion path is still
+what the opposite side goes through):
 
-```python
-def test_trendline_shape_uses_the_stored_points_verbatim():
-    """Numbers off the record, drawn unchanged -- the browser and the PNG
-    cannot disagree about where the line sits if neither recomputes it."""
-    from swingbot.core.charts.chart_geometry import _trendline_shape
+- `test_a_stored_fit_draws_its_own_side_from_absolute_points` — `p1`/`p2`
+  and every pivot come out of the fit unchanged, and the label reads the
+  pair's `strength`.
+- `test_a_stored_fit_draws_the_other_side_from_its_pair` — the side the fit
+  was not taken for is still drawable, converted from the stored pair.
+- `test_a_stored_fit_without_pivots_still_draws_its_line` — no touches is
+  normal (pre-`pivots` fits, and the trendln fallback), and yields a line
+  with no diamonds rather than no line.
+- `test_the_stored_fit_wins_over_a_live_one` — both passed is not a conflict
+  to resolve at render time.
 
-    stored = {
-        "slope": -0.3, "intercept": 200.0,
-        "points": [{"t": 1767225600, "price": 200.0},
-                   {"t": 1779235200, "price": 158.3}],
-        "pivots": [{"t": 1769040000, "price": 194.0},
-                   {"t": 1773878400, "price": 176.6},
-                   {"t": 1777420800, "price": 163.9}],
-        "side": "support", "strength": 4, "window_bars": 120,
-        "lookback": 120, "fit_at": "2026-08-14T10:00:00Z",
-    }
-    shape = _trendline_shape(stored)
-    assert shape["kind"] == "trendline"
-    assert shape["points"] == stored["points"]
-    assert shape["pivots"] == stored["pivots"]
+- [x] **Step 2: Run test to verify it fails**
 
+Run: `python -m pytest tests/test_chart_geometry.py -k stored_fit -v`
+Expected: FAIL — `overlay_geometry() got an unexpected keyword argument
+'trend_fit'`.
 
-def test_a_fit_without_pivots_still_draws_its_line():
-    """Fits stored before the pivots key existed, and the trendln fallback,
-    both arrive with no touches. A line with no diamonds beats no line."""
-    from swingbot.core.charts.chart_geometry import _trendline_shape
+- [x] **Step 3: Implement**
 
-    shape = _trendline_shape({
-        "points": [{"t": 1767225600, "price": 200.0},
-                   {"t": 1779235200, "price": 158.3}],
-        "strength": 0,
-    })
-    assert len(shape["points"]) == 2
-    assert shape["pivots"] == []
-```
+Add `trend_fit: dict = None` to `overlay_geometry`, thread it through
+`_shape_for` into `_trendline_shape`. There, before the side is chosen, let
+the fit's `pair` stand in for `trend_info` (and its `window_bars` for
+`trendline_window_bars`); then, when the chosen side IS the fit's own side,
+return `_stored_trendline_shape(fit, info)` — `p1`/`p2` from `points` and the
+diamonds from `pivots`, copied as absolute epochs, no frame arithmetic.
+Everything else falls through to the existing conversion unchanged.
 
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `python -m pytest tests/test_chart_geometry.py -k trendline_shape -v`
-Expected: FAIL — signature mismatch.
-
-- [ ] **Step 3: Implement**
-
-Rewrite `_trendline_shape` to take the stored fit and emit the shape the client
-already knows how to draw, with `pivots` for the diamond markers the PNG draws:
-
-```python
-def _trendline_shape(fit: dict) -> dict:
-    """The stored fit, as a drawable shape.
-
-    Every number is copied, not derived. This function used to re-fit from a
-    frame; it no longer sees one, which is the point -- there is exactly one
-    place a trendline is computed and it is `charts/trendline_fit.py`.
-    """
-    points = [{"t": int(p["t"]), "price": float(p["price"])} for p in fit["points"]]
-    return {
-        "kind": "trendline",
-        "points": points,
-        # The swing pivots the line was fit through, drawn as diamonds. NOT
-        # `points`: those are the segment's extrapolated ends, which no candle
-        # need have visited. These are the bars that touched the line and
-        # earned it its strength -- `strength` diamonds under a "(Nx)" label.
-        # Absent on fits stored before this key existed; a line with no
-        # diamonds is the correct degradation.
-        "pivots": [{"t": int(p["t"]), "price": float(p["price"])}
-                   for p in fit.get("pivots") or []],
-        "strength": int(fit.get("strength", 0)),
-    }
-```
-
-Add `trend_fit: dict = None` to `overlay_geometry`'s keyword arguments and pass
-it to `_shape_for` so a `Trendline` source resolves to this shape instead of
-being skipped.
-
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `python scripts/testrun.py file tests/test_chart_geometry.py`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/chart_geometry.py tests/test_chart_geometry.py
