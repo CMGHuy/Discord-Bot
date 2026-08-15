@@ -3,9 +3,9 @@ import os
 
 import pytest
 
-from swingbot.core import jsonio
+from swingbot.core.infra import jsonio
 
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 
 def test_roundtrip(tmp_path):
@@ -65,7 +65,7 @@ def test_read_invalid_utf8_returns_default(tmp_path):
 
 
 def test_statestore_atomic(tmp_path):
-    from swingbot.core.state import StateStore
+    from swingbot.core.infra.state import StateStore
 
     path = str(tmp_path / "state.json")
     store = StateStore(path=path)
@@ -77,7 +77,7 @@ def test_statestore_atomic(tmp_path):
 
 
 def test_account_config_atomic(tmp_path):
-    from swingbot.core import account as account_module
+    from swingbot.core.planning import account as account_module
 
     path = str(tmp_path / "account.json")
     cfg = account_module.load_account_config(path)  # seeds a fresh file

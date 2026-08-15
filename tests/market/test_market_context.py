@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from tests.conftest import make_ohlcv, make_trend_df
-from swingbot.core import market_context as mc
+from swingbot.core.market import market_context as mc
 from swingbot.core.edge.regime2 import REGIMES, regime_series
 
 
@@ -189,12 +189,12 @@ def _entries(df, strategy="RSI Divergence"):
     # RSI Divergence at 4w is one of the few strategies that actually fires on
     # the shared market_df walk (bull=7, bear=4); plain "RSI" fires zero times,
     # which would make the masking assertions below pass vacuously.
-    from swingbot.core.entry_filters import entries_for
+    from swingbot.core.market.entry_filters import entries_for
     return entries_for(strategy, df, "4w")
 
 
 def test_gate_masks_entries_when_context_comes_from_the_frame(monkeypatch, market_df):
-    from swingbot.core import strategy_types
+    from swingbot.core.market import strategy_types
 
     # A smooth exponential trend never dips, so RSI dip-buying never fires and
     # the assertion below would pass vacuously -- market_df is a real walk.

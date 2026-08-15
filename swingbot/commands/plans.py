@@ -8,8 +8,8 @@ import discord
 
 from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
-from swingbot.core.plan_engine import PlanStatus
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.planning.plan_engine import PlanStatus
+from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.scanning import embed_theme as theme
 from swingbot.commands.views import (
     starred_ids,

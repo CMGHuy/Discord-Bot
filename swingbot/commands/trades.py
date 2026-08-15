@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 import discord
 
 from swingbot import config
-from swingbot.core import account as account_module
+from swingbot.core.planning import account as account_module
 from swingbot.core import scan_engine
-from swingbot.core.data import get_currency_symbol
+from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
-from swingbot.core.risk_metrics import compute_risk_metrics
+from swingbot.core.tracking.risk_metrics import compute_risk_metrics
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo

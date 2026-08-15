@@ -69,8 +69,8 @@ def _guarded(run_fn):
 def _symbols_for_folds() -> list:
     """The symbol set folds run over. Separate seam so tests never touch
     the universe files or the OHLCV cache."""
-    from swingbot.core.universe import universe_symbols
-    from swingbot.core.watchlist import load_watchlist
+    from swingbot.core.marketdata.universe import universe_symbols
+    from swingbot.core.marketdata.watchlist import load_watchlist
 
     symbols = universe_symbols(getattr(config, "SCAN_UNIVERSE", "watchlist")) or []
     return symbols or load_watchlist()
@@ -94,7 +94,7 @@ def _frame_for(symbol: str):
         from market_data over identical windows -- the fold N would have
         been starved by the data source alone.
     """
-    from swingbot.core.backtest_cache import CACHE_DIR
+    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
     import pandas as pd
 
     path = CACHE_DIR / f"{symbol}.csv"
@@ -120,9 +120,9 @@ def _default_run(start: str, end: str, overrides: dict,
     setting just to run a backtest.
     """
     import numpy as np
-    from swingbot.core.backtest import ALL_STRATEGIES, run_backtest_daterange
-    from swingbot.core.strategy_types import HORIZONS
-    from swingbot.core.universe import liquidity_ok
+    from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest_daterange
+    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.marketdata.universe import liquidity_ok
 
     strategies = ALL_STRATEGIES if strategies is None else strategies
     horizons = list(HORIZONS) if horizons is None else horizons
@@ -439,9 +439,9 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
     actually applies the guard on), since a walk-forward replay models
     repeated automatic scanning over time, not a one-off `!check`.
     """
-    from swingbot.core.backtest import ALL_STRATEGIES, run_backtest_daterange
-    from swingbot.core.strategy_types import HORIZONS
-    from swingbot.core.universe import liquidity_ok, sector_map
+    from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest_daterange
+    from swingbot.core.market.strategy_types import HORIZONS
+    from swingbot.core.marketdata.universe import liquidity_ok, sector_map
 
     strategies = ALL_STRATEGIES if strategies is None else strategies
     horizons = list(HORIZONS) if horizons is None else horizons

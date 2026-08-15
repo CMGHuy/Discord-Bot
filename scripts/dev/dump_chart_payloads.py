@@ -31,7 +31,7 @@ from swingbot import config  # noqa: E402
 config.DATA_DIR = tempfile.mkdtemp(prefix="chart-harness-")
 
 from swingbot.admin import app as admin_app  # noqa: E402
-from swingbot.core.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
 
 sys.path.insert(0, os.path.join(ROOT, "scripts", "dev"))
 from render_chart_fixtures import FIXTURES  # noqa: E402

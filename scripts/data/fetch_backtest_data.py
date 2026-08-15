@@ -13,10 +13,10 @@ go back decades; intraday (1h/1m) history is NOT available this far back.
 
 --universe NAME (Task E15) is a SEPARATE, additive mode: it incrementally
 updates market_data/ (watchlist + named universe, e.g. sp500) via
-swingbot.core.data_store.update_cache -- fetching only new bars since each
+swingbot.core.marketdata.data_store.update_cache -- fetching only new bars since each
 symbol's last cached date, nightly-safe for 500+ symbols. This is a
 DIFFERENT cache location from the default data/backtest_cache/ path above
-(owned by swingbot.core.backtest_cache) and the two are NOT unified: today's
+(owned by swingbot.core.marketdata.backtest_cache) and the two are NOT unified: today's
 run_backtest_range.py / backtest_scenarios.py / this script's default mode
 still only read data/backtest_cache/, not market_data/.
     python scripts/data/fetch_backtest_data.py --universe sp500"""
@@ -37,7 +37,7 @@ import yfinance as yf
 
 # Cache location, filename scheme, and CSV shape are owned by the core module
 # so this bulk populator and the auto-cache-on-add path can never drift.
-from swingbot.core.backtest_cache import CACHE_DIR, cache_path, normalize_ohlcv
+from swingbot.core.marketdata.backtest_cache import CACHE_DIR, cache_path, normalize_ohlcv
 
 START, END = "2018-06-01", "2025-12-31"
 
@@ -45,7 +45,7 @@ START, END = "2018-06-01", "2025-12-31"
 def load_universe_symbols(name: str) -> list[str]:
     """Watchlist ticker + named universe (e.g. sp500), deduped, sorted.
     Import kept local so the default no-flag path never touches this module."""
-    from swingbot.core import universe
+    from swingbot.core.marketdata import universe
     symbols = set(load_watchlist()) | set(universe.universe_symbols(name))
     return sorted(symbols)
 
@@ -82,23 +82,23 @@ def main():
     ap.add_argument("--end", default=END, help=f"end date YYYY-MM-DD, or 'today' (default {END})")
     ap.add_argument("--force", action="store_true", help="re-fetch and overwrite already-cached tickers")
     # --universe is a SEPARATE, additive code path (Task E15). It does NOT
-    # touch data/backtest_cache/ (owned by swingbot.core.backtest_cache and
+    # touch data/backtest_cache/ (owned by swingbot.core.marketdata.backtest_cache and
     # read by run_backtest_range.py / backtest_scenarios.py / this script's
     # default no-flag mode above) -- it writes to market_data/ via
-    # swingbot.core.data_store's incremental cache instead. The two caches
+    # swingbot.core.marketdata.data_store's incremental cache instead. The two caches
     # are NOT unified: today's grid/backtest scripts only read the former,
     # so --universe output isn't yet usable by them. This mirrors that gap
     # honestly rather than silently building an orphaned feature.
     ap.add_argument("--universe", metavar="NAME", default=None,
                      help="incrementally update market_data/ for watchlist + "
-                          "named universe (e.g. 'sp500') via swingbot.core.data_store."
+                          "named universe (e.g. 'sp500') via swingbot.core.marketdata.data_store."
                           "update_cache -- a SEPARATE cache from the default "
                           "data/backtest_cache/ path above; not read by "
                           "run_backtest_range.py or other grid scripts yet")
     args = ap.parse_args()
 
     if args.universe:
-        from swingbot.core.data_store import update_cache
+        from swingbot.core.marketdata.data_store import update_cache
         symbols = load_universe_symbols(args.universe)
         print(f"Incrementally updating market_data/ for {len(symbols)} symbols "
               f"(watchlist + universe='{args.universe}')\n"

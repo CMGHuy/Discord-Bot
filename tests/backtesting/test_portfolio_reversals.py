@@ -6,7 +6,7 @@ new opt-in flags.
 """
 import pytest
 
-from swingbot.core.backtest_wf import _early_exit_r, portfolio_replay
+from swingbot.core.backtesting.backtest_wf import _early_exit_r, portfolio_replay
 
 
 def _sig(date, ticker="AAPL", *, r=1.0, exit_date="2020-02-01",

@@ -14,7 +14,7 @@ import os
 from threading import Lock
 
 from swingbot import config
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 _LOCK = Lock()
 

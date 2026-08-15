@@ -43,7 +43,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from ..trendlines import strongest_trendline_pair
+from swingbot.core.market.trendlines import strongest_trendline_pair
 
 TRENDLINE_FIT_KEY = "trendline_fit"
 

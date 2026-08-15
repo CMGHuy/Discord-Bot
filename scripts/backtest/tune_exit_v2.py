@@ -14,9 +14,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from swingbot.core import plan_engine
-from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
-from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES
+from swingbot.core.planning import plan_engine
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")

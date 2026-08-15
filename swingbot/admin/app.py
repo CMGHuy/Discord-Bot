@@ -238,7 +238,7 @@ def _ohlcv_frame(ticker: str):
     to the backtest CSV cache so the chart still renders offline. Split out
     of the route for testability (tests monkeypatch this)."""
     try:
-        from swingbot.core.data import get_daily_data
+        from swingbot.core.marketdata.data import get_daily_data
         df = get_daily_data(ticker)
         if df is not None and len(df):
             return df
@@ -259,7 +259,7 @@ def _trade_for_levels(trade_id: str):
     """Look up a trade record by id for the ohlcv payload's optional
     `levels` block. Split out of the route for testability (tests
     monkeypatch this), same pattern as `_ohlcv_frame`."""
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     return TradeLog().get_trade_by_id(trade_id)
 
 

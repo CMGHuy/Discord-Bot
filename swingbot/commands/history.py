@@ -17,9 +17,9 @@ from collections import defaultdict
 
 from swingbot.bot_core import bot
 from swingbot.core import scan_engine
-from swingbot.core.data import get_daily_data, get_currency_symbol
+from swingbot.core.marketdata.data import get_daily_data, get_currency_symbol
 from swingbot import config
-from swingbot.core.strategy import HORIZONS
+from swingbot.core.market.strategy import HORIZONS
 from swingbot.commands.backtest import STRATEGY_MAP
 
 trade_log = scan_engine.trade_log
@@ -214,7 +214,7 @@ def _sync_generate_plans(ticker: str, horizon: str, strategy_norm: str,
     df = get_daily_data(ticker, period="max")
     cur = get_currency_symbol(ticker, config.CURRENCY_SYMBOL)
 
-    from swingbot.core.backtest import run_backtest_daterange, ALL_STRATEGIES as _ALL
+    from swingbot.core.backtesting.backtest import run_backtest_daterange, ALL_STRATEGIES as _ALL
 
     strategies = [strategy_norm] if strategy_norm != "all" else list(_ALL)
     horizons   = [horizon] if horizon != "all" else list(HORIZONS.keys())

@@ -5,7 +5,7 @@ import discord
 import pytest
 
 from swingbot.commands.stats import _fake_item_from_plan, stats_embed, top_plans
-from swingbot.core.plan_engine import TradePlanV2
+from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning import embeds as embeds_mod
 from swingbot.core.scanning.embeds import build_embed
 

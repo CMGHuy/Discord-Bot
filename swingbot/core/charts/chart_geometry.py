@@ -41,10 +41,10 @@ import pandas as pd
 
 from .chart_style import DEFAULT_TRENDLINE_LOOKBACK_DAYS, METHOD_PRIORITY
 from .chart_drawing import _fib_anchor_points, _floor_pivot_prices
-from ..indicators import ema, fibonacci_levels, rolling_vwap, zigzag_pivots
-from ..volatility import bollinger_bands
-from ..fvg import find_fair_value_gaps_detailed
-from ..strategy import compute_hvn_level
+from swingbot.core.market.indicators import ema, fibonacci_levels, rolling_vwap, zigzag_pivots
+from swingbot.core.market.volatility import bollinger_bands
+from swingbot.core.market.fvg import find_fair_value_gaps_detailed
+from swingbot.core.market.strategy import compute_hvn_level
 
 
 def _pick_primary_source(sources: list) -> str | None:

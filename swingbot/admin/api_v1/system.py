@@ -535,7 +535,7 @@ def get_preferences():
     server that validated its shape would need editing every time the SPA
     remembered one more thing.
     """
-    from swingbot.core.jsonio import read_json
+    from swingbot.core.infra.jsonio import read_json
 
     return jsonify({"preferences": read_json(_preferences_path(), {}) or {}})
 
@@ -550,7 +550,7 @@ def put_preferences():
     """
     import json
 
-    from swingbot.core.jsonio import atomic_write_json
+    from swingbot.core.infra.jsonio import atomic_write_json
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, Mapping):

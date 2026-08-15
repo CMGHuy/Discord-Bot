@@ -5,8 +5,8 @@ import urllib.error
 
 import pytest
 
-from swingbot.core import fmp_client as fc
-from swingbot.core.fmp_client import (
+from swingbot.core.marketdata import fmp_client as fc
+from swingbot.core.marketdata.fmp_client import (
     FMPClient, FMPAccessError, FMPError, FMPRateLimitError, VALID_INTERVALS,
 )
 

@@ -18,8 +18,8 @@ lets tuning disable a direction or horizons per strategy.
 import numpy as np
 import pandas as pd
 
-from .indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
-from .strategy_types import (
+from swingbot.core.market.indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
+from swingbot.core.market.strategy_types import (
     FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
     STRATEGY_GATES,
 )
@@ -115,7 +115,7 @@ def apply_regime_gate(bull: pd.Series, bear: pd.Series, strategy: str,
     allowed to trade. Flag-gated + empty-by-default: shipping the
     mechanism costs nothing until E33's evidence fills REGIME_ALLOW."""
     from swingbot import config
-    from swingbot.core.strategy_types import REGIME_ALLOW
+    from swingbot.core.market.strategy_types import REGIME_ALLOW
     allowed = REGIME_ALLOW.get(strategy)
     if not getattr(config, "REGIME_GATES_ENABLED", False) or not allowed or regimes is None:
         return bull, bear
@@ -140,7 +140,7 @@ def entries_for(strategy: str, df: pd.DataFrame, horizon_key: str,
     if regimes is None:
         # Fail-closed by design: with REGIME_GATES_ENABLED on and no context
         # block on df, this raises rather than silently skipping the gate.
-        from swingbot.core import market_context
+        from swingbot.core.market import market_context
         regimes = market_context.get(df, "ctx_regime")
 
     gates = STRATEGY_GATES.get(strategy)

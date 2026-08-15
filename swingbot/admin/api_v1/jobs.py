@@ -145,7 +145,7 @@ def create_proposal():
     suite, and only then spending a validation shot -- this endpoint records
     a candidate, it does not change how the bot trades.
     """
-    from swingbot.core import entry_filters
+    from swingbot.core.market import entry_filters
     from swingbot.admin.queries import _load_result
 
     payload = request.get_json(silent=True) or {}

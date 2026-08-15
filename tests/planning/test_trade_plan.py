@@ -1,7 +1,7 @@
 import pytest
-from swingbot.core.strategy_types import SignalResult
+from swingbot.core.market.strategy_types import SignalResult
 from swingbot.core.trade_plan import compute_trade_plan
-from swingbot.core.plan_engine import build_strategy_plan
+from swingbot.core.planning.plan_engine import build_strategy_plan
 from tests.helpers import make_ohlcv
 
 

@@ -55,9 +55,9 @@ def test_refresh_snapshot_writes_file(tmp_path, monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", snap_path)
 
     fake_trades = [_t(1)]
-    with patch("swingbot.core.performance.TradeLog") as MockLog, \
-         patch("swingbot.core.account.load_account_config", return_value={"base_balance": 10_000.0}), \
-         patch("swingbot.core.registry.load_registry", return_value=[]):
+    with patch("swingbot.core.tracking.performance.TradeLog") as MockLog, \
+         patch("swingbot.core.planning.account.load_account_config", return_value={"base_balance": 10_000.0}), \
+         patch("swingbot.core.backtesting.registry.load_registry", return_value=[]):
         MockLog.return_value.get_trades.return_value = fake_trades
         refresh_snapshot()
 
@@ -67,7 +67,7 @@ def test_refresh_snapshot_writes_file(tmp_path, monkeypatch):
 
 def test_refresh_snapshot_never_raises_on_failure(monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", "/nonexistent/deeply/nested/x.json")
-    with patch("swingbot.core.performance.TradeLog", side_effect=RuntimeError("boom")):
+    with patch("swingbot.core.tracking.performance.TradeLog", side_effect=RuntimeError("boom")):
         refresh_snapshot()  # must not raise
 
 

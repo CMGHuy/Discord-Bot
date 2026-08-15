@@ -10,10 +10,10 @@ import numpy as np
 import pytest
 
 from swingbot import config
-from swingbot.core import plan_engine
+from swingbot.core.planning import plan_engine
 from swingbot.core.edge.stops import MIN_SAMPLE, mae_informed_stop_mult
-from swingbot.core.plan_engine import _atr_plan, build_strategy_plan
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.planning.plan_engine import _atr_plan, build_strategy_plan
+from swingbot.core.market.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
 
@@ -217,11 +217,11 @@ def test_backtest_sizing_path_is_untouched(df):
     trades off the live journal. stop_mult stays an injected parameter the
     E33 fold harness supplies explicitly."""
     import inspect
-    from swingbot.core import backtest
+    from swingbot.core.backtesting import backtest
     assert "stop_mult" not in inspect.signature(backtest._trade_plan_at).parameters
     assert inspect.signature(_atr_plan).parameters["stop_mult"].default is None
 
-    from swingbot.core.indicators import atr
+    from swingbot.core.market.indicators import atr
     atr_series = atr(df, 14)
     config_flag = config.DATA_DRIVEN_STOPS_ENABLED
     assert config_flag is False, "this factor must ship default-off"
@@ -305,7 +305,7 @@ def test_tp2_r_override_respects_the_beyond_tp1_and_leg_cap_invariants(df):
     beyond TP1, or whose TP1->TP2 leg exceeds MAX_TARGET2_LEG_MULTIPLE of
     the entry->TP1 leg, is not a runner target -- the level-based TP2
     stands instead of being clobbered by a nonsense number."""
-    from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
+    from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
     base = _macd_plan(df)
     rr = (base.tp1 - base.trigger_price) / (base.trigger_price - base.stop_loss)
 
@@ -321,7 +321,7 @@ def test_tp2_override_never_forces_tp2_onto_a_strategy_validated_without_it(df):
     This override changes the tp2 PRICE where tp2 is already enabled; it
     must not switch tp2 on for a strategy whose validated exit model has
     none, which would be a different exit model than E33 is set up to judge."""
-    from swingbot.core.plan_engine import exit_params_for
+    from swingbot.core.planning.plan_engine import exit_params_for
     assert exit_params_for("RSI")["tp2"] is False
     plan = _plan(df, tp2_r=1.5)
     assert plan.tp2 is None and plan.tp2_r_applied is None
@@ -378,8 +378,8 @@ def test_the_leg_cap_ceilings_any_mfe_tp2_at_four_times_rr(df):
     out -- 1.4R for MACD's rr=0.35. A P60 winner-MFE above that is simply
     not adoptable as a TP2 without moving a frozen constant, and the
     level-based TP2 stands instead."""
-    from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
-    from swingbot.core.plan_engine import _rr_for
+    from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
+    from swingbot.core.planning.plan_engine import _rr_for
     rr = _rr_for("MACD", "4w")
     ceiling = rr * (1 + MAX_TARGET2_LEG_MULTIPLE)
     assert ceiling == pytest.approx(1.4)
@@ -397,7 +397,7 @@ def _partial_plan(**over):
     `risk_per_share` field (the brief's stub invents one). Original 1R is
     entry - stop_loss = $2; stop_loss keeps the ORIGINAL stop because the
     breakeven move writes plan.working_stop, never plan.stop_loss."""
-    from swingbot.core.plan_engine import PlanStatus, TradePlanV2
+    from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2
     fields = dict(
         plan_id="p1", ticker="TEST", created_at="2026-01-01", source="strategy",
         strategy="RSI", horizon_key="4w", direction="bullish",
@@ -426,7 +426,7 @@ def _campaign_r(plan, exit_price, add=None):
 
 
 def test_pyramid_fires_at_plus_1r():
-    from swingbot.core.plan_manager import maybe_pyramid
+    from swingbot.core.planning.plan_manager import maybe_pyramid
     plan = _partial_plan()
     assert maybe_pyramid(plan, price=101.9) is None          # < entry + 1R
     add = maybe_pyramid(plan, price=102.0)                   # == entry + 1R
@@ -437,7 +437,7 @@ def test_pyramid_fires_at_plus_1r():
 
 
 def test_pyramid_mirrors_for_a_short():
-    from swingbot.core.plan_manager import maybe_pyramid
+    from swingbot.core.planning.plan_manager import maybe_pyramid
     plan = _partial_plan(direction="bearish", stop_loss=102.0, tp1=99.0)
     assert maybe_pyramid(plan, price=98.1) is None
     assert maybe_pyramid(plan, price=98.0) == {
@@ -445,8 +445,8 @@ def test_pyramid_mirrors_for_a_short():
 
 
 def test_pyramid_only_from_partial():
-    from swingbot.core.plan_engine import PlanStatus
-    from swingbot.core.plan_manager import maybe_pyramid
+    from swingbot.core.planning.plan_engine import PlanStatus
+    from swingbot.core.planning.plan_manager import maybe_pyramid
     for status in (PlanStatus.PENDING, PlanStatus.ACTIVE,
                    PlanStatus.CLOSED, PlanStatus.CANCELLED):
         assert maybe_pyramid(_partial_plan(status=status), price=105.0) is None
@@ -472,7 +472,7 @@ def test_a_fixed_half_size_add_would_break_the_invariant():
 def test_clean_stop_out_now_nets_at_or_above_breakeven():
     """Invariant 1, the one the fix exists to make true: remainder at
     breakeven + add at the original entry, no gap, campaign >= 0."""
-    from swingbot.core.plan_manager import maybe_pyramid
+    from swingbot.core.planning.plan_manager import maybe_pyramid
     for tp1 in (100.4, 101.0, 101.5, 103.0):
         plan = _partial_plan(tp1=tp1)
         add = maybe_pyramid(plan, price=102.0)
@@ -485,7 +485,7 @@ def test_a_gap_to_the_original_stop_beats_the_plans_own_1r_risk():
     """Invariant 2: even gapping through everything down to the plan's
     ORIGINAL stop, the campaign is better off than the -1R that plan was
     always willing to lose."""
-    from swingbot.core.plan_manager import maybe_pyramid
+    from swingbot.core.planning.plan_manager import maybe_pyramid
     plan = _partial_plan()
     add = maybe_pyramid(plan, price=102.0)
     assert _campaign_r(plan, plan.stop_loss, add) == pytest.approx(-0.75)
@@ -496,7 +496,7 @@ def test_a_gap_beyond_the_original_stop_stays_unbounded():
     """Invariant 3, stated honestly: no stop-based rule bounds a gap. The
     add scales that exposure, it does not create or remove it -- and the
     derived fraction still more than halves it versus a fixed 0.5 add."""
-    from swingbot.core.plan_manager import maybe_pyramid
+    from swingbot.core.planning.plan_manager import maybe_pyramid
     plan = _partial_plan()
     add = maybe_pyramid(plan, price=102.0)
     extra = _campaign_r(plan, 90.0) - _campaign_r(plan, 90.0, add)
@@ -506,14 +506,14 @@ def test_a_gap_beyond_the_original_stop_stays_unbounded():
 
 
 def test_an_add_too_small_to_matter_is_not_suggested():
-    from swingbot.core.plan_manager import PYRAMID_MIN_FRACTION, maybe_pyramid
+    from swingbot.core.planning.plan_manager import PYRAMID_MIN_FRACTION, maybe_pyramid
     # TP1 banked almost nothing -> derived fraction 0.025, below the floor.
     assert maybe_pyramid(_partial_plan(tp1=100.1), price=102.0) is None
     assert PYRAMID_MIN_FRACTION == 0.05
 
 
 def test_the_add_fraction_is_capped():
-    from swingbot.core.plan_manager import (PYRAMID_MAX_FRACTION,
+    from swingbot.core.planning.plan_manager import (PYRAMID_MAX_FRACTION,
                                             pyramid_add_fraction)
     # A TP1 far beyond 1R would derive a fraction > 1; the cap holds.
     assert pyramid_add_fraction(_partial_plan(tp1=130.0)) == PYRAMID_MAX_FRACTION
@@ -530,8 +530,8 @@ def test_manager_emits_a_suggestion_once_and_never_sizes_money(monkeypatch):
     post as a SUGGESTION -- it must not touch legs_realized, working_stop
     or the status, and must not fire twice for the same plan."""
     from swingbot import config
-    from swingbot.core import plan_manager
-    from swingbot.core.plan_engine import PlanStatus
+    from swingbot.core.planning import plan_manager
+    from swingbot.core.planning.plan_engine import PlanStatus
 
     plan = _partial_plan()
     monkeypatch.setattr(config, "PYRAMIDING_ENABLED", True)

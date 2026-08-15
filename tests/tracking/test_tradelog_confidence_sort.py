@@ -1,4 +1,4 @@
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 
 def test_get_trades_sort_by_confidence_handles_none_level(tmp_path):

@@ -3,8 +3,8 @@ import pytest
 
 
 def test_rr_override_single_source_and_floor():
-    from swingbot.core.strategy_types import STRATEGY_RR_OVERRIDE, BREAKEVEN_TRIGGER_FRACTION
-    from swingbot.core.backtest import STRATEGY_RR_OVERRIDE as BT_RR, ALL_STRATEGIES
+    from swingbot.core.market.strategy_types import STRATEGY_RR_OVERRIDE, BREAKEVEN_TRIGGER_FRACTION
+    from swingbot.core.backtesting.backtest import STRATEGY_RR_OVERRIDE as BT_RR, ALL_STRATEGIES
 
     assert BT_RR is STRATEGY_RR_OVERRIDE          # same object, not a copy
     assert set(STRATEGY_RR_OVERRIDE) == set(ALL_STRATEGIES)
@@ -14,7 +14,7 @@ def test_rr_override_single_source_and_floor():
 
 
 def test_strategy_gates_shape():
-    from swingbot.core.strategy_types import STRATEGY_GATES
+    from swingbot.core.market.strategy_types import STRATEGY_GATES
     for strat, gates in STRATEGY_GATES.items():
         assert set(gates) <= {"directions", "horizons"}
 
@@ -26,7 +26,7 @@ from tests.conftest import make_trend_df, make_ohlcv, assert_entry_invariants
 
 
 def test_shared_gates_uptrend(uptrend_df):
-    from swingbot.core.entry_filters import compute_shared_gates
+    from swingbot.core.market.entry_filters import compute_shared_gates
     g = compute_shared_gates(uptrend_df)
     for key in ("bull_regime", "bear_regime", "trend50_bull", "trend50_bear",
                 "atr_floor", "atr_calm", "vol_ok"):
@@ -40,7 +40,7 @@ def test_shared_gates_uptrend(uptrend_df):
 
 
 def test_shared_gates_downtrend(downtrend_df):
-    from swingbot.core.entry_filters import compute_shared_gates
+    from swingbot.core.market.entry_filters import compute_shared_gates
     g = compute_shared_gates(downtrend_df)
     assert not g["bull_regime"].iloc[-1]
     # bear regime needs 200-SMA falling for 120 bars -> needs 320 bars, so
@@ -50,7 +50,7 @@ def test_shared_gates_downtrend(downtrend_df):
 
 
 def test_rolling_extreme_position_helpers():
-    from swingbot.core.entry_filters import _rolling_argmax_pos, _rolling_argmin_pos
+    from swingbot.core.market.entry_filters import _rolling_argmax_pos, _rolling_argmin_pos
     s = pd.Series([1.0, 5.0, 2.0, 3.0, 4.0])
     amax = _rolling_argmax_pos(s, 3)
     amin = _rolling_argmin_pos(s, 3)
@@ -61,7 +61,7 @@ def test_rolling_extreme_position_helpers():
 
 
 def test_entries_for_applies_direction_and_horizon_gates(monkeypatch, uptrend_df):
-    import swingbot.core.entry_filters as ef
+    import swingbot.core.market.entry_filters as ef
 
     fired = pd.Series(True, index=uptrend_df.index)
     monkeypatch.setitem(ef.ENTRY_FUNCS, "Stub", lambda df, hk, params=None: (fired.copy(), fired.copy()))
@@ -89,7 +89,7 @@ def _v_shape_down_then_flat():
 
 
 def test_fibonacci_no_bullish_entries_on_down_impulse():
-    from swingbot.core.entry_filters import fibonacci_entries
+    from swingbot.core.market.entry_filters import fibonacci_entries
     df = _v_shape_down_then_flat()
     bull, bear = fibonacci_entries(df, "4w")
     assert_entry_invariants(bull, bear, df)
@@ -99,7 +99,7 @@ def test_fibonacci_no_bullish_entries_on_down_impulse():
 
 
 def test_fibonacci_bullish_requires_bull_regime(downtrend_df):
-    from swingbot.core.entry_filters import fibonacci_entries
+    from swingbot.core.market.entry_filters import fibonacci_entries
     bull, bear = fibonacci_entries(downtrend_df, "4w")
     assert_entry_invariants(bull, bear, downtrend_df)
     assert not bull.any()
@@ -111,7 +111,7 @@ GATED_BY_MA50 = ["EMA Crossover", "VWAP", "Fibonacci"]  # extended by later task
 def test_bullish_entries_respect_trend_gates(market_df):
     """Wiring invariant: every bullish entry bar must satisfy the shared
     trend gates the strategy declares (close above the 50- and 200-SMA)."""
-    from swingbot.core.entry_filters import ENTRY_FUNCS, compute_shared_gates
+    from swingbot.core.market.entry_filters import ENTRY_FUNCS, compute_shared_gates
     g = compute_shared_gates(market_df)
     for strat in GATED_BY_MA50:
         if strat not in ENTRY_FUNCS:
@@ -125,9 +125,9 @@ def test_bullish_entries_respect_trend_gates(market_df):
 
 def test_ema_cross_not_extended(market_df):
     """No bullish EMA entry may be more than ext_atr ATRs above the fast EMA."""
-    from swingbot.core.entry_filters import ema_cross_entries, compute_shared_gates, DEFAULT_PARAMS
-    from swingbot.core.indicators import ema
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market.entry_filters import ema_cross_entries, compute_shared_gates, DEFAULT_PARAMS
+    from swingbot.core.market.indicators import ema
+    from swingbot.core.market.strategy_types import HORIZONS
     g = compute_shared_gates(market_df)
     bull, _ = ema_cross_entries(market_df, "4w")
     fast = ema(market_df["Close"], HORIZONS["4w"]["ema_fast"])
@@ -137,7 +137,7 @@ def test_ema_cross_not_extended(market_df):
 
 
 def test_vwap_entries_flat_market_produces_nothing(flat_df):
-    from swingbot.core.entry_filters import vwap_entries
+    from swingbot.core.market.entry_filters import vwap_entries
     bull, bear = vwap_entries(flat_df, "4w")
     assert not bull.any() and not bear.any()   # atr_floor gate blocks dead tape
 
@@ -146,9 +146,9 @@ GATED_BY_MA50.extend(["MACD", "MA Ribbon"])
 
 
 def test_macd_bullish_entries_have_rising_histogram(market_df):
-    from swingbot.core.entry_filters import macd_entries
-    from swingbot.core.indicators import macd as macd_fn
-    from swingbot.core.strategy_types import MACD_PERIODS_BY_HORIZON
+    from swingbot.core.market.entry_filters import macd_entries
+    from swingbot.core.market.indicators import macd as macd_fn
+    from swingbot.core.market.strategy_types import MACD_PERIODS_BY_HORIZON
     bull, bear = macd_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     f, s, sig = MACD_PERIODS_BY_HORIZON["4w"]
@@ -159,7 +159,7 @@ def test_macd_bullish_entries_have_rising_histogram(market_df):
 
 
 def test_ma_ribbon_slope_agreement(market_df):
-    from swingbot.core.entry_filters import ma_ribbon_entries, RIBBON_PERIODS_BY_HORIZON
+    from swingbot.core.market.entry_filters import ma_ribbon_entries, RIBBON_PERIODS_BY_HORIZON
     bull, bear = ma_ribbon_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     _, _, slow_p = RIBBON_PERIODS_BY_HORIZON["4w"]
@@ -174,8 +174,8 @@ GATED_BY_MA50.extend(["Support/Resistance", "Break & Retest"])
 def test_sr_bullish_breakout_bar_quality(market_df):
     """Every S/R bullish entry must close in the top 40% of its bar and not
     gap more than 3% above the broken level."""
-    from swingbot.core.entry_filters import support_resistance_entries, DEFAULT_PARAMS
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market.entry_filters import support_resistance_entries, DEFAULT_PARAMS
+    from swingbot.core.market.strategy_types import HORIZONS
     bull, bear = support_resistance_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     lb = HORIZONS["4w"]["sr_lookback"]
@@ -191,7 +191,7 @@ def test_sr_bullish_breakout_bar_quality(market_df):
 def test_break_retest_entry_bar_bounces(market_df):
     """B&R bullish entries must close above the prior bar's high (the retest
     has already turned, we are not catching the falling knife into the level)."""
-    from swingbot.core.entry_filters import break_retest_entries
+    from swingbot.core.market.entry_filters import break_retest_entries
     bull, bear = break_retest_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     prev_high = market_df["High"].shift(1)
@@ -200,7 +200,7 @@ def test_break_retest_entry_bar_bounces(market_df):
 
 
 def test_rsi_bullish_requires_confirmation_bar(market_df):
-    from swingbot.core.entry_filters import rsi_entries
+    from swingbot.core.market.entry_filters import rsi_entries
     bull, bear = rsi_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     prev_high = market_df["High"].shift(1)
@@ -209,7 +209,7 @@ def test_rsi_bullish_requires_confirmation_bar(market_df):
 
 
 def test_rsi_bullish_requires_rising_200sma(market_df):
-    from swingbot.core.entry_filters import rsi_entries, compute_shared_gates
+    from swingbot.core.market.entry_filters import rsi_entries, compute_shared_gates
     g = compute_shared_gates(market_df)
     bull, _ = rsi_entries(market_df, "4w")
     fired = bull[bull].index
@@ -217,7 +217,7 @@ def test_rsi_bullish_requires_rising_200sma(market_df):
 
 
 def test_rsi_no_bullish_in_sustained_downtrend(downtrend_df):
-    from swingbot.core.entry_filters import rsi_entries
+    from swingbot.core.market.entry_filters import rsi_entries
     bull, _ = rsi_entries(downtrend_df, "4w")
     assert not bull.any()
 
@@ -228,7 +228,7 @@ GATED_BY_MA50.extend(["RSI Divergence", "Volume Profile"])
 def test_hvn_share_sums_correctly():
     """On a series that trades one price 80% of the time, the HVN share must
     reflect that dominance."""
-    from swingbot.core.entry_filters import _vectorized_hvn
+    from swingbot.core.market.entry_filters import _vectorized_hvn
     closes = np.where(np.arange(300) % 5 == 0, 110.0, 100.0)  # 20% at 110
     df = make_ohlcv(closes, spread_pct=0.5)
     hvn, share = _vectorized_hvn(df, lookback=60)
@@ -237,8 +237,8 @@ def test_hvn_share_sums_correctly():
 
 
 def test_volume_profile_entries_respect_node_share(market_df):
-    from swingbot.core.entry_filters import volume_profile_entries, _vectorized_hvn, DEFAULT_PARAMS
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market.entry_filters import volume_profile_entries, _vectorized_hvn, DEFAULT_PARAMS
+    from swingbot.core.market.strategy_types import HORIZONS
     bull, bear = volume_profile_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     _, share = _vectorized_hvn(market_df, HORIZONS["4w"]["sr_lookback"])
@@ -248,8 +248,8 @@ def test_volume_profile_entries_respect_node_share(market_df):
 
 
 def test_rsi_divergence_bull_entries_have_turning_rsi(market_df):
-    from swingbot.core.entry_filters import rsi_divergence_entries, DEFAULT_PARAMS
-    from swingbot.core.indicators import rsi as rsi_fn
+    from swingbot.core.market.entry_filters import rsi_divergence_entries, DEFAULT_PARAMS
+    from swingbot.core.market.indicators import rsi as rsi_fn
     bull, bear = rsi_divergence_entries(market_df, "4w")
     assert_entry_invariants(bull, bear, market_df)
     r = rsi_fn(market_df["Close"], 14)
@@ -260,7 +260,7 @@ def test_rsi_divergence_bull_entries_have_turning_rsi(market_df):
 
 
 def test_elliott_entry_levels_include_wave0(market_df):
-    from swingbot.core.indicators import elliott_wave3_entries
+    from swingbot.core.market.indicators import elliott_wave3_entries
     _, _, levels = elliott_wave3_entries(market_df, 7.0)
     for lv in levels.values():
         # Task 104 (rescue): entry_levels also carries each wave point's bar
@@ -271,7 +271,7 @@ def test_elliott_entry_levels_include_wave0(market_df):
 
 
 def test_elliott_only_fires_on_4w(market_df):
-    from swingbot.core.entry_filters import elliott_wave_entries
+    from swingbot.core.market.entry_filters import elliott_wave_entries
     for hk in ("2w", "2m", "3m", "6m"):
         bull, bear = elliott_wave_entries(market_df, hk)
         assert not bull.any() and not bear.any()
@@ -281,9 +281,9 @@ def test_elliott_only_fires_on_4w(market_df):
 
 def test_elliott_wave2_depth_gate(market_df):
     """Every fired entry must correspond to a wave-2 retracing 30-80% of wave 1."""
-    from swingbot.core.entry_filters import elliott_wave_entries, DEFAULT_PARAMS
-    from swingbot.core.indicators import elliott_wave3_entries
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market.entry_filters import elliott_wave_entries, DEFAULT_PARAMS
+    from swingbot.core.market.indicators import elliott_wave3_entries
+    from swingbot.core.market.strategy_types import HORIZONS
     bull, bear = elliott_wave_entries(market_df, "4w")
     _, _, levels = elliott_wave3_entries(market_df, HORIZONS["4w"]["max_risk_pct"])
     p = DEFAULT_PARAMS["Elliott Wave"]
@@ -297,8 +297,8 @@ def test_elliott_wave2_depth_gate(market_df):
 def test_live_signals_agree_with_entry_filters(market_df):
     """For every strategy and a spread of horizons, the live signal's
     `triggered` flag must equal the last bar of the entry-filter series."""
-    from swingbot.core.strategy import STRATEGY_FUNCS
-    from swingbot.core.entry_filters import entries_for
+    from swingbot.core.market.strategy import STRATEGY_FUNCS
+    from swingbot.core.market.entry_filters import entries_for
     for strat, func in STRATEGY_FUNCS.items():
         for hk in ("2w", "4w", "2m"):
             res = func("TEST", market_df, hk)

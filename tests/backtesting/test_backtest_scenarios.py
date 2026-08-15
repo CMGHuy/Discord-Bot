@@ -1,7 +1,7 @@
 """Tests for backtest_scenarios.levels_asof memoization."""
 import numpy as np
 
-from swingbot.core import backtest_scenarios as bs
+from swingbot.core.backtesting import backtest_scenarios as bs
 from tests.helpers import make_ohlcv
 import pytest
 

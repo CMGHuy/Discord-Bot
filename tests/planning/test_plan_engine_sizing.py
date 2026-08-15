@@ -3,16 +3,16 @@ backtest._trade_plan_at into plan_engine (Tasks 8-13)."""
 import numpy as np
 import pytest
 
-from swingbot.core import backtest
-from swingbot.core.indicators import atr
-from swingbot.core.plan_engine import (
+from swingbot.core.backtesting import backtest
+from swingbot.core.market.indicators import atr
+from swingbot.core.planning.plan_engine import (
     _atr_plan,
     _elliott_plan,
     _fibonacci_plan,
     _safe_atr_value,
     _sr_plan,
 )
-from swingbot.core.strategy_types import HORIZONS, STRATEGY_RR_OVERRIDE
+from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_RR_OVERRIDE
 
 from tests.helpers import make_ohlcv
 

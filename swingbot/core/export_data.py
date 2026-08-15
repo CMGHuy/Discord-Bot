@@ -40,7 +40,7 @@ import mplfinance as mpf
 import pandas as pd
 import yfinance as yf
 
-from .ticker_utils import candidate_symbols
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 # How many tickers to fetch from Yahoo Finance at once during a bulk
 # watchlist scrape. Each fetch is network-bound (waiting on Yahoo's

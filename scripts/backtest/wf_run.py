@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from swingbot.core.backtest_wf import (  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import (  # noqa: E402
     ANCHORED_FOLDS, _default_run, _guarded, collect_portfolio_signals, gate,
     portfolio_replay, run_folds,
 )
@@ -34,7 +34,7 @@ def main() -> int:
                    help="limit to one horizon key (repeatable)")
     p.add_argument("--universe", default=None,
                    help="scope the fold sweep to a named universe (e.g. 'etfs') via "
-                        "swingbot.core.universe.universe_symbols, instead of the account's "
+                        "swingbot.core.marketdata.universe.universe_symbols, instead of the account's "
                         "live SCAN_UNIVERSE setting -- for one-off scoped runs (Task E80)")
     p.add_argument("--json", default=None, help="write the raw result dict here")
     p.add_argument("--portfolio", action="store_true",
@@ -113,7 +113,7 @@ def main() -> int:
 
     tickers = None
     if args.universe:
-        from swingbot.core.universe import universe_symbols
+        from swingbot.core.marketdata.universe import universe_symbols
         tickers = universe_symbols(args.universe)
         print(f"scoped to universe='{args.universe}': {len(tickers)} symbols")
 

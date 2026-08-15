@@ -41,8 +41,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from swingbot.core.indicators import atr
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.market.indicators import atr
+from swingbot.core.market.strategy_types import HORIZONS
 
 STATES = ("fresh", "tested", "delivered", "decaying")
 

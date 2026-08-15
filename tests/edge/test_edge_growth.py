@@ -89,7 +89,7 @@ def test_collect_stats_threads_target_into_growth_path(monkeypatch):
     # user's requested target -- inconsistent with the main growth_report()
     # line a few feet away, which DID honor `target`.
     from swingbot.commands import growth as growth_cmd
-    from swingbot.core import account as account_module
+    from swingbot.core.planning import account as account_module
 
     points = [("2025-07-12", 10_000.0), ("2026-07-12", 15_000.0)]  # 1.5x
     monkeypatch.setattr(account_module, "load_account_config",

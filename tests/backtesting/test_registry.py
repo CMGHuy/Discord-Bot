@@ -1,4 +1,4 @@
-from swingbot.core.registry import get_badge, load_registry
+from swingbot.core.backtesting.registry import get_badge, load_registry
 
 
 def test_validated_strategy():

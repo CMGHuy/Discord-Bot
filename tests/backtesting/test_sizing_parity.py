@@ -24,10 +24,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from swingbot.core import backtest
-from swingbot.core.backtest import ALL_STRATEGIES
-from swingbot.core.indicators import atr, elliott_wave3_entries
-from swingbot.core.strategy_types import HORIZONS, MIN_BARS
+from swingbot.core.backtesting import backtest
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES
+from swingbot.core.market.indicators import atr, elliott_wave3_entries
+from swingbot.core.market.strategy_types import HORIZONS, MIN_BARS
 
 from tests.fixtures.legacy_trade_plan_at import legacy_trade_plan_at
 

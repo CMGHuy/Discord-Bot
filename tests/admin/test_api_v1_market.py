@@ -60,7 +60,7 @@ def test_the_csv_cache_backs_a_failed_live_fetch(logged_in, tmp_path, monkeypatc
     cache.mkdir()
     _fake_df(60).rename_axis("Date").to_csv(cache / "ZZZZ.csv")
     monkeypatch.setattr(cfg, "DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("swingbot.core.data.get_daily_data",
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_daily_data",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("net down")))
 
     body = logged_in.get("/api/v1/market/chart/ZZZZ?window=60").get_json()
@@ -347,7 +347,7 @@ def fittable_frame(monkeypatch):
 
 @pytest.fixture
 def trade_log(admin_app):
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     return TradeLog
 
 
@@ -429,7 +429,7 @@ def test_the_backfill_uses_the_trades_own_entry_not_the_last_close(
     last close instead would store a different line from the image -- the
     exact failure this consolidation exists to end."""
     from swingbot.core.charts import trendline_fit as fit_mod
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import HORIZONS
 
     seen = {}
     real = fit_mod.fit_trendline
@@ -450,7 +450,7 @@ def test_a_failed_backfill_write_still_serves_the_chart(
         logged_in, fittable_frame, seed_trade, monkeypatch):
     """A cache fill that cannot write degrades to "fitted again next time",
     never to a 500."""
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     monkeypatch.setattr(TradeLog, "store_trendline_fit",
                         lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
     tid = seed_trade()

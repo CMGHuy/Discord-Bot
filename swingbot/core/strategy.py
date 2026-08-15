@@ -51,21 +51,21 @@ Profile) live in signals.py, and the SignalResult/HORIZONS/MIN_BARS
 types they share live in strategy_types.py -- this module is just the
 registry (STRATEGY_FUNCS) and the evaluate_all() runner that calls every
 one of them for a given ticker. Both siblings are imported back here and
-re-exported, so `from swingbot.core.strategy import <anything>` that
+re-exported, so `from swingbot.core.market.strategy import <anything>` that
 worked before this split still works identically.
 """
 import pandas as pd
 
 # Both blocks below are the RE-EXPORT SURFACE this module docstring promises:
 # several of these names are unused *here* on purpose, so that callers who
-# imported them from `swingbot.core.strategy` before the signals/
+# imported them from `swingbot.core.market.strategy` before the signals/
 # strategy_types split still can. Do not "clean up" an unused-import warning
 # by deleting one -- check for importers first.
-from .strategy_types import (  # noqa: F401
+from swingbot.core.market.strategy_types import (  # noqa: F401
     FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, MIN_BARS,
     RSI_OVERBOUGHT, RSI_OVERSOLD, SR_VOLUME_MULTIPLE, SignalResult,
 )
-from .signals import (  # noqa: F401
+from swingbot.core.market.signals import (  # noqa: F401
     break_retest_signal, compute_hvn_level, compute_volume_profile,
     ema_cross_signal, elliott_wave_signal, fibonacci_signal, ma_ribbon_signal,
     macd_signal, rsi_divergence_signal, rsi_signal, support_resistance_signal,

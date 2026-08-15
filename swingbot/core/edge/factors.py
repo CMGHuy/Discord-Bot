@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from swingbot import config
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 RS_WINDOW = 63  # ~3 months of trading days
 RS_CACHE_PATH = os.path.join(config.DATA_DIR, "universe", "rs_cache.json")
@@ -54,7 +54,7 @@ def sector_rs_percentile(sector: str, sector_etf_dfs: dict, spy_df,
                          sector_of_etf: dict | None = None,
                          window: int = RS_WINDOW) -> float:
     if sector_of_etf is None:
-        from swingbot.core.universe import sector_map
+        from swingbot.core.marketdata.universe import sector_map
         sector_of_etf = sector_map("etfs")
     rels = {}
     for etf, df in sector_etf_dfs.items():
@@ -141,7 +141,7 @@ def intraday_confirms(symbol: str, direction: str,
     deliberately absent from the backtest (no honest intraday history)."""
     if intraday_df is None:
         if fetch is None:
-            from swingbot.core.data_store import get_intraday
+            from swingbot.core.marketdata.data_store import get_intraday
             fetch = get_intraday
         intraday_df = fetch(symbol)
     if intraday_df is None or intraday_df.empty:

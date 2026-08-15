@@ -6,7 +6,7 @@ because an HTML form cannot post an array, which stops mattering once the
 client speaks JSON.
 
 **These are the first tests in the repo that WRITE to the watchlist**, which
-turned up a live hazard: `swingbot.core.watchlist.DEFAULT_PATH` is computed
+turned up a live hazard: `swingbot.core.marketdata.watchlist.DEFAULT_PATH` is computed
 at import time from `config.DATA_DIR`, so it ignores the per-test
 monkeypatch and points at the real project's data/watchlist.json. Reading
 through it is merely wrong; writing through it would edit the user's actual
@@ -52,8 +52,8 @@ def no_network(monkeypatch):
     Neither is what these tests are about, and a test suite that depends on
     yfinance being reachable fails for reasons that have nothing to do with
     the code."""
-    monkeypatch.setattr("swingbot.core.data.get_company_name", lambda t: f"{t} Inc.")
-    monkeypatch.setattr("swingbot.core.backtest_cache.ensure_cached_background",
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_company_name", lambda t: f"{t} Inc.")
+    monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached_background",
                         lambda t: None)
 
 

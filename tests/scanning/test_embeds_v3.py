@@ -13,8 +13,8 @@ import pytest
 
 from swingbot import config
 from swingbot.commands.scanning import _ordered_alerts
-from swingbot.core.explain import build_explanation
-from swingbot.core.plan_engine import TradePlanV2
+from swingbot.core.market.explain import build_explanation
+from swingbot.core.planning.plan_engine import TradePlanV2
 from swingbot.core.scanning import embed_theme as theme
 from swingbot.core.scanning.embeds import (
     RequirementCheck, build_closed_trade_embed, build_embed, build_near_close_embed, confidence_color,

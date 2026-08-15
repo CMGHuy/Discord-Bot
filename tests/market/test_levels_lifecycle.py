@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from swingbot.core import levels_lifecycle as ll
+from swingbot.core.market import levels_lifecycle as ll
 
 
 def _frame(closes, lows=None, highs=None, start="2020-01-01"):
@@ -236,7 +236,7 @@ def test_stop_anchor_never_returns_a_delivered_level():
 # --- input tolerance --------------------------------------------------------
 
 def test_accepts_levels_objects_as_well_as_floats():
-    from swingbot.core.levels import Level as RawLevel
+    from swingbot.core.market.levels import Level as RawLevel
 
     df = _frame(_oscillating())
     out = ll.classify_levels(df, len(df) - 1,

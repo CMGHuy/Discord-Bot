@@ -51,7 +51,7 @@ def atr_percentile(df: pd.DataFrame, period: int = 14,
     """Rank of the current normalized ATR (ATR14/Close) within its trailing
     `window` bars, 0..1. None when there isn't at least window/2 of usable
     history (early frames shouldn't pretend to know their vol regime)."""
-    from swingbot.core.indicators import atr
+    from swingbot.core.market.indicators import atr
     if len(df) < period + window // 2:
         return None
     norm = (atr(df, period) / df["Close"]).dropna()

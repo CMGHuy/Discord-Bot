@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.plan_engine import plan_to_dict
+from swingbot.core.planning.plan_engine import plan_to_dict
 
 MAX_BYTES = 50 * 1024 * 1024
 
@@ -79,7 +79,7 @@ def backfill_forward_returns(path: str | None = None, price_fn=None,
     if not os.path.exists(path):
         return 0
     if price_fn is None:
-        from swingbot.core.data import get_daily_data
+        from swingbot.core.marketdata.data import get_daily_data
         price_fn = get_daily_data
 
     with open(path, encoding="utf-8") as f:

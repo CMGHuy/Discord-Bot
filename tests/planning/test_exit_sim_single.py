@@ -14,7 +14,7 @@ entry_index+1.
 """
 import pytest
 
-from swingbot.core.plan_engine import TradePlanV2, PlanStatus, simulate_exit
+from swingbot.core.planning.plan_engine import TradePlanV2, PlanStatus, simulate_exit
 from tests.helpers import make_ohlcv
 
 

@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.plan_engine import (PlanStatus, TradePlanV2,
+from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
                                        pending_invalidated, record_transition)
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.planning.plan_store import PlanStore
 
 log = logging.getLogger("swing-bot.plan_manager")
 
@@ -408,19 +408,19 @@ _MANAGER: PlanManager | None = None
 
 
 def _price_fn(ticker):                      # module-level so tests can patch it
-    from swingbot.core.data import get_current_price
+    from swingbot.core.marketdata.data import get_current_price
     return get_current_price(ticker)
 
 
 def _live_atr(ticker):
-    from swingbot.core.data import get_daily_data
-    from swingbot.core.indicators import atr
+    from swingbot.core.marketdata.data import get_daily_data
+    from swingbot.core.market.indicators import atr
     df = get_daily_data(ticker)
     return float(atr(df, 14).iloc[-1])
 
 
 def _bars_since(ticker, created_at):
-    from swingbot.core.data import get_daily_data
+    from swingbot.core.marketdata.data import get_daily_data
     df = get_daily_data(ticker)
     return int((df.index.tz_localize(None) > created_at).sum()) \
         if df.index.tz is None else int((df.index > created_at).sum())
@@ -435,7 +435,7 @@ def run_manager_tick() -> list[PlanEvent]:
     if not config.INTRADAY_MANAGER_V2:
         return []
     if _MANAGER is None:
-        from swingbot.core.performance import TradeLog
+        from swingbot.core.tracking.performance import TradeLog
         _MANAGER = PlanManager(PlanStore(), _price_fn, atr_fn=_live_atr,
                                bar_count_fn=_bars_since, trade_log=TradeLog())
     return _MANAGER.poll()

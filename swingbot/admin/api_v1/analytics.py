@@ -22,7 +22,7 @@ from datetime import datetime
 
 from flask import jsonify, request
 
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 from . import ApiError, _positive_int, api_v1
 from .auth import require_auth
@@ -250,7 +250,7 @@ def analytics_strategies():
         _rolling_win_rate_series,
         _strategy_horizon_heatmap,
     )
-    from swingbot.core.performance import primary_strategy_label
+    from swingbot.core.tracking.performance import primary_strategy_label
 
     rows = _registry_rows()
     closed = [

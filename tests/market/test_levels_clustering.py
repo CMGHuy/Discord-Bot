@@ -1,5 +1,5 @@
-from swingbot.core import levels
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.market import levels
+from swingbot.core.market.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
 def test_cluster_merges_within_tolerance():

@@ -21,9 +21,9 @@ A 2.0% High/Low spread keeps ATR wide enough for `atr_floor`/`atr_calm`/
 `not_extended` throughout without changing the touch mechanic itself.
 """
 import numpy as np
-from swingbot.core.entry_filters import ema_cross_entries
-from swingbot.core.indicators import ema
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.market.entry_filters import ema_cross_entries
+from swingbot.core.market.indicators import ema
+from swingbot.core.market.strategy_types import HORIZONS
 from tests.conftest import make_ohlcv
 
 PULLBACK = {"rsi_dip": 45, "ext_atr": 1.0,

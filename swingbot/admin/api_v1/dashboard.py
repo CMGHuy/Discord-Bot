@@ -35,7 +35,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 from . import ApiError, api_v1
 from .auth import require_auth

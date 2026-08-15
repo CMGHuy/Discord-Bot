@@ -7,8 +7,8 @@ import discord
 from swingbot import config
 from swingbot.core import scan_engine
 from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
-from swingbot.core.data import get_currency_symbol, get_daily_data
-from swingbot.core.strategy import HORIZONS, MIN_BARS, evaluate_all
+from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
+from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all
 from swingbot.core.charts.trade_chart import generate_all_strategy_charts
 
 
@@ -83,7 +83,7 @@ async def ticker_cmd(ctx, ticker: str):
     for r in results:
         if not r.triggered:
             continue
-        from swingbot.core.plan_engine import build_strategy_plan
+        from swingbot.core.planning.plan_engine import build_strategy_plan
         try:
             plan = build_strategy_plan(df, len(df) - 1, ticker=ticker,
                                        strategy=r.strategy, horizon_key=r.horizon_key,

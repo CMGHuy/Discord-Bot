@@ -55,7 +55,7 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
     only OTC and international ones hit the network, and doing those
     sequentially stalls the whole response.
     """
-    from swingbot.core.data import get_company_name
+    from swingbot.core.marketdata.data import get_company_name
 
     if not tickers:
         return {}
@@ -74,8 +74,8 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
 @api_v1.route("/watchlist/tickers", methods=["GET"])
 @require_auth
 def list_tickers():
-    from swingbot.core.performance import TradeLog
-    from swingbot.core.watchlist import load_watchlist
+    from swingbot.core.tracking.performance import TradeLog
+    from swingbot.core.marketdata.watchlist import load_watchlist
 
     tickers = list(load_watchlist(_watchlist_path()))
     counts = {t: {"open": 0, "closed": 0} for t in tickers}
@@ -101,8 +101,8 @@ def add_tickers():
     Reports per-symbol outcomes instead of failing the batch, so pasting
     thirty symbols with one typo adds twenty-nine and names the one.
     """
-    from swingbot.core.backtest_cache import ensure_cached_background
-    from swingbot.core.watchlist import add_ticker, load_watchlist
+    from swingbot.core.marketdata.backtest_cache import ensure_cached_background
+    from swingbot.core.marketdata.watchlist import add_ticker, load_watchlist
 
     payload = request.get_json(silent=True) or {}
     raw = payload.get("tickers")
@@ -140,7 +140,7 @@ def add_tickers():
 @api_v1.route("/watchlist/tickers/<symbol>", methods=["DELETE"])
 @require_auth
 def remove_ticker_route(symbol: str):
-    from swingbot.core.watchlist import load_watchlist, remove_ticker
+    from swingbot.core.marketdata.watchlist import load_watchlist, remove_ticker
 
     symbol = symbol.strip().upper()
     path = _watchlist_path()
@@ -153,6 +153,6 @@ def remove_ticker_route(symbol: str):
 @api_v1.route("/watchlist/suggest", methods=["GET"])
 @require_auth
 def suggest():
-    from swingbot.core.ticker_directory import search_tickers
+    from swingbot.core.marketdata.ticker_directory import search_tickers
 
     return jsonify({"results": search_tickers(request.args.get("q", ""))})

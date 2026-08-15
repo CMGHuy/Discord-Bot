@@ -10,7 +10,7 @@ import datetime as _dt
 import os
 
 from swingbot import config
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 DD_LADDER = ((8.0, 0.75), (12.0, 0.50), (16.0, 0.25), (20.0, 0.0))
 RESUME_DD_PCT = 15.0   # once paused, entries resume only below this

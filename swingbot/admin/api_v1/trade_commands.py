@@ -27,9 +27,9 @@ from datetime import datetime, timezone
 from flask import jsonify, request
 
 from swingbot import config
-from swingbot.core.performance import TradeLog
-from swingbot.core.plan_engine import PlanStatus, record_transition
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.tracking.performance import TradeLog
+from swingbot.core.planning.plan_engine import PlanStatus, record_transition
+from swingbot.core.planning.plan_store import PlanStore
 
 from . import api_v1, error
 from .auth import require_auth

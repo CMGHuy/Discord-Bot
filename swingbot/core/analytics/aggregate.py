@@ -16,7 +16,7 @@ except Exception:
     _BERLIN_TZ = None
 
 from swingbot.core.analytics import metrics
-from swingbot.core.performance import primary_strategy_label
+from swingbot.core.tracking.performance import primary_strategy_label
 
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]

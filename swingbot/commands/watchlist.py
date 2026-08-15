@@ -2,9 +2,9 @@
 import asyncio
 
 from swingbot.bot_core import bot
-from swingbot.core.backtest_cache import ensure_cached_background
-from swingbot.core.data import get_daily_data
-from swingbot.core.watchlist import add_ticker, clear_watchlist, load_watchlist, remove_ticker
+from swingbot.core.marketdata.backtest_cache import ensure_cached_background
+from swingbot.core.marketdata.data import get_daily_data
+from swingbot.core.marketdata.watchlist import add_ticker, clear_watchlist, load_watchlist, remove_ticker
 
 
 @bot.group(name="watchlist", invoke_without_command=True)

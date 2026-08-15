@@ -1,6 +1,6 @@
 import pytest
 
-from swingbot.core import quality
+from swingbot.core.planning import quality
 
 
 @pytest.mark.parametrize("direction,regime,expected", [

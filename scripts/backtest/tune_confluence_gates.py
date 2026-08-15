@@ -29,8 +29,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from swingbot.core.backtest_scenarios import _aggregate, replay_scenarios
-from swingbot.core.plan_engine import simulate_exit
+from swingbot.core.backtesting.backtest_scenarios import _aggregate, replay_scenarios
+from swingbot.core.planning.plan_engine import simulate_exit
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")

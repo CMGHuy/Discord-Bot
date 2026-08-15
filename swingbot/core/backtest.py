@@ -64,11 +64,11 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .indicators import atr, elliott_wave3_entries
+from swingbot.core.market.indicators import atr, elliott_wave3_entries
 # Re-exported for callers that import these from `backtest` rather than from
 # their defining modules (tests/test_entry_filters.py does exactly that).
-from .strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE  # noqa: F401
-from .strategy_types import (  # noqa: F401
+from swingbot.core.market.strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE  # noqa: F401
+from swingbot.core.market.strategy_types import (  # noqa: F401
     BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE,
 )
 
@@ -119,7 +119,7 @@ class BacktestSummary:
 def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
     """Single source of entry logic lives in entry_filters.py -- shared with
     the live scanner so backtest and live signals cannot drift."""
-    from .entry_filters import entries_for
+    from swingbot.core.market.entry_filters import entries_for
     return entries_for(strategy, df, horizon_key)
 
 
@@ -128,7 +128,7 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     plans); this wrapper only picks the branch from the precomputed series.
     Parity with the original inline implementation is locked by
     tests/test_plan_engine_sizing.py."""
-    from .plan_engine import (
+    from swingbot.core.planning.plan_engine import (
         _atr_plan,
         _elliott_plan,
         _fibonacci_plan,
@@ -237,7 +237,7 @@ def run_backtest(
     _lm_supports: list = []
     _lm_resistances: list = []
     if exit_model == "v2":
-        from .plan_engine import (
+        from swingbot.core.planning.plan_engine import (
             PlanStatus, TradePlanV2, entry_type_for, exit_params_for,
             select_tp2, simulate_exit,
         )
@@ -266,7 +266,7 @@ def run_backtest(
             if tp2_mode == "levels" and _exit_params["tp2"]:
                 cache_key = i // 5
                 if cache_key != _lm_cache_key:
-                    from .levels import build_level_map
+                    from swingbot.core.market.levels import build_level_map
                     _lm_supports, _lm_resistances = build_level_map(
                         df.iloc[:i + 1], HORIZONS[horizon_key], entry)
                     _lm_cache_key = cache_key

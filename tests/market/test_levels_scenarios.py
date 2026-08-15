@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
-from swingbot.core import levels
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.market import levels
+from swingbot.core.market.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
 def _structured_df():

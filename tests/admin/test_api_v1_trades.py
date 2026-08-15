@@ -616,7 +616,7 @@ def priced(monkeypatch):
     """Pin the live price. The real one is a network call, and the whole
     point of these fields is what they do WITH a price."""
     def _at(value):
-        import swingbot.core.data as data
+        import swingbot.core.marketdata.data as data
         monkeypatch.setattr(data, "prefetch_prices", lambda tickers: None)
         monkeypatch.setattr(data, "get_current_price", lambda t: value)
     return _at

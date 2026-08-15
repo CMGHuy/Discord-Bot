@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 
 from swingbot import config
-from swingbot.core.backtest import ALL_STRATEGIES
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES
 
 # The out-of-sample window already consumed by round-1 validation
 # (docs/superpowers/results/2026-07-validation.md). Reusing it for

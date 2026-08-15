@@ -56,37 +56,37 @@ import discord
 
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
-from swingbot.core import levels
-from swingbot.core import account as account_module
-from swingbot.core import market_context
-from swingbot.core.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.market import levels
+from swingbot.core.planning import account as account_module
+from swingbot.core.market import market_context
+from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
 from swingbot.core.edge import correlation as corr_mod
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
-from swingbot.core.jsonio import read_json
+from swingbot.core.infra.jsonio import read_json
 from .confidence import ConfidenceResult, score_confidence
-from swingbot.core.data import get_currency_symbol, get_current_price, get_daily_data
-from swingbot.core.reversal import evaluate_reversal, reversals_for_ticker
-from swingbot.core.events import earnings_within_window
-from swingbot.core.explain import build_explanation
-from swingbot.core.market_events import get_market_events
-from swingbot.core.notifier import notify_secondary
-from swingbot.core.performance import TradeLog
-from swingbot.core.quality import atr_percentile as _atr_percentile
-from swingbot.core.plan_engine import (build_confluence_plan,
+from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
+from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
+from swingbot.core.market.events import earnings_within_window
+from swingbot.core.market.explain import build_explanation
+from swingbot.core.market.market_events import get_market_events
+from swingbot.core.infra.notifier import notify_secondary
+from swingbot.core.tracking.performance import TradeLog
+from swingbot.core.planning.quality import atr_percentile as _atr_percentile
+from swingbot.core.planning.plan_engine import (build_confluence_plan,
                                        primary_strategy_for, select_tp2)
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.planning.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
-from swingbot.core.state import StateStore
-from swingbot.core.strategy import HORIZONS, MIN_BARS
-from swingbot.core import universe
+from swingbot.core.infra.state import StateStore
+from swingbot.core.market.strategy import HORIZONS, MIN_BARS
+from swingbot.core.marketdata import universe
 from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.charts.trendline_fit import fit_trendline
-from swingbot.core.watchlist import load_watchlist
+from swingbot.core.marketdata.watchlist import load_watchlist
 # Several of these are unused HERE and re-exported on purpose: core/scan_engine.py
 # is an `import *` shim over this module, and callers reach them through it
 # (admin/helpers.py imports CONFIDENCE_COLORS, commands/trades.py uses

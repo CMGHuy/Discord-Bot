@@ -38,8 +38,8 @@ from datetime import datetime, timezone
 from flask import jsonify, request
 
 from swingbot.admin import dashboard as dash
-from swingbot.core.performance import TradeLog
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.tracking.performance import TradeLog
+from swingbot.core.planning.plan_store import PlanStore
 
 from . import api_v1, collection, error, parse_collection_params
 from .auth import require_auth
@@ -286,7 +286,7 @@ def _attach_follow_scores(rows: list[dict], plans: list[dict]) -> None:
     """
     try:
         from swingbot.core.analytics.rank import follow_score
-        from swingbot.core.plan_engine import plan_from_dict
+        from swingbot.core.planning.plan_engine import plan_from_dict
     except Exception:
         return
 
@@ -580,7 +580,7 @@ def _status_fields(row: dict, price: float | None) -> dict:
     interpolates between; the palette lives in tokens.css, so a repaint is a
     CSS change and never an API change. See spec v18 Decision 5.
     """
-    from swingbot.core.performance import trade_proximity
+    from swingbot.core.tracking.performance import trade_proximity
 
     entry, sl, tp = row.get("entry"), row.get("stop_loss"), row.get("target")
     direction = row.get("direction") or "bullish"
@@ -648,7 +648,7 @@ def _attach_current_prices(rows: list[dict]) -> None:
     if not live:
         return
     try:
-        from swingbot.core.data import get_current_price, prefetch_prices
+        from swingbot.core.marketdata.data import get_current_price, prefetch_prices
         prefetch_prices([r["ticker"] for r in live])
         for r in live:
             r["current_price"] = get_current_price(r["ticker"])

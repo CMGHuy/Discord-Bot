@@ -1,7 +1,7 @@
 import json
 import os
 
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 
 def test_tradelog_writes_atomically_no_tmp_left_behind(tmp_path):

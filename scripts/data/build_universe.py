@@ -30,7 +30,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from swingbot.core.universe import UNIVERSE_DIR  # noqa: E402
+from swingbot.core.marketdata.universe import UNIVERSE_DIR  # noqa: E402
 
 
 def build(raw_csv: str, top: int | None) -> str:
@@ -47,7 +47,7 @@ def build(raw_csv: str, top: int | None) -> str:
 
     name = "sp500"
     if top:
-        from swingbot.core.data_store import load_from_disk
+        from swingbot.core.marketdata.data_store import load_from_disk
         def dollar_vol(sym):
             df = load_from_disk(sym, "1d")
             if df is None or len(df) < 20:

@@ -49,7 +49,7 @@ def no_network(monkeypatch):
     """Cluster detection fetches daily history per open ticker. That is
     parity with the Jinja page, not something these tests are about, and a
     suite that needs yfinance reachable fails for unrelated reasons."""
-    monkeypatch.setattr("swingbot.core.data.get_daily_data",
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_daily_data",
                         lambda *a, **k: None, raising=False)
 
 
@@ -137,7 +137,7 @@ def test_utilisation_is_not_clamped_at_100(logged_in, killswitch_file, tmp_path)
     back to the balance calculation without one -- and the balance is not
     reliably isolated: `account.load_account_config` takes its path as an
     import-time default argument (`account.py`'s CONFIG_PATH), and
-    `swingbot.core.account` is not in conftest's reload list, so whether it
+    `swingbot.core.planning.account` is not in conftest's reload list, so whether it
     sees the test's account.json or the real one depends on which test
     imported it first. An earlier version of this test asserted against the
     seeded 10,000 balance and passed alone while failing in a full run.

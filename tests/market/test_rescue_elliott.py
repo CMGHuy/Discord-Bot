@@ -1,6 +1,6 @@
 import numpy as np
 
-from swingbot.core.entry_filters import elliott_wave_entries
+from swingbot.core.market.entry_filters import elliott_wave_entries
 from tests.conftest import make_ohlcv
 
 GATED = {"depth_min": 0.30, "depth_max": 0.80,

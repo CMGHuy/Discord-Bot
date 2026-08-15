@@ -36,7 +36,7 @@ except Exception:
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from swingbot.core.backtest_wf import collect_portfolio_signals, portfolio_replay  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import collect_portfolio_signals, portfolio_replay  # noqa: E402
 
 TRAIN = ("2020-01-01", "2023-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")

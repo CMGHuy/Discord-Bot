@@ -37,7 +37,7 @@ ta-lib/C compilation, no extra pip packages beyond what's already in use.
 """
 import pandas as pd
 
-from .indicators import adx, keltner_channel, macd, rsi
+from swingbot.core.market.indicators import adx, keltner_channel, macd, rsi
 
 
 def bollinger_bands(df: pd.DataFrame, window: int = 20, num_std: float = 2.0) -> pd.DataFrame:

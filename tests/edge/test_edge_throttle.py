@@ -69,7 +69,7 @@ def test_kill_state_roundtrip(tmp_path, monkeypatch):
 
 def test_recycle_candidates():
     import datetime as dt
-    from swingbot.core.plan_manager import recycle_candidates
+    from swingbot.core.planning.plan_manager import recycle_candidates
 
     class Plan:
         def __init__(self, pid, age_days, time_stop, entry=100.0, rps=2.0):

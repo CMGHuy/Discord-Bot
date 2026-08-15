@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from swingbot import config as app_config
-from swingbot.core.indicators import ema
+from swingbot.core.market.indicators import ema
 
 # Kept as a module-level alias for anything importing DEFAULT_REGIME_TICKER
 # directly, but get_market_regime() below reads app_config.MARKET_REGIME_TICKER

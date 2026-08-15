@@ -53,7 +53,7 @@ def _positions(balance: float) -> list[dict]:
     moment either changed.
     """
     from swingbot.core.edge.heat import trade_risk_pct
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
 
     try:
         open_trades = TradeLog().get_trades(status="open", limit=None) or []

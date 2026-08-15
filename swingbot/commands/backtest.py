@@ -11,13 +11,13 @@ instead of an interactive command.
 """
 import asyncio
 
-from swingbot.core.backtest import (
+from swingbot.core.backtesting.backtest import (
     run_backtest, run_backtest_daterange, run_full_backtest,
 )
 from swingbot.bot_core import bot
-from swingbot.core.data import get_daily_data
-from swingbot.core.strategy import HORIZONS
-from swingbot.core.watchlist import load_watchlist
+from swingbot.core.marketdata.data import get_daily_data
+from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.marketdata.watchlist import load_watchlist
 
 STRATEGY_MAP = {
     # legacy

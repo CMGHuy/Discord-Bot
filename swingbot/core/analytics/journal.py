@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.core.analytics import metrics
 from swingbot.core.analytics.mfe_mae import compute_mfe_mae
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 log = logging.getLogger("swing-bot.journal")
 
@@ -239,7 +239,7 @@ def journal_trade_close(trade: dict) -> None:
     """
     df = None
     try:
-        from swingbot.core.data import get_daily_data
+        from swingbot.core.marketdata.data import get_daily_data
         df = get_daily_data(trade["ticker"])
     except Exception:
         log.warning("journal_trade_close: bars fetch failed for %s -- journaling without MFE/MAE",

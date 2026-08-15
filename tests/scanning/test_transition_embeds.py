@@ -1,4 +1,4 @@
-from swingbot.core.plan_manager import PlanEvent
+from swingbot.core.planning.plan_manager import PlanEvent
 from swingbot.core.scanning.embeds import build_plan_event_embed
 from tests.planning.test_plan_engine_model import _plan
 

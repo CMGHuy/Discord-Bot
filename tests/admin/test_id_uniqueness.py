@@ -28,7 +28,7 @@ weaker claim.
 import string
 import uuid
 
-from swingbot.core.performance import _TRADE_ID_ALPHABET
+from swingbot.core.tracking.performance import _TRADE_ID_ALPHABET
 
 # Enough to catch a generator whose charset or length has changed, without
 # making the suite slow. Not a probabilistic collision hunt -- 62^16 needs no

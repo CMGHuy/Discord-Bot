@@ -191,7 +191,7 @@ def test_fib_anchors_are_real_bars_in_the_frame():
 # --------------------------------------------------------------------
 
 def test_fvg_zone_shape():
-    from swingbot.core.fvg import find_fair_value_gaps_detailed
+    from swingbot.core.market.fvg import find_fair_value_gaps_detailed
 
     df = _fvg_frame()
     gap = [g for g in find_fair_value_gaps_detailed(df) if g["direction"] == "bullish"][-1]

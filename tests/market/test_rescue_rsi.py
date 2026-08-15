@@ -5,7 +5,7 @@ frame fires with ADX ~19 inside the bands (gate must pass)."""
 import numpy as np
 import pytest
 
-from swingbot.core.entry_filters import adx_series, rsi_entries
+from swingbot.core.market.entry_filters import adx_series, rsi_entries
 from tests.conftest import make_ohlcv
 
 GATED = {"max_adx": 25, "require_bb_range": True}

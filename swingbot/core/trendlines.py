@@ -68,7 +68,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .indicators import zigzag_pivots
+from swingbot.core.market.indicators import zigzag_pivots
 
 log = logging.getLogger("swing-bot.trendlines")
 

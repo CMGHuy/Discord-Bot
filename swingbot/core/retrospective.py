@@ -22,8 +22,8 @@ import logging
 import os
 from collections import defaultdict
 
-from swingbot.core.performance import primary_strategy_label
-from swingbot.core import account as account_module
+from swingbot.core.tracking.performance import primary_strategy_label
+from swingbot.core.planning import account as account_module
 from swingbot import config as app_config
 from swingbot.core.analytics import calibration
 from swingbot.core.analytics.insights import edge_decay_report
@@ -282,9 +282,9 @@ def _collect_weekly_risk_stats(all_trades: list, today: dt.date) -> dict:
     each expensive/network-dependent piece is its own try/except so one failure
     (e.g. a price fetch) never blocks the others."""
     from swingbot.core.edge import correlation, ruin
-    from swingbot.core.data import get_daily_data
-    from swingbot.core.performance import TradeLog
-    from swingbot.core import universe
+    from swingbot.core.marketdata.data import get_daily_data
+    from swingbot.core.tracking.performance import TradeLog
+    from swingbot.core.marketdata import universe
 
     stats: dict = {
         # E82 (scan health telemetry) hasn't landed -- there is no persisted
@@ -641,7 +641,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         try:
             from swingbot.commands.growth import rs_rotation_report
             from swingbot.core.edge.factors import load_rs_cache
-            from swingbot.core.universe import sector_map
+            from swingbot.core.marketdata.universe import sector_map
             rels = load_rs_cache().get("rels") or {}
             if rels:
                 sectors = sector_map(getattr(app_config, "SCAN_UNIVERSE", "watchlist"))

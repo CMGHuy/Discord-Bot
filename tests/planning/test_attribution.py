@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from swingbot.core.plan_engine import primary_strategy_for
-from swingbot.core.performance import primary_strategy_label
+from swingbot.core.planning.plan_engine import primary_strategy_for
+from swingbot.core.tracking.performance import primary_strategy_label
 
 
 def _scenario(target_sources, stop_sources=()):

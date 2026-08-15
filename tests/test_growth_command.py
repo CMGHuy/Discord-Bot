@@ -37,7 +37,7 @@ def test_growth_command_rejects_non_positive_target(target):
 def test_growth_command_normal_target_proceeds_past_validation(monkeypatch):
     # A valid target (> 1x) must NOT hit the early-return validation path --
     # it should reach growth_report() and produce the normal fenced report.
-    from swingbot.core import account as account_module
+    from swingbot.core.planning import account as account_module
 
     # Empty/fresh account state: load_account_config with no balance history
     # is enough to prove _collect_stats/growth_report ran without needing to
@@ -69,7 +69,7 @@ def _mc_trade(entry, stop, exit_price, direction="bullish"):
 def test_growth_command_attaches_mc_fan_with_enough_history(monkeypatch, tmp_path):
     import discord
     from swingbot.commands import growth as growth_mod
-    from swingbot.core import account as account_module
+    from swingbot.core.planning import account as account_module
 
     monkeypatch.setattr(account_module, "load_account_config",
                         lambda: {"risk_pct": 1.0, "base_balance": 10_000.0, "balance": 10_000.0})
@@ -93,7 +93,7 @@ def test_growth_command_attaches_mc_fan_with_enough_history(monkeypatch, tmp_pat
 
 def test_growth_command_no_chart_below_min_history(monkeypatch, tmp_path):
     from swingbot.commands import growth as growth_mod
-    from swingbot.core import account as account_module
+    from swingbot.core.planning import account as account_module
 
     monkeypatch.setattr(account_module, "load_account_config",
                         lambda: {"risk_pct": 1.0, "base_balance": 10_000.0, "balance": 10_000.0})

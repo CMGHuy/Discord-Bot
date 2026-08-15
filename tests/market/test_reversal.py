@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from swingbot.core.reversal import (
+from swingbot.core.market.reversal import (
     ReversalDecision, evaluate_reversal, reversals_for_ticker)
 
 NOW = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)

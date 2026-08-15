@@ -54,7 +54,7 @@ def test_pooled_max_dd_pct_skips_trades_with_no_r_multiple():
 
 
 def test_tickers_for_run_uses_named_universe(monkeypatch):
-    import swingbot.core.universe as universe
+    import swingbot.core.marketdata.universe as universe
 
     def boom():
         raise AssertionError("load_watchlist should not be called when a universe is given")

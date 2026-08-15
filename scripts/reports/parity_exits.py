@@ -34,10 +34,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 from fetch_backtest_data import load_cached, load_watchlist
-from swingbot.core.backtest import ALL_STRATEGIES, _trade_plan_at, run_backtest
-from swingbot.core.indicators import atr, elliott_wave3_entries
-from swingbot.core.plan_engine import PlanStatus, TradePlanV2, simulate_exit
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, _trade_plan_at, run_backtest
+from swingbot.core.market.indicators import atr, elliott_wave3_entries
+from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, simulate_exit
+from swingbot.core.market.strategy_types import HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 R_TOL = 1e-6  # both sides round(r, 3) from the same unrounded inputs

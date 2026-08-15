@@ -7,7 +7,7 @@ from tests.conftest import make_ohlcv
 
 def _run_with_forced_entry(monkeypatch, df, entry_bar, direction="bullish",
                            strategy="EMA Crossover", horizon="2w", **kwargs):
-    import swingbot.core.backtest as bt
+    import swingbot.core.backtesting.backtest as bt
     bull = pd.Series(False, index=df.index)
     bear = pd.Series(False, index=df.index)
     (bull if direction == "bullish" else bear).iloc[entry_bar] = True
@@ -91,7 +91,7 @@ def test_v2_stop_entry_that_never_triggers_is_silently_dropped(monkeypatch):
     the 98 stop (never invalidates either) -- so the plan expires pending,
     genuinely never entering a trade.
     """
-    import swingbot.core.plan_engine as plan_engine
+    import swingbot.core.planning.plan_engine as plan_engine
     closes = np.full(60, 100.0)
     closes[41:46] = 99.0
     df = make_ohlcv(closes, spread_pct=1.0)
@@ -104,8 +104,8 @@ def test_v2_stop_entry_that_never_triggers_is_silently_dropped(monkeypatch):
 def test_vectorized_entries_delegates_to_entry_filters(market_df):
     """backtest must produce byte-identical entries to entry_filters for
     every strategy -- no drift, that is the whole point of the redesign."""
-    from swingbot.core.backtest import _vectorized_entries, ALL_STRATEGIES
-    from swingbot.core.entry_filters import entries_for
+    from swingbot.core.backtesting.backtest import _vectorized_entries, ALL_STRATEGIES
+    from swingbot.core.market.entry_filters import entries_for
     for strat in ALL_STRATEGIES:
         b1, s1 = _vectorized_entries(market_df, strat, "4w")
         b2, s2 = entries_for(strat, market_df, "4w")
@@ -116,8 +116,8 @@ def test_vectorized_entries_delegates_to_entry_filters(market_df):
 import pytest
 from pathlib import Path
 import pandas as pd
-from swingbot.core.backtest import run_backtest
-import swingbot.core.entry_filters as ef
+from swingbot.core.backtesting.backtest import run_backtest
+import swingbot.core.market.entry_filters as ef
 
 CACHE = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 

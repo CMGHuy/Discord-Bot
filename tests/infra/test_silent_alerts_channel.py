@@ -23,7 +23,7 @@ import pytest
 from swingbot import config
 from swingbot.commands import scanning as scanning_mod
 from swingbot.commands.scanning import _send_alerts
-from swingbot.core.silent_channel import SilentChannel, silence
+from swingbot.core.infra.silent_channel import SilentChannel, silence
 
 
 class FakeChannel:

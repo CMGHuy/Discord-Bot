@@ -28,9 +28,9 @@ from datetime import datetime, timezone
 # `load_account_config` is re-exported: api_v1/dashboard.py reaches it as
 # `dash.load_account_config`, so it is used even though nothing in this file
 # calls it.
-from swingbot.core.account import compute_position_size, load_account_config
-from swingbot.core.data import get_current_price, prefetch_prices
-from swingbot.core.performance import trade_proximity
+from swingbot.core.planning.account import compute_position_size, load_account_config
+from swingbot.core.marketdata.data import get_current_price, prefetch_prices
+from swingbot.core.tracking.performance import trade_proximity
 
 from .helpers import _primary_strategy_label
 

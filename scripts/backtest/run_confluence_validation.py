@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Confluence scenario replay VALIDATION run (plan Task 41) -- SINGLE run over
 the out-of-sample 2024-01-01..2025-12-31 window, using the Task-40-adopted
-CONFLUENCE_GATES (swingbot.core.backtest_scenarios), never retuned after
+CONFLUENCE_GATES (swingbot.core.backtesting.backtest_scenarios), never retuned after
 seeing these results.
 
 The literal plan command (`run_backtest_range.py --validation --scenarios`)
@@ -48,9 +48,9 @@ import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
 from run_backtest_range import build_registry_records, merge_registry
-from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, replay_scenarios
-from swingbot.core.plan_engine import simulate_exit
-from swingbot.core.strategy_types import HORIZONS
+from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, replay_scenarios
+from swingbot.core.planning.plan_engine import simulate_exit
+from swingbot.core.market.strategy_types import HORIZONS
 
 VALIDATION = ("2024-01-01", "2025-12-31")
 MIN_N = 15

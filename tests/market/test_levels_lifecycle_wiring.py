@@ -11,9 +11,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from swingbot.core import plan_engine
-from swingbot.core.backtest import _trade_plan_at
-from swingbot.core.indicators import atr
+from swingbot.core.planning import plan_engine
+from swingbot.core.backtesting.backtest import _trade_plan_at
+from swingbot.core.market.indicators import atr
 
 
 def _frame(n=300, seed=7):
@@ -191,7 +191,7 @@ def test_stop_only_ever_widens(monkeypatch, df):
 
 
 def test_stop_adjustment_respects_max_risk_pct(monkeypatch, df):
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market.strategy_types import HORIZONS
 
     _flags(monkeypatch, stops=True)
     i = len(df) - 1
@@ -226,7 +226,7 @@ def test_levels_are_built_without_lookahead_in_the_backtest_branch(monkeypatch, 
     out of bars the trade cannot have seen.
     """
     seen = {}
-    from swingbot.core import levels as levels_mod
+    from swingbot.core.market import levels as levels_mod
     real = levels_mod.build_level_map
 
     def spy(hist, h, price):
@@ -242,7 +242,7 @@ def test_levels_are_built_without_lookahead_in_the_backtest_branch(monkeypatch, 
 
 def test_live_path_reuses_the_callers_level_map(monkeypatch, df):
     """Live already has a level_map; rebuilding it would be wasted work."""
-    from swingbot.core import levels as levels_mod
+    from swingbot.core.market import levels as levels_mod
     monkeypatch.setattr(levels_mod, "build_level_map",
                         lambda *a, **k: pytest.fail("rebuilt levels despite a level_map"))
 

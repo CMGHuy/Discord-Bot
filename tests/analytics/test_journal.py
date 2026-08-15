@@ -114,7 +114,7 @@ def _closed_trade():
 def test_journal_trade_close_adds_entry(tmp_path, monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
     df = make_ohlcv([100, 108, 98, 104], spread_pct=0.0, start="2026-03-02")
-    with patch("swingbot.core.data.get_daily_data", return_value=df):
+    with patch("swingbot.core.marketdata.data.get_daily_data", return_value=df):
         journal_trade_close(_closed_trade())
     store = JournalStore(path=str(tmp_path / "journal.json"))
     assert store.get("t1") is not None
@@ -122,7 +122,7 @@ def test_journal_trade_close_adds_entry(tmp_path, monkeypatch):
 
 def test_journal_trade_close_never_raises_on_fetch_failure(tmp_path, monkeypatch):
     monkeypatch.setattr("swingbot.core.analytics.journal.config.DATA_DIR", str(tmp_path))
-    with patch("swingbot.core.data.get_daily_data", side_effect=ValueError("no data")):
+    with patch("swingbot.core.marketdata.data.get_daily_data", side_effect=ValueError("no data")):
         journal_trade_close(_closed_trade())  # must not raise
     store = JournalStore(path=str(tmp_path / "journal.json"))
     # Entry still gets added -- just with df=None (all MFE/MAE fields None) --

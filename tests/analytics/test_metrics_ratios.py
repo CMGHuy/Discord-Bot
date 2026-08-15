@@ -119,7 +119,7 @@ def test_sortino_none_when_no_downside():
 
 
 def test_trade_return_pct_mirrors_risk_metrics():
-    from swingbot.core.risk_metrics import _trade_return_pct
+    from swingbot.core.tracking.risk_metrics import _trade_return_pct
 
     bull = {"entry": 100.0, "exit_price": 104.0, "direction": "bullish"}
     bear = {"entry": 100.0, "exit_price": 96.0, "direction": "bearish"}

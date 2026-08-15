@@ -35,7 +35,7 @@ def test_chart_without_plan_unchanged(tmp_path):
 
 
 def test_partial_plan_renders_trail_and_banked_annotation(tmp_path):
-    from swingbot.core.plan_engine import PlanStatus, record_transition
+    from swingbot.core.planning.plan_engine import PlanStatus, record_transition
     df = make_ohlcv([100 + i * 0.3 for i in range(120)])
     plan = _plan(entry_price=100.0, stop_loss=95.0, tp1=110.0,
                 working_stop=112.0, runner_high_close=float(df["Close"].max()))

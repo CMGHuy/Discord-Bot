@@ -74,10 +74,10 @@ from matplotlib.offsetbox import AnnotationBbox, HPacker, TextArea
 import mplfinance as mpf
 import pandas as pd
 
-from .. import levels
-from ..indicators import macd as _compute_macd, rsi as _compute_rsi, keltner_channel as _compute_kc
-from ..volatility import adx_trend_strength
-from ..trendlines import strongest_trendline_pair
+from swingbot.core.market import levels
+from swingbot.core.market.indicators import macd as _compute_macd, rsi as _compute_rsi, keltner_channel as _compute_kc
+from swingbot.core.market.volatility import adx_trend_strength
+from swingbot.core.market.trendlines import strongest_trendline_pair
 
 from .chart_style import (
     CHART_BG, CHIP_BG, CURRENT_PRICE_COLOR, DEFAULT_LOOKBACK_DAYS,
@@ -975,7 +975,7 @@ def generate_trade_chart(
                 # constant is designed for, just visualized here rather than
                 # applied to a live exit decision.
                 try:
-                    from ..indicators import atr as atr_indicator
+                    from swingbot.core.market.indicators import atr as atr_indicator
                     atr_full = atr_indicator(df, 14)
                     atr_recent = atr_full.reindex(recent.index).bfill()
                     is_bull_trail = plan_v2.direction == "bullish"

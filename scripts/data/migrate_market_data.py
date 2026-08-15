@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from swingbot.core.data_store import (
+from swingbot.core.marketdata.data_store import (
     DATA_DIR,
     TIMEFRAMES,
     safe_symbol,

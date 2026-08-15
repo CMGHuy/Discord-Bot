@@ -54,8 +54,8 @@ def test_classify_and_regime_series_agree_on_last_bar():
 
 def test_regime_gate_masks_disallowed_bars(monkeypatch):
     import pandas as pd
-    from swingbot.core import entry_filters
-    from swingbot.core import strategy_types
+    from swingbot.core.market import entry_filters
+    from swingbot.core.market import strategy_types
     from swingbot import config
 
     idx = pd.bdate_range("2024-01-01", periods=6)
@@ -72,7 +72,7 @@ def test_regime_gate_masks_disallowed_bars(monkeypatch):
 
 def test_regime_gate_noop_when_unconfigured(monkeypatch):
     import pandas as pd
-    from swingbot.core import entry_filters
+    from swingbot.core.market import entry_filters
     from swingbot import config
     monkeypatch.setattr(config, "REGIME_GATES_ENABLED", True, raising=False)
     idx = pd.bdate_range("2024-01-01", periods=3)

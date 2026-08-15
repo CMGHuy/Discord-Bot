@@ -3,7 +3,7 @@ triggers a background fetch. No real network -- fetch is always monkeypatched.""
 import pandas as pd
 import pytest
 
-from swingbot.core import backtest_cache as bc
+from swingbot.core.marketdata import backtest_cache as bc
 
 
 def _make_df(nbars: int) -> pd.DataFrame:

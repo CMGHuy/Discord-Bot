@@ -15,7 +15,7 @@ So the functions moved here first, unchanged, and only the Jinja half of
 it is queries and shaping, which is exactly why the v1 API wanted it.
 
 `primary_strategy_label` is deliberately NOT here — `pages.py` only
-re-exported it, and callers now import it from `swingbot.core.performance`,
+re-exported it, and callers now import it from `swingbot.core.tracking.performance`,
 its real home.
 
 Two colour helpers (`_lerp_hex`, `_heatmap_color`) came across with the
@@ -35,12 +35,12 @@ from swingbot import config
 from swingbot.core.analytics.metrics import win_rate
 from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
 from swingbot.core.analytics.rank import follow_score, rank_plans
-from swingbot.core.backtest import ALL_STRATEGIES
-from swingbot.core.performance import TradeLog, primary_strategy_label
-from swingbot.core.plan_engine import PlanStatus, plan_to_dict
-from swingbot.core.plan_store import PlanStore
-from swingbot.core.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
-from swingbot.core.registry import load_registry
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES
+from swingbot.core.tracking.performance import TradeLog, primary_strategy_label
+from swingbot.core.planning.plan_engine import PlanStatus, plan_to_dict
+from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
+from swingbot.core.backtesting.registry import load_registry
 
 from .dashboard import is_today_berlin as _is_today_berlin
 

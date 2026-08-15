@@ -10,12 +10,12 @@ rewrite = _repackage.rewrite
 
 
 def test_absolute_module_import():
-    assert rewrite("from swingbot.core.jsonio import atomic_write_json") == \
+    assert rewrite("from swingbot.core.infra.jsonio import atomic_write_json") == \
         "from swingbot.core.infra.jsonio import atomic_write_json"
 
 
 def test_string_literal_patch_target():
-    assert rewrite('mock.patch("swingbot.core.data.fetch_ohlc")') == \
+    assert rewrite('mock.patch("swingbot.core.marketdata.data.fetch_ohlc")') == \
         'mock.patch("swingbot.core.marketdata.data.fetch_ohlc")'
 
 
@@ -64,7 +64,7 @@ def test_multiline_import_prefix_only():
 
 
 def test_idempotent():
-    once = rewrite("from swingbot.core.jsonio import atomic_write_json")
+    once = rewrite("from swingbot.core.infra.jsonio import atomic_write_json")
     assert rewrite(once) == once
 
 

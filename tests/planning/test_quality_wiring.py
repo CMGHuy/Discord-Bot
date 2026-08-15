@@ -1,4 +1,4 @@
-from swingbot.core.plan_engine import build_strategy_plan
+from swingbot.core.planning.plan_engine import build_strategy_plan
 from tests.helpers import make_ohlcv
 
 QI = dict(regime="bullish", htf_bias="bullish", confluence_count=3,

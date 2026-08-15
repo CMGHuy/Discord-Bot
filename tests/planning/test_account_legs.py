@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from swingbot.core import account
+from swingbot.core.planning import account
 
 
 def test_self_healing_recompute_sums_legs(tmp_path):

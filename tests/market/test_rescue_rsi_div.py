@@ -7,7 +7,7 @@ REPL-tuned and frozen). Volume ratio at the reclaim bar is 1.46 with
 vol_mult=1.5 and 1.00 with vol_mult=1.0."""
 import numpy as np
 
-from swingbot.core.entry_filters import rsi_divergence_entries
+from swingbot.core.market.entry_filters import rsi_divergence_entries
 from tests.conftest import make_ohlcv
 
 OFF = {"min_volume_ratio": None, "min_reclaim_strength": None}

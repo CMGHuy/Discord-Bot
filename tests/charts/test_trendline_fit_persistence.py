@@ -46,8 +46,8 @@ def test_a_record_without_a_fit_is_still_valid():
 
 
 def test_log_trade_stores_the_fit_it_is_given(tmp_path):
-    """The real writer: swingbot.core.performance.TradeLog.log_trade."""
-    from swingbot.core.performance import TradeLog
+    """The real writer: swingbot.core.tracking.performance.TradeLog.log_trade."""
+    from swingbot.core.tracking.performance import TradeLog
 
     log = TradeLog(path=str(tmp_path / "trades.json"))
     fit = fit_trendline(_frame(), lookback=120, current_price=160.0, is_bull=True)
@@ -68,7 +68,7 @@ def test_log_trade_stores_the_fit_it_is_given(tmp_path):
 def test_log_trade_omits_the_key_entirely_when_there_is_no_fit(tmp_path):
     """`if fit:` at the call site, so "absent" means one thing -- no line --
     rather than two."""
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
 
     log = TradeLog(path=str(tmp_path / "trades.json"))
     trade_id = log.log_trade(

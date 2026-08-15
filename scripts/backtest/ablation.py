@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from swingbot.core.backtest_wf import run_folds  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import run_folds  # noqa: E402
 
 ADOPTED_PATH = "docs/superpowers/results/adopted_components.json"
 

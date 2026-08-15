@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import yfinance as yf
 
-from .ticker_utils import candidate_symbols
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger("swing-bot.data_store")
 

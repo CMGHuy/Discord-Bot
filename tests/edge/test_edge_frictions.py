@@ -18,7 +18,7 @@ def test_commission_r_golden():
 
 
 def test_backtest_frictions_reduce_r(monkeypatch):
-    import swingbot.core.backtest as bt
+    import swingbot.core.backtesting.backtest as bt
     df = make_ohlcv(np.full(80, 100.0), spread_pct=1.0)
     bull = pd.Series(False, index=df.index); bull.iloc[40] = True
     bear = pd.Series(False, index=df.index)
@@ -31,7 +31,7 @@ def test_backtest_frictions_reduce_r(monkeypatch):
 
 
 def test_frictions_off_is_bit_identical_to_before(monkeypatch):
-    import swingbot.core.backtest as bt
+    import swingbot.core.backtesting.backtest as bt
     df = make_ohlcv(np.full(80, 100.0), spread_pct=1.0)
     bull = pd.Series(False, index=df.index); bull.iloc[40] = True
     monkeypatch.setattr(bt, "_vectorized_entries",

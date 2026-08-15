@@ -1,4 +1,4 @@
-from swingbot.core.plan_engine import PlanStatus, record_transition
+from swingbot.core.planning.plan_engine import PlanStatus, record_transition
 from swingbot.commands.plans import format_plans_board
 from tests.planning.test_plan_engine_model import _plan
 

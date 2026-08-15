@@ -24,7 +24,7 @@ warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from swingbot.core.fmp_client import FMPClient, VALID_INTERVALS, FMPResult  # noqa: E402
+from swingbot.core.marketdata.fmp_client import FMPClient, VALID_INTERVALS, FMPResult  # noqa: E402
 
 OUT_ROOT = ROOT / "data" / "fmp"
 

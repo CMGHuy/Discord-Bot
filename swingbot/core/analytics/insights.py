@@ -109,7 +109,7 @@ def edge_decay_report(closed: list[dict]) -> list[str]:
     for the pre-registered alert rule). Loads the registry itself (the
     one deliberate I/O exception in this module) so calibration.py stays
     a pure function of (closed, registry_entries) with no hidden load."""
-    from swingbot.core import registry
+    from swingbot.core.backtesting import registry
 
     rows = calibration.badge_drift(closed, registry.load_registry())
     lines = []

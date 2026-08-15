@@ -1,5 +1,5 @@
-from swingbot.core.plan_engine import PlanStatus, record_transition
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.planning.plan_engine import PlanStatus, record_transition
+from swingbot.core.planning.plan_store import PlanStore
 from tests.planning.test_plan_engine_model import _plan
 
 

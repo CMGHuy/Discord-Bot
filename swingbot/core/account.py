@@ -60,7 +60,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config as app_config
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
@@ -101,7 +101,7 @@ def _sum_realized_pnl(trades_path: str = None) -> float:
             # v2 two-leg trade whose realized_pnl_amount never got written
             # (e.g. a crash between leg append and settle) -- rederive it
             # from the legs themselves rather than treating it as unsettled.
-            from swingbot.core.performance import settle_legs
+            from swingbot.core.tracking.performance import settle_legs
             pnl = settle_legs(t)
         if pnl is not None:
             try:

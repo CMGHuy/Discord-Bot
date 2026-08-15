@@ -7,10 +7,10 @@ import discord
 
 from swingbot import config
 from swingbot.bot_core import bot
-from swingbot.core import export_data
-from swingbot.core.data_store import DATA_DIR as CACHE_DIR, INTERVAL_CONFIG, download_and_cache
-from swingbot.core.export_data import export_ticker
-from swingbot.core.watchlist import load_watchlist
+from swingbot.core.marketdata import export_data
+from swingbot.core.marketdata.data_store import DATA_DIR as CACHE_DIR, INTERVAL_CONFIG, download_and_cache
+from swingbot.core.marketdata.export_data import export_ticker
+from swingbot.core.marketdata.watchlist import load_watchlist
 
 
 @bot.command(name="charts")

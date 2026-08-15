@@ -107,7 +107,7 @@ def test_window_replaces_anchored_folds_in_fold_mode(monkeypatch):
 
 
 def test_no_window_keeps_anchored_folds(monkeypatch):
-    from swingbot.core.backtest_wf import ANCHORED_FOLDS
+    from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS
 
     captured = {}
 

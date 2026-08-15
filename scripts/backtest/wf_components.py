@@ -36,14 +36,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import numpy as np  # noqa: E402
 
 from swingbot import config  # noqa: E402
-from swingbot.core.backtest import ALL_STRATEGIES, run_backtest  # noqa: E402
-from swingbot.core.backtest_wf import (ANCHORED_FOLDS, GATE_MAX_DEGRADATION_R,  # noqa: E402
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import (ANCHORED_FOLDS, GATE_MAX_DEGRADATION_R,  # noqa: E402
                                        GATE_MIN_IMPROVING_FOLDS,
                                        GATE_MIN_N_PER_FOLD, _apply_overrides,
                                        _frame_for, gate)
-from swingbot.core.strategy_types import HORIZONS  # noqa: E402
-from swingbot.core.universe import liquidity_ok, universe_symbols  # noqa: E402
-from swingbot.core.watchlist import load_watchlist  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.marketdata.universe import liquidity_ok, universe_symbols  # noqa: E402
+from swingbot.core.marketdata.watchlist import load_watchlist  # noqa: E402
 
 # Components the backtest can actually observe. Verified empirically
 # before registering (flip the flag, same windows, compare expectancy):

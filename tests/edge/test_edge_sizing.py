@@ -80,14 +80,14 @@ def _cfg(mode):
 
 
 def test_default_mode_unchanged():
-    from swingbot.core.account import compute_position_size
+    from swingbot.core.planning.account import compute_position_size
     # entry 100, stop 98 -> $2 risk/share; 1% of 10k = $100 -> 50 shares.
     out = compute_position_size(100.0, 98.0, _cfg("risk_pct"))
     assert out["shares"] == 50
 
 
 def test_kelly_mode_uses_strategy_stats():
-    from swingbot.core.account import compute_position_size
+    from swingbot.core.planning.account import compute_position_size
     stats = {"win_rate": 0.80, "avg_win_r": 0.4, "avg_loss_r": 1.0, "n": 200}
     # kelly says 2.0% but min(config 1.0, kelly 2.0) = 1.0 -> same 50 shares
     out = compute_position_size(100.0, 98.0, _cfg("kelly"), strategy_stats=stats)
@@ -102,14 +102,14 @@ def test_kelly_mode_uses_strategy_stats():
 
 
 def test_vol_target_mode_shrinks_wild_tickers():
-    from swingbot.core.account import compute_position_size
+    from swingbot.core.planning.account import compute_position_size
     out = compute_position_size(100.0, 98.0, _cfg("vol_target"), ticker_atr_pct=3.0)
     # vol-target 0.7% -> min(1.0, 0.7) -> $70 risk -> 35 shares
     assert out["shares"] == 35
 
 
 def test_min_of_all_takes_the_smallest():
-    from swingbot.core.account import compute_position_size
+    from swingbot.core.planning.account import compute_position_size
     stats = {"win_rate": 0.80, "avg_win_r": 0.4, "avg_loss_r": 1.0, "n": 200}
     out = compute_position_size(100.0, 98.0, _cfg("min_of_all"),
                                 strategy_stats=stats, ticker_atr_pct=3.0)
@@ -117,13 +117,13 @@ def test_min_of_all_takes_the_smallest():
 
 
 def test_new_modes_without_inputs_fall_back_to_config_risk():
-    from swingbot.core.account import compute_position_size
+    from swingbot.core.planning.account import compute_position_size
     out = compute_position_size(100.0, 98.0, _cfg("min_of_all"))
     assert out["shares"] == 50
 
 
 def test_set_sizing_mode_accepts_the_three_edge_modes(tmp_path):
-    from swingbot.core.account import set_sizing_mode
+    from swingbot.core.planning.account import set_sizing_mode
     path = str(tmp_path / "account.json")
     assert set_sizing_mode("kelly", path=path)["sizing_mode"] == "kelly"
     assert set_sizing_mode("vol_target", path=path)["sizing_mode"] == "vol_target"
@@ -157,7 +157,7 @@ def test_sizing_shadow_report_ignores_trades_without_shadow_data():
 
 
 def test_log_trade_stamps_shadow_sizing_from_own_history(tmp_path):
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     log = TradeLog(path=str(tmp_path / "trades.json"))
     # seed one closed trade for the strategy so kelly has real R history to
     # work with -- n=1 is well below KELLY_MIN_SAMPLE (30) so this exercises
@@ -184,7 +184,7 @@ def test_log_trade_stamps_shadow_sizing_from_own_history(tmp_path):
 
 
 def test_log_trade_shadow_sizing_none_with_no_strategy_history(tmp_path):
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     log = TradeLog(path=str(tmp_path / "trades.json"))
     trade_id = log.log_trade(
         ticker="AAPL", strategy="Brand New Strategy", horizon_key="4w", direction="bullish",

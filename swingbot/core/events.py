@@ -16,8 +16,8 @@ import logging
 
 import yfinance as yf
 
-from .ticker_utils import candidate_symbols
-from .universe import is_etf
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
+from swingbot.core.marketdata.universe import is_etf
 
 log = logging.getLogger("swing-bot.events")
 

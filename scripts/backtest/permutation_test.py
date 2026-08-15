@@ -31,8 +31,8 @@ def p_value(real_expectancy: float, permuted: list) -> float:
 
 def _fold_run_fn(overrides: dict):
     """Returns run_fn(shift) -> pooled test expectancy with entries rolled."""
-    import swingbot.core.backtest as bt
-    from swingbot.core.backtest_wf import run_folds
+    import swingbot.core.backtesting.backtest as bt
+    from swingbot.core.backtesting.backtest_wf import run_folds
 
     def run(shift: int) -> float:
         bt.ENTRY_SHIFT = shift

@@ -14,8 +14,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .plan_engine import build_strategy_plan
-from .strategy_types import BREAKEVEN_TRIGGER_FRACTION
+from swingbot.core.planning.plan_engine import build_strategy_plan
+from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION
 
 MANAGEMENT_NOTE = (
     f"After price covers {BREAKEVEN_TRIGGER_FRACTION:.0%} of the distance to target, "

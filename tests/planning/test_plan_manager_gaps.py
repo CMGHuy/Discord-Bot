@@ -1,7 +1,7 @@
 import pytest
 
-from swingbot.core.plan_store import PlanStore
-from swingbot.core.plan_manager import PlanManager
+from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning.plan_manager import PlanManager
 from tests.fake_feed import FakePriceFeed
 from tests.planning.test_plan_manager_active import _active
 

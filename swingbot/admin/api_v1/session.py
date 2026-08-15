@@ -97,7 +97,7 @@ def health():
     failing the probe that monitoring uses to decide the admin is down.
     """
     try:
-        from swingbot.core.data import is_us_market_active
+        from swingbot.core.marketdata.data import is_us_market_active
         market_active = bool(is_us_market_active())
     except Exception:
         market_active = False

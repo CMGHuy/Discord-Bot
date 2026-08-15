@@ -14,10 +14,10 @@ from swingbot.config import auto_reload_if_changed
 from swingbot.core import scan_engine
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.bot_core import bot, in_session, log, SESSION_TZ, install_reload_signal_handler, on_config_reload
-from swingbot.core.data import get_current_price
-from swingbot.core.silent_channel import silence
-from swingbot.core.strategy import HORIZONS
-from swingbot.core.watchlist import load_watchlist
+from swingbot.core.marketdata.data import get_current_price
+from swingbot.core.infra.silent_channel import silence
+from swingbot.core.market.strategy import HORIZONS
+from swingbot.core.marketdata.watchlist import load_watchlist
 
 _TRIGGER_FILE         = os.path.join(config.DATA_DIR, "trigger_check.flag")
 # Queue file written by the admin UI when a trade is manually closed.
@@ -244,7 +244,7 @@ async def _post_daily_digest(channel) -> None:
     user would see running !top themselves."""
     import datetime as _dt
 
-    from swingbot.core.plan_store import PlanStore
+    from swingbot.core.planning.plan_store import PlanStore
     from swingbot.commands.stats import _fake_item_from_plan
     from swingbot.core.scanning.embeds import build_embed
     from swingbot.commands.views import PlanActionView
@@ -346,7 +346,7 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
     author_id=None) attached (any user may click); legacy (no-plan) alerts
     get no view. PlanActionView is imported lazily here rather than at
     module top to avoid a circular import: views.py imports from
-    swingbot.core.plan_store, and scanning.py is imported very early during
+    swingbot.core.planning.plan_store, and scanning.py is imported very early during
     bot startup (bot_core.py registers commands from every
     swingbot/commands/* module) -- a top-level import is safe today (no
     cycle exists), but the lazy import documents the intent and costs
@@ -1070,7 +1070,7 @@ async def trade_monitor():
             all_newly_closed.extend(near_tp_closed)
 
     # v2 plan lifecycle tick (flag-gated; no-op while INTRADAY_MANAGER_V2=false)
-    from swingbot.core import plan_manager
+    from swingbot.core.planning import plan_manager
     try:
         plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
     except Exception as exc:
@@ -1128,7 +1128,7 @@ async def _resolve_retrospective_channel(channel_id_override: int | None = None,
 async def _post_retrospective(channel_id_override: int | None = None, today=None):
     """Build and post today's (or `today`'s, if given) retrospective. Called
     by daily_recap task and !recap command."""
-    from swingbot.core.retrospective import build_daily_retrospective
+    from swingbot.core.tracking.retrospective import build_daily_retrospective
 
     all_trades = trade_log.get_trades(limit=10_000)
     messages   = build_daily_retrospective(all_trades, today=today)
@@ -1181,7 +1181,7 @@ async def weekend_deep_scan() -> str:
     nothing to report or the channel couldn't be resolved) -- for the
     scheduler branch to log, and for testability without a live bot.
     """
-    from swingbot.core.data import get_current_price
+    from swingbot.core.marketdata.data import get_current_price
 
     old_confirm = config.SIGNAL_CONFIRMATION_SCANS
     old_min_conf = config.MIN_ALERT_CONFIDENCE_LEVEL
@@ -1324,7 +1324,7 @@ async def market_data_refresh():
         return
 
     try:
-        from swingbot.core.data_refresh import (
+        from swingbot.core.marketdata.data_refresh import (
             FAILED_RETRY_HOURS, pending_gaps, refresh_all, summary_line,
         )
         result = await asyncio.to_thread(

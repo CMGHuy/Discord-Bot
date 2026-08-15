@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from swingbot.core.entry_filters import ma_ribbon_entries
+from swingbot.core.market.entry_filters import ma_ribbon_entries
 from tests.conftest import make_ohlcv, make_trend_df
 
 GATED = {"ext_pct": 8.0, "min_width_pctile": 0.4, "require_expanding": True}

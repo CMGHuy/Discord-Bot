@@ -10,7 +10,7 @@ import discord
 from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core.analytics.rank import rank_plans
-from swingbot.core.plan_store import PlanStore
+from swingbot.core.planning.plan_store import PlanStore
 from swingbot.commands.views import PlanActionView
 from swingbot.core.scanning.embeds import build_embed
 

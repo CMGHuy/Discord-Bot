@@ -14,7 +14,7 @@ route shared with the Jinja UI; the Jinja UI is gone (Release B), so this
 module now carries the only serialisation.
 
 Every number here is produced by the same Python that draws the PNG the bot
-posts to Discord -- `swingbot.core.indicators`,
+posts to Discord -- `swingbot.core.market.indicators`,
 `signals.compute_volume_profile`, `charts.chart_geometry.overlay_geometry`
 and `charts.trendline_fit`. A browser-side reimplementation of "where does
 the 61.8% retracement sit" or "what is the 20-EMA here" would be a guarantee
@@ -122,7 +122,7 @@ def _indicators(df, window: int) -> dict:
     instead draw an empty pane with a price axis and no line, which reads as
     "this indicator is flat" rather than "there is not enough history".
     """
-    from swingbot.core.indicators import keltner_channel, macd, rsi
+    from swingbot.core.market.indicators import keltner_channel, macd, rsi
 
     n = len(df)
     out = {}
@@ -165,7 +165,7 @@ def _volume_profile(df, window: int) -> list:
     profile is an overlay on the price pane rather than a pane of its own, so
     there is nothing to omit.
     """
-    from swingbot.core.signals import compute_volume_profile
+    from swingbot.core.market.signals import compute_volume_profile
 
     # compute_volume_profile needs 2 bars of margin beyond its lookback.
     lookback = min(window, len(df) - 2)
@@ -232,7 +232,7 @@ def _chart_trendline_fit(trade: dict, df, horizon: dict, is_bull: bool) -> dict 
 
     from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS
     from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY, fit_trendline
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
 
     fit = trade.get(TRENDLINE_FIT_KEY)
     if fit:
@@ -367,8 +367,8 @@ def chart(ticker: str):
     from swingbot import config
     from swingbot.admin.app import _ohlcv_frame, _trade_for_levels
     from swingbot.core.charts.chart_geometry import bar_epochs, overlay_geometry
-    from swingbot.core.data import get_currency_symbol
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.marketdata.data import get_currency_symbol
+    from swingbot.core.market.strategy_types import HORIZONS
 
     raw_window = request.args.get("window")
     if raw_window is None:

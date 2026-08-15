@@ -8,7 +8,7 @@ functions sharing only the SignalResult dataclass and a handful of
 constants (HORIZONS, MIN_BARS, RSI thresholds, ...) that strategy.py
 still owns -- strategy.py imports every one of these back and re-exposes
 them (via STRATEGY_FUNCS and direct re-export) exactly as before, so
-nothing about how a caller uses swingbot.core.strategy changes.
+nothing about how a caller uses swingbot.core.market.strategy changes.
 
 compute_volume_profile/compute_hvn_level also live here since they're the
 data-computation half of the Volume Profile signal above -- but they're
@@ -18,9 +18,9 @@ top-level functions rather than folded into volume_profile_signal.
 """
 import pandas as pd
 
-from .entry_filters import entries_for, RIBBON_PERIODS_BY_HORIZON
-from .indicators import ema, macd, rsi, rolling_vwap, fibonacci_levels, elliott_wave3_entries, zigzag_pivots
-from .strategy_types import HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE, SignalResult
+from swingbot.core.market.entry_filters import entries_for, RIBBON_PERIODS_BY_HORIZON
+from swingbot.core.market.indicators import ema, macd, rsi, rolling_vwap, fibonacci_levels, elliott_wave3_entries, zigzag_pivots
+from swingbot.core.market.strategy_types import HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE, SignalResult
 
 
 # ---------------------------------------------------------------------------

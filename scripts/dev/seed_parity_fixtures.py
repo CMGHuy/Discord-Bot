@@ -38,7 +38,7 @@ from swingbot import config  # noqa: E402  (needs the path above)
 # the Analytics heatmap silently had nothing to draw. A fixture using keys the
 # product does not know produces a plausible-looking screen that proves
 # nothing.
-from swingbot.core.strategy_types import HORIZONS  # noqa: E402
+from swingbot.core.market.strategy_types import HORIZONS  # noqa: E402
 
 # --- ids ------------------------------------------------------------------
 # Plan ids are UUID4-shaped because trade_commands.py routes a note by
@@ -161,7 +161,7 @@ TRADES = [
 # supposed to check rather than four identical full bars.
 def _spectrum_plans():
     try:
-        from swingbot.core.data import get_current_price
+        from swingbot.core.marketdata.data import get_current_price
     except Exception:
         return [], []
 

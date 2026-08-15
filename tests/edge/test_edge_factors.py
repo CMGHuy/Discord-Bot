@@ -203,8 +203,8 @@ def test_avwap_anchors_ignore_bars_before_the_lookback():
 
 def test_avwap_levels_enter_the_level_map_when_enabled(monkeypatch):
     from swingbot import config
-    from swingbot.core import levels
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market import levels
+    from swingbot.core.market.strategy_types import HORIZONS
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", True)
     df = make_trend_df(300, +0.2)
     cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
@@ -217,8 +217,8 @@ def test_avwap_levels_absent_while_the_flag_is_off(monkeypatch):
     shifts every confluence count, so it stays dark until the walk-forward
     folds (E33) and the shadow forward-gate (E40) have judged it."""
     from swingbot import config
-    from swingbot.core import levels
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market import levels
+    from swingbot.core.market.strategy_types import HORIZONS
     assert config.AVWAP_LEVELS_ENABLED is False, "this factor must ship default-off"
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", False)
     df = make_trend_df(300, +0.2)
@@ -232,7 +232,7 @@ def test_avwap_is_its_own_strategy_family():
     window), and strategy_family() matches on startswith, so "AVWAP" would
     otherwise fall through to itself unregistered and be counted as a
     confirming strategy that isn't in ALL_STRATEGY_FAMILIES."""
-    from swingbot.core import levels
+    from swingbot.core.market import levels
     assert levels.strategy_family("AVWAP") == "AVWAP"
     assert levels.strategy_family("VWAP") == "VWAP"
     assert "AVWAP" in levels.ALL_STRATEGY_FAMILIES
@@ -300,7 +300,7 @@ def test_pierce_without_reclaim_earns_no_rejection_points():
 def test_bimodal_volume_finds_nodes():
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.levels import volume_profile_nodes
+    from swingbot.core.market.levels import volume_profile_nodes
     # price spends time at 100 and 120 (heavy volume), races through 110
     closes = np.concatenate([np.full(80, 100.0), np.linspace(100, 120, 20),
                              np.full(80, 120.0)])
@@ -320,7 +320,7 @@ def test_edge_bins_are_scanned_too():
     empirically before fixing, not reasoned about."""
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.levels import volume_profile_nodes
+    from swingbot.core.market.levels import volume_profile_nodes
     closes = np.concatenate([np.full(60, 100.0), np.linspace(100, 110, 10),
                              np.full(60, 110.0)])
     vols = np.concatenate([np.full(60, 5e6), np.full(10, 4e5), np.full(60, 5e6)])
@@ -335,7 +335,7 @@ def test_flat_profile_yields_no_nodes():
     acceptance shelf and no vacuum."""
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.levels import volume_profile_nodes
+    from swingbot.core.market.levels import volume_profile_nodes
     df = make_ohlcv(np.full(120, 100.0), spread_pct=0.0,
                     volumes=np.full(120, 1e6))
     nodes = volume_profile_nodes(df)
@@ -347,7 +347,7 @@ def test_hvn_lvn_collapse_into_the_existing_volume_profile_family():
     HVN" candidate, computed at more resolution -- counting them as extra
     distinct families would double-count one piece of evidence, which is
     the exact thing strategy_family() exists to prevent."""
-    from swingbot.core import levels
+    from swingbot.core.market import levels
     assert levels.strategy_family("Volume Profile HVN") == "Volume Profile"
     assert levels.strategy_family("Volume Profile LVN") == "Volume Profile"
 
@@ -355,8 +355,8 @@ def test_hvn_lvn_collapse_into_the_existing_volume_profile_family():
 def test_hvn_lvn_levels_are_flag_gated(monkeypatch):
     import numpy as np
     from swingbot import config
-    from swingbot.core import levels
-    from swingbot.core.strategy_types import HORIZONS
+    from swingbot.core.market import levels
+    from swingbot.core.market.strategy_types import HORIZONS
     from tests.conftest import make_ohlcv
     closes = np.concatenate([np.full(80, 100.0), np.linspace(100, 120, 20),
                              np.full(80, 120.0)])
@@ -396,7 +396,7 @@ def _divergence_df():
 
 
 def test_divergence_strength_golden():
-    from swingbot.core.signals import divergence_strength
+    from swingbot.core.market.signals import divergence_strength
     # 4 swing points (+2), price +6.7% vs RSI -3 pts => disagreement 0.0967
     # -> int(0.0967*40) = 3 (+3), volume fading 3M -> 1M = 67% (+3) = 8
     score = divergence_strength([90.0, 92.0, 94.0, 96.0], [35.0, 32.0],
@@ -405,14 +405,14 @@ def test_divergence_strength_golden():
 
 
 def test_divergence_strength_two_touch_accident_scores_zero():
-    from swingbot.core.signals import divergence_strength
+    from swingbot.core.market.signals import divergence_strength
     # bare minimum swings, near-parallel slopes, flat volume
     assert divergence_strength([100.0, 101.0], [40.0, 39.0],
                                [1_000_000.0, 1_000_000.0]) == 0
 
 
 def test_divergence_strength_is_bounded():
-    from swingbot.core.signals import divergence_strength
+    from swingbot.core.market.signals import divergence_strength
     score = divergence_strength([50.0] + [60.0] * 9, [90.0, 10.0],
                                 [9_000_000.0, 100_000.0])
     assert 0 <= score <= 10
@@ -427,8 +427,8 @@ def test_divergence_detection_is_unchanged_by_the_scoring(monkeypatch):
     scanner share) and signals.rsi_divergence_signal delegates `triggered`
     straight to entries_for. This pins that delegation so a future
     'optimization' can't quietly reintroduce a second detector here."""
-    from swingbot.core import signals
-    from swingbot.core.entry_filters import entries_for
+    from swingbot.core.market import signals
+    from swingbot.core.market.entry_filters import entries_for
     df = _divergence_df()
     bull, bear = entries_for("RSI Divergence", df, "2m")
     res = signals.rsi_divergence_signal("TEST", df, "2m")
@@ -439,7 +439,7 @@ def test_divergence_detection_is_unchanged_by_the_scoring(monkeypatch):
 def test_strength_is_attached_when_the_divergence_pattern_is_described():
     """When the enrichment block recognises the pattern, the details it
     renders now carry a 0-10 strength alongside the swing values."""
-    from swingbot.core import signals
+    from swingbot.core.market import signals
     df = _divergence_df()
 
     # Force the entry gate open so the descriptive block runs; detection
@@ -462,7 +462,7 @@ def test_strength_is_attached_when_the_divergence_pattern_is_described():
 # --- E37: quality score v2 components ---------------------------------------
 
 def test_quality_v2_component_points():
-    from swingbot.core.quality import (breadth_points, candle_points,
+    from swingbot.core.planning.quality import (breadth_points, candle_points,
                                        gap_penalty, mtf_points, rs_points)
     assert rs_points(50.0) == 0 and rs_points(100.0) == 10 and rs_points(75.0) == 5
     assert mtf_points(0) == 0 and mtf_points(2) == 6 and mtf_points(3) == 10
@@ -475,7 +475,7 @@ def test_quality_v2_components_handle_absent_inputs():
     """Every edge input can legitimately be unavailable (no RS benchmark,
     too small a universe for breadth). None must score 0, never crash and
     never be treated as a real reading."""
-    from swingbot.core.quality import (breadth_points, candle_points,
+    from swingbot.core.planning.quality import (breadth_points, candle_points,
                                        mtf_points, rs_points)
     assert rs_points(None) == 0 and breadth_points(None) == 0
     assert mtf_points(None) == 0 and candle_points(None) == 0
@@ -495,7 +495,7 @@ def test_score_plan_is_bit_identical_without_edge_inputs():
     current scoring. A caller that supplies no edge inputs -- which is
     every caller today, including scripts/reports/audit_quality_score.py -- must
     get exactly the score it got before."""
-    from swingbot.core.quality import score_plan
+    from swingbot.core.planning.quality import score_plan
     base = score_plan(**_v1_inputs())
     same = score_plan(**_v1_inputs(), rs_percentile=None, mtf=None,
                       breadth=None, candle_quality=None, gap_fragile=False)
@@ -505,7 +505,7 @@ def test_score_plan_is_bit_identical_without_edge_inputs():
 
 
 def test_edge_components_append_rows_and_the_total_still_clamps():
-    from swingbot.core.quality import score_plan
+    from swingbot.core.planning.quality import score_plan
     maxed = score_plan(**_v1_inputs(), rs_percentile=100.0, mtf=3,
                        breadth=70.0, candle_quality=10, gap_fragile=False)
     assert 0 <= maxed.score <= 100
@@ -521,7 +521,7 @@ def test_edge_components_append_rows_and_the_total_still_clamps():
 
 
 def test_score_never_goes_negative_on_a_worst_case():
-    from swingbot.core.quality import score_plan
+    from swingbot.core.planning.quality import score_plan
     worst = score_plan(direction="bullish", regime="bearish", htf_bias="bearish",
                        confluence_count=0, volume_ratio=0.1, atr_pct=0.95,
                        trigger_distance_pct=9.0, badge_status="WEAK",

@@ -23,9 +23,9 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
-import swingbot.core.backtest as bt
-import swingbot.core.entry_filters as ef
-from swingbot.core.strategy_types import HORIZONS
+import swingbot.core.backtesting.backtest as bt
+import swingbot.core.market.entry_filters as ef
+from swingbot.core.market.strategy_types import HORIZONS
 
 TRAIN = ("2020-01-01", "2023-12-31")
 

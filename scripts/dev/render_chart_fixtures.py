@@ -218,7 +218,7 @@ def verify_overlays() -> int:
     """Asserts each fixture's primary source is actually drawable, so a
     silently-failing overlay can't masquerade as a passing refactor."""
     from swingbot.core.charts.chart_geometry import overlay_geometry, _pick_primary_source
-    from swingbot.core.trendlines import strongest_trendline_pair
+    from swingbot.core.market.trendlines import strongest_trendline_pair
 
     failures = 0
     for name in sorted(FIXTURES):

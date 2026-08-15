@@ -15,11 +15,11 @@ import os
 import discord
 
 from swingbot import config
-from swingbot.core.data import get_currency_symbol, get_daily_data
+from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
-from swingbot.core.jsonio import atomic_write_json, read_json
-from swingbot.core.plan_store import PlanStore
-from swingbot.core.strategy import HORIZONS
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.market.strategy import HORIZONS
 
 _plan_store = PlanStore()
 

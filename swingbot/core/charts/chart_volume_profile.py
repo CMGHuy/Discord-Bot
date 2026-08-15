@@ -20,7 +20,7 @@ from .chart_style import (
     VOLUME_PROFILE_PANEL_LOOKBACK_DAYS,
     _label_bbox,
 )
-from ..strategy import compute_volume_profile
+from swingbot.core.market.strategy import compute_volume_profile
 
 
 def _draw_volume_profile_overlay(ax, df: pd.DataFrame, lookback: int, entry_price: float = None,

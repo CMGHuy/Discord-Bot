@@ -59,7 +59,7 @@ def main() -> int:
         return 1
 
     if args.backfill:
-        from swingbot.core.shadow_log import backfill_forward_returns
+        from swingbot.core.backtesting.shadow_log import backfill_forward_returns
         print(f"resolved {backfill_forward_returns(args.path)} newly matured entries",
               file=sys.stderr)
 

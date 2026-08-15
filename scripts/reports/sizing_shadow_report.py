@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # the "actual" column falls back to 0 via _walk's `or 0.0` -- a real,
     # disclosed gap, not a silently wrong number.
     from swingbot.core.analytics.metrics import r_multiple as _r_multiple
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
 
     trades = TradeLog().get_trades(limit=None)
     for t in trades:

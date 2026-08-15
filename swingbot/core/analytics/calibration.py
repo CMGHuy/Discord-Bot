@@ -100,7 +100,7 @@ def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
     validated to begin with), and duplicate strategy names (e.g. one row
     per horizon) collapse to the first VALIDATED occurrence encountered.
     """
-    from swingbot.core.levels import strategy_family
+    from swingbot.core.market.levels import strategy_family
 
     rows = []
     seen: set[str] = set()

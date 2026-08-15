@@ -1,4 +1,4 @@
-from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, stamp_badge
+from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, stamp_badge
 from swingbot.core.scanning.embeds import (badge_field_for, entry_line,
                                            leg_rows, quality_lines)
 from tests.planning.test_plan_engine_model import _plan

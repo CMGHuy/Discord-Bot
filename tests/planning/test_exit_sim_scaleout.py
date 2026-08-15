@@ -8,7 +8,7 @@ coverage.
 """
 import pytest
 
-from swingbot.core.plan_engine import simulate_exit
+from swingbot.core.planning.plan_engine import simulate_exit
 from tests.planning.test_exit_sim_single import _plan
 from tests.helpers import make_ohlcv
 
@@ -144,7 +144,7 @@ def test_trail_never_ratchets_backwards():
     result = simulate_exit(df, signal_index=14, plan=plan, scale_out=True)
     assert result.runner_outcome == "runner_trail"
 
-    from swingbot.core.indicators import atr as atr_indicator
+    from swingbot.core.market.indicators import atr as atr_indicator
     atr_series = atr_indicator(df, 14)
     trail_from_130 = 130.0 - 2.5 * float(atr_series.iloc[16])
     trail_from_124 = 130.0 - 2.5 * float(atr_series.iloc[17])
@@ -154,7 +154,7 @@ def test_trail_never_ratchets_backwards():
 
 
 def test_chandelier_stop_pure_function():
-    from swingbot.core.plan_engine import chandelier_stop
+    from swingbot.core.planning.plan_engine import chandelier_stop
     assert chandelier_stop(130.0, 2.0, 2.5, "bullish") == pytest.approx(125.0)
     assert chandelier_stop(70.0, 2.0, 2.5, "bearish") == pytest.approx(75.0)
 
@@ -250,14 +250,14 @@ def test_runner_timeout_uses_checked_stop_not_post_ratchet_trail():
     # at 108 - 2.5*2.0 = 103.0 through bars 2-12 -- that 103.0 is
     # "checked_stop", the value actually checked against bar 13's low).
     # Bar 13's own end-of-iteration ratchet uses the now-real ATR(14),
-    # computed below directly via swingbot.core.indicators.atr (not
+    # computed below directly via swingbot.core.market.indicators.atr (not
     # hand-waved): atr(14)[13] == 1.488244065325937, giving a POST-ratchet
     # trail of 108 - 2.5*1.488244065325937 == 104.27938983668516 -- ABOVE
     # the bar's actual close (104.0) and never checked against any
     # subsequent bar (there isn't one). Pre-fix, the clamp reported
     # 104.27938983668516 (a price the bar never closed at); post-fix it
     # must report the real close, 104.0.
-    from swingbot.core.indicators import atr as atr_indicator
+    from swingbot.core.market.indicators import atr as atr_indicator
 
     decline = [108.0 - 0.4 * k for k in range(1, 12)]   # 11 bars: 107.6 .. 103.6
     closes = ([100.0, (100.0, 111.0, 99.5, 108.0)]              # 0: entry, 1: TP1 touch (peak close=108)

@@ -156,7 +156,7 @@ def render_growth_path(equity_curve: list, out_dir: str, target: float = 10.0,
 
 
 def render_fold_evidence(component_results: list, out_dir: str) -> str:
-    from swingbot.core.backtest_wf import GATE_MAX_DEGRADATION_R
+    from swingbot.core.backtesting.backtest_wf import GATE_MAX_DEGRADATION_R
     n = len(component_results)
     fig, ax = plt.subplots(figsize=(max(8, 2.2 * n), 5), facecolor=CHART_BG, dpi=110)
     ax.set_facecolor(CHART_BG)

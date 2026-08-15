@@ -1,4 +1,4 @@
-from swingbot.core.plan_engine import entry_type_for
+from swingbot.core.planning.plan_engine import entry_type_for
 
 
 def test_strategy_source_defaults_market():

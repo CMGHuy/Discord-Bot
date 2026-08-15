@@ -32,7 +32,7 @@ it represents the pre-floor legacy behavior that must remain frozen.
 """
 import numpy as np
 
-from swingbot.core.strategy_types import HORIZONS, SR_VOLUME_MULTIPLE, STRATEGY_RR_OVERRIDE
+from swingbot.core.market.strategy_types import HORIZONS, SR_VOLUME_MULTIPLE, STRATEGY_RR_OVERRIDE
 
 STRUCTURE_BUFFER_ATR = 0.25  # extra cushion beyond swing high/low, in units of ATR
 SR_VOLUME_STRENGTH_CEILING = 3.0

@@ -1,9 +1,9 @@
 # tests/test_wf_portfolio.py
 import pytest
 
-from swingbot.core import backtest_wf
-from swingbot.core.backtest import BacktestSummary, BacktestTrade
-from swingbot.core.backtest_wf import collect_portfolio_signals, portfolio_replay
+from swingbot.core.backtesting import backtest_wf
+from swingbot.core.backtesting.backtest import BacktestSummary, BacktestTrade
+from swingbot.core.backtesting.backtest_wf import collect_portfolio_signals, portfolio_replay
 
 
 def _sig(date, ticker, r, exit_date, sector="Tech", strategy="RSI", outcome=None):
@@ -112,8 +112,8 @@ def test_collect_portfolio_signals_dedupes_similar_same_ticker(monkeypatch):
     # once, no matter which strategy/horizon found each one.
     monkeypatch.setattr(backtest_wf, "_symbols_for_folds", lambda: ["FAKE"])
     monkeypatch.setattr(backtest_wf, "_frame_for", lambda sym: object())
-    monkeypatch.setattr("swingbot.core.universe.liquidity_ok", lambda df: True)
-    monkeypatch.setattr("swingbot.core.universe.sector_map", lambda universe: {"FAKE": "Tech"})
+    monkeypatch.setattr("swingbot.core.marketdata.universe.liquidity_ok", lambda df: True)
+    monkeypatch.setattr("swingbot.core.marketdata.universe.sector_map", lambda universe: {"FAKE": "Tech"})
 
     # StratA opens a setup 2021-01-04, still open (exits 2021-01-20) when:
     #  - StratB's "dup" trade opens 2021-01-10 with entry/stop/target all
@@ -129,7 +129,7 @@ def test_collect_portfolio_signals_dedupes_similar_same_ticker(monkeypatch):
         trades = {"StratA": [strat_a], "StratB": [strat_b_dup, strat_b_diff]}[strategy]
         return _summary(ticker, strategy, horizon_key, trades)
 
-    monkeypatch.setattr("swingbot.core.backtest.run_backtest_daterange",
+    monkeypatch.setattr("swingbot.core.backtesting.backtest.run_backtest_daterange",
                         fake_run_backtest_daterange)
 
     signals = collect_portfolio_signals("2021-01-01", "2021-12-31",
@@ -153,8 +153,8 @@ def test_collect_portfolio_signals_keeps_non_overlapping_similar_trades(monkeypa
     # open, so both must be kept once they no longer overlap in time.
     monkeypatch.setattr(backtest_wf, "_symbols_for_folds", lambda: ["FAKE"])
     monkeypatch.setattr(backtest_wf, "_frame_for", lambda sym: object())
-    monkeypatch.setattr("swingbot.core.universe.liquidity_ok", lambda df: True)
-    monkeypatch.setattr("swingbot.core.universe.sector_map", lambda universe: {"FAKE": "Tech"})
+    monkeypatch.setattr("swingbot.core.marketdata.universe.liquidity_ok", lambda df: True)
+    monkeypatch.setattr("swingbot.core.marketdata.universe.sector_map", lambda universe: {"FAKE": "Tech"})
 
     strat_a = _trade("2021-01-04", "2021-01-08", 100.0, 95.0, 110.0, 1.5)
     strat_b = _trade("2021-01-10", "2021-02-01", 100.5, 95.2, 110.3, 0.8)
@@ -163,7 +163,7 @@ def test_collect_portfolio_signals_keeps_non_overlapping_similar_trades(monkeypa
         trades = {"StratA": [strat_a], "StratB": [strat_b]}[strategy]
         return _summary(ticker, strategy, horizon_key, trades)
 
-    monkeypatch.setattr("swingbot.core.backtest.run_backtest_daterange",
+    monkeypatch.setattr("swingbot.core.backtesting.backtest.run_backtest_daterange",
                         fake_run_backtest_daterange)
 
     signals = collect_portfolio_signals("2021-01-01", "2021-12-31",

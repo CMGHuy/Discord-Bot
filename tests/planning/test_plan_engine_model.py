@@ -1,6 +1,6 @@
 import pytest
 
-from swingbot.core.plan_engine import PlanStatus, TradePlanV2, record_transition
+from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, record_transition
 
 
 def _plan(**kw):

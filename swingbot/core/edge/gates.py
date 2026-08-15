@@ -30,7 +30,7 @@ def stop_beyond_gap_noise(stop_distance_pct: float, gap_p90_pct: float,
 
 
 def _default_days_to_earnings(symbol: str):
-    from swingbot.core import events
+    from swingbot.core.market import events
     next_date = events.get_next_earnings_date(symbol)
     if next_date is None:
         return None

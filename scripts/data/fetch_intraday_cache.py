@@ -3,7 +3,7 @@
 per-ticker coverage report.
 
 For routine top-ups prefer the bot's own auto-refresh
-(`swingbot.core.data_refresh`, wired to the `market_data_refresh` task loop)
+(`swingbot.core.marketdata.data_refresh`, wired to the `market_data_refresh` task loop)
 or `refresh_all()` directly -- both are incremental. This script exists for
 the cold-start/audit case: it re-fetches at full depth and PRINTS what each
 ticker actually got versus its real listing date, which is how the Yahoo
@@ -43,7 +43,7 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd
 import yfinance as yf
 
-from swingbot.core.data_store import (
+from swingbot.core.marketdata.data_store import (
     DATA_DIR,
     TIMEFRAMES,
     _normalize_columns,
@@ -53,7 +53,7 @@ from swingbot.core.data_store import (
     timeframe_name,
     yf_interval,
 )
-from swingbot.core.ticker_utils import candidate_symbols
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 
 def load_watchlist() -> list[str]:
@@ -121,7 +121,7 @@ def listing_dates() -> dict:
     begins meaningfully after that listed then and its date is a real
     listing date; one starting at the cache floor listed at or before it and
     its true IPO is unknown from this source."""
-    from swingbot.core.backtest_cache import CACHE_DIR
+    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
 
     out = {}
     cache = Path(CACHE_DIR)

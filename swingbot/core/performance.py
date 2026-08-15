@@ -33,10 +33,10 @@ except Exception:
     _BERLIN_TZ = None
 
 from swingbot import config
-from swingbot.core import account as account_module
+from swingbot.core.planning import account as account_module
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
-from swingbot.core.jsonio import atomic_write_json, read_json
-from swingbot.core.strategy_types import HORIZONS as _HORIZONS
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
 
 # Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
 # settings are tuned for -- see check_near_tp_timeout()'s horizon-scaling below.
@@ -82,7 +82,7 @@ def _refresh_snapshot_safely() -> None:
 # approaching the target, grey while it's still sitting near entry.
 # Pure/no I/O so it's trivial to unit-test and safe to call on every
 # dashboard render -- the admin UI supplies the live price (see
-# swingbot.core.data.get_current_price, which does its own caching).
+# swingbot.core.marketdata.data.get_current_price, which does its own caching).
 # ---------------------------------------------------------------------------
 
 # Endpoint colors the proximity score is interpolated between. Reusing

@@ -16,7 +16,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
-from swingbot.core.strategy import HORIZONS
+from swingbot.core.market.strategy import HORIZONS
 from swingbot.core import scan_engine
 
 # ──────────────────────────────────────────────

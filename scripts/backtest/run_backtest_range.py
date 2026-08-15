@@ -24,11 +24,11 @@ import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
 from swingbot import config
-from swingbot.core import market_context
-from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
-from swingbot.core.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
-from swingbot.core.strategy_types import HORIZONS
-from swingbot.core.universe import data_quality_issues, liquidity_reason
+from swingbot.core.market import market_context
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
+from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 
 _SPY_CACHE: dict = {}
 
@@ -201,7 +201,7 @@ def _tickers_for_run(universe: str | None) -> list:
     when given, else the watchlist -- same override seam as
     backtest_wf._symbols_for_folds/run_folds' tickers= param."""
     if universe:
-        from swingbot.core.universe import universe_symbols
+        from swingbot.core.marketdata.universe import universe_symbols
         return sorted(universe_symbols(universe))
     return sorted(load_watchlist())
 
@@ -251,7 +251,7 @@ def main():
     ap.add_argument("--strategy", default=None)
     ap.add_argument("--universe", default=None,
                     help="scope tickers to a named universe (e.g. 'etfs', Task E80) via "
-                         "swingbot.core.universe.universe_symbols, instead of the watchlist")
+                         "swingbot.core.marketdata.universe.universe_symbols, instead of the watchlist")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--emit-registry", dest="emit_registry", default=None,
                     help="path to validation_registry.json to merge records into")

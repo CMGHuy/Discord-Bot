@@ -67,8 +67,8 @@ def refresh_cache() -> None:
 def data_quality_sweep() -> dict:
     print("\n[2/5] Data quality sweep over cached tickers...")
     import pandas as pd
-    from swingbot.core.backtest_cache import CACHE_DIR
-    from swingbot.core.universe import data_quality_issues
+    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
+    from swingbot.core.marketdata.universe import data_quality_issues
 
     issues = {}
     csvs = sorted(CACHE_DIR.glob("*.csv")) if CACHE_DIR.exists() else []
@@ -88,7 +88,7 @@ def data_quality_sweep() -> dict:
 
 def check_fold_rollover() -> None:
     print("\n[3/5] Checking whether the anchored fold set is due for a rollover...")
-    from swingbot.core.backtest_wf import ANCHORED_FOLDS
+    from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS
 
     last_test_year = int(ANCHORED_FOLDS[-1][3][:4])
     current_year = datetime.date.today().year

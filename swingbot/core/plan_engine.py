@@ -15,9 +15,9 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from swingbot import config
-from swingbot.core.levels import MAX_TARGET2_LEG_MULTIPLE
-from swingbot.core.registry import Badge, get_badge
-from swingbot.core.strategy_types import (
+from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
+from swingbot.core.backtesting.registry import Badge, get_badge
+from swingbot.core.market.strategy_types import (
     BREAKEVEN_TRIGGER_FRACTION,
     HORIZONS,
     STRATEGY_RR_OVERRIDE,
@@ -215,13 +215,13 @@ def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
     there runs to the end of history, so an unsliced build_level_map would
     draw levels out of bars the trade cannot have seen.
     """
-    from swingbot.core import levels_lifecycle
+    from swingbot.core.market import levels_lifecycle
 
     if level_map is not None:
         supports, resistances = level_map
         raw = list(supports) + list(resistances)
     else:
-        from swingbot.core import levels as levels_mod
+        from swingbot.core.market import levels as levels_mod
         hist = df.iloc[:index + 1]
         supports, resistances = levels_mod.build_level_map(
             hist, HORIZONS[horizon_key], entry)
@@ -266,7 +266,7 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
     if not levels:
         return stop, tp1, {}
 
-    from swingbot.core import levels_lifecycle
+    from swingbot.core.market import levels_lifecycle
 
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
@@ -341,7 +341,7 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
 
 def _sr_plan(entry, volume_ratio, direction, horizon_key):
     """Fixed-percent stop; target from volume strength unless R:R override set."""
-    from swingbot.core.strategy import SR_VOLUME_MULTIPLE
+    from swingbot.core.market.strategy import SR_VOLUME_MULTIPLE
 
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
@@ -502,8 +502,8 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     MAE/MFE-derived overrides. Left None, each is resolved from the live
     journal iff config.DATA_DRIVEN_STOPS_ENABLED -- so the flag-off path
     is bit-identical to before and never opens the journal at all."""
-    from swingbot.core.indicators import atr as atr_indicator
-    from swingbot.core.indicators import elliott_wave3_entries
+    from swingbot.core.market.indicators import atr as atr_indicator
+    from swingbot.core.market.indicators import elliott_wave3_entries
 
     close = float(df["Close"].iloc[index])
     atr_series = atr_indicator(df, 14)
@@ -600,7 +600,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
 def _apply_quality(plan: TradePlanV2, quality_inputs: dict | None) -> None:
     if quality_inputs is None:
         return
-    from swingbot.core.quality import score_plan
+    from swingbot.core.planning.quality import score_plan
     q = score_plan(direction=plan.direction, badge_status=plan.badge, **quality_inputs)
     plan.quality_score, plan.tier = q.score, q.tier
     plan.quality_breakdown = q.breakdown
@@ -927,7 +927,7 @@ def _scale_out_exit_walk(
     toward profit via a chandelier trail (Task 26) as the runner rides, with
     an optional TP2 target (Task 25). Task 27 still owes runner-timeout
     test coverage."""
-    from swingbot.core.indicators import atr as atr_indicator
+    from swingbot.core.market.indicators import atr as atr_indicator
 
     high, low, close = df["High"].values, df["Low"].values, df["Close"].values
     n = len(df)

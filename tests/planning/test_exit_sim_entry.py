@@ -9,7 +9,7 @@ entry_price the scale-out walk (Task 24+) was established with, via the
 returned ExitResult (the scale-out path no longer raises -- Task 21's
 NotImplementedError placeholder was removed in Task 24).
 """
-from swingbot.core.plan_engine import TradePlanV2, PlanStatus, simulate_exit
+from swingbot.core.planning.plan_engine import TradePlanV2, PlanStatus, simulate_exit
 from tests.helpers import make_ohlcv
 
 

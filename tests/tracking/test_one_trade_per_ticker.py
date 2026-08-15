@@ -10,7 +10,7 @@ import json
 import pytest
 
 from swingbot import config
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 
 @pytest.fixture

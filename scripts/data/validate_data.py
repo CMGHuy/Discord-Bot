@@ -5,12 +5,12 @@ Dual-mode, mirroring the E15 precedent in fetch_backtest_data.py's
 --universe flag -- two caches exist in this repo and they are NOT unified:
 
   * default (no flag): validates data/backtest_cache/ (owned by
-    swingbot.core.backtest_cache, flat {TICKER}.csv files) -- the cache
+    swingbot.core.marketdata.backtest_cache, flat {TICKER}.csv files) -- the cache
     that today's actual grid/backtest scripts (run_backtest_range.py,
     backtest_scenarios.py) read. This is the meaningful mode: running it
     over the real, populated cache.
   * --universe NAME: validates market_data/ (owned by
-    swingbot.core.data_store, grouped by candle timeframe as
+    swingbot.core.marketdata.data_store, grouped by candle timeframe as
     {timeframe}/{TICKER}.csv, e.g. market_data/daily/AAPL.csv) for the
     watchlist + a named universe (e.g. sp500) -- data_store.py's intended
     future cache for the expanded universe, not yet read by any backtest
@@ -27,14 +27,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from swingbot.core.universe import data_quality_issues  # noqa: E402
+from swingbot.core.marketdata.universe import data_quality_issues  # noqa: E402
 
 
 def _validate_backtest_cache() -> int:
     """Default mode: data/backtest_cache/, flat {TICKER}.csv files, read the
     same way scripts/data/fetch_backtest_data.py's own load_cached() does."""
     import pandas as pd
-    from swingbot.core.backtest_cache import CACHE_DIR
+    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
 
     bad = 0
     checked = 0
@@ -54,8 +54,8 @@ def _validate_universe_cache(name: str) -> int:
     """--universe NAME mode: market_data/daily/{TICKER}.csv, for the
     watchlist + named universe symbols (mirrors fetch_backtest_data.py's
     E15 --universe mode). "1d" below resolves to the daily/ folder."""
-    from swingbot.core.data_store import DATA_DIR, load_from_disk
-    from swingbot.core import universe as universe_mod
+    from swingbot.core.marketdata.data_store import DATA_DIR, load_from_disk
+    from swingbot.core.marketdata import universe as universe_mod
 
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts", "data"))
     from fetch_backtest_data import load_watchlist  # noqa: E402

@@ -118,8 +118,8 @@ from dataclasses import dataclass, field
 import logging
 
 from swingbot import config
-from swingbot.core.candlestick_patterns import detect_confirming_pattern
-from swingbot.core.volatility import adx_trend_strength, macd_momentum_aligned, rsi_trend_aligned, squeeze_breakout_confirmation
+from swingbot.core.market.candlestick_patterns import detect_confirming_pattern
+from swingbot.core.market.volatility import adx_trend_strength, macd_momentum_aligned, rsi_trend_aligned, squeeze_breakout_confirmation
 
 log = logging.getLogger("swing-bot.confidence")
 

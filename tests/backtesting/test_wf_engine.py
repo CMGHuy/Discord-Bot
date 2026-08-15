@@ -8,7 +8,7 @@ ever evaluates a bar inside its own training window.
 import pytest
 
 from swingbot import config
-from swingbot.core.backtest_wf import ANCHORED_FOLDS, gate, run_folds
+from swingbot.core.backtesting.backtest_wf import ANCHORED_FOLDS, gate, run_folds
 
 
 def test_folds_are_frozen():
@@ -73,7 +73,7 @@ def test_default_run_respects_explicit_tickers(monkeypatch):
     """tickers=[...] must replace _symbols_for_folds()'s SCAN_UNIVERSE
     lookup entirely, so a one-off scoped run (e.g. ETF-only) never falls
     back to sweeping the full configured universe."""
-    import swingbot.core.backtest_wf as wf
+    import swingbot.core.backtesting.backtest_wf as wf
 
     seen = []
 
@@ -91,7 +91,7 @@ def test_default_run_respects_explicit_tickers(monkeypatch):
 
 
 def test_run_folds_threads_tickers_into_default_run(monkeypatch):
-    import swingbot.core.backtest_wf as wf
+    import swingbot.core.backtesting.backtest_wf as wf
 
     captured = []
 
@@ -134,7 +134,7 @@ def test_gate_constants_match_the_pre_registered_rule():
     folds, no fold degrades by more than 0.05R, N >= 30 per fold. Changing
     any of these silently would invalidate every decision already recorded
     against them."""
-    from swingbot.core import backtest_wf as wf
+    from swingbot.core.backtesting import backtest_wf as wf
     assert wf.GATE_MIN_IMPROVING_FOLDS == 2
     assert wf.GATE_MAX_DEGRADATION_R == 0.05
     assert wf.GATE_MIN_N_PER_FOLD == 30
@@ -145,7 +145,7 @@ def test_gate_constants_match_the_pre_registered_rule():
 def test_overrides_are_restored_even_when_a_run_raises():
     """A component run that blows up must not leave config mutated -- the
     next component's folds would silently inherit it."""
-    from swingbot.core import backtest_wf as wf
+    from swingbot.core.backtesting import backtest_wf as wf
     before = config.REGIME_GATES_ENABLED
 
     def boom(start, end, overrides):
@@ -165,7 +165,7 @@ def test_default_run_passes_a_horizon_to_the_backtest(monkeypatch):
     so those five positionals bound `start` to horizon_key and raised
     TypeError for the missing date_to. It was never callable."""
     import pandas as pd
-    from swingbot.core import backtest_wf as wf
+    from swingbot.core.backtesting import backtest_wf as wf
 
     calls = []
 
@@ -178,8 +178,8 @@ def test_default_run_passes_a_horizon_to_the_backtest(monkeypatch):
 
     monkeypatch.setattr(wf, "_symbols_for_folds", lambda: ["AAA"])
     monkeypatch.setattr(wf, "_frame_for", lambda sym: pd.DataFrame({"Close": [1.0]}))
-    monkeypatch.setattr("swingbot.core.universe.liquidity_ok", lambda df, *a, **k: True)
-    monkeypatch.setattr("swingbot.core.backtest.run_backtest_daterange", fake_daterange)
+    monkeypatch.setattr("swingbot.core.marketdata.universe.liquidity_ok", lambda df, *a, **k: True)
+    monkeypatch.setattr("swingbot.core.backtesting.backtest.run_backtest_daterange", fake_daterange)
 
     out = wf._default_run("2021-01-01", "2021-12-31", {}, strategies=["RSI"],
                           horizons=["4w"])
@@ -203,7 +203,7 @@ def test_default_run_passes_a_horizon_to_the_backtest(monkeypatch):
 
 def test_default_run_ignores_trades_without_an_r_multiple(monkeypatch):
     import pandas as pd
-    from swingbot.core import backtest_wf as wf
+    from swingbot.core.backtesting import backtest_wf as wf
 
     class _T:
         def __init__(self, r):
@@ -214,8 +214,8 @@ def test_default_run_ignores_trades_without_an_r_multiple(monkeypatch):
 
     monkeypatch.setattr(wf, "_symbols_for_folds", lambda: ["AAA"])
     monkeypatch.setattr(wf, "_frame_for", lambda sym: pd.DataFrame({"Close": [1.0]}))
-    monkeypatch.setattr("swingbot.core.universe.liquidity_ok", lambda df, *a, **k: True)
-    monkeypatch.setattr("swingbot.core.backtest.run_backtest_daterange",
+    monkeypatch.setattr("swingbot.core.marketdata.universe.liquidity_ok", lambda df, *a, **k: True)
+    monkeypatch.setattr("swingbot.core.backtesting.backtest.run_backtest_daterange",
                         lambda *a, **k: _Summary())
     out = wf._default_run("2021-01-01", "2021-12-31", {}, strategies=["RSI"],
                           horizons=["4w"])
@@ -226,7 +226,7 @@ def test_run_backtest_daterange_defaults_are_unchanged():
     """The pass-through params added for the harness must not move any
     existing caller's numbers."""
     import inspect
-    from swingbot.core.backtest import run_backtest_daterange
+    from swingbot.core.backtesting.backtest import run_backtest_daterange
     params = inspect.signature(run_backtest_daterange).parameters
     assert params["frictions"].default is True
     assert params["exit_model"].default == "v1"
@@ -239,9 +239,9 @@ def test_folds_read_the_same_cache_the_baseline_was_measured_on(tmp_path, monkey
     judged against came from that cache, and market_data/ starts 2018-06 --
     right at the folds' own anchor, so indicators would get no warm-up."""
     import pandas as pd
-    from swingbot.core import backtest_wf as wf
+    from swingbot.core.backtesting import backtest_wf as wf
 
-    monkeypatch.setattr("swingbot.core.backtest_cache.CACHE_DIR", tmp_path)
+    monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.CACHE_DIR", tmp_path)
     assert wf._frame_for("NOPE") is None
 
     frame = pd.DataFrame({"Open": [1.0], "High": [1.0], "Low": [1.0],
@@ -322,8 +322,8 @@ def test_shadow_report_promotes_on_an_exact_tie():
 
 def test_shadow_logger_accepts_component_and_variant_tags(tmp_path):
     import json
-    from swingbot.core import shadow_log
-    from swingbot.core.plan_engine import PlanStatus, TradePlanV2
+    from swingbot.core.backtesting import shadow_log
+    from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2
 
     plan = TradePlanV2(
         plan_id="p", ticker="AAA", created_at="2026-01-01", source="strategy",
@@ -356,7 +356,7 @@ def test_forward_return_backfill_only_resolves_matured_entries(tmp_path):
     rather than being scored on a partial window."""
     import json
     import pandas as pd
-    from swingbot.core import shadow_log
+    from swingbot.core.backtesting import shadow_log
 
     path = tmp_path / "shadow.jsonl"
     rows = [
@@ -412,7 +412,7 @@ def test_planted_signal_beats_noise(monkeypatch):
 
 
 def test_plateau_vs_spike():
-    from swingbot.core.backtest_wf import plateau_report
+    from swingbot.core.backtesting.backtest_wf import plateau_report
     plateau = plateau_report("rs_min", [50, 60, 70], [0.10, 0.11, 0.09], 60)
     assert plateau["is_plateau"] is True
     spike = plateau_report("rs_min", [50, 60, 70], [0.02, 0.15, 0.03], 60)

@@ -53,11 +53,11 @@ import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
 from swingbot import config
-from swingbot.core import market_context
-from swingbot.core.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.market import market_context
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.edge.regime2 import REGIMES
-from swingbot.core.strategy_types import HORIZONS
-from swingbot.core.universe import data_quality_issues, liquidity_reason, universe_symbols
+from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason, universe_symbols
 
 TRAIN_FROM, TRAIN_TO = "2020-01-01", "2023-12-31"
 SUB_FOLDS = ("2020", "2021", "2022", "2023")

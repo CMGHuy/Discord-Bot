@@ -66,14 +66,14 @@ def test_edge_decay_report_line_on_real_alert():
                 "status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.105,
                 "window": "2024-01-01..2025-12-31"}]
     live = [_live_t("win") for _ in range(14)] + [_live_t("loss") for _ in range(11)]  # 56% of 25
-    with patch("swingbot.core.registry.load_registry", return_value=registry):
+    with patch("swingbot.core.backtesting.registry.load_registry", return_value=registry):
         lines = edge_decay_report(live)
     assert len(lines) == 1
     assert "Fibonacci" in lines[0] and "81.6" in lines[0] and "56" in lines[0]
 
 
 def test_edge_decay_report_empty_when_no_alerts():
-    with patch("swingbot.core.registry.load_registry", return_value=[]):
+    with patch("swingbot.core.backtesting.registry.load_registry", return_value=[]):
         assert edge_decay_report([]) == []
 
 
@@ -91,7 +91,7 @@ def test_top_lessons_counts_pairings():
 import datetime as _dt
 from unittest.mock import patch as _patch
 
-from swingbot.core.retrospective import build_daily_retrospective
+from swingbot.core.tracking.retrospective import build_daily_retrospective
 
 
 def _closed_today(ticker, status, closed_at="2026-03-10T16:00:00+00:00"):
@@ -106,7 +106,7 @@ def test_retrospective_includes_edge_decay_line_when_alert():
                 "status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.105,
                 "window": "2024-01-01..2025-12-31"}]
     heavy_losers = [dict(_closed_today("AAA", "loss"), target_sources=["Fib 61.8%"]) for _ in range(30)]
-    with _patch("swingbot.core.registry.load_registry", return_value=registry):
+    with _patch("swingbot.core.backtesting.registry.load_registry", return_value=registry):
         messages = build_daily_retrospective(heavy_losers, today=_dt.date(2026, 3, 10))
     joined = "\n".join(messages)
     assert "Edge decay" in joined or "📉" in joined
@@ -114,7 +114,7 @@ def test_retrospective_includes_edge_decay_line_when_alert():
 
 def test_retrospective_without_decay_omits_the_line():
     trades = [_closed_today("AAA", "win")]
-    with _patch("swingbot.core.registry.load_registry", return_value=[]):
+    with _patch("swingbot.core.backtesting.registry.load_registry", return_value=[]):
         messages = build_daily_retrospective(trades, today=_dt.date(2026, 3, 10))
     joined = "\n".join(messages)
     assert "Edge decay" not in joined
@@ -129,6 +129,6 @@ def test_retrospective_lessons_block_present_when_journaled(tmp_path, monkeypatc
         "closed_at": "2026-03-10T16:00:00+00:00", "tags": [], "note": "",
     })
     trades = [_closed_today("AAA", "win")]
-    with _patch("swingbot.core.registry.load_registry", return_value=[]):
+    with _patch("swingbot.core.backtesting.registry.load_registry", return_value=[]):
         messages = build_daily_retrospective(trades, today=_dt.date(2026, 3, 10))
     assert any("Clean capture" in m for m in messages)

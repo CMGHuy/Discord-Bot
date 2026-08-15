@@ -15,7 +15,7 @@ import os
 from swingbot import config
 from swingbot.core.analytics import calibration, metrics
 from swingbot.core.analytics.aggregate import DIMENSIONS, stats_by
-from swingbot.core.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.jsonio import atomic_write_json, read_json
 
 DEFAULT_PATH = os.path.join(config.DATA_DIR, "analytics_snapshot.json")
 
@@ -100,9 +100,9 @@ def refresh_snapshot() -> None:
     stays at its previous (or absent) state for one more cycle.
     """
     try:
-        from swingbot.core import account as account_module
-        from swingbot.core import registry
-        from swingbot.core.performance import TradeLog
+        from swingbot.core.planning import account as account_module
+        from swingbot.core.backtesting import registry
+        from swingbot.core.tracking.performance import TradeLog
 
         closed = TradeLog().get_trades(status="all", limit=None)
         starting_balance = account_module.load_account_config().get("base_balance", 0.0)

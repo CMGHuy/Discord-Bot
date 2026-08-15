@@ -18,14 +18,14 @@ from datetime import datetime, timezone
 import discord
 
 from swingbot import config
-from swingbot.core import account
-from swingbot.core.account import compute_position_size, load_account_config
+from swingbot.core.planning import account
+from swingbot.core.planning.account import compute_position_size, load_account_config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
-from swingbot.core.data import get_currency_symbol, get_daily_data
-from swingbot.core.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
-from swingbot.core.registry import Badge
+from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
+from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
+from swingbot.core.backtesting.registry import Badge
 from swingbot.core.scanning import embed_theme as theme
-from swingbot.core.strategy import HORIZONS
+from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 
 log = logging.getLogger("swing-bot.scan_engine")
@@ -1038,8 +1038,8 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
 async def notify_plan_events(bot, events):
     """Route fills to the alerts channel, everything else to history --
     same split notify_closed_trades already uses."""
-    from swingbot.core.plan_store import PlanStore
-    from swingbot.core.silent_channel import silence
+    from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.infra.silent_channel import silence
     store = PlanStore()
     for event in events:
         plan = store.get(event.plan_id)

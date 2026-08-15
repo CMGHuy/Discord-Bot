@@ -7,7 +7,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
-from .ticker_utils import candidate_symbols
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def get_company_name(ticker: str) -> str | None:
     US-listed tickers). Falls back to yfinance only for international or
     OTC symbols not in the directory.
     """
-    from .ticker_directory import lookup_name  # avoid circular import at module level
+    from swingbot.core.marketdata.ticker_directory import lookup_name  # avoid circular import at module level
 
     ticker_key = ticker.upper().strip()
     if ticker_key in _company_name_cache:

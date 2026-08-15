@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 
 import swingbot.config as config
-from swingbot.core import account as _account
+from swingbot.core.planning import account as _account
 from swingbot.core.edge import throttle
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.scanning import engine
 from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv

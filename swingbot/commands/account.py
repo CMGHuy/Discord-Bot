@@ -1,5 +1,5 @@
 """!account and its subcommands."""
-from swingbot.core.account import (
+from swingbot.core.planning.account import (
     load_account_config, set_balance, set_max_open_positions, set_max_position_pct,
     set_max_position_value_absolute, set_max_risk_amount_absolute, set_position_pct,
     set_risk_pct, set_sizing_mode,

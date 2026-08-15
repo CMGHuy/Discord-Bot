@@ -94,7 +94,7 @@ def test_collect_portfolio_state_degrades_on_account_config_failure(monkeypatch)
     must still fall back to 0.0 (not NameError) and the growth-path section
     must degrade to {} rather than the whole command crashing."""
     from swingbot.commands.growth import _collect_portfolio_state
-    from swingbot.core import account as account_module
+    from swingbot.core.planning import account as account_module
 
     def _boom():
         raise OSError("disk read failed")
@@ -136,11 +136,11 @@ def test_collect_weekly_risk_stats_excludes_self_correlated_singleton(monkeypatc
     against), the pre-fix loop produced a spurious singleton like ["AAPL"]
     instead of the correct empty result."""
     from tests.conftest import make_trend_df
-    from swingbot.core import retrospective
-    from swingbot.core import account as account_module
-    from swingbot.core.performance import TradeLog
-    from swingbot.core import universe
-    from swingbot.core import data as data_module
+    from swingbot.core.tracking import retrospective
+    from swingbot.core.planning import account as account_module
+    from swingbot.core.tracking.performance import TradeLog
+    from swingbot.core.marketdata import universe
+    from swingbot.core.marketdata import data as data_module
 
     df = make_trend_df(120, +0.20)  # >= MIN_OVERLAP_BARS(30) of valid price history
 
@@ -165,11 +165,11 @@ def test_collect_weekly_risk_stats_excludes_uncorrelated_pair(monkeypatch):
     (corr(df, df) == 1.0); the fix must not let that self-match alone count
     as 'the biggest cluster' for either ticker."""
     from tests.conftest import make_trend_df
-    from swingbot.core import retrospective
-    from swingbot.core import account as account_module
-    from swingbot.core.performance import TradeLog
-    from swingbot.core import universe
-    from swingbot.core import data as data_module
+    from swingbot.core.tracking import retrospective
+    from swingbot.core.planning import account as account_module
+    from swingbot.core.tracking.performance import TradeLog
+    from swingbot.core.marketdata import universe
+    from swingbot.core.marketdata import data as data_module
 
     df_a = make_trend_df(120, +0.20, start_price=100.0)
     df_b = make_trend_df(120, -0.35, start_price=50.0, spread_pct=6.0)

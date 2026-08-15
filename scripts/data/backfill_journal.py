@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from swingbot import config
 from swingbot.core.analytics.journal import JournalStore, build_entry
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 BACKTEST_CACHE_DIR = os.path.join(config.DATA_DIR, "backtest_cache")
 
@@ -27,7 +27,7 @@ def _fetch_with_cache_fallback(ticker: str):
     (columns Date,Open,High,Low,Close,Volume) so a backfill run doesn't
     need network access at all once that cache is warm."""
     try:
-        from swingbot.core.data import get_daily_data
+        from swingbot.core.marketdata.data import get_daily_data
         return get_daily_data(ticker)
     except Exception:
         pass

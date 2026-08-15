@@ -1,6 +1,6 @@
 """Tests for select_tp2 -- the next structural level beyond TP1 (Task 16)."""
-from swingbot.core.levels import Level
-from swingbot.core.plan_engine import build_strategy_plan, select_tp2
+from swingbot.core.market.levels import Level
+from swingbot.core.planning.plan_engine import build_strategy_plan, select_tp2
 
 from tests.helpers import make_ohlcv
 

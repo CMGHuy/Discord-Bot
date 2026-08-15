@@ -3,12 +3,12 @@ import types
 import pandas as pd
 import pytest
 
-from swingbot.core.plan_engine import (
+from swingbot.core.planning.plan_engine import (
     PlanStatus,
     build_confluence_plan,
     scenario_is_breakout,
 )
-from swingbot.core.strategy_types import STRATEGY_RR_OVERRIDE
+from swingbot.core.market.strategy_types import STRATEGY_RR_OVERRIDE
 
 # Not in STRATEGY_RR_OVERRIDE -> exercises the 0.35 fallback.
 DEFAULT_RR_STRATEGY = "S/R Confluence"

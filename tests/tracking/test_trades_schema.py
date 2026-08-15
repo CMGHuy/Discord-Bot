@@ -1,6 +1,6 @@
 import pytest
 
-from swingbot.core.performance import TradeLog, settle_legs
+from swingbot.core.tracking.performance import TradeLog, settle_legs
 
 
 def _trade(**kw):

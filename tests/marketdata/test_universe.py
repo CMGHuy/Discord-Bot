@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from tests.conftest import make_ohlcv
-from swingbot.core.universe import liquidity_ok
+from swingbot.core.marketdata.universe import liquidity_ok
 
 
 def test_spy_like_passes():
@@ -29,7 +29,7 @@ def test_explicit_thresholds_override_config():
 
 
 def test_load_etfs_universe():
-    from swingbot.core.universe import load, universe_symbols
+    from swingbot.core.marketdata.universe import load, universe_symbols
     rows = load("etfs")
     syms = universe_symbols("etfs")
     assert "SPY" in syms and "QQQ" in syms and "GLD" in syms and "TLT" in syms
@@ -39,7 +39,7 @@ def test_load_etfs_universe():
 
 def test_load_dedupes_and_unknown_is_empty(tmp_path, monkeypatch):
     import json
-    from swingbot.core import universe
+    from swingbot.core.marketdata import universe
     d = tmp_path / "universe"; d.mkdir()
     (d / "dup.json").write_text(json.dumps([
         {"symbol": "AAA", "name": "A", "sector": "Energy", "etf": False},
@@ -51,13 +51,13 @@ def test_load_dedupes_and_unknown_is_empty(tmp_path, monkeypatch):
 
 
 def test_sector_map():
-    from swingbot.core.universe import sector_map
+    from swingbot.core.marketdata.universe import sector_map
     m = sector_map("etfs")
     assert m.get("XLE") == "Energy"
 
 
 def test_is_etf():
-    from swingbot.core.universe import is_etf
+    from swingbot.core.marketdata.universe import is_etf
     assert is_etf("SPY") is True
     assert is_etf("spy") is True          # case-insensitive
     assert is_etf("NVDA") is False
@@ -70,7 +70,7 @@ def test_etf_skips_earnings_lookup(monkeypatch):
     # swallowed and this test would pass even with the short-circuit
     # removed. Use a call-recording spy instead so the assertion on `calls`
     # is a genuine "no network call happened" proof.
-    from swingbot.core import events
+    from swingbot.core.market import events
 
     calls = []
 
@@ -87,7 +87,7 @@ def test_etf_skips_earnings_lookup(monkeypatch):
 
 def test_spy_plan_builds_end_to_end():
     from tests.conftest import make_trend_df
-    from swingbot.core.plan_engine import build_strategy_plan
+    from swingbot.core.planning.plan_engine import build_strategy_plan
 
     df = make_trend_df(300, +0.15)
     plan = build_strategy_plan(df, len(df) - 1, ticker="SPY", strategy="MACD",
@@ -99,7 +99,7 @@ def test_update_cache_appends_only_new_bars(tmp_path):
     import numpy as np
     import pandas as pd
     from tests.conftest import make_ohlcv
-    from swingbot.core.data_store import save_to_disk, load_from_disk, update_cache
+    from swingbot.core.marketdata.data_store import save_to_disk, load_from_disk, update_cache
 
     old = make_ohlcv(np.full(50, 100.0), start="2026-01-01")
     save_to_disk(old, "TEST", "1d", base_dir=str(tmp_path))
@@ -124,7 +124,7 @@ def test_default_ranged_fetch_sends_date_only_start(monkeypatch):
     and hands back an empty frame, which silently looked like "nothing new"
     on every warm incremental refresh at an intraday interval."""
     import pandas as pd
-    from swingbot.core import data_store
+    from swingbot.core.marketdata import data_store
 
     captured = {}
 
@@ -143,7 +143,7 @@ def test_default_ranged_fetch_sends_date_only_start(monkeypatch):
 def test_update_cache_empty_delta_is_noop(tmp_path):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.data_store import save_to_disk, update_cache
+    from swingbot.core.marketdata.data_store import save_to_disk, update_cache
     save_to_disk(make_ohlcv(np.full(50, 100.0), start="2026-01-01"), "TEST", "1d",
                  base_dir=str(tmp_path))
     result = update_cache(["TEST"], base_dir=str(tmp_path),
@@ -162,19 +162,19 @@ def _clean_frame(n=100):
 
 
 def test_clean_frame_has_no_issues():
-    from swingbot.core.universe import data_quality_issues
+    from swingbot.core.marketdata.universe import data_quality_issues
     assert data_quality_issues(_clean_frame(), "OK") == []
 
 
 def test_flat_closes_flagged():
-    from swingbot.core.universe import data_quality_issues
+    from swingbot.core.marketdata.universe import data_quality_issues
     df = _clean_frame()
     df.iloc[40:47, df.columns.get_loc("Close")] = 55.5   # 7 identical closes
     assert any("identical closes" in i for i in data_quality_issues(df, "X"))
 
 
 def test_unadjusted_split_flagged():
-    from swingbot.core.universe import data_quality_issues
+    from swingbot.core.marketdata.universe import data_quality_issues
     df = _clean_frame()
     df.iloc[50:, df.columns.get_loc("Close")] *= 0.5     # -50% jump, volume unchanged
     assert any("split" in i for i in data_quality_issues(df, "X"))
@@ -182,7 +182,7 @@ def test_unadjusted_split_flagged():
 
 def test_negative_price_and_gap_flagged():
     import pandas as pd
-    from swingbot.core.universe import data_quality_issues
+    from swingbot.core.marketdata.universe import data_quality_issues
     df = _clean_frame()
     df.iloc[10, df.columns.get_loc("Low")] = -1.0
     df = df.drop(df.index[60:75])                        # 15-bar hole ≈ 21 calendar days
@@ -196,7 +196,7 @@ def test_negative_price_and_gap_flagged():
 def test_get_intraday_roundtrip_and_cache(tmp_path):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.data_store import get_intraday
+    from swingbot.core.marketdata.data_store import get_intraday
 
     frame = make_ohlcv(np.full(40, 100.0), start="2026-07-01")
     calls = {"n": 0}
@@ -213,7 +213,7 @@ def test_get_intraday_roundtrip_and_cache(tmp_path):
 
 
 def test_get_intraday_none_on_fetch_error(tmp_path):
-    from swingbot.core.data_store import get_intraday
+    from swingbot.core.marketdata.data_store import get_intraday
 
     def broken(symbol, interval):
         raise RuntimeError("rate limited")
@@ -244,7 +244,7 @@ def test_map_tickers_isolates_errors():
 # --- Timeframe-grouped cache layout -----------------------------------------
 
 def test_timeframe_name_accepts_both_spellings():
-    from swingbot.core.data_store import timeframe_name
+    from swingbot.core.marketdata.data_store import timeframe_name
     assert timeframe_name("1h") == "hourly"
     assert timeframe_name("60m") == "hourly"
     assert timeframe_name("hourly") == "hourly"
@@ -255,13 +255,13 @@ def test_timeframe_name_accepts_both_spellings():
 
 def test_timeframe_name_rejects_unknown():
     import pytest
-    from swingbot.core.data_store import timeframe_name
+    from swingbot.core.marketdata.data_store import timeframe_name
     with pytest.raises(ValueError):
         timeframe_name("3decades")
 
 
 def test_cache_path_groups_by_timeframe_and_sanitizes(tmp_path):
-    from swingbot.core.data_store import cache_path
+    from swingbot.core.marketdata.data_store import cache_path
     p = cache_path("AAPL", "1h", base_dir=str(tmp_path))
     assert p.endswith(os.path.join("hourly", "AAPL.csv"))
     # futures/index symbols must not create stray nested folders
@@ -274,7 +274,7 @@ def test_cache_path_groups_by_timeframe_and_sanitizes(tmp_path):
 def test_both_spellings_hit_the_same_file(tmp_path):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.data_store import save_to_disk, load_from_disk
+    from swingbot.core.marketdata.data_store import save_to_disk, load_from_disk
     save_to_disk(make_ohlcv(np.full(12, 100.0)), "TEST", "1h", base_dir=str(tmp_path))
     assert len(load_from_disk("TEST", "hourly", base_dir=str(tmp_path))) == 12
 
@@ -282,15 +282,15 @@ def test_both_spellings_hit_the_same_file(tmp_path):
 # --- Auto-refresh (data_refresh) --------------------------------------------
 
 def test_is_stale_true_when_missing(tmp_path):
-    from swingbot.core.data_refresh import is_stale
+    from swingbot.core.marketdata.data_refresh import is_stale
     assert is_stale("NOPE", "daily", base_dir=str(tmp_path)) is True
 
 
 def test_is_stale_false_for_just_written_file(tmp_path):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core.data_store import save_to_disk
-    from swingbot.core.data_refresh import is_stale
+    from swingbot.core.marketdata.data_store import save_to_disk
+    from swingbot.core.marketdata.data_refresh import is_stale
     save_to_disk(make_ohlcv(np.full(5, 100.0)), "TEST", "daily", base_dir=str(tmp_path))
     assert is_stale("TEST", "daily", base_dir=str(tmp_path)) is False
 
@@ -298,8 +298,8 @@ def test_is_stale_false_for_just_written_file(tmp_path):
 def test_refresh_symbol_skips_fresh_cache(tmp_path, monkeypatch):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
-    from swingbot.core.data_store import save_to_disk
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import save_to_disk
 
     save_to_disk(make_ohlcv(np.full(5, 100.0)), "TEST", "daily", base_dir=str(tmp_path))
 
@@ -315,7 +315,7 @@ def test_refresh_symbol_skips_fresh_cache(tmp_path, monkeypatch):
 def test_refresh_symbol_cold_does_full_fetch(tmp_path, monkeypatch):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
+    from swingbot.core.marketdata import data_refresh
 
     frame = make_ohlcv(np.full(30, 100.0))
     monkeypatch.setattr(data_refresh, "fetch_interval_data", lambda s, tf: frame)
@@ -333,8 +333,8 @@ def _age_cache(path, hours):
 def test_refresh_symbol_appends_only_new_bars(tmp_path, monkeypatch):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
-    from swingbot.core.data_store import save_to_disk, load_from_disk, cache_path
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import save_to_disk, load_from_disk, cache_path
 
     old = make_ohlcv(np.full(20, 100.0), start="2026-01-01")
     save_to_disk(old, "TEST", "daily", base_dir=str(tmp_path))
@@ -360,8 +360,8 @@ def test_refresh_symbol_appends_only_new_bars(tmp_path, monkeypatch):
 def test_refresh_symbol_no_new_bars_touches_mtime(tmp_path, monkeypatch):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
-    from swingbot.core.data_store import save_to_disk, cache_path
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import save_to_disk, cache_path
 
     save_to_disk(make_ohlcv(np.full(20, 100.0), start="2026-01-01"), "TEST",
                  "daily", base_dir=str(tmp_path))
@@ -377,7 +377,7 @@ def test_refresh_symbol_no_new_bars_touches_mtime(tmp_path, monkeypatch):
 
 
 def test_refresh_all_survives_a_failing_symbol(tmp_path, monkeypatch):
-    from swingbot.core import data_refresh
+    from swingbot.core.marketdata import data_refresh
 
     def flaky(symbol, tf):
         if symbol == "BAD":
@@ -405,8 +405,8 @@ def test_forced_refresh_merges_never_overwrites(tmp_path, monkeypatch):
     lets the cache outgrow the provider's cap over time."""
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
-    from swingbot.core.data_store import save_to_disk, load_from_disk
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import save_to_disk, load_from_disk
 
     deep = make_ohlcv(np.full(60, 100.0), start="2026-01-01")   # archived
     save_to_disk(deep, "TEST", "hourly", base_dir=str(tmp_path))
@@ -428,8 +428,8 @@ def test_archive_grows_past_provider_window(tmp_path, monkeypatch):
     """Two successive fetches of non-overlapping windows accumulate."""
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
-    from swingbot.core.data_store import load_from_disk, cache_path
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import load_from_disk, cache_path
 
     old_window = make_ohlcv(np.full(30, 100.0), start="2026-01-01")
     monkeypatch.setattr(data_refresh, "fetch_interval_data",
@@ -451,7 +451,7 @@ def test_archive_grows_past_provider_window(tmp_path, monkeypatch):
 def test_transient_failure_is_retried_then_succeeds(tmp_path, monkeypatch):
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
+    from swingbot.core.marketdata import data_refresh
 
     calls = {"n": 0}
     frame = make_ohlcv(np.full(10, 100.0))
@@ -470,7 +470,7 @@ def test_transient_failure_is_retried_then_succeeds(tmp_path, monkeypatch):
 
 
 def test_retry_gives_up_after_attempts(tmp_path, monkeypatch):
-    from swingbot.core import data_refresh
+    from swingbot.core.marketdata import data_refresh
     calls = {"n": 0}
 
     def always_fails(symbol, tf):
@@ -488,8 +488,8 @@ def test_failed_pair_is_retried_sooner_and_tracked(tmp_path, monkeypatch):
     """A failure must stay on the books and come back around quickly."""
     import numpy as np
     from tests.conftest import make_ohlcv
-    from swingbot.core import data_refresh
-    from swingbot.core.data_store import save_to_disk, cache_path
+    from swingbot.core.marketdata import data_refresh
+    from swingbot.core.marketdata.data_store import save_to_disk, cache_path
 
     save_to_disk(make_ohlcv(np.full(5, 100.0)), "TEST", "monthly",
                  base_dir=str(tmp_path))
@@ -504,7 +504,7 @@ def test_failed_pair_is_retried_sooner_and_tracked(tmp_path, monkeypatch):
 
 
 def test_pending_gaps_lists_failures(tmp_path, monkeypatch):
-    from swingbot.core import data_refresh
+    from swingbot.core.marketdata import data_refresh
     monkeypatch.setattr(data_refresh, "fetch_interval_data",
                         lambda s, tf: (_ for _ in ()).throw(RuntimeError("down")))
     monkeypatch.setattr(data_refresh, "RETRY_BASE_DELAY", 0.0)

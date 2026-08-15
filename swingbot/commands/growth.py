@@ -8,9 +8,9 @@ from discord.ext import commands
 
 from swingbot import config
 from swingbot.bot_core import bot
-from swingbot.core import account as account_module
+from swingbot.core.planning import account as account_module
 from swingbot.core.edge.growth import AVG_DAYS_PER_MONTH, growth_report, growth_path
-from swingbot.core.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog
 
 MC_MIN_CLOSED_TRADES = 10   # below this a bootstrap R-multiple sample is noise
 
@@ -104,8 +104,8 @@ def _collect_portfolio_state() -> dict:
     soft-import style: every sub-collector try/excepted to a safe default
     so a missing/broken piece never kills the whole command."""
     from swingbot.core.edge import correlation, heat, throttle
-    from swingbot.core.data import get_daily_data
-    from swingbot.core import universe
+    from swingbot.core.marketdata.data import get_daily_data
+    from swingbot.core.marketdata import universe
 
     state: dict = {}
 
