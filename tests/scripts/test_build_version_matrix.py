@@ -55,6 +55,14 @@ def test_a_component_named_like_a_stamp_is_invisible():
     assert bvm._components({"ui": "1.0.0", "cache_updated": "0.1.0"}) == ["ui"]
 
 
+def test_the_legacy_bare_updated_key_is_invisible():
+    """Regression: commit d80512f9 had a bare `"updated"` key as a shared timestamp
+    (pre-dates the ui_updated/bot_updated convention). It must be excluded from
+    components to prevent permanent data pollution in the release history."""
+    doc = {"ui": "1.0.7", "bot": "1.1.1", "updated": "2026-08-07 19-44-19"}
+    assert bvm._components(doc) == ["ui", "bot"]
+
+
 def test_semver_sorts_numerically_not_lexically():
     versions = ["1.0.5", "1.0.10", "1.0.2", "1.1.0", "1.0.9"]
     assert sorted(versions, key=bvm._semver_key) == [

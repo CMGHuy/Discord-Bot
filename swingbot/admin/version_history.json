@@ -1,10 +1,9 @@
 {
-  "generated_at": "2026-08-15 19:19:04 UTC",
+  "generated_at": "2026-08-15 19:26:05 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
-    "bot",
-    "updated"
+    "bot"
   ],
   "current": {
     "ui": "1.4.0",
@@ -18,8 +17,7 @@
       "subject": "First commit",
       "versions": {
         "ui": "1.0.1",
-        "bot": "1.0.1",
-        "updated": null
+        "bot": "1.0.1"
       },
       "changed": [
         "ui",
@@ -33,8 +31,7 @@
       "subject": "Update bot messages and add more emojs icons",
       "versions": {
         "ui": "1.0.3",
-        "bot": "1.0.2",
-        "updated": null
+        "bot": "1.0.2"
       },
       "changed": [
         "ui",
@@ -48,8 +45,7 @@
       "subject": "Enhance performance of making a trade plan",
       "versions": {
         "ui": "1.0.3",
-        "bot": "1.0.3",
-        "updated": null
+        "bot": "1.0.3"
       },
       "changed": [
         "bot"
@@ -62,8 +58,7 @@
       "subject": "Avoid duplicated trades",
       "versions": {
         "ui": "1.0.3",
-        "bot": "1.0.4",
-        "updated": null
+        "bot": "1.0.4"
       },
       "changed": [
         "bot"
@@ -76,8 +71,7 @@
       "subject": "Add more progress message for the bot and hard reload button in Logs page",
       "versions": {
         "ui": "1.0.4",
-        "bot": "1.0.5",
-        "updated": null
+        "bot": "1.0.5"
       },
       "changed": [
         "ui",
@@ -91,8 +85,7 @@
       "subject": "Lower the tension a bit to find more trade",
       "versions": {
         "ui": "1.0.4",
-        "bot": "1.0.6",
-        "updated": null
+        "bot": "1.0.6"
       },
       "changed": [
         "bot"
@@ -105,8 +98,7 @@
       "subject": "Lower the tension more",
       "versions": {
         "ui": "1.0.4",
-        "bot": "1.0.7",
-        "updated": null
+        "bot": "1.0.7"
       },
       "changed": [
         "bot"
@@ -119,8 +111,7 @@
       "subject": "Fix Discord does not run scanning and add healthcheck message now",
       "versions": {
         "ui": "1.0.4",
-        "bot": "1.0.9",
-        "updated": null
+        "bot": "1.0.9"
       },
       "changed": [
         "bot"
@@ -133,8 +124,7 @@
       "subject": "Lower the tension more",
       "versions": {
         "ui": "1.0.4",
-        "bot": "1.0.10",
-        "updated": null
+        "bot": "1.0.10"
       },
       "changed": [
         "bot"
@@ -147,8 +137,7 @@
       "subject": "Simplify display and make more animation and beautiful",
       "versions": {
         "ui": "1.0.5",
-        "bot": "1.0.11",
-        "updated": null
+        "bot": "1.0.11"
       },
       "changed": [
         "ui",
@@ -162,8 +151,7 @@
       "subject": "Also show trendline points and fib retracement 0 100% points",
       "versions": {
         "ui": "1.0.6",
-        "bot": "1.0.12",
-        "updated": null
+        "bot": "1.0.12"
       },
       "changed": [
         "ui",
@@ -177,8 +165,7 @@
       "subject": "Silent healthcheck message",
       "versions": {
         "ui": "1.0.6",
-        "bot": "1.0.13",
-        "updated": null
+        "bot": "1.0.13"
       },
       "changed": [
         "bot"
@@ -191,8 +178,7 @@
       "subject": "Add welcome and goodbye message",
       "versions": {
         "ui": "1.0.6",
-        "bot": "1.0.15",
-        "updated": null
+        "bot": "1.0.15"
       },
       "changed": [
         "bot"
@@ -205,8 +191,7 @@
       "subject": "docs: unified plan engine v2 \u00e2\u20ac\u201d final report (Task 110)",
       "versions": {
         "ui": "1.0.6",
-        "bot": "1.1.0",
-        "updated": null
+        "bot": "1.1.0"
       },
       "changed": [
         "bot"
@@ -219,8 +204,7 @@
       "subject": "chore: VERSION.json ui 1.0.6 -> 1.0.7",
       "versions": {
         "ui": "1.0.7",
-        "bot": "1.1.0",
-        "updated": null
+        "bot": "1.1.0"
       },
       "changed": [
         "ui"
@@ -233,12 +217,10 @@
       "subject": "chore: VERSION.json bot 1.1.0 -> 1.1.1, stamp update time",
       "versions": {
         "ui": "1.0.7",
-        "bot": "1.1.1",
-        "updated": "2026-08-07 19-44-19"
+        "bot": "1.1.1"
       },
       "changed": [
-        "bot",
-        "updated"
+        "bot"
       ]
     },
     {
@@ -248,8 +230,7 @@
       "subject": "chore: VERSION.json ui 1.0.7 -> 1.0.8, bot 1.1.1 -> 1.1.2",
       "versions": {
         "ui": "1.0.8",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui",
@@ -263,8 +244,7 @@
       "subject": "refactor(admin): move dashboard JS and view-models out of the polled fragment",
       "versions": {
         "ui": "1.0.9",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -277,8 +257,7 @@
       "subject": "release(ui): 1.1.0 -- Release A, the SPA becomes the default admin UI",
       "versions": {
         "ui": "1.1.0",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -291,8 +270,7 @@
       "subject": "release(ui): 1.2.0 -- the SPA refresh",
       "versions": {
         "ui": "1.2.0",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -305,8 +283,7 @@
       "subject": "release(ui): 1.2.1 -- close plan v21",
       "versions": {
         "ui": "1.2.1",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -319,8 +296,7 @@
       "subject": "release(ui): 1.2.2 -- Release B, the Jinja UI is deleted",
       "versions": {
         "ui": "1.2.2",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -333,8 +309,7 @@
       "subject": "release(ui): 1.2.3 -- the version moves into the sidebar",
       "versions": {
         "ui": "1.2.3",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -347,8 +322,7 @@
       "subject": "release(ui): 1.2.4 -- control alignment and grouped settings",
       "versions": {
         "ui": "1.2.4",
-        "bot": "1.1.2",
-        "updated": null
+        "bot": "1.1.2"
       },
       "changed": [
         "ui"
@@ -361,8 +335,7 @@
       "subject": "release(bot): 1.1.3 -- one stored trendline fit",
       "versions": {
         "ui": "1.2.4",
-        "bot": "1.1.3",
-        "updated": null
+        "bot": "1.1.3"
       },
       "changed": [
         "bot"
@@ -375,8 +348,7 @@
       "subject": "release(ui): 1.4.0 -- the annotated interactive trade chart",
       "versions": {
         "ui": "1.4.0",
-        "bot": "1.1.3",
-        "updated": null
+        "bot": "1.1.3"
       },
       "changed": [
         "ui"
@@ -389,8 +361,7 @@
       "subject": "release(bot): 1.1.4 -- the v27 repo restructure",
       "versions": {
         "ui": "1.4.0",
-        "bot": "1.1.4",
-        "updated": null
+        "bot": "1.1.4"
       },
       "changed": [
         "bot"

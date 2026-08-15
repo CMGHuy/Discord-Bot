@@ -50,8 +50,14 @@ def _components(doc: dict) -> list[str]:
     `<something>_updated`. It would be filtered out here and simply never
     appear, with no error raised anywhere -- which is why this is written down
     rather than left to be rediscovered.
+
+    Also excludes the literal `"updated"` key (bare, no underscore): a real
+    historical VERSION.json commit (d80512f9, pre-dates the ui_updated/bot_updated
+    convention) had this exact key as a shared timestamp. If `VERSION.json` ever
+    gains a shared top-level `"updated"` field again, this filter prevents it from
+    being mistaken for a component.
     """
-    return [k for k in doc if not k.endswith("_updated")]
+    return [k for k in doc if k != "updated" and not k.endswith("_updated")]
 
 
 # Retained for the SPA-side version filter (v29 Task 6); no caller in this
@@ -87,7 +93,7 @@ def _states() -> list[dict]:
         except json.JSONDecodeError:
             continue                      # a malformed intermediate state
         versions = {k: str(v) for k, v in doc.items()
-                    if not k.endswith("_updated") and v}
+                    if k != "updated" and not k.endswith("_updated") and v}
         # AT LEAST ONE, never all. A release predating a component simply does
         # not carry its key; requiring every known component here would drop
         # every historical release the first time anyone extends VERSION.json.
@@ -109,7 +115,7 @@ def _states() -> list[dict]:
         except json.JSONDecodeError:
             live = {}
         live_versions = {k: str(v) for k, v in live.items()
-                         if not k.endswith("_updated") and v}
+                         if k != "updated" and not k.endswith("_updated") and v}
         if live_versions and (not states or states[-1]["versions"] != live_versions):
             states.append({
                 "sha": "uncommitted",
