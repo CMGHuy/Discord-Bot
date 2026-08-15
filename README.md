@@ -80,7 +80,7 @@ swingbot/
 - `data.py` — `!charts`, `!scrapeall`, `!download`, `!cached`
 
 **`swingbot/admin/`:**
-- `app.py` — the admin web UI (see [DOCKER.md](DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
+- `app.py` — the admin web UI (see [DOCKER.md](docs/DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
 
 **Data files (created on first run, under `data/`):** `watchlist.json`, `state.json`,
 `trades.json`, `account.json`. Chart images go under `exports/`; the bot's rotating log file goes under `logs/`.

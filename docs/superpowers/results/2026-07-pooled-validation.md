@@ -4,7 +4,7 @@ All numbers are from single pre-registered VALIDATION runs on
 2024-01-01..2025-12-31 (v2 exits + scale-out), pooled from the committed
 JSONs — no window re-exposure:
 
-- `exit_v2_validation.json` (Task 32 — all 11 strategies)
+- `docs/superpowers/results/exit_v2_validation.json` (Task 32 — all 11 strategies)
 - `docs/superpowers/results/rescue_elliott_validation.json` (Task 106 —
   Elliott under its adopted gate; supersedes Task 32's ungated Elliott row)
 - `docs/superpowers/results/confluence_validation.json` (Task 41)

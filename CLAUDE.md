@@ -17,8 +17,8 @@ Two entry points: `python bot.py` (the bot) and `python admin_ui.py` (the
 admin). The admin is a Flask **API** plus an Angular SPA served from
 `frontend/` — the Jinja UI it used to render was deleted on 2026-08-14
 (Release B). Flask now serves only `/api/v1/*`, the SPA's routes and `/`;
-the SPA is built by a Node stage in the Dockerfile, so a deploy needs it. Deployed as two Docker containers off one image (`DOCKER.md`,
-`DEPLOY_HETZNER.md`); `.env` is the single config source, hot-reloaded via
+the SPA is built by a Node stage in the Dockerfile, so a deploy needs it. Deployed as two Docker containers off one image (`docs/DOCKER.md`,
+`docs/DEPLOY_HETZNER.md`); `.env` is the single config source, hot-reloaded via
 SIGHUP (schema lives in `swingbot/config.py` — every setting is one `Field`
 entry that feeds both the env parser and the admin UI's Settings page).
 

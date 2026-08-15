@@ -8,7 +8,7 @@ frozen file is committed because the deployed container has no git history to
 re-derive it from.
 
 **What the data means, exactly.** Both containers build from one image
-(`DOCKER.md`), so the two versions at any commit are what was released as a
+(`docs/DOCKER.md`), so the two versions at any commit are what was released as a
 unit. A pair in this payload therefore says "these two shipped together" — it is
 *not* a test result and *not* a support claim, and the page that renders it
 repeats that wording. Combinations that never shipped are absent rather than

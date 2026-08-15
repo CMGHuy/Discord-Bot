@@ -497,7 +497,7 @@ jobs:
           # revision of this block changed it to /opt/swingbot, on the
           # stated grounds that the hyphenated path was wrong. It is not:
           # deploy/hetzner-setup.sh:30 creates `APP_DIR="/opt/swing-bot"`,
-          # every path in DEPLOY_HETZNER.md matches, and on the box itself
+          # every path in docs/DEPLOY_HETZNER.md matches, and on the box itself
           # `ls /opt/swingbot` answers "No such file or directory" while the
           # shell sits in /opt/swing-bot. The un-hyphenated spelling came
           # from a probe that used it, got ENOENT for that reason, and was

@@ -9,7 +9,7 @@ python scripts/run_backtest_range.py --validation --exit-model v2 --scale-out \
 
 Window 2024-01-01..2025-12-31 (single pre-registered run), 75/78 cached
 tickers, all horizons, v2 exits + scale-out with the Task 31 `EXIT_V2_PARAMS`.
-Raw JSON: `exit_v2_validation.json` (repo root, committed).
+Raw JSON: `exit_v2_validation.json` (this directory, committed).
 
 **Sequencing note (honesty):** the plan ordered this task before Phase 8, but
 it was actually run on 2026-07-18 *after* the RSI rescue adopted its
