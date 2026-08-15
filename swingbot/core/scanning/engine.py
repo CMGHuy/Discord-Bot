@@ -1468,6 +1468,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "take_profit": plan.take_profit, "target2": plan.target2_price})
 
         trade_id = None
+        # Bound out here, not inside the branch below, because the chart is
+        # rendered further down for EVERY alert -- including the snapshot
+        # ones that log no trade. Left inside, those alerts would raise
+        # NameError into the chart try/except and silently lose their PNG.
+        trendline_fit = None
         if item.all_requirements_met and not already_open:
             # v2 plan pedigree (tier/badge/quality/source) rides along with
             # plan_id -- same cutover guard: only a live "on" plan is real
@@ -1486,7 +1491,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # different arguments would be a different line from the one the
             # PNG draws, which is the whole failure this consolidation exists
             # to end.
-            trendline_fit = None
             try:
                 trendline_fit = fit_trendline(
                     df,
@@ -1565,6 +1569,12 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     stop_sources=list(dict.fromkeys(plan.stop_sources)),
                     horizon=h,
                     market_price=plan.market_price,
+                    # The fit taken above, drawn rather than recomputed. This
+                    # is the point of storing it: the PNG and the chart
+                    # endpoint now read the same numbers. None here (fit
+                    # failed, or no line exists) simply restores the old
+                    # behaviour of fitting inline.
+                    trendline_fit=trendline_fit,
                 )
             log.info("Chart generated for %s -> %s", result.ticker, chart_filename)
         except Exception as e:
