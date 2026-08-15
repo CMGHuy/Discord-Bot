@@ -34,7 +34,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { Select } from '../../ui/form-controls';
 import { ABSENT, date, dateTime, share } from '../../ui/format';
-import { Panel, Tab, TabBar } from '../../ui/layout';
+import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { Histogram } from '../../ui/histogram';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
@@ -103,6 +103,7 @@ interface ProposalView extends ProposalRow {
   imports: [
     TabBar,
     Panel,
+    ControlRow,
     DataTable,
     MetricChip,
     Histogram,
@@ -173,7 +174,7 @@ interface ProposalView extends ProposalRow {
              panels above are deliberately all-time, so the heading says which
              is which rather than leaving the reader to guess. -->
         <sb-panel [heading]="derivedHeading()">
-          <div class="range" role="group" aria-label="Analytics date range">
+          <sb-control-row class="range" role="group" aria-label="Analytics date range">
             <label>
               From
               <input type="date" [value]="store.rangeFrom() ?? ''"
@@ -194,7 +195,7 @@ interface ProposalView extends ProposalRow {
                  over four trades and one over four hundred must not read as
                  equally authoritative. -->
             <span class="sample">{{ sampleLabel() }}</span>
-          </div>
+          </sb-control-row>
 
           @if (store.rangeSampleSize() === 0) {
             <!-- Not an error. An empty window is a legitimate answer, and the
@@ -628,7 +629,7 @@ interface ProposalView extends ProposalRow {
               launcher returns when it finishes.
             </p>
           } @else {
-            <div class="launch">
+            <sb-control-row class="launch">
               <sb-select
                 label="Strategy"
                 placeholder="Pick a strategy"
@@ -645,7 +646,7 @@ interface ProposalView extends ProposalRow {
               >
                 Launch TRAIN grid
               </button>
-            </div>
+            </sb-control-row>
             @if (store.launchError(); as message) {
               <p class="alert" role="alert">{{ message }}</p>
             }
@@ -913,13 +914,7 @@ interface ProposalView extends ProposalRow {
 
     /* -- SR54: the range control ---------------------------------------- */
 
-    .range {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: var(--space-8);
-      margin-bottom: var(--space-8);
-    }
+    .range { margin-bottom: var(--space-8); }
 
     .range label {
       display: grid;
@@ -1033,7 +1028,8 @@ interface ProposalView extends ProposalRow {
     }
 
     /* -- tuning -------------------------------------------------------- */
-    .launch { display: flex; align-items: flex-end; gap: var(--space-10); }
+    /* .launch keeps its class as a marker only -- sb-control-row supplies
+       every declaration the rule used to carry. */
 
     .jobhead {
       display: flex;
