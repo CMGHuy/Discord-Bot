@@ -169,6 +169,11 @@ export class TabBar {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="row" [class.stacked]="stacked()"><ng-content /></div>`,
   styles: `
+    /* Block, not the inline default. Consumers put margin, padding, a
+       background and position:sticky on this element (the settings save bar
+       does all four) -- every one of those is ignored or half-applied on an
+       inline box, and silently, which is the worst way to lose a layout. */
+    :host { display: block; }
     .row {
       display: flex;
       align-items: flex-end;

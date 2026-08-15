@@ -5,7 +5,7 @@ import { SystemStore } from '../../stores/system.store';
 import { Button } from '../../ui/button';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { dateTime } from '../../ui/format';
-import { Panel } from '../../ui/layout';
+import { ControlRow, Panel } from '../../ui/layout';
 import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 
 /**
@@ -24,7 +24,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 @Component({
   selector: 'sb-settings-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -47,20 +47,24 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
     <!-- SR56. Over a hundred fields had no way to find one by name. The
          controls sit above the form rather than in the save bar: they change
          what you are looking at, not what you are about to commit. -->
-    <div class="find" role="search">
+    <sb-control-row class="find" role="search">
       <sb-text-input
         label="Find a setting"
         type="text"
         [value]="store.settingsQuery()"
         (valueChange)="store.setSettingsQuery($event)"
       />
+      <!-- topLabel is what lets the checkbox sit beside the labelled search
+           input: both now have a label band above a 28px control band, so
+           their boxes land on the same line. -->
       <sb-checkbox
+        topLabel="Filter"
         label="Only changed from default"
         [checked]="store.onlyChanged()"
         (checkedChange)="store.setOnlyChanged($event)"
       />
       <span class="found">{{ foundLabel() }}</span>
-    </div>
+    </sb-control-row>
 
     <!-- SR63. settings.html:101-103. The dot has meant this since SR56; the
          legend saying so is what makes it readable without guessing. -->
@@ -171,7 +175,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
 
     <!-- the save bar --------------------------------------------------- -->
 
-    <div class="bar">
+    <sb-control-row class="bar">
       <span class="count">
         @if (store.dirty()) {
           {{ store.dirtyKeys().length }} changed
@@ -180,7 +184,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
         }
       </span>
 
-      <div class="bar-actions">
+      <sb-control-row class="bar-actions">
         <button
           sb-button
           variant="ghost"
@@ -210,8 +214,8 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
         >
           Save
         </button>
-      </div>
-    </div>
+      </sb-control-row>
+    </sb-control-row>
 
     @if (store.formError(); as message) {
       <!-- The server validates against the schema this form was built from,
@@ -411,13 +415,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
     .asymmetry { color: var(--text-faint); font-size: var(--text-micro); }
 
     /* -- SR56: finding a setting ------------------------------------- */
-    .find {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-10);
-      margin-bottom: var(--space-10);
-    }
+    .find { margin-bottom: var(--space-10); }
     .find .found {
       margin-left: auto;
       color: var(--text-faint);
@@ -455,11 +453,10 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
     .restart, .secret { color: var(--warn); font-size: var(--text-chip); }
     .secret { color: var(--text-faint); }
 
+    /* No justify-content: space-between any more. It lived on the flex rule
+       the primitive now owns, and .bar-actions' margin-left: auto states the
+       same intent on the element that actually has to move. */
     .bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-14);
       padding: var(--space-10) var(--space-14);
       background: var(--surface);
       border: 1px solid var(--border);
@@ -468,7 +465,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
       bottom: 0;
     }
     .count { color: var(--text-secondary); font-size: var(--text-table); }
-    .bar-actions { display: flex; gap: var(--space-8); }
+    .bar-actions { margin-left: auto; }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);
