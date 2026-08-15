@@ -256,3 +256,13 @@ docs/superpowers/plans/2026-08-13-v21-spa-refresh.md
 Never invent a fresh topic name — a worktree called `trade-history-filter` takes
 a second lookup to tie back to plan v9. For work that is not executing a plan, a
 short topic name is fine; the rule binds only when a plan exists.
+
+**Worktree execution is the default, not an opt-in.** Told to implement a `vN`
+spec or plan with no instruction about where — no "inline", "in this session",
+"in the current tree" — create the worktree under the naming convention above
+before starting Task 1, without asking first. Asked to implement it directly in
+the main tree, do that instead; that is an explicit override, not a violation
+of this rule. The point of asking first would be to catch the case where a
+worktree is wrong for the task, and a plan document is precisely the case where
+it almost never is — plan execution is long-running, multi-commit, and wants
+the review-and-merge boundary a worktree gives it for free.
