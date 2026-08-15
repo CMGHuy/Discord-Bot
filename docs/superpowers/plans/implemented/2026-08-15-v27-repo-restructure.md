@@ -19,6 +19,53 @@ tool (Task 7) performs the rewrite; it is deleted in the final task.
 
 **Tech Stack:** Python 3.11+, pytest, `git mv`, `python -m compileall`.
 
+## Progress
+
+> All 15 tasks complete, 2026-08-15. Final suite: **1663 passed, 136 skipped,
+> 0 failed** — exactly the Task 1 baseline, restored after Tasks 7–14's
+> +12-test tool interval. Version bumped `bot 1.1.3 → 1.1.4` (the plan's
+> header predicted `1.1.2 → 1.1.3`; `main` had already consumed 1.1.3 for an
+> unrelated release before this plan ran — bumped one more patch instead).
+>
+> **Deviations and gaps this plan's text didn't anticipate**, found and fixed
+> while executing (all verified against the full suite before commit):
+> - Task 4: moving `scripts/` broke ~34 `ROOT = Path(__file__).resolve()
+>   .parent.parent`-style computations (one directory level short) and ~20
+>   sibling-script imports, across code the plan's five named executable
+>   references didn't cover. `deploy/deploy.sh`'s live smoke-test invocation
+>   needed the same fix.
+> - Task 6: grouping `tests/` broke 16 cross-test-file imports
+>   (`tests.test_X` helper imports) and 5 more `ROOT`/`CACHE`-style
+>   computations, for the same one-level-short reason.
+> - Tasks 8–12: the repackage tool's Task-7-documented design — rewrite
+>   every module's reference to its FINAL package on the very first
+>   invocation, using the complete map, while only physically moving that
+>   task's own modules — means the suite cannot collect cleanly between
+>   Task 8 and Task 13. Verified each intermediate task compiled clean and
+>   diffed to import/path-only changes; deferred the full-suite pytest
+>   check to Task 13, where it passed with one more fix (a relative
+>   `from .. import config` in `data_refresh.py`, invisible to the tool
+>   because `config` isn't a tracked core module).
+> - Task 15: the repo-wide dangling-path sweep caught 22 more stale
+>   `swingbot/core/*.py` references beyond the task's named file list
+>   (README.md, docs/features.md, docs/superpowers/edge-premortem.md,
+>   swingbot/config.py, .env.example, bot.py, requirements.txt, and others).
+>   Separately, regenerating `version_history.json` for the bump surfaced a
+>   `Path(__file__).resolve().parents[1]` in `build_version_matrix.py` —
+>   the `.parents[N]` indexing idiom, which Task 4's `.parent.parent` /
+>   `dirname(dirname(...))` sweep pattern didn't match — silently pointed
+>   at `scripts/` instead of the repo root once the script moved into
+>   `scripts/dev/`. Fixed; it was the only such instance repo-wide.
+>
+> **Deliberately left as-is:** the v27 plan's and v26 spec's own bodies,
+> and `docs/superpowers/plans/v27-baseline.md` (deleted in Task 15 anyway),
+> keep their old flat-path prose — they narrate the move itself and
+> rewriting them mid-narrative would make the history unreadable, not more
+> accurate. Two `scripts/*.py` mentions in
+> `docs/MANUAL_VERIFICATION_CHECKLIST.md` (`gate_fold_run.py`,
+> `macro_smoke.py`) were never real paths — they describe scripts a future,
+> unrelated task creates — and were left alone.
+
 ## Global Constraints
 
 - **No behaviour changes.** A diff hunk that is not a file move, an import line, a
