@@ -1,4 +1,4 @@
-import { Injectable, signal, Signal } from '@angular/core';
+import { Inject, Injectable, InjectionToken, signal, Signal } from '@angular/core';
 
 export type ChartLayer = 'macd' | 'rsi' | 'keltner' | 'volumeProfile' | 'plan';
 
@@ -28,6 +28,15 @@ function localStorageAdapter(): ChartPrefsStore {
   };
 }
 
+/**
+ * Injection token for the chart preferences store.
+ * Provides localStorageAdapter by default, overridable for tests.
+ */
+export const CHART_PREFS_STORE = new InjectionToken<ChartPrefsStore>(
+  'CHART_PREFS_STORE',
+  { providedIn: 'root', factory: localStorageAdapter },
+);
+
 const DEFAULT_LAYERS: Record<ChartLayer, boolean> = {
   macd: true,
   rsi: true,
@@ -52,7 +61,7 @@ export class ChartPrefs {
   private readonly visibilitySignal;
   private readonly store: ChartPrefsStore;
 
-  constructor(store: ChartPrefsStore = localStorageAdapter()) {
+  constructor(@Inject(CHART_PREFS_STORE) store: ChartPrefsStore = localStorageAdapter()) {
     this.store = store;
     const loaded = this.loadInitial();
     this.visibilitySignal = signal(loaded);
