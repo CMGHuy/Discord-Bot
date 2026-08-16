@@ -58,6 +58,21 @@ def no_network(monkeypatch):
                         lambda t: None)
 
 
+@pytest.fixture(autouse=True)
+def clean_earnings_cache():
+    """`events._earnings_datetime_cache` is a module-level dict with a 6h
+    TTL -- real across the whole test process, not per-request. Without
+    this, one test seeding "AAPL" would leak into every later test that
+    happens to use the same symbol. Cleared before AND after: after, so a
+    background warm-up thread from THIS test (started by _next_earnings for
+    an uncached ticker) writing in after the test has already moved on
+    cannot poison the next one either."""
+    from swingbot.core.market import events
+    events._earnings_datetime_cache.clear()
+    yield
+    events._earnings_datetime_cache.clear()
+
+
 def test_requires_auth(client):
     assert_error(client.get("/api/v1/watchlist/tickers"), "auth", 401)
 
@@ -77,25 +92,80 @@ def test_list_shape(watchlist, logged_in):
     }, where="ticker")
 
 
-def test_next_earnings_fields_are_iso_strings_derived_from_one_call(watchlist, logged_in, monkeypatch):
+def test_next_earnings_fields_are_iso_strings_from_the_cache(watchlist, logged_in):
+    # _next_earnings only ever reads the cache (never fetches inline -- see
+    # its own docstring for why), so the way to give a ticker a known
+    # earnings time in a test is to seed the cache directly, exactly as a
+    # prior request's background warm-up would have.
     import datetime as dt
+    import time as time_module
+    from swingbot.core.market import events
+
     # UTC-4 (EDT): 16:00 local is 20:00 UTC -- both fields must reflect the
     # UTC-converted value, not the source's own -04:00 offset.
     tz = dt.timezone(dt.timedelta(hours=-4))
-    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_datetime",
-                        lambda t: dt.datetime(2026, 9, 3, 16, 0, tzinfo=tz))
+    events._earnings_datetime_cache["AAPL"] = (
+        dt.datetime(2026, 9, 3, 16, 0, tzinfo=tz), time_module.monotonic())
+
     watchlist(["AAPL"])
     row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
     assert row["next_earnings_date"] == "2026-09-03"
     assert row["next_earnings_datetime"] == "2026-09-03T20:00:00+00:00"
 
 
-def test_next_earnings_fields_none_when_unknown(watchlist, logged_in):
-    # The no_network fixture already patches this to return None.
+def test_next_earnings_fields_null_when_confirmed_no_data(watchlist, logged_in):
+    # A cached None (Yahoo checked, nothing found) is a different case from
+    # "never checked" below -- both render null on the wire, but only this
+    # one should NOT trigger a background warm-up (it's already resolved).
+    import time as time_module
+    from swingbot.core.market import events
+
+    events._earnings_datetime_cache["AAPL"] = (None, time_module.monotonic())
+
     watchlist(["AAPL"])
     row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
     assert row["next_earnings_date"] is None
     assert row["next_earnings_datetime"] is None
+
+
+def test_next_earnings_fields_null_and_non_blocking_when_not_yet_cached(watchlist, logged_in):
+    # The whole point of the fix: a ticker with nothing in the cache must
+    # render null immediately rather than the response waiting on a live
+    # Yahoo call. Real timing (not just correctness) is asserted here since
+    # that IS the bug being guarded against -- a correct-but-slow response
+    # would still reproduce it.
+    import time as time_module
+
+    watchlist(["AAPL"])
+    started = time_module.monotonic()
+    row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
+    elapsed = time_module.monotonic() - started
+
+    assert row["next_earnings_date"] is None
+    assert row["next_earnings_datetime"] is None
+    assert elapsed < 1.0
+
+
+def test_an_uncached_ticker_triggers_a_background_warm_up(watchlist, logged_in, monkeypatch):
+    warmed = []
+    monkeypatch.setattr("swingbot.core.market.events.warm_earnings_cache_background",
+                        lambda tickers: warmed.extend(tickers))
+    watchlist(["AAPL"])
+    logged_in.get("/api/v1/watchlist/tickers")
+    assert warmed == ["AAPL"]
+
+
+def test_a_cached_ticker_does_not_trigger_a_background_warm_up(watchlist, logged_in, monkeypatch):
+    import time as time_module
+    from swingbot.core.market import events
+
+    events._earnings_datetime_cache["AAPL"] = (None, time_module.monotonic())
+    warmed = []
+    monkeypatch.setattr("swingbot.core.market.events.warm_earnings_cache_background",
+                        lambda tickers: warmed.extend(tickers))
+    watchlist(["AAPL"])
+    logged_in.get("/api/v1/watchlist/tickers")
+    assert warmed == []
 
 
 def test_add_a_single_ticker(watchlist, logged_in):

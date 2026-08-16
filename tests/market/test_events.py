@@ -45,6 +45,17 @@ def not_an_etf(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def clean_cache():
+    """`_earnings_datetime_cache` is a module-level dict with a 6h TTL --
+    real across every test in this process, not per-test. Every test here
+    uses "AAPL", so without this the second test to run would see the
+    first test's cached result instead of exercising its own fake ticker."""
+    events._earnings_datetime_cache.clear()
+    yield
+    events._earnings_datetime_cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def one_candidate(monkeypatch):
     # candidate_symbols normally yields format variants; pin it to the
     # ticker itself so tests control exactly one yfinance call.
@@ -110,3 +121,78 @@ def test_the_returned_datetime_converts_correctly_to_utc(monkeypatch):
 
     assert result.astimezone(dt.timezone.utc) == dt.datetime(
         2026, 10, 29, 20, 0, tzinfo=dt.timezone.utc)
+
+
+# --- caching: the fix for the 23s watchlist load ---------------------------
+
+def test_a_second_call_within_the_ttl_does_not_refetch(monkeypatch):
+    calls = []
+
+    def spy(symbol):
+        calls.append(symbol)
+        raise RuntimeError("no data")
+
+    monkeypatch.setattr(events.yf, "Ticker", spy)
+
+    events.get_next_earnings_datetime("AAPL")
+    events.get_next_earnings_datetime("AAPL")
+
+    assert len(calls) == 1
+
+
+def test_a_cached_none_is_still_a_cache_hit(monkeypatch):
+    # None is a real, valid cached result ("checked, nothing found") --
+    # confirming it doesn't fall through the cache's own truthiness check
+    # and refetch every time.
+    monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(pd.DataFrame()))
+    events.get_next_earnings_datetime("AAPL")
+
+    def boom(symbol):
+        raise AssertionError("must not refetch a cached None")
+
+    monkeypatch.setattr(events.yf, "Ticker", boom)
+    assert events.get_next_earnings_datetime("AAPL") is None
+
+
+def test_peek_returns_not_cached_before_anything_has_been_fetched():
+    assert events.peek_cached_earnings_datetime("AAPL") is events._NOT_CACHED
+
+
+def test_peek_returns_the_cached_value_without_fetching(monkeypatch):
+    tz = dt.timezone(dt.timedelta(hours=-4))
+    upcoming = dt.datetime(2026, 10, 29, 16, 0, tzinfo=tz)
+    monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(_frame(upcoming)))
+    events.get_next_earnings_datetime("AAPL")  # populates the cache
+
+    def boom(symbol):
+        raise AssertionError("peek must never fetch")
+
+    monkeypatch.setattr(events.yf, "Ticker", boom)
+    assert events.peek_cached_earnings_datetime("AAPL") == upcoming
+
+
+def test_warm_earnings_cache_background_populates_the_cache(monkeypatch):
+    tz = dt.timezone(dt.timedelta(hours=-4))
+    upcoming = dt.datetime(2026, 10, 29, 16, 0, tzinfo=tz)
+    monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(_frame(upcoming)))
+
+    thread = events.warm_earnings_cache_background(["AAPL"])
+    thread.join(timeout=5)
+
+    assert events.peek_cached_earnings_datetime("AAPL") == upcoming
+
+
+def test_warm_earnings_cache_background_survives_a_failing_ticker(monkeypatch):
+    # One bad symbol in the batch must not stop the rest, and must not
+    # raise on the daemon thread where nothing would ever see it.
+    def boom(symbol):
+        raise RuntimeError("network hiccup")
+
+    monkeypatch.setattr(events.yf, "Ticker", boom)
+
+    thread = events.warm_earnings_cache_background(["AAPL", "MSFT"])
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert events.peek_cached_earnings_datetime("AAPL") is None
+    assert events.peek_cached_earnings_datetime("MSFT") is None

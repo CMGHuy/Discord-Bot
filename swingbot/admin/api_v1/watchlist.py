@@ -73,19 +73,26 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
 
 
 def _next_earnings(tickers: list[str]) -> dict[str, tuple[str | None, str | None]]:
-    """Same concurrency shape as `_company_names` -- `get_next_earnings_datetime`
-    is an uncached, per-ticker Yahoo call (`events.py`), so this is one live
-    round trip per symbol regardless; doing them sequentially would stall the
-    response by roughly `len(tickers)` times whatever one call costs.
+    """Cache-only: never fetches, never blocks the response.
 
-    One call per ticker for BOTH fields the API returns -- the Watchlist
-    table's plain date column and the Earnings calendar's time-of-day -- via
+    `get_next_earnings_datetime` (events.py) caches for 6h, but the FIRST
+    request for a ticker is still a live, uncached Yahoo round trip with no
+    local-data fallback (unlike company-name lookups, most of which resolve
+    from a local directory) -- fetching every watchlist ticker synchronously
+    here, even concurrently, measured at 23s for a ~34-ticker watchlist
+    before this existed, which is severe enough to read as "the page shows
+    nothing" rather than "slow". A ticker not yet cached renders with
+    `next_earnings_date`/`next_earnings_datetime` both null for THIS
+    response; `warm_earnings_cache_background` fills the cache on a daemon
+    thread so a reload (or the next scheduled poll) sees the real value
+    without this request paying for it.
+
+    One source for BOTH fields the API returns -- the Watchlist table's
+    plain date column and the Earnings calendar's time-of-day -- via
     `get_next_earnings_datetime` rather than the date-only
     `get_next_earnings_date` used elsewhere (the earnings-blackout gate).
     Deriving the date from the same richer call means the table and the
-    calendar can never show a different date for the same ticker; using the
-    date-only function here as well would risk exactly that, from two
-    separate yfinance code paths that could occasionally disagree.
+    calendar can never show a different date for the same ticker.
 
     ISO strings, not raw `date`/`datetime` objects, matching every other
     date this API returns -- `jsonify` on a bare `date` is not a convention
@@ -95,24 +102,28 @@ def _next_earnings(tickers: list[str]) -> dict[str, tuple[str | None, str | None
     clock from it, and starting from a fixed zone rather than whatever the
     source data's own offset happened to be keeps that conversion exact.
     """
-    from swingbot.core.market.events import get_next_earnings_datetime
+    from swingbot.core.market.events import (
+        _NOT_CACHED, peek_cached_earnings_datetime, warm_earnings_cache_background,
+    )
 
     if not tickers:
         return {}
+
     result: dict[str, tuple[str | None, str | None]] = {}
-    with ThreadPoolExecutor(max_workers=min(10, len(tickers))) as pool:
-        futures = {pool.submit(get_next_earnings_datetime, t): t for t in tickers}
-        for fut in as_completed(futures):
-            t = futures[fut]
-            try:
-                value = fut.result()
-                if value is None:
-                    result[t] = (None, None)
-                else:
-                    utc = value.astimezone(dt.timezone.utc)
-                    result[t] = (utc.date().isoformat(), utc.isoformat())
-            except Exception:
-                result[t] = (None, None)
+    to_warm: list[str] = []
+    for t in tickers:
+        cached = peek_cached_earnings_datetime(t)
+        if cached is _NOT_CACHED:
+            result[t] = (None, None)
+            to_warm.append(t)
+        elif cached is None:
+            result[t] = (None, None)
+        else:
+            utc = cached.astimezone(dt.timezone.utc)
+            result[t] = (utc.date().isoformat(), utc.isoformat())
+
+    if to_warm:
+        warm_earnings_cache_background(to_warm)
     return result
 
 

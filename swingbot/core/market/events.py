@@ -13,6 +13,8 @@ the holding window, the bot flags it rather than pretending it isn't there.
 """
 import datetime as dt
 import logging
+import threading
+import time
 
 import yfinance as yf
 
@@ -20,6 +22,24 @@ from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.universe import is_etf
 
 log = logging.getLogger("swing-bot.events")
+
+# An earnings date is essentially static for weeks at a time -- nothing like
+# get_current_price's 15s TTL is warranted, and the cost of NOT caching this
+# is severe: GET /watchlist/tickers calls get_next_earnings_datetime once per
+# watchlist ticker on every page load, uncached, and each call is a live
+# Yahoo round trip with no local-data fallback (unlike company-name lookups,
+# which resolve most US symbols from a local directory). Measured on a
+# ~34-ticker watchlist: 23 seconds per load before this cache existed --
+# severe enough to read as "the page shows nothing" rather than "slow".
+# Same in-memory {ticker: (value, fetched_at)} shape as _price_cache in
+# marketdata/data.py, just a much longer TTL.
+_EARNINGS_DATETIME_CACHE_TTL_SECONDS = 6 * 60 * 60
+_earnings_datetime_cache: dict[str, tuple[dt.datetime | None, float]] = {}
+
+#: Distinguishes "checked Yahoo, confirmed nothing" (a real cached `None`)
+#: from "never checked, or the entry expired" -- callers that must not
+#: block (the watchlist endpoint) need to tell those apart.
+_NOT_CACHED = object()
 
 
 def get_next_earnings_date(ticker: str) -> dt.date | None:
@@ -67,7 +87,62 @@ def get_next_earnings_datetime(ticker: str) -> dt.datetime | None:
     For a future date, Yahoo has not necessarily confirmed the exact time
     (some companies announce it only weeks ahead) -- treat every returned
     value as an estimate, never as confirmed.
+
+    Cached in-memory per ticker for `_EARNINGS_DATETIME_CACHE_TTL_SECONDS`
+    (6h) -- see that constant's comment for why this one needs a cache at
+    all where `get_next_earnings_date` (below) has gone without one.
     """
+    ticker_key = ticker.upper().strip()
+    cached = _earnings_datetime_cache.get(ticker_key)
+    now_monotonic = time.monotonic()
+    if cached and (now_monotonic - cached[1]) < _EARNINGS_DATETIME_CACHE_TTL_SECONDS:
+        return cached[0]
+
+    result = _fetch_next_earnings_datetime(ticker_key)
+    _earnings_datetime_cache[ticker_key] = (result, now_monotonic)
+    return result
+
+
+def peek_cached_earnings_datetime(ticker: str):
+    """Read-only: the cached value if fresh, or `_NOT_CACHED` -- never
+    fetches, never blocks.
+
+    For a caller that must answer instantly (the watchlist endpoint) and
+    would rather show "unknown for now" than make a request wait on a live
+    Yahoo call. Pair with `warm_earnings_cache_background` to fill the gap
+    for next time without making THIS request pay for it.
+    """
+    ticker_key = ticker.upper().strip()
+    cached = _earnings_datetime_cache.get(ticker_key)
+    if cached and (time.monotonic() - cached[1]) < _EARNINGS_DATETIME_CACHE_TTL_SECONDS:
+        return cached[0]
+    return _NOT_CACHED
+
+
+def warm_earnings_cache_background(tickers: list[str]) -> threading.Thread:
+    """Fire-and-forget: populate the cache for `tickers` on a daemon thread.
+
+    Same shape as `marketdata.backtest_cache.ensure_cached_background` --
+    the caller gets an immediate return and the next request (or the next
+    poll of the same page) sees the warmed cache instead of paying for it.
+    Sequential within the thread rather than its own pool: this already
+    runs off the request thread, so there is no response latency to
+    protect, and stacking a second pool under a pool the caller may already
+    be running (`_next_earnings`'s `ThreadPoolExecutor`) buys nothing.
+    """
+    def _run():
+        for ticker in tickers:
+            try:
+                get_next_earnings_datetime(ticker)
+            except Exception:
+                log.debug("background earnings warm-up failed for %s", ticker, exc_info=True)
+
+    t = threading.Thread(target=_run, name="earnings-cache-warm", daemon=True)
+    t.start()
+    return t
+
+
+def _fetch_next_earnings_datetime(ticker: str) -> dt.datetime | None:
     if is_etf(ticker):
         return None
 
