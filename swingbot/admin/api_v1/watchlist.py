@@ -71,6 +71,34 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
     return names
 
 
+def _next_earnings_dates(tickers: list[str]) -> dict[str, str | None]:
+    """Same concurrency shape as `_company_names` -- `get_next_earnings_date`
+    is an uncached, per-ticker Yahoo call (`events.py`), so this is one live
+    round trip per symbol regardless; doing them sequentially would stall the
+    response by roughly `len(tickers)` times whatever one call costs.
+
+    ISO date strings (`YYYY-MM-DD`), not raw `date` objects, matching every
+    other date this API returns -- `jsonify` on a bare `date` is not a
+    convention exercised anywhere else here, so this stays consistent rather
+    than being the one endpoint that relies on it.
+    """
+    from swingbot.core.market.events import get_next_earnings_date
+
+    if not tickers:
+        return {}
+    dates: dict[str, str | None] = {}
+    with ThreadPoolExecutor(max_workers=min(10, len(tickers))) as pool:
+        futures = {pool.submit(get_next_earnings_date, t): t for t in tickers}
+        for fut in as_completed(futures):
+            t = futures[fut]
+            try:
+                result = fut.result()
+                dates[t] = result.isoformat() if result else None
+            except Exception:
+                dates[t] = None
+    return dates
+
+
 @api_v1.route("/watchlist/tickers", methods=["GET"])
 @require_auth
 def list_tickers():
@@ -86,9 +114,11 @@ def list_tickers():
         bucket["open" if tr.get("status") == "open" else "closed"] += 1
 
     names = _company_names(tickers)
+    earnings = _next_earnings_dates(tickers)
     return jsonify({"tickers": [
         {"symbol": t, "company_name": names.get(t),
-         "open_trades": counts[t]["open"], "closed_trades": counts[t]["closed"]}
+         "open_trades": counts[t]["open"], "closed_trades": counts[t]["closed"],
+         "next_earnings_date": earnings.get(t)}
         for t in tickers
     ]})
 

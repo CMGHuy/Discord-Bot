@@ -15,7 +15,7 @@ import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
-import { text } from '../../ui/format';
+import { date, text } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 
 /**
@@ -240,11 +240,17 @@ export class Watchlist {
   private readonly actionsCell =
     viewChild.required<TemplateRef<RowContext<Ticker>>>('actionsCell');
 
-  protected readonly visible = ['symbol', 'company_name', 'open_trades', 'closed_trades', 'actions'];
+  protected readonly visible = [
+    'symbol', 'company_name', 'next_earnings_date', 'open_trades', 'closed_trades', 'actions',
+  ];
 
   protected readonly columns = computed<ColumnDef<Ticker>[]>(() => [
     { key: 'symbol', header: 'Symbol', cell: this.symbolCell() },
     { key: 'company_name', header: 'Company', value: (row) => text(row.company_name) },
+    {
+      key: 'next_earnings_date', header: 'Next earnings',
+      value: (row) => (row.next_earnings_date ? date(row.next_earnings_date) : null),
+    },
     { key: 'open_trades', header: 'Open', value: (row) => row.open_trades, numeric: true },
     { key: 'closed_trades', header: 'Closed', value: (row) => row.closed_trades, numeric: true },
     { key: 'actions', header: '', cell: this.actionsCell(), width: '1%' },

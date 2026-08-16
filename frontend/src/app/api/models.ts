@@ -485,6 +485,9 @@ export interface Ticker {
   company_name: string | null;
   open_trades: number;
   closed_trades: number;
+  /** ISO date (`YYYY-MM-DD`), or null when Yahoo has no calendar data for
+   *  this symbol (or it's an ETF, which never reports earnings). */
+  next_earnings_date: string | null;
 }
 
 /** `GET /watchlist/tickers`. A plain list, NOT a `Collection` — the watchlist

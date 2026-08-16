@@ -48,11 +48,12 @@ def logged_in(client):
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Company-name resolution and history warm-up both reach the network.
-    Neither is what these tests are about, and a test suite that depends on
-    yfinance being reachable fails for reasons that have nothing to do with
-    the code."""
+    """Company-name resolution, earnings-date lookup and history warm-up all
+    reach the network. None of that is what these tests are about, and a test
+    suite that depends on yfinance being reachable fails for reasons that
+    have nothing to do with the code."""
     monkeypatch.setattr("swingbot.core.marketdata.data.get_company_name", lambda t: f"{t} Inc.")
+    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_date", lambda t: None)
     monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached_background",
                         lambda t: None)
 
@@ -71,7 +72,24 @@ def test_list_shape(watchlist, logged_in):
     assert_shape(body["tickers"][0], {
         "symbol": str, "company_name": (str, type(None)),
         "open_trades": int, "closed_trades": int,
+        "next_earnings_date": (str, type(None)),
     }, where="ticker")
+
+
+def test_next_earnings_date_is_an_iso_string(watchlist, logged_in, monkeypatch):
+    import datetime as dt
+    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_date",
+                        lambda t: dt.date(2026, 9, 3))
+    watchlist(["AAPL"])
+    row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
+    assert row["next_earnings_date"] == "2026-09-03"
+
+
+def test_next_earnings_date_none_when_unknown(watchlist, logged_in):
+    # The no_network fixture already patches this to return None.
+    watchlist(["AAPL"])
+    row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
+    assert row["next_earnings_date"] is None
 
 
 def test_add_a_single_ticker(watchlist, logged_in):
