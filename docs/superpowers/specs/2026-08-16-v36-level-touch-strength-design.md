@@ -33,6 +33,27 @@ how recently, and feed that grade into level selection and confidence.
 
 ## Design
 
+### Correction: the per-bar classifier already exists
+
+Written before reading `edge/factors.py:193`. **`pattern_quality_at_level(df,
+idx, level, direction) -> int`** already implements the wick-vs-body rule below,
+including the exact rejection/break distinction (`:217-224`), with the comment
+*"piercing and CLOSING through is a break, not a rejection, and must not score
+like a bounce."*
+
+It is the `candle_quality` input `engine.py::_build_quality_inputs` deliberately
+declines to supply, because *"candle_quality needs a specific touch-bar+level
+the scan loop doesn't track per plan"*.
+
+So this spec's genuinely new work is narrower than described below: **touch
+discovery** (which bars touched a level), **aggregation with recency decay**,
+and **a field on `Level`**. The classification table below documents the rule
+`pattern_quality_at_level` already implements; it is not a rewrite of it.
+
+One consequence: that function scores 0–10 with **no negative band**, so a break
+scores *low*, not negative. The negative signal is supplied at the aggregate
+level rather than by editing a function other code already consumes.
+
 ### What counts as a touch — wick vs body
 
 Three outcomes when price enters a level's tolerance band, distinguished by

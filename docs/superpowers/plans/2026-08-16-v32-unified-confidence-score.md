@@ -758,15 +758,37 @@ paths.
 Run: `python scripts/dev/testrun.py file tests/scanning/test_confidence_levels.py`
 Expected: PASS
 
-- [ ] **Step 6: Run the fast tier — nothing else may move**
+- [ ] **Step 6: Fix the duplicated band arithmetic at `engine.py:939`**
+
+`engine.py` re-buckets the level after the HTF counter-trend penalty with a
+**hardcoded** copy of the band boundaries:
+
+```python
+new_level = max(1, min(5, 1 + new_score // 20))   # assumes 5 equal 20-pt bands
+```
+
+Task 5's recalibrated bands are *not* five equal 20-point bands, so this
+silently computes the wrong level the moment v32 lands. It must go through the
+single source of truth instead:
+
+```python
+from .confidence import level_for_score
+new_level, new_label = level_for_score(new_score, target_count)
+```
+
+Add a regression test asserting `engine`'s post-penalty level equals
+`level_for_score(new_score, target_count)` for a score in a non-20-wide band
+(e.g. 78, which is Level 5 under the new table but Level 4 under `1 + 78//20`).
+
+- [ ] **Step 7: Run the fast tier — nothing else may move**
 
 Run: `python scripts/dev/testrun.py fast`
 Expected: `0 failed`, `0 xfailed`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add swingbot/core/scanning/confidence.py swingbot/config.py tests/scanning/test_confidence_levels.py
+git add swingbot/core/scanning/confidence.py swingbot/core/scanning/engine.py swingbot/config.py tests/scanning/test_confidence_levels.py
 git commit -m "feat(v32): score_confidence runs the factor registry behind UNIFIED_CONFIDENCE"
 ```
 

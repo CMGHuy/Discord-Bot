@@ -13,14 +13,25 @@ called from `swingbot/core/market/levels.py:346`, which folds their values into
 the candidate level pool, and from `scanning/engine.py:216` for decision
 context.
 
-What is unknown — and Task 1 of the plan is to establish it — is **which anchors
-`avwap_anchors()` actually picks**, whether they are the meaningful ones, and
-whether the resulting levels are visible to the user as a named method or
-silently merged into a cluster label.
+**The audit predicted here has since been done, while writing the plan. Scope
+did shrink, as anticipated:**
 
-This is a spec about auditing and extending working code, not building a
-feature. The scope may shrink substantially after Task 1, and that is a
-legitimate outcome.
+- `avwap_anchors()` (`factors.py:168-191`) **already** picks the last two
+  confirmed swing-pivot lows and highs (`span=5`, confirmed both sides) plus
+  the highest-volume bar.
+- **NO-LOOKAHEAD is already handled and documented** (`factors.py:172-177`):
+  the pivot scan deliberately stops `span` bars short of the end.
+- **Confluence inflation is already guarded**: every anchor appends the same
+  `"AVWAP"` label (`levels.py:348`) and `confidence.py:243` dedups.
+
+What remains genuinely missing: the **52-week high/low anchor**, and **naming
+the anchor** in output (`engine.py:216` builds `f"⚓{a}"` from a bar *index*).
+
+**And the finding that reframes this spec:** `AVWAP_LEVELS_ENABLED` **defaults
+to `false`** (`config.py:592`). Its help text says the flag waits on "the E33
+walk-forward folds and the E40 shadow forward-gate". So anchored VWAP
+contributes **nothing today**, and the largest win available is not a new
+anchor — it is running that measurement and deciding the default.
 
 ## Goal
 
