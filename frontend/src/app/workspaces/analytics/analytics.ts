@@ -22,6 +22,7 @@ import {
   GridRow,
   HeatmapCell,
   JobStatus,
+  JobSummary,
   ProposalRow,
   Streaks,
   StrategyRow,
@@ -47,6 +48,7 @@ import {
   DECILE_COLUMNS,
   DRIFT_COLUMNS,
   GRID_COLUMNS,
+  PAST_JOBS_COLUMNS,
   STRATEGY_COLUMNS,
   TIER_COLUMNS,
   allKeys,
@@ -711,17 +713,15 @@ interface ProposalView extends ProposalRow {
 
         @if (store.pastJobs(); as past) {
           @if (past.length) {
-            <sb-panel heading="Earlier jobs">
-              <ul class="jobs">
-                @for (job of past; track job.id) {
-                  <li>
-                    <code>{{ job.id }}</code>
-                    <span class="muted">
-                      {{ job.state }} · started {{ fmtDateTime(job.started_at) }}
-                    </span>
-                  </li>
-                }
-              </ul>
+            <sb-panel heading="Earlier jobs" [flush]="true">
+              <sb-data-table
+                [rows]="pastJobsPage.visible()"
+                [columns]="pastJobsColumns"
+                [visible]="pastJobsKeys"
+                [rowKey]="pastJobRowKey"
+                [pagination]="pastJobsPage.pageSpec()"
+                (pageChange)="pastJobsPage.setPage($event)"
+              />
             </sb-panel>
           }
         }
@@ -1101,10 +1101,6 @@ interface ProposalView extends ProposalRow {
     }
     .log + .note { padding: var(--space-10) var(--space-14); }
 
-    .jobs { display: grid; gap: var(--space-6); list-style: none; }
-    .jobs li { display: flex; align-items: baseline; gap: var(--space-8); font-size: var(--text-table); }
-    .jobs code { color: var(--text); font-family: var(--font-mono); }
-
     .proposal {
       margin-top: var(--space-10);
       padding: var(--space-10);
@@ -1305,6 +1301,7 @@ export class Analytics {
   protected readonly tierKeys = allKeys(TIER_COLUMNS);
   protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
   protected readonly gridKeys = allKeys(GRID_COLUMNS);
+  protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
 
   protected readonly strategyKey = (row: StrategyRow) => row.strategy;
   protected readonly strategyPage = createClientPage(() => this.store.strategyRows());
@@ -1318,6 +1315,9 @@ export class Analytics {
   protected readonly driftPage = createClientPage(() => this.store.drift());
   protected readonly gridRowKey = (row: GridRow) => String(row.row_index);
   protected readonly gridPage = createClientPage(() => this.store.grid());
+  protected readonly pastJobRowKey = (row: JobSummary) => row.id;
+  protected readonly pastJobsPage = createClientPage(() => this.store.pastJobs());
+  protected readonly pastJobsColumns = PAST_JOBS_COLUMNS; // static, no cell slots needed
 
   /** WEAK reads as the "loss" side of this bar list -- greyscale would be
    *  equally defensible (a badge is a quality judgement, not P&L), but
