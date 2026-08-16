@@ -146,7 +146,17 @@ describe('TradesStore', () => {
   const respond = (body: Partial<Collection<TradeRow>> = {}) =>
     expectRequest().flush({ ...COLLECTION, ...body });
 
-  it('loads on creation, with no separate bootstrap call', () => {
+  it('does not load until a query has been set', () => {
+    // Regression for the Dashboard bug where each of the three per-status
+    // TradeGroup panels raced an unfiltered request against its own real
+    // one: the store must never fetch on the untouched placeholder query,
+    // only once a real setQuery() has actually landed.
+    tick();
+    backend.expectNone((r) => r.url === '/api/v1/trades');
+  });
+
+  it('loads as soon as setQuery is called, with no separate bootstrap call', () => {
+    store.setQuery({ page: 1, per_page: 25 });
     tick();
     respond();
 
@@ -214,6 +224,7 @@ describe('TradesStore', () => {
   });
 
   it('refetches when the query changes', () => {
+    store.setQuery({ page: 1, per_page: 25 });
     tick();
     respond();
 
@@ -239,6 +250,7 @@ describe('TradesStore', () => {
   });
 
   it('does not refetch on an unrelated event', () => {
+    store.setQuery({ page: 1, per_page: 25 });
     tick();
     respond();
 
@@ -249,6 +261,7 @@ describe('TradesStore', () => {
   });
 
   it('maps the envelope to the table pagination contract', () => {
+    store.setQuery({ page: 1, per_page: 25 });
     tick();
     respond({ total: 90, page: 2, per_page: 25 });
 
@@ -277,6 +290,7 @@ describe('TradesStore', () => {
   });
 
   it('keeps the rows on screen when a refetch fails', () => {
+    store.setQuery({ page: 1, per_page: 25 });
     tick();
     respond();
 
@@ -289,6 +303,7 @@ describe('TradesStore', () => {
   });
 
   it('clears the error once a refetch succeeds', () => {
+    store.setQuery({ page: 1, per_page: 25 });
     tick();
     expectRequest().error(new ProgressEvent('error'), { status: 0 });
     expect(store.error()).not.toBeNull();

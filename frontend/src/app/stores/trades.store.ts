@@ -19,6 +19,23 @@ export const DEFAULT_PER_PAGE = 25;
 interface TradesSlice {
   data: Collection<TradeRow> | null;
   query: TradeQuery;
+  /** False until `setQuery` has been called at least once.
+   *
+   *  Guards the very first load: `onInit`'s effect below depends on `query`,
+   *  and `query` starts at the placeholder default above (page 1, no
+   *  status) before any consumer has had a chance to set its real one -- a
+   *  required signal `input()` is never readable synchronously in a
+   *  constructor (Angular sets it after construction), so a consumer that
+   *  wants a specific query, like Dashboard's per-status `TradeGroup`, can
+   *  only supply it from its OWN constructor `effect()`, which is created
+   *  and therefore flushed AFTER this store's `onInit` effect -- injection
+   *  runs before the injecting component's constructor body. Without this
+   *  gate, that ordering fires one request for the untouched placeholder
+   *  query before the real one, and whichever response lands last wins:
+   *  three `TradeGroup`s racing their own unfiltered bursts is why the
+   *  Dashboard could end up showing the same (unfiltered, CLOSED-included)
+   *  trades in all three status panels. */
+  queryReady: boolean;
   loading: boolean;
   error: string | null;
 
@@ -71,6 +88,7 @@ export const TradesStore = signalStore(
   withState<TradesSlice>({
     data: null,
     query: { page: 1, per_page: DEFAULT_PER_PAGE },
+    queryReady: false,
     loading: false,
     error: null,
     clearing: null,
@@ -110,7 +128,7 @@ export const TradesStore = signalStore(
   })),
   withMethods((store, api = inject(ApiClient)) => ({
     setQuery(query: TradeQuery): void {
-      patchState(store, { query });
+      patchState(store, { query, queryReady: true });
     },
 
     load(): void {
@@ -196,6 +214,10 @@ export const TradesStore = signalStore(
         // path cannot drift apart.
         trades();
         store.query();
+        // Skip the placeholder query nobody asked for. `queryReady` flips
+        // (and this effect re-runs) the moment a real `setQuery` lands --
+        // see the field's own comment for why the ordering otherwise races.
+        if (!store.queryReady()) return;
         store.load();
       });
     },
