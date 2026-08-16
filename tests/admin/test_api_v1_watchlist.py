@@ -53,7 +53,7 @@ def no_network(monkeypatch):
     suite that depends on yfinance being reachable fails for reasons that
     have nothing to do with the code."""
     monkeypatch.setattr("swingbot.core.marketdata.data.get_company_name", lambda t: f"{t} Inc.")
-    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_date", lambda t: None)
+    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_datetime", lambda t: None)
     monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached_background",
                         lambda t: None)
 
@@ -73,23 +73,29 @@ def test_list_shape(watchlist, logged_in):
         "symbol": str, "company_name": (str, type(None)),
         "open_trades": int, "closed_trades": int,
         "next_earnings_date": (str, type(None)),
+        "next_earnings_datetime": (str, type(None)),
     }, where="ticker")
 
 
-def test_next_earnings_date_is_an_iso_string(watchlist, logged_in, monkeypatch):
+def test_next_earnings_fields_are_iso_strings_derived_from_one_call(watchlist, logged_in, monkeypatch):
     import datetime as dt
-    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_date",
-                        lambda t: dt.date(2026, 9, 3))
+    # UTC-4 (EDT): 16:00 local is 20:00 UTC -- both fields must reflect the
+    # UTC-converted value, not the source's own -04:00 offset.
+    tz = dt.timezone(dt.timedelta(hours=-4))
+    monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_datetime",
+                        lambda t: dt.datetime(2026, 9, 3, 16, 0, tzinfo=tz))
     watchlist(["AAPL"])
     row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
     assert row["next_earnings_date"] == "2026-09-03"
+    assert row["next_earnings_datetime"] == "2026-09-03T20:00:00+00:00"
 
 
-def test_next_earnings_date_none_when_unknown(watchlist, logged_in):
+def test_next_earnings_fields_none_when_unknown(watchlist, logged_in):
     # The no_network fixture already patches this to return None.
     watchlist(["AAPL"])
     row = logged_in.get("/api/v1/watchlist/tickers").get_json()["tickers"][0]
     assert row["next_earnings_date"] is None
+    assert row["next_earnings_datetime"] is None
 
 
 def test_add_a_single_ticker(watchlist, logged_in):

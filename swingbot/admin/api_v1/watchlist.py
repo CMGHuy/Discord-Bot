@@ -12,6 +12,7 @@ working around; the SPA gets the structured version.
 """
 from __future__ import annotations
 
+import datetime as dt
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -71,32 +72,48 @@ def _company_names(tickers: list[str]) -> dict[str, str | None]:
     return names
 
 
-def _next_earnings_dates(tickers: list[str]) -> dict[str, str | None]:
-    """Same concurrency shape as `_company_names` -- `get_next_earnings_date`
+def _next_earnings(tickers: list[str]) -> dict[str, tuple[str | None, str | None]]:
+    """Same concurrency shape as `_company_names` -- `get_next_earnings_datetime`
     is an uncached, per-ticker Yahoo call (`events.py`), so this is one live
     round trip per symbol regardless; doing them sequentially would stall the
     response by roughly `len(tickers)` times whatever one call costs.
 
-    ISO date strings (`YYYY-MM-DD`), not raw `date` objects, matching every
-    other date this API returns -- `jsonify` on a bare `date` is not a
-    convention exercised anywhere else here, so this stays consistent rather
-    than being the one endpoint that relies on it.
+    One call per ticker for BOTH fields the API returns -- the Watchlist
+    table's plain date column and the Earnings calendar's time-of-day -- via
+    `get_next_earnings_datetime` rather than the date-only
+    `get_next_earnings_date` used elsewhere (the earnings-blackout gate).
+    Deriving the date from the same richer call means the table and the
+    calendar can never show a different date for the same ticker; using the
+    date-only function here as well would risk exactly that, from two
+    separate yfinance code paths that could occasionally disagree.
+
+    ISO strings, not raw `date`/`datetime` objects, matching every other
+    date this API returns -- `jsonify` on a bare `date` is not a convention
+    exercised anywhere else here, so this stays consistent rather than being
+    the one endpoint that relies on it. The datetime is converted to UTC
+    before formatting: the frontend renders both a UTC and a Europe/Berlin
+    clock from it, and starting from a fixed zone rather than whatever the
+    source data's own offset happened to be keeps that conversion exact.
     """
-    from swingbot.core.market.events import get_next_earnings_date
+    from swingbot.core.market.events import get_next_earnings_datetime
 
     if not tickers:
         return {}
-    dates: dict[str, str | None] = {}
+    result: dict[str, tuple[str | None, str | None]] = {}
     with ThreadPoolExecutor(max_workers=min(10, len(tickers))) as pool:
-        futures = {pool.submit(get_next_earnings_date, t): t for t in tickers}
+        futures = {pool.submit(get_next_earnings_datetime, t): t for t in tickers}
         for fut in as_completed(futures):
             t = futures[fut]
             try:
-                result = fut.result()
-                dates[t] = result.isoformat() if result else None
+                value = fut.result()
+                if value is None:
+                    result[t] = (None, None)
+                else:
+                    utc = value.astimezone(dt.timezone.utc)
+                    result[t] = (utc.date().isoformat(), utc.isoformat())
             except Exception:
-                dates[t] = None
-    return dates
+                result[t] = (None, None)
+    return result
 
 
 @api_v1.route("/watchlist/tickers", methods=["GET"])
@@ -114,11 +131,12 @@ def list_tickers():
         bucket["open" if tr.get("status") == "open" else "closed"] += 1
 
     names = _company_names(tickers)
-    earnings = _next_earnings_dates(tickers)
+    earnings = _next_earnings(tickers)
     return jsonify({"tickers": [
         {"symbol": t, "company_name": names.get(t),
          "open_trades": counts[t]["open"], "closed_trades": counts[t]["closed"],
-         "next_earnings_date": earnings.get(t)}
+         "next_earnings_date": earnings.get(t, (None, None))[0],
+         "next_earnings_datetime": earnings.get(t, (None, None))[1]}
         for t in tickers
     ]})
 

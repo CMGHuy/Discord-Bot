@@ -48,6 +48,46 @@ def get_next_earnings_date(ticker: str) -> dt.date | None:
     return None
 
 
+def get_next_earnings_datetime(ticker: str) -> dt.datetime | None:
+    """Like `get_next_earnings_date`, but with a time-of-day and timezone
+    attached when Yahoo has one.
+
+    `Ticker.calendar["Earnings Date"]` (what `get_next_earnings_date` reads)
+    is a plain date list with no time. `Ticker.get_earnings_dates()` is a
+    separate yfinance call that returns a real, per-company,
+    `America/New_York`-zoned timestamp -- confirmed empirically: AAPL/MSFT/
+    NVDA consistently report after close (16:00 ET) while JPM/WMT
+    consistently report before open (06:00-08:00 ET), correctly shifting
+    across the EST/EDT boundary. Admin-display use only (the Watchlist
+    Earnings calendar) -- kept independent of `get_next_earnings_date`
+    rather than sharing an implementation, because that function backs the
+    earnings-blackout gate, a trading-safety check with its own tests, and
+    this path must never be able to shift its behaviour.
+
+    For a future date, Yahoo has not necessarily confirmed the exact time
+    (some companies announce it only weeks ahead) -- treat every returned
+    value as an estimate, never as confirmed.
+    """
+    if is_etf(ticker):
+        return None
+
+    for candidate in candidate_symbols(ticker):
+        try:
+            earnings = yf.Ticker(candidate).get_earnings_dates(limit=6)
+        except Exception as e:
+            log.debug("Earnings-dates fetch failed for %s: %s", candidate, e)
+            continue
+        if earnings is None or earnings.empty:
+            continue
+
+        now = dt.datetime.now(dt.timezone.utc)
+        upcoming = [ts for ts in earnings.index if ts.to_pydatetime() >= now]
+        if upcoming:
+            return min(upcoming).to_pydatetime()
+
+    return None
+
+
 def earnings_within_window(ticker: str, max_holding_days: int):
     """
     Returns (earnings_date, days_away) if the next known earnings date
