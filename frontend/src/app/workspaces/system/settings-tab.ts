@@ -85,7 +85,7 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
         }
 
         @for (group of groupsOf(section.fields); track group.kind) {
-        <div class="fields" [class.compact]="group.kind === 'checkbox'">
+        <div class="fields">
           @for (field of group.fields; track field.key) {
             <div
               class="field"
@@ -132,43 +132,45 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
                    keeps the band count at four, and a missing band would shift
                    every later band of that cell up a row. -->
               <p class="help">{{ field.help }}</p>
-              <p class="meta">
-                <span class="key">{{ field.key }}</span>
-                <!-- SR63. settings.html:50. Without it "what was this before I
-                     touched it" has no answer on screen -- and the per-field
-                     reset SR56 added is far less useful when you cannot see
-                     what it will reset TO. -->
-                @if (field.default) {
-                  <span class="default-badge" title="Default value">{{ field.default }}</span>
-                }
+              <div class="meta">
+                <span class="meta-badges">
+                  <span class="key">{{ field.key }}</span>
+                  <!-- SR63. settings.html:50. Without it "what was this before I
+                       touched it" has no answer on screen -- and the per-field
+                       reset SR56 added is far less useful when you cannot see
+                       what it will reset TO. -->
+                  @if (field.default) {
+                    <span class="default-badge" title="Default value">{{ field.default }}</span>
+                  }
+                  @if (!field.hot_reloadable) {
+                    <!-- Named per field rather than only in the diff: it is
+                         the difference between a change that takes effect and
+                         one that waits for a restart nobody knew to do. -->
+                    <span class="restart" title="Restart required to take effect">restart</span>
+                  }
+                  @if (field.sensitive) {
+                    <span class="secret">stored value hidden — type to replace</span>
+                  }
+                </span>
                 @if (store.differsFromDefault(field)) {
-                  <!-- The Jinja page's dot: differs from the CODE default,
-                       which is a different statement from "edited just now"
-                       and the one that survives a reload. A plain inline
-                       link rather than sb-button: at the button's own
-                       --control-h (28px) it towered over the plain-text
-                       badges beside it in this row, and the full label
-                       repeated what the default-badge two spaces to its
-                       left and the title attribute here already say. -->
+                  <!-- On its own line, right-aligned: real button chrome
+                       (border/background/padding) reads as an action rather
+                       than another badge once it is out of .meta-badges' row
+                       -- the plain-link style e66c06b introduced was needed
+                       only because a full sb-button used to share that row
+                       with plain-text badges and towered over them at its
+                       own --control-h (28px). Decoupled now, so it can look
+                       like a button again without that clash. -->
                   <button
                     type="button"
                     class="reset"
                     [title]="'Reset to ' + field.default"
                     (click)="store.resetField(field)"
                   >
-                    reset
+                    Reset
                   </button>
                 }
-                @if (!field.hot_reloadable) {
-                  <!-- Named per field rather than only in the diff: it is
-                       the difference between a change that takes effect and
-                       one that waits for a restart nobody knew to do. -->
-                  <span class="restart" title="Restart required to take effect">restart</span>
-                }
-                @if (field.sensitive) {
-                  <span class="secret">stored value hidden — type to replace</span>
-                }
-              </p>
+              </div>
             </div>
           }
         </div>
@@ -368,9 +370,6 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
          has a real one, and every section would carry three. */
       margin-bottom: var(--space-20);
     }
-    /* A checkbox has no 260px-wide control to hold. */
-    .compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-
     /* Four bands -- label, control, help, meta -- mapped onto four parent
        rows. The parent then sizes each band to the TALLEST cell across the
        row, so every control starts at the same y and every meta line bottoms
@@ -457,7 +456,12 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
        next one -- the one way two fields' text could visibly run together. */
     .help { color: var(--text-muted); font-size: var(--text-chip); line-height: 1.4;
             overflow-wrap: anywhere; }
-    .meta { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+    /* Column, not one flex row: the badges (key/default/restart/secret) stay
+       a left-aligned wrapping line, and .reset -- when present -- gets a
+       line of its own below them, pushed to the right by align-items here
+       rather than by anything on the button itself. */
+    .meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-4); }
+    .meta-badges { align-self: stretch; display: flex; flex-wrap: wrap; gap: var(--space-6); }
     .key {
       color: var(--text-faint);
       font-family: var(--font-mono);
@@ -476,19 +480,23 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
       cursor: help;
     }
     .secret { color: var(--text-faint); font-size: var(--text-chip); }
-    /* A plain inline link, not sb-button: at the button's own --control-h
-       (28px) it towered over the plain-text badges sharing this row. */
+    /* Real button chrome, at --text-chip scale to sit comfortably below the
+       badges row rather than at sb-button's own --control-h (28px) -- this
+       is the same reasoning e66c06b applied when it flattened this into a
+       link, just aimed at the opposite conclusion now that .reset is off
+       .meta-badges' row: nothing here is towering over plain text any more,
+       so it can look like the button it is. */
     .reset {
-      border: 0;
-      background: none;
-      padding: 0;
+      padding: 2px var(--space-8);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-chip);
+      background: var(--surface);
       color: var(--accent);
       font: inherit;
       font-size: var(--text-chip);
       cursor: pointer;
-      text-decoration: underline;
     }
-    .reset:hover { color: var(--text); }
+    .reset:hover { background: var(--surface-raised); border-color: var(--border-strong); color: var(--text); }
 
     /* No justify-content: space-between any more. It lived on the flex rule
        the primitive now owns, and .bar-actions' margin-left: auto states the
