@@ -413,6 +413,18 @@ export interface AnalyticsCalibration {
   drift: unknown[];
 }
 
+export interface AnalyticsPlans {
+  funnel: { posted: number; filled: number; hit_tp1: number; closed: number };
+  in_flight: number;
+  fill_rate: {
+    resolved_n: number;
+    fill_rate_pct: number | null;
+    median_days_to_fill: number | null;
+  };
+  badges: Record<string, number>;
+  tiers: Record<string, number>;
+}
+
 /** `GET /analytics/registry`.
  *
  *  It really is this one key. The `{strategies, horizons, cells}` shape this

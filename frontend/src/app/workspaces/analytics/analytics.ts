@@ -22,6 +22,7 @@ import {
   GridRow,
   HeatmapCell,
   JobStatus,
+  JobSummary,
   ProposalRow,
   Streaks,
   StrategyRow,
@@ -33,17 +34,22 @@ import { Chip, QualityChip, qualityTone } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
+import { createClientPage } from '../../ui/data-table/client-page';
 import { Select } from '../../ui/form-controls';
-import { ABSENT, date, dateTime, share } from '../../ui/format';
+import { ABSENT, date, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
-import { Histogram } from '../../ui/histogram';
+import { Histogram, HistogramBin } from '../../ui/histogram';
+import { LineChart, LineChartSeries } from '../../ui/line-chart';
 import { MetricChip } from '../../ui/metric-chip';
+import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
 import {
   CONFIDENCE_COLUMNS,
   breakdownColumns,
   DECILE_COLUMNS,
   DRIFT_COLUMNS,
+  GRID_COLUMNS,
+  PAST_JOBS_COLUMNS,
   STRATEGY_COLUMNS,
   TIER_COLUMNS,
   allKeys,
@@ -51,15 +57,17 @@ import {
   rate,
 } from './analytics.columns';
 
-/** Performance · Strategies · Calibration · Tuning — spec v14 Decision 6, in
- *  its order. **Tabs, not sub-navigation**: four sections is within what a tab
- *  strip carries comfortably, and a second level of navigation inside one of
- *  six workspaces reintroduces exactly the depth the IA change removed. */
+/** Performance · Strategies · Calibration · Tuning · Plans — spec v14
+ *  Decision 6, in its order. **Tabs, not sub-navigation**: five sections is
+ *  within what a tab strip carries comfortably, and a second level of
+ *  navigation inside one of six workspaces reintroduces exactly the depth
+ *  the IA change removed. */
 const TABS: Tab[] = [
   { id: 'performance', label: 'Performance' },
   { id: 'strategies', label: 'Strategies' },
   { id: 'calibration', label: 'Calibration' },
   { id: 'tuning', label: 'Tuning' },
+  { id: 'plans', label: 'Plans' },
 ];
 
 const TAB_IDS = new Set<string>(ANALYTICS_TABS);
@@ -108,12 +116,14 @@ interface ProposalView extends ProposalRow {
     DataTable,
     MetricChip,
     Histogram,
+    LineChart,
     Chip,
     QualityChip,
     Sparkline,
     Select,
     Button,
     ConfirmDialog,
+    PaginationComponent,
   ],
   template: `
     <header class="head">
@@ -142,6 +152,7 @@ interface ProposalView extends ProposalRow {
           }
         }
 
+        <h2 class="section">Snapshot</h2>
         <div class="panels">
           <sb-panel heading="Record">
             <div class="chips">
@@ -171,6 +182,60 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
+             the server has been building and serving all along. -->
+        @if (store.snapshotError(); as message) {
+          <!-- Its own line, not the tab-wide error: the panels above came from
+               a different endpoint and are not implicated. -->
+          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
+        }
+
+        <div class="panels">
+          <sb-panel heading="Risk-adjusted">
+            <div class="chips">
+              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
+              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
+              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
+              <!-- Max drawdown is always a loss, and always reported positive
+                   by the server. Amber, not red: it is the cost of the track
+                   record, not a loss happening now. -->
+              <sb-metric-chip
+                label="Max drawdown"
+                [value]="store.maxDrawdownPct()"
+                unit="%"
+                [decimals]="1"
+                tone="caution"
+              />
+              <sb-metric-chip
+                label="Total P&L"
+                [value]="store.totalPnl()"
+                tone="pnl"
+                [unit]="currencyUnit()"
+              />
+            </div>
+          </sb-panel>
+
+          @if (store.streaks(); as streaks) {
+            <sb-panel heading="Streaks">
+              <dl>
+                <div>
+                  <dt>Current</dt>
+                  <dd class="num">{{ currentStreak(streaks) }}</dd>
+                </div>
+                <div>
+                  <dt>Best win run</dt>
+                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
+                </div>
+                <div>
+                  <dt>Worst loss run</dt>
+                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
+                </div>
+              </dl>
+            </sb-panel>
+          }
+        </div>
+
+        <h2 class="section">Distributions</h2>
         <!-- SR54. Everything below is scoped by the range control; the two
              panels above are deliberately all-time, so the heading says which
              is which rather than leaving the reader to guess. -->
@@ -229,7 +294,7 @@ interface ProposalView extends ProposalRow {
             }
           </sb-panel>
 
-          <sb-panel heading="R-multiple distribution">
+          <sb-panel heading="R-multiple distribution (selected range)">
             @if (store.rHistogram().length) {
               <sb-histogram [bins]="store.rHistogram()" />
             } @else {
@@ -237,6 +302,15 @@ interface ProposalView extends ProposalRow {
             }
           </sb-panel>
         </div>
+
+        @if (store.rMultipleBins().length) {
+          <sb-panel heading="R-multiple distribution (all-time)">
+            <!-- Bars, not a pie and not a line: this is a distribution, and
+                 the shape IS the finding -- a healthy edge is a cluster of
+                 small losses with a tail of larger wins. -->
+            <sb-histogram [bins]="store.rMultipleBins()" />
+          </sb-panel>
+        }
 
         <div class="panels">
           <sb-panel heading="By holding period">
@@ -255,23 +329,47 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
 
           <sb-panel heading="By month">
-            @if (store.calendarReturns().length) {
-              <dl>
-                @for (month of store.calendarReturns(); track month.month) {
-                  <div>
-                    <dt>{{ month.month }}</dt>
-                    <dd class="num">
-                      {{ month.return_pct.toFixed(2) }}% · {{ fmtCount(month.n) }}
-                    </dd>
-                  </div>
-                }
-              </dl>
+            @if (store.monthHistogram().length) {
+              <sb-histogram [bins]="store.monthHistogram()" />
             } @else {
               <p class="stale">No months with closed trades.</p>
             }
           </sb-panel>
         </div>
 
+        <h2 class="section">Over time</h2>
+        @if (store.equitySeries().length) {
+          <div class="panels">
+            <sb-panel heading="Account balance">
+              <sb-line-chart [series]="store.balanceWithBenchmark()" [valueFormat]="fmtLineValue" />
+              <p class="series-note">
+                {{ store.equitySeries().length }} points ·
+                {{ seriesRange(store.equitySeries()) }}
+              </p>
+            </sb-panel>
+
+            <sb-panel heading="Drawdown">
+              <sb-line-chart [series]="drawdownSeriesForChart()" [valueFormat]="fmtLineValue" />
+              <p class="series-note">
+                Peak-to-trough, as a share of the running high. Higher is worse.
+              </p>
+            </sb-panel>
+          </div>
+        }
+        <div class="panels">
+          <sb-panel heading="Rolling returns">
+            <sb-line-chart [series]="store.rollingReturnsChart()" [valueFormat]="fmtLineValue" />
+          </sb-panel>
+          <sb-panel heading="Cumulative return by strategy">
+            @if (store.cumulativeByStrategyChart().length) {
+              <sb-line-chart [series]="store.cumulativeByStrategyChart()" [valueFormat]="fmtLineValue" />
+            } @else {
+              <p class="stale">No strategies with closed trades yet.</p>
+            }
+          </sb-panel>
+        </div>
+
+        <h2 class="section">By segment</h2>
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
              that deliberately. The digest and lessons are analytics and live
              here; a single trade's excursions live beside the note that
@@ -307,114 +405,16 @@ interface ProposalView extends ProposalRow {
           }
         </sb-panel>
 
-        @if (store.cumulativeByStrategy().length) {
-          <sb-panel heading="Cumulative return by strategy">
-            <dl>
-              @for (series of store.cumulativeByStrategy(); track series.strategy) {
-                <div>
-                  <dt>{{ series.strategy }}</dt>
-                  <dd class="num">{{ fmtCumulative(series.points) }}</dd>
-                </div>
-              }
-            </dl>
-          </sb-panel>
-        }
-
-        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
-             the server has been building and serving all along. -->
-        @if (store.snapshotError(); as message) {
-          <!-- Its own line, not the tab-wide error: the panels above came from
-               a different endpoint and are not implicated. -->
-          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
-        }
-
-        <div class="panels">
-          <sb-panel heading="Risk-adjusted">
-            <div class="chips">
-              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
-              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
-              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
-              <!-- Max drawdown is always a loss, and always reported positive
-                   by the server. Amber, not red: it is the cost of the track
-                   record, not a loss happening now. -->
-              <sb-metric-chip
-                label="Max drawdown"
-                [value]="store.maxDrawdownPct()"
-                unit="%"
-                [decimals]="1"
-                tone="caution"
-              />
-              <sb-metric-chip
-                label="Total P&L"
-                [value]="store.totalPnl()"
-                tone="pnl"
-                [unit]="currencyUnit()"
-              />
-            </div>
-          </sb-panel>
-
-          @if (store.streaks(); as streaks) {
-            <sb-panel heading="Streaks">
-              <dl>
-                <div>
-                  <dt>Current</dt>
-                  <dd class="num">{{ currentStreak(streaks) }}</dd>
-                </div>
-                <div>
-                  <dt>Best win run</dt>
-                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
-                </div>
-                <div>
-                  <dt>Worst loss run</dt>
-                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
-          }
-        </div>
-
-        @if (store.equitySeries().length) {
-          <div class="panels">
-            <sb-panel heading="Account balance">
-              <sb-sparkline
-                [points]="equityPoints()"
-                label="Account balance over the whole record"
-              />
-              <p class="series-note">
-                {{ store.equitySeries().length }} points ·
-                {{ seriesRange(store.equitySeries()) }}
-              </p>
-            </sb-panel>
-
-            <sb-panel heading="Drawdown">
-              <sb-sparkline
-                [points]="drawdownPoints()"
-                label="Percentage below the running peak balance"
-              />
-              <p class="series-note">
-                Peak-to-trough, as a share of the running high. Higher is worse.
-              </p>
-            </sb-panel>
-          </div>
-        }
-
-        @if (store.rMultipleBins().length) {
-          <sb-panel heading="R-multiple distribution">
-            <!-- Bars, not a pie and not a line: this is a distribution, and
-                 the shape IS the finding -- a healthy edge is a cluster of
-                 small losses with a tail of larger wins. -->
-            <sb-histogram [bins]="store.rMultipleBins()" />
-          </sb-panel>
-        }
-
         <sb-panel heading="By confidence level" [flush]="true">
           <sb-data-table
-            [rows]="store.byConfidence()"
+            [rows]="confidencePage.visible()"
             [columns]="confidenceColumns()"
             [visible]="confidenceKeys"
             [rowKey]="confidenceKey"
             [loading]="store.loading()"
             [emptyState]="confidenceEmpty"
+            [pagination]="confidencePage.pageSpec()"
+            (pageChange)="confidencePage.setPage($event)"
           />
         </sb-panel>
 
@@ -432,12 +432,14 @@ interface ProposalView extends ProposalRow {
             />
           </div>
           <sb-data-table
-            [rows]="store.breakdownRows()"
+            [rows]="breakdownPage.visible()"
             [columns]="breakdownColumns()"
             [visible]="breakdownKeys"
             [rowKey]="breakdownKey"
             [loading]="store.loading()"
             [emptyState]="breakdownEmpty()"
+            [pagination]="breakdownPage.pageSpec()"
+            (pageChange)="breakdownPage.setPage($event)"
           />
         </sb-panel>
       }
@@ -470,12 +472,14 @@ interface ProposalView extends ProposalRow {
         <sb-panel heading="Strategy registry" [flush]="true">
           <p class="panel-subtitle">out-of-sample validation status per strategy</p>
           <sb-data-table
-            [rows]="store.strategyRows()"
+            [rows]="strategyPage.visible()"
             [columns]="strategyColumns()"
             [visible]="strategyKeys"
             [rowKey]="strategyKey"
             [loading]="store.loading()"
             [emptyState]="strategyEmpty"
+            [pagination]="strategyPage.pageSpec()"
+            (pageChange)="strategyPage.setPage($event)"
           />
 
           <!-- SR61. The twelve column tips from strategies.html:30-41. A
@@ -538,19 +542,25 @@ interface ProposalView extends ProposalRow {
         </p>
 
         <sb-panel heading="Quality score vs outcome" [flush]="true">
-          <!-- SR61. The Jinja chart drew an 80% line across the deciles; this
-               table has no chart to draw it on, so it says the target instead.
-               80 is calibration.py:_meets_band's A-tier bar, verified. -->
+          <!-- SR61. The Jinja chart drew an 80% line across the deciles; the
+               SPA rewrite dropped it and kept only this sentence. Restored
+               below -- 80 is calibration.py:_meets_band's A-tier bar,
+               verified -- with the table underneath for the exact figures. -->
           <p class="panel-subtitle">
             Each decile's realised win rate, against an 80% target.
           </p>
+          @if (store.decileHistogram().length) {
+            <sb-histogram [bins]="store.decileHistogram()" [max]="100" [referenceLine]="80" />
+          }
           <sb-data-table
-            [rows]="store.deciles()"
+            [rows]="decilePage.visible()"
             [columns]="decileColumns"
             [visible]="decileKeys"
             [rowKey]="decileKey"
             [loading]="store.loading()"
             [emptyState]="decileEmpty"
+            [pagination]="decilePage.pageSpec()"
+            (pageChange)="decilePage.setPage($event)"
           />
         </sb-panel>
 
@@ -576,12 +586,14 @@ interface ProposalView extends ProposalRow {
             (VALIDATED vs WEAK) may be dragging its tier down.
           </p>
           <sb-data-table
-            [rows]="store.tiers()"
+            [rows]="tierPage.visible()"
             [columns]="tierColumns()"
             [visible]="tierKeys"
             [rowKey]="tierKey"
             [loading]="store.loading()"
             [emptyState]="tierEmpty"
+            [pagination]="tierPage.pageSpec()"
+            (pageChange)="tierPage.setPage($event)"
           />
         </sb-panel>
 
@@ -602,12 +614,14 @@ interface ProposalView extends ProposalRow {
             than 10 percentage points below its out-of-sample win rate.
           </p>
           <sb-data-table
-            [rows]="store.drift()"
+            [rows]="driftPage.visible()"
             [columns]="driftColumns()"
             [visible]="driftKeys"
             [rowKey]="driftKey"
             [loading]="store.loading()"
             [emptyState]="driftEmpty"
+            [pagination]="driftPage.pageSpec()"
+            (pageChange)="driftPage.setPage($event)"
           />
         </sb-panel>
       }
@@ -681,48 +695,14 @@ interface ProposalView extends ProposalRow {
               <p class="alert" role="alert">{{ message }}</p>
             }
 
-            <div class="scroller">
-              <table class="grid">
-                <thead>
-                  <tr>
-                    <th>Parameters</th>
-                    <th class="num">N</th>
-                    <th class="num">Win rate</th>
-                    <th class="num">ExpR</th>
-                    <th class="num">Excluded</th>
-                    <th>Bar</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of store.grid(); track row.row_index) {
-                    <tr [class.passes]="row.passes">
-                      <td class="params">{{ row.paramLabel }}</td>
-                      <td class="num">{{ fmtCount(row.n_eval) }}</td>
-                      <td class="num">{{ fmtRate(row.win_rate) }}</td>
-                      <td class="num">{{ fmtExpectancy(row.expectancy_r) }}</td>
-                      <td class="num">{{ fmtExcluded(row.excluded_share) }}</td>
-                      <td>
-                        @if (row.passes) {
-                          <sb-chip label="Clears" tone="q5" />
-                        }
-                      </td>
-                      <td>
-                        <button
-                          sb-button
-                          variant="secondary"
-                          type="button"
-                          [loading]="store.proposing() === row.row_index"
-                          (click)="askPropose(row)"
-                        >
-                          Propose
-                        </button>
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+            <sb-data-table
+              [rows]="gridPage.visible()"
+              [columns]="gridColumns()"
+              [visible]="gridKeys"
+              [rowKey]="gridRowKey"
+              [pagination]="gridPage.pageSpec()"
+              (pageChange)="gridPage.setPage($event)"
+            />
 
             <p class="note">
               A row clears the bar at 30 or more evaluated trades, a win rate of
@@ -735,17 +715,15 @@ interface ProposalView extends ProposalRow {
 
         @if (store.pastJobs(); as past) {
           @if (past.length) {
-            <sb-panel heading="Earlier jobs">
-              <ul class="jobs">
-                @for (job of past; track job.id) {
-                  <li>
-                    <code>{{ job.id }}</code>
-                    <span class="muted">
-                      {{ job.state }} · started {{ fmtDateTime(job.started_at) }}
-                    </span>
-                  </li>
-                }
-              </ul>
+            <sb-panel heading="Earlier jobs" [flush]="true">
+              <sb-data-table
+                [rows]="pastJobsPage.visible()"
+                [columns]="pastJobsColumns"
+                [visible]="pastJobsKeys"
+                [rowKey]="pastJobRowKey"
+                [pagination]="pastJobsPage.pageSpec()"
+                (pageChange)="pastJobsPage.setPage($event)"
+              />
             </sb-panel>
           }
         }
@@ -757,43 +735,89 @@ interface ProposalView extends ProposalRow {
             hand, running the suite, and only then spending a validation shot.
           </p>
 
-          @if (proposalViews(); as proposals) {
-            @if (proposals.length === 0) {
-              <p class="muted">No proposals yet.</p>
+          @if (proposalViews().length === 0) {
+            <p class="muted">No proposals yet.</p>
+          }
+          @for (proposal of proposalsPage.visible(); track proposal.filename) {
+            <div class="proposal">
+              <header class="proposal-head">
+                <strong>{{ proposal.strategy }}</strong>
+                <span class="muted">
+                  {{ fmtDateTime(proposal.created_at) }} · job {{ proposal.job_id }}
+                </span>
+              </header>
+              <table class="diff">
+                <thead>
+                  <tr><th>Parameter</th><th class="num">Current</th><th class="num">Proposed</th></tr>
+                </thead>
+                <tbody>
+                  @for (param of proposal.params; track param.key) {
+                    <tr>
+                      <td>{{ param.key }}</td>
+                      <td class="num muted">{{ param.current }}</td>
+                      <td class="num">{{ param.proposed }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <p class="muted">{{ proposal.trainSummary }}</p>
+              <button
+                sb-button
+                type="button"
+                variant="danger"
+                (click)="pendingDelete.set(proposal)"
+              >
+                Delete
+              </button>
+            </div>
+          }
+          <sb-pagination [pagination]="proposalsPage.pageSpec()" (pageChange)="proposalsPage.setPage($event)" />
+        </sb-panel>
+      }
+
+      <!-- -- plans ---------------------------------------------------- -->
+      @case ('plans') {
+        <p class="section-help">
+          Every plan ever posted, and how far it got: PENDING (posted,
+          waiting for its entry trigger) &rarr; ACTIVE (filled) &rarr;
+          PARTIAL (TP1 hit) &rarr; CLOSED, or CANCELLED at any point before
+          filling. Fill rate and time-to-fill are measured over RESOLVED
+          plans only (CLOSED or CANCELLED) &mdash; a plan still waiting
+          hasn't finished its journey yet, and counting it would bias the
+          rate toward "undecided".
+        </p>
+
+        <sb-panel heading="Lifecycle funnel">
+          @if (store.funnelChart().length) {
+            <sb-histogram [bins]="store.funnelChart()" />
+            <p class="series-note">{{ store.inFlight() }} currently in flight (not counted above).</p>
+          } @else {
+            <p class="stale">No plans posted yet.</p>
+          }
+        </sb-panel>
+
+        <div class="panels">
+          <sb-panel heading="Fill rate">
+            <div class="chips">
+              <sb-metric-chip label="Filled" [value]="store.fillRatePct()" unit="%" [decimals]="1" />
+              <sb-metric-chip label="Median days to fill" [value]="store.medianDaysToFill()" [decimals]="1" />
+            </div>
+          </sb-panel>
+
+          <sb-panel heading="Badge distribution">
+            @if (store.badgeChart().length) {
+              <sb-histogram [bins]="store.badgeChart()" [isNegative]="isWeakBadge" />
+            } @else {
+              <p class="stale">No plans posted yet.</p>
             }
-            @for (proposal of proposals; track proposal.filename) {
-              <div class="proposal">
-                <header class="proposal-head">
-                  <strong>{{ proposal.strategy }}</strong>
-                  <span class="muted">
-                    {{ fmtDateTime(proposal.created_at) }} · job {{ proposal.job_id }}
-                  </span>
-                </header>
-                <table class="diff">
-                  <thead>
-                    <tr><th>Parameter</th><th class="num">Current</th><th class="num">Proposed</th></tr>
-                  </thead>
-                  <tbody>
-                    @for (param of proposal.params; track param.key) {
-                      <tr>
-                        <td>{{ param.key }}</td>
-                        <td class="num muted">{{ param.current }}</td>
-                        <td class="num">{{ param.proposed }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-                <p class="muted">{{ proposal.trainSummary }}</p>
-                <button
-                  sb-button
-                  type="button"
-                  variant="danger"
-                  (click)="pendingDelete.set(proposal)"
-                >
-                  Delete
-                </button>
-              </div>
-            }
+          </sb-panel>
+        </div>
+
+        <sb-panel heading="Tier distribution">
+          @if (store.tierChart().length) {
+            <sb-histogram [bins]="store.tierChart()" />
+          } @else {
+            <p class="stale">No plans posted yet.</p>
           }
         </sb-panel>
       }
@@ -851,6 +875,23 @@ interface ProposalView extends ProposalRow {
       }
     </ng-template>
 
+    <ng-template #gridPassesCell let-row>
+      @if (row.passes) {
+        <sb-chip label="Clears" tone="q5" />
+      }
+    </ng-template>
+    <ng-template #gridProposeCell let-row>
+      <button
+        sb-button
+        variant="secondary"
+        type="button"
+        [loading]="store.proposing() === row.row_index"
+        (click)="askPropose(row)"
+      >
+        Propose
+      </button>
+    </ng-template>
+
     <sb-confirm-dialog
       [open]="pendingDelete() !== null"
       title="Delete this proposal?"
@@ -885,6 +926,16 @@ interface ProposalView extends ProposalRow {
     .stale { color: var(--warn); font-size: var(--text-table); }
 
     sb-panel { display: block; margin-top: var(--space-14); }
+
+    .section {
+      margin: var(--space-20) 0 var(--space-10);
+      color: var(--text-faint);
+      font-size: var(--text-micro);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .section:first-of-type { margin-top: 0; }
 
     .alert {
       margin-top: var(--space-14);
@@ -942,6 +993,18 @@ interface ProposalView extends ProposalRow {
       font-variant-numeric: tabular-nums;
     }
 
+    /* .panel-subtitle and .section-help carry no horizontal padding of
+       their own (styles.css). Inside a [flush]="true" sb-panel that leaves
+       them flush against the panel's left border while the panel's own
+       <header> keeps its 14px padding -- visibly misaligned against the
+       heading directly above. Every flush panel on this workspace (Strategy
+       registry, Tier calibration, Badge drift, and Task 8's restored
+       Calibration chart) gets this fix from one rule. */
+    sb-panel .panel-subtitle,
+    sb-panel .section-help {
+      padding: 0 var(--space-14);
+    }
+
     /* -- SR55/SR61: explanatory copy ------------------------------------ */
 
     .glossary, .sub {
@@ -974,21 +1037,6 @@ interface ProposalView extends ProposalRow {
 
     /* -- SR51: the grid results ----------------------------------------- */
 
-    /* Reuses .heat's cell rules where it can; only what differs is set here.
-       A row that cleared the bar is marked on the left as well as by its chip,
-       so the signal survives greyscale and does not depend on spotting one
-       chip among twelve. The parameters cell is the only one allowed to wrap. */
-    .grid { width: 100%; border-collapse: collapse; }
-    .grid th, .grid td {
-      padding: var(--space-6) var(--space-10);
-      text-align: left;
-      font-size: var(--text-table);
-      white-space: nowrap;
-      border-bottom: 1px solid var(--border);
-    }
-    .grid th { color: var(--text-secondary); font-size: var(--text-micro); }
-    .grid tr.passes td:first-child { box-shadow: inset 2px 0 0 var(--pos); }
-    .grid td.params { white-space: normal; min-width: 18rem; }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
@@ -1053,10 +1101,6 @@ interface ProposalView extends ProposalRow {
       white-space: pre-wrap;
     }
     .log + .note { padding: var(--space-10) var(--space-14); }
-
-    .jobs { display: grid; gap: var(--space-6); list-style: none; }
-    .jobs li { display: flex; align-items: baseline; gap: var(--space-8); font-size: var(--text-table); }
-    .jobs code { color: var(--text); font-family: var(--font-mono); }
 
     .proposal {
       margin-top: var(--space-10);
@@ -1211,13 +1255,6 @@ export class Analytics {
                         (event.target as HTMLInputElement).value || null);
   }
 
-  /** The last point of a per-strategy walk — where that strategy ended up.
-   *  The full series is in the payload for whoever plots it; this is the
-   *  one number a list row can carry honestly. */
-  protected fmtCumulative(points: readonly { cum_pct: number }[]): string {
-    return points.length ? `${points[points.length - 1].cum_pct.toFixed(2)}%` : ABSENT;
-  }
-
   /* -- cell templates --------------------------------------------------- */
 
   private readonly rollingCell = viewChild.required<TemplateRef<unknown>>('rollingCell');
@@ -1226,6 +1263,8 @@ export class Analytics {
   private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
   private readonly bandCell = viewChild.required<TemplateRef<unknown>>('bandCell');
   private readonly decayCell = viewChild.required<TemplateRef<unknown>>('decayCell');
+  private readonly gridPassesCell = viewChild.required<TemplateRef<unknown>>('gridPassesCell');
+  private readonly gridProposeCell = viewChild.required<TemplateRef<unknown>>('gridProposeCell');
 
   /** The declared columns with rich cells attached by key — the same split
    *  Trades uses, so `analytics.columns.ts` stays free of templates. */
@@ -1248,6 +1287,13 @@ export class Analytics {
     attach(DRIFT_COLUMNS, { drift_alert: this.decayCell() }),
   );
 
+  protected readonly gridColumns = computed(() =>
+    attach(GRID_COLUMNS, {
+      passes: this.gridPassesCell(),
+      propose: this.gridProposeCell(),
+    }),
+  );
+
   protected readonly decileColumns = DECILE_COLUMNS;
 
   protected readonly strategyKeys = allKeys(STRATEGY_COLUMNS);
@@ -1255,12 +1301,33 @@ export class Analytics {
   protected readonly decileKeys = allKeys(DECILE_COLUMNS);
   protected readonly tierKeys = allKeys(TIER_COLUMNS);
   protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
+  protected readonly gridKeys = allKeys(GRID_COLUMNS);
+  protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
 
   protected readonly strategyKey = (row: StrategyRow) => row.strategy;
+  protected readonly strategyPage = createClientPage(() => this.store.strategyRows());
   protected readonly confidenceKey = (row: { level: number }) => String(row.level);
+  protected readonly confidencePage = createClientPage(() => this.store.byConfidence());
   protected readonly decileKey = (row: { decile: string }) => row.decile;
+  protected readonly decilePage = createClientPage(() => this.store.deciles());
   protected readonly tierKey = (row: TierRow) => row.tier;
+  protected readonly tierPage = createClientPage(() => this.store.tiers());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
+  protected readonly driftPage = createClientPage(() => this.store.drift());
+  protected readonly gridRowKey = (row: GridRow) => String(row.row_index);
+  protected readonly gridPage = createClientPage(() => this.store.grid());
+  protected readonly pastJobRowKey = (row: JobSummary) => row.id;
+  protected readonly pastJobsPage = createClientPage(() => this.store.pastJobs());
+  protected readonly pastJobsColumns = PAST_JOBS_COLUMNS; // static, no cell slots needed
+
+  /** WEAK reads as the "loss" side of this bar list -- greyscale would be
+   *  equally defensible (a badge is a quality judgement, not P&L), but
+   *  VALIDATED-vs-WEAK is structurally the same "good/bad split" the
+   *  green/red pair exists for elsewhere on this workspace's strategy
+   *  badges (see #badgeCell's own note on why THAT one stays greyscale --
+   *  the difference is this chart has no chip carrying the badge word
+   *  beside it, so colour is the only signal available here). */
+  protected readonly isWeakBadge = (bin: HistogramBin): boolean => bin.label === 'WEAK';
 
   /* Empty states are sentences about *this* table's situation, never a
    * generic "No data" — see `EmptyStateComponent`. */
@@ -1285,6 +1352,7 @@ export class Analytics {
   );
   protected readonly breakdownKeys = allKeys(breakdownColumns(''));
   protected readonly breakdownKey = (row: BreakdownRow) => row.key;
+  protected readonly breakdownPage = createClientPage(() => this.store.breakdownRows());
 
   protected readonly breakdownEmpty = computed(() => ({
     title: `Nothing grouped by ${this.store.breakdownLabel().toLowerCase()} yet`,
@@ -1293,16 +1361,14 @@ export class Analytics {
 
   protected onBreakdown(value: string): void {
     this.store.setBreakdown(value as BreakdownDimension);
+    this.breakdownPage.setPage(1);
   }
 
-  /** Sparklines take bare numbers; the dates are the series-note's job. */
-  protected readonly equityPoints = computed(() =>
-    this.store.equitySeries().map((point) => point.value),
-  );
-  protected readonly drawdownPoints = computed(() =>
-    this.store.drawdownSeries().map((point) => point.value),
-  );
+  protected readonly fmtLineValue = (value: number): string => `${value.toFixed(2)}%`;
 
+  protected readonly drawdownSeriesForChart = computed<LineChartSeries[]>(() => [
+    { name: 'Drawdown', points: this.store.drawdownSeries() },
+  ]);
 
   /** "3 wins" rather than "3". The number alone does not say which way the run
    *  is going, and a current streak is the one figure here where that is the
@@ -1410,11 +1476,6 @@ export class Analytics {
     return strategy ? `Grid results — ${strategy}` : 'Grid results';
   });
 
-  /** The excluded share arrives as a fraction and is a share, not a change,
-   *  so it takes `share` rather than the signing `pct`. */
-  protected readonly fmtExcluded = (value: number | null) =>
-    value === null ? ABSENT : share(value * 100);
-
   protected askPropose(row: GridRow): void {
     this.pendingPropose.set(row);
   }
@@ -1467,6 +1528,11 @@ export class Analytics {
       };
     }),
   );
+
+  /** Each proposal is a card with its own nested diff table, not flat row
+   *  data -- `sb-data-table` doesn't fit, so this gets its own small pager
+   *  rather than the shared component. */
+  protected readonly proposalsPage = createClientPage(() => this.proposalViews(), 8);
 
   protected readonly deleteConsequence = computed(() => {
     const proposal = this.pendingDelete();

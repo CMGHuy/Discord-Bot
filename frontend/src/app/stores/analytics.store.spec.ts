@@ -126,6 +126,12 @@ const STRATEGIES = {
   },
 };
 
+const CALIBRATION = {
+  deciles: [{ decile: '80-89', n: 12, win_rate: 83.3, expectancy_r: 0.6 }],
+  tiers: [{ tier: 'A', n: 4, win_rate: null, expectancy_r: null, expected_band: '>=80', ok: null }],
+  drift: [],
+};
+
 const RUNNING_JOB = {
   id: 'abc123',
   kind: 'tune',
@@ -209,6 +215,9 @@ describe('AnalyticsStore', () => {
   const respondStrategies = (body: Record<string, unknown> = {}) =>
     backend.expectOne('/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
 
+  const respondCalibration = (body: Record<string, unknown> = {}) =>
+    backend.expectOne('/api/v1/analytics/calibration').flush({ ...CALIBRATION, ...body });
+
   const respondJobs = (jobs: unknown[]) =>
     backend.expectOne('/api/v1/jobs').flush({ jobs });
 
@@ -285,6 +294,61 @@ describe('AnalyticsStore', () => {
 
     expect(store.deciles()).toHaveLength(1);
     expect(store.tiers()[0].ok).toBeNull();
+  });
+
+  it('exposes deciles as a fixed-0-100 histogram', () => {
+    tick();
+    respondPerformance();
+    store.setTab('calibration');
+    tick();
+    respondCalibration({ deciles: [
+      { decile: 'D1', n: 12, win_rate: 42, expectancy_r: 0.1 },
+      { decile: 'D10', n: 15, win_rate: 88, expectancy_r: 0.4 },
+    ] });
+
+    expect(store.decileHistogram()).toEqual([
+      { label: 'D1', count: 42 }, { label: 'D10', count: 88 },
+    ]);
+  });
+
+  it('omits a decile with too few trades to have a win rate yet, rather than charting it as 0', () => {
+    tick();
+    respondPerformance();
+    store.setTab('calibration');
+    tick();
+    respondCalibration({ deciles: [
+      { decile: 'D1', n: 12, win_rate: 42, expectancy_r: 0.1 },
+      { decile: 'D5', n: 0, win_rate: null, expectancy_r: null },
+    ] });
+
+    expect(store.decileHistogram()).toEqual([{ label: 'D1', count: 42 }]);
+  });
+
+  it('fetches /analytics/plans when the plans tab opens', () => {
+    tick();
+    respondPerformance();
+
+    store.setTab('plans');
+    tick();
+    backend.expectOne('/api/v1/analytics/plans').flush({
+      funnel: { posted: 10, filled: 8, hit_tp1: 5, closed: 4 },
+      in_flight: 3,
+      fill_rate: { resolved_n: 7, fill_rate_pct: 71.4, median_days_to_fill: 2.5 },
+      badges: { VALIDATED: 7, WEAK: 3 },
+      tiers: { A: 4, B: 3, C: 3 },
+    });
+    expect(store.funnelChart()).toEqual([
+      { label: 'Posted', count: 10 }, { label: 'Filled', count: 8 },
+      { label: 'Hit TP1', count: 5 }, { label: 'Closed', count: 4 },
+    ]);
+    expect(store.fillRatePct()).toBe(71.4);
+    expect(store.medianDaysToFill()).toBe(2.5);
+    expect(store.badgeChart()).toEqual([
+      { label: 'VALIDATED', count: 7 }, { label: 'WEAK', count: 3 },
+    ]);
+    expect(store.tierChart()).toEqual([
+      { label: 'A', count: 4 }, { label: 'B', count: 3 }, { label: 'C', count: 3 },
+    ]);
   });
 
   /* -- the six relocated metrics -------------------------------------- */
@@ -721,6 +785,54 @@ describe('AnalyticsStore', () => {
         .toEqual(['2026-07-01', '2026-08-01']);
       expect(store.cumulativeByStrategy().map((s) => s.strategy))
         .toEqual(['MACD', 'RSI']);
+    });
+
+    it('exposes a month histogram computed from calendarReturns', () => {
+      tick();
+      respondPerformance({ calendar: [
+        { month: '2026-06', return_pct: 4.2, n: 3 },
+        { month: '2026-07', return_pct: -1.8, n: 2 },
+      ] });
+
+      expect(store.monthHistogram()).toEqual([
+        { label: '2026-06', count: 4.2 },
+        { label: '2026-07', count: -1.8 },
+      ]);
+    });
+
+    it('overlays the SPY benchmark on the account-balance series when present', () => {
+      tick();
+      respondPerformance({ benchmark: { spy_cum: { '2026-01-01': 0, '2026-01-11': 3.2 } } });
+      const series = store.balanceWithBenchmark();
+      expect(series.map((s) => s.name)).toEqual(['Account balance', 'SPY']);
+    });
+
+    it('omits the SPY series entirely when the benchmark fetch was unavailable', () => {
+      tick();
+      respondPerformance({ benchmark: { spy_cum: {} } });
+      expect(store.balanceWithBenchmark().map((s) => s.name)).toEqual(['Account balance']);
+    });
+
+    it('exposes rolling returns as a single-series line chart', () => {
+      tick();
+      respondPerformance({ rolling_returns: [
+        { date: '2026-01-01', return_pct: 1.1 }, { date: '2026-01-08', return_pct: -0.4 },
+      ] });
+      expect(store.rollingReturnsChart()).toEqual([{
+        name: 'Rolling return',
+        points: [{ date: '2026-01-01', value: 1.1 }, { date: '2026-01-08', value: -0.4 }],
+      }]);
+    });
+
+    it('exposes cumulative-by-strategy as one series per strategy', () => {
+      tick();
+      respondPerformance({ cumulative_by_strategy: {
+        RSI: [{ date: '2026-01-01', cum_pct: 2.1 }],
+        VWAP: [{ date: '2026-01-01', cum_pct: -0.5 }],
+      } });
+      const chart = store.cumulativeByStrategyChart();
+      expect(chart.map((s) => s.name)).toEqual(['RSI', 'VWAP']); // sorted, matches cumulativeByStrategy
+      expect(chart[0].points).toEqual([{ date: '2026-01-01', value: 2.1 }]);
     });
 
     it('echoes the applied range back with its sample size', () => {

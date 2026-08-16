@@ -282,3 +282,17 @@ def analytics_registry():
     from swingbot.admin.queries import _registry_rows
 
     return jsonify({"registry": _registry_rows()})
+
+
+@api_v1.route("/analytics/plans", methods=["GET"])
+@require_auth
+def analytics_plans():
+    """Lifecycle funnel, fill rate/time-to-fill, and badge/tier distribution
+    over every plan ever posted -- the Plans tab. 'UI renders, analytics
+    computes': the actual walk is `_plan_lifecycle`, this route only calls
+    and forwards it, same as every other route in this module.
+    """
+    from swingbot.admin.queries import _plan_lifecycle
+    from swingbot.core.planning.plan_store import PlanStore
+
+    return jsonify(_plan_lifecycle(PlanStore().all()))

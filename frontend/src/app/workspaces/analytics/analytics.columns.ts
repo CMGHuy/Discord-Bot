@@ -1,10 +1,12 @@
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { ABSENT, date } from '../../ui/format';
+import { ABSENT, date, dateTime, share } from '../../ui/format';
 import {
   BreakdownRow,
   ConfidenceRow,
   DecileRow,
   DriftRow,
+  GridRow,
+  JobSummary,
   StrategyRow,
   TierRow,
 } from '../../stores/analytics.store';
@@ -144,6 +146,34 @@ export const DRIFT_COLUMNS: ColumnDef<DriftRow>[] = [
   { key: 'live_wr', header: 'Live WR', numeric: true, value: (r) => rate(r.live_wr) },
   { key: 'delta_wr', header: 'Δ', numeric: true, value: (r) => delta(r.delta_wr) },
   { key: 'drift_alert', header: 'Decay' },
+];
+
+/* -- tuning grid --------------------------------------------------------- */
+
+/** `passes` and `propose` render through templates; their `value` is omitted
+ *  so the table has nothing to fall back to and a missing cell is obvious. */
+export const GRID_COLUMNS: ColumnDef<GridRow>[] = [
+  { key: 'paramLabel', header: 'Parameters', value: (r) => r.paramLabel },
+  { key: 'n_eval', header: 'N', numeric: true, value: (r) => count(r.n_eval) },
+  { key: 'win_rate', header: 'Win rate', numeric: true, value: (r) => rate(r.win_rate) },
+  { key: 'expectancy_r', header: 'ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },
+  // The excluded share arrives as a fraction and is a share, not a change --
+  // same reasoning as the deleted `fmtExcluded` this column replaces.
+  { key: 'excluded_share', header: 'Excluded', numeric: true,
+    value: (r) => (r.excluded_share === null ? ABSENT : share(r.excluded_share * 100)) },
+  { key: 'passes', header: 'Bar' },     // cell slot, filled in analytics.ts
+  { key: 'propose', header: '' },       // cell slot, filled in analytics.ts
+];
+
+/* -- past jobs ------------------------------------------------------------
+ *
+ * `started_at` takes `dateTime`, not `date`: a tuning job's history reads by
+ * time of day as much as by date, and the hand-rolled list this replaces
+ * already showed it that way (`fmtDateTime`). */
+export const PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[] = [
+  { key: 'id', header: 'Job', value: (r) => r.id },
+  { key: 'state', header: 'State', value: (r) => r.state },
+  { key: 'started_at', header: 'Started', value: (r) => dateTime(r.started_at) },
 ];
 
 /** Every column, every table: none of these paginate, none of them are wide

@@ -6,6 +6,7 @@ import {
   AnalyticsCalibration,
   AnalyticsJournal,
   AnalyticsPerformance,
+  AnalyticsPlans,
   AnalyticsRegistry,
   AnalyticsSnapshot,
   AnalyticsStrategies,
@@ -205,6 +206,10 @@ export class ApiClient {
 
   analyticsRegistry(): Observable<AnalyticsRegistry> {
     return this.http.get<AnalyticsRegistry>(`${this.base}/analytics/registry`);
+  }
+
+  analyticsPlans(): Observable<AnalyticsPlans> {
+    return this.http.get<AnalyticsPlans>(`${this.base}/analytics/plans`);
   }
 
   /* -- jobs and tuning proposals ---------------------------------------- */

@@ -30,6 +30,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime
+from statistics import median
 
 from swingbot import config
 from swingbot.core.analytics.metrics import win_rate
@@ -86,6 +88,76 @@ def _plan_rows(status: str | None = None, tier: str | None = None,
         needle = ticker.strip().upper()
         rows = [r for r in rows if needle in r["ticker"].upper()]
     return {"plans": rows, "counts": counts}
+
+
+def _reached(plan, status: str) -> bool:
+    """Whether `plan` ever transitioned INTO `status`, at any point in its
+    history -- not whether it is currently there. The state machine
+    (_LEGAL_TRANSITIONS) is monotonic with no backward transition, so a
+    plan currently CLOSED may or may not have passed through PARTIAL on the
+    way, and only the history says which."""
+    return any(h.get("status") == status for h in (plan.status_history or []))
+
+
+def _days_between(start: str, end: str) -> float:
+    """Whole days, swing-trade granularity -- created_at is documented as
+    an 'ISO date of the bar/scan', not a precise timestamp, so resolving
+    below day granularity would imply precision neither field actually
+    carries."""
+    return (datetime.fromisoformat(end[:10]) - datetime.fromisoformat(start[:10])).days
+
+
+def _plan_lifecycle(plans: list) -> dict:
+    """Funnel, fill-rate/time-to-fill, and badge/tier distribution over
+    every plan ever posted -- the Plans tab's three panels. Walks
+    `PlanStore().all()` the same way `_plan_rows` already does, rather than
+    a second read path.
+
+    Funnel counts are BY FURTHEST STAGE EVER REACHED (`_reached`), not by
+    current status: a plan currently CLOSED may have stopped out directly
+    from ACTIVE without ever hitting PARTIAL, so "hit_tp1" cannot be read
+    off current status alone.
+
+    fill_rate is scoped to RESOLVED plans (CLOSED or CANCELLED) only --
+    a still-PENDING plan hasn't finished its journey yet, and folding it in
+    would bias the rate toward "undecided" rather than measure a real
+    outcome.
+    """
+    posted = len(plans)
+    filled = sum(1 for p in plans if _reached(p, PlanStatus.ACTIVE))
+    hit_tp1 = sum(1 for p in plans if _reached(p, PlanStatus.PARTIAL))
+    closed = sum(1 for p in plans if p.status == PlanStatus.CLOSED)
+    in_flight = sum(
+        1 for p in plans
+        if p.status in (PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL)
+    )
+
+    resolved = [p for p in plans if p.status in (PlanStatus.CLOSED, PlanStatus.CANCELLED)]
+    filled_resolved = [p for p in resolved if _reached(p, PlanStatus.ACTIVE)]
+    fill_days = []
+    for p in filled_resolved:
+        active_entry = next(h for h in p.status_history if h["status"] == PlanStatus.ACTIVE)
+        fill_days.append(_days_between(p.created_at, active_entry["at"]))
+
+    badges: dict[str, int] = {}
+    tiers: dict[str, int] = {}
+    for p in plans:
+        badges[p.badge] = badges.get(p.badge, 0) + 1
+        tiers[p.tier] = tiers.get(p.tier, 0) + 1
+
+    return {
+        "funnel": {"posted": posted, "filled": filled, "hit_tp1": hit_tp1, "closed": closed},
+        "in_flight": in_flight,
+        "fill_rate": {
+            "resolved_n": len(resolved),
+            "fill_rate_pct": (
+                round(len(filled_resolved) / len(resolved) * 100, 1) if resolved else None
+            ),
+            "median_days_to_fill": median(fill_days) if fill_days else None,
+        },
+        "badges": badges,
+        "tiers": tiers,
+    }
 
 
 def _gate_description(strategy: str) -> str:

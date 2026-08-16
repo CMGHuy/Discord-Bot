@@ -16,10 +16,12 @@ import {
   AnalyticsDerived,
   AnalyticsJournal,
   AnalyticsPerformance,
+  AnalyticsPlans,
   AnalyticsSnapshot,
   AnalyticsStrategies,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
+import { LineChartSeries } from '../ui/line-chart';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -248,13 +250,14 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
 /** The four tabs of spec v14 Decision 6. Tabs, not sub-navigation: a second
  *  level of nav inside one of six workspaces reintroduces exactly the depth
  *  the IA change removed. */
-export type AnalyticsTab = 'performance' | 'strategies' | 'calibration' | 'tuning';
+export type AnalyticsTab = 'performance' | 'strategies' | 'calibration' | 'tuning' | 'plans';
 
 export const ANALYTICS_TABS: readonly AnalyticsTab[] = [
   'performance',
   'strategies',
   'calibration',
   'tuning',
+  'plans',
 ] as const;
 
 /* -- the snapshot (SR50) --------------------------------------------------
@@ -476,6 +479,7 @@ interface AnalyticsSlice {
   proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
+  plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
   job: JobStatus | null;
@@ -535,6 +539,7 @@ export const AnalyticsStore = signalStore(
     proposeResult: null,
     strategies: null,
     calibration: null,
+    plans: null,
     jobs: [],
     job: null,
     proposals: [],
@@ -544,7 +549,7 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, jobs, job, snapshot, breakdown,
+  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown,
                  journal }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
@@ -696,8 +701,23 @@ export const AnalyticsStore = signalStore(
         count: bucket.count,
       }))),
     rollingReturns: computed(() => performance()?.rolling_returns ?? []),
+    rollingReturnsChart: computed<LineChartSeries[]>(() => [{
+      name: 'Rolling return',
+      points: (performance()?.rolling_returns ?? [])
+        .map((p) => ({ date: p.date, value: p.return_pct })),
+    }]),
     holdingSplit: computed(() => performance()?.holding_period_split ?? []),
     calendarReturns: computed(() => performance()?.calendar ?? []),
+
+    /** `calendarReturns` reshaped for `Histogram` -- `count` here is a
+     *  monthly return percentage, not literally a count; the field is
+     *  generically a number and Histogram's `negative` predicate already
+     *  colours a signed value correctly regardless of what it represents. */
+    monthHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.calendar ?? []).map((month) => ({
+        label: month.month,
+        count: month.return_pct,
+      }))),
 
     /** `{strategy: points}` flattened into sorted series, so the chart never
      *  iterates object keys and never redraws in a different order. */
@@ -818,6 +838,58 @@ export const AnalyticsStore = signalStore(
       const current = job()?.id;
       return jobs().filter((entry) => entry.id !== current);
     }),
+
+    /* -- plans ----------------------------------------------------------- */
+
+    funnelChart: computed<HistogramBin[]>(() => {
+      const f = plans()?.funnel;
+      if (!f) return [];
+      return [
+        { label: 'Posted', count: f.posted },
+        { label: 'Filled', count: f.filled },
+        { label: 'Hit TP1', count: f.hit_tp1 },
+        { label: 'Closed', count: f.closed },
+      ];
+    }),
+    fillRatePct: computed(() => plans()?.fill_rate.fill_rate_pct ?? null),
+    medianDaysToFill: computed(() => plans()?.fill_rate.median_days_to_fill ?? null),
+    inFlight: computed(() => plans()?.in_flight ?? 0),
+    badgeChart: computed<HistogramBin[]>(() =>
+      Object.entries(plans()?.badges ?? {}).map(([label, count]) => ({ label, count }))),
+    tierChart: computed<HistogramBin[]>(() =>
+      Object.entries(plans()?.tiers ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([label, count]) => ({ label, count }))),
+  })),
+
+  withComputed(({ equitySeries, benchmarkSeries }) => ({
+    /** Account balance, with SPY's cumulative return overlaid when the
+     *  benchmark fetch succeeded -- best-effort, so an unavailable benchmark
+     *  degrades to the balance line alone rather than an empty chart. */
+    balanceWithBenchmark: computed<LineChartSeries[]>(() => {
+      const balance: LineChartSeries = { name: 'Account balance', points: equitySeries() };
+      const spy = benchmarkSeries();
+      if (spy.length === 0) return [balance];
+      return [balance, { name: 'SPY', points: spy.map((p) => ({ date: p.date, value: p.pct })) }];
+    }),
+  })),
+
+  withComputed(({ cumulativeByStrategy }) => ({
+    cumulativeByStrategyChart: computed<LineChartSeries[]>(() =>
+      cumulativeByStrategy().map((s) => ({
+        name: s.strategy,
+        points: s.points.map((p) => ({ date: p.date, value: p.cum_pct })),
+      }))),
+  })),
+
+  withComputed(({ deciles }) => ({
+    /** A decile with no closed trades yet has `win_rate: null` -- omitted
+     *  rather than charted as 0, which would read as "this decile loses
+     *  every time" instead of "not enough data yet". */
+    decileHistogram: computed<HistogramBin[]>(() =>
+      deciles()
+        .filter((d): d is typeof d & { win_rate: number } => d.win_rate !== null)
+        .map((d) => ({ label: d.decile, count: d.win_rate }))),
   })),
 
   withMethods((store, api = inject(ApiClient)) => {
@@ -888,6 +960,14 @@ export const AnalyticsStore = signalStore(
       api.analyticsCalibration().subscribe({
         next: (calibration) =>
           patchState(store, { calibration, loading: false, error: null }),
+        error: fail,
+      });
+    };
+
+    const loadPlans = (): void => {
+      patchState(store, { loading: true });
+      api.analyticsPlans().subscribe({
+        next: (plans) => patchState(store, { plans, loading: false, error: null }),
         error: fail,
       });
     };
@@ -975,6 +1055,8 @@ export const AnalyticsStore = signalStore(
           return loadCalibration();
         case 'tuning':
           return loadTuning();
+        case 'plans':
+          return loadPlans();
       }
     };
 

@@ -20,6 +20,33 @@ and the Tuning tab conversions (10-12). Close with a full gate (13).
 library — this app draws its own, see `ui/histogram.ts` and `ui/sparkline.ts`
 for the existing style); Python 3.11+, Flask, pytest.
 
+## Progress (closed 2026-08-16)
+
+All 23 tasks committed. Both suites green at close: `1678 passed, 0 failed,
+0 xfailed` (Python; skip count differs from the CLAUDE.md reference baseline,
+most likely because this worktree never populated the backtest CSV cache —
+not itself a failure), `774/774` (frontend, vitest). Shipped as `ui 1.6.0`.
+
+**Addendum 2026-08-16 (post-close): the verification gap above is now
+filled.** A second, concurrent session in this same worktree — unaware the
+plan had already closed, having been paused for several hours by a session
+usage limit — independently re-executed Tasks 17-21 (converging on the same
+diffs; no conflicting changes) and then ran Task 22 Step 3 for real, with
+`chrome-devtools-mcp` connected: `python admin_ui.py` + `npm start`, logged
+in, resized to 380x900, and screenshotted all five tabs (Performance,
+Strategies, Calibration, Tuning, Plans). Result: no horizontal overflow on
+any tab; the Strategy registry table rendered as stacked phone cards with
+real registry data (not squeezed); the two original bugs were confirmed
+visually, not just at the source level — the Strategy registry heading and
+its subtitle share a left edge, and the Performance tab shows both
+"(selected range)" and "(all-time)" R-multiple panels. The tuning grid and
+past-jobs tables were not exercised with real rows (no seeded job data in
+this worktree) — their empty states rendered cleanly, and their phone-card
+behavior rests on the same `sb-data-table` component already visually
+confirmed via the Strategy registry table above, per this plan's own Global
+Constraint that the phone-card layout is automatic for anything on
+`sb-data-table`.
+
 ## Global Constraints
 
 - **`sb-data-table`'s phone-card layout is automatic** (spec v18 Decision 9,
@@ -54,7 +81,7 @@ for the existing style); Python 3.11+, Flask, pytest.
 but the whole phase has no dependency on the backend work in Phase 5 below —
 they may run concurrently once someone is free for each.
 
-## Task 1: `sb-line-chart` — geometry, pure and unit-tested
+### Task 1: `sb-line-chart` — geometry, pure and unit-tested
 
 **Files:**
 - Create: `frontend/src/app/ui/line-chart.ts` (component + exported pure
@@ -69,7 +96,7 @@ they may run concurrently once someone is free for each.
   `seriesPath(series: LineChartSeries, xScale, yScale): string`. Task 2
   renders these; Task 4/9/11/etc. pass series into the component.
 
-- [ ] **Step 1: Write the failing geometry tests**
+- [x] **Step 1: Write the failing geometry tests**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -146,12 +173,12 @@ describe('seriesPath', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `line-chart.ts` does not exist yet
 
-- [ ] **Step 3: Implement the geometry functions**
+- [x] **Step 3: Implement the geometry functions**
 
 ```ts
 export interface LineChartPoint {
@@ -216,12 +243,12 @@ export function seriesPath(
 }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
@@ -234,7 +261,7 @@ decile chart (Task 8) needs an absolute 0-100 axis, not one auto-scaled to
 whichever decile happens to be tallest."
 ```
 
-## Task 2: `sb-line-chart` — render (axes, series, legend)
+### Task 2: `sb-line-chart` — render (axes, series, legend)
 
 **Files:**
 - Modify: `frontend/src/app/ui/line-chart.ts`
@@ -250,7 +277,7 @@ whichever decile happens to be tallest."
   `valueFormat: input<(value: number) => string>((v) => v.toFixed(2))`.
   Tasks 4, 9, 11, 12, 18-20 consume this component.
 
-- [ ] **Step 1: Write the failing render test**
+- [x] **Step 1: Write the failing render test**
 
 ```ts
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -306,12 +333,12 @@ describe('LineChart', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `LineChart` is not exported
 
-- [ ] **Step 3: Implement the component**
+- [x] **Step 3: Implement the component**
 
 Append to `frontend/src/app/ui/line-chart.ts`:
 
@@ -423,19 +450,19 @@ export class LineChart {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
 git commit -m "feat(ui): sb-line-chart renders -- axes via scale, legend past one series"
 ```
 
-## Task 3: `sb-line-chart` — hover crosshair + tooltip
+### Task 3: `sb-line-chart` — hover crosshair + tooltip
 
 **Files:**
 - Modify: `frontend/src/app/ui/line-chart.ts`
@@ -445,7 +472,7 @@ git commit -m "feat(ui): sb-line-chart renders -- axes via scale, legend past on
 - Consumes: Task 2's `LineChart` component internals.
 - Produces: pointer-move behaviour only; no new public inputs/outputs.
 
-- [ ] **Step 1: Write the failing hover test**
+- [x] **Step 1: Write the failing hover test**
 
 ```ts
 it('shows a tooltip with every series value at the hovered date', () => {
@@ -473,12 +500,12 @@ it('hides the tooltip on pointer leave', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — no `.tooltip` ever renders
 
-- [ ] **Step 3: Implement hover**
+- [x] **Step 3: Implement hover**
 
 `getBoundingClientRect()` is unavailable in jsdom's layout-less environment
 (same trap this repo already documents for width-dependent tests elsewhere),
@@ -559,19 +586,19 @@ Add `signal` to the `@angular/core` import list, and this to `styles`:
     }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
 git commit -m "feat(ui): sb-line-chart hover crosshair and tooltip"
 ```
 
-## Task 4: `Histogram` gains `max` and `referenceLine`
+### Task 4: `Histogram` gains `max` and `referenceLine`
 
 **Files:**
 - Modify: `frontend/src/app/ui/histogram.ts`
@@ -585,7 +612,7 @@ git commit -m "feat(ui): sb-line-chart hover crosshair and tooltip"
   Task 5 adds it) keeps working unchanged. Task 8 (Calibration) is the first
   consumer of both.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('scales against the tallest bin by default', () => {
@@ -621,12 +648,12 @@ it('draws no reference line when none is given', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `max`/`referenceLine` inputs don't exist, `.reference-line` never renders
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
   readonly max = input<number | null>(null);
@@ -681,12 +708,12 @@ absolutely-positioned overlay — reconsider only if the overlay approach
 above proves visually wrong once Task 8 renders it; the test only checks
 `style.left`, which either approach satisfies identically.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/histogram.ts frontend/src/app/ui/histogram.spec.ts
@@ -698,7 +725,7 @@ must scale against an absolute 0-100 win-rate axis, not against each other,
 or a genuinely bad decile reads as a full bar next to a worse one."
 ```
 
-## Task 5: Client-side pagination helper
+### Task 5: Client-side pagination helper
 
 **Files:**
 - Create: `frontend/src/app/ui/data-table/client-page.ts`
@@ -711,7 +738,7 @@ or a genuinely bad decile reads as a full bar next to a worse one."
   Tasks 6, 7, 10, 12, 13, 20, 21 all call this once per table instead of
   hand-rolling the same slice-and-count logic nine times.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 import { signal } from '@angular/core';
@@ -749,12 +776,12 @@ describe('createClientPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `client-page.ts` does not exist
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 import { Signal, WritableSignal, computed, signal } from '@angular/core';
@@ -802,12 +829,12 @@ export function createClientPage<T>(rows: () => readonly T[], perPage = 25): Cli
 }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/client-page.ts frontend/src/app/ui/data-table/client-page.spec.ts
@@ -829,7 +856,7 @@ times."
 new panels land). Depends only on Phase 1's `sb-line-chart` (Tasks 1-3) and
 `createClientPage` (Task 5) — no dependency on Phases 3-6 below.
 
-## Task 6: Fix the two bugs, on this tab
+### Task 6: Fix the two bugs, on this tab
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -838,7 +865,7 @@ new panels land). Depends only on Phase 1's `sb-line-chart` (Tasks 1-3) and
 - Consumes: nothing.
 - Produces: nothing new — this task only changes existing markup/CSS.
 
-- [ ] **Step 1: Relabel the two R-multiple panels**
+- [x] **Step 1: Relabel the two R-multiple panels**
 
 Find (Performance tab, near the date-range control):
 
@@ -866,7 +893,7 @@ Change to:
           <sb-panel heading="R-multiple distribution (all-time)">
 ```
 
-- [ ] **Step 2: Fix the flush-panel subtitle alignment**
+- [x] **Step 2: Fix the flush-panel subtitle alignment**
 
 In the `styles` template literal, find:
 
@@ -892,14 +919,14 @@ Insert before it:
     }
 ```
 
-- [ ] **Step 3: Verify by eye**
+- [x] **Step 3: Verify by eye**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.` — this is a CSS-only
 change with no unit-testable assertion; the full visual check happens in
 Task 22 (responsive/phone pass) which screenshots every tab.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -914,7 +941,7 @@ up inside a flush panel where the header beside them does have 14px --
 fixed once for every flush panel on this workspace rather than per-panel."
 ```
 
-## Task 7: Performance tab — four labeled sub-sections
+### Task 7: Performance tab — four labeled sub-sections
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -925,7 +952,7 @@ fixed once for every flush panel on this workspace rather than per-panel."
   panels in `<div class="section-group">` blocks. No panel's content
   changes — Tasks 9 and 11 add NEW panels inside these groups afterward.
 
-- [ ] **Step 1: Wrap the existing panels**
+- [x] **Step 1: Wrap the existing panels**
 
 In the `@case ('performance')` block, group the existing panels (identified
 by their current heading) into four `<div class="section-group">` blocks,
@@ -972,7 +999,7 @@ This step is a pure reorganisation — move each existing `<sb-panel>` block
 (and its surrounding `@if`, unchanged) under the section it now belongs to,
 per the spec's grouping. No panel gains or loses content in this step.
 
-- [ ] **Step 2: Add the section heading style**
+- [x] **Step 2: Add the section heading style**
 
 ```css
     .section {
@@ -986,12 +1013,12 @@ per the spec's grouping. No panel gains or loses content in this step.
     .section:first-of-type { margin-top: 0; }
 ```
 
-- [ ] **Step 3: Build and eyeball**
+- [x] **Step 3: Build and eyeball**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -1002,7 +1029,7 @@ changes, only where it sits -- the next three tasks add new panels into
 the sections this creates."
 ```
 
-## Task 8: By month → bar chart
+### Task 8: By month → bar chart
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1012,7 +1039,7 @@ the sections this creates."
   return_pct, n}[]`), `Histogram` from `ui/histogram`.
 - Produces: nothing new for later tasks.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `analytics.store.spec.ts` already has a fixture with a `calendar` array
 (check the existing `PERFORMANCE` fixture — reuse it, add a case if it has
@@ -1032,13 +1059,13 @@ it('exposes a month histogram computed from calendarReturns', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python scripts/dev/testrun.py file` doesn't apply here — frontend:
 `cd frontend && npx ng test`
 Expected: FAIL — `store.monthHistogram is not a function`
 
-- [ ] **Step 3: Add the computed to `analytics.store.ts`**
+- [x] **Step 3: Add the computed to `analytics.store.ts`**
 
 Near `calendarReturns`:
 
@@ -1054,12 +1081,12 @@ Near `calendarReturns`:
       }))),
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render it, replacing the `<dl>`**
+- [x] **Step 5: Render it, replacing the `<dl>`**
 
 In `analytics.ts`, `@case ('performance')`, in the "Distributions" section's
 second `.panels` row (see Task 7 Step 1), replace:
@@ -1095,12 +1122,12 @@ with:
           </sb-panel>
 ```
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
@@ -1111,7 +1138,7 @@ number Histogram's negative predicate already colours correctly, same as
 every other P&L-shaped bar on this tab."
 ```
 
-## Task 9: Account balance / Drawdown upgrade + SPY benchmark overlay
+### Task 9: Account balance / Drawdown upgrade + SPY benchmark overlay
 
 **Files:**
 - Modify: `frontend/src/app/stores/analytics.store.ts`
@@ -1127,7 +1154,7 @@ every other P&L-shaped bar on this tab."
 - Produces: `store.balanceWithBenchmark(): LineChartSeries[]` — used by
   this task only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('overlays the SPY benchmark on the account-balance series when present', () => {
@@ -1144,12 +1171,12 @@ it('omits the SPY series entirely when the benchmark fetch was unavailable', () 
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `store.balanceWithBenchmark is not a function`
 
-- [ ] **Step 3: Add the computed**
+- [x] **Step 3: Add the computed**
 
 `analytics.store.ts` has exactly one `withComputed(...)` call today, and
 `equitySeries`/`benchmarkSeries` are both properties of the object literal
@@ -1177,12 +1204,12 @@ become callable:
 
 Import `LineChartSeries` from `'../ui/line-chart'` at the top of the file.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render, replacing the two `Sparkline`s**
+- [x] **Step 5: Render, replacing the two `Sparkline`s**
 
 In `analytics.ts`'s "Over time" section (Task 7), replace:
 
@@ -1238,12 +1265,12 @@ The Strategy registry's rolling-win-rate cell (`#rollingCell`) also uses
 `sb-sparkline` and is NOT touched by this task, so `Sparkline` stays
 imported.
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
@@ -1254,7 +1281,7 @@ rendered; it overlays account balance now, best-effort -- an unavailable
 benchmark degrades to the balance line alone."
 ```
 
-## Task 10: Rolling returns + Cumulative return by strategy — new charts
+### Task 10: Rolling returns + Cumulative return by strategy — new charts
 
 **Files:**
 - Modify: `frontend/src/app/stores/analytics.store.ts`
@@ -1268,7 +1295,7 @@ benchmark degrades to the balance line alone."
 - Produces: `store.rollingReturnsChart(): LineChartSeries[]`,
   `store.cumulativeByStrategyChart(): LineChartSeries[]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('exposes rolling returns as a single-series line chart', () => {
@@ -1294,12 +1321,12 @@ it('exposes cumulative-by-strategy as one series per strategy', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — both computeds undefined
 
-- [ ] **Step 3: Add the computeds**
+- [x] **Step 3: Add the computeds**
 
 `rollingReturnsChart` only needs `performance()`, which is already a
 destructured parameter of the big `withComputed` block `rollingReturns`
@@ -1332,12 +1359,12 @@ after Task 9's:
   })),
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render both, and move Cumulative-by-strategy out of "By segment"**
+- [x] **Step 5: Render both, and move Cumulative-by-strategy out of "By segment"**
 
 In `analytics.ts`'s "Over time" section, after the Account balance/Drawdown
 panels row, add:
@@ -1363,12 +1390,12 @@ Task 7 Step 1 placed it in "By segment" (it listed
 and the `<dl>` block are now dead; remove them. Grep first to confirm no
 other call site: `grep -n "fmtCumulative" frontend/src/app/workspaces/analytics/analytics.ts`.
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
@@ -1389,7 +1416,7 @@ strategy, replacing the last-point-only list."
 
 Depends on Phase 1 (Tasks 1-4). No dependency on Phase 2.
 
-## Task 11: Restore the decile calibration chart
+### Task 11: Restore the decile calibration chart
 
 **Files:**
 - Modify: `frontend/src/app/stores/analytics.store.ts`
@@ -1405,7 +1432,7 @@ Depends on Phase 1 (Tasks 1-4). No dependency on Phase 2.
   `referenceLine` inputs from Task 4.
 - Produces: `store.decileHistogram(): HistogramBin[]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('exposes deciles as a fixed-0-100 histogram', () => {
@@ -1433,12 +1460,12 @@ it('omits a decile with too few trades to have a win rate yet, rather than chart
 a helper of this shape for the Calibration tab's fetch; if not, mirror
 `respondPerformance`'s pattern against `backend.expectOne('/api/v1/analytics/calibration')`.)
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `store.decileHistogram is not a function`
 
-- [ ] **Step 3: Add the computed**
+- [x] **Step 3: Add the computed**
 
 Same cross-reference issue Tasks 9 and 10 hit: `deciles` is a sibling
 property inside the store's one big `withComputed` object literal, not a
@@ -1457,12 +1484,12 @@ literal. Add another separate `withComputed` stage, after Task 10's:
   })),
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render the chart above the existing table**
+- [x] **Step 5: Render the chart above the existing table**
 
 In `analytics.ts`'s `@case ('calibration')`, "Quality score vs outcome"
 panel, before the `<sb-data-table>`:
@@ -1482,12 +1509,12 @@ panel, before the `<sb-data-table>`:
 Add `Histogram` to this component's `imports` if it isn't already there —
 it is (used by Return/R-multiple distributions), so no import change needed.
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
@@ -1508,7 +1535,7 @@ genuinely bad decile sitting next to a worse one."
 
 Depends only on Task 5 (`createClientPage`). No dependency on Phases 2-3.
 
-## Task 12: Paginate the Strategy registry table
+### Task 12: Paginate the Strategy registry table
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1517,7 +1544,7 @@ Depends only on Task 5 (`createClientPage`). No dependency on Phases 2-3.
 - Consumes: `createClientPage` from `ui/data-table/client-page`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire it up**
+- [x] **Step 1: Wire it up**
 
 Add to the `Analytics` component class:
 
@@ -1542,7 +1569,7 @@ In the template, `<sb-data-table>` for Strategy registry, add:
 
 Import `createClientPage` from `'../../ui/data-table/client-page'`.
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
@@ -1553,14 +1580,14 @@ overflow test pattern IF one is added for this workspace, which is out of
 scope here per the spec's existing precedent that Dashboard/Analytics don't
 carry their own component spec files, relying on store specs instead.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
 git commit -m "feat(analytics): paginate the Strategy registry table"
 ```
 
-## Task 13: Paginate confidence + breakdown tables (Performance tab)
+### Task 13: Paginate confidence + breakdown tables (Performance tab)
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1569,7 +1596,7 @@ git commit -m "feat(analytics): paginate the Strategy registry table"
 - Consumes: `createClientPage`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire up both tables**
+- [x] **Step 1: Wire up both tables**
 
 ```ts
   protected readonly confidencePage = createClientPage(() => this.store.byConfidence());
@@ -1598,12 +1625,12 @@ same pattern for `breakdownPage`.
 and add the reset line to it rather than replacing the whole method if it
 already does more than call `store.setBreakdown`.)
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -1614,7 +1641,7 @@ a smaller dimension while on a later page shows an empty table that reads
 as 'no data' rather than 'wrong page'."
 ```
 
-## Task 14: Paginate deciles + tiers + drift tables (Calibration tab)
+### Task 14: Paginate deciles + tiers + drift tables (Calibration tab)
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1623,7 +1650,7 @@ as 'no data' rather than 'wrong page'."
 - Consumes: `createClientPage`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire up all three**
+- [x] **Step 1: Wire up all three**
 
 ```ts
   protected readonly decilePage = createClientPage(() => this.store.deciles());
@@ -1634,12 +1661,12 @@ as 'no data' rather than 'wrong page'."
 Same binding pattern as Task 12 on each of the three `<sb-data-table>`s in
 `@case ('calibration')`.
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -1656,7 +1683,7 @@ git commit -m "feat(analytics): paginate deciles, tiers and drift tables"
 dependency on Phases 1-4 or Phase 6 — pure Python, can run fully in parallel
 with all frontend work above once someone is free.
 
-## Task 15: Plan-lifecycle aggregation
+### Task 15: Plan-lifecycle aggregation
 
 **Files:**
 - Modify: `swingbot/admin/queries.py`
@@ -1669,7 +1696,7 @@ with all frontend work above once someone is free.
   `badges`, `tiers` (exact shape in Step 3). Task 16 serializes this
   verbatim into the new endpoint's response.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from types import SimpleNamespace
@@ -1764,12 +1791,12 @@ def test_empty_plan_list_returns_well_formed_zeros():
     assert result["tiers"] == {}
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_queries_plan_lifecycle.py`
 Expected: FAIL — `ImportError: cannot import name '_plan_lifecycle'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add `from datetime import datetime` and `from statistics import median` to
 `queries.py`'s existing top-of-file import block (alongside `import json`,
@@ -1850,12 +1877,12 @@ def _plan_lifecycle(plans: list) -> dict:
     }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_queries_plan_lifecycle.py`
 Expected: PASS, 6 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/queries.py tests/admin/test_queries_plan_lifecycle.py
@@ -1869,7 +1896,7 @@ plan hasn't resolved yet, and counting it would bias the rate toward
 undecided rather than measure a real outcome."
 ```
 
-## Task 16: `GET /analytics/plans` endpoint
+### Task 16: `GET /analytics/plans` endpoint
 
 **Files:**
 - Modify: `swingbot/admin/api_v1/analytics.py`
@@ -1884,7 +1911,7 @@ undecided rather than measure a real outcome."
 - Produces: `GET /api/v1/analytics/plans` → `{funnel, in_flight, fill_rate,
   badges, tiers}`, verbatim from `_plan_lifecycle`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 This file's own routes import per-function, not at module scope — every
 route but the one carrying `TradeLog` does this (`analytics_registry`'s
@@ -1917,12 +1944,12 @@ def test_plans_requires_auth(client):
     assert client.get("/api/v1/analytics/plans").status_code == 401
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_analytics.py`
 Expected: FAIL — 404, route doesn't exist
 
-- [ ] **Step 3: Add the route**
+- [x] **Step 3: Add the route**
 
 Append to `swingbot/admin/api_v1/analytics.py`:
 
@@ -1941,12 +1968,12 @@ def analytics_plans():
     return jsonify(_plan_lifecycle(PlanStore().all()))
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_analytics.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/analytics.py tests/admin/test_api_v1_analytics.py
@@ -1966,7 +1993,7 @@ Assembles and forwards _plan_lifecycle verbatim, matching this module's own
 and, for the chart panels, Phase 1 (`sb-line-chart`/`Histogram`). No
 dependency on Phases 2-4.
 
-## Task 17: Store + API client + models for the Plans tab
+### Task 17: Store + API client + models for the Plans tab
 
 **Files:**
 - Modify: `frontend/src/app/api/models.ts`
@@ -1981,7 +2008,7 @@ dependency on Phases 2-4.
   `store.funnelChart()`, `store.fillRatePct()`, `store.medianDaysToFill()`,
   `store.badgeChart()`, `store.tierChart()`. Task 18 renders all of these.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('fetches /analytics/plans when the plans tab opens', () => {
@@ -2009,12 +2036,12 @@ it('fetches /analytics/plans when the plans tab opens', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `store.setTab('plans')` rejects an unknown tab / `funnelChart` undefined
 
-- [ ] **Step 3: Add the model type**
+- [x] **Step 3: Add the model type**
 
 In `frontend/src/app/api/models.ts`, near `AnalyticsCalibration`:
 
@@ -2032,7 +2059,7 @@ export interface AnalyticsPlans {
 }
 ```
 
-- [ ] **Step 4: Add the API client method**
+- [x] **Step 4: Add the API client method**
 
 In `frontend/src/app/api/api-client.ts`, near `analyticsCalibration`:
 
@@ -2044,7 +2071,7 @@ In `frontend/src/app/api/api-client.ts`, near `analyticsCalibration`:
 
 Add `AnalyticsPlans` to this file's import from `./models`.
 
-- [ ] **Step 5: Widen `AnalyticsTab`, add state, add `loadPlans`**
+- [x] **Step 5: Widen `AnalyticsTab`, add state, add `loadPlans`**
 
 In `analytics.store.ts`:
 
@@ -2083,7 +2110,7 @@ already use to change tabs (grep `store.tab` usage in
 `analytics.store.spec.ts` for the established pattern and match it exactly
 rather than inventing a `setTab` method this store doesn't have).
 
-- [ ] **Step 6: Add the chart-shaping computeds**
+- [x] **Step 6: Add the chart-shaping computeds**
 
 In `withComputed`, destructuring `plans` alongside the others:
 
@@ -2109,19 +2136,19 @@ In `withComputed`, destructuring `plans` alongside the others:
         .map(([label, count]) => ({ label, count }))),
 ```
 
-- [ ] **Step 7: Run to verify it passes**
+- [x] **Step 7: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend/src/app/api/models.ts frontend/src/app/api/api-client.ts frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts
 git commit -m "feat(analytics): Plans tab data -- store, API client, models"
 ```
 
-## Task 18: Plans tab — render
+### Task 18: Plans tab — render
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -2131,7 +2158,7 @@ git commit -m "feat(analytics): Plans tab data -- store, API client, models"
   imported).
 - Produces: the rendered fifth tab.
 
-- [ ] **Step 1: Add the tab entry**
+- [x] **Step 1: Add the tab entry**
 
 In the component-local `TABS` array:
 
@@ -2145,7 +2172,7 @@ const TABS: Tab[] = [
 ];
 ```
 
-- [ ] **Step 2: Add the `@case`**
+- [x] **Step 2: Add the `@case`**
 
 In the `@switch (activeTab())`, after `@case ('tuning')`:
 
@@ -2212,12 +2239,12 @@ Add to the component class:
 
 Import `HistogramBin` from `'../../ui/histogram'` if not already imported.
 
-- [ ] **Step 3: Build and run the frontend suite**
+- [x] **Step 3: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -2233,7 +2260,7 @@ git commit -m "feat(analytics): render the Plans tab -- funnel, fill rate, badge
 **Sequential within the phase.** Depends only on Task 5 (`createClientPage`).
 No dependency on Phases 2-6.
 
-## Task 19: Convert tuning grid results to `sb-data-table`
+### Task 19: Convert tuning grid results to `sb-data-table`
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.columns.ts`
@@ -2244,7 +2271,7 @@ No dependency on Phases 2-6.
   `createClientPage`.
 - Produces: `GRID_COLUMNS: ColumnDef<GridRow>[]` — used only here.
 
-- [ ] **Step 1: Add the column definitions**
+- [x] **Step 1: Add the column definitions**
 
 In `analytics.columns.ts`, matching `STRATEGY_COLUMNS`'s real shape exactly
 (`key`/`header`/`numeric`/`value`, NOT `label`/`align`/`sortable` — verified
@@ -2269,7 +2296,7 @@ export const GRID_COLUMNS: ColumnDef<GridRow>[] = [
 `count`, `rate`, `expectancy` are already exported from this file — reuse
 them rather than reformatting inline.
 
-- [ ] **Step 2: Replace the hand-rolled `<table class="grid">`**
+- [x] **Step 2: Replace the hand-rolled `<table class="grid">`**
 
 Add to the `Analytics` component, mirroring `protected readonly columns`
 in `frontend/src/app/workspaces/dashboard/dashboard.ts` — the existing
@@ -2327,19 +2354,19 @@ Import `allKeys` from `./analytics.columns` if not already imported (it is
 — `strategyKeys`/`confidenceKeys`/etc. already use it), and `GRID_COLUMNS`
 alongside the file's other column-list imports.
 
-- [ ] **Step 3: Build and run the frontend suite**
+- [x] **Step 3: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.columns.ts frontend/src/app/workspaces/analytics/analytics.ts
 git commit -m "feat(analytics): tuning grid results become sb-data-table -- pagination and phone cards in one move"
 ```
 
-## Task 20: Convert past jobs to `sb-data-table`
+### Task 20: Convert past jobs to `sb-data-table`
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.columns.ts`
@@ -2350,7 +2377,7 @@ git commit -m "feat(analytics): tuning grid results become sb-data-table -- pagi
   returncode}`, `analytics.store.ts`).
 - Produces: `PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[]` — used only here.
 
-- [ ] **Step 1: Add columns**
+- [x] **Step 1: Add columns**
 
 `ColumnDef`'s real shape (Task 19 confirmed it against `STRATEGY_COLUMNS`):
 `key`/`header`/`numeric`/`value`, not `label`/`align`:
@@ -2366,7 +2393,7 @@ export const PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[] = [
 `date` is already imported in this file (used by `STRATEGY_COLUMNS`'s
 `run_date` column).
 
-- [ ] **Step 2: Replace the hand-rolled `<ul class="jobs">`**
+- [x] **Step 2: Replace the hand-rolled `<ul class="jobs">`**
 
 ```ts
   protected readonly pastJobsPage = createClientPage(() => this.store.pastJobs());
@@ -2395,19 +2422,19 @@ export const PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[] = [
 Import `JobSummary` and `PAST_JOBS_COLUMNS` alongside this file's other
 Analytics-tab imports.
 
-- [ ] **Step 3: Build and run the frontend suite**
+- [x] **Step 3: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.columns.ts frontend/src/app/workspaces/analytics/analytics.ts
 git commit -m "feat(analytics): past jobs become sb-data-table -- pagination and phone cards"
 ```
 
-## Task 21: Paginate the proposals list
+### Task 21: Paginate the proposals list
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -2416,7 +2443,7 @@ git commit -m "feat(analytics): past jobs become sb-data-table -- pagination and
 - Consumes: `createClientPage`, `proposalViews()` (existing computed).
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire it up**
+- [x] **Step 1: Wire it up**
 
 Each proposal is a card with its own nested diff table, not flat row data —
 `sb-data-table` doesn't fit, so this gets a small dedicated pager rather
@@ -2443,12 +2470,12 @@ add it to this component's `imports` array — it was used exactly this way,
 standalone, in the Versions workspace's own pagination, see
 `frontend/src/app/workspaces/versions/versions.ts`.)
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -2466,16 +2493,18 @@ so it gets its own small pager (8 per page) rather than sb-data-table."
 
 **Sequential.** The gate is last.
 
-## Task 22: Full gate + responsive/phone verification
+### Task 22: Full gate + responsive/phone verification
 
 **Files:** none modified — verification only.
 
-- [ ] **Step 1: Confirm nothing still references removed symbols**
+- [x] **Step 1: Confirm nothing still references removed symbols**
 
 Run: `grep -n "fmtCumulative\|class=\"grid\"\|class=\"jobs\"" frontend/src/app/workspaces/analytics/analytics.ts`
 Expected: no output (all three were removed in Tasks 10, 19, 20)
 
-- [ ] **Step 2: Run both suites**
+Verified 2026-08-16: no matches.
+
+- [x] **Step 2: Run both suites**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`
@@ -2483,26 +2512,39 @@ Expected: `0 failed`, `0 xfailed`
 Run: `cd frontend && npx ng test`
 Expected: all files pass
 
-- [ ] **Step 3: Screenshot every tab at a phone width**
+Verified 2026-08-16 (dispatched to the `test-runner` subagent for the Python
+run): `1678 passed, 136 skipped, 0 failed, 0 xfailed` — pass/skip counts differ
+from the CLAUDE.md reference baseline (`1686 passed, 66 skipped`), most likely
+because this worktree has no populated backtest CSV cache
+(`scripts/data/fetch_backtest_data.py` was never run here), which skips more
+backtest-dependent tests than a checkout that has one; per CLAUDE.md a changed
+count alone is not a failure. Frontend: `npx ng test --watch=false`
+(the `--browsers` flag from the plan's original command doesn't apply — this
+project runs on the Vitest builder, not Karma) — `49 test files, 774 tests,
+0 failed`.
 
-Use `chrome-devtools-mcp` (or the equivalent available browser tool):
-`resize_page` to 380x900, navigate to `/analytics` with each of
-`?tab=performance`, `?tab=strategies`, `?tab=calibration`, `?tab=tuning`,
-`?tab=plans`, and `take_screenshot fullPage:true` on each. Confirm by eye:
-no horizontal overflow on any tab, the three converted tables (tuning grid,
-past jobs — Tasks 19-20) render as cards not a squeezed table, the Strategy
-registry/breakdown/confidence/deciles/tiers/drift tables (already on
-`sb-data-table`) do the same, and the heatmap's horizontal scroll (left
-as-is per the spec) is the only place that scrolls sideways.
+- [x] **Step 3: Screenshot every tab at a phone width — done retroactively, see Addendum above**
 
-- [ ] **Step 4: Verify the two original bugs, by eye**
+Originally skipped by explicit human-partner decision (no browser tool
+connected in the closing session — see the superseded note this replaces,
+still visible in git history at commit `816b48c`). Performed for real on
+2026-08-16 by a second, concurrent session — see "Addendum 2026-08-16" near
+the top of this file for the method and result (no overflow, phone cards
+confirmed with real data on the Strategy registry table).
+
+- [x] **Step 4: Verify the two original bugs — confirmed visually, see Addendum above**
 
 On the Strategies tab: "Strategy registry" heading and "out-of-sample
 validation status per strategy" subtitle share a left edge. On the
 Performance tab: the two R-multiple panels read "(selected range)" and
 "(all-time)".
 
-## Task 23: Version bump, regenerate, close the plan
+Originally confirmed at the source/CSS level only (see the superseded note
+this replaces, still visible in git history at commit `816b48c`). Confirmed
+by eye in a rendered browser on 2026-08-16 — see "Addendum 2026-08-16" near
+the top of this file.
+
+### Task 23: Version bump, regenerate, close the plan
 
 **Files:**
 - Modify: `VERSION.json`

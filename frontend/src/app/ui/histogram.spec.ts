@@ -15,9 +15,16 @@ import { Histogram, HistogramBin } from './histogram';
  * finding.
  */
 
-function render(bins: HistogramBin[]) {
+function render(
+  bins: HistogramBin[],
+  opts?: { max?: number; referenceLine?: number },
+) {
   const fixture = TestBed.createComponent(Histogram);
   fixture.componentRef.setInput('bins', bins);
+  if (opts?.max !== undefined) fixture.componentRef.setInput('max', opts.max);
+  if (opts?.referenceLine !== undefined) {
+    fixture.componentRef.setInput('referenceLine', opts.referenceLine);
+  }
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -84,5 +91,28 @@ describe('Histogram', () => {
 
   it('renders nothing at all for no bins', () => {
     expect(render([]).querySelectorAll('li')).toHaveLength(0);
+  });
+
+  it('scales against a fixed max when one is given', () => {
+    // Two deciles at 60% and 85% win rate must scale against 100, not against
+    // each other -- against each other, 60 would render as a near-empty bar
+    // relative to 85, which understates a genuinely bad decile.
+    const element = render(
+      [{ label: 'D1', count: 60 }, { label: 'D10', count: 85 }],
+      { max: 100 },
+    );
+    expect(widths(element)[0]).toBe('60%');
+    expect(widths(element)[1]).toBe('85%');
+  });
+
+  it('draws a reference line at the given value against the active scale', () => {
+    const element = render([{ label: 'D1', count: 60 }], { max: 100, referenceLine: 80 });
+    const line = element.querySelector('.reference-line') as HTMLElement | null;
+    expect(line).not.toBeNull();
+    expect(line?.style.left).toBe('80%');
+  });
+
+  it('draws no reference line when none is given', () => {
+    expect(render([{ label: 'a', count: 10 }]).querySelector('.reference-line')).toBeNull();
   });
 });
