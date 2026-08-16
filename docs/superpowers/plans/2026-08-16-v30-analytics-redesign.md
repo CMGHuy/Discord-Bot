@@ -69,7 +69,7 @@ they may run concurrently once someone is free for each.
   `seriesPath(series: LineChartSeries, xScale, yScale): string`. Task 2
   renders these; Task 4/9/11/etc. pass series into the component.
 
-- [ ] **Step 1: Write the failing geometry tests**
+- [x] **Step 1: Write the failing geometry tests**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -146,12 +146,12 @@ describe('seriesPath', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `line-chart.ts` does not exist yet
 
-- [ ] **Step 3: Implement the geometry functions**
+- [x] **Step 3: Implement the geometry functions**
 
 ```ts
 export interface LineChartPoint {
@@ -216,12 +216,12 @@ export function seriesPath(
 }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
@@ -250,7 +250,7 @@ whichever decile happens to be tallest."
   `valueFormat: input<(value: number) => string>((v) => v.toFixed(2))`.
   Tasks 4, 9, 11, 12, 18-20 consume this component.
 
-- [ ] **Step 1: Write the failing render test**
+- [x] **Step 1: Write the failing render test**
 
 ```ts
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -306,12 +306,12 @@ describe('LineChart', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `LineChart` is not exported
 
-- [ ] **Step 3: Implement the component**
+- [x] **Step 3: Implement the component**
 
 Append to `frontend/src/app/ui/line-chart.ts`:
 
@@ -423,12 +423,12 @@ export class LineChart {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
@@ -445,7 +445,7 @@ git commit -m "feat(ui): sb-line-chart renders -- axes via scale, legend past on
 - Consumes: Task 2's `LineChart` component internals.
 - Produces: pointer-move behaviour only; no new public inputs/outputs.
 
-- [ ] **Step 1: Write the failing hover test**
+- [x] **Step 1: Write the failing hover test**
 
 ```ts
 it('shows a tooltip with every series value at the hovered date', () => {
@@ -473,12 +473,12 @@ it('hides the tooltip on pointer leave', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — no `.tooltip` ever renders
 
-- [ ] **Step 3: Implement hover**
+- [x] **Step 3: Implement hover**
 
 `getBoundingClientRect()` is unavailable in jsdom's layout-less environment
 (same trap this repo already documents for width-dependent tests elsewhere),
@@ -559,12 +559,12 @@ Add `signal` to the `@angular/core` import list, and this to `styles`:
     }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
@@ -585,7 +585,7 @@ git commit -m "feat(ui): sb-line-chart hover crosshair and tooltip"
   Task 5 adds it) keeps working unchanged. Task 8 (Calibration) is the first
   consumer of both.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('scales against the tallest bin by default', () => {
@@ -621,12 +621,12 @@ it('draws no reference line when none is given', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `max`/`referenceLine` inputs don't exist, `.reference-line` never renders
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
   readonly max = input<number | null>(null);
@@ -681,12 +681,12 @@ absolutely-positioned overlay — reconsider only if the overlay approach
 above proves visually wrong once Task 8 renders it; the test only checks
 `style.left`, which either approach satisfies identically.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/histogram.ts frontend/src/app/ui/histogram.spec.ts
@@ -711,7 +711,7 @@ or a genuinely bad decile reads as a full bar next to a worse one."
   Tasks 6, 7, 10, 12, 13, 20, 21 all call this once per table instead of
   hand-rolling the same slice-and-count logic nine times.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 import { signal } from '@angular/core';
@@ -749,12 +749,12 @@ describe('createClientPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `client-page.ts` does not exist
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 import { Signal, WritableSignal, computed, signal } from '@angular/core';
@@ -802,12 +802,12 @@ export function createClientPage<T>(rows: () => readonly T[], perPage = 25): Cli
 }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/ui/data-table/client-page.ts frontend/src/app/ui/data-table/client-page.spec.ts
@@ -838,7 +838,7 @@ new panels land). Depends only on Phase 1's `sb-line-chart` (Tasks 1-3) and
 - Consumes: nothing.
 - Produces: nothing new — this task only changes existing markup/CSS.
 
-- [ ] **Step 1: Relabel the two R-multiple panels**
+- [x] **Step 1: Relabel the two R-multiple panels**
 
 Find (Performance tab, near the date-range control):
 
@@ -866,7 +866,7 @@ Change to:
           <sb-panel heading="R-multiple distribution (all-time)">
 ```
 
-- [ ] **Step 2: Fix the flush-panel subtitle alignment**
+- [x] **Step 2: Fix the flush-panel subtitle alignment**
 
 In the `styles` template literal, find:
 
@@ -892,14 +892,14 @@ Insert before it:
     }
 ```
 
-- [ ] **Step 3: Verify by eye**
+- [x] **Step 3: Verify by eye**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.` — this is a CSS-only
 change with no unit-testable assertion; the full visual check happens in
 Task 22 (responsive/phone pass) which screenshots every tab.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -925,7 +925,7 @@ fixed once for every flush panel on this workspace rather than per-panel."
   panels in `<div class="section-group">` blocks. No panel's content
   changes — Tasks 9 and 11 add NEW panels inside these groups afterward.
 
-- [ ] **Step 1: Wrap the existing panels**
+- [x] **Step 1: Wrap the existing panels**
 
 In the `@case ('performance')` block, group the existing panels (identified
 by their current heading) into four `<div class="section-group">` blocks,
@@ -972,7 +972,7 @@ This step is a pure reorganisation — move each existing `<sb-panel>` block
 (and its surrounding `@if`, unchanged) under the section it now belongs to,
 per the spec's grouping. No panel gains or loses content in this step.
 
-- [ ] **Step 2: Add the section heading style**
+- [x] **Step 2: Add the section heading style**
 
 ```css
     .section {
@@ -986,12 +986,12 @@ per the spec's grouping. No panel gains or loses content in this step.
     .section:first-of-type { margin-top: 0; }
 ```
 
-- [ ] **Step 3: Build and eyeball**
+- [x] **Step 3: Build and eyeball**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
