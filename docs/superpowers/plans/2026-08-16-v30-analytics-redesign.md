@@ -1517,7 +1517,7 @@ Depends only on Task 5 (`createClientPage`). No dependency on Phases 2-3.
 - Consumes: `createClientPage` from `ui/data-table/client-page`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire it up**
+- [x] **Step 1: Wire it up**
 
 Add to the `Analytics` component class:
 
@@ -1542,7 +1542,7 @@ In the template, `<sb-data-table>` for Strategy registry, add:
 
 Import `createClientPage` from `'../../ui/data-table/client-page'`.
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
@@ -1553,7 +1553,7 @@ overflow test pattern IF one is added for this workspace, which is out of
 scope here per the spec's existing precedent that Dashboard/Analytics don't
 carry their own component spec files, relying on store specs instead.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -1569,7 +1569,7 @@ git commit -m "feat(analytics): paginate the Strategy registry table"
 - Consumes: `createClientPage`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire up both tables**
+- [x] **Step 1: Wire up both tables**
 
 ```ts
   protected readonly confidencePage = createClientPage(() => this.store.byConfidence());
@@ -1598,12 +1598,12 @@ same pattern for `breakdownPage`.
 and add the reset line to it rather than replacing the whole method if it
 already does more than call `store.setBreakdown`.)
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
