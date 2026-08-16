@@ -28,23 +28,48 @@ export interface HistogramBin {
   selector: 'sb-histogram',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <ul>
-      @for (bin of bins(); track bin.label) {
-        <li>
-          <span class="label num">{{ bin.label }}</span>
-          <span class="track">
-            <span
-              class="fill"
-              [class.negative]="isNegative()(bin)"
-              [style.width.%]="width(bin.count)"
-            ></span>
-          </span>
-          <span class="count num">{{ bin.count }}</span>
-        </li>
+    <div class="wrap">
+      @if (referenceLine(); as ref) {
+        <div class="track-col">
+          <div class="reference-line" [style.left.%]="referenceLeft()"></div>
+        </div>
       }
-    </ul>
+      <ul>
+        @for (bin of bins(); track bin.label) {
+          <li>
+            <span class="label num">{{ bin.label }}</span>
+            <span class="track">
+              <span
+                class="fill"
+                [class.negative]="isNegative()(bin)"
+                [style.width.%]="width(bin.count)"
+              ></span>
+            </span>
+            <span class="count num">{{ bin.count }}</span>
+          </li>
+        }
+      </ul>
+    </div>
   `,
   styles: `
+    /* The reference line sits in a grid layer of its own (.wrap), whose
+       three columns exactly mirror each .li's own 4rem/1fr/2.5rem grid, so
+       an absolutely-positioned line in the middle column lands on the bars
+       themselves rather than spanning the label/count columns too. */
+    .wrap {
+      position: relative;
+      display: grid;
+      grid-template-columns: 4rem 1fr 2.5rem;
+      gap: var(--space-8);
+    }
+    .wrap > ul { grid-column: 1 / -1; }
+    .track-col { grid-column: 2; grid-row: 1; position: relative; align-self: stretch; }
+    .reference-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      border-left: 1px dashed var(--text-faint);
+    }
     ul { display: grid; gap: 2px; list-style: none; }
     li {
       display: grid;
@@ -81,11 +106,27 @@ export class Histogram {
     bin.label.startsWith('-'),
   );
 
-  private readonly tallest = computed(() =>
-    Math.max(...this.bins().map((bin) => bin.count), 1),
+  /** A fixed scale ceiling. Wins over the default scale-to-tallest-bin --
+   *  needed by the Calibration decile chart, where two deciles at 60% and
+   *  85% win rate must scale against an absolute 100, not against each
+   *  other (which would understate a genuinely bad decile next to a worse
+   *  one). */
+  readonly max = input<number | null>(null);
+
+  /** A dashed line drawn across every bar's track, at this value against
+   *  the active scale (`max` when given, else the tallest bin). */
+  readonly referenceLine = input<number | null>(null);
+
+  private readonly tallest = computed(
+    () => this.max() ?? Math.max(...this.bins().map((bin) => bin.count), 1),
   );
 
   protected width(count: number): number {
     return (count / this.tallest()) * 100;
+  }
+
+  protected referenceLeft(): number {
+    const ref = this.referenceLine();
+    return ref === null ? 0 : (ref / this.tallest()) * 100;
   }
 }
