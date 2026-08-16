@@ -1,3 +1,5 @@
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+
 export interface LineChartPoint {
   date: string;
   value: number;
@@ -57,4 +59,111 @@ export function seriesPath(
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
     })
     .join(' ');
+}
+
+/** Eight categorical hues, fixed order -- the dataviz skill's dark-mode
+ *  categorical palette (`references/palette.md`'s "Categorical palette"
+ *  table, Dark column), verified directly against that file rather than
+ *  assumed. This app is dark-only (`styles/tokens.css`'s own "Dark only"
+ *  note: no `prefers-color-scheme` block, no `[data-theme]` hook), so the
+ *  dark-surface steps are the only ones that apply here -- the light column
+ *  is never rendered. A ninth series folds into "Other" per the skill's own
+ *  rule rather than cycling back to hue 1. */
+const SERIES_COLORS = [
+  '#3987e5', '#d95926', '#199e70', '#c98500',
+  '#d55181', '#008300', '#9085e9', '#e66767',
+] as const;
+
+/**
+ * A multi-series time chart with a shared axis, a legend past one series,
+ * and an optional fixed reference line -- built once for the three "over
+ * time" Performance panels (Task 4, 9, 11) and the restored Calibration
+ * decile chart (Task 8), rather than three bespoke SVGs. Neither existing
+ * primitive fit: `Sparkline` is a deliberately unlabelled 100x24 single
+ * series (its own doc comment), `Histogram` is bars only.
+ *
+ * No animation on data change (spec 3's "no card-flash on refresh" rule) --
+ * a value updates in place, same as every other live figure in this app.
+ */
+@Component({
+  selector: 'sb-line-chart',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (hasData()) {
+      <svg viewBox="0 0 600 220" preserveAspectRatio="none" role="img">
+        @if (referenceLine(); as ref) {
+          <line class="reference" [attr.x1]="0" [attr.x2]="600"
+                [attr.y1]="refY(ref)" [attr.y2]="refY(ref)" />
+        }
+        @for (series of series(); track series.name; let i = $index) {
+          <path class="series" [attr.d]="pathFor(series)"
+                [attr.stroke]="colorFor(i)" fill="none" />
+        }
+      </svg>
+      @if (series().length > 1) {
+        <div class="legend">
+          @for (series of series(); track series.name; let i = $index) {
+            <span class="entry">
+              <i [style.background]="colorFor(i)"></i>{{ series.name }}
+            </span>
+          }
+        </div>
+      }
+    } @else {
+      <p class="empty">No data to chart.</p>
+    }
+  `,
+  styles: `
+    :host { display: block; }
+    svg { width: 100%; height: 140px; }
+    path.series { stroke-width: 2; vector-effect: non-scaling-stroke; }
+    line.reference {
+      stroke: var(--text-faint);
+      stroke-width: 1;
+      stroke-dasharray: 4 3;
+      vector-effect: non-scaling-stroke;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: var(--space-10); margin-top: var(--space-8);
+              font-size: var(--text-chip); color: var(--text-secondary); }
+    .entry { display: inline-flex; align-items: center; gap: var(--space-4); }
+    .entry i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .empty { color: var(--text-faint); font-size: var(--text-table); }
+  `,
+})
+export class LineChart {
+  readonly series = input.required<readonly LineChartSeries[]>();
+  readonly yDomain = input<{ min: number; max: number } | null>(null);
+  readonly referenceLine = input<number | null>(null);
+  readonly valueFormat = input<(value: number) => string>((v) => v.toFixed(2));
+
+  protected readonly hasData = computed(() =>
+    this.series().some((s) => s.points.length > 0),
+  );
+
+  private readonly allDates = computed(() =>
+    this.series().flatMap((s) => s.points.map((p) => p.date)),
+  );
+  private readonly allValues = computed(() =>
+    this.series().flatMap((s) => s.points.map((p) => p.value)),
+  );
+
+  private readonly xScale = computed(() => lineChartXScale(this.allDates()));
+  private readonly yScale = computed(() =>
+    lineChartYScale(this.allValues(), this.yDomain() ?? undefined),
+  );
+
+  protected pathFor(series: LineChartSeries): string {
+    const path = seriesPath(series, this.xScale(), this.yScale());
+    // Scale the 0-1 path up into the 600x220 viewBox.
+    return path.replace(/([ML]) ([\d.]+) ([\d.]+)/g, (_, cmd, x, y) =>
+      `${cmd} ${(Number(x) * 600).toFixed(2)} ${(Number(y) * 220).toFixed(2)}`);
+  }
+
+  protected refY(value: number): number {
+    return (1 - this.yScale()(value)) * 220;
+  }
+
+  protected colorFor(index: number): string {
+    return SERIES_COLORS[index % SERIES_COLORS.length];
+  }
 }

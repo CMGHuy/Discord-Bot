@@ -1,5 +1,7 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import { lineChartXScale, lineChartYScale, seriesPath } from './line-chart';
+import { LineChart, lineChartXScale, lineChartYScale, seriesPath } from './line-chart';
 
 describe('lineChartXScale', () => {
   it('maps the earliest date to 0 and the latest to 1', () => {
@@ -68,5 +70,52 @@ describe('seriesPath', () => {
     const x = lineChartXScale(['2026-01-01']);
     const y = lineChartYScale([0]);
     expect(() => seriesPath(series, x, y)).not.toThrow();
+  });
+});
+
+describe('LineChart', () => {
+  function render(series: { name: string; points: { date: string; value: number }[] }[]) {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const fixture = TestBed.createComponent(LineChart);
+    fixture.componentRef.setInput('series', series);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('draws one path per series', () => {
+    const fixture = render([
+      { name: 'ui', points: [{ date: '2026-01-01', value: 0 }, { date: '2026-01-02', value: 1 }] },
+      { name: 'bot', points: [{ date: '2026-01-01', value: 2 }, { date: '2026-01-02', value: 3 }] },
+    ]);
+    expect(fixture.nativeElement.querySelectorAll('path.series')).toHaveLength(2);
+  });
+
+  it('shows no legend for a single series -- the panel heading already names it', () => {
+    const fixture = render([{ name: 'ui', points: [{ date: '2026-01-01', value: 0 }] }]);
+    expect(fixture.nativeElement.querySelector('.legend')).toBeNull();
+  });
+
+  it('shows a legend entry per series once there is more than one', () => {
+    const fixture = render([
+      { name: 'ui', points: [{ date: '2026-01-01', value: 0 }] },
+      { name: 'bot', points: [{ date: '2026-01-01', value: 1 }] },
+    ]);
+    const entries = fixture.nativeElement.querySelectorAll('.legend .entry');
+    expect(entries).toHaveLength(2);
+    expect(entries[0].textContent).toContain('ui');
+    expect(entries[1].textContent).toContain('bot');
+  });
+
+  it('draws the reference line when one is given', () => {
+    const fixture = render([{ name: 'wr', points: [{ date: '2026-01-01', value: 60 }] }]);
+    expect(fixture.nativeElement.querySelector('line.reference')).toBeNull();
+    fixture.componentRef.setInput('referenceLine', 80);
+    fixture.componentRef.setInput('yDomain', { min: 0, max: 100 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('line.reference')).not.toBeNull();
+  });
+
+  it('renders nothing rather than throwing when every series is empty', () => {
+    expect(() => render([{ name: 'ui', points: [] }])).not.toThrow();
   });
 });
