@@ -1884,7 +1884,7 @@ undecided rather than measure a real outcome."
 - Produces: `GET /api/v1/analytics/plans` → `{funnel, in_flight, fill_rate,
   badges, tiers}`, verbatim from `_plan_lifecycle`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 This file's own routes import per-function, not at module scope — every
 route but the one carrying `TradeLog` does this (`analytics_registry`'s
@@ -1917,12 +1917,12 @@ def test_plans_requires_auth(client):
     assert client.get("/api/v1/analytics/plans").status_code == 401
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_analytics.py`
 Expected: FAIL — 404, route doesn't exist
 
-- [ ] **Step 3: Add the route**
+- [x] **Step 3: Add the route**
 
 Append to `swingbot/admin/api_v1/analytics.py`:
 
@@ -1941,12 +1941,12 @@ def analytics_plans():
     return jsonify(_plan_lifecycle(PlanStore().all()))
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_analytics.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/analytics.py tests/admin/test_api_v1_analytics.py
