@@ -10,9 +10,24 @@ changes population and gains a sixth level; every user sees a different feed.
 This repo has **two scoring systems**, and the smarter one is advisory.
 
 `swingbot/core/scanning/confidence.py::score_confidence()` produces a 1–5 level
-from a method-count base level, a 100-point quality base, and an honesty cap. It
-is the **only** thing that gates whether an alert fires
-(`MIN_ALERT_CONFIDENCE_LEVEL`, default 3).
+from a method-count base level plus two ±1 adjustments (quality and
+expectancy). It is the **only** thing that gates whether an alert fires
+(`MIN_ALERT_CONFIDENCE_LEVEL`).
+
+**Two facts the docs get wrong, corrected here from the code:**
+
+- **The default is `4`, not 3.** `config.py:167` reads
+  `default="4", options=["1"…"5"]`. `docs/strategy.md` says 3. The code wins.
+- **There is no explicit honesty gate.** `docs/strategy.md` describes "Lv5 needs
+  3+ methods, Lv4 needs 2+" as a cap, but no such cap exists in the source. It
+  is an *emergent* property of the arithmetic at `confidence.py:253`:
+  `base_level = max(1, min(5, target_count))`, then at most +2 from the two
+  adjustments. One method caps at Lv3, two at Lv4, three at Lv5.
+
+  This matters enormously for the merge: extending naively to
+  `min(6, target_count)` would silently let two methods reach Lv6. The
+  honesty property must become an **explicit, tested cap** in this spec, not
+  remain an accident of two clamps.
 
 `swingbot/core/planning/quality.py::score_plan()` produces a 0–100 score with
 frozen E37 weights over `regime`, `htf`, `confluence`, `volume`,
@@ -89,14 +104,22 @@ would weight trend context roughly three times.
 ### Levels 1–6
 
 `LEVELS` in `confidence.py` becomes six bands. **Level 6 is conditional**: it
-ships only if the TRAIN measurement finds a population that clears **both**
+ships only if the TRAIN measurement finds a population clearing **all three**:
 
-1. **≥100 TRAIN samples**, and
-2. a **Wilson score interval** whose lower bound still supports the elite claim
-   — the point estimate alone is not sufficient.
+1. **n ≥ 100** TRAIN samples;
+2. **point-estimate win rate ≥ 90%** (the target band for the tier); and
+3. **Wilson 95% score-interval lower bound ≥ 80%**, *and* strictly above Level
+   5's own point-estimate win rate — so Lv6 is demonstrably better than Lv5
+   rather than a relabelling of it.
 
-If no population clears both, this spec ships **1–5** and records the negative
-result. A 100%-win-rate tier on six trades is not a tier.
+Criterion 3 is deliberately looser than criterion 2 because the arithmetic
+demands it: at n=100 a Wilson lower bound of 90% requires roughly 96/100 wins,
+which is not a realistic bar for a swing system. An 80% lower bound paired with
+a ≥90% point estimate is the honest way to express "a genuinely elite tier"
+without setting a threshold nothing can clear.
+
+If no population clears all three, this spec ships **1–5** and records the
+negative result. A 100%-win-rate tier on six trades is not a tier.
 
 Level 6 carries its own method-count floor in the honesty gate, at least as
 strict as Level 5's current 3+.
@@ -105,6 +128,24 @@ strict as Level 5's current 3+.
 
 **A/B/C `tier` is removed.** Confidence levels become the single vocabulary
 across embeds, admin UI and code. `QualityResult.tier` and `_tier()` go away.
+
+**Blast radius, enumerated — it is wider than "delete a field".** `tier` is
+consumed by:
+
+| Consumer | Use |
+|---|---|
+| `commands/views.py:201,226,229` | a **live Discord filter control** — users filter plans by tier |
+| `commands/plans.py:71,88` | tier chip in the plan list; tier filter argument |
+| `commands/views.py:136` | breakdown embed title `({plan.tier}/{plan.badge})` |
+| `admin/queries.py:146` | tier aggregation for the admin cockpit |
+| `core/planning/plan_engine.py:605` | `plan.quality_score, plan.tier = q.score, q.tier` |
+| `core/planning/plan_manager.py:161` | persisted on the plan record |
+| `core/scanning/embeds.py:390` | `f"Quality: {plan.quality_score}/100 (Tier {plan.tier})"` |
+
+The Discord tier **filter** is the awkward one: removing it changes a control
+users interact with, and persisted plan records carry a `tier` field that must
+either be migrated or tolerated as legacy on read. The plan must handle both;
+this is not a mechanical find-and-replace.
 
 This invalidates the offline **decile audit** table that is the stated evidence
 behind the current A/B/C thresholds, and the **E43 ablation harness** judges
@@ -115,10 +156,11 @@ than the duplication being removed.
 
 ### Config
 
-`MIN_ALERT_CONFIDENCE_LEVEL` **keeps its name and its default of 3**, and gains
-`6` as a legal value. No live `.env` needs to change at deploy. The
-`config.Field` entry's `max` moves 5 → 6, which propagates to the admin UI
-Settings page automatically.
+`MIN_ALERT_CONFIDENCE_LEVEL` **keeps its name and its current default of `4`**,
+and gains `6` as a legal value. No live `.env` needs to change at deploy. The
+field is a `type="select"`, so its `options` list becomes
+`["1","2","3","4","5","6"]`, which propagates to the admin UI Settings page
+automatically.
 
 Level thresholds are recalibrated so that a default of 3 admits an alert
 population near today's — the level numbers keep roughly their current meaning
@@ -153,9 +195,10 @@ Follows `docs/claude/backtest-methodology.md`. New pre-registration required.
 
 ## What this deliberately does NOT change
 
-- **The honesty gate stays.** Method count still caps the level. Restructuring
-  the points beneath it does not license reaching Level 5 or 6 on context
-  alone.
+- **The honesty property stays** — but is *promoted*, not preserved as-is. It
+  becomes an explicit, unit-tested cap rather than an emergent side effect of
+  two clamps (see "The problem, stated once"). Restructuring the points beneath
+  it must not license reaching Level 5 or 6 on context alone.
 - **The method-count base level stays.** It is not folded into the additive
   pool.
 - **No new market data.** Everything in the merged factor set is already
