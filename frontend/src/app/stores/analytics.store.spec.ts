@@ -723,6 +723,19 @@ describe('AnalyticsStore', () => {
         .toEqual(['MACD', 'RSI']);
     });
 
+    it('exposes a month histogram computed from calendarReturns', () => {
+      tick();
+      respondPerformance({ calendar: [
+        { month: '2026-06', return_pct: 4.2, n: 3 },
+        { month: '2026-07', return_pct: -1.8, n: 2 },
+      ] });
+
+      expect(store.monthHistogram()).toEqual([
+        { label: '2026-06', count: 4.2 },
+        { label: '2026-07', count: -1.8 },
+      ]);
+    });
+
     it('echoes the applied range back with its sample size', () => {
       openPerformance();
 

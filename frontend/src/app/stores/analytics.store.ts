@@ -699,6 +699,16 @@ export const AnalyticsStore = signalStore(
     holdingSplit: computed(() => performance()?.holding_period_split ?? []),
     calendarReturns: computed(() => performance()?.calendar ?? []),
 
+    /** `calendarReturns` reshaped for `Histogram` -- `count` here is a
+     *  monthly return percentage, not literally a count; the field is
+     *  generically a number and Histogram's `negative` predicate already
+     *  colours a signed value correctly regardless of what it represents. */
+    monthHistogram: computed<HistogramBin[]>(() =>
+      (performance()?.calendar ?? []).map((month) => ({
+        label: month.month,
+        count: month.return_pct,
+      }))),
+
     /** `{strategy: points}` flattened into sorted series, so the chart never
      *  iterates object keys and never redraws in a different order. */
     cumulativeByStrategy: computed(() => {

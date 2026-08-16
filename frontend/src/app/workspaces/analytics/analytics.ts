@@ -319,17 +319,8 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
 
           <sb-panel heading="By month">
-            @if (store.calendarReturns().length) {
-              <dl>
-                @for (month of store.calendarReturns(); track month.month) {
-                  <div>
-                    <dt>{{ month.month }}</dt>
-                    <dd class="num">
-                      {{ month.return_pct.toFixed(2) }}% · {{ fmtCount(month.n) }}
-                    </dd>
-                  </div>
-                }
-              </dl>
+            @if (store.monthHistogram().length) {
+              <sb-histogram [bins]="store.monthHistogram()" />
             } @else {
               <p class="stale">No months with closed trades.</p>
             }
@@ -337,8 +328,7 @@ interface ProposalView extends ProposalRow {
         </div>
 
         <h2 class="section">Over time</h2>
-        <!-- Task 8's By-month bar chart replaces the "By month" <dl> above.
-             Task 9's Account balance/Drawdown upgrade + benchmark overlay,
+        <!-- Task 9's Account balance/Drawdown upgrade + benchmark overlay,
              and Task 10's Rolling returns and Cumulative-by-strategy charts
              land here. -->
 
