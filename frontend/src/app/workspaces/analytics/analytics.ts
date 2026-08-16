@@ -37,7 +37,7 @@ import { createClientPage } from '../../ui/data-table/client-page';
 import { Select } from '../../ui/form-controls';
 import { ABSENT, date, dateTime, share } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
-import { Histogram } from '../../ui/histogram';
+import { Histogram, HistogramBin } from '../../ui/histogram';
 import { LineChart, LineChartSeries } from '../../ui/line-chart';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
@@ -53,15 +53,17 @@ import {
   rate,
 } from './analytics.columns';
 
-/** Performance · Strategies · Calibration · Tuning — spec v14 Decision 6, in
- *  its order. **Tabs, not sub-navigation**: four sections is within what a tab
- *  strip carries comfortably, and a second level of navigation inside one of
- *  six workspaces reintroduces exactly the depth the IA change removed. */
+/** Performance · Strategies · Calibration · Tuning · Plans — spec v14
+ *  Decision 6, in its order. **Tabs, not sub-navigation**: five sections is
+ *  within what a tab strip carries comfortably, and a second level of
+ *  navigation inside one of six workspaces reintroduces exactly the depth
+ *  the IA change removed. */
 const TABS: Tab[] = [
   { id: 'performance', label: 'Performance' },
   { id: 'strategies', label: 'Strategies' },
   { id: 'calibration', label: 'Calibration' },
   { id: 'tuning', label: 'Tuning' },
+  { id: 'plans', label: 'Plans' },
 ];
 
 const TAB_IDS = new Set<string>(ANALYTICS_TABS);
@@ -804,6 +806,53 @@ interface ProposalView extends ProposalRow {
           }
         </sb-panel>
       }
+
+      <!-- -- plans ---------------------------------------------------- -->
+      @case ('plans') {
+        <p class="section-help">
+          Every plan ever posted, and how far it got: PENDING (posted,
+          waiting for its entry trigger) &rarr; ACTIVE (filled) &rarr;
+          PARTIAL (TP1 hit) &rarr; CLOSED, or CANCELLED at any point before
+          filling. Fill rate and time-to-fill are measured over RESOLVED
+          plans only (CLOSED or CANCELLED) &mdash; a plan still waiting
+          hasn't finished its journey yet, and counting it would bias the
+          rate toward "undecided".
+        </p>
+
+        <sb-panel heading="Lifecycle funnel">
+          @if (store.funnelChart().length) {
+            <sb-histogram [bins]="store.funnelChart()" />
+            <p class="series-note">{{ store.inFlight() }} currently in flight (not counted above).</p>
+          } @else {
+            <p class="stale">No plans posted yet.</p>
+          }
+        </sb-panel>
+
+        <div class="panels">
+          <sb-panel heading="Fill rate">
+            <div class="chips">
+              <sb-metric-chip label="Filled" [value]="store.fillRatePct()" unit="%" [decimals]="1" />
+              <sb-metric-chip label="Median days to fill" [value]="store.medianDaysToFill()" [decimals]="1" />
+            </div>
+          </sb-panel>
+
+          <sb-panel heading="Badge distribution">
+            @if (store.badgeChart().length) {
+              <sb-histogram [bins]="store.badgeChart()" [isNegative]="isWeakBadge" />
+            } @else {
+              <p class="stale">No plans posted yet.</p>
+            }
+          </sb-panel>
+        </div>
+
+        <sb-panel heading="Tier distribution">
+          @if (store.tierChart().length) {
+            <sb-histogram [bins]="store.tierChart()" />
+          } @else {
+            <p class="stale">No plans posted yet.</p>
+          }
+        </sb-panel>
+      }
     }
 
     <!-- cells ----------------------------------------------------------
@@ -1288,6 +1337,15 @@ export class Analytics {
   protected readonly tierPage = createClientPage(() => this.store.tiers());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
   protected readonly driftPage = createClientPage(() => this.store.drift());
+
+  /** WEAK reads as the "loss" side of this bar list -- greyscale would be
+   *  equally defensible (a badge is a quality judgement, not P&L), but
+   *  VALIDATED-vs-WEAK is structurally the same "good/bad split" the
+   *  green/red pair exists for elsewhere on this workspace's strategy
+   *  badges (see #badgeCell's own note on why THAT one stays greyscale --
+   *  the difference is this chart has no chip carrying the badge word
+   *  beside it, so colour is the only signal available here). */
+  protected readonly isWeakBadge = (bin: HistogramBin): boolean => bin.label === 'WEAK';
 
   /* Empty states are sentences about *this* table's situation, never a
    * generic "No data" — see `EmptyStateComponent`. */
