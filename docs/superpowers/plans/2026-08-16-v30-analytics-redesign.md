@@ -1012,7 +1012,7 @@ the sections this creates."
   return_pct, n}[]`), `Histogram` from `ui/histogram`.
 - Produces: nothing new for later tasks.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `analytics.store.spec.ts` already has a fixture with a `calendar` array
 (check the existing `PERFORMANCE` fixture — reuse it, add a case if it has
@@ -1032,13 +1032,13 @@ it('exposes a month histogram computed from calendarReturns', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python scripts/dev/testrun.py file` doesn't apply here — frontend:
 `cd frontend && npx ng test`
 Expected: FAIL — `store.monthHistogram is not a function`
 
-- [ ] **Step 3: Add the computed to `analytics.store.ts`**
+- [x] **Step 3: Add the computed to `analytics.store.ts`**
 
 Near `calendarReturns`:
 
@@ -1054,12 +1054,12 @@ Near `calendarReturns`:
       }))),
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render it, replacing the `<dl>`**
+- [x] **Step 5: Render it, replacing the `<dl>`**
 
 In `analytics.ts`, `@case ('performance')`, in the "Distributions" section's
 second `.panels` row (see Task 7 Step 1), replace:
@@ -1095,12 +1095,12 @@ with:
           </sb-panel>
 ```
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
