@@ -1316,7 +1316,7 @@ diff still shows them arriving with that task rather than pre-existing.
 - Consumes: Task 7's rendered page.
 - Produces: nothing downstream. This is the last UI task.
 
-- [ ] **Step 1: Write the failing overflow test**
+- [x] **Step 1: Write the failing overflow test**
 
 ```ts
 /** Six components, one of them arriving late. The point is the count: this is
@@ -1360,7 +1360,7 @@ it('does not widen when components are added', async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails or passes**
+- [x] **Step 2: Run to verify it fails or passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS if Task 7's CSS is right. **If it fails, Task 7 has a bug** —
@@ -1368,7 +1368,7 @@ fix it there rather than working around it here. This test exists because the
 no-horizontal-growth property is the design's foundation and a comment cannot
 enforce it.
 
-- [ ] **Step 3: Add the legend and axis ticks**
+- [x] **Step 3: Add the legend and axis ticks**
 
 ```html
 <div class="legend">
@@ -1405,7 +1405,7 @@ Add to the store:
         lanes().some((lane) => lane.segments.length > stripWidth() / 8)),
 ```
 
-- [ ] **Step 4: Add the missing states**
+- [x] **Step 4: Add the missing states**
 
 ```html
 @if (store.filter(); as active) {
@@ -1424,18 +1424,18 @@ Add to the store:
 Keep the existing "no history recorded" copy for the generator-never-run case —
 it answers a different question and must stay distinguishable from the above.
 
-- [ ] **Step 5: Confirm `basis` still renders verbatim**
+- [x] **Step 5: Confirm `basis` still renders verbatim**
 
 Run: `cd frontend && grep -n "basis" src/app/workspaces/versions/versions.ts`
 Expected: a `{{ store.basis() }}` interpolation with no surrounding rewording.
 This is a Global Constraint — the page must not drift into promising "tested".
 
-- [ ] **Step 6: Build and test**
+- [x] **Step 6: Build and test**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/versions/
@@ -1447,6 +1447,15 @@ tooltips carrying what the compressed geometry cannot show, and a caveat that
 appears exactly when width stops meaning duration. Plus a test for the
 no-horizontal-growth property, which a comment cannot enforce."
 ```
+
+**Note (found during implementation):** the strip's `ResizeObserver` is the
+frontend's first use of it, and jsdom (the test environment) does not
+implement it — `TestBed.createComponent(Versions)` in the new
+`versions.spec.ts` threw `ReferenceError: ResizeObserver is not defined`
+until the `effect` guarded itself with `typeof ResizeObserver ===
+'undefined'`. Costs nothing in a real browser; the store's `stripWidth: 800`
+default already covers the window before a real observer's first callback.
+Actual commit: `6c4324d`.
 
 ---
 
