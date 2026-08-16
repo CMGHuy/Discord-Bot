@@ -15,10 +15,8 @@ import { DashboardScope, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
-import { TradesStore } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
-import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
+import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell } from '../../ui/plan-cell';
@@ -41,17 +39,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
-
-/**
- * How many open positions the summary table shows.
- *
- * A cap, not a page. The Dashboard answers "what is happening right now" at a
- * glance, and a glance does not scroll; the full list is one click away in
- * Trades, which is where paging, filtering and sorting belong. This is also
- * why no pager is passed to the table -- a pager here would invite paging
- * through a summary, which is the Trades workspace wearing a disguise.
- */
-export const OPEN_POSITIONS_CAP = 6;
+import { TradeGroup } from './trade-group';
 
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
@@ -82,16 +70,16 @@ export const OPEN_POSITIONS_CAP = 6;
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    RouterLink, MetricCard, MetricChip, Sparkline, Panel, DataTable,
+    RouterLink, MetricCard, MetricChip, Sparkline, Panel, TradeGroup,
     StatusCell, DirectionArrow, PlanCell, ConfidenceCell, Button, ControlRow,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // Provided here rather than in root: the stores are created on entry and
+  // Provided here rather than in root: the store is created on entry and
   // destroyed on exit, so a workspace does not hold stale state while you
-  // are looking at another one. `TradesStore` is a second, independent
-  // instance -- the Trades workspace's own copy is unaffected by the query
-  // this screen sets on its own.
-  providers: [DashboardStore, TradesStore],
+  // are looking at another one. Each `sb-trade-group` below provides its own
+  // `TradesStore` instance (see trade-group.ts) -- neither this one nor
+  // those three touch the Trades workspace's own copy.
+  providers: [DashboardStore],
   template: `
     <header class="head">
       <h1>Dashboard</h1>
@@ -244,21 +232,6 @@ export const OPEN_POSITIONS_CAP = 6;
     }
 
     <sb-panel heading="Open positions" [flush]="true">
-      <!-- The link out is in the panel header rather than under the table:
-           it belongs to this table, and a "see all" floating below a capped
-           list reads as pagination. -->
-      <a panel-actions class="all-link" routerLink="/trades" [queryParams]="{ status: 'open' }">
-        {{ allLinkLabel() }}
-      </a>
-
-      @if (trades.error(); as message) {
-        <!-- Without this the failed first load renders as the table's empty
-             state, and "No open positions" is a claim about the account
-             rather than about the network -- the one misreading on this
-             screen that could get someone to stop watching a live trade. -->
-        <p class="table-error" role="status">{{ message }}</p>
-      }
-
       <!-- SR59, the last cosmetic row: dashboard_fragment.html:391's
            shares tooltip. A panel note rather than a per-cell title, per this
            task's Step 2 — and because the per-trade half of it (which sizing
@@ -272,14 +245,42 @@ export const OPEN_POSITIONS_CAP = 6;
         above.
       </p>
 
-      <sb-data-table
-        [rows]="openPositions()"
+      <!-- Three groups, not one merged list. status=open (ACTIVE-or-PARTIAL)
+           is the only existing alias and it drops PENDING entirely; splitting
+           this way is also what "clear separation for each category" needs,
+           not just what the endpoint happens to support. Each group is its
+           own store instance -- see trade-group.ts -- so a slow or failed
+           fetch for one category never blocks or blanks the other two. -->
+      <sb-trade-group
+        status="PENDING"
+        heading="Pending"
         [columns]="columns()"
         [visible]="visible()"
         [pinned]="pinned"
         [rowKey]="rowKey"
-        [loading]="trades.loading()"
-        [emptyState]="emptyState"
+        [emptyState]="pendingEmptyState"
+        (rowActivate)="open($event)"
+        (reorder)="onReorder($event)"
+      />
+      <sb-trade-group
+        status="ACTIVE"
+        heading="Active"
+        [columns]="columns()"
+        [visible]="visible()"
+        [pinned]="pinned"
+        [rowKey]="rowKey"
+        [emptyState]="activeEmptyState"
+        (rowActivate)="open($event)"
+        (reorder)="onReorder($event)"
+      />
+      <sb-trade-group
+        status="PARTIAL"
+        heading="Partial"
+        [columns]="columns()"
+        [visible]="visible()"
+        [pinned]="pinned"
+        [rowKey]="rowKey"
+        [emptyState]="partialEmptyState"
         (rowActivate)="open($event)"
         (reorder)="onReorder($event)"
       />
@@ -497,16 +498,23 @@ export class Dashboard {
    *  the account's symbol. Three cards had `" USD"` written into the template
    *  while `CURRENCY_SYMBOL` has defaulted to `€` all along. */
   protected readonly currencyUnit = computed(() => ` ${this.connection.currency()}`);
-  /** The open-positions table's data. Same component, same store shape and
-   *  the same `trades` event as the Trades workspace -- what differs is only
-   *  the query, which is set once below and never changes. */
-  protected readonly trades = inject(TradesStore);
 
   protected readonly rowKey = (row: TradeRow) => row.id;
 
-  protected readonly emptyState = {
-    title: 'No open positions',
-    hint: 'They appear here as the bot opens them.',
+  /** One per lifecycle category shown below -- `sb-trade-group` owns its own
+   *  data, but the empty-state copy is naming a plan's absence at a specific
+   *  stage, which reads as three different facts and not one. */
+  protected readonly pendingEmptyState: EmptyState = {
+    title: 'No pending plans',
+    hint: 'They appear here once a plan is posted, waiting for its entry trigger.',
+  };
+  protected readonly activeEmptyState: EmptyState = {
+    title: 'No active positions',
+    hint: 'They appear here once a plan’s entry fills.',
+  };
+  protected readonly partialEmptyState: EmptyState = {
+    title: 'No partial positions',
+    hint: 'They appear here once TP1 hits and part of the position closes.',
   };
 
   private readonly tickerCell =
@@ -604,22 +612,6 @@ export class Dashboard {
     return tradeColumns().map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
     );
-  });
-
-  /** Belt and braces over the server's `per_page`: if the API ever ignores or
-   *  raises the cap, the Dashboard still shows a glanceable list rather than
-   *  silently growing into a second Trades page. */
-  protected readonly openPositions = computed(() =>
-    this.trades.rows().slice(0, OPEN_POSITIONS_CAP),
-  );
-
-  /** Counts come from the Dashboard endpoint rather than the table, because the
-   *  table is capped: "All 23 open" is the truth the link leads to, where
-   *  `rows.length` would say 6 and be wrong in exactly the case the link
-   *  matters most. */
-  protected readonly allLinkLabel = computed(() => {
-    const total = this.store.openTrades();
-    return total > OPEN_POSITIONS_CAP ? `All ${total} open →` : 'Open in Trades →';
   });
 
   /** Amber once exposure is most of the cap. Amber means caution, which is
@@ -740,22 +732,6 @@ export class Dashboard {
       ? `${this.currencyUnit()} max`
       : this.currencyUnit(),
   );
-
-  constructor() {
-    // Set once, synchronously, before the store's effect first runs: one
-    // request with the right query rather than a default fetch followed by a
-    // corrected one. Nothing here ever changes it -- there is no filter UI on
-    // this screen, and adding one would be building Trades again.
-    this.trades.setQuery({
-      status: 'open',
-      // Newest first: the position most likely to need attention is the one
-      // just opened, and it is the one the alert that brought you here is
-      // about.
-      sort: '-opened_at',
-      page: 1,
-      per_page: OPEN_POSITIONS_CAP,
-    });
-  }
 
   protected fmtPct = pct;
 
