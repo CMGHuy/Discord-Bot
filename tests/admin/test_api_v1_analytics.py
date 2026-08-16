@@ -22,6 +22,7 @@ _PATHS = [
     "/api/v1/analytics/strategies",
     "/api/v1/analytics/calibration",
     "/api/v1/analytics/registry",
+    "/api/v1/analytics/plans",
 ]
 
 
@@ -92,6 +93,44 @@ def test_calibration_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/calibration").get_json(),
                  {"deciles": list, "tiers": list, "drift": list})
+
+
+def test_plans_shape(seed, logged_in):
+    seed()
+    assert_shape(logged_in.get("/api/v1/analytics/plans").get_json(), {
+        "funnel": dict, "in_flight": int, "fill_rate": dict,
+        "badges": dict, "tiers": dict,
+    })
+
+
+def test_plans_serves_the_lifecycle_aggregation_over_real_plans(logged_in, monkeypatch):
+    """`seed()`'s plans.json is always empty (it exists to seed trades); this
+    checks the route actually forwards PlanStore().all() through
+    _plan_lifecycle rather than an empty list, by patching PlanStore at its
+    origin module -- the same target the route itself resolves lazily. """
+    import swingbot.core.planning.plan_store as plan_store_mod
+
+    class FakePlan:
+        def __init__(self, status, badge, tier):
+            self.status = status
+            self.status_history = []
+            self.created_at = "2026-01-01"
+            self.badge = badge
+            self.tier = tier
+
+    class FakeStore:
+        def all(self):
+            return [
+                FakePlan("PENDING", "VALIDATED", "A"),
+                FakePlan("PENDING", "WEAK", "C"),
+            ]
+
+    monkeypatch.setattr(plan_store_mod, "PlanStore", FakeStore)
+    body = logged_in.get("/api/v1/analytics/plans").get_json()
+    assert body["funnel"]["posted"] == 2
+    assert body["in_flight"] == 2
+    assert body["badges"] == {"VALIDATED": 1, "WEAK": 1}
+    assert body["tiers"] == {"A": 1, "C": 1}
 
 
 def test_strategies_ships_series_not_svg(seed, logged_in):
