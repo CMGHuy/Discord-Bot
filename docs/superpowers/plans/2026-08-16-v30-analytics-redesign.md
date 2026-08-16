@@ -1981,7 +1981,7 @@ dependency on Phases 2-4.
   `store.funnelChart()`, `store.fillRatePct()`, `store.medianDaysToFill()`,
   `store.badgeChart()`, `store.tierChart()`. Task 18 renders all of these.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('fetches /analytics/plans when the plans tab opens', () => {
@@ -2009,12 +2009,12 @@ it('fetches /analytics/plans when the plans tab opens', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `store.setTab('plans')` rejects an unknown tab / `funnelChart` undefined
 
-- [ ] **Step 3: Add the model type**
+- [x] **Step 3: Add the model type**
 
 In `frontend/src/app/api/models.ts`, near `AnalyticsCalibration`:
 
@@ -2032,7 +2032,7 @@ export interface AnalyticsPlans {
 }
 ```
 
-- [ ] **Step 4: Add the API client method**
+- [x] **Step 4: Add the API client method**
 
 In `frontend/src/app/api/api-client.ts`, near `analyticsCalibration`:
 
@@ -2044,7 +2044,7 @@ In `frontend/src/app/api/api-client.ts`, near `analyticsCalibration`:
 
 Add `AnalyticsPlans` to this file's import from `./models`.
 
-- [ ] **Step 5: Widen `AnalyticsTab`, add state, add `loadPlans`**
+- [x] **Step 5: Widen `AnalyticsTab`, add state, add `loadPlans`**
 
 In `analytics.store.ts`:
 
@@ -2083,7 +2083,7 @@ already use to change tabs (grep `store.tab` usage in
 `analytics.store.spec.ts` for the established pattern and match it exactly
 rather than inventing a `setTab` method this store doesn't have).
 
-- [ ] **Step 6: Add the chart-shaping computeds**
+- [x] **Step 6: Add the chart-shaping computeds**
 
 In `withComputed`, destructuring `plans` alongside the others:
 
@@ -2109,12 +2109,12 @@ In `withComputed`, destructuring `plans` alongside the others:
         .map(([label, count]) => ({ label, count }))),
 ```
 
-- [ ] **Step 7: Run to verify it passes**
+- [x] **Step 7: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend/src/app/api/models.ts frontend/src/app/api/api-client.ts frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts
