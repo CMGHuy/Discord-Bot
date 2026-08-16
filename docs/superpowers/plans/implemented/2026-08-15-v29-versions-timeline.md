@@ -1552,7 +1552,7 @@ git mv docs/superpowers/plans/2026-08-15-v29-versions-timeline.md docs/superpowe
 git commit -m "docs: v28/v29 close, so they leave the live list"
 ```
 
-- [ ] **Step 6: Push**
+- [x] **Step 6: Push**
 
 ```bash
 git fetch origin && git rev-list --left-right --count main...origin/main
