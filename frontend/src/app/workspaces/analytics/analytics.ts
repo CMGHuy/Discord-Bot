@@ -37,6 +37,7 @@ import { Select } from '../../ui/form-controls';
 import { ABSENT, date, dateTime, share } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { Histogram } from '../../ui/histogram';
+import { LineChart, LineChartSeries } from '../../ui/line-chart';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
 import {
@@ -108,6 +109,7 @@ interface ProposalView extends ProposalRow {
     DataTable,
     MetricChip,
     Histogram,
+    LineChart,
     Chip,
     QualityChip,
     Sparkline,
@@ -328,9 +330,25 @@ interface ProposalView extends ProposalRow {
         </div>
 
         <h2 class="section">Over time</h2>
-        <!-- Task 9's Account balance/Drawdown upgrade + benchmark overlay,
-             and Task 10's Rolling returns and Cumulative-by-strategy charts
-             land here. -->
+        @if (store.equitySeries().length) {
+          <div class="panels">
+            <sb-panel heading="Account balance">
+              <sb-line-chart [series]="store.balanceWithBenchmark()" [valueFormat]="fmtLineValue" />
+              <p class="series-note">
+                {{ store.equitySeries().length }} points ·
+                {{ seriesRange(store.equitySeries()) }}
+              </p>
+            </sb-panel>
+
+            <sb-panel heading="Drawdown">
+              <sb-line-chart [series]="drawdownSeriesForChart()" [valueFormat]="fmtLineValue" />
+              <p class="series-note">
+                Peak-to-trough, as a share of the running high. Higher is worse.
+              </p>
+            </sb-panel>
+          </div>
+        }
+        <!-- Task 10's Rolling returns and Cumulative-by-strategy charts land here. -->
 
         <h2 class="section">By segment</h2>
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
@@ -1291,14 +1309,11 @@ export class Analytics {
     this.store.setBreakdown(value as BreakdownDimension);
   }
 
-  /** Sparklines take bare numbers; the dates are the series-note's job. */
-  protected readonly equityPoints = computed(() =>
-    this.store.equitySeries().map((point) => point.value),
-  );
-  protected readonly drawdownPoints = computed(() =>
-    this.store.drawdownSeries().map((point) => point.value),
-  );
+  protected readonly fmtLineValue = (value: number): string => `${value.toFixed(2)}%`;
 
+  protected readonly drawdownSeriesForChart = computed<LineChartSeries[]>(() => [
+    { name: 'Drawdown', points: this.store.drawdownSeries() },
+  ]);
 
   /** "3 wins" rather than "3". The number alone does not say which way the run
    *  is going, and a current streak is the one figure here where that is the

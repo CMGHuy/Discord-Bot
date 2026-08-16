@@ -736,6 +736,19 @@ describe('AnalyticsStore', () => {
       ]);
     });
 
+    it('overlays the SPY benchmark on the account-balance series when present', () => {
+      tick();
+      respondPerformance({ benchmark: { spy_cum: { '2026-01-01': 0, '2026-01-11': 3.2 } } });
+      const series = store.balanceWithBenchmark();
+      expect(series.map((s) => s.name)).toEqual(['Account balance', 'SPY']);
+    });
+
+    it('omits the SPY series entirely when the benchmark fetch was unavailable', () => {
+      tick();
+      respondPerformance({ benchmark: { spy_cum: {} } });
+      expect(store.balanceWithBenchmark().map((s) => s.name)).toEqual(['Account balance']);
+    });
+
     it('echoes the applied range back with its sample size', () => {
       openPerformance();
 

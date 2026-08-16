@@ -20,6 +20,7 @@ import {
   AnalyticsStrategies,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
+import { LineChartSeries } from '../ui/line-chart';
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -827,6 +828,18 @@ export const AnalyticsStore = signalStore(
     pastJobs: computed(() => {
       const current = job()?.id;
       return jobs().filter((entry) => entry.id !== current);
+    }),
+  })),
+
+  withComputed(({ equitySeries, benchmarkSeries }) => ({
+    /** Account balance, with SPY's cumulative return overlaid when the
+     *  benchmark fetch succeeded -- best-effort, so an unavailable benchmark
+     *  degrades to the balance line alone rather than an empty chart. */
+    balanceWithBenchmark: computed<LineChartSeries[]>(() => {
+      const balance: LineChartSeries = { name: 'Account balance', points: equitySeries() };
+      const spy = benchmarkSeries();
+      if (spy.length === 0) return [balance];
+      return [balance, { name: 'SPY', points: spy.map((p) => ({ date: p.date, value: p.pct })) }];
     }),
   })),
 
