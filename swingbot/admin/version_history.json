@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-16 16:49:15 UTC",
+  "generated_at": "2026-08-16 17:43:44 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.6.1",
+    "ui": "1.6.2",
     "bot": "1.1.4"
   },
   "releases": [
@@ -413,6 +413,19 @@
       "subject": "release(ui): 1.6.1 -- fix the Dashboard's three status panels showing the same trades",
       "versions": {
         "ui": "1.6.1",
+        "bot": "1.1.4"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-16",
+      "last_seen": "2026-08-16",
+      "commit": "20e0132d",
+      "subject": "release(ui): 1.6.2 -- watchlist earnings date, settings row fixes, dashboard polish",
+      "versions": {
+        "ui": "1.6.2",
         "bot": "1.1.4"
       },
       "changed": [
