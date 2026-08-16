@@ -1623,7 +1623,7 @@ as 'no data' rather than 'wrong page'."
 - Consumes: `createClientPage`.
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire up all three**
+- [x] **Step 1: Wire up all three**
 
 ```ts
   protected readonly decilePage = createClientPage(() => this.store.deciles());
@@ -1634,12 +1634,12 @@ as 'no data' rather than 'wrong page'."
 Same binding pattern as Task 12 on each of the three `<sb-data-table>`s in
 `@case ('calibration')`.
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
