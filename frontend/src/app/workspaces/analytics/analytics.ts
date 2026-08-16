@@ -41,6 +41,7 @@ import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { LineChart, LineChartSeries } from '../../ui/line-chart';
 import { MetricChip } from '../../ui/metric-chip';
+import { PaginationComponent } from '../../ui/pagination';
 import { Sparkline } from '../../ui/sparkline';
 import {
   CONFIDENCE_COLUMNS,
@@ -122,6 +123,7 @@ interface ProposalView extends ProposalRow {
     Select,
     Button,
     ConfirmDialog,
+    PaginationComponent,
   ],
   template: `
     <header class="head">
@@ -733,44 +735,43 @@ interface ProposalView extends ProposalRow {
             hand, running the suite, and only then spending a validation shot.
           </p>
 
-          @if (proposalViews(); as proposals) {
-            @if (proposals.length === 0) {
-              <p class="muted">No proposals yet.</p>
-            }
-            @for (proposal of proposals; track proposal.filename) {
-              <div class="proposal">
-                <header class="proposal-head">
-                  <strong>{{ proposal.strategy }}</strong>
-                  <span class="muted">
-                    {{ fmtDateTime(proposal.created_at) }} · job {{ proposal.job_id }}
-                  </span>
-                </header>
-                <table class="diff">
-                  <thead>
-                    <tr><th>Parameter</th><th class="num">Current</th><th class="num">Proposed</th></tr>
-                  </thead>
-                  <tbody>
-                    @for (param of proposal.params; track param.key) {
-                      <tr>
-                        <td>{{ param.key }}</td>
-                        <td class="num muted">{{ param.current }}</td>
-                        <td class="num">{{ param.proposed }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-                <p class="muted">{{ proposal.trainSummary }}</p>
-                <button
-                  sb-button
-                  type="button"
-                  variant="danger"
-                  (click)="pendingDelete.set(proposal)"
-                >
-                  Delete
-                </button>
-              </div>
-            }
+          @if (proposalViews().length === 0) {
+            <p class="muted">No proposals yet.</p>
           }
+          @for (proposal of proposalsPage.visible(); track proposal.filename) {
+            <div class="proposal">
+              <header class="proposal-head">
+                <strong>{{ proposal.strategy }}</strong>
+                <span class="muted">
+                  {{ fmtDateTime(proposal.created_at) }} · job {{ proposal.job_id }}
+                </span>
+              </header>
+              <table class="diff">
+                <thead>
+                  <tr><th>Parameter</th><th class="num">Current</th><th class="num">Proposed</th></tr>
+                </thead>
+                <tbody>
+                  @for (param of proposal.params; track param.key) {
+                    <tr>
+                      <td>{{ param.key }}</td>
+                      <td class="num muted">{{ param.current }}</td>
+                      <td class="num">{{ param.proposed }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <p class="muted">{{ proposal.trainSummary }}</p>
+              <button
+                sb-button
+                type="button"
+                variant="danger"
+                (click)="pendingDelete.set(proposal)"
+              >
+                Delete
+              </button>
+            </div>
+          }
+          <sb-pagination [pagination]="proposalsPage.pageSpec()" (pageChange)="proposalsPage.setPage($event)" />
         </sb-panel>
       }
 
@@ -1527,6 +1528,11 @@ export class Analytics {
       };
     }),
   );
+
+  /** Each proposal is a card with its own nested diff table, not flat row
+   *  data -- `sb-data-table` doesn't fit, so this gets its own small pager
+   *  rather than the shared component. */
+  protected readonly proposalsPage = createClientPage(() => this.proposalViews(), 8);
 
   protected readonly deleteConsequence = computed(() => {
     const proposal = this.pendingDelete();
