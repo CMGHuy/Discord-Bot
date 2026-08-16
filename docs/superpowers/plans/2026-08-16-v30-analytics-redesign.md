@@ -2416,7 +2416,7 @@ git commit -m "feat(analytics): past jobs become sb-data-table -- pagination and
 - Consumes: `createClientPage`, `proposalViews()` (existing computed).
 - Produces: nothing for later tasks.
 
-- [ ] **Step 1: Wire it up**
+- [x] **Step 1: Wire it up**
 
 Each proposal is a card with its own nested diff table, not flat row data —
 `sb-data-table` doesn't fit, so this gets a small dedicated pager rather
@@ -2443,12 +2443,12 @@ add it to this component's `imports` array — it was used exactly this way,
 standalone, in the Versions workspace's own pagination, see
 `frontend/src/app/workspaces/versions/versions.ts`.)
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
