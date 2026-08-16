@@ -2131,7 +2131,7 @@ git commit -m "feat(analytics): Plans tab data -- store, API client, models"
   imported).
 - Produces: the rendered fifth tab.
 
-- [ ] **Step 1: Add the tab entry**
+- [x] **Step 1: Add the tab entry**
 
 In the component-local `TABS` array:
 
@@ -2145,7 +2145,7 @@ const TABS: Tab[] = [
 ];
 ```
 
-- [ ] **Step 2: Add the `@case`**
+- [x] **Step 2: Add the `@case`**
 
 In the `@switch (activeTab())`, after `@case ('tuning')`:
 
@@ -2212,12 +2212,12 @@ Add to the component class:
 
 Import `HistogramBin` from `'../../ui/histogram'` if not already imported.
 
-- [ ] **Step 3: Build and run the frontend suite**
+- [x] **Step 3: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
