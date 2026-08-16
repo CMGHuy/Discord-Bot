@@ -82,7 +82,7 @@
   --quality-5: var(--pos);
 
   /* -- type ------------------------------------------------------------
-   * Named by role, not by size: the scale is closed (9/10/11/12/14/18/23)
+   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/25)
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
@@ -102,13 +102,17 @@
    */
   --text-scale: 1;
 
-  --text-micro: calc(9px * var(--text-scale));      /* micro-label */
-  --text-chip: calc(10px * var(--text-scale));      /* chip */
-  --text-table: calc(11px * var(--text-scale));     /* table body */
-  --text-body: calc(12px * var(--text-scale));      /* body */
-  --text-subhead: calc(14px * var(--text-scale));   /* subheading */
-  --text-title: calc(18px * var(--text-scale));     /* section title */
-  --text-metric: calc(23px * var(--text-scale));    /* primary metric */
+  /* +2px across the scale (2026-08-16): the 100% step read too small end to
+     end, and this is the anchor every step multiplies from -- raising it
+     here moves 100% (and, proportionally, 90/110/125%) together rather than
+     special-casing one step. */
+  --text-micro: calc(11px * var(--text-scale));      /* micro-label */
+  --text-chip: calc(12px * var(--text-scale));      /* chip */
+  --text-table: calc(13px * var(--text-scale));     /* table body */
+  --text-body: calc(14px * var(--text-scale));      /* body */
+  --text-subhead: calc(16px * var(--text-scale));   /* subheading */
+  --text-title: calc(20px * var(--text-scale));     /* section title */
+  --text-metric: calc(25px * var(--text-scale));    /* primary metric */
 
   /* -- spacing ---------------------------------------------------------
    * Closed scale, named by value on purpose. An indirection table
