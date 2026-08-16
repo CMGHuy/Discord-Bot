@@ -616,7 +616,7 @@ replaced by `visible()`) and `pairCount()` (a count of cross-product pairs,
 replaced by `pageSpec().total`, which counts releases). Grep the template for
 both before declaring Task 7 done.
 
-- [ ] **Step 1: Replace the model types**
+- [x] **Step 1: Replace the model types**
 
 Delete `VersionPair` and `VersionRange` (grep first — they are referenced only
 by `VersionHistory` and the old store) and write:
@@ -659,7 +659,7 @@ export interface VersionHistory {
 export type VersionFilter = { component: string; version: string } | null;
 ```
 
-- [ ] **Step 2: Write the failing store tests**
+- [x] **Step 2: Write the failing store tests**
 
 Keep the file's existing TestBed setup (providers, `HttpTestingController`) —
 only the fixture and the assertions change. Add this harness above the tests;
@@ -739,12 +739,12 @@ it('resets to page 1 when the filter changes', () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [x] **Step 3: Run to verify they fail**
 
 Run: `npx ng test`
 Expected: FAIL — `store.releases is not a function`
 
-- [ ] **Step 4: Implement the store's non-geometry half**
+- [x] **Step 4: Implement the store's non-geometry half**
 
 ```ts
 export const PAGE_SIZE = 25;
@@ -819,12 +819,12 @@ then `visible`, `pageSpec` and the methods:
       },
 ```
 
-- [ ] **Step 5: Run to verify they pass**
+- [x] **Step 5: Run to verify they pass**
 
 Run: `npx ng test`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/api/models.ts frontend/src/app/stores/versions.store.ts frontend/src/app/stores/versions.store.spec.ts
@@ -835,6 +835,15 @@ generator walks git. The chip is its own toggle, so lookup needs no new
 control, and it resets to page 1 -- staying on page 3 of a one-page filter
 shows an empty list that reads as 'no results'."
 ```
+
+**Note (found during implementation):** this task, Task 6, and Task 7 were
+implemented and verified together, not at each task's own boundary. Task 5
+removes `store.rows()`/`botAxis()`/`pairCount()` that the OLD page component
+still called at that point, so `ng build`/`ng test` do not compile again
+until Task 7's page rewrite lands — contradicting the Architecture section's
+"every commit before that is independently green" (that claim holds for
+Phases 1-2's Python commits, not for 5-6 vs. 7). Verified once, at the end of
+all three. See Task 7's note for the actual commit.
 
 ## Task 6: Strip geometry — time axis, width floor, absent regions, bracket
 
@@ -847,7 +856,7 @@ shows an empty list that reads as 'no results'."
 - Produces: `LaneSegment` and `Lane` types; `lanes()`, `bracket()`,
   `setStripWidth(px)`. Task 7 renders these.
 
-- [ ] **Step 1: Write the failing geometry tests**
+- [x] **Step 1: Write the failing geometry tests**
 
 ```ts
 it('lays segments out on a time axis, not by release index', () => {
@@ -905,12 +914,12 @@ it('survives a single release without dividing by zero', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx ng test`
 Expected: FAIL — `store.lanes is not a function`
 
-- [ ] **Step 3: Add the types**
+- [x] **Step 3: Add the types**
 
 ```ts
 /** One component's run at one version, as a fraction of the strip. */
@@ -933,7 +942,7 @@ export interface Lane {
 }
 ```
 
-- [ ] **Step 4: Implement the floor, as a pure exported function**
+- [x] **Step 4: Implement the floor, as a pure exported function**
 
 Exported so it can be tested without a store, and so the redistribution is
 readable on its own:
@@ -983,7 +992,7 @@ export function applyFloor(widths: number[], floor: number): number[] {
 }
 ```
 
-- [ ] **Step 5: Implement `lanes` and `bracket`**
+- [x] **Step 5: Implement `lanes` and `bracket`**
 
 Add `stripWidth: 800` to the slice (a sane default so the store is usable
 before the component has measured itself), plus:
@@ -1073,12 +1082,12 @@ and the setter:
       },
 ```
 
-- [ ] **Step 6: Run to verify they pass**
+- [x] **Step 6: Run to verify they pass**
 
 Run: `npx ng test`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/versions.store.ts frontend/src/app/stores/versions.store.spec.ts
@@ -1090,6 +1099,20 @@ is only visible when width means duration. The floor exists because
 --date=short gives day resolution and this repo ships several times a day;
 four same-day releases are sub-pixel on a six-week axis and would vanish."
 ```
+
+**Note (found during implementation): the reference `lanes` code above has a
+real bug.** Writing the "every lane sums to 1" test caught it directly —
+`raw = runs.map((run) => (run.to - run.from) / span)` uses each run's own
+`last_seen` as its width boundary, but `last_seen` is normally the calendar
+day BEFORE the next distinct tuple's `date` begins (same-day supersession is
+the exception, not the rule). That leaves a one-day gap between every pair
+of consecutive segments, so any lane with more than one segment fell short
+of summing to 1 — RESPONSE's own `ui`/`bot` lanes were off by 1/45 (~2.2%).
+Fixed by bounding each run's WIDTH at the next run's `from` (or `tEnd` for
+the last run) instead of its own `to`; `to` itself is left untouched since
+the segment's `lastSeen` tooltip metadata still needs the true last-seen
+date, not the padded geometric boundary. See Task 7's note for the actual
+commit (5-7 landed together).
 
 ---
 
@@ -1110,7 +1133,7 @@ generator-side work shares no file with either and **may run alongside Task 8**.
 - Consumes: everything Tasks 5-6 produce.
 - Produces: the rendered workspace. Task 8 annotates it.
 
-- [ ] **Step 1: Replace the template**
+- [x] **Step 1: Replace the template**
 
 Four regions, top to bottom. Keep the existing `head`, `error`, `muted` and
 `stale` blocks verbatim — they are unchanged by this work.
@@ -1186,7 +1209,7 @@ Four regions, top to bottom. Keep the existing `head`, `error`, `muted` and
 <sb-pagination [pagination]="store.pageSpec()" (pageChange)="store.setPage($event)" />
 ```
 
-- [ ] **Step 2: Add the component members**
+- [x] **Step 2: Add the component members**
 
 ```ts
   protected readonly store = inject(VersionsStore);
@@ -1218,7 +1241,7 @@ Four regions, top to bottom. Keep the existing `head`, `error`, `muted` and
   });
 ```
 
-- [ ] **Step 3: Write the styles**
+- [x] **Step 3: Write the styles**
 
 Delete every `.matrix`, `.corner`, `.colhead`, `.rowhead`, `.track .bar`,
 `.dot` and `.scroller` rule — the matrix is gone. Add:
@@ -1247,7 +1270,7 @@ Delete every `.matrix`, `.corner`, `.colhead`, `.rowhead`, `.track .bar`,
                border-radius: 3px; background: var(--surface-raised); }
 ```
 
-- [ ] **Step 4: Remove the two dead call sites**
+- [x] **Step 4: Remove the two dead call sites**
 
 Run: `cd frontend && grep -n "rows()\|pairCount()" src/app/workspaces/versions/versions.ts`
 Expected: no output. `rows()` was matrix geometry — the stream uses
@@ -1255,17 +1278,17 @@ Expected: no output. `rows()` was matrix geometry — the stream uses
 tally becomes `store.pageSpec().total` releases. Both are gone from the store
 after Task 5, so a leftover is a compile error, not a silent bug.
 
-- [ ] **Step 5: Build and check it compiles**
+- [x] **Step 5: Build and check it compiles**
 
 Run: `cd frontend && npx ng build`
 Expected: `Application bundle generation complete.`
 
-- [ ] **Step 6: Run the frontend suite**
+- [x] **Step 6: Run the frontend suite**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/versions/versions.ts
@@ -1276,6 +1299,12 @@ never horizontal -- the property that makes an open-ended component set
 representable at all. A 2D grid gives each component an axis and there is
 no third axis, which is why this is a rewrite and not new CSS."
 ```
+
+**Note (found during implementation):** Tasks 5, 6 and 7 landed in one commit,
+`3efd9d8`, for the reason recorded at Task 5's own note — the build does not
+compile between them. The "filtered"/"no releases match" states from Task 8
+Step 4 were kept out of this rewrite's template on purpose, so Task 8's own
+diff still shows them arriving with that task rather than pre-existing.
 
 ## Task 8: Annotation — legend, ticks, tooltips, and the states
 
