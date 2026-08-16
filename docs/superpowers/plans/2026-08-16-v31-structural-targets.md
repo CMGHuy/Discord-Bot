@@ -5,6 +5,19 @@ Bump: bot minor (1.1.4 → 1.2.0)
 
 Built from `docs/superpowers/specs/2026-08-16-v31-structural-targets-design.md`.
 
+## Stable baseline before implementation starts
+
+`Version:` above is when this plan was **written** (`document-conventions.md`'s
+rule: never refreshed afterwards). This is a separate, later mark: the last
+known-good state before v31's own code changes begin, since a full release
+cycle of unrelated UI/backend work shipped on `main` between authoring this
+plan and starting on it.
+
+**`ui 1.7.0 · bot 1.1.4`, commit `43387ce`.** If v31's implementation needs to
+be rolled back, this is the commit to return to — everything from here up to
+(not including) v31's first implementation commit is unrelated to this plan
+and should be treated as part of the stable base, not as work to unwind.
+
 `bot` minor by the `working-conventions.md` test — observable difference, not
 diff size. Every number the bot posts in every alert changes, and the precedent
 is exact: `bot 1.1.0` (`9b979be`) was earned by Plan Engine v2 because "how
