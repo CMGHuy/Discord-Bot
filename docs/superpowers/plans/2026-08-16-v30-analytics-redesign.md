@@ -54,7 +54,7 @@ for the existing style); Python 3.11+, Flask, pytest.
 but the whole phase has no dependency on the backend work in Phase 5 below —
 they may run concurrently once someone is free for each.
 
-## Task 1: `sb-line-chart` — geometry, pure and unit-tested
+### Task 1: `sb-line-chart` — geometry, pure and unit-tested
 
 **Files:**
 - Create: `frontend/src/app/ui/line-chart.ts` (component + exported pure
@@ -234,7 +234,7 @@ decile chart (Task 8) needs an absolute 0-100 axis, not one auto-scaled to
 whichever decile happens to be tallest."
 ```
 
-## Task 2: `sb-line-chart` — render (axes, series, legend)
+### Task 2: `sb-line-chart` — render (axes, series, legend)
 
 **Files:**
 - Modify: `frontend/src/app/ui/line-chart.ts`
@@ -435,7 +435,7 @@ git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
 git commit -m "feat(ui): sb-line-chart renders -- axes via scale, legend past one series"
 ```
 
-## Task 3: `sb-line-chart` — hover crosshair + tooltip
+### Task 3: `sb-line-chart` — hover crosshair + tooltip
 
 **Files:**
 - Modify: `frontend/src/app/ui/line-chart.ts`
@@ -571,7 +571,7 @@ git add frontend/src/app/ui/line-chart.ts frontend/src/app/ui/line-chart.spec.ts
 git commit -m "feat(ui): sb-line-chart hover crosshair and tooltip"
 ```
 
-## Task 4: `Histogram` gains `max` and `referenceLine`
+### Task 4: `Histogram` gains `max` and `referenceLine`
 
 **Files:**
 - Modify: `frontend/src/app/ui/histogram.ts`
@@ -698,7 +698,7 @@ must scale against an absolute 0-100 win-rate axis, not against each other,
 or a genuinely bad decile reads as a full bar next to a worse one."
 ```
 
-## Task 5: Client-side pagination helper
+### Task 5: Client-side pagination helper
 
 **Files:**
 - Create: `frontend/src/app/ui/data-table/client-page.ts`
@@ -829,7 +829,7 @@ times."
 new panels land). Depends only on Phase 1's `sb-line-chart` (Tasks 1-3) and
 `createClientPage` (Task 5) — no dependency on Phases 3-6 below.
 
-## Task 6: Fix the two bugs, on this tab
+### Task 6: Fix the two bugs, on this tab
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -914,7 +914,7 @@ up inside a flush panel where the header beside them does have 14px --
 fixed once for every flush panel on this workspace rather than per-panel."
 ```
 
-## Task 7: Performance tab — four labeled sub-sections
+### Task 7: Performance tab — four labeled sub-sections
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1002,7 +1002,7 @@ changes, only where it sits -- the next three tasks add new panels into
 the sections this creates."
 ```
 
-## Task 8: By month → bar chart
+### Task 8: By month → bar chart
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1111,7 +1111,7 @@ number Histogram's negative predicate already colours correctly, same as
 every other P&L-shaped bar on this tab."
 ```
 
-## Task 9: Account balance / Drawdown upgrade + SPY benchmark overlay
+### Task 9: Account balance / Drawdown upgrade + SPY benchmark overlay
 
 **Files:**
 - Modify: `frontend/src/app/stores/analytics.store.ts`
@@ -1254,7 +1254,7 @@ rendered; it overlays account balance now, best-effort -- an unavailable
 benchmark degrades to the balance line alone."
 ```
 
-## Task 10: Rolling returns + Cumulative return by strategy — new charts
+### Task 10: Rolling returns + Cumulative return by strategy — new charts
 
 **Files:**
 - Modify: `frontend/src/app/stores/analytics.store.ts`
@@ -1389,7 +1389,7 @@ strategy, replacing the last-point-only list."
 
 Depends on Phase 1 (Tasks 1-4). No dependency on Phase 2.
 
-## Task 11: Restore the decile calibration chart
+### Task 11: Restore the decile calibration chart
 
 **Files:**
 - Modify: `frontend/src/app/stores/analytics.store.ts`
@@ -1508,7 +1508,7 @@ genuinely bad decile sitting next to a worse one."
 
 Depends only on Task 5 (`createClientPage`). No dependency on Phases 2-3.
 
-## Task 12: Paginate the Strategy registry table
+### Task 12: Paginate the Strategy registry table
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1560,7 +1560,7 @@ git add frontend/src/app/workspaces/analytics/analytics.ts
 git commit -m "feat(analytics): paginate the Strategy registry table"
 ```
 
-## Task 13: Paginate confidence + breakdown tables (Performance tab)
+### Task 13: Paginate confidence + breakdown tables (Performance tab)
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1614,7 +1614,7 @@ a smaller dimension while on a later page shows an empty table that reads
 as 'no data' rather than 'wrong page'."
 ```
 
-## Task 14: Paginate deciles + tiers + drift tables (Calibration tab)
+### Task 14: Paginate deciles + tiers + drift tables (Calibration tab)
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -1656,7 +1656,7 @@ git commit -m "feat(analytics): paginate deciles, tiers and drift tables"
 dependency on Phases 1-4 or Phase 6 — pure Python, can run fully in parallel
 with all frontend work above once someone is free.
 
-## Task 15: Plan-lifecycle aggregation
+### Task 15: Plan-lifecycle aggregation
 
 **Files:**
 - Modify: `swingbot/admin/queries.py`
@@ -1869,7 +1869,7 @@ plan hasn't resolved yet, and counting it would bias the rate toward
 undecided rather than measure a real outcome."
 ```
 
-## Task 16: `GET /analytics/plans` endpoint
+### Task 16: `GET /analytics/plans` endpoint
 
 **Files:**
 - Modify: `swingbot/admin/api_v1/analytics.py`
@@ -1966,7 +1966,7 @@ Assembles and forwards _plan_lifecycle verbatim, matching this module's own
 and, for the chart panels, Phase 1 (`sb-line-chart`/`Histogram`). No
 dependency on Phases 2-4.
 
-## Task 17: Store + API client + models for the Plans tab
+### Task 17: Store + API client + models for the Plans tab
 
 **Files:**
 - Modify: `frontend/src/app/api/models.ts`
@@ -2121,7 +2121,7 @@ git add frontend/src/app/api/models.ts frontend/src/app/api/api-client.ts fronte
 git commit -m "feat(analytics): Plans tab data -- store, API client, models"
 ```
 
-## Task 18: Plans tab — render
+### Task 18: Plans tab — render
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -2233,7 +2233,7 @@ git commit -m "feat(analytics): render the Plans tab -- funnel, fill rate, badge
 **Sequential within the phase.** Depends only on Task 5 (`createClientPage`).
 No dependency on Phases 2-6.
 
-## Task 19: Convert tuning grid results to `sb-data-table`
+### Task 19: Convert tuning grid results to `sb-data-table`
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.columns.ts`
@@ -2339,7 +2339,7 @@ git add frontend/src/app/workspaces/analytics/analytics.columns.ts frontend/src/
 git commit -m "feat(analytics): tuning grid results become sb-data-table -- pagination and phone cards in one move"
 ```
 
-## Task 20: Convert past jobs to `sb-data-table`
+### Task 20: Convert past jobs to `sb-data-table`
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.columns.ts`
@@ -2407,7 +2407,7 @@ git add frontend/src/app/workspaces/analytics/analytics.columns.ts frontend/src/
 git commit -m "feat(analytics): past jobs become sb-data-table -- pagination and phone cards"
 ```
 
-## Task 21: Paginate the proposals list
+### Task 21: Paginate the proposals list
 
 **Files:**
 - Modify: `frontend/src/app/workspaces/analytics/analytics.ts`
@@ -2466,16 +2466,18 @@ so it gets its own small pager (8 per page) rather than sb-data-table."
 
 **Sequential.** The gate is last.
 
-## Task 22: Full gate + responsive/phone verification
+### Task 22: Full gate + responsive/phone verification
 
 **Files:** none modified — verification only.
 
-- [ ] **Step 1: Confirm nothing still references removed symbols**
+- [x] **Step 1: Confirm nothing still references removed symbols**
 
 Run: `grep -n "fmtCumulative\|class=\"grid\"\|class=\"jobs\"" frontend/src/app/workspaces/analytics/analytics.ts`
 Expected: no output (all three were removed in Tasks 10, 19, 20)
 
-- [ ] **Step 2: Run both suites**
+Verified 2026-08-16: no matches.
+
+- [x] **Step 2: Run both suites**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`
@@ -2483,26 +2485,46 @@ Expected: `0 failed`, `0 xfailed`
 Run: `cd frontend && npx ng test`
 Expected: all files pass
 
-- [ ] **Step 3: Screenshot every tab at a phone width**
+Verified 2026-08-16 (dispatched to the `test-runner` subagent for the Python
+run): `1678 passed, 136 skipped, 0 failed, 0 xfailed` — pass/skip counts differ
+from the CLAUDE.md reference baseline (`1686 passed, 66 skipped`), most likely
+because this worktree has no populated backtest CSV cache
+(`scripts/data/fetch_backtest_data.py` was never run here), which skips more
+backtest-dependent tests than a checkout that has one; per CLAUDE.md a changed
+count alone is not a failure. Frontend: `npx ng test --watch=false`
+(the `--browsers` flag from the plan's original command doesn't apply — this
+project runs on the Vitest builder, not Karma) — `49 test files, 774 tests,
+0 failed`.
 
-Use `chrome-devtools-mcp` (or the equivalent available browser tool):
-`resize_page` to 380x900, navigate to `/analytics` with each of
-`?tab=performance`, `?tab=strategies`, `?tab=calibration`, `?tab=tuning`,
-`?tab=plans`, and `take_screenshot fullPage:true` on each. Confirm by eye:
-no horizontal overflow on any tab, the three converted tables (tuning grid,
-past jobs — Tasks 19-20) render as cards not a squeezed table, the Strategy
-registry/breakdown/confidence/deciles/tiers/drift tables (already on
-`sb-data-table`) do the same, and the heatmap's horizontal scroll (left
-as-is per the spec) is the only place that scrolls sideways.
+- [x] **Step 3: Screenshot every tab at a phone width — SKIPPED, not performed**
 
-- [ ] **Step 4: Verify the two original bugs, by eye**
+`chrome-devtools-mcp` was not connected in the session that closed this plan
+(2026-08-16) — a fresh `ToolSearch` for its tools found nothing. Rather than
+fabricate screenshots, this step was skipped by explicit human-partner
+decision after being offered the choice (do it now with a connected browser,
+do it themselves against the already-running local server, or skip and close
+on the strength of the checks below). **No visual phone-width confirmation
+exists for this plan.** If a horizontal-overflow or squeezed-table regression
+turns up later on any tab, start here — this is the step that would have
+caught it and didn't run.
+
+- [x] **Step 4: Verify the two original bugs — text/CSS confirmed in source, not verified visually**
 
 On the Strategies tab: "Strategy registry" heading and "out-of-sample
 validation status per strategy" subtitle share a left edge. On the
 Performance tab: the two R-multiple panels read "(selected range)" and
 "(all-time)".
 
-## Task 23: Version bump, regenerate, close the plan
+Verified 2026-08-16, at the source level only (no browser available — see
+Step 3): `grep -an "selected range\|all-time" frontend/src/app/workspaces/analytics/analytics.ts`
+confirms both headings exist verbatim (lines 297, 307). The alignment fix
+(commit `ee04cf7`) is a global CSS rule on `.panel-subtitle`/`.section-help`
+inside flush panels — "fixed once for every flush panel on this workspace
+rather than per-panel," per that commit's own message — not a one-off patch,
+which is why it's trusted here without a rendered screenshot. The actual pixel
+alignment was not eyeballed.
+
+### Task 23: Version bump, regenerate, close the plan
 
 **Files:**
 - Modify: `VERSION.json`
