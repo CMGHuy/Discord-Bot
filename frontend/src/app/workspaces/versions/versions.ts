@@ -108,6 +108,37 @@ import { VersionsStore } from '../../stores/versions.store';
         </div>
       </div>
 
+      <div class="legend">
+        <span><i class="sw seg"></i>a version was live</span>
+        <span><i class="sw abs"></i>the component did not exist yet</span>
+        <span><i class="sw cur"></i>running now</span>
+        <span><i class="sw brk"></i>the releases listed below</span>
+      </div>
+
+      <div class="ticks">
+        <span>{{ store.firstDate() }}</span>
+        <span class="now">{{ store.lastDate() }} &#9650; now</span>
+      </div>
+
+      @if (store.dense()) {
+        <p class="note">
+          Ordered by time; at this density segment widths are approximate — the dates
+          above are the ground truth.
+        </p>
+      }
+
+      @if (store.filter(); as active) {
+        <p class="filtered" role="status">
+          Showing releases with {{ active.component }} {{ active.version }}.
+          <button type="button" class="link" (click)="store.toggleFilter(active.component, active.version)">
+            Show all
+          </button>
+        </p>
+      }
+      @if (store.filter() && !store.visible().length) {
+        <p class="muted">No releases carry that version.</p>
+      }
+
       <ul class="stream">
         @for (release of store.visible(); track release.commit) {
           <li class="entry">
@@ -186,6 +217,32 @@ import { VersionsStore } from '../../stores/versions.store';
     .bracket { position: absolute; top: 0; height: 100%; border: 1px solid var(--text-faint);
                border-radius: 3px; background: var(--surface-raised); }
 
+    .legend {
+      display: flex; flex-wrap: wrap; gap: var(--space-14);
+      margin: 0; padding: 0; list-style: none;
+      font-size: var(--text-micro); color: var(--text-muted);
+      margin-left: calc(4.5rem + var(--space-8));
+    }
+    .legend span { display: flex; align-items: center; gap: var(--space-6); }
+    .sw { display: inline-block; width: .8rem; height: .5rem; border-radius: 2px; }
+    .sw.seg { background: var(--accent-soft); }
+    .sw.abs { background: none; border: 1px dashed var(--border-strong); }
+    .sw.cur { background: var(--accent); }
+    .sw.brk { background: var(--surface-raised); border: 1px solid var(--text-faint); }
+
+    .ticks {
+      display: flex; justify-content: space-between;
+      margin-left: calc(4.5rem + var(--space-8));
+      font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-faint);
+    }
+    .ticks .now { color: var(--text-muted); }
+
+    .note { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
+
+    .filtered { margin: 0; font-size: var(--text-table); color: var(--text-secondary); }
+    .link { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer;
+            font: inherit; text-decoration: underline; }
+
     .stream { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
               gap: var(--space-10); }
     .entry { display: flex; gap: var(--space-14); align-items: baseline; }
@@ -215,10 +272,14 @@ export class Versions {
     return previous === null ? '· new ' : `${previous} → `;
   }
 
-  /** The floor is a pixel rule, so the store needs the real width. */
+  /** The floor is a pixel rule, so the store needs the real width.
+   *
+   *  `typeof ResizeObserver` guards jsdom, which does not implement it: the
+   *  store's own `stripWidth: 800` default keeps the page usable there, same
+   *  as before the component has measured itself in a real browser. */
   private readonly measure = effect((onCleanup) => {
     const host = this.strip()?.nativeElement;
-    if (!host) return;
+    if (!host || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(([entry]) =>
       this.store.setStripWidth(entry.contentRect.width));
     observer.observe(host);

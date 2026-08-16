@@ -248,6 +248,16 @@ export const VersionsStore = signalStore(
       return { start, width: Math.max((to - from) / span, 2 / Math.max(1, stripWidth())) };
     }),
   })),
+  withComputed(({ data, lanes, stripWidth }) => ({
+    firstDate: computed(() => data()?.releases?.[0]?.date ?? ''),
+    lastDate: computed(() => {
+      const all = data()?.releases ?? [];
+      return all[all.length - 1]?.last_seen ?? '';
+    }),
+    /** True once enough segments are floored that width has stopped meaning
+     *  duration. Drives the caveat above rather than hiding it. */
+    dense: computed(() => lanes().some((lane) => lane.segments.length > stripWidth() / 8)),
+  })),
   withMethods((store, api = inject(ApiClient)) => ({
     load(): void {
       patchState(store, { loading: true });
