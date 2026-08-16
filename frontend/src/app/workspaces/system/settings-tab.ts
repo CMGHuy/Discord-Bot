@@ -144,23 +144,26 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
                 @if (store.differsFromDefault(field)) {
                   <!-- The Jinja page's dot: differs from the CODE default,
                        which is a different statement from "edited just now"
-                       and the one that survives a reload. -->
+                       and the one that survives a reload. A plain inline
+                       link rather than sb-button: at the button's own
+                       --control-h (28px) it towered over the plain-text
+                       badges beside it in this row, and the full label
+                       repeated what the default-badge two spaces to its
+                       left and the title attribute here already say. -->
                   <button
-                    sb-button
-                    variant="ghost"
                     type="button"
                     class="reset"
                     [title]="'Reset to ' + field.default"
                     (click)="store.resetField(field)"
                   >
-                    reset to default
+                    reset
                   </button>
                 }
                 @if (!field.hot_reloadable) {
                   <!-- Named per field rather than only in the diff: it is
                        the difference between a change that takes effect and
                        one that waits for a restart nobody knew to do. -->
-                  <span class="restart">restart required</span>
+                  <span class="restart" title="Restart required to take effect">restart</span>
                 }
                 @if (field.sensitive) {
                   <span class="secret">stored value hidden — type to replace</span>
@@ -449,15 +452,43 @@ import { FieldGroup, controlOf, groupByControl } from './settings-grouping';
       font-size: var(--text-chip);
     }
 
-    .help { color: var(--text-muted); font-size: var(--text-chip); line-height: 1.4; }
+    /* overflow-wrap: an unbroken long token (a URL, a path) in a field's help
+       copy must wrap inside its own 260px column rather than spill into the
+       next one -- the one way two fields' text could visibly run together. */
+    .help { color: var(--text-muted); font-size: var(--text-chip); line-height: 1.4;
+            overflow-wrap: anywhere; }
     .meta { display: flex; flex-wrap: wrap; gap: var(--space-6); }
     .key {
       color: var(--text-faint);
       font-family: var(--font-mono);
       font-size: var(--text-chip);
     }
-    .restart, .secret { color: var(--warn); font-size: var(--text-chip); }
-    .secret { color: var(--text-faint); }
+    /* A pill rather than plain text, at the same --text-chip scale as .key
+       and .default-badge beside it -- the row is otherwise all plain text,
+       so "restart" needs a container of its own to still read as a status
+       rather than another word in the sentence. */
+    .restart {
+      padding: 1px var(--space-6);
+      background: color-mix(in srgb, var(--warn) 14%, transparent);
+      border-radius: var(--radius-chip);
+      color: var(--warn);
+      font-size: var(--text-chip);
+      cursor: help;
+    }
+    .secret { color: var(--text-faint); font-size: var(--text-chip); }
+    /* A plain inline link, not sb-button: at the button's own --control-h
+       (28px) it towered over the plain-text badges sharing this row. */
+    .reset {
+      border: 0;
+      background: none;
+      padding: 0;
+      color: var(--accent);
+      font: inherit;
+      font-size: var(--text-chip);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .reset:hover { color: var(--text); }
 
     /* No justify-content: space-between any more. It lived on the flex rule
        the primitive now owns, and .bar-actions' margin-left: auto states the
