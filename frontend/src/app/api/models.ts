@@ -488,6 +488,12 @@ export interface Ticker {
   /** ISO date (`YYYY-MM-DD`), or null when Yahoo has no calendar data for
    *  this symbol (or it's an ETF, which never reports earnings). */
   next_earnings_date: string | null;
+  /** Full ISO-8601 UTC timestamp for the same event, or null under the same
+   *  conditions as next_earnings_date -- always UTC regardless of the
+   *  reporting company's own exchange timezone, so the client can render
+   *  any local time (e.g. Europe/Berlin) from one consistent source. Never
+   *  confirmed by the company for a future date; treat as an estimate. */
+  next_earnings_datetime: string | null;
 }
 
 /** `GET /watchlist/tickers`. A plain list, NOT a `Collection` — the watchlist

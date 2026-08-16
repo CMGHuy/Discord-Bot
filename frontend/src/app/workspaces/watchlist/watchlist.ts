@@ -4,6 +4,7 @@ import {
   TemplateRef,
   computed,
   inject,
+  input,
   signal,
   viewChild,
 } from '@angular/core';
@@ -14,9 +15,62 @@ import { WatchlistStore } from '../../stores/watchlist.store';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, RowContext } from '../../ui/data-table/data-table.types';
+import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, text } from '../../ui/format';
-import { ControlRow, Panel } from '../../ui/layout';
+import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { EarningsCalendar } from './earnings-calendar';
+
+const TABS: Tab[] = [
+  { id: 'watchlist', label: 'Watchlist' },
+  { id: 'earnings', label: 'Earnings' },
+];
+const TAB_IDS = new Set(TABS.map((t) => t.id));
+
+/** Monday 00:00 through Sunday 23:59:59 of the week containing `now` --
+ *  matches the calendar's own Monday-first week, so "this week" means the
+ *  same seven days in both places. */
+function currentWeekBounds(now: Date): { start: Date; end: Date } {
+  const mondayOffset = (now.getDay() + 6) % 7;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6,
+                       23, 59, 59, 999);
+  return { start, end };
+}
+
+export function isWithinCurrentWeek(isoDate: string | null): boolean {
+  if (!isoDate) return false;
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const day = new Date(y, m - 1, d);
+  const { start, end } = currentWeekBounds(new Date());
+  return day >= start && day <= end;
+}
+
+/** Ascending by default (soonest first); a ticker with no known date sorts
+ *  LAST regardless of direction -- "unknown" is not meaningfully before or
+ *  after a real date, and floating it to the top of a descending sort would
+ *  read as "most urgent" for the one thing that carries no urgency at all. */
+export function compareTickers(a: Ticker, b: Ticker, sort: SortSpec): number {
+  const dir = sort.direction === 'asc' ? 1 : -1;
+  const av = sortValue(a, sort.key);
+  const bv = sortValue(b, sort.key);
+  if (av === null && bv === null) return 0;
+  if (av === null) return 1;
+  if (bv === null) return -1;
+  if (av < bv) return -dir;
+  if (av > bv) return dir;
+  return 0;
+}
+
+function sortValue(row: Ticker, key: string): string | number | null {
+  switch (key) {
+    case 'symbol': return row.symbol;
+    case 'company_name': return row.company_name;
+    case 'next_earnings_date': return row.next_earnings_date;
+    case 'open_trades': return row.open_trades;
+    case 'closed_trades': return row.closed_trades;
+    default: return null;
+  }
+}
 
 /**
  * Watchlist — the watchlist the scanner walks.
@@ -38,7 +92,7 @@ import { ControlRow, Panel } from '../../ui/layout';
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow],
+  imports: [RouterLink, DataTable, Panel, Button, ConfirmDialog, ControlRow, TabBar, EarningsCalendar],
   providers: [WatchlistStore],
   template: `
     <header class="head">
@@ -49,6 +103,9 @@ import { ControlRow, Panel } from '../../ui/layout';
       }
     </header>
 
+    <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
+
+    @if (activeTab() === 'watchlist') {
     <sb-panel heading="Add tickers">
       <!-- SR62. watchlist.html:85-92. The gap table calls this the one
            cosmetic row with a functional consequence: an add that fails
@@ -121,13 +178,23 @@ import { ControlRow, Panel } from '../../ui/layout';
     }
 
     <sb-panel heading="Watchlist" [flush]="true">
+      <!-- A row blinks when its earnings date falls within the current
+           week (Monday-Sunday, same boundary the Earnings tab's calendar
+           uses) -- a gentle pulse, not a hard flash; see data-table.ts's
+           .blink rule and its prefers-reduced-motion fallback. -->
+      <p class="section-help panel-note">
+        A row pulses when that ticker reports earnings this week.
+      </p>
       <sb-data-table
-        [rows]="store.tickers()"
+        [rows]="sortedRows()"
         [columns]="columns()"
         [visible]="visible"
         [rowKey]="rowKey"
+        [rowClass]="rowClassFn"
+        [sort]="sort()"
         [loading]="store.loading() && store.empty()"
         [emptyState]="emptyState"
+        (sortChange)="setSort($event)"
         (rowActivate)="open($event)"
       />
     </sb-panel>
@@ -151,6 +218,20 @@ import { ControlRow, Panel } from '../../ui/layout';
     <ng-template #actionsCell let-row>
       <button sb-button variant="ghost" type="button" (click)="ask(row)">Remove</button>
     </ng-template>
+    }
+
+    @if (activeTab() === 'earnings') {
+      <sb-panel heading="Earnings">
+        <p class="section-help">
+          Every watchlist ticker's next known earnings date, one cell per
+          day. Only tickers currently on the watchlist appear here, and a
+          newly-added one shows up the next time this page loads — same
+          data as the Watchlist tab's "Next earnings" column, just grouped
+          by date instead of by ticker.
+        </p>
+        <sb-earnings-calendar [tickers]="store.tickers()" />
+      </sb-panel>
+    }
   `,
   styles: `
     /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
@@ -218,15 +299,61 @@ import { ControlRow, Panel } from '../../ui/layout';
 
     .row-link { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
     .row-link:hover { text-decoration: underline; }
+
+    /* The Watchlist panel is flush (the table needs edge-to-edge rows),
+       which zeroes the body's own padding -- restores just the left/right
+       inset so this note lines up with the panel heading above it, same
+       fix as Dashboard's .panel-note. */
+    .panel-note { padding: var(--space-10) var(--space-14) 0; }
   `,
 })
 export class Watchlist {
   private readonly router = inject(Router);
   protected readonly store = inject(WatchlistStore);
 
+  protected readonly tabs = TABS;
+  /** Bound from `?tab=` via the app-wide withComponentInputBinding(), same
+   *  as Analytics. An unknown or absent value falls back to Watchlist. */
+  readonly tab = input<string>();
+  protected readonly activeTab = computed(() => {
+    const requested = this.tab();
+    return requested && TAB_IDS.has(requested) ? requested : 'watchlist';
+  });
+
+  protected goToTab(tab: string): void {
+    void this.router.navigate([], {
+      queryParams: { tab: tab === 'watchlist' ? null : tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
   protected readonly entry = signal('');
   /** The row awaiting confirmation, or null. */
   protected readonly pending = signal<Ticker | null>(null);
+
+  /** Client-side: the whole watchlist loads in one plain-list response
+   *  (data-table.ts's PageSpec convention -- Watchlist is one of the three
+   *  unpaginated call sites), so sorting is a local re-order of what is
+   *  already on screen rather than a server round trip.
+   *
+   *  Defaults to soonest-earnings-first: the whole point of the Earnings
+   *  work is "what's coming up", and the table should open already
+   *  answering that without a click. */
+  protected readonly sort = signal<SortSpec>({ key: 'next_earnings_date', direction: 'asc' });
+
+  protected setSort(next: SortSpec): void {
+    this.sort.set(next);
+  }
+
+  protected readonly sortedRows = computed(() =>
+    [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort())));
+
+  /** Bound (not a method call in the template) so DataTable's identity
+   *  check on the input doesn't see a new function every change-detection
+   *  pass -- an arrow field, same pattern as `rowKey` below. */
+  protected readonly rowClassFn = (row: Ticker): string | null =>
+    isWithinCurrentWeek(row.next_earnings_date) ? 'blink' : null;
 
   protected readonly rowKey = (row: Ticker) => row.symbol;
 
@@ -245,14 +372,14 @@ export class Watchlist {
   ];
 
   protected readonly columns = computed<ColumnDef<Ticker>[]>(() => [
-    { key: 'symbol', header: 'Symbol', cell: this.symbolCell() },
-    { key: 'company_name', header: 'Company', value: (row) => text(row.company_name) },
+    { key: 'symbol', header: 'Symbol', cell: this.symbolCell(), sortable: true },
+    { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true },
     {
-      key: 'next_earnings_date', header: 'Next earnings',
+      key: 'next_earnings_date', header: 'Next earnings', sortable: true,
       value: (row) => (row.next_earnings_date ? date(row.next_earnings_date) : null),
     },
-    { key: 'open_trades', header: 'Open', value: (row) => row.open_trades, numeric: true },
-    { key: 'closed_trades', header: 'Closed', value: (row) => row.closed_trades, numeric: true },
+    { key: 'open_trades', header: 'Open', value: (row) => row.open_trades, numeric: true, sortable: true },
+    { key: 'closed_trades', header: 'Closed', value: (row) => row.closed_trades, numeric: true, sortable: true },
     { key: 'actions', header: '', cell: this.actionsCell(), width: '1%' },
   ]);
 

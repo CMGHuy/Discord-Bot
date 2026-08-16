@@ -82,6 +82,20 @@ export function dateTime(iso: string | null | undefined): string {
   });
 }
 
+/** A 24-hour clock time in an EXPLICIT timezone, not the viewer's own --
+ *  for the Watchlist Earnings calendar, which shows both UTC and
+ *  Europe/Berlin side by side so the two are directly comparable regardless
+ *  of what timezone the browser itself is in. `Intl.DateTimeFormat`'s
+ *  `timeZone` option handles the DST transition correctly on either side
+ *  (Europe/Berlin shifts between CET and CEST; UTC never does), which a
+ *  fixed offset could not. */
+export function timeInZone(iso: string | null | undefined, timeZone: string): string {
+  if (!iso) return ABSENT;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return ABSENT;
+  return parsed.toLocaleTimeString('en-GB', { timeZone, hour: '2-digit', minute: '2-digit' });
+}
+
 export function date(iso: string | null | undefined): string {
   if (!iso) return ABSENT;
   const parsed = new Date(iso);

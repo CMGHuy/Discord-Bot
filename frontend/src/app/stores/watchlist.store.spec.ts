@@ -52,9 +52,9 @@ class FakeEventStream {
 const TICKERS = {
   tickers: [
     { symbol: 'AAPL', company_name: 'Apple Inc.', open_trades: 1, closed_trades: 4,
-      next_earnings_date: '2026-09-03' },
+      next_earnings_date: '2026-09-03', next_earnings_datetime: '2026-09-03T20:00:00+00:00' },
     { symbol: 'MSFT', company_name: 'Microsoft', open_trades: 0, closed_trades: 2,
-      next_earnings_date: null },
+      next_earnings_date: null, next_earnings_datetime: null },
   ],
 };
 

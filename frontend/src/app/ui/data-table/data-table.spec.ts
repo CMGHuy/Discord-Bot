@@ -53,6 +53,7 @@ const ROWS: Row[] = [
       [columns]="columns()"
       [visible]="visible()"
       [rowKey]="rowKey"
+      [rowClass]="rowClass()"
       [sort]="sort()"
       [pagination]="pagination()"
       [loading]="loading()"
@@ -84,6 +85,7 @@ class Host {
     viewChild.required<TemplateRef<RowContext<Row>>>('actionCell');
 
   readonly rowKey = (row: Row) => row.id;
+  readonly rowClass = signal<(row: Row) => string | null>(() => null);
 
   readonly columns = computed<ColumnDef<Row>[]>(() => [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true },
@@ -556,5 +558,41 @@ describe('DataTable card mode', () => {
     fixture.detectChanges();
     expect(el().querySelector('table')).not.toBeNull();
     expect(cards()).toHaveLength(0);
+  });
+});
+
+describe('DataTable rowClass', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const bodyRows = () => [...el().querySelectorAll('tbody tr.row')];
+
+  it('adds nothing extra when unset — the three other call sites are unaffected', () => {
+    expect(bodyRows().every((r) => r.className.trim() === 'row')).toBe(true);
+  });
+
+  it('applies the class only to rows the callback names', () => {
+    host.rowClass.set((row) => (row.ticker === 'MSFT' ? 'blink' : null));
+    fixture.detectChanges();
+
+    const classes = bodyRows().map((r) => r.className);
+    expect(classes).toEqual(['row', 'row blink', 'row']);
+  });
+
+  it('applies to cards too, not just table rows', () => {
+    host.cardsAt.set(true);
+    host.rowClass.set((row) => (row.ticker === 'MSFT' ? 'blink' : null));
+    fixture.detectChanges();
+
+    const cards = [...el().querySelectorAll('.card')];
+    expect(cards.map((c) => c.className)).toEqual(['card', 'card blink', 'card']);
   });
 });

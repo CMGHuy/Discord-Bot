@@ -62,7 +62,7 @@ import {
              every column added to one is missing from the other. -->
         <ul class="cards">
           @for (row of rows(); track rowKey()(row)) {
-            <li class="card" (click)="activate(row, $event)">
+            <li class="card" [class]="rowClass()(row)" (click)="activate(row, $event)">
               <div class="card-head">
                 @for (col of headlineColumns(); track col.key) {
                   <span class="head-cell">
@@ -149,7 +149,7 @@ import {
 
         <tbody>
           @for (row of rows(); track rowKey()(row)) {
-            <tr class="row" (click)="activate(row, $event)">
+            <tr class="row" [class]="rowClass()(row)" (click)="activate(row, $event)">
               @if (expansion()) {
                 <td class="expander-cell">
                   <button
@@ -320,6 +320,21 @@ import {
     .arrow { display: inline-block; min-width: 0.7em; color: var(--accent); }
 
     .row:hover { background: var(--surface-raised); }
+
+    /* A pulse, not a hard on/off flash: WCAG's flash-rate guidance exists
+       for a reason, and an opacity/background fade reads as "attention"
+       without the seizure risk of a true blink. Respects
+       prefers-reduced-motion -- the row still needs telling apart, so it
+       falls back to a steady tint rather than losing the signal entirely. */
+    .blink { animation: sb-row-blink 1.6s ease-in-out infinite; }
+    .blink:hover { animation-play-state: paused; }
+    @keyframes sb-row-blink {
+      0%, 100% { background: transparent; }
+      50% { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .blink { animation: none; background: color-mix(in srgb, var(--warn) 10%, transparent); }
+    }
     .expansion > td { background: var(--surface); white-space: normal; }
 
     .expander-cell { width: 1px; padding-right: 0; }
@@ -351,6 +366,10 @@ export class DataTable<T> {
   readonly visible = input.required<string[]>();
   /** Stable identity per row: the `@for` track and the expansion key. */
   readonly rowKey = input.required<(row: T) => string>();
+  /** An extra CSS class for the whole row (or card), or null for none --
+   *  e.g. a blink animation on a row whose date is imminent. Optional and a
+   *  no-op when unset, so the three other call sites are unaffected. */
+  readonly rowClass = input<(row: T) => string | null>(() => null);
 
   readonly sort = input<SortSpec | null>(null);
   /** `null` means this data is not paginated: render every row, show no
