@@ -20,6 +20,33 @@ and the Tuning tab conversions (10-12). Close with a full gate (13).
 library — this app draws its own, see `ui/histogram.ts` and `ui/sparkline.ts`
 for the existing style); Python 3.11+, Flask, pytest.
 
+## Progress (closed 2026-08-16)
+
+All 23 tasks committed. Both suites green at close: `1678 passed, 0 failed,
+0 xfailed` (Python; skip count differs from the CLAUDE.md reference baseline,
+most likely because this worktree never populated the backtest CSV cache —
+not itself a failure), `774/774` (frontend, vitest). Shipped as `ui 1.6.0`.
+
+**Addendum 2026-08-16 (post-close): the verification gap above is now
+filled.** A second, concurrent session in this same worktree — unaware the
+plan had already closed, having been paused for several hours by a session
+usage limit — independently re-executed Tasks 17-21 (converging on the same
+diffs; no conflicting changes) and then ran Task 22 Step 3 for real, with
+`chrome-devtools-mcp` connected: `python admin_ui.py` + `npm start`, logged
+in, resized to 380x900, and screenshotted all five tabs (Performance,
+Strategies, Calibration, Tuning, Plans). Result: no horizontal overflow on
+any tab; the Strategy registry table rendered as stacked phone cards with
+real registry data (not squeezed); the two original bugs were confirmed
+visually, not just at the source level — the Strategy registry heading and
+its subtitle share a left edge, and the Performance tab shows both
+"(selected range)" and "(all-time)" R-multiple panels. The tuning grid and
+past-jobs tables were not exercised with real rows (no seeded job data in
+this worktree) — their empty states rendered cleanly, and their phone-card
+behavior rests on the same `sb-data-table` component already visually
+confirmed via the Strategy registry table above, per this plan's own Global
+Constraint that the phone-card layout is automatic for anything on
+`sb-data-table`.
+
 ## Global Constraints
 
 - **`sb-data-table`'s phone-card layout is automatic** (spec v18 Decision 9,
@@ -2496,33 +2523,26 @@ count alone is not a failure. Frontend: `npx ng test --watch=false`
 project runs on the Vitest builder, not Karma) — `49 test files, 774 tests,
 0 failed`.
 
-- [x] **Step 3: Screenshot every tab at a phone width — SKIPPED, not performed**
+- [x] **Step 3: Screenshot every tab at a phone width — done retroactively, see Addendum above**
 
-`chrome-devtools-mcp` was not connected in the session that closed this plan
-(2026-08-16) — a fresh `ToolSearch` for its tools found nothing. Rather than
-fabricate screenshots, this step was skipped by explicit human-partner
-decision after being offered the choice (do it now with a connected browser,
-do it themselves against the already-running local server, or skip and close
-on the strength of the checks below). **No visual phone-width confirmation
-exists for this plan.** If a horizontal-overflow or squeezed-table regression
-turns up later on any tab, start here — this is the step that would have
-caught it and didn't run.
+Originally skipped by explicit human-partner decision (no browser tool
+connected in the closing session — see the superseded note this replaces,
+still visible in git history at commit `816b48c`). Performed for real on
+2026-08-16 by a second, concurrent session — see "Addendum 2026-08-16" near
+the top of this file for the method and result (no overflow, phone cards
+confirmed with real data on the Strategy registry table).
 
-- [x] **Step 4: Verify the two original bugs — text/CSS confirmed in source, not verified visually**
+- [x] **Step 4: Verify the two original bugs — confirmed visually, see Addendum above**
 
 On the Strategies tab: "Strategy registry" heading and "out-of-sample
 validation status per strategy" subtitle share a left edge. On the
 Performance tab: the two R-multiple panels read "(selected range)" and
 "(all-time)".
 
-Verified 2026-08-16, at the source level only (no browser available — see
-Step 3): `grep -an "selected range\|all-time" frontend/src/app/workspaces/analytics/analytics.ts`
-confirms both headings exist verbatim (lines 297, 307). The alignment fix
-(commit `ee04cf7`) is a global CSS rule on `.panel-subtitle`/`.section-help`
-inside flush panels — "fixed once for every flush panel on this workspace
-rather than per-panel," per that commit's own message — not a one-off patch,
-which is why it's trusted here without a rendered screenshot. The actual pixel
-alignment was not eyeballed.
+Originally confirmed at the source/CSS level only (see the superseded note
+this replaces, still visible in git history at commit `816b48c`). Confirmed
+by eye in a rendered browser on 2026-08-16 — see "Addendum 2026-08-16" near
+the top of this file.
 
 ### Task 23: Version bump, regenerate, close the plan
 
