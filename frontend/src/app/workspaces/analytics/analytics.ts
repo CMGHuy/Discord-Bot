@@ -33,6 +33,7 @@ import { Chip, QualityChip, qualityTone } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
+import { createClientPage } from '../../ui/data-table/client-page';
 import { Select } from '../../ui/form-controls';
 import { ABSENT, date, dateTime, share } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
@@ -399,12 +400,14 @@ interface ProposalView extends ProposalRow {
 
         <sb-panel heading="By confidence level" [flush]="true">
           <sb-data-table
-            [rows]="store.byConfidence()"
+            [rows]="confidencePage.visible()"
             [columns]="confidenceColumns()"
             [visible]="confidenceKeys"
             [rowKey]="confidenceKey"
             [loading]="store.loading()"
             [emptyState]="confidenceEmpty"
+            [pagination]="confidencePage.pageSpec()"
+            (pageChange)="confidencePage.setPage($event)"
           />
         </sb-panel>
 
@@ -422,12 +425,14 @@ interface ProposalView extends ProposalRow {
             />
           </div>
           <sb-data-table
-            [rows]="store.breakdownRows()"
+            [rows]="breakdownPage.visible()"
             [columns]="breakdownColumns()"
             [visible]="breakdownKeys"
             [rowKey]="breakdownKey"
             [loading]="store.loading()"
             [emptyState]="breakdownEmpty()"
+            [pagination]="breakdownPage.pageSpec()"
+            (pageChange)="breakdownPage.setPage($event)"
           />
         </sb-panel>
       }
@@ -460,12 +465,14 @@ interface ProposalView extends ProposalRow {
         <sb-panel heading="Strategy registry" [flush]="true">
           <p class="panel-subtitle">out-of-sample validation status per strategy</p>
           <sb-data-table
-            [rows]="store.strategyRows()"
+            [rows]="strategyPage.visible()"
             [columns]="strategyColumns()"
             [visible]="strategyKeys"
             [rowKey]="strategyKey"
             [loading]="store.loading()"
             [emptyState]="strategyEmpty"
+            [pagination]="strategyPage.pageSpec()"
+            (pageChange)="strategyPage.setPage($event)"
           />
 
           <!-- SR61. The twelve column tips from strategies.html:30-41. A
@@ -1266,7 +1273,9 @@ export class Analytics {
   protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
 
   protected readonly strategyKey = (row: StrategyRow) => row.strategy;
+  protected readonly strategyPage = createClientPage(() => this.store.strategyRows());
   protected readonly confidenceKey = (row: { level: number }) => String(row.level);
+  protected readonly confidencePage = createClientPage(() => this.store.byConfidence());
   protected readonly decileKey = (row: { decile: string }) => row.decile;
   protected readonly tierKey = (row: TierRow) => row.tier;
   protected readonly driftKey = (row: DriftRow) => row.strategy;
@@ -1294,6 +1303,7 @@ export class Analytics {
   );
   protected readonly breakdownKeys = allKeys(breakdownColumns(''));
   protected readonly breakdownKey = (row: BreakdownRow) => row.key;
+  protected readonly breakdownPage = createClientPage(() => this.store.breakdownRows());
 
   protected readonly breakdownEmpty = computed(() => ({
     title: `Nothing grouped by ${this.store.breakdownLabel().toLowerCase()} yet`,
@@ -1302,6 +1312,7 @@ export class Analytics {
 
   protected onBreakdown(value: string): void {
     this.store.setBreakdown(value as BreakdownDimension);
+    this.breakdownPage.setPage(1);
   }
 
   protected readonly fmtLineValue = (value: number): string => `${value.toFixed(2)}%`;
