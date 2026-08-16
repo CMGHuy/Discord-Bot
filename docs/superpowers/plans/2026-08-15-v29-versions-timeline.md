@@ -23,6 +23,37 @@ before that is independently green.
 **Tech Stack:** Python 3.11+, pytest, Flask; Angular 21 signals, `@ngrx/signals`,
 vitest.
 
+## Progress (closing)
+
+**All 9 tasks complete and shipped.** Four deviations from the plan as written,
+each recorded at the task that hit it:
+
+- **Tasks 5-7 landed in one commit (`3efd9d8`)**, not at each task's own
+  boundary — Task 5 removes store methods the old page component still called,
+  so the app does not compile again until Task 7's rewrite lands. The
+  Architecture section's "every commit before that is independently green"
+  holds for Phases 1-2's Python commits, not across the 5→7 boundary.
+- **A real bug in Task 6's own reference `lanes()` implementation**, caught by
+  its own "every lane sums to 1" test: using a run's `last_seen` as its width
+  boundary leaves a one-day gap before the next run's `date`. Fixed by bounding
+  width at the next run's `from` instead.
+- **The `ui` bump landed as 1.5.0, not the predicted 1.4.0`:** 1.4.0 was
+  claimed by `273fb1a` (the trade chart, v25) after this plan's header was
+  written against ui 1.3.1.
+- **`tests/admin/test_api_v1_versions.py` still carried the old ui×bot-matrix
+  tests** (`pairs`/`ranges`/`ui_versions`/`bot_versions`) into Task 4 — Task 3's
+  guard-test repair only touched the generator's own test file. Removed as
+  part of Task 4's commit once they became structurally incompatible with the
+  new payload shape.
+
+Also: the strip's `ResizeObserver` (Task 8) is guarded behind `typeof
+ResizeObserver !== 'undefined'` since jsdom doesn't implement it and this is
+the frontend's first use of it.
+
+Final gate: `python scripts/dev/testrun.py full` → 1668 passed, 136 skipped, 0
+failed. `cd frontend && npx ng test` → 744 passed. `ui` released at 1.5.0,
+`bot` untouched at 1.1.4.
+
 ## Global Constraints
 
 - **`VERSION.json`'s format does not change.** Adding a component is adding a key.
@@ -1472,12 +1503,12 @@ Actual commit: `6c4324d`.
 - Modify: `docs/superpowers/specs/2026-08-15-v28-versions-timeline-design.md` (move)
 - Modify: `docs/superpowers/plans/2026-08-15-v29-versions-timeline.md` (move)
 
-- [ ] **Step 1: Confirm nothing still reads the dead fields**
+- [x] **Step 1: Confirm nothing still reads the dead fields**
 
 Run: `git grep -n "ui_versions\|bot_versions\|VersionPair\|VersionRange" -- '*.py' '*.ts'`
 Expected: no output. Any hit is a leftover — remove it before proceeding.
 
-- [ ] **Step 2: Run both suites**
+- [x] **Step 2: Run both suites**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`. The passed/skipped counts will have moved and
@@ -1486,7 +1517,7 @@ that is not a failure — see `docs/claude/testing-cost.md`.
 Run: `cd frontend && npx ng test`
 Expected: all files pass.
 
-- [ ] **Step 3: Bump `ui` to 1.4.0**
+- [x] **Step 3: Bump `ui` to 1.4.0**
 
 Edit `VERSION.json`: `"ui": "1.4.0"`, and set `ui_updated` to now
 (`YYYY-MM-DD HH-MM-SS`, UTC). Leave `bot` and `bot_updated` alone.
@@ -1500,7 +1531,7 @@ Different visualisation, different question answered, and a payload sharing
 no field names with the old one."
 ```
 
-- [ ] **Step 4: Regenerate — AFTER the bump commit, never before**
+- [x] **Step 4: Regenerate — AFTER the bump commit, never before**
 
 The generator walks `git log` for `VERSION.json`. Run before the bump is
 committed and the newest release records as `"commit": "uncommitted"`, which is
@@ -1513,7 +1544,7 @@ git add swingbot/admin/version_history.json
 git commit -m "chore(versions): regenerate version_history.json for 1.4.0"
 ```
 
-- [ ] **Step 5: Move the spec and plan to `implemented/`**
+- [x] **Step 5: Move the spec and plan to `implemented/`**
 
 ```bash
 git mv docs/superpowers/specs/2026-08-15-v28-versions-timeline-design.md docs/superpowers/specs/implemented/
