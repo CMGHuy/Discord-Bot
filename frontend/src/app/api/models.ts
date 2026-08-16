@@ -910,40 +910,40 @@ export interface Preferences {
 
 /* -- versions ----------------------------------------------------------- */
 
-/** One ui/bot pair that was released together, recovered from the git
- *  history of VERSION.json by `scripts/dev/build_version_matrix.py`. */
-export interface VersionPair {
-  ui: string;
-  bot: string;
-  first_seen: string;
+/** One release: a distinct tuple of component versions, with the commit that
+ *  introduced it. `versions` is keyed by component name and carries `null` for
+ *  a component that did not exist yet — which is a different fact from a
+ *  component that did not change, and the strip draws the two differently. */
+export interface Release {
+  date: string;
+  /** The last date this exact tuple was still current. Equal to `date` for a
+   *  tuple superseded the same day. */
   last_seen: string;
-  commit?: string;
-  subject?: string;
-}
-
-/** The span of bot versions one ui version was ever released alongside. */
-export interface VersionRange {
-  ui: string;
-  bot_min: string;
-  bot_max: string;
-  bot_count: number;
-  first_seen: string;
-  last_seen: string;
+  commit: string;
+  subject: string;
+  versions: Record<string, string | null>;
+  /** Components whose value differs from the previous release. Derived by the
+   *  generator, never here — see the note in `build_version_matrix.py`. */
+  changed: string[];
 }
 
 export interface VersionHistory {
   /** When the frozen file was generated; null if it was never generated. */
   generated_at: string | null;
-  /** The server's own sentence about what the pairing data does and does not
-   *  claim. Rendered verbatim rather than restated in the template, so the
-   *  page cannot drift into promising "tested" where the API says "shipped". */
+  /** The server's own sentence about what the data does and does not claim.
+   *  Rendered verbatim rather than restated, so the page cannot drift into
+   *  promising "tested" where the API says "shipped". */
   basis: string | null;
   /** Read from VERSION.json per request, so it always matches the sidebar. */
-  live: { ui: string; bot: string };
+  live: Record<string, string>;
   /** VERSION.json has moved on since the frozen file was generated. */
   stale: boolean;
-  ui_versions: string[];
-  bot_versions: string[];
-  pairs: VersionPair[];
-  ranges: VersionRange[];
+  /** Lane and chip order: first-appearance, so adding a component appends. */
+  components: string[];
+  current: Record<string, string>;
+  /** Oldest first on the wire. The store reverses exactly once. */
+  releases: Release[];
 }
+
+/** A selected `{component, version}` pair, or null for "no filter". */
+export type VersionFilter = { component: string; version: string } | null;

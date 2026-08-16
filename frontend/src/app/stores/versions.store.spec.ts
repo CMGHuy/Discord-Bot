@@ -17,129 +17,195 @@ import { VersionsStore } from './versions.store';
 
 /* The Versions workspace's data.
  *
- * What earns tests here is the GEOMETRY, not the fetch. The matrix draws a bar
- * from a start column across a span and puts dots on specific columns; every
- * one of those is an index into `bot_versions`, and an off-by-one produces a
- * page that looks entirely plausible and is wrong. The fetch itself is the same
- * shape as every other store and is covered only where it fails.
+ * What earns tests here is ordering, filtering and paging — the wire is
+ * oldest-first and the store reverses it exactly once, a chip toggle is its
+ * own clear, and a filter change must not strand the reader on a page that no
+ * longer exists. The fetch itself is the same shape as every other store and
+ * is covered only where it fails.
  */
+
+let store: InstanceType<typeof VersionsStore>;
+
+/** Stand the store up and answer its one request.
+ *
+ *  Takes the payload rather than assuming one, because two tests need a
+ *  different history (the single-release case below, and the six-component
+ *  case in Task 8). `VersionsStore.load()` runs from `onInit`, so the request
+ *  is in flight as soon as the store is injected — flushing is all that is
+ *  left to do. */
+function seed(payload: VersionHistory): void {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+      VersionsStore,
+    ],
+  });
+  const http = TestBed.inject(HttpTestingController);
+  store = TestBed.inject(VersionsStore);
+  http.expectOne('/api/v1/versions').flush(payload);
+}
 
 const RESPONSE: VersionHistory = {
   generated_at: '2026-08-15 07:00:00 UTC',
   basis: 'Versions observed together in VERSION.json.',
   live: { ui: '1.2.0', bot: '1.1.2' },
   stale: false,
-  ui_versions: ['1.0.4', '1.1.0', '1.2.0'],
-  bot_versions: ['1.0.5', '1.0.6', '1.0.10', '1.1.0', '1.1.2'],
-  pairs: [
-    // 1.0.4 skips 1.0.6 deliberately: the span covers it, no pair shipped on
-    // it, and the dots are what tell those two situations apart.
-    { ui: '1.0.4', bot: '1.0.5', first_seen: '2026-07-08', last_seen: '2026-07-08' },
-    { ui: '1.0.4', bot: '1.0.10', first_seen: '2026-07-09', last_seen: '2026-07-09' },
-    { ui: '1.1.0', bot: '1.1.0', first_seen: '2026-07-18', last_seen: '2026-07-18' },
-    { ui: '1.2.0', bot: '1.1.2', first_seen: '2026-08-14', last_seen: '2026-08-14' },
-  ],
-  ranges: [
-    { ui: '1.0.4', bot_min: '1.0.5', bot_max: '1.0.10', bot_count: 2,
-      first_seen: '2026-07-08', last_seen: '2026-07-09' },
-    { ui: '1.1.0', bot_min: '1.1.0', bot_max: '1.1.0', bot_count: 1,
-      first_seen: '2026-07-18', last_seen: '2026-07-18' },
-    { ui: '1.2.0', bot_min: '1.1.2', bot_max: '1.1.2', bot_count: 1,
-      first_seen: '2026-08-14', last_seen: '2026-08-14' },
+  components: ['ui', 'bot', 'worker'],
+  current: { ui: '1.2.0', bot: '1.1.2', worker: '0.1.0' },
+  releases: [
+    { date: '2026-07-01', last_seen: '2026-07-04', commit: 'a1', subject: 'first',
+      versions: { ui: '1.0.0', bot: '1.0.0', worker: null }, changed: ['ui', 'bot'] },
+    { date: '2026-07-05', last_seen: '2026-07-05', commit: 'a2', subject: 'bot moves',
+      versions: { ui: '1.0.0', bot: '1.1.2', worker: null }, changed: ['bot'] },
+    { date: '2026-07-06', last_seen: '2026-08-15', commit: 'a3', subject: 'worker joins',
+      versions: { ui: '1.2.0', bot: '1.1.2', worker: '0.1.0' }, changed: ['ui', 'worker'] },
   ],
 };
 
-function setup(response: VersionHistory | null = RESPONSE) {
-  TestBed.configureTestingModule({
-    providers: [
-      provideZonelessChangeDetection(),
-      provideHttpClient(
-        withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor]),
-      ),
-      provideHttpClientTesting(),
-      VersionsStore,
-    ],
-  });
-
-  const store = TestBed.inject(VersionsStore);
-  const http = TestBed.inject(HttpTestingController);
-  const request = http.expectOne('/api/v1/versions');
-  if (response) request.flush(response);
-  return { store, http, request };
-}
-
 describe('VersionsStore', () => {
-  it('loads on init', () => {
-    const { store } = setup();
-    expect(store.pairCount()).toBe(4);
-    expect(store.empty()).toBe(false);
+  beforeEach(() => seed(RESPONSE));
+
+  it('reverses the wire order exactly once', () => {
+    expect(store.releases().map((r) => r.commit)).toEqual(['a3', 'a2', 'a1']);
   });
 
-  it('orders rows newest ui first', () => {
-    const { store } = setup();
-    expect(store.rows().map((r) => r.ui)).toEqual(['1.2.0', '1.1.0', '1.0.4']);
+  it('filters to the releases carrying a component version', () => {
+    store.toggleFilter('bot', '1.1.2');
+    expect(store.visible().map((r) => r.commit)).toEqual(['a3', 'a2']);
   });
 
-  it('resolves the bar to 1-based grid columns', () => {
-    const { store } = setup();
-    const row = store.rows().find((r) => r.ui === '1.0.4')!;
-    // bot_versions[0] is 1.0.5 -> column 1; 1.0.10 is index 2 -> column 3.
-    expect(row.start).toBe(1);
-    expect(row.span).toBe(3);
+  it('clears the filter when the same chip is chosen twice', () => {
+    store.toggleFilter('bot', '1.1.2');
+    store.toggleFilter('bot', '1.1.2');
+    expect(store.filter()).toBeNull();
+    expect(store.visible()).toHaveLength(3);
   });
 
-  it('a single-version range still spans one column', () => {
-    const { store } = setup();
-    const row = store.rows().find((r) => r.ui === '1.2.0')!;
-    expect(row.start).toBe(5);
-    expect(row.span).toBe(1);
+  it('never matches a null version — absent is not a value', () => {
+    store.toggleFilter('worker', '');
+    expect(store.visible()).toHaveLength(0);
   });
 
-  it('dots mark only the pairs that actually shipped', () => {
-    const { store } = setup();
-    const row = store.rows().find((r) => r.ui === '1.0.4')!;
-    // Columns 1 and 3, NOT 2 -- 1.0.6 falls inside the span with no pair.
-    expect(row.shipped).toEqual([1, 3]);
+  it('resets to page 1 when the filter changes', () => {
+    store.setPage(2);
+    store.toggleFilter('bot', '1.1.2');
+    expect(store.page()).toBe(1);
   });
 
-  it('every dot falls inside its own row span', () => {
-    const { store } = setup();
-    for (const row of store.rows()) {
-      for (const column of row.shipped) {
-        expect(column).toBeGreaterThanOrEqual(row.start);
-        expect(column).toBeLessThan(row.start + row.span);
-      }
-    }
-  });
-
-  it('marks the row matching the live ui version', () => {
-    const { store } = setup();
-    expect(store.rows().filter((r) => r.current).map((r) => r.ui)).toEqual(['1.2.0']);
-  });
-
-  it('exposes the server basis verbatim rather than restating it', () => {
-    const { store } = setup();
+  it('exposes components, current and basis from the payload', () => {
+    expect(store.components()).toEqual(['ui', 'bot', 'worker']);
+    expect(store.current()).toEqual(RESPONSE.current);
     expect(store.basis()).toBe(RESPONSE.basis);
   });
 
   it('surfaces the stale flag', () => {
-    const { store } = setup({ ...RESPONSE, stale: true });
+    seed({ ...RESPONSE, stale: true });
     expect(store.stale()).toBe(true);
   });
 
+  it('reports the pre-slice total in pageSpec, not visible().length', () => {
+    expect(store.pageSpec()).toEqual({ total: 3, page: 1, perPage: 25 });
+  });
+
   it('renders nothing rather than throwing when history is empty', () => {
-    const { store } = setup({
-      ...RESPONSE, ui_versions: [], bot_versions: [], pairs: [], ranges: [],
+    seed({ ...RESPONSE, components: [], current: {}, releases: [] });
+    expect(store.releases()).toEqual([]);
+    expect(store.visible()).toEqual([]);
+    expect(store.empty()).toBe(false); // a response arrived; it's just empty
+  });
+
+  describe('lane geometry', () => {
+    it('lays segments out on a time axis, not by release index', () => {
+      // RESPONSE's own `ui` lane doesn't isolate this property (its second
+      // segment happens to be both later AND longer), so this uses a fixture
+      // built so segment[0]'s hold period is unambiguously longer: 10 days,
+      // then 1 day. Index order would make them equal; time must not.
+      const TIME_AXIS: VersionHistory = {
+        ...RESPONSE,
+        components: ['ui'],
+        current: { ui: '1.2.0' },
+        releases: [
+          { date: '2026-01-01', last_seen: '2026-01-11', commit: 't1', subject: 'first',
+            versions: { ui: '1.0.0' }, changed: ['ui'] },
+          { date: '2026-01-12', last_seen: '2026-01-13', commit: 't2', subject: 'bump',
+            versions: { ui: '1.1.0' }, changed: ['ui'] },
+          { date: '2026-01-14', last_seen: '2026-01-14', commit: 't3', subject: 'bump again',
+            versions: { ui: '1.2.0' }, changed: ['ui'] },
+        ],
+      };
+      seed(TIME_AXIS);
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      expect(ui.segments[0].width).toBeGreaterThan(ui.segments[1].width);
     });
-    expect(store.rows()).toEqual([]);
-    expect(store.botAxis()).toEqual([]);
+
+    it('every lane sums to 1', () => {
+      for (const lane of store.lanes()) {
+        const total = lane.segments.reduce((sum, s) => sum + s.width, 0) + lane.absentWidth;
+        expect(total).toBeCloseTo(1, 5);
+      }
+    });
+
+    it('floors a sub-pixel segment and takes the surplus from its neighbours', () => {
+      store.setStripWidth(200); // floor = 2/200 = 0.01
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      for (const s of ui.segments) expect(s.width).toBeGreaterThanOrEqual(0.01);
+      expect(ui.segments.reduce((sum, s) => sum + s.width, 0)).toBeCloseTo(1, 5);
+    });
+
+    it('gives a late component an absent region, not a segment', () => {
+      const worker = store.lanes().find((l) => l.component === 'worker')!;
+      // The leading gap is a region with no version, never a segment carrying a
+      // falsy one — the two render differently and must not be conflated.
+      expect(worker.absentWidth).toBeGreaterThan(0);
+      expect(worker.segments).toHaveLength(1);
+      expect(worker.segments[0].version).toBe('0.1.0');
+    });
+
+    it('brackets the visible page', () => {
+      const b = store.bracket();
+      expect(b.start).toBeGreaterThanOrEqual(0);
+      expect(b.start + b.width).toBeLessThanOrEqual(1.000001);
+    });
+
+    it('survives a single release without dividing by zero', () => {
+      // One release means a zero-length time span. `tEnd` is floored at `t0 + 1`
+      // precisely so this divides by 1 rather than 0 and yields a full-width
+      // segment instead of NaN — which would render as an invisible strip.
+      const ONE: VersionHistory = {
+        ...RESPONSE,
+        components: ['ui'],
+        current: { ui: '1.0.0' },
+        releases: [{
+          date: '2026-07-01', last_seen: '2026-07-01', commit: 'a1', subject: 'only',
+          versions: { ui: '1.0.0' }, changed: ['ui'],
+        }],
+      };
+      seed(ONE);
+      expect(store.lanes()[0].segments[0].width).toBeCloseTo(1, 5);
+      expect(Number.isNaN(store.lanes()[0].segments[0].width)).toBe(false);
+    });
   });
 
   it('keeps an error message and stays renderable', () => {
-    const { store, request } = setup(null);
-    request.flush({ error: { code: 'unavailable', message: 'down' } },
-                  { status: 503, statusText: 'Service Unavailable' });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        VersionsStore,
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    store = TestBed.inject(VersionsStore);
+    http.expectOne('/api/v1/versions').flush(
+      { error: { code: 'unavailable', message: 'down' } },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
     expect(store.error()).toBeTruthy();
-    expect(store.rows()).toEqual([]);
+    expect(store.releases()).toEqual([]);
   });
 });
