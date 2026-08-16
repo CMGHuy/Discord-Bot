@@ -1405,7 +1405,7 @@ Depends on Phase 1 (Tasks 1-4). No dependency on Phase 2.
   `referenceLine` inputs from Task 4.
 - Produces: `store.decileHistogram(): HistogramBin[]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('exposes deciles as a fixed-0-100 histogram', () => {
@@ -1433,12 +1433,12 @@ it('omits a decile with too few trades to have a win rate yet, rather than chart
 a helper of this shape for the Calibration tab's fetch; if not, mirror
 `respondPerformance`'s pattern against `backend.expectOne('/api/v1/analytics/calibration')`.)
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `store.decileHistogram is not a function`
 
-- [ ] **Step 3: Add the computed**
+- [x] **Step 3: Add the computed**
 
 Same cross-reference issue Tasks 9 and 10 hit: `deciles` is a sibling
 property inside the store's one big `withComputed` object literal, not a
@@ -1457,12 +1457,12 @@ literal. Add another separate `withComputed` stage, after Task 10's:
   })),
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render the chart above the existing table**
+- [x] **Step 5: Render the chart above the existing table**
 
 In `analytics.ts`'s `@case ('calibration')`, "Quality score vs outcome"
 panel, before the `<sb-data-table>`:
@@ -1482,12 +1482,12 @@ panel, before the `<sb-data-table>`:
 Add `Histogram` to this component's `imports` if it isn't already there —
 it is (used by Return/R-multiple distributions), so no import change needed.
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
