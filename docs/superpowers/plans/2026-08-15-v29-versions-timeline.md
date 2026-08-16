@@ -459,7 +459,7 @@ to catch."
 - Produces: `GET /api/v1/versions` returning `generated_at`, `basis`, `live`,
   `stale`, `components`, `current`, `releases`. Task 5 types this.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_payload_shape(logged_in):
@@ -491,12 +491,12 @@ def test_stale_is_false_when_live_matches_frozen(logged_in, monkeypatch):
     assert logged_in.get("/api/v1/versions").get_json()["stale"] is False
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_versions.py`
 Expected: FAIL — `missing components`, and `_helpers` has no `get_component_versions`
 
-- [ ] **Step 3: Add the helper**
+- [x] **Step 3: Add the helper**
 
 In `swingbot/admin/helpers.py`, beside `get_versions()`:
 
@@ -523,7 +523,7 @@ def get_component_versions() -> dict:
             if not k.endswith("_updated") and v}
 ```
 
-- [ ] **Step 4: Rewrite the endpoint body**
+- [x] **Step 4: Rewrite the endpoint body**
 
 ```python
 @api_v1.route("/versions", methods=["GET"])
@@ -550,19 +550,19 @@ def get_versions():
     })
 ```
 
-- [ ] **Step 5: Update `_load_history`'s empty shape (line 50-52)**
+- [x] **Step 5: Update `_load_history`'s empty shape (line 50-52)**
 
 ```python
         return {"generated_at": None, "basis": None, "current": {},
                 "components": [], "releases": []}
 ```
 
-- [ ] **Step 6: Run the endpoint tests**
+- [x] **Step 6: Run the endpoint tests**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_versions.py`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add swingbot/admin/helpers.py swingbot/admin/api_v1/versions.py tests/admin/test_api_v1_versions.py
@@ -573,6 +573,15 @@ regenerating reads as stale -- otherwise the page renders a confidently
 complete history with a lane missing. get_versions() is left alone: the
 sidebar and /health want a fixed ui/bot shape and would break on a third key."
 ```
+
+**Note (found during implementation):** `tests/admin/test_api_v1_versions.py` predates
+this plan and still carried the old ui×bot-matrix tests (`pairs`, `ranges`,
+`ui_versions`, `bot_versions`) — Task 3's guard-test repair only touched
+`tests/scripts/test_build_version_matrix.py`, not this file. Those tests are
+structurally incompatible with this task's own `dead not in body` assertion, so
+they were removed as part of Step 7's commit rather than left to rot; the
+missing/corrupt-history coverage they carried was kept, adapted to the new
+`components`/`releases` keys. Actual commit: `9289b02`.
 
 ---
 
