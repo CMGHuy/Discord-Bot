@@ -2350,7 +2350,7 @@ git commit -m "feat(analytics): tuning grid results become sb-data-table -- pagi
   returncode}`, `analytics.store.ts`).
 - Produces: `PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[]` — used only here.
 
-- [ ] **Step 1: Add columns**
+- [x] **Step 1: Add columns**
 
 `ColumnDef`'s real shape (Task 19 confirmed it against `STRATEGY_COLUMNS`):
 `key`/`header`/`numeric`/`value`, not `label`/`align`:
@@ -2366,7 +2366,7 @@ export const PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[] = [
 `date` is already imported in this file (used by `STRATEGY_COLUMNS`'s
 `run_date` column).
 
-- [ ] **Step 2: Replace the hand-rolled `<ul class="jobs">`**
+- [x] **Step 2: Replace the hand-rolled `<ul class="jobs">`**
 
 ```ts
   protected readonly pastJobsPage = createClientPage(() => this.store.pastJobs());
@@ -2395,12 +2395,12 @@ export const PAST_JOBS_COLUMNS: ColumnDef<JobSummary>[] = [
 Import `JobSummary` and `PAST_JOBS_COLUMNS` alongside this file's other
 Analytics-tab imports.
 
-- [ ] **Step 3: Build and run the frontend suite**
+- [x] **Step 3: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.columns.ts frontend/src/app/workspaces/analytics/analytics.ts
