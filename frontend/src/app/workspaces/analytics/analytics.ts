@@ -229,7 +229,7 @@ interface ProposalView extends ProposalRow {
             }
           </sb-panel>
 
-          <sb-panel heading="R-multiple distribution">
+          <sb-panel heading="R-multiple distribution (selected range)">
             @if (store.rHistogram().length) {
               <sb-histogram [bins]="store.rHistogram()" />
             } @else {
@@ -399,7 +399,7 @@ interface ProposalView extends ProposalRow {
         }
 
         @if (store.rMultipleBins().length) {
-          <sb-panel heading="R-multiple distribution">
+          <sb-panel heading="R-multiple distribution (all-time)">
             <!-- Bars, not a pie and not a line: this is a distribution, and
                  the shape IS the finding -- a healthy edge is a cluster of
                  small losses with a tail of larger wins. -->
@@ -940,6 +940,18 @@ interface ProposalView extends ProposalRow {
       color: var(--text-faint);
       font-size: var(--text-chip);
       font-variant-numeric: tabular-nums;
+    }
+
+    /* .panel-subtitle and .section-help carry no horizontal padding of
+       their own (styles.css). Inside a [flush]="true" sb-panel that leaves
+       them flush against the panel's left border while the panel's own
+       <header> keeps its 14px padding -- visibly misaligned against the
+       heading directly above. Every flush panel on this workspace (Strategy
+       registry, Tier calibration, Badge drift, and Task 8's restored
+       Calibration chart) gets this fix from one rule. */
+    sb-panel .panel-subtitle,
+    sb-panel .section-help {
+      padding: 0 var(--space-14);
     }
 
     /* -- SR55/SR61: explanatory copy ------------------------------------ */
