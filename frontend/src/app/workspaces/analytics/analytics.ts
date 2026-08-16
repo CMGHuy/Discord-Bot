@@ -142,6 +142,7 @@ interface ProposalView extends ProposalRow {
           }
         }
 
+        <h2 class="section">Snapshot</h2>
         <div class="panels">
           <sb-panel heading="Record">
             <div class="chips">
@@ -171,6 +172,60 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
+             the server has been building and serving all along. -->
+        @if (store.snapshotError(); as message) {
+          <!-- Its own line, not the tab-wide error: the panels above came from
+               a different endpoint and are not implicated. -->
+          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
+        }
+
+        <div class="panels">
+          <sb-panel heading="Risk-adjusted">
+            <div class="chips">
+              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
+              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
+              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
+              <!-- Max drawdown is always a loss, and always reported positive
+                   by the server. Amber, not red: it is the cost of the track
+                   record, not a loss happening now. -->
+              <sb-metric-chip
+                label="Max drawdown"
+                [value]="store.maxDrawdownPct()"
+                unit="%"
+                [decimals]="1"
+                tone="caution"
+              />
+              <sb-metric-chip
+                label="Total P&L"
+                [value]="store.totalPnl()"
+                tone="pnl"
+                [unit]="currencyUnit()"
+              />
+            </div>
+          </sb-panel>
+
+          @if (store.streaks(); as streaks) {
+            <sb-panel heading="Streaks">
+              <dl>
+                <div>
+                  <dt>Current</dt>
+                  <dd class="num">{{ currentStreak(streaks) }}</dd>
+                </div>
+                <div>
+                  <dt>Best win run</dt>
+                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
+                </div>
+                <div>
+                  <dt>Worst loss run</dt>
+                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
+                </div>
+              </dl>
+            </sb-panel>
+          }
+        </div>
+
+        <h2 class="section">Distributions</h2>
         <!-- SR54. Everything below is scoped by the range control; the two
              panels above are deliberately all-time, so the heading says which
              is which rather than leaving the reader to guess. -->
@@ -238,6 +293,15 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        @if (store.rMultipleBins().length) {
+          <sb-panel heading="R-multiple distribution (all-time)">
+            <!-- Bars, not a pie and not a line: this is a distribution, and
+                 the shape IS the finding -- a healthy edge is a cluster of
+                 small losses with a tail of larger wins. -->
+            <sb-histogram [bins]="store.rMultipleBins()" />
+          </sb-panel>
+        }
+
         <div class="panels">
           <sb-panel heading="By holding period">
             <!-- Every band renders, including empty ones: "the edge is all in
@@ -272,6 +336,13 @@ interface ProposalView extends ProposalRow {
           </sb-panel>
         </div>
 
+        <h2 class="section">Over time</h2>
+        <!-- Task 8's By-month bar chart replaces the "By month" <dl> above.
+             Task 9's Account balance/Drawdown upgrade + benchmark overlay,
+             and Task 10's Rolling returns and Cumulative-by-strategy charts
+             land here. -->
+
+        <h2 class="section">By segment</h2>
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
              that deliberately. The digest and lessons are analytics and live
              here; a single trade's excursions live beside the note that
@@ -317,93 +388,6 @@ interface ProposalView extends ProposalRow {
                 </div>
               }
             </dl>
-          </sb-panel>
-        }
-
-        <!-- SR50. Everything below comes from GET /analytics/snapshot, which
-             the server has been building and serving all along. -->
-        @if (store.snapshotError(); as message) {
-          <!-- Its own line, not the tab-wide error: the panels above came from
-               a different endpoint and are not implicated. -->
-          <p class="stale" role="status">Snapshot unavailable — {{ message }}</p>
-        }
-
-        <div class="panels">
-          <sb-panel heading="Risk-adjusted">
-            <div class="chips">
-              <sb-metric-chip label="Profit factor" [value]="store.profitFactor()" />
-              <sb-metric-chip label="Sharpe" [value]="store.sharpe()" />
-              <sb-metric-chip label="Sortino" [value]="store.sortino()" />
-              <!-- Max drawdown is always a loss, and always reported positive
-                   by the server. Amber, not red: it is the cost of the track
-                   record, not a loss happening now. -->
-              <sb-metric-chip
-                label="Max drawdown"
-                [value]="store.maxDrawdownPct()"
-                unit="%"
-                [decimals]="1"
-                tone="caution"
-              />
-              <sb-metric-chip
-                label="Total P&L"
-                [value]="store.totalPnl()"
-                tone="pnl"
-                [unit]="currencyUnit()"
-              />
-            </div>
-          </sb-panel>
-
-          @if (store.streaks(); as streaks) {
-            <sb-panel heading="Streaks">
-              <dl>
-                <div>
-                  <dt>Current</dt>
-                  <dd class="num">{{ currentStreak(streaks) }}</dd>
-                </div>
-                <div>
-                  <dt>Best win run</dt>
-                  <dd class="num">{{ fmtCount(streaks.bestWin) }}</dd>
-                </div>
-                <div>
-                  <dt>Worst loss run</dt>
-                  <dd class="num">{{ fmtCount(streaks.worstLoss) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
-          }
-        </div>
-
-        @if (store.equitySeries().length) {
-          <div class="panels">
-            <sb-panel heading="Account balance">
-              <sb-sparkline
-                [points]="equityPoints()"
-                label="Account balance over the whole record"
-              />
-              <p class="series-note">
-                {{ store.equitySeries().length }} points ·
-                {{ seriesRange(store.equitySeries()) }}
-              </p>
-            </sb-panel>
-
-            <sb-panel heading="Drawdown">
-              <sb-sparkline
-                [points]="drawdownPoints()"
-                label="Percentage below the running peak balance"
-              />
-              <p class="series-note">
-                Peak-to-trough, as a share of the running high. Higher is worse.
-              </p>
-            </sb-panel>
-          </div>
-        }
-
-        @if (store.rMultipleBins().length) {
-          <sb-panel heading="R-multiple distribution (all-time)">
-            <!-- Bars, not a pie and not a line: this is a distribution, and
-                 the shape IS the finding -- a healthy edge is a cluster of
-                 small losses with a tail of larger wins. -->
-            <sb-histogram [bins]="store.rMultipleBins()" />
           </sb-panel>
         }
 
@@ -885,6 +869,16 @@ interface ProposalView extends ProposalRow {
     .stale { color: var(--warn); font-size: var(--text-table); }
 
     sb-panel { display: block; margin-top: var(--space-14); }
+
+    .section {
+      margin: var(--space-20) 0 var(--space-10);
+      color: var(--text-faint);
+      font-size: var(--text-micro);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .section:first-of-type { margin-top: 0; }
 
     .alert {
       margin-top: var(--space-14);
