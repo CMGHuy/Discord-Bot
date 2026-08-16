@@ -324,6 +324,33 @@ describe('AnalyticsStore', () => {
     expect(store.decileHistogram()).toEqual([{ label: 'D1', count: 42 }]);
   });
 
+  it('fetches /analytics/plans when the plans tab opens', () => {
+    tick();
+    respondPerformance();
+
+    store.setTab('plans');
+    tick();
+    backend.expectOne('/api/v1/analytics/plans').flush({
+      funnel: { posted: 10, filled: 8, hit_tp1: 5, closed: 4 },
+      in_flight: 3,
+      fill_rate: { resolved_n: 7, fill_rate_pct: 71.4, median_days_to_fill: 2.5 },
+      badges: { VALIDATED: 7, WEAK: 3 },
+      tiers: { A: 4, B: 3, C: 3 },
+    });
+    expect(store.funnelChart()).toEqual([
+      { label: 'Posted', count: 10 }, { label: 'Filled', count: 8 },
+      { label: 'Hit TP1', count: 5 }, { label: 'Closed', count: 4 },
+    ]);
+    expect(store.fillRatePct()).toBe(71.4);
+    expect(store.medianDaysToFill()).toBe(2.5);
+    expect(store.badgeChart()).toEqual([
+      { label: 'VALIDATED', count: 7 }, { label: 'WEAK', count: 3 },
+    ]);
+    expect(store.tierChart()).toEqual([
+      { label: 'A', count: 4 }, { label: 'B', count: 3 }, { label: 'C', count: 3 },
+    ]);
+  });
+
   /* -- the six relocated metrics -------------------------------------- */
 
   it('exposes all six metrics relocated from the Dashboard', () => {

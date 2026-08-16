@@ -16,6 +16,7 @@ import {
   AnalyticsDerived,
   AnalyticsJournal,
   AnalyticsPerformance,
+  AnalyticsPlans,
   AnalyticsSnapshot,
   AnalyticsStrategies,
 } from '../api/models';
@@ -249,13 +250,14 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
 /** The four tabs of spec v14 Decision 6. Tabs, not sub-navigation: a second
  *  level of nav inside one of six workspaces reintroduces exactly the depth
  *  the IA change removed. */
-export type AnalyticsTab = 'performance' | 'strategies' | 'calibration' | 'tuning';
+export type AnalyticsTab = 'performance' | 'strategies' | 'calibration' | 'tuning' | 'plans';
 
 export const ANALYTICS_TABS: readonly AnalyticsTab[] = [
   'performance',
   'strategies',
   'calibration',
   'tuning',
+  'plans',
 ] as const;
 
 /* -- the snapshot (SR50) --------------------------------------------------
@@ -477,6 +479,7 @@ interface AnalyticsSlice {
   proposeResult: string | null;
   strategies: AnalyticsStrategies | null;
   calibration: AnalyticsCalibration | null;
+  plans: AnalyticsPlans | null;
   jobs: JobSummary[];
   /** The job whose progress is on screen — status plus a log tail. */
   job: JobStatus | null;
@@ -536,6 +539,7 @@ export const AnalyticsStore = signalStore(
     proposeResult: null,
     strategies: null,
     calibration: null,
+    plans: null,
     jobs: [],
     job: null,
     proposals: [],
@@ -545,7 +549,7 @@ export const AnalyticsStore = signalStore(
     launchError: null,
   }),
 
-  withComputed(({ performance, strategies, calibration, jobs, job, snapshot, breakdown,
+  withComputed(({ performance, strategies, calibration, plans, jobs, job, snapshot, breakdown,
                  journal }) => ({
     /* -- SR50: the snapshot's own figures ------------------------------- */
 
@@ -834,6 +838,28 @@ export const AnalyticsStore = signalStore(
       const current = job()?.id;
       return jobs().filter((entry) => entry.id !== current);
     }),
+
+    /* -- plans ----------------------------------------------------------- */
+
+    funnelChart: computed<HistogramBin[]>(() => {
+      const f = plans()?.funnel;
+      if (!f) return [];
+      return [
+        { label: 'Posted', count: f.posted },
+        { label: 'Filled', count: f.filled },
+        { label: 'Hit TP1', count: f.hit_tp1 },
+        { label: 'Closed', count: f.closed },
+      ];
+    }),
+    fillRatePct: computed(() => plans()?.fill_rate.fill_rate_pct ?? null),
+    medianDaysToFill: computed(() => plans()?.fill_rate.median_days_to_fill ?? null),
+    inFlight: computed(() => plans()?.in_flight ?? 0),
+    badgeChart: computed<HistogramBin[]>(() =>
+      Object.entries(plans()?.badges ?? {}).map(([label, count]) => ({ label, count }))),
+    tierChart: computed<HistogramBin[]>(() =>
+      Object.entries(plans()?.tiers ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([label, count]) => ({ label, count }))),
   })),
 
   withComputed(({ equitySeries, benchmarkSeries }) => ({
@@ -938,6 +964,14 @@ export const AnalyticsStore = signalStore(
       });
     };
 
+    const loadPlans = (): void => {
+      patchState(store, { loading: true });
+      api.analyticsPlans().subscribe({
+        next: (plans) => patchState(store, { plans, loading: false, error: null }),
+        error: fail,
+      });
+    };
+
     const loadProposals = (): void => {
       api.proposals().subscribe({
         next: (list) =>
@@ -1021,6 +1055,8 @@ export const AnalyticsStore = signalStore(
           return loadCalibration();
         case 'tuning':
           return loadTuning();
+        case 'plans':
+          return loadPlans();
       }
     };
 
