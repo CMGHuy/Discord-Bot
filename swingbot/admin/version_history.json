@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-16 09:10:46 UTC",
+  "generated_at": "2026-08-16 09:56:15 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.5.0",
+    "ui": "1.5.1",
     "bot": "1.1.4"
   },
   "releases": [
@@ -374,6 +374,19 @@
       "subject": "release(ui): 1.5.0 -- the Versions timeline",
       "versions": {
         "ui": "1.5.0",
+        "bot": "1.1.4"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-16",
+      "last_seen": "2026-08-16",
+      "commit": "1efc093f",
+      "subject": "release(ui): 1.5.1 -- dashboard grouping, versions shading, type scale, settings cleanup",
+      "versions": {
+        "ui": "1.5.1",
         "bot": "1.1.4"
       },
       "changed": [
