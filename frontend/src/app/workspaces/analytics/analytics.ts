@@ -546,12 +546,14 @@ interface ProposalView extends ProposalRow {
             <sb-histogram [bins]="store.decileHistogram()" [max]="100" [referenceLine]="80" />
           }
           <sb-data-table
-            [rows]="store.deciles()"
+            [rows]="decilePage.visible()"
             [columns]="decileColumns"
             [visible]="decileKeys"
             [rowKey]="decileKey"
             [loading]="store.loading()"
             [emptyState]="decileEmpty"
+            [pagination]="decilePage.pageSpec()"
+            (pageChange)="decilePage.setPage($event)"
           />
         </sb-panel>
 
@@ -577,12 +579,14 @@ interface ProposalView extends ProposalRow {
             (VALIDATED vs WEAK) may be dragging its tier down.
           </p>
           <sb-data-table
-            [rows]="store.tiers()"
+            [rows]="tierPage.visible()"
             [columns]="tierColumns()"
             [visible]="tierKeys"
             [rowKey]="tierKey"
             [loading]="store.loading()"
             [emptyState]="tierEmpty"
+            [pagination]="tierPage.pageSpec()"
+            (pageChange)="tierPage.setPage($event)"
           />
         </sb-panel>
 
@@ -603,12 +607,14 @@ interface ProposalView extends ProposalRow {
             than 10 percentage points below its out-of-sample win rate.
           </p>
           <sb-data-table
-            [rows]="store.drift()"
+            [rows]="driftPage.visible()"
             [columns]="driftColumns()"
             [visible]="driftKeys"
             [rowKey]="driftKey"
             [loading]="store.loading()"
             [emptyState]="driftEmpty"
+            [pagination]="driftPage.pageSpec()"
+            (pageChange)="driftPage.setPage($event)"
           />
         </sb-panel>
       }
@@ -1277,8 +1283,11 @@ export class Analytics {
   protected readonly confidenceKey = (row: { level: number }) => String(row.level);
   protected readonly confidencePage = createClientPage(() => this.store.byConfidence());
   protected readonly decileKey = (row: { decile: string }) => row.decile;
+  protected readonly decilePage = createClientPage(() => this.store.deciles());
   protected readonly tierKey = (row: TierRow) => row.tier;
+  protected readonly tierPage = createClientPage(() => this.store.tiers());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
+  protected readonly driftPage = createClientPage(() => this.store.drift());
 
   /* Empty states are sentences about *this* table's situation, never a
    * generic "No data" — see `EmptyStateComponent`. */
