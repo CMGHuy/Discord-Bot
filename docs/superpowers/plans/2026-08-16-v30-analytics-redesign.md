@@ -2244,7 +2244,7 @@ No dependency on Phases 2-6.
   `createClientPage`.
 - Produces: `GRID_COLUMNS: ColumnDef<GridRow>[]` — used only here.
 
-- [ ] **Step 1: Add the column definitions**
+- [x] **Step 1: Add the column definitions**
 
 In `analytics.columns.ts`, matching `STRATEGY_COLUMNS`'s real shape exactly
 (`key`/`header`/`numeric`/`value`, NOT `label`/`align`/`sortable` — verified
@@ -2269,7 +2269,7 @@ export const GRID_COLUMNS: ColumnDef<GridRow>[] = [
 `count`, `rate`, `expectancy` are already exported from this file — reuse
 them rather than reformatting inline.
 
-- [ ] **Step 2: Replace the hand-rolled `<table class="grid">`**
+- [x] **Step 2: Replace the hand-rolled `<table class="grid">`**
 
 Add to the `Analytics` component, mirroring `protected readonly columns`
 in `frontend/src/app/workspaces/dashboard/dashboard.ts` — the existing
@@ -2327,12 +2327,12 @@ Import `allKeys` from `./analytics.columns` if not already imported (it is
 — `strategyKeys`/`confidenceKeys`/etc. already use it), and `GRID_COLUMNS`
 alongside the file's other column-list imports.
 
-- [ ] **Step 3: Build and run the frontend suite**
+- [x] **Step 3: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.columns.ts frontend/src/app/workspaces/analytics/analytics.ts
