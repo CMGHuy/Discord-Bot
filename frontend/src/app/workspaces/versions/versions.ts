@@ -94,6 +94,7 @@ import { VersionsStore } from '../../stores/versions.store';
                 <button type="button" class="segment" [class.current]="segment.current"
                         [style.left.%]="segment.start * 100"
                         [style.width.%]="segment.width * 100"
+                        [style.background]="segment.current ? null : versionTint(segment.version)"
                         (click)="store.toggleFilter(lane.component, segment.version)"
                         [attr.title]="lane.component + ' ' + segment.version
                           + ' · ' + segment.firstSeen + ' → ' + segment.lastSeen"></button>
@@ -208,8 +209,13 @@ import { VersionsStore } from '../../stores/versions.store';
     .lane-name { width: 4.5rem; flex: none; font-family: var(--font-mono);
                  font-size: var(--text-micro); color: var(--text-muted); }
     .track { position: relative; flex: 1; height: 15px; min-width: 0; }
+    /* The 2px surface-colour ring is the separator between two segments that
+       happen to land on adjacent shades -- not a border drawn AROUND data,
+       which is why it is inset rather than added stroke width. Every segment
+       gets one, current included, so the seam is consistent end to end. */
     .segment { position: absolute; top: 0; height: 100%; border: 0; padding: 0;
-               border-radius: 2px; background: var(--accent-soft); cursor: pointer; }
+               border-radius: 2px; cursor: pointer;
+               box-shadow: inset 0 0 0 1px var(--bg); }
     .segment.current { background: var(--accent); }
     .absent { position: absolute; left: 0; top: 0; height: 100%;
               border: 1px dashed var(--border-strong); border-radius: 2px; }
@@ -260,6 +266,34 @@ export class Versions {
   protected isFiltered(component: string, version: string): boolean {
     const active = this.store.filter();
     return active?.component === component && active?.version === version;
+  }
+
+  /**
+   * A distinct shade per version, so a lane with many past segments reads as
+   * a sequence rather than one undifferentiated block -- the complaint this
+   * exists to fix was that every non-current segment shared one flat colour
+   * with no boundary between them.
+   *
+   * **One hue, not one per version.** `styles/tokens.css` reserves five hues
+   * for meaning (pos/neg/warn/accent/info) and calls a sixth "a review
+   * defect" -- this is exactly the design system's own ordinal case (a
+   * version's place in a time-ordered sequence, not a nominal identity), so
+   * it stays on the accent hue (252°) and varies only lightness. Hashed from
+   * the version string rather than the segment's position so the same
+   * version always reads the same shade if it reappears, and so the shade
+   * does not shift under a reader's cursor as the strip re-measures.
+   */
+  protected versionTint(version: string): string {
+    let hash = 0;
+    for (let i = 0; i < version.length; i++) {
+      hash = (hash * 31 + version.charCodeAt(i)) | 0;
+    }
+    // 38-62%: dark enough to clear the light-band floor against --bg at the
+    // low end, and capped 5 points below --accent's own 67% lightness at the
+    // high end -- a hash landing near the top must still read as clearly
+    // dimmer than "current", never close enough to be mistaken for it.
+    const lightness = 38 + (Math.abs(hash) % 25);
+    return `hsl(252, 65%, ${lightness}%)`;
   }
 
   /** "1.2.4 → " for a bump, "· new " for a component's first appearance. The
