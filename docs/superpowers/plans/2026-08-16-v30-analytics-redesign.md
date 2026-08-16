@@ -1669,7 +1669,7 @@ with all frontend work above once someone is free.
   `badges`, `tiers` (exact shape in Step 3). Task 16 serializes this
   verbatim into the new endpoint's response.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from types import SimpleNamespace
@@ -1764,12 +1764,12 @@ def test_empty_plan_list_returns_well_formed_zeros():
     assert result["tiers"] == {}
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_queries_plan_lifecycle.py`
 Expected: FAIL — `ImportError: cannot import name '_plan_lifecycle'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add `from datetime import datetime` and `from statistics import median` to
 `queries.py`'s existing top-of-file import block (alongside `import json`,
@@ -1850,12 +1850,12 @@ def _plan_lifecycle(plans: list) -> dict:
     }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_queries_plan_lifecycle.py`
 Expected: PASS, 6 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/queries.py tests/admin/test_queries_plan_lifecycle.py
