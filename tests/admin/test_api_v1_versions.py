@@ -1,4 +1,4 @@
-"""GET /api/v1/versions — the ui/bot pairing history behind the Versions page.
+"""GET /api/v1/versions — the component release timeline behind the Versions page.
 
 The endpoint reads a COMMITTED file (`swingbot/admin/version_history.json`)
 rather than live git, because the deployed container has no history to walk.
@@ -27,16 +27,6 @@ def test_requires_auth(client):
     assert client.get("/api/v1/versions").status_code == 401
 
 
-def test_payload_shape(logged_in):
-    body = logged_in.get("/api/v1/versions").get_json()
-    for key in ("generated_at", "basis", "live", "stale",
-                "ui_versions", "bot_versions", "pairs", "ranges"):
-        assert key in body, f"missing {key}"
-    assert isinstance(body["ui_versions"], list)
-    assert isinstance(body["pairs"], list)
-    assert isinstance(body["stale"], bool)
-
-
 def test_live_versions_come_from_version_json(logged_in):
     """`live` is read per-request, so the page can never disagree with the
     sidebar — which reads the same helper."""
@@ -47,32 +37,6 @@ def test_live_versions_come_from_version_json(logged_in):
     assert body["live"]["bot"] == helpers.get_versions()["bot"]
 
 
-def test_every_pair_is_covered_by_a_range(logged_in):
-    """Each ui version's range must actually span the pairs recorded for it.
-
-    This is the property the page's bars rely on: a bar drawn from bot_min to
-    bot_max is a lie if some pair for that ui sits outside it.
-    """
-    body = logged_in.get("/api/v1/versions").get_json()
-    if not body["pairs"]:
-        pytest.skip("no frozen history in this checkout")
-
-    order = {v: i for i, v in enumerate(body["bot_versions"])}
-    spans = {r["ui"]: (order[r["bot_min"]], order[r["bot_max"]]) for r in body["ranges"]}
-
-    for pair in body["pairs"]:
-        lo, hi = spans[pair["ui"]]
-        assert lo <= order[pair["bot"]] <= hi, (
-            f"ui {pair['ui']} shipped with bot {pair['bot']}, outside its own range")
-
-
-def test_ranges_cover_every_ui_version_exactly_once(logged_in):
-    body = logged_in.get("/api/v1/versions").get_json()
-    if not body["pairs"]:
-        pytest.skip("no frozen history in this checkout")
-    assert sorted(r["ui"] for r in body["ranges"]) == sorted(body["ui_versions"])
-
-
 def test_missing_history_file_still_renders(logged_in, monkeypatch):
     """A checkout where the generator was never run must not 500 the page."""
     from swingbot.admin.api_v1 import versions
@@ -81,7 +45,8 @@ def test_missing_history_file_still_renders(logged_in, monkeypatch):
     resp = logged_in.get("/api/v1/versions")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["pairs"] == []
+    assert body["components"] == []
+    assert body["releases"] == []
     assert body["generated_at"] is None
     # Live versions still resolve, so the page can say what is running now.
     assert body["live"]["ui"]
@@ -95,7 +60,8 @@ def test_corrupt_history_file_still_renders(logged_in, monkeypatch, tmp_path):
 
     monkeypatch.setattr(versions, "HISTORY_PATH", str(bad))
     body = logged_in.get("/api/v1/versions").get_json()
-    assert body["pairs"] == []
+    assert body["components"] == []
+    assert body["releases"] == []
 
 
 def test_stale_flag_set_when_frozen_file_lags_version_json(logged_in, monkeypatch, tmp_path):
@@ -105,12 +71,9 @@ def test_stale_flag_set_when_frozen_file_lags_version_json(logged_in, monkeypatc
         "generated_at": "2020-01-01 00:00:00 UTC",
         "basis": "test",
         "current": {"ui": "0.0.1", "bot": "0.0.1"},
-        "ui_versions": ["0.0.1"], "bot_versions": ["0.0.1"],
-        "pairs": [{"ui": "0.0.1", "bot": "0.0.1",
-                   "first_seen": "2020-01-01", "last_seen": "2020-01-01"}],
-        "ranges": [{"ui": "0.0.1", "bot_min": "0.0.1", "bot_max": "0.0.1",
-                    "bot_count": 1, "first_seen": "2020-01-01",
-                    "last_seen": "2020-01-01"}],
+        "components": ["ui", "bot"],
+        "releases": [{"sha": "abc123", "date": "2020-01-01",
+                      "versions": {"ui": "0.0.1", "bot": "0.0.1"}, "changed": ["ui", "bot"]}],
     }), encoding="utf-8")
 
     from swingbot.admin.api_v1 import versions
@@ -131,8 +94,37 @@ def test_not_stale_when_frozen_file_matches(logged_in, monkeypatch, tmp_path):
         "generated_at": "2026-01-01 00:00:00 UTC",
         "basis": "test",
         "current": {"ui": live["ui"], "bot": live["bot"]},
-        "ui_versions": [], "bot_versions": [], "pairs": [], "ranges": [],
+        "components": ["ui", "bot"], "releases": [],
     }), encoding="utf-8")
 
     monkeypatch.setattr(versions, "HISTORY_PATH", str(frozen))
+    assert logged_in.get("/api/v1/versions").get_json()["stale"] is False
+
+
+def test_payload_shape(logged_in):
+    body = logged_in.get("/api/v1/versions").get_json()
+    for key in ("generated_at", "basis", "live", "stale",
+                "components", "current", "releases"):
+        assert key in body, f"missing {key}"
+    assert isinstance(body["components"], list)
+    assert isinstance(body["releases"], list)
+    assert isinstance(body["stale"], bool)
+    for dead in ("ui_versions", "bot_versions", "pairs", "ranges"):
+        assert dead not in body, f"{dead} is a matrix artefact and must be gone"
+
+
+def test_stale_is_true_when_a_component_set_differs(logged_in, monkeypatch):
+    """Adding a component to VERSION.json without regenerating leaves a page
+    that looks complete and is missing a whole lane. That must read as stale."""
+    from swingbot.admin.api_v1 import versions as mod
+    monkeypatch.setattr(mod._helpers, "get_component_versions",
+                        lambda: {"ui": "9.9.9", "bot": "9.9.9", "worker": "0.1.0"})
+    assert logged_in.get("/api/v1/versions").get_json()["stale"] is True
+
+
+def test_stale_is_false_when_live_matches_frozen(logged_in, monkeypatch):
+    import json as _json
+    from swingbot.admin.api_v1 import versions as mod
+    frozen = mod._load_history()["current"]
+    monkeypatch.setattr(mod._helpers, "get_component_versions", lambda: dict(frozen))
     assert logged_in.get("/api/v1/versions").get_json()["stale"] is False

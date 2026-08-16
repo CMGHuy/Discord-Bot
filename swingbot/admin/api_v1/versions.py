@@ -50,32 +50,28 @@ def _load_history() -> dict[str, Any]:
             return json.load(fh)
     except (OSError, json.JSONDecodeError):
         return {"generated_at": None, "basis": None, "current": {},
-                "ui_versions": [], "bot_versions": [], "pairs": [], "ranges": []}
+                "components": [], "releases": []}
 
 
 @api_v1.route("/versions", methods=["GET"])
 @require_auth
 def get_versions():
     history = _load_history()
-    live = _helpers.get_versions()
-    live_pair = {"ui": live.get("ui"), "bot": live.get("bot")}
+    live = _helpers.get_component_versions()
+    frozen_current = history.get("current") or {}
 
     # Stale means the generator has not been re-run since the last bump, not
-    # that anything is broken. Compared against the frozen file's own record of
-    # what was current when it was written.
-    frozen_pair = history.get("current") or {}
-    stale = bool(live_pair["ui"]) and (
-        frozen_pair.get("ui") != live_pair["ui"]
-        or frozen_pair.get("bot") != live_pair["bot"]
-    )
+    # that anything is broken. A whole-dict comparison rather than key-by-key:
+    # a component ADDED to VERSION.json and absent from the frozen file is the
+    # same failure -- a page that looks complete while missing an entire lane.
+    stale = bool(live) and live != frozen_current
 
     return jsonify({
         "generated_at": history.get("generated_at"),
         "basis": history.get("basis"),
-        "live": live_pair,
+        "live": live,
         "stale": stale,
-        "ui_versions": history.get("ui_versions", []),
-        "bot_versions": history.get("bot_versions", []),
-        "pairs": history.get("pairs", []),
-        "ranges": history.get("ranges", []),
+        "components": history.get("components", []),
+        "current": frozen_current,
+        "releases": history.get("releases", []),
     })

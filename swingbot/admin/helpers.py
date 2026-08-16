@@ -418,6 +418,28 @@ def get_versions() -> dict:
     return versions
 
 
+def get_component_versions() -> dict:
+    """Every component in VERSION.json, discovered from its keys.
+
+    Distinct from `get_versions()` above, which is deliberately left alone: the
+    sidebar and `/health` want a fixed `{ui, bot, last_updated}` shape and would
+    break on a third key. This one returns whatever the file declares, which is
+    what the Versions page needs.
+
+    Empty dict on a missing or malformed file -- the caller renders "no history"
+    rather than erroring a page out over a version display.
+    """
+    if not os.path.exists(VERSION_PATH):
+        return {}
+    try:
+        with open(VERSION_PATH, "r") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return {k: str(v) for k, v in data.items()
+            if not k.endswith("_updated") and v}
+
+
 # ---------------------------------------------------------------------------
 # Logs
 # ---------------------------------------------------------------------------
