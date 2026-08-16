@@ -53,6 +53,9 @@ export const OPEN_POSITIONS_CAP = 6;
           {{ allLinkLabel() }}
         </a>
       </div>
+      @if (explanation(); as text) {
+        <p class="panel-subtitle">{{ text }}</p>
+      }
 
       @if (trades.error(); as message) {
         <p class="table-error" role="status">{{ message }}</p>
@@ -72,16 +75,31 @@ export const OPEN_POSITIONS_CAP = 6;
     </div>
   `,
   styles: `
-    .group + .group { margin-top: var(--space-14); border-top: 1px solid var(--border);
-                       padding-top: var(--space-14); }
+    /* A visibly stronger rule than the --border used inside a table
+       (row dividers, the panel's own edge) -- three same-shaped tables
+       stacked in one flush panel need a break the eye catches without
+       reading the heading text, not just a hairline that reads as another
+       row divider. */
+    .group + .group {
+      margin-top: var(--space-20);
+      border-top: 2px solid var(--border-strong);
+      padding-top: var(--space-14);
+    }
     .group-head {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
       gap: var(--space-10);
       padding: 0 var(--space-14);
-      margin-bottom: var(--space-8);
+      margin-bottom: var(--space-4);
     }
+    /* .panel-subtitle is global (styles.css) and carries no horizontal
+       padding of its own -- it is normally used directly under a Panel
+       header, which supplies the inset itself. Here it sits in a flush
+       panel body instead, so this restores just that one inset, scoped to
+       this component only (Angular's emulated encapsulation keeps it from
+       leaking to other .panel-subtitle uses elsewhere). */
+    .panel-subtitle { padding: 0 var(--space-14); margin-bottom: var(--space-8); }
     h3 {
       margin: 0;
       color: var(--text-secondary);
@@ -111,6 +129,10 @@ export class TradeGroup {
    *  `ACTIVE` or `PARTIAL`. */
   readonly status = input.required<string>();
   readonly heading = input.required<string>();
+  /** One line naming what this status means, rendered under the heading.
+   *  Optional: a group with nothing worth saying just omits it rather than
+   *  rendering an empty line. */
+  readonly explanation = input<string | null>(null);
   readonly cap = input(OPEN_POSITIONS_CAP);
   readonly columns = input.required<ColumnDef<TradeRow>[]>();
   readonly visible = input.required<string[]>();

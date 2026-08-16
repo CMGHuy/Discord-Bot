@@ -237,8 +237,15 @@ import { TradeGroup } from './trade-group';
            task's Step 2 — and because the per-trade half of it (which sizing
            mode a position was opened under, and whether that still matches
            today's setting) reads from sizing_mode, which lives on the
-           detail payload and belongs on the detail view. -->
-      <p class="section-help">
+           detail payload and belongs on the detail view.
+
+           Padded explicitly: the panel is flush (the tables below need
+           edge-to-edge rows), which zeroes the body's own padding, so
+           without this the text would sit flush against the panel's left
+           edge while the "Open positions" heading above keeps the header's
+           padding — two pieces of text in one panel with different left
+           edges. The panel-note class below restores just that one inset. -->
+      <p class="section-help panel-note">
         Share counts are snapshotted when a position opens. A trade logged
         before that snapshot existed shows an estimate instead, and a position
         opened under a different sizing mode will not match the premium note
@@ -250,21 +257,15 @@ import { TradeGroup } from './trade-group';
            this way is also what "clear separation for each category" needs,
            not just what the endpoint happens to support. Each group is its
            own store instance -- see trade-group.ts -- so a slow or failed
-           fetch for one category never blocks or blanks the other two. -->
-      <sb-trade-group
-        status="PENDING"
-        heading="Pending"
-        [columns]="columns()"
-        [visible]="visible()"
-        [pinned]="pinned"
-        [rowKey]="rowKey"
-        [emptyState]="pendingEmptyState"
-        (rowActivate)="open($event)"
-        (reorder)="onReorder($event)"
-      />
+           fetch for one category never blocks or blanks the other two.
+
+           Active first: it is what "what is happening right now" actually
+           means -- a filled, live position -- with Pending (waiting to fill)
+           and Partial (already de-risked) behind it. -->
       <sb-trade-group
         status="ACTIVE"
         heading="Active"
+        explanation="Entry has filled — position is open and being tracked toward TP1/stop."
         [columns]="columns()"
         [visible]="visible()"
         [pinned]="pinned"
@@ -274,8 +275,21 @@ import { TradeGroup } from './trade-group';
         (reorder)="onReorder($event)"
       />
       <sb-trade-group
+        status="PENDING"
+        heading="Pending"
+        explanation="Plan built and posted, but price has not yet reached the entry trigger."
+        [columns]="columns()"
+        [visible]="visible()"
+        [pinned]="pinned"
+        [rowKey]="rowKey"
+        [emptyState]="pendingEmptyState"
+        (rowActivate)="open($event)"
+        (reorder)="onReorder($event)"
+      />
+      <sb-trade-group
         status="PARTIAL"
         heading="Partial"
+        explanation="TP1 hit — half the position closed, the remainder rides toward TP2 with its stop at break-even."
         [columns]="columns()"
         [visible]="visible()"
         [pinned]="pinned"
@@ -464,6 +478,13 @@ import { TradeGroup } from './trade-group';
       padding: var(--space-8) var(--space-14);
       color: var(--warn);
       font-size: var(--text-table);
+    }
+
+    /* Restores the header's left inset for text sitting directly in the
+       flush panel body -- see the template comment above .panel-note's one
+       use. Top spacing too, so it doesn't crowd the panel's header rule. */
+    .panel-note {
+      padding: var(--space-10) var(--space-14) 0;
     }
 
     .all-link {
