@@ -1127,7 +1127,7 @@ every other P&L-shaped bar on this tab."
 - Produces: `store.balanceWithBenchmark(): LineChartSeries[]` — used by
   this task only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('overlays the SPY benchmark on the account-balance series when present', () => {
@@ -1144,12 +1144,12 @@ it('omits the SPY series entirely when the benchmark fetch was unavailable', () 
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — `store.balanceWithBenchmark is not a function`
 
-- [ ] **Step 3: Add the computed**
+- [x] **Step 3: Add the computed**
 
 `analytics.store.ts` has exactly one `withComputed(...)` call today, and
 `equitySeries`/`benchmarkSeries` are both properties of the object literal
@@ -1177,12 +1177,12 @@ become callable:
 
 Import `LineChartSeries` from `'../ui/line-chart'` at the top of the file.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render, replacing the two `Sparkline`s**
+- [x] **Step 5: Render, replacing the two `Sparkline`s**
 
 In `analytics.ts`'s "Over time" section (Task 7), replace:
 
@@ -1238,12 +1238,12 @@ The Strategy registry's rolling-win-rate cell (`#rollingCell`) also uses
 `sb-sparkline` and is NOT touched by this task, so `Sparkline` stays
 imported.
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
