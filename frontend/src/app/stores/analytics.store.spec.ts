@@ -126,6 +126,12 @@ const STRATEGIES = {
   },
 };
 
+const CALIBRATION = {
+  deciles: [{ decile: '80-89', n: 12, win_rate: 83.3, expectancy_r: 0.6 }],
+  tiers: [{ tier: 'A', n: 4, win_rate: null, expectancy_r: null, expected_band: '>=80', ok: null }],
+  drift: [],
+};
+
 const RUNNING_JOB = {
   id: 'abc123',
   kind: 'tune',
@@ -209,6 +215,9 @@ describe('AnalyticsStore', () => {
   const respondStrategies = (body: Record<string, unknown> = {}) =>
     backend.expectOne('/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });
 
+  const respondCalibration = (body: Record<string, unknown> = {}) =>
+    backend.expectOne('/api/v1/analytics/calibration').flush({ ...CALIBRATION, ...body });
+
   const respondJobs = (jobs: unknown[]) =>
     backend.expectOne('/api/v1/jobs').flush({ jobs });
 
@@ -285,6 +294,34 @@ describe('AnalyticsStore', () => {
 
     expect(store.deciles()).toHaveLength(1);
     expect(store.tiers()[0].ok).toBeNull();
+  });
+
+  it('exposes deciles as a fixed-0-100 histogram', () => {
+    tick();
+    respondPerformance();
+    store.setTab('calibration');
+    tick();
+    respondCalibration({ deciles: [
+      { decile: 'D1', n: 12, win_rate: 42, expectancy_r: 0.1 },
+      { decile: 'D10', n: 15, win_rate: 88, expectancy_r: 0.4 },
+    ] });
+
+    expect(store.decileHistogram()).toEqual([
+      { label: 'D1', count: 42 }, { label: 'D10', count: 88 },
+    ]);
+  });
+
+  it('omits a decile with too few trades to have a win rate yet, rather than charting it as 0', () => {
+    tick();
+    respondPerformance();
+    store.setTab('calibration');
+    tick();
+    respondCalibration({ deciles: [
+      { decile: 'D1', n: 12, win_rate: 42, expectancy_r: 0.1 },
+      { decile: 'D5', n: 0, win_rate: null, expectancy_r: null },
+    ] });
+
+    expect(store.decileHistogram()).toEqual([{ label: 'D1', count: 42 }]);
   });
 
   /* -- the six relocated metrics -------------------------------------- */

@@ -856,6 +856,16 @@ export const AnalyticsStore = signalStore(
       }))),
   })),
 
+  withComputed(({ deciles }) => ({
+    /** A decile with no closed trades yet has `win_rate: null` -- omitted
+     *  rather than charted as 0, which would read as "this decile loses
+     *  every time" instead of "not enough data yet". */
+    decileHistogram: computed<HistogramBin[]>(() =>
+      deciles()
+        .filter((d): d is typeof d & { win_rate: number } => d.win_rate !== null)
+        .map((d) => ({ label: d.decile, count: d.win_rate }))),
+  })),
+
   withMethods((store, api = inject(ApiClient)) => {
     /** Every failure lands here, and none of them clear the data already on
      *  screen. A table that empties because one refetch failed is worse than

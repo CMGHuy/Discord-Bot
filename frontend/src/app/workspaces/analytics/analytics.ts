@@ -528,12 +528,16 @@ interface ProposalView extends ProposalRow {
         </p>
 
         <sb-panel heading="Quality score vs outcome" [flush]="true">
-          <!-- SR61. The Jinja chart drew an 80% line across the deciles; this
-               table has no chart to draw it on, so it says the target instead.
-               80 is calibration.py:_meets_band's A-tier bar, verified. -->
+          <!-- SR61. The Jinja chart drew an 80% line across the deciles; the
+               SPA rewrite dropped it and kept only this sentence. Restored
+               below -- 80 is calibration.py:_meets_band's A-tier bar,
+               verified -- with the table underneath for the exact figures. -->
           <p class="panel-subtitle">
             Each decile's realised win rate, against an 80% target.
           </p>
+          @if (store.decileHistogram().length) {
+            <sb-histogram [bins]="store.decileHistogram()" [max]="100" [referenceLine]="80" />
+          }
           <sb-data-table
             [rows]="store.deciles()"
             [columns]="decileColumns"
