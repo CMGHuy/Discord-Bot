@@ -1268,7 +1268,7 @@ benchmark degrades to the balance line alone."
 - Produces: `store.rollingReturnsChart(): LineChartSeries[]`,
   `store.cumulativeByStrategyChart(): LineChartSeries[]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('exposes rolling returns as a single-series line chart', () => {
@@ -1294,12 +1294,12 @@ it('exposes cumulative-by-strategy as one series per strategy', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `cd frontend && npx ng test`
 Expected: FAIL — both computeds undefined
 
-- [ ] **Step 3: Add the computeds**
+- [x] **Step 3: Add the computeds**
 
 `rollingReturnsChart` only needs `performance()`, which is already a
 destructured parameter of the big `withComputed` block `rollingReturns`
@@ -1332,12 +1332,12 @@ after Task 9's:
   })),
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `cd frontend && npx ng test`
 Expected: PASS
 
-- [ ] **Step 5: Render both, and move Cumulative-by-strategy out of "By segment"**
+- [x] **Step 5: Render both, and move Cumulative-by-strategy out of "By segment"**
 
 In `analytics.ts`'s "Over time" section, after the Account balance/Drawdown
 panels row, add:
@@ -1363,12 +1363,12 @@ Task 7 Step 1 placed it in "By segment" (it listed
 and the `<dl>` block are now dead; remove them. Grep first to confirm no
 other call site: `grep -n "fmtCumulative" frontend/src/app/workspaces/analytics/analytics.ts`.
 
-- [ ] **Step 6: Build and run the frontend suite**
+- [x] **Step 6: Build and run the frontend suite**
 
 Run: `cd frontend && npx ng build && npx ng test`
 Expected: bundle complete; all tests pass
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/analytics.ts
