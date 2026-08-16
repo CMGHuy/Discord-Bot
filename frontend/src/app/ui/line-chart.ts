@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 export interface LineChartPoint {
   date: string;
@@ -90,7 +90,8 @@ const SERIES_COLORS = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (hasData()) {
-      <svg viewBox="0 0 600 220" preserveAspectRatio="none" role="img">
+      <svg viewBox="0 0 600 220" preserveAspectRatio="none" role="img"
+           (pointermove)="onPointerMove($event)" (pointerleave)="onPointerLeave()">
         @if (referenceLine(); as ref) {
           <line class="reference" [attr.x1]="0" [attr.x2]="600"
                 [attr.y1]="refY(ref)" [attr.y2]="refY(ref)" />
@@ -100,6 +101,14 @@ const SERIES_COLORS = [
                 [attr.stroke]="colorFor(i)" fill="none" />
         }
       </svg>
+      @if (tooltipRows().length) {
+        <div class="tooltip">
+          <strong>{{ tooltipDate() }}</strong>
+          @for (row of tooltipRows(); track row.name) {
+            <div>{{ row.name }}: {{ valueFormat()(row.point.value) }}</div>
+          }
+        </div>
+      }
       @if (series().length > 1) {
         <div class="legend">
           @for (series of series(); track series.name; let i = $index) {
@@ -128,6 +137,15 @@ const SERIES_COLORS = [
     .entry { display: inline-flex; align-items: center; gap: var(--space-4); }
     .entry i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
     .empty { color: var(--text-faint); font-size: var(--text-table); }
+    .tooltip {
+      position: absolute;
+      padding: var(--space-6) var(--space-8);
+      background: var(--surface-overlay);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      font-size: var(--text-chip);
+      pointer-events: none;
+    }
   `,
 })
 export class LineChart {
@@ -166,4 +184,45 @@ export class LineChart {
   protected colorFor(index: number): string {
     return SERIES_COLORS[index % SERIES_COLORS.length];
   }
+
+  protected readonly hoverIndex = signal<number | null>(null);
+
+  private readonly nearestDates = computed(() => {
+    const dates = [...new Set(this.allDates())].sort(
+      (a, b) => new Date(a).getTime() - new Date(b).getTime(),
+    );
+    return dates;
+  });
+
+  // getBoundingClientRect() is unavailable in jsdom's layout-less
+  // environment (same trap this repo already documents for width-dependent
+  // tests elsewhere), so this reads clientX relative to the element's own
+  // bounding box at pointer time -- the spec only asserts the tooltip's
+  // PRESENCE and CONTENT, never a pixel position, for exactly that reason.
+  protected onPointerMove(event: PointerEvent): void {
+    const dates = this.nearestDates();
+    if (dates.length === 0) return;
+    const svg = event.currentTarget as SVGSVGElement;
+    const rect = svg.getBoundingClientRect();
+    const fraction = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+    const index = Math.round(fraction * (dates.length - 1));
+    this.hoverIndex.set(Math.max(0, Math.min(dates.length - 1, index)));
+  }
+
+  protected onPointerLeave(): void {
+    this.hoverIndex.set(null);
+  }
+
+  protected readonly tooltipDate = computed(() => {
+    const index = this.hoverIndex();
+    return index === null ? null : this.nearestDates()[index];
+  });
+
+  protected readonly tooltipRows = computed(() => {
+    const date = this.tooltipDate();
+    if (date === null) return [];
+    return this.series()
+      .map((s) => ({ name: s.name, point: s.points.find((p) => p.date === date) }))
+      .filter((row): row is { name: string; point: LineChartPoint } => row.point !== undefined);
+  });
 }

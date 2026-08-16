@@ -118,4 +118,28 @@ describe('LineChart', () => {
   it('renders nothing rather than throwing when every series is empty', () => {
     expect(() => render([{ name: 'ui', points: [] }])).not.toThrow();
   });
+
+  it('shows a tooltip with every series value at the hovered date', () => {
+    const fixture = render([
+      { name: 'ui', points: [{ date: '2026-01-01', value: 10 }, { date: '2026-01-11', value: 20 }] },
+      { name: 'bot', points: [{ date: '2026-01-01', value: 1 }, { date: '2026-01-11', value: 2 }] },
+    ]);
+    const svg = fixture.nativeElement.querySelector('svg');
+    svg.dispatchEvent(new MouseEvent('pointermove', { clientX: 0, bubbles: true }));
+    fixture.detectChanges();
+    const tooltip = fixture.nativeElement.querySelector('.tooltip');
+    expect(tooltip).not.toBeNull();
+    expect(tooltip.textContent).toContain('ui');
+    expect(tooltip.textContent).toContain('bot');
+  });
+
+  it('hides the tooltip on pointer leave', () => {
+    const fixture = render([{ name: 'ui', points: [{ date: '2026-01-01', value: 10 }] }]);
+    const svg = fixture.nativeElement.querySelector('svg');
+    svg.dispatchEvent(new MouseEvent('pointermove', { clientX: 0, bubbles: true }));
+    fixture.detectChanges();
+    svg.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tooltip')).toBeNull();
+  });
 });
