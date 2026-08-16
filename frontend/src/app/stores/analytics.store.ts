@@ -697,6 +697,11 @@ export const AnalyticsStore = signalStore(
         count: bucket.count,
       }))),
     rollingReturns: computed(() => performance()?.rolling_returns ?? []),
+    rollingReturnsChart: computed<LineChartSeries[]>(() => [{
+      name: 'Rolling return',
+      points: (performance()?.rolling_returns ?? [])
+        .map((p) => ({ date: p.date, value: p.return_pct })),
+    }]),
     holdingSplit: computed(() => performance()?.holding_period_split ?? []),
     calendarReturns: computed(() => performance()?.calendar ?? []),
 
@@ -841,6 +846,14 @@ export const AnalyticsStore = signalStore(
       if (spy.length === 0) return [balance];
       return [balance, { name: 'SPY', points: spy.map((p) => ({ date: p.date, value: p.pct })) }];
     }),
+  })),
+
+  withComputed(({ cumulativeByStrategy }) => ({
+    cumulativeByStrategyChart: computed<LineChartSeries[]>(() =>
+      cumulativeByStrategy().map((s) => ({
+        name: s.strategy,
+        points: s.points.map((p) => ({ date: p.date, value: p.cum_pct })),
+      }))),
   })),
 
   withMethods((store, api = inject(ApiClient)) => {

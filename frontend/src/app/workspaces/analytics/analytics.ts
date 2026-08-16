@@ -348,7 +348,18 @@ interface ProposalView extends ProposalRow {
             </sb-panel>
           </div>
         }
-        <!-- Task 10's Rolling returns and Cumulative-by-strategy charts land here. -->
+        <div class="panels">
+          <sb-panel heading="Rolling returns">
+            <sb-line-chart [series]="store.rollingReturnsChart()" [valueFormat]="fmtLineValue" />
+          </sb-panel>
+          <sb-panel heading="Cumulative return by strategy">
+            @if (store.cumulativeByStrategyChart().length) {
+              <sb-line-chart [series]="store.cumulativeByStrategyChart()" [valueFormat]="fmtLineValue" />
+            } @else {
+              <p class="stale">No strategies with closed trades yet.</p>
+            }
+          </sb-panel>
+        </div>
 
         <h2 class="section">By segment</h2>
         <!-- SR55. NOT a rebuilt Journal page: spec v14 Decision 4 collapsed
@@ -385,19 +396,6 @@ interface ProposalView extends ProposalRow {
             }
           }
         </sb-panel>
-
-        @if (store.cumulativeByStrategy().length) {
-          <sb-panel heading="Cumulative return by strategy">
-            <dl>
-              @for (series of store.cumulativeByStrategy(); track series.strategy) {
-                <div>
-                  <dt>{{ series.strategy }}</dt>
-                  <dd class="num">{{ fmtCumulative(series.points) }}</dd>
-                </div>
-              }
-            </dl>
-          </sb-panel>
-        }
 
         <sb-panel heading="By confidence level" [flush]="true">
           <sb-data-table
@@ -1223,13 +1221,6 @@ export class Analytics {
   protected onRangeTo(event: Event): void {
     this.store.setRange(this.store.rangeFrom(),
                         (event.target as HTMLInputElement).value || null);
-  }
-
-  /** The last point of a per-strategy walk — where that strategy ended up.
-   *  The full series is in the payload for whoever plots it; this is the
-   *  one number a list row can carry honestly. */
-  protected fmtCumulative(points: readonly { cum_pct: number }[]): string {
-    return points.length ? `${points[points.length - 1].cum_pct.toFixed(2)}%` : ABSENT;
   }
 
   /* -- cell templates --------------------------------------------------- */

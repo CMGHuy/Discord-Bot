@@ -749,6 +749,28 @@ describe('AnalyticsStore', () => {
       expect(store.balanceWithBenchmark().map((s) => s.name)).toEqual(['Account balance']);
     });
 
+    it('exposes rolling returns as a single-series line chart', () => {
+      tick();
+      respondPerformance({ rolling_returns: [
+        { date: '2026-01-01', return_pct: 1.1 }, { date: '2026-01-08', return_pct: -0.4 },
+      ] });
+      expect(store.rollingReturnsChart()).toEqual([{
+        name: 'Rolling return',
+        points: [{ date: '2026-01-01', value: 1.1 }, { date: '2026-01-08', value: -0.4 }],
+      }]);
+    });
+
+    it('exposes cumulative-by-strategy as one series per strategy', () => {
+      tick();
+      respondPerformance({ cumulative_by_strategy: {
+        RSI: [{ date: '2026-01-01', cum_pct: 2.1 }],
+        VWAP: [{ date: '2026-01-01', cum_pct: -0.5 }],
+      } });
+      const chart = store.cumulativeByStrategyChart();
+      expect(chart.map((s) => s.name)).toEqual(['RSI', 'VWAP']); // sorted, matches cumulativeByStrategy
+      expect(chart[0].points).toEqual([{ date: '2026-01-01', value: 2.1 }]);
+    });
+
     it('echoes the applied range back with its sample size', () => {
       openPerformance();
 
