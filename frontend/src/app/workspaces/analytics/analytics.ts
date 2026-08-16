@@ -35,7 +35,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { Select } from '../../ui/form-controls';
-import { ABSENT, date, dateTime, share } from '../../ui/format';
+import { ABSENT, date, dateTime } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { Histogram, HistogramBin } from '../../ui/histogram';
 import { LineChart, LineChartSeries } from '../../ui/line-chart';
@@ -46,6 +46,7 @@ import {
   breakdownColumns,
   DECILE_COLUMNS,
   DRIFT_COLUMNS,
+  GRID_COLUMNS,
   STRATEGY_COLUMNS,
   TIER_COLUMNS,
   allKeys,
@@ -690,48 +691,14 @@ interface ProposalView extends ProposalRow {
               <p class="alert" role="alert">{{ message }}</p>
             }
 
-            <div class="scroller">
-              <table class="grid">
-                <thead>
-                  <tr>
-                    <th>Parameters</th>
-                    <th class="num">N</th>
-                    <th class="num">Win rate</th>
-                    <th class="num">ExpR</th>
-                    <th class="num">Excluded</th>
-                    <th>Bar</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of store.grid(); track row.row_index) {
-                    <tr [class.passes]="row.passes">
-                      <td class="params">{{ row.paramLabel }}</td>
-                      <td class="num">{{ fmtCount(row.n_eval) }}</td>
-                      <td class="num">{{ fmtRate(row.win_rate) }}</td>
-                      <td class="num">{{ fmtExpectancy(row.expectancy_r) }}</td>
-                      <td class="num">{{ fmtExcluded(row.excluded_share) }}</td>
-                      <td>
-                        @if (row.passes) {
-                          <sb-chip label="Clears" tone="q5" />
-                        }
-                      </td>
-                      <td>
-                        <button
-                          sb-button
-                          variant="secondary"
-                          type="button"
-                          [loading]="store.proposing() === row.row_index"
-                          (click)="askPropose(row)"
-                        >
-                          Propose
-                        </button>
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+            <sb-data-table
+              [rows]="gridPage.visible()"
+              [columns]="gridColumns()"
+              [visible]="gridKeys"
+              [rowKey]="gridRowKey"
+              [pagination]="gridPage.pageSpec()"
+              (pageChange)="gridPage.setPage($event)"
+            />
 
             <p class="note">
               A row clears the bar at 30 or more evaluated trades, a win rate of
@@ -907,6 +874,23 @@ interface ProposalView extends ProposalRow {
       }
     </ng-template>
 
+    <ng-template #gridPassesCell let-row>
+      @if (row.passes) {
+        <sb-chip label="Clears" tone="q5" />
+      }
+    </ng-template>
+    <ng-template #gridProposeCell let-row>
+      <button
+        sb-button
+        variant="secondary"
+        type="button"
+        [loading]="store.proposing() === row.row_index"
+        (click)="askPropose(row)"
+      >
+        Propose
+      </button>
+    </ng-template>
+
     <sb-confirm-dialog
       [open]="pendingDelete() !== null"
       title="Delete this proposal?"
@@ -1052,21 +1036,6 @@ interface ProposalView extends ProposalRow {
 
     /* -- SR51: the grid results ----------------------------------------- */
 
-    /* Reuses .heat's cell rules where it can; only what differs is set here.
-       A row that cleared the bar is marked on the left as well as by its chip,
-       so the signal survives greyscale and does not depend on spotting one
-       chip among twelve. The parameters cell is the only one allowed to wrap. */
-    .grid { width: 100%; border-collapse: collapse; }
-    .grid th, .grid td {
-      padding: var(--space-6) var(--space-10);
-      text-align: left;
-      font-size: var(--text-table);
-      white-space: nowrap;
-      border-bottom: 1px solid var(--border);
-    }
-    .grid th { color: var(--text-secondary); font-size: var(--text-micro); }
-    .grid tr.passes td:first-child { box-shadow: inset 2px 0 0 var(--pos); }
-    .grid td.params { white-space: normal; min-width: 18rem; }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { color: var(--text); font-size: var(--text-table); }
@@ -1297,6 +1266,8 @@ export class Analytics {
   private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
   private readonly bandCell = viewChild.required<TemplateRef<unknown>>('bandCell');
   private readonly decayCell = viewChild.required<TemplateRef<unknown>>('decayCell');
+  private readonly gridPassesCell = viewChild.required<TemplateRef<unknown>>('gridPassesCell');
+  private readonly gridProposeCell = viewChild.required<TemplateRef<unknown>>('gridProposeCell');
 
   /** The declared columns with rich cells attached by key — the same split
    *  Trades uses, so `analytics.columns.ts` stays free of templates. */
@@ -1319,6 +1290,13 @@ export class Analytics {
     attach(DRIFT_COLUMNS, { drift_alert: this.decayCell() }),
   );
 
+  protected readonly gridColumns = computed(() =>
+    attach(GRID_COLUMNS, {
+      passes: this.gridPassesCell(),
+      propose: this.gridProposeCell(),
+    }),
+  );
+
   protected readonly decileColumns = DECILE_COLUMNS;
 
   protected readonly strategyKeys = allKeys(STRATEGY_COLUMNS);
@@ -1326,6 +1304,7 @@ export class Analytics {
   protected readonly decileKeys = allKeys(DECILE_COLUMNS);
   protected readonly tierKeys = allKeys(TIER_COLUMNS);
   protected readonly driftKeys = allKeys(DRIFT_COLUMNS);
+  protected readonly gridKeys = allKeys(GRID_COLUMNS);
 
   protected readonly strategyKey = (row: StrategyRow) => row.strategy;
   protected readonly strategyPage = createClientPage(() => this.store.strategyRows());
@@ -1337,6 +1316,8 @@ export class Analytics {
   protected readonly tierPage = createClientPage(() => this.store.tiers());
   protected readonly driftKey = (row: DriftRow) => row.strategy;
   protected readonly driftPage = createClientPage(() => this.store.drift());
+  protected readonly gridRowKey = (row: GridRow) => String(row.row_index);
+  protected readonly gridPage = createClientPage(() => this.store.grid());
 
   /** WEAK reads as the "loss" side of this bar list -- greyscale would be
    *  equally defensible (a badge is a quality judgement, not P&L), but
@@ -1493,11 +1474,6 @@ export class Analytics {
     const strategy = this.store.gridStrategy();
     return strategy ? `Grid results — ${strategy}` : 'Grid results';
   });
-
-  /** The excluded share arrives as a fraction and is a share, not a change,
-   *  so it takes `share` rather than the signing `pct`. */
-  protected readonly fmtExcluded = (value: number | null) =>
-    value === null ? ABSENT : share(value * 100);
 
   protected askPropose(row: GridRow): void {
     this.pendingPropose.set(row);
