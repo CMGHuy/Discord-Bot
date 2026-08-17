@@ -251,6 +251,15 @@ if __name__ == "__main__":
               f"Wilson=[{row['wilson_lo']*100:5.1f}%, {row['wilson_hi']*100:5.1f}%]")
 
     if args.json:
-        out = {"n_trades": len(trades), "factor_lift": lift, "level_table": levels_table}
+        # Lean raw records (no per-trade `points` breakdown -- factor_lift
+        # already summarizes it, and 4337 full breakdowns would bloat a
+        # committed file) so a future re-weighting/re-leveling pass can
+        # recompute factor_lift_table()/level_table() offline without
+        # re-running the whole backtest again.
+        raw_trades = [{"outcome": t["outcome"], "score": t["score"],
+                      "level": t["level"], "target_count": t["target_count"]}
+                     for t in trades]
+        out = {"n_trades": len(trades), "factor_lift": lift,
+              "level_table": levels_table, "trades": raw_trades}
         Path(args.json).write_text(json.dumps(out, indent=2, default=list))
         print(f"\nWrote {args.json}", flush=True)

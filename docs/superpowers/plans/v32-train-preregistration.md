@@ -1,0 +1,114 @@
+# v32 TRAIN measurement and VALIDATION pre-registration
+
+Task 9 of `docs/superpowers/plans/2026-08-16-v32-unified-confidence-score.md`.
+Written before Task 10's VALIDATION run and not revised after seeing its
+result.
+
+## TRAIN measurement (Task 8)
+
+`data/v32_train_lift.json`, 4337 TRAIN trades (2020-01-01..2023-12-31, 75
+tickers x 10 horizons x 11 strategies), via
+`scripts/backtest/measure_factor_lift.py --train`.
+
+**Result: no factor kept a real, positively-signed weight.**
+
+| Factor | Disposition |
+|---|---|
+| Target distance quality, Stop level confluence, Target confluence quality, HTF bias, ADX, MACD, Squeeze, Candlestick, MTF alignment, Volume ratio, ATR percentile, Trigger distance, Badge status, Tight-stop penalty | Measured, Wilson-overlapping (indistinguishable from zero lift) -- **dropped** |
+| RSI trend alignment | Measured, real non-overlapping lift, but **negative** (-0.056): higher "RSI confirms direction" points correlate with a LOWER win rate -- the opposite of its designed premise -- **dropped** |
+| Market regime alignment | Never measured (this harness runs offline, no historical SPY regime feed reconstructed -- same limitation as `scripts/reports/audit_quality_score.py`) -- **dropped**, no evidence either way |
+| Relative strength, Market breadth | Never measured (need a historical per-date cross-sectional universe reconstruction this repo's cache doesn't retain) -- **dropped**, no evidence either way, real candidates for a future spec once measurable |
+| Gap penalty | Never fires in this harness or in live production (`gap_fragile` is never wired by any caller) -- **kept**, inert either way, per Task 4's explicit instruction to port it pending future wiring |
+
+`swingbot.core.scanning.factors.FACTORS` now contains exactly `[factor_gap]`.
+Every other ported factor function stays defined and tested -- correct,
+validated implementations that didn't earn inclusion on this evidence, not
+broken code.
+
+This is a genuinely significant, three-times-confirmed result (flagged to
+the user across three separate decision points given how much it changes):
+the quality-points pool ships effectively empty. `UNIFIED_CONFIDENCE`'s
+level is now driven almost entirely by method count (via `honesty_cap`),
+functionally close to what the pre-v32 legacy system's Step 1 already was.
+
+## A structural fix this measurement forced (Task 9, beyond re-weighting)
+
+`level_for_score()` (Task 5) originally derived level PURELY from the 0-100
+score via a `LEVELS` band lookup, using `honesty_cap(target_count)` only as
+an upper ceiling on that result. With the quality-points pool empty, every
+score is pinned at 0, which would have made `level_for_score` return Level 1
+for every scenario regardless of method count -- silently gating every
+`UNIFIED_CONFIDENCE` alert below any sane `MIN_ALERT_CONFIDENCE_LEVEL`, and
+making Task 10's VALIDATION run fail by construction (100% alert-volume
+loss) rather than test anything real.
+
+Fixed (confirmed with the user before implementing): `level_for_score` now
+sets `target_count`'s `honesty_cap` as the BASE level, with the 0-100
+quality score only able to nudge it -1 (weak quality, score<=30) or +1
+(strong quality, score>=70 -- a structural no-op today, since base already
+equals the cap and the upper clamp absorbs it). This matches the Global
+Constraints' stated intent ("base level from method count... remains the
+base, and the honesty cap remains on top of it") more faithfully than the
+literal Task 5 code did. Full reasoning in `confidence.py`'s
+`level_for_score` docstring and the Task 9 commit.
+
+**Consequence for Task 9 Step 3 ("recalibrate the level bands so
+MIN_ALERT_CONFIDENCE_LEVEL=4 admits ~today's population"):** this
+instruction is now moot as literally written -- `LEVELS`' band edges no
+longer drive level determination at all under the fixed mechanic (only
+`_LEVEL_LABELS` still reads them). The only real lever left is
+`_HONESTY_CAP`'s target_count-to-level mapping, and there is no TRAIN
+evidence to justify changing it: `factor_target_confluence_quality` (built
+directly from `target_count`) itself showed only 0.026 lift, statistically
+insignificant. `_HONESTY_CAP` stays exactly as Task 5 set it
+(`{0:1, 1:3, 2:4, 3:5}`, fallback 6) -- an unjustified recalibration would
+be the same kind of ungrounded token-points move this whole measurement
+exists to prevent. Recorded here as a genuine "doesn't apply as written"
+finding rather than silently skipped.
+
+## Level 6 decision (Task 9, Step 4)
+
+Re-measured with the corrected `level_for_score` and the trimmed `FACTORS`
+(both change which level every trade lands in vs. the first TRAIN run) --
+same 4337 TRAIN trades, `data/v32_train_lift.json`:
+
+| Level | n | Win rate | Wilson interval |
+|---|---|---|---|
+| 1 | 521 | 38.4% | [34.3%, 42.6%] |
+| 2 | 166 | 30.1% | [23.7%, 37.5%] |
+| 3 | 116 | 45.7% | [36.9%, 54.7%] |
+| 4 | 144 | 42.4% | [34.6%, 50.5%] |
+| 5 | 2211 | 49.4% | [47.4%, 51.5%] |
+| 6 | **0** | -- | -- |
+
+**Level 6 does not clear the bar -- decisively, not marginally.** n=0: with
+the quality-points pool empty, the +1 nudge that could reach
+`honesty_cap(4+)=6` never fires (score is always 0, never >=70), so Level 6
+became structurally unreachable the moment Task 9's factor-dropping
+decision landed. **Removed** per the plan's own instruction: `LEVELS`
+restored to its exact pre-v32 5-band edges, `_HONESTY_CAP`'s fallback set
+to 5, config `options` already `["1".."5"]` (Task 6 never added "6" --
+that was reserved for Task 10 on a PASS, so there is nothing to revert
+there).
+
+## VALIDATION pre-registration
+
+- **Primary:** win rate (TP1 before stop) at `MIN_ALERT_CONFIDENCE_LEVEL=4`.
+- **PASS:** win rate improves vs. the legacy scorer on the same VALIDATION
+  window, AND alert volume falls by no more than 30%.
+- **FAIL:** any regression in win rate, or volume loss > 30%.
+- **Level 6** ships only if TRAIN showed n>=100, point estimate >=90%,
+  Wilson lower bound >=80% and above Level 5's own point estimate. Already
+  decided by the TRAIN result above (n=0) -- Level 6 does not exist to ship
+  regardless of Task 10's outcome; this line stays as the rule that was
+  applied, not a live gate Task 10 still needs to check.
+- **One shot.** A FAIL means `UNIFIED_CONFIDENCE` stays default-off.
+
+Given the near-empty factor pool, a reasonable expectation going in: the
+unified score is now close to a relabeling of method-count-driven gating,
+so VALIDATION is largely a test of whether `honesty_cap`'s specific
+target_count-to-level mapping (unchanged from Task 5/pre-v32 in spirit,
+just applied more directly) performs comparably to the legacy scorer's
+base-level-plus-nudges formula on real, unseen data -- not a test of
+RS/MTF/breadth's promised gating influence, since none of the three
+survived TRAIN with assignable weight.

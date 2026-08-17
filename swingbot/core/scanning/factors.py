@@ -358,27 +358,41 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
     )
 
 
-# Exactly the factors docs/superpowers/plans/v32-factor-reconciliation.md
-# (Task 1) kept, in breakdown display order. Weights are ported verbatim
-# from confidence.py/quality.py; Task 9 re-derives them from TRAIN evidence.
+# v32 Task 9: TRAIN factor-lift measurement (data/v32_train_lift.json, 4337
+# trades) found NO factor with real, positively-signed, statistically
+# distinguishable win-rate lift:
+#   - 13 factors measured, Wilson-overlapping (indistinguishable from zero
+#     lift): target_distance, stop_confluence, target_confluence_quality,
+#     htf, adx, macd, squeeze, candlestick, mtf, volume, atr_percentile,
+#     trigger_distance, badge, tight_stop.
+#   - 1 factor measured with a REAL, non-overlapping lift, but the WRONG
+#     sign: rsi (-0.056 -- higher "RSI confirms direction" points correlate
+#     with a LOWER win rate, the opposite of its designed premise). Kept as
+#     a positively-weighted factor with a flipped sign would be exactly the
+#     post-hoc data-dredged rationalization this plan's TRAIN-derived-
+#     weights discipline exists to prevent.
+#   - 3 factors were never measurable at all with this repo's cache, not
+#     measured-and-rejected: regime (needs a historical SPY feed this
+#     harness doesn't reconstruct -- the offline quality-score decile audit
+#     under scripts/reports/ documents the same limitation), rs and breadth
+#     (both need a historical per-date cross-sectional universe
+#     reconstruction the cache doesn't retain). Per Task 9's own rule
+#     ("assign points from measured
+#     lift"), no measurement means no basis to assign a weight either way --
+#     these remain real candidates for a future spec once a way to measure
+#     them exists, not falsified by this TRAIN run.
+#
+# Every function above stays defined and tested -- correct, validated
+# implementations that simply didn't earn inclusion in the ACTIVE registry
+# on this evidence, not broken code to delete. Only factor_gap ships,
+# unchanged from Task 4: it never fires today (gap_fragile is never wired
+# by any caller, live or offline) so it costs nothing to include, and
+# dropping genuinely-untested infrastructure serves no purpose the way
+# dropping an unsupported WEIGHT does.
+#
+# Full reasoning, and the user's explicit sign-off on this near-empty
+# result (confirmed across three separate questions given how much it
+# changes): docs/superpowers/plans/v32-train-preregistration.md.
 FACTORS[:] = [
-    factor_target_distance,
-    factor_stop_confluence,
-    factor_target_confluence_quality,
-    factor_regime,
-    factor_htf,
-    factor_adx,
-    factor_macd,
-    factor_rsi,
-    factor_squeeze,
-    factor_candlestick,
-    factor_rs,
-    factor_mtf,
-    factor_breadth,
-    factor_volume,
-    factor_atr_percentile,
-    factor_trigger_distance,
-    factor_badge,
-    factor_tight_stop,
     factor_gap,
 ]

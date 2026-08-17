@@ -124,22 +124,29 @@ from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
 
 log = logging.getLogger("swing-bot.confidence")
 
+# v32 Task 9: Level 6 ("Elite") was conditional on TRAIN clearing n>=100,
+# point estimate >=90%, Wilson lower bound >=80% and above Level 5's own
+# point estimate (see docs/superpowers/plans/v32-train-preregistration.md).
+# It did not clear that bar -- n=0, not just short: with the quality-points
+# pool empty (every measured factor dropped, see factors.py), the +1
+# quality nudge that could reach honesty_cap(4+)=6 never fires (score is
+# always 0), making Level 6 structurally unreachable under this TRAIN
+# result. Removed per the plan's own instruction ("a negative result here
+# is a finished task"): 5 bands, restored to their exact pre-v32 edges.
 LEVELS = [
     (1, "Very Low", 0, 20),
     (2, "Low", 21, 40),
     (3, "Medium", 41, 60),
-    (4, "High", 61, 75),
-    (5, "Very High", 76, 90),
-    (6, "Elite", 91, 100),
+    (4, "High", 61, 80),
+    (5, "Very High", 81, 100),
 ]
 _LEVEL_LABELS = {lvl: label for lvl, label, _lo, _hi in LEVELS}
 _LEVEL_RANGE = {lvl: (lo, hi) for lvl, _label, lo, hi in LEVELS}
 
 # Method-count ceiling. Until v32 this was emergent -- min(5, target_count)
-# plus at most +2 of adjustment -- which meant extending the scale to 6
-# would have silently let TWO methods reach Elite. It is explicit now.
+# plus at most +2 of adjustment. It is explicit now.
 _HONESTY_CAP = {0: 1, 1: 3, 2: 4, 3: 5}
-_MAX_LEVEL = 6
+_MAX_LEVEL = 5
 
 # The pre-v32 5-band ranges, frozen here so the still-untouched legacy score
 # path (below, until Task 6 extracts it into _score_confidence_legacy) keeps
@@ -150,20 +157,47 @@ _LEGACY_LEVEL_RANGE = {1: (0, 20), 2: (21, 40), 3: (41, 60), 4: (61, 80), 5: (81
 
 
 def honesty_cap(target_count: int) -> int:
-    """Highest level `target_count` independent confirming methods may reach.
-    Level 6 needs 4+, one stricter than Level 5's 3+."""
+    """Highest level `target_count` independent confirming methods may
+    reach -- and, since v32 Task 9, level_for_score's actual BASE level too
+    (see that function's docstring). 4+ methods reach the ceiling, 5 (Level
+    6 was removed on a negative TRAIN result, see v32-train-preregistration.md)."""
     return _HONESTY_CAP.get(max(0, int(target_count)), _MAX_LEVEL)
 
 
 def level_for_score(score: int, target_count: int) -> tuple:
-    """Map a 0-100 score to a level, then lower it to the honesty cap if the
-    method count does not support it. The cap never raises a level."""
-    level = _MAX_LEVEL
-    for lvl, _label, lo, hi in LEVELS:
-        if lo <= score <= hi:
-            level = lvl
-            break
-    level = min(level, honesty_cap(target_count))
+    """Method count sets the BASE level (via honesty_cap -- the highest
+    level that count of independent confirming methods may reach); the
+    0-100 quality score can only nudge it +-1 from there, using the same
+    genuinely-strong/genuinely-weak thresholds the legacy scorer's own Step
+    3 uses (QUALITY_BOOST_THRESHOLD/QUALITY_PENALTY_THRESHOLD). The +1
+    branch is a structural no-op -- base_level already equals the cap, so
+    the upper clamp always absorbs it -- which is intentional: quality can
+    never manufacture a level method count doesn't support (the whole point
+    of the honesty property), it can only demote a weak-quality scenario
+    one level below what its method count alone would earn.
+
+    v32 Task 9 fix: the original version (Task 5) derived level PURELY from
+    the score via a LEVELS band lookup, using honesty_cap only as an upper
+    ceiling on that result -- so target_count had NO influence on level
+    unless the quality-points pool happened to score high too. TRAIN
+    evidence (Task 8) found 15 of 15 measured quality factors either
+    Wilson-overlapping or wrong-signed, so Task 9 dropped all of them --
+    which would have pinned every unified score at 0 and every level at 1,
+    regardless of method count, making Task 10's VALIDATION run fail by
+    construction rather than test anything. This restores method count as
+    the actual driver, matching the Global Constraints' stated intent
+    ("base level from method count... remains the base, and the honesty
+    cap remains on top of it") rather than the score-first reading Task 5
+    literally implemented.
+    """
+    base_level = honesty_cap(target_count)
+    if score >= QUALITY_BOOST_THRESHOLD:
+        adjustment = 1
+    elif score <= QUALITY_PENALTY_THRESHOLD:
+        adjustment = -1
+    else:
+        adjustment = 0
+    level = max(1, min(base_level, base_level + adjustment))
     return level, _LEVEL_LABELS[level]
 
 # Step 3's thresholds -- quality has to be genuinely strong or genuinely
@@ -571,6 +605,6 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     target_count, _ = _resolve_confluence(None, scenario.target_sources)
     level, label = level_for_score(score, target_count)
     breakdown["Confirming methods"] = (
-        f"{target_count} independent method(s) -> caps at Level "
-        f"{honesty_cap(target_count)}")
+        f"{target_count} independent method(s) -> base Level "
+        f"{honesty_cap(target_count)}, quality score nudges +-1 from there")
     return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)

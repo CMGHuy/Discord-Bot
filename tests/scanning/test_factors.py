@@ -432,6 +432,10 @@ def test_target_confluence_quality_bands():
 
 
 def test_factors_registry_has_exactly_the_kept_factors():
-    from swingbot.core.scanning.factors import FACTORS
-    assert len(FACTORS) == 19
-    assert len(set(FACTORS)) == 19   # no accidental duplicate entry
+    """Task 2/3/4 ported and registered 19 factors; Task 9's TRAIN
+    measurement found none with real, positively-signed lift (see
+    factors.py's own comment above FACTORS for the full breakdown), so only
+    factor_gap -- inert today, never fires -- remains in the active
+    registry. The other 18 stay defined and tested, just not registered."""
+    from swingbot.core.scanning.factors import FACTORS, factor_gap
+    assert FACTORS == [factor_gap]
