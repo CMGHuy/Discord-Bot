@@ -95,8 +95,13 @@ def test_flag_shadow_attaches_plan_without_touching_legacy(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
     item = _item()
     sc = _scenario()
+    # level_map=None (not ([], [])): an empty-but-not-None level map now
+    # means "no real levels on either side" to build_confluence_plan's v31
+    # target selection, which correctly rejects it. This test only cares
+    # about shadow-mode side effects, so it wants the honest "no level map at
+    # all" fallback (the scenario's own take_profit as the sole candidate).
     engine.attach_plan_v2(item, sc, make_ohlcv([100.0] * 60),
-                          "AAPL", "4w", level_map=([], []))
+                          "AAPL", "4w", level_map=None)
     assert item.plan_v2 is not None
     assert item.plan_v2.source == "confluence"
     # legacy scenario numbers untouched -- the embed keeps reading these
@@ -147,8 +152,11 @@ def test_quality_scoring_actually_runs_and_produces_a_nonzero_score(monkeypatch)
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
     item = SimpleNamespace(plan_v2=None, target_confluence=(4, ["EMA21", "Fib", "S/R", "VWAP"]))
     regime = SimpleNamespace(trend="bullish")
+    # level_map=None: this test is about quality scoring, not target
+    # selection -- see test_flag_shadow_attaches_plan_without_touching_legacy
+    # for why ([], []) now means "reject, no real levels" instead.
     engine.attach_plan_v2(item, _scenario(), _structured_df(), "AAPL", "4w",
-                          level_map=([], []), regime=regime,
+                          level_map=None, regime=regime,
                           rs_percentile=82.0, breadth=61.0)
     assert item.plan_v2 is not None
     assert item.plan_v2.quality_score > 0
@@ -206,7 +214,12 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MIN_REWARD_PCT", 0.5)
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
-    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
+    # NOT 0.0: levels.py's own hard-filter treats <=0 as "off" (build_scenarios
+    # constraint check), but v31's select_structural_target treats min_rr<=0 as
+    # "reject everything" (a deliberate, different semantic -- Task 2). A tiny
+    # positive floor loosens scenario construction the same way 0.0 used to,
+    # without tripping the new target-selection rejection.
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
     # engine.py also floors the min-reward requirement at 15% of the horizon's
     # OWN sr_target_min_pct (see engine.py's effective_min_reward comment) --
     # 4w's default (15.0) floors it at 2.25%, above this fixture's nearest
@@ -254,6 +267,98 @@ def test_sync_run_scan_gates_attach_plan_v2_on_all_ok(monkeypatch, tmp_path):
         "attach_plan_v2 SHOULD be called (plan_v2 must be set) for a scenario that passes "
         "every requirement check -- the engine.py:676-677 `if all_ok:` gate's other branch"
     )
+
+
+# --- v31 Task 6: attach_plan_v2's None return (no qualifying structural
+# target) must be distinguished from a builder exception, and must drop the
+# item from scan_items in "on" mode without suppressing the legacy alert in
+# "shadow" mode. --------------------------------------------------------
+
+def test_attach_plan_v2_records_the_rejection_reason(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
+    item = _item()
+    engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=None)
+    assert item.plan_v2 is None
+    assert item.plan_v2_rejected == "no_qualifying_target"
+
+
+def test_a_builder_exception_is_still_a_warning_not_a_rejection(monkeypatch):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    monkeypatch.setattr(engine, "build_confluence_plan",
+                        lambda *a, **k: 1 / 0)
+    item = _item()
+    engine.attach_plan_v2(item, _scenario(), make_ohlcv([100.0] * 60),
+                          "AAPL", "4w", level_map=None)   # must not raise
+    assert item.plan_v2 is None
+    # A crash must not masquerade as a clean "no setup" -- that distinction
+    # is the whole reason plan_v2_rejected exists as a separate flag.
+    assert getattr(item, "plan_v2_rejected", None) is None
+
+
+def _setup_minimal_scan(monkeypatch, tmp_path):
+    """Single-ticker, all_ok-guaranteed _sync_run_scan drive -- same recipe
+    as test_sync_run_scan_gates_attach_plan_v2_on_all_ok's Run 2, factored
+    out for the rejection-path tests below."""
+    df = _structured_df()
+    monkeypatch.setattr(config, "MIN_REWARD_PCT", 0.5)
+    monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
+    monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
+    monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
+    monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
+    monkeypatch.setattr(engine, "load_watchlist", lambda: ["TEST"])
+    monkeypatch.setattr(
+        engine, "get_daily_data",
+        lambda ticker, period=None: df.copy() if ticker == "TEST" else None,
+    )
+    monkeypatch.setattr(engine, "get_current_price", lambda ticker: None)
+    monkeypatch.setattr(engine, "trade_log", TradeLog(path=str(tmp_path / "trades.json")))
+    monkeypatch.setattr(engine, "is_stop_requested", lambda: False)
+
+
+def test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
+    _setup_minimal_scan(monkeypatch, tmp_path)
+    monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
+
+    captured = {}
+
+    def _capture_and_shortcircuit(items):
+        captured["items"] = list(items)
+        return []
+
+    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+
+    alerts, _, _ = engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
+
+    assert captured["items"] == [], (
+        "PLAN_ENGINE_V2='on': an item whose plan_v2 was rejected for "
+        "'no_qualifying_target' must never reach scan_items"
+    )
+    assert alerts == []
+
+
+def test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
+    _setup_minimal_scan(monkeypatch, tmp_path)
+    monkeypatch.setattr(engine, "build_confluence_plan", lambda *a, **k: None)
+
+    captured = {}
+
+    def _capture_and_shortcircuit(items):
+        captured["items"] = list(items)
+        return []
+
+    monkeypatch.setattr(engine, "dedup_scan_items", _capture_and_shortcircuit)
+
+    engine._sync_run_scan("4w", require_confirmation=False, progress=None, min_confluence=0)
+
+    items = captured["items"]
+    assert items, "fixture must produce at least one real scenario"
+    assert all(item.plan_v2 is None and item.plan_v2_rejected == "no_qualifying_target"
+              for item in items), "shadow mode still builds/rejects plan_v2, just never suppresses the item"
 
 
 def test_illiquid_ticker_skips_new_signals_but_still_monitors_open_trades(monkeypatch, tmp_path):
@@ -360,7 +465,12 @@ def test_sync_run_scan_parallel_dispatch_matches_serial(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MIN_REWARD_PCT", 0.5)
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
-    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
+    # NOT 0.0: levels.py's own hard-filter treats <=0 as "off" (build_scenarios
+    # constraint check), but v31's select_structural_target treats min_rr<=0 as
+    # "reject everything" (a deliberate, different semantic -- Task 2). A tiny
+    # positive floor loosens scenario construction the same way 0.0 used to,
+    # without tripping the new target-selection rejection.
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     # Same per-horizon loosening as test_sync_run_scan_gates_attach_plan_v2_on_all_ok
     # -- see that test's docstring for why 4w's default sr_target_min_pct
@@ -444,7 +554,12 @@ def _drive_alert_loop(monkeypatch, tmp_path, intraday_fn):
     monkeypatch.setattr(config, "MIN_REWARD_PCT", 0.5)
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 0.0)
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 50.0)
-    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.0)
+    # NOT 0.0: levels.py's own hard-filter treats <=0 as "off" (build_scenarios
+    # constraint check), but v31's select_structural_target treats min_rr<=0 as
+    # "reject everything" (a deliberate, different semantic -- Task 2). A tiny
+    # positive floor loosens scenario construction the same way 0.0 used to,
+    # without tripping the new target-selection rejection.
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 0.01)
     monkeypatch.setattr(config, "MIN_ALERT_CONFIDENCE_LEVEL", 1)
     monkeypatch.setitem(engine.HORIZONS["4w"], "sr_target_min_pct", 1.0)
 
