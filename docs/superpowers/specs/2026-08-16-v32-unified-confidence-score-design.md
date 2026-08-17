@@ -5,6 +5,22 @@ Bump: bot minor (1.1.4 → 1.2.0) — the gate that decides which alerts fire
 changes population and gains a sixth level; every user sees a different feed.
 `ui` patch, for the Settings field range and the retirement of tier labels.
 
+**What actually shipped (amended, per document-conventions.md, after the
+work -- not revised in the paragraph above):** the merged score never
+went live. TRAIN measurement found no factor -- including RS, MTF and
+market breadth, the three this spec's whole premise rests on -- with a
+real, positively-signed win-rate lift; the one-shot VALIDATION run then
+showed the resulting near-empty-factor-pool scoring performing slightly
+*worse* than the legacy scorer it was meant to replace. `UNIFIED_CONFIDENCE`
+stays default-off; Level 6 was removed on the same negative TRAIN result
+before VALIDATION even ran. Actual bump: `bot` **patch** (1.2.0 → 1.2.1) --
+tier retirement (Task 11) is a real, observable Discord/bot-facing change
+(chip rendering, `!liveplans`/slash command filter syntax, firehose
+routing), just not the minor-level "different feed" this line predicted.
+`ui` patch (1.7.1 → 1.7.2) for the admin API's own tier-to-confidence-level
+migration. Full result:
+`docs/superpowers/plans/implemented/v32-train-preregistration.md`.
+
 ## The problem, stated once
 
 This repo has **two scoring systems**, and the smarter one is advisory.
@@ -203,7 +219,10 @@ Follows `docs/claude/backtest-methodology.md`. New pre-registration required.
   pool.
 - **No new market data.** Everything in the merged factor set is already
   computed during a scan. This spec adds no fetches and no dependencies.
-- **`MIN_ALERT_CONFIDENCE_LEVEL`'s default stays 3.** Level 6, if it ships, is
+- **`MIN_ALERT_CONFIDENCE_LEVEL`'s default stays 4** (`config.py:174` --
+  this line originally said 3, contradicting both the Global Constraints
+  above and the live code; a defect in this spec, found and corrected
+  during implementation, Task 1's reconciliation). Level 6, if it ships, is
   opt-in.
 - **Plan Engine v2 is not removed.** Only its scoring role is unified;
   `build_confluence_plan` and the rest are untouched.

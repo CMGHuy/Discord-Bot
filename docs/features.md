@@ -93,8 +93,8 @@ CSV export can never quietly disagree:
 |---|---|
 | `metrics.py` | Equity curve, drawdown, win rate, expectancy R, profit factor, streaks, rolling win rate, Sharpe/Sortino — pure functions over trade-record lists. |
 | `mfe_mae.py` | Per-trade max favorable/adverse excursion and exit efficiency (how much of the available move a trade actually captured). |
-| `aggregate.py` | `stats_by(closed, dimension)` — one `StatRow` per bucket, across 10 dimensions (strategy, horizon, tier, badge, confidence, direction, day-of-week, month, ticker, source). |
-| `calibration.py` | Quality-score decile calibration, tier-vs-design-band checks, and `badge_drift` — the pre-registered edge-decay rule. |
+| `aggregate.py` | `stats_by(closed, dimension)` — one `StatRow` per bucket, across 9 dimensions (strategy, horizon, badge, confidence, direction, day-of-week, month, ticker, source). |
+| `calibration.py` | Quality-score decile calibration, per-confidence-level win-rate calibration, and `badge_drift` — the pre-registered edge-decay rule. |
 | `rank.py` | `follow_score` — the one ranking authority (see below). |
 | `journal.py` | `JournalStore` — one auto-generated lesson entry per closed trade (MFE/MAE, exit efficiency, tags, a templated `auto_lesson`), plus hand-added notes via `set_note`. |
 | `insights.py` | Human-readable rollups over the journal: the weekly lessons digest, the edge-decay report, and the top-recurring-lessons list. Formats only — every number here is delegated to `metrics.py`/`calibration.py`. |
@@ -155,9 +155,9 @@ recomputed per-view:
 
 | Page | What it's for |
 |---|---|
-| **Plans** (`/plans`) | The live plan board — every `TradePlanV2` ranked by `follow_score`, filterable by status/tier/badge/ticker, with cancel/close actions and a detail page (chart, timeline, quality breakdown, linked trade). |
+| **Plans** (`/plans`) | The live plan board — every `TradePlanV2` ranked by `follow_score`, filterable by status/confidence level/badge/ticker, with cancel/close actions and a detail page (chart, timeline, quality breakdown, linked trade). |
 | **Strategies** (`/strategies`) | Registry provenance per strategy (badge, R:R override, OOS N/WR/expectancy, validation window/run date), a strategy×horizon live win-rate heatmap, drift chips, and rolling-WR sparklines. |
-| **Calibration** (`/calibration`) | Does a higher quality score actually win more? Score-decile chart vs the 80% target line, tier-vs-design-band pass/fail, and the badge-drift table (see the edge-decay rule above). |
+| **Calibration** (`/calibration`) | Does a higher quality score actually win more? Score-decile chart vs the 80% target line, per-confidence-level win rate, and the badge-drift table (see the edge-decay rule above). |
 | **Journal** (`/journal`) | Browses `JournalStore` entries (MFE/MAE, exit efficiency, tags, auto-lesson) with tag/outcome/strategy filters and inline note editing, plus a Weekly digest tab. |
 | **Tuning** (`/tuning`) | A workbench over `scripts/backtest/tune_strategy.py`: current per-strategy parameters, a grid-launch form, live job-progress streaming, and a results/proposal browser. See the TRAIN-only guardrail below — this page can only ever *propose* a parameter change. |
 
@@ -235,7 +235,7 @@ actually trading at — never a projection dressed up as a promise.
   `strategy_types.py`'s `STRATEGY_GATES`), every plan's target-selection band
   (`config.MIN_RISK_REWARD_RATIO`/`MAX_RISK_REWARD_RATIO`, the nearest real
   level a plan's target may land on — see Plan Engine v2 below), the
-  quality scoring in `quality.py` that tiers signals, and the validation
+  quality scoring in `quality.py` that scores every plan 0-100, and the validation
   registry (`swingbot/core/backtesting/registry.py`) that badges which strategies have
   actually earned trust out-of-sample. Nothing here can invent edge that
   isn't real — E33's component-adoption process ran, found zero components
