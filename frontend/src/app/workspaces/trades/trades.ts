@@ -444,6 +444,11 @@ export class Trades {
   readonly badge = input<string>();
   readonly confidence = input<string>();
   readonly has_note = input<string>();
+  // Dashboard lifecycle-strip click-through (Today / Today+open scope). No
+  // control here sets it -- only the Dashboard's status cards send it -- but
+  // it still has to arrive through the same URL-is-truth path as every other
+  // filter, or a reload/shared link would silently drop it.
+  readonly today = input<string>();
 
   protected readonly statusChips = STATUS_CHIPS;
   protected readonly tableId = TRADES_TABLE_ID;
@@ -673,6 +678,8 @@ export class Trades {
         // the same reason a `?has_note=1` string comparison matched nothing.
         has_note:
           this.has_note() === undefined ? undefined : this.has_note() === '1',
+        today:
+          this.today() === undefined ? undefined : this.today() === '1',
       };
       this.store.setQuery(query);
     });
@@ -755,6 +762,7 @@ export class Trades {
       badge: null,
       confidence: null,
       has_note: null,
+      today: null,
     });
   }
 

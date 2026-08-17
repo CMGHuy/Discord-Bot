@@ -94,6 +94,9 @@ export interface TradeRow {
   opened_at: string | null;
   closed_at: string | null;
   has_note: boolean;
+  /** Whether this row's CURRENT status was entered today (Europe/Berlin
+   *  calendar day). See the `today` query param on `TradeQuery` below. */
+  today: boolean;
   /* SR53 — the plan's own numbers, so a row that has not filled is not mostly
      nulls. `opened_at` and `held_hours` describe an execution; these describe
      the plan. Null on a legacy row, which never had a plan. */
@@ -198,6 +201,12 @@ export interface TradeQuery {
   /** SR52. The 1-5 level. Named `confidence` in the URL and stored as
    *  `confidence_level` on the row; `_FILTER_KEYS` bridges the two. */
   confidence?: string;
+  /** Whether this row's CURRENT status was entered today (Europe/Berlin
+   *  calendar day). The Dashboard lifecycle strip's date scope, sent
+   *  alongside `status` from a card click so Today/Today+open narrows all
+   *  five statuses the same way the strip's own counts do -- not just
+   *  CLOSED/CANCELLED. Tri-state like `has_note`: absent means unfiltered. */
+  today?: boolean;
 }
 
 export const TRADE_SORTABLE = [

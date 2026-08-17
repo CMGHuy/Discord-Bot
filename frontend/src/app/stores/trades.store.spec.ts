@@ -79,6 +79,7 @@ const ROW: TradeRow = {
   opened_at: '2026-01-03T14:30:00Z',
   closed_at: null,
   has_note: false,
+  today: false,
   // SR7. Present on every row, so the fixture carries them too -- a fixture
   // that drifts from the interface stops representing what the store sees.
   progress_pct: 42.5,
