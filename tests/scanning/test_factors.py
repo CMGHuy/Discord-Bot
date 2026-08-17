@@ -301,3 +301,137 @@ def test_tight_stop_absent_when_no_atr_floor():
 
 def test_tight_stop_absent_scenario_returns_none():
     assert factor_tight_stop(_ctx()) is None
+
+
+# --- Task 4: quality.py components, including RS/MTF/breadth ----------
+
+from swingbot.core.scanning.factors import (  # noqa: E402
+    factor_rs, factor_mtf, factor_breadth, factor_htf, factor_volume,
+    factor_atr_percentile, factor_trigger_distance, factor_badge,
+    factor_gap, factor_target_confluence_quality,
+)
+
+
+def test_rs_scores_zero_at_or_below_median():
+    assert factor_rs(_ctx(rs_percentile=50.0)).points == 0
+    assert factor_rs(_ctx(rs_percentile=10.0)).points == 0
+
+
+def test_rs_scales_above_median_and_caps():
+    assert factor_rs(_ctx(rs_percentile=75.0)).points == 5
+    assert factor_rs(_ctx(rs_percentile=100.0)).points == 10
+
+
+def test_rs_absent_returns_none_not_zero():
+    """None means the RS benchmark fetch failed. It must be omitted from the
+    breakdown, not rendered as a real reading of zero."""
+    assert factor_rs(_ctx()) is None
+
+
+def test_mtf_uses_the_discrete_alignment_ladder():
+    assert factor_mtf(_ctx(mtf=0)).points == 0
+    assert factor_mtf(_ctx(mtf=1)).points == 3
+    assert factor_mtf(_ctx(mtf=2)).points == 6
+    assert factor_mtf(_ctx(mtf=3)).points == 10
+
+
+def test_mtf_absent_returns_none():
+    assert factor_mtf(_ctx()) is None
+
+
+def test_breadth_scores_above_forty_percent_and_caps_at_sixty():
+    assert factor_breadth(_ctx(breadth=40.0)).points == 0
+    assert factor_breadth(_ctx(breadth=60.0)).points == 5
+    assert factor_breadth(_ctx(breadth=95.0)).points == 5
+
+
+def test_breadth_absent_returns_none():
+    assert factor_breadth(_ctx()) is None
+
+
+def test_htf_aligned_scores_fifteen():
+    ctx = _ctx(scenario=_scenario("bullish"), htf_bias="bullish")
+    assert factor_htf(ctx).points == 15
+
+
+def test_htf_counter_scores_zero():
+    ctx = _ctx(scenario=_scenario("bullish"), htf_bias="bearish")
+    r = factor_htf(ctx)
+    assert r.points == 0
+
+
+def test_htf_absent_returns_none():
+    assert factor_htf(_ctx(scenario=_scenario())) is None
+    assert factor_htf(_ctx(htf_bias="bullish")) is None
+    assert factor_htf(_ctx(scenario=_scenario(), htf_bias="sideways")) is None
+
+
+def test_volume_ratio_bands():
+    assert factor_volume(_ctx(volume_ratio=2.5)).points == 10
+    assert factor_volume(_ctx(volume_ratio=1.5)).points == 8
+    assert factor_volume(_ctx(volume_ratio=1.0)).points == 4
+    assert factor_volume(_ctx(volume_ratio=0.5)).points == 0
+
+
+def test_volume_absent_returns_none():
+    assert factor_volume(_ctx()) is None
+    assert factor_volume(_ctx(volume_ratio=float("nan"))) is None
+
+
+def test_atr_percentile_bands():
+    assert factor_atr_percentile(_ctx(atr_pct=0.95)).points == 0
+    assert factor_atr_percentile(_ctx(atr_pct=0.75)).points == 5
+    assert factor_atr_percentile(_ctx(atr_pct=0.3)).points == 10
+
+
+def test_atr_percentile_absent_returns_none():
+    """Unknown vol regime is genuinely absent -- distinct from a KNOWN
+    reading in the 0.7-0.9 band that also happens to score 5."""
+    assert factor_atr_percentile(_ctx()) is None
+
+
+def test_trigger_distance_bands():
+    assert factor_trigger_distance(_ctx(trigger_distance_pct=0.3)).points == 10
+    assert factor_trigger_distance(_ctx(trigger_distance_pct=1.0)).points == 6
+    assert factor_trigger_distance(_ctx(trigger_distance_pct=2.0)).points == 3
+    assert factor_trigger_distance(_ctx(trigger_distance_pct=5.0)).points == 0
+
+
+def test_trigger_distance_absent_returns_none():
+    assert factor_trigger_distance(_ctx()) is None
+
+
+def test_badge_validated_scores_twenty():
+    assert factor_badge(_ctx(badge_status="VALIDATED")).points == 20
+
+
+def test_badge_other_status_scores_zero():
+    assert factor_badge(_ctx(badge_status="WEAK")).points == 0
+
+
+def test_badge_absent_returns_none():
+    assert factor_badge(_ctx()) is None
+
+
+def test_gap_penalty_only_when_fragile():
+    r = factor_gap(_ctx(gap_fragile=True))
+    assert r.points == -10
+
+
+def test_gap_penalty_absent_when_not_fragile():
+    assert factor_gap(_ctx(gap_fragile=False)) is None
+
+
+def test_target_confluence_quality_bands():
+    assert factor_target_confluence_quality(_ctx(target_count=0)).points == 0
+    assert factor_target_confluence_quality(_ctx(target_count=1)).points == 7
+    assert factor_target_confluence_quality(_ctx(target_count=2)).points == 12
+    assert factor_target_confluence_quality(_ctx(target_count=3)).points == 16
+    assert factor_target_confluence_quality(_ctx(target_count=4)).points == 20
+    assert factor_target_confluence_quality(_ctx(target_count=9)).points == 20
+
+
+def test_factors_registry_has_exactly_the_kept_factors():
+    from swingbot.core.scanning.factors import FACTORS
+    assert len(FACTORS) == 19
+    assert len(set(FACTORS)) == 19   # no accidental duplicate entry

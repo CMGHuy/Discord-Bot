@@ -13,6 +13,7 @@ docs/superpowers/plans/v32-factor-reconciliation.md (Task 1).
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -238,3 +239,146 @@ def factor_tight_stop(ctx: FactorContext) -> FactorResult | None:
         f"({ctx.scenario.atr_floor_pct:.1f}%) — likely to get clipped by normal volatility "
         f"-> {points} quality pts",
     )
+
+
+# --- quality.py components (Task 4). Point ranges carried over verbatim
+# from quality.py:114-129 -- this task introduces no weight change;
+# re-weighting happens in Task 9 on TRAIN evidence. RS/MTF/breadth were
+# already None-safe in quality.py's own score_plan (which only calls their
+# scoring function when the input isn't None); every other component here
+# follows the same "None input -> return None" rule Task 3 established,
+# distinguishing a genuinely-known reading that happens to score low from
+# an input that was never available.
+
+
+def factor_rs(ctx: FactorContext) -> FactorResult | None:
+    if ctx.rs_percentile is None:
+        return None
+    points = int(round(max(0.0, min(ctx.rs_percentile - 50.0, 50.0)) / 5.0))
+    return FactorResult(
+        "Relative strength", points,
+        f"RS percentile {ctx.rs_percentile:.0f} vs the scanned universe (+{points})",
+    )
+
+
+def factor_mtf(ctx: FactorContext) -> FactorResult | None:
+    if ctx.mtf is None:
+        return None
+    points = {0: 0, 1: 3, 2: 6, 3: 10}.get(int(ctx.mtf), 0)
+    return FactorResult(
+        "Multi-timeframe alignment", points,
+        f"{int(ctx.mtf)}/3 higher timeframes agree (+{points})",
+    )
+
+
+def factor_breadth(ctx: FactorContext) -> FactorResult | None:
+    if ctx.breadth is None:
+        return None
+    points = int(round(max(0.0, min(ctx.breadth - 40.0, 20.0)) / 4.0))
+    return FactorResult(
+        "Market breadth", points,
+        f"{ctx.breadth:.0f}% of the universe above its 50 EMA (+{points})",
+    )
+
+
+def factor_htf(ctx: FactorContext) -> FactorResult | None:
+    if ctx.scenario is None or ctx.htf_bias not in ("bullish", "bearish"):
+        return None
+    if ctx.htf_bias == ctx.scenario.direction:
+        return FactorResult("HTF bias", 15, f"HTF bias {ctx.htf_bias} agrees (+15)")
+    return FactorResult("HTF bias", 0, f"⚠️ HTF bias {ctx.htf_bias} disagrees (+0)")
+
+
+def factor_volume(ctx: FactorContext) -> FactorResult | None:
+    if ctx.volume_ratio is None or not math.isfinite(ctx.volume_ratio):
+        return None
+    if ctx.volume_ratio >= 2.0:
+        points = 10
+    elif ctx.volume_ratio >= 1.2:
+        points = 8
+    elif ctx.volume_ratio >= 0.8:
+        points = 4
+    else:
+        points = 0
+    return FactorResult("Volume ratio", points, f"{ctx.volume_ratio:.2f}x average volume (+{points})")
+
+
+def factor_atr_percentile(ctx: FactorContext) -> FactorResult | None:
+    if ctx.atr_pct is None:
+        return None
+    if ctx.atr_pct >= 0.9:
+        points = 0
+    elif ctx.atr_pct >= 0.7:
+        points = 5
+    else:
+        points = 10
+    return FactorResult("ATR percentile", points,
+                        f"ATR at the {ctx.atr_pct * 100:.0f}th percentile (+{points})")
+
+
+def factor_trigger_distance(ctx: FactorContext) -> FactorResult | None:
+    if ctx.trigger_distance_pct is None:
+        return None
+    if ctx.trigger_distance_pct <= 0.5:
+        points = 10
+    elif ctx.trigger_distance_pct <= 1.5:
+        points = 6
+    elif ctx.trigger_distance_pct <= 3.0:
+        points = 3
+    else:
+        points = 0
+    return FactorResult("Trigger distance", points,
+                        f"{ctx.trigger_distance_pct:.1f}% from the entry trigger (+{points})")
+
+
+def factor_badge(ctx: FactorContext) -> FactorResult | None:
+    if ctx.badge_status is None:
+        return None
+    points = 20 if ctx.badge_status == "VALIDATED" else 0
+    return FactorResult("Badge status", points, f"badge {ctx.badge_status} (+{points})")
+
+
+def factor_gap(ctx: FactorContext) -> FactorResult | None:
+    if not ctx.gap_fragile:
+        return None
+    return FactorResult("Gap penalty", -10, "⚠️ fragile gap risk (-10)")
+
+
+def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
+    """Renamed from quality.component_confluence during Task 1's
+    reconciliation to keep it visibly distinct, in the breakdown, from the
+    honesty-cap base level -- both derive from the same target_count, a
+    deliberate, flagged (not silently resolved) overlap. See
+    docs/superpowers/plans/v32-factor-reconciliation.md."""
+    count = max(0, int(ctx.target_count))
+    points = 20 if count >= 4 else {0: 0, 1: 7, 2: 12, 3: 16}[count]
+    return FactorResult(
+        "Target confluence quality", points,
+        f"{count} strateg{'y' if count == 1 else 'ies'} confirm the target (+{points})",
+    )
+
+
+# Exactly the factors docs/superpowers/plans/v32-factor-reconciliation.md
+# (Task 1) kept, in breakdown display order. Weights are ported verbatim
+# from confidence.py/quality.py; Task 9 re-derives them from TRAIN evidence.
+FACTORS[:] = [
+    factor_target_distance,
+    factor_stop_confluence,
+    factor_target_confluence_quality,
+    factor_regime,
+    factor_htf,
+    factor_adx,
+    factor_macd,
+    factor_rsi,
+    factor_squeeze,
+    factor_candlestick,
+    factor_rs,
+    factor_mtf,
+    factor_breadth,
+    factor_volume,
+    factor_atr_percentile,
+    factor_trigger_distance,
+    factor_badge,
+    factor_tight_stop,
+    factor_gap,
+]
