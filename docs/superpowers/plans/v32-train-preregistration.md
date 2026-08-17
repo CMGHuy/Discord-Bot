@@ -158,3 +158,48 @@ existing base-level-plus-nudges formula, not better. The spec's premise
 time") does not ship in this version. Task 11 onward (tier retirement,
 documentation) proceeds regardless, per the plan's own framing -- those are
 independent cleanups, not conditioned on this VALIDATION passing.
+
+## Task 12: decile audit / E43 ablation harness -- no re-pointing needed
+
+Task 12 assumed both `scripts/reports/audit_quality_score.py` (the decile
+audit) and `scripts/backtest/ablation.py` (the E43 harness) measure against
+the A/B/C tier structure Task 11 removed, and need re-pointing at confidence
+levels / `FACTORS`. **Neither premise holds, verified by reading both
+scripts in full and running them:**
+
+- **The decile audit never bucketed by tier.** It buckets TRAIN trades by
+  `quality.score_plan()`'s raw 0-100 SCORE into deciles, plus a separate
+  per-component logistic-regression significance test over `quality.py`'s
+  seven base components (regime/htf/confluence/volume/atr_percentile/
+  trigger_distance/badge) -- an entirely different axis from the A/B/C label
+  `_tier(score)` derived from that same score. Task 11 deleted `_tier()` and
+  the `tier` field; it did not touch `score_plan()`'s components or scoring
+  at all, since those never depended on the label. Ran it unchanged: exit 0,
+  produces both tables (a real, pre-existing, non-v32 finding surfaced along
+  the way -- `badge` shows as a significant NEGATIVE coefficient, z=-2.51;
+  not investigated further here, out of this task's scope).
+- **The E43 ablation harness measures something structurally unrelated.**
+  `ablation.py` does leave-one-out ablation over `adopted_components.json`
+  -- backtest ACCEPTANCE-GATE config flags (`REGIME_GATES_ENABLED`,
+  `AVWAP_LEVELS_ENABLED`, etc., per `docs/superpowers/plans/implemented/
+  2026-07-11-v4-edge-engine.md`'s own Task E43 record) -- never `quality.py`
+  or `confidence.py`'s scoring components. The design spec's claim ("the
+  E43 ablation harness judges them individually") conflates this script
+  with the decile audit's logistic-regression half, which is the one that
+  actually judges components individually. `adopted_components.json` is
+  still `{}` (empty; E33's fold sweep adopted nothing, unrelated to v32),
+  so ablation over it is inherently a no-op -- matching this harness's own
+  original E43 implementation note ("Not invoked against a live fold sweep
+  -- with the adopted set empty, `run_folds({})` would cost ~76 min of real
+  compute to confirm a mathematically guaranteed +0.0000R with zero
+  ablation rows; documented rather than burned"). Ran it anyway to confirm:
+  it crashes on a pre-existing, unrelated Windows-console Unicode bug (the
+  "Δ" character in its print statement isn't encodable under cp1252) before
+  reaching any ablation logic -- present regardless of any v32 change, not
+  introduced by this plan, and out of scope to fix here.
+
+**Task 9's `measure_factor_lift.py` (Task 8) already provides the TRAIN-based
+evidence for the v32 merged score** that the design spec imagined this task's
+"re-pointed ablation harness" would produce -- a purpose-built script, not a
+repurposing of a harness built for a different axis. No code changes made to
+either script; this reconciliation is Task 12's deliverable.
