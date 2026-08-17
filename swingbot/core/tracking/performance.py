@@ -221,6 +221,29 @@ class TradeLog:
     def _load(self) -> list:
         return read_json(self.path, [])
 
+    def reload(self) -> None:
+        """Re-read trades.json from disk into `self._trades`.
+
+        Every other call site makes a fresh `TradeLog()` per use (the
+        module singleton in `core/scanning/engine.py` is the sole
+        exception, and it never diverges from disk because it is the only
+        writer that touches it). `plan_manager.PlanManager` is handed its
+        OWN separate `TradeLog()` instance by `run_manager_tick()`'s
+        module-level `_MANAGER` singleton, kept for the life of the
+        process -- see PlanStore.reload()'s docstring for the identical
+        pattern on the plans-side store. Without this, any trade the
+        shared `engine.trade_log` singleton logs (every legacy/v1 alert)
+        after `_MANAGER` was first built is invisible to this instance's
+        `self._trades`, and the next v2 plan-lifecycle write here
+        (`log_trade`/`append_leg_by_plan`/`close_plan_trade`, all of which
+        call `_save()`) serializes that stale list and clobbers
+        trades.json, erasing every trade logged elsewhere in the meantime.
+        Call this before using `self._trades` when this instance is
+        long-lived.
+        """
+        with _LOCK:
+            self._trades = self._load()
+
     def _save(self):
         atomic_write_json(self.path, self._trades)
 

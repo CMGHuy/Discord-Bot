@@ -129,6 +129,17 @@ class PlanManager:
         return datetime.now(timezone.utc).isoformat()
 
     def poll(self) -> list[PlanEvent]:
+        # `self.store` (and `self.trade_log`) can be long-lived instances --
+        # the module singleton `_MANAGER` below keeps both for the
+        # process's whole life -- so reload each from disk first. Otherwise
+        # a plan added by some OTHER PlanStore instance since our last tick
+        # is invisible here AND any write this tick performs (on either
+        # store) clobbers the file with a stale snapshot, erasing whatever
+        # a different instance wrote elsewhere in the meantime. See
+        # PlanStore.reload() / TradeLog.reload()'s docstrings.
+        self.store.reload()
+        if self.trade_log is not None:
+            self.trade_log.reload()
         events: list[PlanEvent] = []
         for plan in self.store.open_plans():
             try:

@@ -35,6 +35,27 @@ class PlanStore:
             log.warning("plans.json unreadable (%s); starting empty", exc)
             return {}
 
+    def reload(self) -> None:
+        """Re-read plans.json from disk into `self._plans`.
+
+        Every OTHER call site makes a fresh `PlanStore()` per use, so its
+        `__init__` load is always current. `plan_manager.run_manager_tick()`
+        is the one exception: it builds a single `PlanManager` the first
+        time it runs and keeps it (and the `PlanStore` instance handed to
+        it) for the life of the process, so without an explicit reload here
+        its `_plans` snapshot is forever whatever existed at that first
+        tick. Any plan added afterward (every new Discord alert, via
+        `engine.py`'s own fresh `PlanStore().add()`) is invisible to
+        `poll()` -- it never fills, never gets checked against its
+        SL/TP, and never closes -- and worse, the NEXT unrelated plan this
+        stale instance `update()`s serializes `list(self._plans.values())`
+        and clobbers plans.json, erasing the newer plan from disk entirely.
+        Call this before every poll so the tick always acts on -- and
+        writes back -- current state rather than a point-in-time snapshot.
+        """
+        with _LOCK:
+            self._plans = self._load()
+
     def _save(self) -> None:
         # Through jsonio rather than a second copy of the tmp+replace dance.
         # The duplicate was missing the fsync AND the Windows retry, so this
