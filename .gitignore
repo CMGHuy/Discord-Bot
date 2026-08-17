@@ -27,6 +27,9 @@ backtest_range_summary.txt
 validation_results.json
 data/replay_r_sequence.json
 data/replay_result.json
+data/v32_train_lift.json
+data/v32_validation.json
+data/v32_factor_correlation.json
 
 # Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
 # rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
