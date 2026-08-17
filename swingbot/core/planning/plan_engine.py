@@ -509,8 +509,27 @@ def _sr_plan(entry, volume_ratio, direction, horizon_key):
     return stop_loss, take_profit
 
 
-def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
-    """Stop beyond wave-2 (buffered, risk-capped); R:R-override target."""
+def elliott_target_candidates(entry_level: dict, direction) -> list[float]:
+    """The Elliott strategy's OWN wave-3 projections: wave1 itself, and the
+    classic wave2 +/- k * |wave1 - wave0| projections for k in
+    (1.0, 1.618, 2.618), signed by direction -- wave 3 continues the same
+    way wave 1 did, so unlike a fib swing there is no mirror side to
+    include. Reuses the pivots elliott_wave3_entries already published
+    (indicators.py) -- callers must not recompute them."""
+    wave0, wave1, wave2 = entry_level["wave0"], entry_level["wave1"], entry_level["wave2"]
+    is_bull = direction == "bullish"
+    amplitude = abs(wave1 - wave0)
+    candidates = [wave1]
+    for k in (1.0, 1.618, 2.618):
+        candidates.append(wave2 + k * amplitude if is_bull else wave2 - k * amplitude)
+    return candidates
+
+
+def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_levels=None):
+    """Stop beyond wave-2 (buffered, risk-capped). Target is the nearest
+    real wave-3 projection (elliott_target_candidates) that pays at least
+    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31). Returns
+    None when no candidate clears the floor."""
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
@@ -520,9 +539,11 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
-    risk_now = abs(entry - stop_loss)
-    rr = _rr_for("Elliott Wave", horizon_key)
-    take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
     return stop_loss, take_profit
 
 
