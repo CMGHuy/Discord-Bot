@@ -138,6 +138,14 @@ assuming its code ships. Derive "done" from deliverables and merge commits — t
 **A worktree executing a plan takes that plan's file stem** as both its
 directory and its branch name.
 
+**Once a plan's worktree branch is merged to `main`, remove that worktree and
+its branch as part of the same close-out** (`git worktree remove <path>` then
+`git branch -d <branch>` — `-d`, not `-D`: it should refuse unless the branch
+is actually merged, which is your confirmation it's safe). Do this only for
+the plan's own topic branch/worktree, never for a `backup*` or `stable-*`
+branch — those are exempt under "Never delete a branch whose name contains
+'backup'" below regardless of merge status.
+
 `docs/claude/document-conventions.md` has the rest: when a spec may move (and why
 one feeding live plans may not), the references to re-point in the same commit,
 and why the `SessionStart` hook stops seeing a moved plan.

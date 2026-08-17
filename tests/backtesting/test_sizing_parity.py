@@ -11,7 +11,7 @@ compares plan_engine against the *current* (post-delegation)
 layer of indirection and can no longer prove extraction correctness on its
 own.
 
-STOP ONLY as of plan v31 (docs/superpowers/plans/2026-08-16-v31-structural-targets.md,
+STOP ONLY as of plan v31 (docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md,
 Task 15): the frozen reference's target arithmetic is now permanently stale
 -- plan_engine prices every target off a real structural level instead of a
 fixed per-strategy reward:risk ratio, and the frozen module (deliberately;
@@ -156,7 +156,7 @@ def test_sizing_parity(ticker, strategy, horizon_key):
             f"stop mismatch old={old_stop!r} new={new_stop!r}"
         )
         # tp1 is NOT compared. It diverges from the frozen reference BY
-        # DESIGN as of plan v31 (docs/superpowers/plans/2026-08-16-v31-structural-targets.md):
+        # DESIGN as of plan v31 (docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md):
         # plan_engine now prices every target off a real structural level
         # (plan_engine.select_structural_target) instead of the frozen
         # module's fixed per-strategy reward:risk arithmetic. A tp1

@@ -163,7 +163,7 @@ def main() -> int:
                     compared += 1
                     # tp1 is NOT part of the deviation check. It diverges
                     # from the frozen reference BY DESIGN as of plan v31
-                    # (docs/superpowers/plans/2026-08-16-v31-structural-targets.md,
+                    # (docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md,
                     # Task 15) -- plan_engine prices every target off a real
                     # structural level instead of the frozen module's fixed
                     # per-strategy reward:risk arithmetic. Only stop is

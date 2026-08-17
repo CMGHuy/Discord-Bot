@@ -86,21 +86,19 @@ recent quarters.
 Two places, and the distinction matters:
 
 1. **Level selection** — a better-tested level is preferred when choosing the
-   target, feeding `select_structural_target()`. **That symbol does not exist
-   yet**: it is introduced by v31 Task 2. Every reference to it in this spec is
-   a forward reference to v31's deliverable, not to current code.
+   target, feeding `select_structural_target()`, introduced by v31 Task 2 and
+   now live in `swingbot/core/planning/plan_engine.py`.
 2. **Confidence** — touch strength becomes a factor inside v32's merged score.
 
 ### Interaction with v31 — the reason this spec is last
 
-`docs/superpowers/plans/2026-08-16-v31-structural-targets.md` is **live work
-that is reworking `select_structural_target()`**, which is exactly the function
-consuming half of this spec's output.
+`docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md`
+merged to `main` on 2026-08-17 (`ef15927`), reworking
+`select_structural_target()`, which is exactly the function consuming half of
+this spec's output.
 
-**v36 does not start until v31 has landed.** Two in-flight changes to one
-selector in a shared working tree do not merge — the second overwrites the
-first. Task 1 re-reads the selector as v31 leaves it and adjusts this design to
-the real signature, rather than the one assumed here.
+Task 1 still re-reads the selector as v31 actually left it and adjusts this
+design to the real signature, rather than the one assumed here.
 
 ### Data cost
 

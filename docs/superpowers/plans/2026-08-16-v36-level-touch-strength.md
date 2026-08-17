@@ -69,16 +69,16 @@ signal at the aggregate level rather than editing a function other code uses.
   acceptance criterion alongside win rate.
 - **DEPENDS ON v32 and v31.**
 
-## v31 blocks Task 4 — read this before starting
+## v31 has landed — Task 4's blocker is cleared
 
-`docs/superpowers/plans/2026-08-16-v31-structural-targets.md` is **live work
-reworking `select_structural_target()`**, the function Task 4 modifies. That
-symbol **does not exist yet**.
+`docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md`
+merged to `main` on 2026-08-17 (`ef15927`), reworking
+`select_structural_target()`, the function Task 4 modifies. That symbol now
+exists (`swingbot/core/planning/plan_engine.py`).
 
-**Do not start Task 4 until v31 has landed.** Tasks 1–3 and 5 touch files v31
-does not, and may proceed. Task 4 begins by re-reading the selector as v31
-actually left it, because two in-flight changes to one function in this shared
-working tree do not merge — the second overwrites the first.
+Task 4 still begins by re-reading the selector as v31 actually left it before
+touching it — its real signature and candidate-source plumbing may not match
+what was assumed when this spec was written.
 
 ## File Structure
 

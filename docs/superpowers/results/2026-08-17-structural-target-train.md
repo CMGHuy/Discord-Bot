@@ -8,7 +8,7 @@ This is not a re-run, re-ask, or loosening of any row in
 `docs/claude/backtest-methodology.md`'s closed pre-registration table
 (`REGIME_ALLOW`, `DATA_DRIVEN_STOPS_ENABLED`, level-lifecycle targets). It is
 a different question about a different engine: plan v31
-(`docs/superpowers/plans/2026-08-16-v31-structural-targets.md`) replaced
+(`docs/superpowers/plans/implemented/2026-08-16-v31-structural-targets.md`) replaced
 every strategy's target-pricing arithmetic (`entry ± risk * rr`, a fixed
 per-strategy R:R override of 0.30–0.40) with
 `plan_engine.select_structural_target` — the nearest real level beyond entry
