@@ -50,7 +50,8 @@ TRADE_FILTER_CHOICES = [
 ]
 
 STATUS_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "PENDING", "ACTIVE", "PARTIAL")]
-TIER_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "A", "B", "C")]
+# v32 Task 11: tier (A/B/C) retired in favour of confidence level (1-5).
+LEVEL_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "1", "2", "3", "4", "5")]
 PERIOD_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("7d", "30d", "90d", "ytd", "all")]
 
 
@@ -164,18 +165,18 @@ async def slash_pnl(interaction: discord.Interaction):
 # ──────────────────────────────────────────────
 
 @bot.tree.command(name="liveplans", description="Live v2 plan lifecycle board (PENDING/ACTIVE/PARTIAL)")
-@app_commands.describe(status="Filter by lifecycle status", tier="Filter by quality tier")
-@app_commands.choices(status=STATUS_CHOICES, tier=TIER_CHOICES)
+@app_commands.describe(status="Filter by lifecycle status", level="Filter by confidence level")
+@app_commands.choices(status=STATUS_CHOICES, level=LEVEL_CHOICES)
 async def slash_liveplans(
     interaction: discord.Interaction,
     status: app_commands.Choice[str] = None,
-    tier: app_commands.Choice[str] = None,
+    level: app_commands.Choice[str] = None,
 ):
     args = []
     if status and status.value != "All":
         args.append(status.value.lower())
-    if tier and tier.value != "All":
-        args.append(f"tier:{tier.value.lower()}")
+    if level and level.value != "All":
+        args.append(f"level:{level.value.lower()}")
 
     await interaction.response.defer()
     ctx = await commands.Context.from_interaction(interaction)

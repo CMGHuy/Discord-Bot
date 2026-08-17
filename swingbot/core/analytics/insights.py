@@ -85,11 +85,11 @@ def weekly_digest(entries: list[dict], closed: list[dict], today: dt.date) -> li
         lines.append("")
         lines.append("**Top tags:** " + ", ".join(f"{tag} ({count})" for tag, count in tag_counts.most_common(3)))
 
-    tier_rows = [r for r in calibration.tier_calibration(week_closed) if r["n"] > 0]
-    if tier_rows:
+    level_rows = [r for r in calibration.level_calibration(week_closed) if r["n"] > 0]
+    if level_rows:
         lines.append("")
-        lines.append("**Tier calibration:** " + " · ".join(
-            f"{r['tier']}: {r['win_rate']:.0f}% (n={r['n']}, band {r['expected_band']})" for r in tier_rows
+        lines.append("**Confidence-level calibration:** " + " · ".join(
+            f"Lv{r['level']}: {r['win_rate']:.0f}% (n={r['n']})" for r in level_rows
         ))
 
     notes = [e for e in week_entries if (e.get("note") or "").strip()][:3]

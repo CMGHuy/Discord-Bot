@@ -24,7 +24,7 @@ def _plan_from_backtest_trade(t, ticker, strategy, horizon_key):
         entry_price=t.entry, expiry_bars=5, stop_loss=t.stop_loss,
         tp1=t.take_profit, tp1_fraction=0.5, tp2=None,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.5,
-        quality_score=0, quality_breakdown=[], tier="C",
+        quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
     )
 

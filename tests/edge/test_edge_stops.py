@@ -430,7 +430,7 @@ def _partial_plan(**over):
         entry_type="market", trigger_price=100.0, entry_price=100.0,
         expiry_bars=5, stop_loss=98.0, tp1=101.0, tp1_fraction=0.5, tp2=None,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.5, quality_score=0,
-        quality_breakdown=[], tier="C", badge="WEAK", badge_stats={},
+        quality_breakdown=[], badge="WEAK", badge_stats={},
         status=PlanStatus.PARTIAL, working_stop=100.0,
     )
     fields.update(over)

@@ -67,18 +67,18 @@ def test_atr_percentile_short_frame_is_none():
     assert quality.atr_percentile(make_ohlcv([100.0] * 20)) is None
 
 
-def test_perfect_inputs_score_100_tier_a():
+def test_perfect_inputs_score_100():
     r = quality.score_plan(direction="bullish", regime="bullish", htf_bias="bullish",
                            confluence_count=4, volume_ratio=2.5, atr_pct=0.3,
                            trigger_distance_pct=0.2, badge_status="VALIDATED")
-    assert r.score == 100 and r.tier == "A"
+    assert r.score == 100
 
 
-def test_all_zero_inputs_score_0_tier_c():
+def test_all_zero_inputs_score_0():
     r = quality.score_plan(direction="bullish", regime="bearish", htf_bias="bearish",
                            confluence_count=0, volume_ratio=0.5, atr_pct=0.95,
                            trigger_distance_pct=5.0, badge_status="WEAK")
-    assert r.score == 0 and r.tier == "C"
+    assert r.score == 0
 
 
 def test_breakdown_has_seven_named_rows_summing_to_score():
@@ -91,9 +91,25 @@ def test_breakdown_has_seven_named_rows_summing_to_score():
     assert sum(pts for _, pts in r.breakdown) == r.score
 
 
-def test_tier_boundaries():
-    assert quality._tier(75) == "A" and quality._tier(74) == "B"
-    assert quality._tier(50) == "B" and quality._tier(49) == "C"
+# --- v32 Task 11: A/B/C tier retired in favour of confidence levels -----
+
+def test_quality_result_has_no_tier():
+    """QualityResult was (score, tier, breakdown); it becomes (score, breakdown)."""
+    from swingbot.core.planning.quality import QualityResult
+    result = QualityResult(score=50, breakdown=[("regime", 15)])
+    assert not hasattr(result, "tier")
+    assert result.score == 50
+
+
+def test_score_plan_no_longer_returns_a_tier():
+    result = quality.score_plan(direction="bullish", regime="bullish", htf_bias="bullish",
+                                confluence_count=3, volume_ratio=1.5, atr_pct=0.5,
+                                trigger_distance_pct=0.4, badge_status="VALIDATED")
+    assert not hasattr(result, "tier")
+
+
+def test_quality_module_has_no_tier_function():
+    assert not hasattr(quality, "_tier")
 
 
 def test_audit_script_never_imported_by_swingbot():

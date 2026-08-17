@@ -575,20 +575,20 @@ def test_lru_frames_get_also_counts_as_a_touch():
     assert "B" not in lru and "A" in lru and "C" in lru
 
 
-def test_alert_routing_by_tier(monkeypatch):
+def test_alert_routing_by_confidence_level(monkeypatch):
     from swingbot import config
     from swingbot.commands.scanning import route_channel_id
 
     class Item:
-        def __init__(self, tier, badge):
-            self.plan = type("P", (), {"tier": tier, "badge": badge})()
+        def __init__(self, confidence_level, badge):
+            self.plan = type("P", (), {"confidence_level": confidence_level, "badge": badge})()
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_ID", "111", raising=False)
     monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "222", raising=False)
-    assert route_channel_id(Item("A", "VALIDATED")) == "111"
-    assert route_channel_id(Item("B", "VALIDATED")) == "222"
-    assert route_channel_id(Item("A", "WEAK")) == "222"
+    assert route_channel_id(Item(5, "VALIDATED")) == "111"
+    assert route_channel_id(Item(3, "VALIDATED")) == "222"
+    assert route_channel_id(Item(5, "WEAK")) == "222"
     monkeypatch.setattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "", raising=False)
-    assert route_channel_id(Item("C", "WEAK")) == "111"   # unset -> no change
+    assert route_channel_id(Item(1, "WEAK")) == "111"   # unset -> no change
 
 
 def test_deep_scan_report_renders():

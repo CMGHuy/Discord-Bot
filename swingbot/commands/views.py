@@ -133,7 +133,7 @@ def breakdown_embed(plan) -> discord.Embed:
     from swingbot.core.analytics.rank import follow_score, follow_breakdown
     import datetime as dt
 
-    embed = discord.Embed(title=f"🔍 Breakdown — {plan.ticker} ({plan.tier}/{plan.badge})",
+    embed = discord.Embed(title=f"🔍 Breakdown — {plan.ticker} ({plan.badge})",
                           color=discord.Color.blurple())
 
     quality_lines = "\n".join(f"{label}: {pts:+d}" for label, pts in (plan.quality_breakdown or [])) or "no components recorded"
@@ -185,12 +185,16 @@ def paginate(items: list, page: int, per_page: int) -> tuple:
 class PlanBoardView(discord.ui.View):
     """
     Filterable !plans board (Task B15 supplies render_fn). Three
-    dropdowns hold the current status/tier/badge filter state; every
+    dropdowns hold the current status/level/badge filter state; every
     selection change and the Refresh button all funnel through the
     same `_apply` method, which calls `render_fn` and edits the
     message in place -- one render path regardless of which control
     triggered it, so there's no risk of the three selects drifting out
     of sync with each other.
+
+    v32 Task 11: the tier (A/B/C) dropdown is replaced by a confidence
+    level (1-5) dropdown -- level is the number that actually gates
+    whether an alert fires, tier never did.
     """
 
     def __init__(self, render_fn, author_id: int, *, items: list = None, timeout: int = 180):
@@ -198,7 +202,7 @@ class PlanBoardView(discord.ui.View):
         self.render_fn = render_fn
         self.author_id = author_id
         self.status = "All"
-        self.tier = "All"
+        self.level = "All"
         self.badge = "All"
         self.items = items or []
         self.page = 0
@@ -219,14 +223,14 @@ class PlanBoardView(discord.ui.View):
             except discord.HTTPException:
                 pass
 
-    async def _apply(self, *, status=None, tier=None, badge=None, interaction: discord.Interaction = None):
+    async def _apply(self, *, status=None, level=None, badge=None, interaction: discord.Interaction = None):
         if status is not None:
             self.status = status
-        if tier is not None:
-            self.tier = tier
+        if level is not None:
+            self.level = level
         if badge is not None:
             self.badge = badge
-        content, embed = self.render_fn(self.status, self.tier, self.badge)
+        content, embed = self.render_fn(self.status, self.level, self.badge)
         if interaction is not None:
             await interaction.response.edit_message(content=content, embed=embed, view=self)
         return content, embed
@@ -239,11 +243,11 @@ class PlanBoardView(discord.ui.View):
         await self._apply(status=select.values[0], interaction=interaction)
 
     @discord.ui.select(
-        placeholder="Tier: All", custom_id="board:tier",
-        options=[discord.SelectOption(label=v, value=v) for v in ("All", "A", "B", "C")],
+        placeholder="Level: All", custom_id="board:level",
+        options=[discord.SelectOption(label=v, value=v) for v in ("All", "1", "2", "3", "4", "5")],
     )
-    async def tier_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        await self._apply(tier=select.values[0], interaction=interaction)
+    async def level_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        await self._apply(level=select.values[0], interaction=interaction)
 
     @discord.ui.select(
         placeholder="Badge: All", custom_id="board:badge",

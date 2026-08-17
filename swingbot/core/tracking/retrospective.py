@@ -595,15 +595,20 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         _save_history(history)
 
     # ── Part 6: Calibration + edge decay (analytics core) ─────────────────
+    # v32 Task 11: level_calibration() (1-5 confidence level) replaces
+    # tier_calibration() (A/B/C tier) and has no pass/fail "ok" verdict --
+    # tier's expected-band came from quality.py's own pre-v32 design; there
+    # is no equivalent measured expected-win-rate-per-level in this
+    # codebase, so there is nothing to flag as "outside its design band"
+    # anymore (see calibration.py's own docstring). Reports the numbers
+    # for every level with real trades today instead of a failure list.
     calibration_lines = []
-    tier_rows = calibration.tier_calibration(closed_today)
-    failing = [r for r in tier_rows if r["ok"] is False]
-    if failing:
+    level_rows = [r for r in calibration.level_calibration(closed_today) if r["n"] > 0]
+    if level_rows:
         calibration_lines.append("**📐 Calibration**")
-        for r in failing:
+        for r in level_rows:
             calibration_lines.append(
-                f"• Tier {r['tier']} at {r['win_rate']:.0f}% WR (n={r['n']}) is outside its "
-                f"design band ({r['expected_band']})."
+                f"• Level {r['level']} at {r['win_rate']:.0f}% WR (n={r['n']})."
             )
     try:
         decay_lines = edge_decay_report(all_trades)

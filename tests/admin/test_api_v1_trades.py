@@ -46,7 +46,6 @@ TRADE_ROW = {
     "direction": str,
     "strategy": NULLABLE_STR,
     "horizon": NULLABLE_STR,
-    "tier": NULLABLE_STR,
     "badge": NULLABLE_STR,
     "confidence_level": NULLABLE_NUMBER,
     "confidence_score": NULLABLE_NUMBER,
@@ -346,6 +345,8 @@ def test_unknown_filter_is_rejected(seed, logged_in):
 # The parity audit found five list filters the Jinja UI had and the SPA did
 # not. Three -- strategy, horizon, tier -- were already accepted here and
 # merely had nothing sending them. Two were accepted by neither side.
+# v32 Task 11: tier itself is since retired (see FILTERS in
+# admin/api_v1/trades.py) -- confidence already covered the same role.
 #
 # `tag` is the one deliberately left out: journal tags are not on a trade row
 # at all, so filtering by one needs the journal endpoint SR55 adds. Recorded
@@ -373,14 +374,16 @@ def test_horizon_filter(seed, logged_in):
     assert body["items"][0]["horizon"] == "6m"
 
 
-def test_tier_filter(seed, logged_in):
-    seed(plans=[
-        {**_plan("11111111-1111-4111-8111-111111111111"), "tier": "A"},
-        {**_plan("22222222-2222-4222-8222-222222222222"), "tier": "C"},
+def test_confidence_filter(seed, logged_in):
+    """confidence_level lives on the trade record (not the plan -- unlike
+    the retired tier field), so this filters legacy trade rows directly."""
+    seed(trades=[
+        {**_trade("11111111-1111-4111-8111-111111111111"), "confidence_level": 5},
+        {**_trade("22222222-2222-4222-8222-222222222222"), "confidence_level": 1},
     ])
-    body = logged_in.get("/api/v1/trades?tier=C").get_json()
+    body = logged_in.get("/api/v1/trades?confidence=1").get_json()
     assert body["total"] == 1
-    assert body["items"][0]["tier"] == "C"
+    assert body["items"][0]["confidence_level"] == 1
 
 
 def test_badge_filter(seed, logged_in):
@@ -494,11 +497,11 @@ def test_sorting_by_follow_score_sinks_the_unranked(seed, logged_in):
 
 def test_new_filters_narrow_the_total_not_just_the_page(seed, logged_in):
     """`total` stays post-filter, pre-slice for the new filters too."""
-    seed(plans=(
-        [{**_plan(f"{i:08d}-1111-4111-8111-111111111111"), "tier": "A"} for i in range(12)]
-        + [{**_plan(f"{i:08d}-2222-4222-8222-222222222222"), "tier": "C"} for i in range(8)]
+    seed(trades=(
+        [{**_trade(f"{i:08d}-1111-4111-8111-111111111111"), "confidence_level": 5} for i in range(12)]
+        + [{**_trade(f"{i:08d}-2222-4222-8222-222222222222"), "confidence_level": 1} for i in range(8)]
     ))
-    body = logged_in.get("/api/v1/trades?tier=C&per_page=5").get_json()
+    body = logged_in.get("/api/v1/trades?confidence=1&per_page=5").get_json()
     assert body["total"] == 8
     assert len(body["items"]) == 5
 

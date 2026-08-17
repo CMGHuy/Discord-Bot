@@ -62,7 +62,7 @@ def _ranked_plan_rows(plans: list) -> list[dict]:
     return [dict(plan_to_dict(p), follow_score=follow_score(p)) for p in ranked]
 
 
-def _plan_rows(status: str | None = None, tier: str | None = None,
+def _plan_rows(status: str | None = None, level: int | None = None,
                badge: str | None = None, ticker: str | None = None) -> dict:
     """Shared by the Plans board page (this task) and /api/plans (api.py
     imports this function instead of keeping its own copy). Counts are
@@ -80,8 +80,8 @@ def _plan_rows(status: str | None = None, tier: str | None = None,
     rows = _ranked_plan_rows(all_plans)
     if status:
         rows = [r for r in rows if r["status"] == status]
-    if tier:
-        rows = [r for r in rows if r["tier"] == tier]
+    if level:
+        rows = [r for r in rows if r["confidence_level"] == level]
     if badge:
         rows = [r for r in rows if r["badge"] == badge]
     if ticker:
@@ -140,10 +140,11 @@ def _plan_lifecycle(plans: list) -> dict:
         fill_days.append(_days_between(p.created_at, active_entry["at"]))
 
     badges: dict[str, int] = {}
-    tiers: dict[str, int] = {}
+    confidence_levels: dict[str, int] = {}
     for p in plans:
         badges[p.badge] = badges.get(p.badge, 0) + 1
-        tiers[p.tier] = tiers.get(p.tier, 0) + 1
+        level_key = str(p.confidence_level) if p.confidence_level is not None else "unknown"
+        confidence_levels[level_key] = confidence_levels.get(level_key, 0) + 1
 
     return {
         "funnel": {"posted": posted, "filled": filled, "hit_tp1": hit_tp1, "closed": closed},
@@ -156,7 +157,7 @@ def _plan_lifecycle(plans: list) -> dict:
             "median_days_to_fill": median(fill_days) if fill_days else None,
         },
         "badges": badges,
-        "tiers": tiers,
+        "confidence_levels": confidence_levels,
     }
 
 

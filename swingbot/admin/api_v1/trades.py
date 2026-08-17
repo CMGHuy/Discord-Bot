@@ -57,12 +57,15 @@ _LEGACY_STATUS = {
 _TERMINAL = {"CLOSED", "CANCELLED"}
 
 FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon",
-                     "direction", "tier", "origin", "has_note",
-                     # SR52. `strategy`, `horizon` and `tier` were already
+                     "direction", "origin", "has_note",
+                     # SR52. `strategy` and `horizon` were already
                      # accepted and had no control; these two were accepted by
                      # neither side. `tag` is deliberately NOT here -- journal
                      # tags are not on a trade row at all, so filtering by one
                      # needs the journal endpoint SR55 adds.
+                     # v32 Task 11: `tier` (A/B/C) retired -- `confidence`
+                     # already covered the same "filter by quality
+                     # classification" role.
                      "badge", "confidence"})
 
 # Query-parameter name -> row key, where the two differ. `confidence` reads
@@ -73,7 +76,7 @@ _FILTER_KEYS = {"confidence": "confidence_level"}
 # Filters compared case-insensitively. These hold vocabulary the UI displays
 # (VALIDATED, bullish, A) rather than free text, and `?badge=validated` failing
 # to match VALIDATED is the exact shape of the NG54 bug.
-_CASELESS_FILTERS = frozenset({"badge", "tier", "direction", "origin"})
+_CASELESS_FILTERS = frozenset({"badge", "direction", "origin"})
 
 # NG54. `status` normalises win and loss to CLOSED, so the two cannot be told
 # apart by it -- but the Jinja UI had an `outcome` filter over exactly that
@@ -145,7 +148,6 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "direction": plan.get("direction"),
         "strategy": plan.get("strategy"),
         "horizon": plan.get("horizon_key"),
-        "tier": plan.get("tier"),
         "badge": plan.get("badge"),
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),
@@ -197,7 +199,6 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "direction": t.get("direction"),
         "strategy": t.get("strategy"),
         "horizon": t.get("horizon_key"),
-        "tier": t.get("tier"),
         "badge": t.get("badge"),
         "confidence_level": t.get("confidence_level"),
         "confidence_score": t.get("confidence_score"),

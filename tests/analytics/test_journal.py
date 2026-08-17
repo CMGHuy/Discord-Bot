@@ -58,7 +58,7 @@ def test_set_note_roundtrips_through_a_fresh_store_instance(tmp_path):
 
 def _base_trade(**kw):
     base = {"id": "t1", "ticker": "AAPL", "strategy": "Fibonacci", "horizon_key": "4w",
-            "direction": "bullish", "tier": "A", "badge": "VALIDATED", "quality_score": 80,
+            "direction": "bullish", "confidence_level": 5, "badge": "VALIDATED", "quality_score": 80,
             "entry": 100.0, "stop_loss": 96.0,
             "opened_at": "2026-03-02T15:00:00+00:00", "closed_at": "2026-03-05T15:00:00+00:00"}
     base.update(kw)
@@ -77,7 +77,7 @@ def test_build_entry_rule1_loss_stopped_after_running():
     e = build_entry(t, df)
     assert e["auto_lesson"] == ("Trade went 1.0R in favor before stopping out — exit management, "
                                 "not entry, cost this one.")
-    assert e["trade_id"] == "t1" and e["tier"] == "A" and e["badge"] == "VALIDATED"
+    assert e["trade_id"] == "t1" and e["confidence_level"] == 5 and e["badge"] == "VALIDATED"
 
 
 def test_build_entry_rule2_win_clean_capture():

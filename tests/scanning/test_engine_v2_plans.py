@@ -133,7 +133,7 @@ def test_build_quality_inputs_never_duplicates_direction_or_badge_status():
     assert "badge_status" not in out
     assert set(out) == {"regime", "htf_bias", "confluence_count", "volume_ratio",
                         "atr_pct", "trigger_distance_pct", "rs_percentile",
-                        "mtf", "breadth"}
+                        "mtf", "breadth", "confidence_level"}
 
 
 def test_build_quality_inputs_confluence_count_defaults_to_zero_without_field():

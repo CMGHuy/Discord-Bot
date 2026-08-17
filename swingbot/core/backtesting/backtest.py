@@ -310,7 +310,7 @@ def run_backtest(
                 breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
                 trail_atr_mult=_exit_params["trail_atr_mult"],
                 quality_score=0, quality_breakdown=[],
-                tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
+                badge="WEAK", badge_stats={}, status=PlanStatus.ACTIVE,
             )
             res = simulate_exit(df, i, plan, scale_out=scale_out)
             # A stop_entry plan that never triggers before expiry ("not_triggered")

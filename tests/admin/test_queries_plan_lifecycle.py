@@ -1,5 +1,5 @@
-"""_plan_lifecycle -- the Plans tab's funnel, fill-rate and badge/tier
-aggregation. Pure over a list of plan-shaped objects; no Flask, no
+"""_plan_lifecycle -- the Plans tab's funnel, fill-rate and badge/confidence-
+level aggregation. Pure over a list of plan-shaped objects; no Flask, no
 PlanStore -- the endpoint test (test_api_v1_analytics.py) covers the wiring.
 """
 from types import SimpleNamespace
@@ -8,10 +8,10 @@ from swingbot.admin.queries import _plan_lifecycle
 from swingbot.core.planning.plan_engine import PlanStatus
 
 
-def _plan(status, history, created_at="2026-01-01", tier="B", badge="VALIDATED"):
+def _plan(status, history, created_at="2026-01-01", confidence_level=3, badge="VALIDATED"):
     return SimpleNamespace(
         status=status, status_history=history, created_at=created_at,
-        tier=tier, badge=badge,
+        confidence_level=confidence_level, badge=badge,
     )
 
 
@@ -74,15 +74,15 @@ def test_fill_rate_null_with_no_resolved_plans():
     assert result["fill_rate"]["median_days_to_fill"] is None
 
 
-def test_badge_and_tier_counts():
+def test_badge_and_confidence_level_counts():
     plans = [
-        _plan(PlanStatus.PENDING, [], badge="VALIDATED", tier="A"),
-        _plan(PlanStatus.PENDING, [], badge="VALIDATED", tier="B"),
-        _plan(PlanStatus.PENDING, [], badge="WEAK", tier="C"),
+        _plan(PlanStatus.PENDING, [], badge="VALIDATED", confidence_level=5),
+        _plan(PlanStatus.PENDING, [], badge="VALIDATED", confidence_level=3),
+        _plan(PlanStatus.PENDING, [], badge="WEAK", confidence_level=1),
     ]
     result = _plan_lifecycle(plans)
     assert result["badges"] == {"VALIDATED": 2, "WEAK": 1}
-    assert result["tiers"] == {"A": 1, "B": 1, "C": 1}
+    assert result["confidence_levels"] == {"5": 1, "3": 1, "1": 1}
 
 
 def test_empty_plan_list_returns_well_formed_zeros():
@@ -91,4 +91,4 @@ def test_empty_plan_list_returns_well_formed_zeros():
     assert result["in_flight"] == 0
     assert result["fill_rate"] == {"resolved_n": 0, "fill_rate_pct": None, "median_days_to_fill": None}
     assert result["badges"] == {}
-    assert result["tiers"] == {}
+    assert result["confidence_levels"] == {}

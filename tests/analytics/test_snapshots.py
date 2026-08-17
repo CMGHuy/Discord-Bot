@@ -10,7 +10,7 @@ def _t(i, status="win"):
             "exit_price": 104.0 if status == "win" else 96.0,
             "realized_pnl_amount": 80.0 if status == "win" else -40.0,
             "opened_at": f"2026-03-0{i}T10:00:00+00:00", "closed_at": f"2026-03-0{i+1}T10:00:00+00:00",
-            "horizon_key": "4w", "tier": "A", "badge": "VALIDATED", "source": "confluence",
+            "horizon_key": "4w", "badge": "VALIDATED", "source": "confluence",
             "confidence_level": 4, "quality_score": 75}
 
 
@@ -23,7 +23,7 @@ def test_build_snapshot_has_every_documented_key():
                                     "profit_factor", "sharpe", "sortino", "max_drawdown_pct",
                                     "total_pnl", "streaks"}
     assert set(snap["by"]) == set(DIMENSIONS)
-    assert set(snap["calibration"]) == {"deciles", "tiers", "drift"}
+    assert set(snap["calibration"]) == {"deciles", "levels", "drift"}
     assert snap["overall"]["n"] == 5
 
 

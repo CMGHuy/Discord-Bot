@@ -511,8 +511,8 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
     """Real inputs for quality.score_plan (Task E37 wiring fix). Before this,
     attach_plan_v2 called build_confluence_plan with no quality_inputs at
     all, so _apply_quality's `if quality_inputs is None: return` made every
-    live v2 plan permanently quality_score=0/tier="C" -- scoring never ran,
-    not "scored low". direction/badge_status are NOT included here: plan_
+    live v2 plan permanently quality_score=0 -- scoring never ran, not
+    "scored low". direction/badge_status are NOT included here: plan_
     engine._apply_quality supplies those itself from the plan it just built
     (plan.direction/plan.badge), so putting them in this dict too raises a
     duplicate-keyword TypeError.
@@ -546,6 +546,11 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         "rs_percentile": rs_percentile,
         "mtf": rs_factors.mtf_alignment(df, scenario.direction),
         "breadth": breadth,
+        # v32 Task 11: rides along to _apply_quality, which pops it before
+        # forwarding the rest to score_plan() -- see that function's own
+        # comment. item.conf is set in _scan_one, well before attach_plan_v2
+        # (and this function) run in _sync_run_scan's later merge loop.
+        "confidence_level": item.conf.level if getattr(item, "conf", None) else None,
     }
 
 
@@ -1577,7 +1582,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 explanation=explanation,
                 confirmed_by=item.combined_from,
                 plan_id=plan_v2.plan_id if plan_v2 is not None else None,
-                tier=plan_v2.tier if plan_v2 is not None else None,
                 badge=plan_v2.badge if plan_v2 is not None else None,
                 quality_score=plan_v2.quality_score if plan_v2 is not None else None,
                 source=plan_v2.source if plan_v2 is not None else None,

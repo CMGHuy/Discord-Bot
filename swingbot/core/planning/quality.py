@@ -86,18 +86,9 @@ def component_badge(badge_status: str) -> int:
     return 20 if badge_status == "VALIDATED" else 0
 
 
-def _tier(score: int) -> str:
-    if score >= 75:
-        return "A"
-    if score >= 50:
-        return "B"
-    return "C"
-
-
 @dataclass
 class QualityResult:
     score: int
-    tier: str
     breakdown: list   # [(component_name, points)] -- rendered verbatim in embeds
 
 
@@ -169,4 +160,4 @@ def score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio,
         breakdown.append(("gap", gap_penalty(True)))
 
     score = max(0, min(100, sum(pts for _, pts in breakdown)))
-    return QualityResult(score=score, tier=_tier(score), breakdown=breakdown)
+    return QualityResult(score=score, breakdown=breakdown)

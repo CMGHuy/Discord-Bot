@@ -48,7 +48,7 @@ def test_top_plans_n_larger_than_available_returns_all_eligible():
     assert [p.ticker for p in top] == ["AAA"]
 
 
-def make_plan_v2(badge="VALIDATED", tier="A", quality_score=72, plan_id="plan-1"):
+def make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=72, plan_id="plan-1"):
     return TradePlanV2(
         plan_id=plan_id, ticker="NVDA", created_at="2026-07-19", source="strategy",
         strategy="RSI Pullback", horizon_key="2w", direction="bullish",
@@ -56,14 +56,14 @@ def make_plan_v2(badge="VALIDATED", tier="A", quality_score=72, plan_id="plan-1"
         stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=120.0,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.0,
         quality_score=quality_score, quality_breakdown=[("regime", 15), ("htf", 8)],
-        tier=tier, badge=badge,
+        confidence_level=confidence_level, badge=badge,
         badge_stats={"n": 40, "win_rate": 82.5, "expectancy_r": 0.9, "window": "2020-2023"},
         status="PENDING",
     )
 
 
 def test_fake_item_from_plan_builds_embed_without_crashing_and_engages_theming():
-    plan = make_plan_v2(badge="VALIDATED", tier="A")
+    plan = make_plan_v2(badge="VALIDATED", confidence_level=5)
     item = _fake_item_from_plan(plan)
 
     # item.plan is a legacy-shaped stand-in with all the fields
@@ -77,9 +77,9 @@ def test_fake_item_from_plan_builds_embed_without_crashing_and_engages_theming()
     embed = build_embed(item, "", {"closed": 0}, None, None, layout="compact")
 
     assert isinstance(embed, discord.Embed)
-    # Tier/badge chip prefix proves plan_v2 theming actually engaged, not
+    # Level/badge chip prefix proves plan_v2 theming actually engaged, not
     # just that build_embed returned without raising.
-    assert embed.title.startswith("🅰")
+    assert embed.title.startswith("5️⃣")
     assert "VALIDATED" in embed.title
     assert "NVDA" in embed.title
 
@@ -176,15 +176,15 @@ def test_lessons_lines_renders_each_entry():
 from swingbot.commands.stats import calibration_lines
 
 
-def test_calibration_lines_marks_failing_tier_and_drift_alert():
-    tiers = [
-        {"tier": "A", "n": 40, "win_rate": 60.0, "expectancy_r": 0.1, "expected_band": ">=80", "ok": False},
-        {"tier": "B", "n": 5, "win_rate": None, "expectancy_r": None, "expected_band": "70-80", "ok": None},
+def test_calibration_lines_reports_level_win_rates_and_drift_alert():
+    levels = [
+        {"level": 5, "n": 40, "win_rate": 60.0, "expectancy_r": 0.1},
+        {"level": 3, "n": 5, "win_rate": None, "expectancy_r": None},
     ]
     decay_lines = ["📉 Fibonacci: OOS WR 81.6% -> live WR 64.0% (N=25) — drift alert"]
-    lines = calibration_lines(tiers, decay_lines)
-    assert any("❌" in l and "A" in l for l in lines)
-    assert any("—" in l and "B" in l for l in lines)
+    lines = calibration_lines(levels, decay_lines)
+    assert any("Level 5" in l and "N=40" in l for l in lines)
+    assert any("Level 3" in l and "—" in l for l in lines)
     assert any("Fibonacci" in l for l in lines)
 
 

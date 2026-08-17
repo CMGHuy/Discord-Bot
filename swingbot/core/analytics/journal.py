@@ -213,7 +213,7 @@ def build_entry(trade: dict, df) -> dict:
         "strategy": trade.get("strategy"),
         "horizon_key": trade.get("horizon_key"),
         "direction": trade.get("direction"),
-        "tier": trade.get("tier"),
+        "confidence_level": trade.get("confidence_level"),
         "badge": trade.get("badge"),
         "quality_score": trade.get("quality_score"),
         "outcome": outcome,
