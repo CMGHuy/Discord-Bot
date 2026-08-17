@@ -126,8 +126,12 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
 def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
     """Sizing lives in plan_engine (single source of truth shared with live
     plans); this wrapper only picks the branch from the precomputed series.
-    Parity with the original inline implementation is locked by
-    tests/test_plan_engine_sizing.py."""
+    Parity with the original inline implementation is now narrower than the
+    module docstring below used to claim (v31): tests/test_plan_engine_sizing.py
+    locks STOP parity only -- target pricing diverged from the pre-extraction
+    arithmetic on purpose (see Task 15). Returns None when the chosen builder
+    finds no target that clears MIN_RISK_REWARD_RATIO -- no qualifying setup
+    at this bar, not a crash."""
     from swingbot.core.planning.plan_engine import (
         _atr_plan,
         _elliott_plan,
@@ -135,23 +139,39 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
         _safe_atr_value,
         _sr_plan,
         apply_level_lifecycle,
+        atr_target_candidates,
+        elliott_target_candidates,
+        fib_target_candidates,
+        sr_target_candidates,
     )
 
     entry = float(df["Close"].iloc[i])
     atr_val = _safe_atr_value(entry, float(atr_series.iloc[i]))
+    h = HORIZONS[horizon_key]
 
     if strategy == "Fibonacci" and swing_high_series is not None:
-        stop_loss, take_profit = _fibonacci_plan(
+        candidates = fib_target_candidates(df, i, h, entry)
+        result = _fibonacci_plan(
             entry, atr_val, float(swing_high_series.iloc[i]),
-            float(swing_low_series.iloc[i]), direction, horizon_key)
+            float(swing_low_series.iloc[i]), direction, horizon_key,
+            candidate_levels=candidates)
     elif strategy == "Support/Resistance" and volume_ratio_series is not None:
-        stop_loss, take_profit = _sr_plan(
-            entry, float(volume_ratio_series.iloc[i]), direction, horizon_key)
+        ratio = float(volume_ratio_series.iloc[i])
+        candidates = sr_target_candidates(df, i, h, entry, ratio)
+        result = _sr_plan(entry, ratio, direction, horizon_key, candidate_levels=candidates)
     elif strategy == "Elliott Wave" and entry_levels and i in entry_levels:
-        stop_loss, take_profit = _elliott_plan(
-            entry, atr_val, entry_levels[i]["wave2"], direction, horizon_key)
+        candidates = elliott_target_candidates(entry_levels[i], direction)
+        result = _elliott_plan(
+            entry, atr_val, entry_levels[i]["wave2"], direction, horizon_key,
+            candidate_levels=candidates)
     else:
-        stop_loss, take_profit = _atr_plan(entry, atr_val, direction, horizon_key, strategy)
+        candidates = atr_target_candidates(entry, atr_val, direction)
+        result = _atr_plan(entry, atr_val, direction, horizon_key, strategy,
+                           candidate_levels=candidates)
+
+    if result is None:
+        return None
+    stop_loss, take_profit = result
 
     # P1: same adjuster the live path calls, so the two cannot diverge. Flags
     # off is a bit-identical no-op -- see apply_level_lifecycle's docstring for
@@ -253,10 +273,13 @@ def run_backtest(
         if one_at_a_time and i <= _open_until:
             continue
         direction = "bullish" if bullish_entries.values[i] else "bearish"
-        entry, stop_loss, take_profit = _trade_plan_at(
+        plan_at = _trade_plan_at(
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels
         )
+        if plan_at is None:
+            continue            # no qualifying target -> not a trade
+        entry, stop_loss, take_profit = plan_at
         risk_per_share = abs(entry - stop_loss)
         if risk_per_share <= 0:
             continue

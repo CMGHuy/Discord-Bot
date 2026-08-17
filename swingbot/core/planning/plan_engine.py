@@ -741,16 +741,30 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         swing_low = float(df["Low"].rolling(lookback).min().iloc[index])
         if not (np.isfinite(swing_high) and np.isfinite(swing_low)):
             return None
-        stop, tp1 = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key)
+        candidates = fib_target_candidates(df, index, h, close)
+        result = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key,
+                                 candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
     elif strategy == "Support/Resistance":
         vol_avg20 = df["Volume"].rolling(20).mean()
         ratio = float((df["Volume"] / vol_avg20).iloc[index])
-        stop, tp1 = _sr_plan(close, ratio, direction, horizon_key)
+        candidates = sr_target_candidates(df, index, h, close, ratio)
+        result = _sr_plan(close, ratio, direction, horizon_key, candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
     elif strategy == "Elliott Wave":
         _, _, entry_levels = elliott_wave3_entries(df, h["max_risk_pct"])
         if not entry_levels or index not in entry_levels:
             return None
-        stop, tp1 = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key)
+        candidates = elliott_target_candidates(entry_levels[index], direction)
+        result = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key,
+                               candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
     else:
         # Only the genuine ATR-multiple path takes the MAE adjustment
         # (edge E31). The three branches above put their stop behind real
@@ -760,8 +774,12 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # "give the ATR stop the room this strategy's winners actually
         # used", so they stay structure-derived on purpose.
         applied_stop_mult = stop_mult if stop_mult is not None else _resolve_stop_mult(strategy)
-        stop, tp1 = _atr_plan(close, atr_val, direction, horizon_key, strategy,
-                              stop_mult=applied_stop_mult)
+        candidates = atr_target_candidates(close, atr_val, direction)
+        result = _atr_plan(close, atr_val, direction, horizon_key, strategy,
+                           stop_mult=applied_stop_mult, candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
 
     # P1: the same adjuster backtest._trade_plan_at calls, with the level_map
     # this path already has (so it costs no extra level build here).

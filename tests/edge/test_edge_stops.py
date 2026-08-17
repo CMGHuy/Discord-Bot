@@ -12,7 +12,7 @@ import pytest
 from swingbot import config
 from swingbot.core.planning import plan_engine
 from swingbot.core.edge.stops import MIN_SAMPLE, mae_informed_stop_mult
-from swingbot.core.planning.plan_engine import _atr_plan, build_strategy_plan
+from swingbot.core.planning.plan_engine import _atr_plan, atr_target_candidates, build_strategy_plan
 from swingbot.core.market.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
@@ -80,30 +80,46 @@ def _plan(df, **kw):
 def test_atr_plan_default_is_bit_identical(df):
     """No stop_mult, flag off: today's numbers, exactly."""
     close, atr_val = 100.0, 2.0
-    assert _atr_plan(close, atr_val, "bullish", "4w", "RSI") == \
-           _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=None)
-    assert _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=1.0) == \
-           _atr_plan(close, atr_val, "bullish", "4w", "RSI")
+    candidates = atr_target_candidates(close, atr_val, "bullish")
+    plain = _atr_plan(close, atr_val, "bullish", "4w", "RSI", candidate_levels=candidates)
+    assert plain is not None
+    assert plain == _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=None,
+                              candidate_levels=candidates)
+    assert plain == _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=1.0,
+                              candidate_levels=candidates)
 
 
 def test_stop_mult_scales_risk_and_preserves_rr():
-    """The multiplier scales `risk_distance`, which feeds BOTH the stop and
-    the R:R-derived target -- so R:R survives untouched. That matters: the
-    R:R override table and the 0.30 floor are frozen constants."""
+    """The multiplier scales `risk_distance`, which feeds the stop. v31:
+    R:R is no longer preserved exactly across the scaling (the target is
+    now the nearest real ATR-ladder candidate that clears the floor, not a
+    fixed multiple of whatever risk_distance happens to be) -- both base
+    and widened plans must independently land in the
+    [MIN_RISK_REWARD_RATIO, MAX_RISK_REWARD_RATIO] band instead."""
     close, atr_val = 100.0, 2.0
-    base_stop, base_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI")
-    wide_stop, wide_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=1.2)
+    base_candidates = atr_target_candidates(close, atr_val, "bullish")
+    base_stop, base_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI",
+                                   candidate_levels=base_candidates)
+    wide_candidates = atr_target_candidates(close, atr_val, "bullish")
+    wide_stop, wide_tp = _atr_plan(close, atr_val, "bullish", "4w", "RSI", stop_mult=1.2,
+                                   candidate_levels=wide_candidates)
 
     base_risk, wide_risk = close - base_stop, close - wide_stop
     assert wide_risk == pytest.approx(base_risk * 1.2)
-    assert (wide_tp - close) / wide_risk == pytest.approx((base_tp - close) / base_risk)
+    for risk, tp in ((base_risk, base_tp), (wide_risk, wide_tp)):
+        assert config.MIN_RISK_REWARD_RATIO - 1e-9 <= (tp - close) / risk <= \
+            config.MAX_RISK_REWARD_RATIO + 1e-9
 
 
 def test_stop_mult_still_respects_the_max_risk_cap():
     """Widening may not punch through the horizon's own max_risk_pct cap."""
     close = 100.0
     huge_atr = close * HORIZONS["4w"]["max_risk_pct"] / 100  # already at the cap
-    capped_stop, _ = _atr_plan(close, huge_atr, "bullish", "4w", "RSI", stop_mult=1.3)
+    candidates = atr_target_candidates(close, huge_atr, "bullish")
+    result = _atr_plan(close, huge_atr, "bullish", "4w", "RSI", stop_mult=1.3,
+                       candidate_levels=candidates)
+    assert result is not None
+    capped_stop, _ = result
     assert close - capped_stop == pytest.approx(close * HORIZONS["4w"]["max_risk_pct"] / 100)
 
 
@@ -291,11 +307,15 @@ class SimpleLevel:
 
 
 def test_tp2_r_override_converts_to_a_price_at_that_r_multiple(df):
+    # v31: tp1 now sits at >=MIN_RISK_REWARD_RATIO (1.5R) by construction, so
+    # the override must be comfortably beyond it (and within the leg cap) to
+    # exercise "applies" -- 1.2R, which used to clear the old ~0.35R tp1
+    # easily, can never qualify as "beyond tp1" anymore.
     base = _macd_plan(df)
-    over = _macd_plan(df, tp2_r=1.2)
+    over = _macd_plan(df, tp2_r=3.0)
     risk = over.trigger_price - over.stop_loss
-    assert over.tp2 == pytest.approx(over.trigger_price + risk * 1.2)
-    assert over.tp2_r_applied == 1.2
+    assert over.tp2 == pytest.approx(over.trigger_price + risk * 3.0)
+    assert over.tp2_r_applied == 3.0
     assert base.tp2_r_applied is None
     assert base.tp2 != over.tp2
 
@@ -337,13 +357,16 @@ def test_time_stop_days_is_recorded_and_closes_nothing(df):
 
 
 def test_flag_on_resolves_tp2_and_time_stop_from_the_journal(df, monkeypatch):
+    # v31: mfe_r must clear the new tp1 floor (see
+    # test_tp2_r_override_converts_to_a_price_at_that_r_multiple) to be
+    # adoptable as TP2 at all -- bumped from 1.2 to 3.0.
     monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
     monkeypatch.setattr(plan_engine, "_journal_entries", lambda: [
         {"strategy": "MACD", "outcome": "win", "mae_r": 0.4,
-         "mfe_r": 1.2, "days_to_half_r": 3} for _ in range(60)
+         "mfe_r": 3.0, "days_to_half_r": 3} for _ in range(60)
     ])
     plan = _macd_plan(df)
-    assert plan.tp2_r_applied == pytest.approx(1.2)
+    assert plan.tp2_r_applied == pytest.approx(3.0)
     assert plan.time_stop_days == 3
     assert plan.stop_mult_applied == pytest.approx(0.8)   # E31 still resolves too
 
@@ -357,9 +380,9 @@ def test_flag_off_resolves_neither(df, monkeypatch):
 
 
 def test_e32_fields_round_trip_and_default_on_old_plans(df):
-    plan = _macd_plan(df, tp2_r=1.2, time_stop_days=4)
+    plan = _macd_plan(df, tp2_r=3.0, time_stop_days=4)  # v31: see the 1.2->3.0 note above
     restored = plan_engine.plan_from_dict(plan_engine.plan_to_dict(plan))
-    assert restored.tp2_r_applied == 1.2 and restored.time_stop_days == 4
+    assert restored.tp2_r_applied == 3.0 and restored.time_stop_days == 4
     assert restored.tp2 == plan.tp2
 
 
@@ -374,17 +397,20 @@ def test_confluence_plans_are_untouched_by_both_overrides(df, monkeypatch):
 
 def test_the_leg_cap_ceilings_any_mfe_tp2_at_four_times_rr(df):
     """Worth knowing before reading E33's folds: MAX_TARGET2_LEG_MULTIPLE
-    (3.0, frozen) means a valid TP2 can sit at most 4x the plan's own R:R
-    out -- 1.4R for MACD's rr=0.35. A P60 winner-MFE above that is simply
-    not adoptable as a TP2 without moving a frozen constant, and the
-    level-based TP2 stands instead."""
+    (3.0, frozen) means a valid TP2 can sit at most 4x the plan's own
+    ACTUAL achieved R:R out. v31: that R:R is no longer the frozen
+    per-strategy _rr_for arithmetic (tp1 is now a real structural level,
+    select_structural_target's own choice) -- derive the ceiling from the
+    plan's own tp1 instead, same pattern
+    test_tp2_r_override_respects_the_beyond_tp1_and_leg_cap_invariants
+    already uses. A P60 winner-MFE above that is simply not adoptable as a
+    TP2 without moving a frozen constant, and the level-based TP2 stands
+    instead."""
     from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
-    from swingbot.core.planning.plan_engine import _rr_for
-    rr = _rr_for("MACD", "4w")
-    ceiling = rr * (1 + MAX_TARGET2_LEG_MULTIPLE)
-    assert ceiling == pytest.approx(1.4)
-
     base = _macd_plan(df)
+    rr = (base.tp1 - base.trigger_price) / (base.trigger_price - base.stop_loss)
+    ceiling = rr * (1 + MAX_TARGET2_LEG_MULTIPLE)
+
     assert _macd_plan(df, tp2_r=ceiling - 0.01).tp2_r_applied == pytest.approx(ceiling - 0.01)
     over_ceiling = _macd_plan(df, tp2_r=ceiling + 0.01)
     assert over_ceiling.tp2_r_applied is None and over_ceiling.tp2 == base.tp2
