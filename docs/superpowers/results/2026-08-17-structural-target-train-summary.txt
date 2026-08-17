@@ -1,0 +1,100 @@
+-- excluded (illiquid, Task E12): 2 of 78 ticker(s) --
+  GC=F: avg dollar vol $4.2M < $20M floor
+  SI=F: avg dollar vol $0.0M < $20M floor
+
+-- excluded (bad data, Task E16): 5 of 78 ticker(s) --
+  ASTS: ASTS: >5 consecutive identical closes (frozen feed?)
+  HIMS: HIMS: >5 consecutive identical closes (frozen feed?)
+  HOOD: HOOD: >40% bar on 2021-08-04 without volume spike (bad split adjust?)
+  QBTS: QBTS: >5 consecutive identical closes (frozen feed?); QBTS: >40% bar on 2024-12-16 without volume spike (bad split adjust?)
+  SOFI: SOFI: >40% bar on 2021-01-07 without volume spike (bad split adjust?)
+
+== TRAIN 2020-01-01 .. 2023-12-31 | pass: WR>=80, ExpR>0, N>=30, excl<=50% ==
+Strategy                   N   Win%    ExpR  MaxDD% AvgWinR   Scr    TO  Excl%   tp2% trail%    be%   rto%  PASS
+EMA Crossover             53   64.2  +0.470    -3.0  +1.525    19     2    28%  23.5%  44.1%  14.7%  17.6%  FAIL
+VWAP                     115   43.5  +0.148   -16.0  +1.718    44     6    30%   0.0%  74.0%   6.0%  20.0%  FAIL
+Fibonacci                241   36.1  +0.226   -40.5  +2.274    49    57    31%   0.0%  59.8%   9.2%  31.0%  FAIL
+Support/Resistance       241   45.6  +0.323   -14.4  +2.048    77    24    30%  11.8%  75.5%   4.5%   8.2%  FAIL
+RSI                       38   23.7  -0.120   -23.7  +1.864    39     3    52%   0.0%  88.9%   0.0%  11.1%  FAIL
+MACD                     112   50.0  +0.151   -11.4  +1.489    73     1    40%  33.9%  62.5%   3.6%   0.0%  FAIL
+Elliott Wave              95   32.6  +0.203   -18.9  +2.437    21    31    35%   6.5%  54.8%   3.2%  35.5%  FAIL
+MA Ribbon                230   47.8  +0.273   -21.3  +1.776    73    16    28%   0.0%  56.4%   9.1%  34.5%  FAIL
+Break & Retest           295   47.5  +0.200   -32.4  +1.589    85    19    26%   0.0%  67.1%  11.4%  21.4%  FAIL
+RSI Divergence          1463   48.3  +0.240   -75.3  +1.708   443    18    24%   0.0%  88.8%   4.0%   7.2%  FAIL
+Volume Profile            63   50.8  +0.285    -7.0  +1.681    17     0    21%   0.0%  87.5%  12.5%   0.0%  FAIL
+
+-- per strategy x horizon (for gating decisions) --
+Strategy               Horiz      N   Win%    ExpR
+Break & Retest         2m        47   55.3  +0.440
+Break & Retest         2w        20   40.0  +0.189
+Break & Retest         3m        21   57.1  +0.356
+Break & Retest         4m        34   50.0  +0.146
+Break & Retest         4w        71   46.5  +0.230
+Break & Retest         5m        35   48.6  +0.271
+Break & Retest         6m        19   31.6  -0.133
+Break & Retest         7m        16   37.5  -0.090
+Break & Retest         8m        15   46.7  +0.027
+Break & Retest         9m        17   47.1  +0.176
+EMA Crossover          2m         8   75.0  +0.486
+EMA Crossover          2w        17   47.1  +0.306
+EMA Crossover          3m         2  100.0  +0.725
+EMA Crossover          4m         2   50.0  -0.069
+EMA Crossover          4w        17   58.8  +0.432
+EMA Crossover          5m         3  100.0  +1.507
+EMA Crossover          6m         1  100.0  +1.085
+EMA Crossover          7m         1  100.0  +1.085
+EMA Crossover          8m         2  100.0  +0.934
+Elliott Wave           4w        95   32.6  +0.203
+Fibonacci              2m        33   33.3  +0.090
+Fibonacci              2w        42   38.1  +0.192
+Fibonacci              3m        29   41.4  +0.390
+Fibonacci              4m        20   35.0  -0.023
+Fibonacci              4w        63   30.2  +0.283
+Fibonacci              5m        16   37.5  +0.238
+Fibonacci              6m        14   42.9  +0.279
+Fibonacci              7m         9   33.3  +0.084
+Fibonacci              8m         7   42.9  +0.173
+Fibonacci              9m         8   50.0  +0.489
+MA Ribbon              2m        10   20.0  -0.133
+MA Ribbon              2w        81   46.9  +0.411
+MA Ribbon              3m        20   55.0  +0.266
+MA Ribbon              4m        19   47.4  +0.141
+MA Ribbon              4w        72   48.6  +0.289
+MA Ribbon              5m        11   45.5  +0.038
+MA Ribbon              6m         7   57.1  +0.166
+MA Ribbon              7m         4   50.0  +0.134
+MA Ribbon              8m         1  100.0  +0.388
+MA Ribbon              9m         5   60.0  +0.547
+MACD                   3m        33   45.5  +0.128
+MACD                   4m        30   53.3  +0.191
+MACD                   7m        19   52.6  +0.186
+MACD                   8m        15   46.7  +0.090
+MACD                   9m        15   53.3  +0.151
+RSI                    2m         4   25.0  -0.143
+RSI                    2w         2    0.0  +0.075
+RSI                    3m         4   25.0  -0.143
+RSI                    4m         4   25.0  -0.143
+RSI                    4w         4   25.0  -0.135
+RSI                    5m         4   25.0  -0.143
+RSI                    6m         4   25.0  -0.143
+RSI                    7m         4   25.0  -0.143
+RSI                    8m         4   25.0  -0.143
+RSI                    9m         4   25.0  -0.143
+RSI Divergence         2m       146   49.3  +0.236
+RSI Divergence         2w       150   44.0  +0.373
+RSI Divergence         3m       144   48.6  +0.217
+RSI Divergence         4m       147   49.0  +0.217
+RSI Divergence         4w       146   47.3  +0.246
+RSI Divergence         5m       146   49.3  +0.230
+RSI Divergence         6m       146   49.3  +0.224
+RSI Divergence         7m       145   49.0  +0.218
+RSI Divergence         8m       145   49.0  +0.213
+RSI Divergence         9m       148   48.6  +0.212
+Support/Resistance     2m       122   43.4  +0.267
+Support/Resistance     3m       119   47.9  +0.386
+VWAP                   4w        65   52.3  +0.330
+VWAP                   6m        14   35.7  -0.084
+VWAP                   7m        15   40.0  +0.077
+VWAP                   8m        13   38.5  +0.039
+VWAP                   9m         8    0.0  -0.615
+Volume Profile         7m        63   50.8  +0.285
