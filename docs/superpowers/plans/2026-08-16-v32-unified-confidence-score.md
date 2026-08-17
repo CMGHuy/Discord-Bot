@@ -64,7 +64,7 @@ This is the most important task in the plan. Shipping the union of both scorers
 would triple-count trend context (ADX + MACD + regime + HTF + MTF all read
 trend) and double-count regime and candlestick, which both scorers compute.
 
-- [ ] **Step 1: Extract both factor sets verbatim**
+- [x] **Step 1: Extract both factor sets verbatim**
 
 From `confidence.py:275-436`: distance(0-20), stop confluence(0-15),
 regime(0-15), ADX(0-15), MACD(0-15), RSI(0-10), squeeze(0-10),
@@ -76,13 +76,13 @@ From `quality.py:19-139`: `component_regime`(15/8/0), `component_htf`(15/8/0),
 `component_badge`(0/20), `rs_points`(0-10), `mtf_points`(0/3/6/10),
 `breadth_points`(0-5), `candle_points`(0-5), `gap_penalty`(0/-10).
 
-- [ ] **Step 2: Write the correlation measurement**
+- [x] **Step 2: Write the correlation measurement**
 
 Sample ≥500 TRAIN scenarios, record every factor's raw value, compute a
 pairwise Spearman correlation matrix. Dispatch via the `backtest-runner`
 subagent so per-scenario output stays out of context.
 
-- [ ] **Step 3: Decide each duplicate/overlap pair**
+- [x] **Step 3: Decide each duplicate/overlap pair**
 
 Record a decision and its evidence for each. Required decisions:
 
@@ -98,12 +98,12 @@ Record a decision and its evidence for each. Required decisions:
 Rule: any pair with |ρ| > 0.7 collapses to one factor unless a written
 justification says why both earn their place.
 
-- [ ] **Step 4: Write the reconciliation document**
+- [x] **Step 4: Write the reconciliation document**
 
 Final factor list with name, point range, input source, and for every dropped
 factor one line on why. This document is the input to Task 2.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/plans/v32-factor-reconciliation.md
@@ -1259,7 +1259,7 @@ git commit -m "docs(v32): correct strategy.md, bump version, close the spec"
 
 ## Progress
 
-- [ ] Task 1 — Factor reconciliation
+- [x] Task 1 — Factor reconciliation
 - [ ] Task 2 — Registry contract
 - [ ] Task 3 — Port confidence.py factors
 - [ ] Task 4 — Port quality.py components (RS/MTF/breadth)
