@@ -134,9 +134,9 @@ def stats_embed(snap: dict) -> discord.Embed:
                      f"(best win streak {streak['best_win_streak']}, worst loss streak {streak['worst_loss_streak']})",
                      inline=False)
 
-    tier_rows = snap["by"].get("tier", [])
-    if tier_rows:
-        embed.add_field(name="By tier", value=_mini_table(tier_rows), inline=False)
+    confidence_rows = snap["by"].get("confidence", [])
+    if confidence_rows:
+        embed.add_field(name="By confidence level", value=_mini_table(confidence_rows), inline=False)
 
     strat_rows = sorted(snap["by"].get("strategy", []), key=lambda r: r["n"], reverse=True)[:5]
     if strat_rows:
@@ -272,12 +272,15 @@ async def lessons_cmd(ctx, arg: str = "5"):
     await ctx.send(f"📖 **Last {len(entries)} journal entr{'y' if len(entries)==1 else 'ies'}:**\n{text[:1900]}")
 
 
-def calibration_lines(tier_rows: list, decay_lines: list) -> list:
+def calibration_lines(level_rows: list, decay_lines: list) -> list:
+    """v32 Task 11: level_calibration() has no expected-band verdict the
+    way tier_calibration() did (see calibration.py's own docstring for
+    why), so this just reports win rate per level -- no checkmark/expected
+    column."""
     lines = []
-    for row in tier_rows:
-        mark = "—" if row["ok"] is None else ("✅" if row["ok"] else "❌")
+    for row in level_rows:
         wr_str = _dash(row["win_rate"], "{:.1f}%")
-        lines.append(f"{mark} Tier {row['tier']}: N={row['n']}, WR {wr_str} (expected {row['expected_band']})")
+        lines.append(f"Level {row['level']}: N={row['n']}, WR {wr_str}")
     lines.extend(decay_lines)
     return lines
 
@@ -285,7 +288,7 @@ def calibration_lines(tier_rows: list, decay_lines: list) -> list:
 @bot.command(name="calibration")
 async def calibration_cmd(ctx):
     from swingbot.core.scanning import engine as scan_engine
-    from swingbot.core.analytics.calibration import tier_calibration, score_deciles
+    from swingbot.core.analytics.calibration import level_calibration, score_deciles
     from swingbot.core.analytics.insights import edge_decay_report
 
     all_trades = scan_engine.trade_log.get_trades(status="all", limit=None)
@@ -294,9 +297,9 @@ async def calibration_cmd(ctx):
         await ctx.send("No closed trades yet — nothing to calibrate against.")
         return
 
-    tiers = tier_calibration(closed)
+    levels = level_calibration(closed)
     decay = edge_decay_report(closed)
-    lines = calibration_lines(tiers, decay)
+    lines = calibration_lines(levels, decay)
 
     deciles = score_deciles(closed)
     decile_summary = (

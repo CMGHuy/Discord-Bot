@@ -68,24 +68,30 @@ def _plan_line(plan) -> str:
     direction_word = "LONG" if plan.direction == "bullish" else "SHORT"
     tp2_bit = f" TP2 {plan.tp2:.2f}" if plan.tp2 is not None else ""
     return (
-        f"{star}{theme.tier_chip(plan.tier)}{theme.badge_chip(plan.badge)} {plan.ticker} {direction_word} · "
+        f"{star}{theme.level_chip(plan.confidence_level)}{theme.badge_chip(plan.badge)} {plan.ticker} {direction_word} · "
         f"{plan.status} · follow {score:.0f} · entry {plan.trigger_price:.2f} SL {plan.stop_loss:.2f} "
         f"TP1 {plan.tp1:.2f}{tp2_bit}"
     )
 
 
-def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, ticker: str = None, today=None) -> tuple:
+def render_board(plans: list, *, status: str, level: str, badge: str, page: int, ticker: str = None, today=None) -> tuple:
     """Pure renderer: a fixed list of TradePlanV2s (or v2-shaped stand-
     ins) in, (content_str, discord.Embed) out. Called directly by
     !liveplans (Task B15/B16) and as PlanBoardView's render_fn (Task B13).
     Filtering happens here, BEFORE ranking and BEFORE pagination, so
     the page count in the footer always reflects the filtered set, not
-    the whole store."""
+    the whole store.
+
+    v32 Task 11: `tier` (A/B/C) filter retired in favour of `level` (1-5
+    confidence level, the number that actually gates whether an alert
+    fires). `level` is a string here (matches `status`/`badge`'s "All" or
+    a literal value convention from the Discord command args), compared
+    against `p.confidence_level` as an int."""
     live = [p for p in plans if p.status in LIVE_STATUSES]
     if status != "All":
         live = [p for p in live if p.status == status]
-    if tier != "All":
-        live = [p for p in live if p.tier == tier]
+    if level != "All":
+        live = [p for p in live if p.confidence_level == int(level)]
     if badge != "All":
         live = [p for p in live if p.badge == badge]
     if ticker:
@@ -111,7 +117,7 @@ def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, 
     body = "\n\n".join(body_parts) if body_parts else "No live plans match this filter."
 
     content = (
-        f"📋 **Live plans** — {len(ranked)} match (status={status}, tier={tier}, badge={badge}), "
+        f"📋 **Live plans** — {len(ranked)} match (status={status}, level={level}, badge={badge}), "
         f"page {page_num + 1}/{max_page + 1}\n\n{body}"
     )
     embed = discord.Embed(
@@ -122,7 +128,7 @@ def render_board(plans: list, *, status: str, tier: str, badge: str, page: int, 
 
 
 _VALID_STATUSES = {"PENDING", "ACTIVE", "PARTIAL", "CLOSED", "CANCELLED", "ALL"}
-_VALID_TIERS = {"A", "B", "C"}
+_VALID_LEVELS = {"1", "2", "3", "4", "5"}
 _VALID_BADGES = {"VALIDATED", "WEAK"}
 
 
@@ -131,10 +137,10 @@ def _parse_board_args(args: tuple) -> dict:
     parsed: dict = {}
     for token in args:
         tl = token.lower()
-        if tl.startswith("tier:"):
-            val = tl[5:].upper()
-            if val in _VALID_TIERS:
-                parsed["tier"] = val
+        if tl.startswith("level:"):
+            val = tl[6:]
+            if val in _VALID_LEVELS:
+                parsed["level"] = val
             continue
         if tl.startswith("badge:"):
             val = tl[6:].upper()
@@ -152,18 +158,18 @@ def _parse_board_args(args: tuple) -> dict:
 async def liveplans_cmd(ctx, *args: str):
     parsed = _parse_board_args(args)
     parsed_status = parsed.get("status", "All")
-    parsed_tier = parsed.get("tier", "All")
+    parsed_level = parsed.get("level", "All")
     parsed_badge = parsed.get("badge", "All")
     parsed_ticker = parsed.get("ticker")
 
     store = PlanStore()
     plans = store.open_plans()
     content, embed = render_board(
-        plans, status=parsed_status, tier=parsed_tier, badge=parsed_badge, ticker=parsed_ticker, page=0,
+        plans, status=parsed_status, level=parsed_level, badge=parsed_badge, ticker=parsed_ticker, page=0,
     )
     view = PlanBoardView(
-        render_fn=lambda status, tier, badge: render_board(
-            plans, status=status, tier=tier, badge=badge, ticker=parsed_ticker, page=0,
+        render_fn=lambda status, level, badge: render_board(
+            plans, status=status, level=level, badge=badge, ticker=parsed_ticker, page=0,
         ),
         author_id=ctx.author.id,
         items=plans,

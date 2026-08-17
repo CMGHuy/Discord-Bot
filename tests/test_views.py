@@ -196,7 +196,7 @@ def test_chart_button_render_failure_sends_ephemeral_error():
 
 def _fixture_plan():
     return types.SimpleNamespace(
-        plan_id="abcd1234-plan", ticker="NVDA", tier="A", badge="VALIDATED", quality_score=82,
+        plan_id="abcd1234-plan", ticker="NVDA", confidence_level=5, badge="VALIDATED", quality_score=82,
         quality_breakdown=[("Trend alignment", 20), ("Volume confirmation", 15), ("Multi-strategy confluence", 47)],
         badge_stats={"status": "VALIDATED", "n": 206, "win_rate": 81.6, "expectancy_r": 0.42, "window": "2024-2025"},
         regime_aligned=True, created_at="2026-07-11",
@@ -268,8 +268,8 @@ def test_any_author_id_none_interaction_check_true_for_any_user():
 
 
 def _stub_render_fn(calls):
-    def render(status, tier, badge):
-        calls.append((status, tier, badge))
+    def render(status, level, badge):
+        calls.append((status, level, badge))
         return "content", discord.Embed(title="board")
     return render
 
@@ -280,8 +280,8 @@ def test_plan_board_view_has_4_children_and_apply_calls_render_fn():
     # 3 selects + refresh + prev + next -- prev/next are decorated methods
     # (Task B14) so they're present on every instance regardless of `items`.
     assert len(view.children) == 6
-    asyncio.run(view._apply(status="ACTIVE", tier="A", badge="All"))
-    assert calls == [("ACTIVE", "A", "All")]
+    asyncio.run(view._apply(status="ACTIVE", level="5", badge="All"))
+    assert calls == [("ACTIVE", "5", "All")]
 
 
 def test_paginate_middle_page():

@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-17 11:19:31 UTC",
+  "generated_at": "2026-08-17 19:49:08 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.1",
-    "bot": "1.2.0"
+    "ui": "1.7.2",
+    "bot": "1.2.1"
   },
   "releases": [
     {
@@ -468,6 +468,20 @@
         "bot": "1.2.0"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-08-17",
+      "last_seen": "2026-08-17",
+      "commit": "5e5e6c86",
+      "subject": "chore(v32): bump bot 1.2.0->1.2.1, ui 1.7.1->1.7.2",
+      "versions": {
+        "ui": "1.7.2",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }

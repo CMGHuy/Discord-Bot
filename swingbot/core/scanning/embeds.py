@@ -382,12 +382,12 @@ def badge_field_for(plan) -> tuple[str, str] | None:
 
 
 def quality_lines(plan) -> tuple[str, str] | None:
-    """('Quality: 82/100 (Tier A)', 'regime +15 · htf +8 · ...') or None
-    for unscored plans. Middle-dot separated, signed ints -- rendering is
+    """('Quality: 82/100', 'regime +15 · htf +8 · ...') or None for
+    unscored plans. Middle-dot separated, signed ints -- rendering is
     FIXED here; every consumer prints these two strings verbatim."""
     if plan is None or not plan.quality_breakdown:
         return None
-    header = f"Quality: {plan.quality_score}/100 (Tier {plan.tier})"
+    header = f"Quality: {plan.quality_score}/100"
     detail = " · ".join(f"{name} {pts:+d}" for name, pts in plan.quality_breakdown)
     return header, detail
 
@@ -464,16 +464,18 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     priority_marker = "⭐ " if (conf.level >= 4 and all_ok) else ""
     needs_review_marker = "⚠️ " if not all_ok else ""
     plan_v2 = _v2_plan(item)
-    # A v2-plan-carrying item gets a tier/badge chip prefix on its title
-    # ("🅰 ✅ VALIDATED · ...") so pedigree is visible before opening the
+    # A v2-plan-carrying item gets a level/badge chip prefix on its title
+    # ("5️⃣ ✅ VALIDATED · ...") so pedigree is visible before opening the
     # embed at all; items with no v2 plan keep today's plain title.
-    chip_prefix = f"{theme.tier_chip(plan_v2.tier)} {theme.badge_chip(plan_v2.badge)} · " if plan_v2 is not None else ""
+    # v32 Task 11: was a tier chip (🅰/🅱/🅲); tier is retired in favour of
+    # plan_v2.confidence_level.
+    chip_prefix = f"{theme.level_chip(plan_v2.confidence_level)} {theme.badge_chip(plan_v2.badge)} · " if plan_v2 is not None else ""
     title = f"{chip_prefix}{needs_review_marker}{priority_marker}{'🟢' if is_bull else '🔴'} {direction} — {result.ticker}"
     if plan_v2 is not None:
-        # Tier/badge dominates the color once a v2 plan exists -- "did this
-        # clear the validation bar, and which tier" outranks the legacy
-        # confidence-level color.
-        embed_color = theme.plan_color(plan_v2.badge, plan_v2.tier)
+        # Badge/level dominates the color once a v2 plan exists -- "did this
+        # clear the validation bar, and how confident is it" outranks the
+        # legacy scan-time confidence-level color below.
+        embed_color = theme.plan_color(plan_v2.badge, plan_v2.confidence_level)
     else:
         # Embed color highlights CONFIDENCE (red=lowest -> green=highest) when
         # every requirement is met; a scenario still missing one or more is
@@ -557,7 +559,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
         if plan_v2 is not None:
             stats = plan_v2.badge_stats or {}
             oos_bit = f" (OOS N={stats.get('n', 0)} WR {stats.get('win_rate', 0):.1f}%)" if stats else ""
-            quality_line = f"Tier {plan_v2.tier} · {plan_v2.quality_score}/100 · {theme.badge_chip(plan_v2.badge)}{oos_bit}"
+            quality_line = f"Level {plan_v2.confidence_level} · {plan_v2.quality_score}/100 · {theme.badge_chip(plan_v2.badge)}{oos_bit}"
             sections["quality"].append(("📐 Quality", quality_line, False))
     else:
         badge_field = badge_field_for(plan_v2)

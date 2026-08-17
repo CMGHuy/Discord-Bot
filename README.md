@@ -1,8 +1,8 @@
 # Swing Trade Alert Bot (Discord)
 
 A Discord bot that scans a list of stock/ETF tickers **live throughout the
-trading session** (default 08:00-23:00 Europe/Berlin) across **five
-swing horizons** (capped at 6 months max), looking for a very specific
+trading session** (default 08:00-23:00 Europe/Berlin) across **ten
+swing horizons** (capped at 9 months max), looking for a very specific
 thing: **is there a real, multi-method-confirmed support or resistance
 level within reach of today's price?** If the next support or resistance
 is at least `MIN_REWARD_PCT` (default **5%**, configurable) away from

@@ -9,9 +9,10 @@ from swingbot.commands.plans import render_board, _parse_board_args
 TODAY = dt.date(2026, 7, 11)
 
 
-def _plan(ticker, status, badge="VALIDATED", tier="A", quality_score=80, plan_id=None, direction="bullish"):
+def _plan(ticker, status, badge="VALIDATED", confidence_level=5, quality_score=80, plan_id=None, direction="bullish"):
     return types.SimpleNamespace(
-        plan_id=plan_id or f"{ticker}-{status}", ticker=ticker, status=status, badge=badge, tier=tier,
+        plan_id=plan_id or f"{ticker}-{status}", ticker=ticker, status=status, badge=badge,
+        confidence_level=confidence_level,
         quality_score=quality_score, direction=direction, entry_type="market",
         trigger_price=100.0, stop_loss=95.0, tp1=110.0, tp2=None,
         regime_aligned=True, created_at="2026-07-11",
@@ -25,7 +26,7 @@ def test_render_board_groups_by_status_and_ranks_within_group():
         _plan("CCC", "PARTIAL", quality_score=50),
         _plan("DDD", "CLOSED"),   # excluded -- not in {PENDING, ACTIVE, PARTIAL}
     ]
-    content, embed = render_board(plans, status="All", tier="All", badge="All", page=0, today=TODAY)
+    content, embed = render_board(plans, status="All", level="All", badge="All", page=0, today=TODAY)
     assert "DDD" not in content
     assert "PENDING" in content and "ACTIVE" in content and "PARTIAL" in content
     pending_pos = content.index("PENDING")
@@ -34,30 +35,30 @@ def test_render_board_groups_by_status_and_ranks_within_group():
     assert content.index("BBB", active_pos) > active_pos
 
 
-def test_render_board_filters_by_tier():
-    plans = [_plan("AAA", "ACTIVE", tier="A"), _plan("BBB", "ACTIVE", tier="B")]
-    content, _ = render_board(plans, status="All", tier="A", badge="All", page=0, today=TODAY)
+def test_render_board_filters_by_level():
+    plans = [_plan("AAA", "ACTIVE", confidence_level=5), _plan("BBB", "ACTIVE", confidence_level=3)]
+    content, _ = render_board(plans, status="All", level="5", badge="All", page=0, today=TODAY)
     assert "AAA" in content and "BBB" not in content
 
 
 def test_render_board_filters_by_ticker():
     plans = [_plan("NVDA", "ACTIVE"), _plan("AAPL", "ACTIVE")]
-    content, _ = render_board(plans, status="All", tier="All", badge="All", page=0, ticker="NVDA", today=TODAY)
+    content, _ = render_board(plans, status="All", level="All", badge="All", page=0, ticker="NVDA", today=TODAY)
     assert "NVDA" in content and "AAPL" not in content
 
 
 def test_liveplans_cmd_ticker_filter_survives_view_filter_change():
     """Task B16: `!liveplans NVDA` must keep filtering to NVDA even after
-    the resulting PlanBoardView's status/tier/badge selects are changed,
+    the resulting PlanBoardView's status/level/badge selects are changed,
     because the ticker filter isn't one of render_fn's parameters -- it's
     captured by the lambda's closure over `parsed_ticker` at command-
     invocation time (swingbot/commands/plans.py:liveplans_cmd). This test
-    picks tier="B"/badge="WEAK" for the second render_fn call precisely
+    picks level="3"/badge="WEAK" for the second render_fn call precisely
     because those match AAPL, not NVDA: if the ticker filter had been lost,
     AAPL would reappear in the output."""
     plans = [
-        _plan("NVDA", "ACTIVE", tier="A", badge="VALIDATED"),
-        _plan("AAPL", "ACTIVE", tier="B", badge="WEAK"),
+        _plan("NVDA", "ACTIVE", confidence_level=5, badge="VALIDATED"),
+        _plan("AAPL", "ACTIVE", confidence_level=3, badge="WEAK"),
     ]
     fake_store = MagicMock()
     fake_store.open_plans.return_value = plans
@@ -74,17 +75,17 @@ def test_liveplans_cmd_ticker_filter_survives_view_filter_change():
     assert "NVDA" in kwargs["content"] and "AAPL" not in kwargs["content"]
 
     view = kwargs["view"]
-    # Simulate the user then changing tier/badge dropdowns to values that
-    # match AAPL, not NVDA. If the ticker filter weren't fixed by the
-    # closure, AAPL would now show up.
-    changed_content, _ = view.render_fn("ACTIVE", "B", "WEAK")
+    # Simulate the user then changing status/level/badge dropdowns to
+    # values that match AAPL, not NVDA. If the ticker filter weren't fixed
+    # by the closure, AAPL would now show up.
+    changed_content, _ = view.render_fn("ACTIVE", "3", "WEAK")
     assert "AAPL" not in changed_content
     assert "No live plans match this filter" in changed_content
 
 
-def test_parse_board_args_status_tier_ticker():
-    parsed = _parse_board_args(("active", "tier:a", "NVDA"))
-    assert parsed == {"status": "ACTIVE", "tier": "A", "ticker": "NVDA"}
+def test_parse_board_args_status_level_ticker():
+    parsed = _parse_board_args(("active", "level:5", "NVDA"))
+    assert parsed == {"status": "ACTIVE", "level": "5", "ticker": "NVDA"}
 
 
 def test_parse_board_args_badge():

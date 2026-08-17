@@ -166,5 +166,12 @@ aggregate number would hide that.
 
 ## Depends on
 
-**v32** (the merged score the confidence factor plugs into) **and v31**
-(`select_structural_target()`, which must not be edited concurrently).
+**v32 and v31 have both landed** (2026-08-17). v31's
+`select_structural_target()` is real, live code -- see this spec's own
+"Interaction with v31" section. v32's registry is also real and live, but
+`UNIFIED_CONFIDENCE` stays default-off after its TRAIN measurement found
+no factor with real positive lift and its VALIDATION run FAILed -- the
+confidence factor this spec's Task 5 would plug into has no live effect
+today. See `docs/superpowers/plans/2026-08-16-v36-level-touch-strength.md`'s
+(still a live plan) own "v32 has also landed, but not as this plan assumed"
+section for the full detail.

@@ -25,7 +25,7 @@ def _plan(**kw):
         entry_type="market", trigger_price=100.0, entry_price=None, expiry_bars=3,
         stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=None,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.5,
-        quality_score=0, quality_breakdown=[], tier="C",
+        quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING, status_history=[],
     )
     base.update(kw)

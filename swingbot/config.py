@@ -112,7 +112,7 @@ FIELDS: list[Field] = [
     Field("DISCORD_CHANNEL_RETROSPECTIVE_ID", "DISCORD_CHANNEL_RETROSPECTIVE_ID", "Discord Connection", "Daily retrospective channel ID",
           help="Channel where the end-of-session retrospective is posted on weekdays. Leave blank to post to the closed-trades channel instead."),
     Field("DISCORD_CHANNEL_FIREHOSE_ID", "DISCORD_CHANNEL_FIREHOSE_ID", "Discord Connection", "Firehose channel ID",
-          help="Channel for non-tier-A alerts. Empty = everything goes to the main alerts channel (no change)."),
+          help="Channel for alerts below top confidence level (5). Empty = everything goes to the main alerts channel (no change)."),
 
     # --- Scanning & session ---
     Field("SESSION_START_HOUR", "SESSION_START_HOUR", "Scanning & Session", "Session start hour",
@@ -174,6 +174,12 @@ FIELDS: list[Field] = [
     Field("MIN_ALERT_CONFIDENCE_LEVEL", "MIN_ALERT_CONFIDENCE_LEVEL", "Trade Filters & Risk", "Min confidence level to alert",
           type="select", default="4", options=["1", "2", "3", "4", "5"],
           help="Only this level and above are shown as alerts (quality over quantity)."),
+    Field("UNIFIED_CONFIDENCE", "UNIFIED_CONFIDENCE", "Trade Filters & Risk",
+          "Unified confidence score (v32)",
+          type="checkbox", default="false",
+          help="Score alerts with the merged factor registry, so relative strength, "
+               "multi-timeframe alignment and market breadth affect which alerts fire. "
+               "Off = the legacy 1-5 score. Enable only after VALIDATION."),
     Field("DEDUP_TOLERANCE_PCT", "DEDUP_TOLERANCE_PCT", "Trade Filters & Risk", "Dedup tolerance %",
           type="float", default="2.0", min=0, step=0.5,
           help="Two signals on the same ticker/direction are merged into one alert if entry/SL/TP are all within this % of each other."),

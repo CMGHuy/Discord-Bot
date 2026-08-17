@@ -1,9 +1,21 @@
 """Live-trade calibration checks: does the quality score actually predict
-win rate (score_deciles), does each tier land in its design band
-(tier_calibration), and has a VALIDATED strategy's live win rate drifted
-below its out-of-sample number (badge_drift)? Pure functions, no I/O --
-callers supply `closed` and (for badge_drift) the already-loaded registry
-list."""
+win rate (score_deciles), how does each confidence level's live win rate
+compare (level_calibration), and has a VALIDATED strategy's live win rate
+drifted below its out-of-sample number (badge_drift)? Pure functions, no
+I/O -- callers supply `closed` and (for badge_drift) the already-loaded
+registry list.
+
+v32 Task 11: tier_calibration() (A/B/C tier, quality.py's own 0-100
+quality_score bands) is retired in favour of level_calibration() (1-5
+confidence level, the number that actually gates whether an alert fires).
+Unlike tier, level has no design-band-vs-live-win-rate "ok" verdict here:
+tier's EXPECTED_BAND came from quality.py's own pre-v32 design; there is no
+equivalent measured expected-win-rate-per-level in this codebase (v32's own
+VALIDATION run measured legacy vs unified gating, not a per-level band), so
+inventing one would be exactly the kind of ungrounded number this repo's
+TRAIN-derived-weights discipline exists to prevent. level_calibration()
+reports n/win_rate/expectancy per level, same shape as score_deciles(),
+without a pass/fail column."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -46,35 +58,21 @@ def score_deciles(closed: list[dict]) -> list[dict]:
     return rows
 
 
-EXPECTED_BAND = {"A": ">=80", "B": "70-80", "C": "<70"}
-MIN_N_FOR_CALIBRATION_VERDICT = 10  # below this, "ok" is None (insufficient data), not False
+LEVELS = (1, 2, 3, 4, 5)
 
 
-def _meets_band(win_rate: float, band: str) -> bool:
-    if band == ">=80":
-        return win_rate >= 80
-    if band == "<70":
-        return win_rate < 70
-    lo, hi = (float(x) for x in band.split("-"))
-    return lo <= win_rate <= hi
-
-
-def tier_calibration(closed: list[dict]) -> list[dict]:
-    """One row per design tier (A/B/C, always all three regardless of
-    whether any trades exist yet) comparing live win rate against the
-    fixed design band that tier is SUPPOSED to land in. `ok` is a
-    three-valued signal, not a boolean pass/fail: None means "not enough
-    live data to judge yet" (win_rate is None, or n < 10), which is a
-    very different message from "judged and it's missing its band"."""
+def level_calibration(closed: list[dict]) -> list[dict]:
+    """One row per confidence level (1-5, always all five regardless of
+    whether any trades exist yet) reporting live win rate and expectancy --
+    the level-based successor to tier_calibration(), with no expected-band
+    verdict (see this module's docstring for why)."""
     rows = []
-    for tier, band in EXPECTED_BAND.items():
-        trades = [t for t in closed if t.get("tier") == tier]
+    for level in LEVELS:
+        trades = [t for t in closed if t.get("confidence_level") == level]
         n = len(trades)
         wr = metrics.win_rate(trades)
         er = metrics.expectancy_r(trades)
-        ok = None if (wr is None or n < MIN_N_FOR_CALIBRATION_VERDICT) else _meets_band(wr, band)
-        rows.append({"tier": tier, "n": n, "win_rate": wr, "expectancy_r": er,
-                     "expected_band": band, "ok": ok})
+        rows.append({"level": level, "n": n, "win_rate": wr, "expectancy_r": er})
     return rows
 
 

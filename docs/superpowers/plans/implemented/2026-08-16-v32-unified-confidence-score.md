@@ -64,7 +64,7 @@ This is the most important task in the plan. Shipping the union of both scorers
 would triple-count trend context (ADX + MACD + regime + HTF + MTF all read
 trend) and double-count regime and candlestick, which both scorers compute.
 
-- [ ] **Step 1: Extract both factor sets verbatim**
+- [x] **Step 1: Extract both factor sets verbatim**
 
 From `confidence.py:275-436`: distance(0-20), stop confluence(0-15),
 regime(0-15), ADX(0-15), MACD(0-15), RSI(0-10), squeeze(0-10),
@@ -76,13 +76,13 @@ From `quality.py:19-139`: `component_regime`(15/8/0), `component_htf`(15/8/0),
 `component_badge`(0/20), `rs_points`(0-10), `mtf_points`(0/3/6/10),
 `breadth_points`(0-5), `candle_points`(0-5), `gap_penalty`(0/-10).
 
-- [ ] **Step 2: Write the correlation measurement**
+- [x] **Step 2: Write the correlation measurement**
 
 Sample ≥500 TRAIN scenarios, record every factor's raw value, compute a
 pairwise Spearman correlation matrix. Dispatch via the `backtest-runner`
 subagent so per-scenario output stays out of context.
 
-- [ ] **Step 3: Decide each duplicate/overlap pair**
+- [x] **Step 3: Decide each duplicate/overlap pair**
 
 Record a decision and its evidence for each. Required decisions:
 
@@ -98,12 +98,12 @@ Record a decision and its evidence for each. Required decisions:
 Rule: any pair with |ρ| > 0.7 collapses to one factor unless a written
 justification says why both earn their place.
 
-- [ ] **Step 4: Write the reconciliation document**
+- [x] **Step 4: Write the reconciliation document**
 
 Final factor list with name, point range, input source, and for every dropped
 factor one line on why. This document is the input to Task 2.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/plans/v32-factor-reconciliation.md
@@ -1259,16 +1259,40 @@ git commit -m "docs(v32): correct strategy.md, bump version, close the spec"
 
 ## Progress
 
-- [ ] Task 1 — Factor reconciliation
-- [ ] Task 2 — Registry contract
-- [ ] Task 3 — Port confidence.py factors
-- [ ] Task 4 — Port quality.py components (RS/MTF/breadth)
-- [ ] Task 5 — Six levels + honesty cap
-- [ ] Task 6 — Rewire score_confidence behind the flag
-- [ ] Task 7 — Feed real RS/MTF/breadth to the gate
-- [ ] Task 8 — TRAIN factor-lift measurement
-- [ ] Task 9 — Re-weight, decide Level 6
-- [ ] Task 10 — VALIDATION run
-- [ ] Task 11 — Retire tier
-- [ ] Task 12 — Re-point audit + ablation
-- [ ] Task 13 — Docs + version bump
+- [x] Task 1 — Factor reconciliation
+- [x] Task 2 — Registry contract
+- [x] Task 3 — Port confidence.py factors
+- [x] Task 4 — Port quality.py components (RS/MTF/breadth)
+- [x] Task 5 — Six levels + honesty cap
+- [x] Task 6 — Rewire score_confidence behind the flag
+- [x] Task 7 — Feed real RS/MTF/breadth to the gate
+- [x] Task 8 — TRAIN factor-lift measurement
+- [x] Task 9 — Re-weight, decide Level 6
+- [x] Task 10 — VALIDATION run
+- [x] Task 11 — Retire tier
+- [x] Task 12 — Re-point audit + ablation
+- [x] Task 13 — Docs + version bump
+
+**Closed 2026-08-17, all 13 tasks complete — a negative result, not a
+partial one.** TRAIN measurement (Task 8) found no factor with real,
+positively-signed win-rate lift: 14 of 15 measured quality factors were
+Wilson-overlapping, the 15th (RSI trend alignment) had a real lift but the
+wrong sign, and RS/breadth (two of the three factors this spec's whole
+premise rests on) were never measurable with this repo's TRAIN cache at
+all. Task 9 dropped all of them; `FACTORS` ships with one inert factor
+(`factor_gap`, never fires). That same result forced a real architecture
+fix beyond re-weighting: `level_for_score()` (Task 5) derived level purely
+from the emptied quality score, which would have pinned every alert at
+Level 1 regardless of method count -- fixed to make `honesty_cap` the base
+level again, with quality only able to nudge it, restoring the Global
+Constraints' actual intent. Level 6 was removed on the same TRAIN result
+(n=0, not marginal). The one-shot VALIDATION run (Task 10) then FAILed: the
+restructured method-count-only gating scored a small win-rate regression
+against the legacy scorer it was meant to replace (-0.82pp), well within
+the volume budget but still a real regression, and volume alone can't clear
+that gate. `UNIFIED_CONFIDENCE` stays default-off. Tier retirement (Task
+11) and documentation (Task 13) shipped regardless, as real, live,
+observable changes -- see `docs/superpowers/plans/implemented/
+v32-train-preregistration.md` for the full numbers and every judgment call
+made along the way, several confirmed with the user given how much they
+changed the plan's own premise.

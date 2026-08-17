@@ -120,9 +120,19 @@ import logging
 from swingbot import config
 from swingbot.core.market.candlestick_patterns import detect_confirming_pattern
 from swingbot.core.market.volatility import adx_trend_strength, macd_momentum_aligned, rsi_trend_aligned, squeeze_breakout_confirmation
+from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
 
 log = logging.getLogger("swing-bot.confidence")
 
+# v32 Task 9: Level 6 ("Elite") was conditional on TRAIN clearing n>=100,
+# point estimate >=90%, Wilson lower bound >=80% and above Level 5's own
+# point estimate (see docs/superpowers/plans/implemented/v32-train-preregistration.md).
+# It did not clear that bar -- n=0, not just short: with the quality-points
+# pool empty (every measured factor dropped, see factors.py), the +1
+# quality nudge that could reach honesty_cap(4+)=6 never fires (score is
+# always 0), making Level 6 structurally unreachable under this TRAIN
+# result. Removed per the plan's own instruction ("a negative result here
+# is a finished task"): 5 bands, restored to their exact pre-v32 edges.
 LEVELS = [
     (1, "Very Low", 0, 20),
     (2, "Low", 21, 40),
@@ -132,6 +142,63 @@ LEVELS = [
 ]
 _LEVEL_LABELS = {lvl: label for lvl, label, _lo, _hi in LEVELS}
 _LEVEL_RANGE = {lvl: (lo, hi) for lvl, _label, lo, hi in LEVELS}
+
+# Method-count ceiling. Until v32 this was emergent -- min(5, target_count)
+# plus at most +2 of adjustment. It is explicit now.
+_HONESTY_CAP = {0: 1, 1: 3, 2: 4, 3: 5}
+_MAX_LEVEL = 5
+
+# The pre-v32 5-band ranges, frozen here so the still-untouched legacy score
+# path (below, until Task 6 extracts it into _score_confidence_legacy) keeps
+# repositioning its cosmetic score inside the OLD band edges -- widening
+# LEVELS to 6 bands moved Level 4/5's edges (61-80 -> 61-75, 81-100 -> 76-90),
+# and the legacy path must stay bit-identical while UNIFIED_CONFIDENCE is off.
+_LEGACY_LEVEL_RANGE = {1: (0, 20), 2: (21, 40), 3: (41, 60), 4: (61, 80), 5: (81, 100)}
+
+
+def honesty_cap(target_count: int) -> int:
+    """Highest level `target_count` independent confirming methods may
+    reach -- and, since v32 Task 9, level_for_score's actual BASE level too
+    (see that function's docstring). 4+ methods reach the ceiling, 5 (Level
+    6 was removed on a negative TRAIN result, see v32-train-preregistration.md)."""
+    return _HONESTY_CAP.get(max(0, int(target_count)), _MAX_LEVEL)
+
+
+def level_for_score(score: int, target_count: int) -> tuple:
+    """Method count sets the BASE level (via honesty_cap -- the highest
+    level that count of independent confirming methods may reach); the
+    0-100 quality score can only nudge it +-1 from there, using the same
+    genuinely-strong/genuinely-weak thresholds the legacy scorer's own Step
+    3 uses (QUALITY_BOOST_THRESHOLD/QUALITY_PENALTY_THRESHOLD). The +1
+    branch is a structural no-op -- base_level already equals the cap, so
+    the upper clamp always absorbs it -- which is intentional: quality can
+    never manufacture a level method count doesn't support (the whole point
+    of the honesty property), it can only demote a weak-quality scenario
+    one level below what its method count alone would earn.
+
+    v32 Task 9 fix: the original version (Task 5) derived level PURELY from
+    the score via a LEVELS band lookup, using honesty_cap only as an upper
+    ceiling on that result -- so target_count had NO influence on level
+    unless the quality-points pool happened to score high too. TRAIN
+    evidence (Task 8) found 15 of 15 measured quality factors either
+    Wilson-overlapping or wrong-signed, so Task 9 dropped all of them --
+    which would have pinned every unified score at 0 and every level at 1,
+    regardless of method count, making Task 10's VALIDATION run fail by
+    construction rather than test anything. This restores method count as
+    the actual driver, matching the Global Constraints' stated intent
+    ("base level from method count... remains the base, and the honesty
+    cap remains on top of it") rather than the score-first reading Task 5
+    literally implemented.
+    """
+    base_level = honesty_cap(target_count)
+    if score >= QUALITY_BOOST_THRESHOLD:
+        adjustment = 1
+    elif score <= QUALITY_PENALTY_THRESHOLD:
+        adjustment = -1
+    else:
+        adjustment = 0
+    level = max(1, min(base_level, base_level + adjustment))
+    return level, _LEVEL_LABELS[level]
 
 # Step 3's thresholds -- quality has to be genuinely strong or genuinely
 # weak to move the level at all; the broad 31-69 middle ground leaves the
@@ -211,9 +278,21 @@ def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tup
     return adjustment, detail
 
 
-def score_confidence(scenario, regime_trend: str = None, df=None,
-                      target_confluence: tuple = None, stop_confluence: tuple = None,
-                      track_record: tuple = None) -> ConfidenceResult:
+def _resolve_confluence(explicit: tuple | None, sources: list) -> tuple:
+    """(count, family_names) from an explicit levels.count_confirming_strategies
+    tuple if given, else a fallback count over the scenario's own
+    already-clustered raw sources. Shared by both the legacy and unified
+    score_confidence paths so they can never disagree about what "N
+    strategies confirmed this" means."""
+    if explicit is not None:
+        return explicit
+    families = list(dict.fromkeys(sources))
+    return len(families), families
+
+
+def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
+                             target_confluence: tuple = None, stop_confluence: tuple = None,
+                             track_record: tuple = None) -> ConfidenceResult:
     """
     `target_confluence` / `stop_confluence`, if given, are (count,
     family_names) tuples from levels.count_confirming_strategies -- the
@@ -237,17 +316,8 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     """
     breakdown = {}
 
-    if target_confluence is not None:
-        target_count, target_families = target_confluence
-    else:
-        target_families = list(dict.fromkeys(scenario.target_sources))
-        target_count = len(target_families)
-
-    if stop_confluence is not None:
-        stop_count, stop_families = stop_confluence
-    else:
-        stop_families = list(dict.fromkeys(scenario.stop_sources))
-        stop_count = len(stop_families)
+    target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
+    stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
 
     # --- Step 1: base level, directly from strategy count -----------
     base_level = max(1, min(5, target_count))
@@ -480,8 +550,10 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
 
     # Displayed score is cosmetic: the quality score repositioned inside
     # the FINAL level's own band, so the number on screen never
-    # contradicts the level right next to it.
-    lo, hi = _LEVEL_RANGE[level]
+    # contradicts the level right next to it. Uses the frozen legacy
+    # ranges (see _LEGACY_LEVEL_RANGE), not the v32-widened LEVELS table --
+    # this whole function is the legacy path until Task 6 extracts it.
+    lo, hi = _LEGACY_LEVEL_RANGE[level]
     score = lo + round(quality_score / 100 * (hi - lo))
     score = max(lo, min(hi, score))
 
@@ -493,4 +565,46 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
                pts_distance, pts_stop, pts_regime, pts_adx, pts_macd, pts_rsi, pts_squeeze, pts_candle,
                quality_adjustment, expectancy_adjustment, level, label, score)
 
+    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)
+
+
+def score_confidence(scenario, regime_trend: str = None, df=None,
+                     target_confluence: tuple = None, stop_confluence: tuple = None,
+                     track_record: tuple = None, **kwargs) -> ConfidenceResult:
+    """Dispatches to the pre-v32 scorer unless UNIFIED_CONFIDENCE is on, in
+    which case it runs the merged factor registry (swingbot.core.scanning.factors)
+    instead. Signature and ConfidenceResult shape are unchanged either way --
+    every existing caller keeps working. **kwargs carries the unified-only
+    inputs (htf_bias, rs_percentile, mtf, breadth, volume_ratio, atr_pct,
+    trigger_distance_pct, badge_status, gap_fragile) the legacy path never
+    read; Task 7 wires real values in from engine.py."""
+    if not getattr(config, "UNIFIED_CONFIDENCE", False):
+        return _score_confidence_legacy(
+            scenario, regime_trend=regime_trend, df=df,
+            target_confluence=target_confluence,
+            stop_confluence=stop_confluence, track_record=track_record)
+
+    target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
+    stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
+
+    ctx = FactorContext(
+        scenario=scenario, df=df, regime_trend=regime_trend,
+        target_count=target_count, target_families=target_families,
+        stop_count=stop_count, stop_families=stop_families,
+        **{k: kwargs.get(k) for k in
+           ("htf_bias", "rs_percentile", "mtf", "breadth", "volume_ratio",
+            "atr_pct", "trigger_distance_pct", "badge_status", "gap_fragile")
+           if k in kwargs},
+    )
+    raw, breakdown = run_factors(FACTORS, ctx)
+    score = max(0, min(100, raw))
+
+    # Method count is re-read AFTER the factors run: the squeeze and
+    # candlestick factors append to scenario.target_sources, so counting
+    # earlier would miss confirmations they just added.
+    target_count, _ = _resolve_confluence(None, scenario.target_sources)
+    level, label = level_for_score(score, target_count)
+    breakdown["Confirming methods"] = (
+        f"{target_count} independent method(s) -> base Level "
+        f"{honesty_cap(target_count)}, quality score nudges +-1 from there")
     return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)

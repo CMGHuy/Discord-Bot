@@ -275,14 +275,21 @@ def cap_alerts(items: list, max_alerts: int | None = None) -> tuple:
 
 
 def route_channel_id(item) -> str:
-    """Task E86: tier-A VALIDATED plans stay in the main alerts channel;
-    everything else goes to the firehose channel when one is configured
-    (empty DISCORD_CHANNEL_FIREHOSE_ID = no behavior change)."""
+    """Task E86: top-confidence VALIDATED plans stay in the main alerts
+    channel; everything else goes to the firehose channel when one is
+    configured (empty DISCORD_CHANNEL_FIREHOSE_ID = no behavior change).
+
+    v32 Task 11: was tier-A (quality.py's own top quality_score band,
+    score >= 75); tier is retired, replaced by confidence LEVEL 5 (the top
+    of the 1-5 legacy scale -- UNIFIED_CONFIDENCE stayed default-off after
+    v32's VALIDATION FAIL, see docs/superpowers/plans/
+    v32-train-preregistration.md) -- the number that actually gates
+    whether an alert fires, which tier never did."""
     firehose = getattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "") or ""
     plan = getattr(item, "plan", None)
-    tier_a = plan is not None and getattr(plan, "tier", "") == "A" \
+    top_level = plan is not None and getattr(plan, "confidence_level", None) == 5 \
         and getattr(plan, "badge", "") == "VALIDATED"
-    if tier_a or not firehose:
+    if top_level or not firehose:
         return config.DISCORD_CHANNEL_TRADES_ID
     return firehose
 
@@ -326,7 +333,7 @@ def deep_scan_report(items: list) -> str:
     return "\n".join(lines)
 
 
-async def _send_alerts(destination, alerts, route_by_tier: bool = False):
+async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
     """alerts: list of (embed, chart_path, plan_or_none, simple_text_or_none)
     tuples; the 4th element is optional (see the unpack below).
 
@@ -353,8 +360,8 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
     nothing at this call frequency (once per alert message, not per scan
     tick).
 
-    `route_by_tier` (Task E86) is opt-in and OFF by default: it re-routes
-    non-tier-A alerts to DISCORD_CHANNEL_FIREHOSE_ID (when configured) via
+    `route_by_confidence` (Task E86) is opt-in and OFF by default: it re-routes
+    below-top-confidence alerts to DISCORD_CHANNEL_FIREHOSE_ID (when configured) via
     route_channel_id(). Only the automatic scheduled/UI-triggered scan
     paths pass True -- a user's own `!check`/`!scan` command result must
     keep posting back to wherever they invoked it (`ctx`), never get
@@ -382,7 +389,7 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
             last_embed.set_footer(text=f"{existing_footer} | {digest}" if existing_footer else digest)
 
     firehose_id = getattr(config, "DISCORD_CHANNEL_FIREHOSE_ID", "") or ""
-    firehose_channel = bot.get_channel(int(firehose_id)) if route_by_tier and firehose_id else None
+    firehose_channel = bot.get_channel(int(firehose_id)) if route_by_confidence and firehose_id else None
     simple_channel = _simple_alert_channel()
 
     for alert in to_send:
@@ -394,7 +401,7 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
         simple_text = alert[3] if len(alert) > 3 else None
 
         send_to = destination
-        if route_by_tier and firehose_channel is not None and plan is not None:
+        if route_by_confidence and firehose_channel is not None and plan is not None:
             target_id = route_channel_id(type("I", (), {"plan": plan})())
             if target_id == firehose_id:
                 send_to = firehose_channel
@@ -409,7 +416,7 @@ async def _send_alerts(destination, alerts, route_by_tier: bool = False):
         #
         # The mirror covers EVERY posted alert, firehose-routed ones included:
         # "same function as the full alerts channel" means the same set of
-        # signals, not the same tier split.
+        # signals, not the same confidence-level split.
         mirrored = False
         if simple_channel is not None and simple_text:
             try:
@@ -662,7 +669,7 @@ async def _session_scan_tick():
     log.info("Running session scan at %s…", now_str)
     progress = scan_engine.ScanProgress()
     alerts = await scan_engine.run_scan(require_confirmation=True, bot=bot, progress=progress)
-    await _send_alerts(channel, alerts, route_by_tier=True)
+    await _send_alerts(channel, alerts, route_by_confidence=True)
 
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
@@ -977,7 +984,7 @@ async def config_watcher():
             finally:
                 poller.cancel()
 
-            await _send_alerts(channel, alerts, route_by_tier=True)
+            await _send_alerts(channel, alerts, route_by_confidence=True)
             f = progress.funnel
             if progress.stopped:
                 summary = (

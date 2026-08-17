@@ -87,10 +87,10 @@ standard ones those libraries implement.
 
 ## Quality over quantity
 
-Only **Level 3 (Medium)** and above confidence scenarios are shown as
-alerts (`MIN_ALERT_CONFIDENCE_LEVEL`, default 3), with Level 4-5 (⭐)
-prioritized. Lower levels are still computed internally, just not
-surfaced — quality over quantity.
+Only **Level 4 (High)** and above confidence scenarios are shown as
+alerts (`MIN_ALERT_CONFIDENCE_LEVEL`, default 4 -- `config.py:174`, not 3),
+with Level 5 (⭐) prioritized. Lower levels are still computed internally,
+just not surfaced — quality over quantity.
 
 ## Duplicate scenarios get merged
 
@@ -122,20 +122,30 @@ charts render, then a final funnel summary before the alerts post:
 
 ## Swing horizons
 
+`swingbot/core/market/strategy_types.py:HORIZONS` is authoritative if this
+table ever drifts again -- it did (both the horizon count and the EMA pairs
+below were wrong until v32's documentation pass found it independently of
+that plan's own scope).
+
 | Horizon | Meaning | EMA pair |
 |---|---|---|
-| `2w` | ~1-2 week swing | EMA5 / EMA10 |
+| `2w` | ~2 week swing | EMA8 / EMA13 |
 | `4w` | ~4 week swing | EMA9 / EMA21 |
 | `2m` | ~2 month swing | EMA14 / EMA35 |
 | `3m` | ~3 month swing | EMA20 / EMA50 |
+| `4m` | ~4 month swing | EMA30 / EMA100 |
+| `5m` | ~5 month swing | EMA40 / EMA150 |
 | `6m` | ~6 month swing | EMA50 / EMA200 |
+| `7m` | ~7 month swing | EMA60 / EMA250 |
+| `8m` | ~8 month swing | EMA70 / EMA300 |
+| `9m` | ~9 month swing | EMA80 / EMA350 |
 
-Capped at 6 months max -- further out, a mechanically-detected level
+Capped at 9 months max -- further out, a mechanically-detected level
 starts meaning less and less. Each horizon uses its own EMA pair, VWAP
 window, Fibonacci lookback, structural lookback, and pivot granularity —
-a `2w` scenario is built from short, fast-reacting windows; a `6m`
+a `2w` scenario is built from short, fast-reacting windows; a `9m`
 scenario from long, slow-reacting ones. Every ticker is checked across
-all five horizons.
+all ten horizons.
 
 ## Entry is always today's current price
 
@@ -265,7 +275,21 @@ generic technical noise:
 target, Level 4 needs 2+. A scenario can't reach "high confidence" on
 distance and regime alignment alone if only one method actually
 confirms the level — that's a much weaker claim than "everything lines
-up", so it gets capped down instead of rounded up.
+up", so it gets capped down instead of rounded up. This is *emergent*
+arithmetic, not a literal cap check in the code: the base level is
+`min(5, method count)`, and the quality/expectancy adjustments below can
+each move it at most ±1, so one confirming method can reach at best
+Level 3 (1 base + 2) and two methods at best Level 4 -- the numbers above
+are the accurate, worked-out consequence of that arithmetic, not a rule
+written down anywhere as its own check.
+
+A 2026-08 spec (v32) explored replacing this with one merged score --
+folding in relative strength, multi-timeframe alignment and market
+breadth as real gating inputs, plus a genuine explicit honesty cap and a
+6th ("Elite") level -- but its one-shot validation run showed a small
+win-rate *regression* against the scoring described here, not an
+improvement, so it never shipped (stays off by default; this section
+remains the accurate, live description).
 
 Confidence is also **visually highlighted**: each alert's embed color is
 a red-to-green gradient by confidence level (🔴 Lv1 → 🟠 Lv2 → 🟡 Lv3 →

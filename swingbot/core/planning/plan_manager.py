@@ -168,10 +168,15 @@ class PlanManager:
                 trade_id = self.trade_log.log_trade(
                     ticker=plan.ticker, strategy=plan.strategy,
                     horizon_key=plan.horizon_key, direction=plan.direction,
-                    confidence_level=None, confidence_label=None,
+                    # v32 Task 11: plan.confidence_level now exists (set at
+                    # plan-build time by _apply_quality), so this stop-entry
+                    # fill can pass the real level instead of a hardcoded
+                    # None -- confidence_label isn't stored on the plan, so
+                    # that half stays None.
+                    confidence_level=plan.confidence_level, confidence_label=None,
                     entry=plan.entry_price, stop_loss=plan.stop_loss,
                     take_profit=plan.tp1, target2=plan.tp2,
-                    plan_id=plan.plan_id, tier=plan.tier, badge=plan.badge,
+                    plan_id=plan.plan_id, badge=plan.badge,
                     quality_score=plan.quality_score, source=plan.source)
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":

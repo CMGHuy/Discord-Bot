@@ -30,12 +30,12 @@ def test_no_plan_returns_none():
 
 
 def test_quality_lines_exact_rendering():
-    p = _plan(quality_score=82, tier="A",
+    p = _plan(quality_score=82,
               quality_breakdown=[("regime", 15), ("htf", 8), ("confluence", 20),
                                  ("volume", 8), ("atr_percentile", 10),
                                  ("trigger_distance", 6), ("badge", 20)])
     header, detail = quality_lines(p)
-    assert header == "Quality: 82/100 (Tier A)"
+    assert header == "Quality: 82/100"
     assert detail == ("regime +15 · htf +8 · confluence +20 · volume +8 · "
                       "atr_percentile +10 · trigger_distance +6 · badge +20")
 

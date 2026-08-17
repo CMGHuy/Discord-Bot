@@ -2,18 +2,18 @@ import discord
 from swingbot.core.scanning import embed_theme as th
 
 
-def test_plan_color_weak_is_amber_regardless_of_tier():
-    assert th.plan_color("WEAK", "A").value == 0xE67E22
-    assert th.plan_color("WEAK", "C").value == 0xE67E22
-    assert th.plan_color("VALIDATED", "A").value == 0x2ECC71
-    assert th.plan_color("VALIDATED", "B").value == 0xF1C40F
-    assert th.plan_color("VALIDATED", "C").value == 0x95A5A6
+def test_plan_color_weak_is_amber_regardless_of_level():
+    assert th.plan_color("WEAK", 5).value == 0xE67E22
+    assert th.plan_color("WEAK", 1).value == 0xE67E22
+    assert th.plan_color("VALIDATED", 5).value == 0x2ECC71
+    assert th.plan_color("VALIDATED", 3).value == 0xF1C40F
+    assert th.plan_color("VALIDATED", 1).value == 0x95A5A6
 
 
-def test_tier_and_badge_chips():
-    assert th.tier_chip("A") == "🅰"
-    assert th.tier_chip("B") == "🅱"
-    assert th.tier_chip("C") == "🅲"
+def test_level_and_badge_chips():
+    assert th.level_chip(5) == "5️⃣"
+    assert th.level_chip(3) == "3️⃣"
+    assert th.level_chip(1) == "1️⃣"
     assert th.badge_chip("VALIDATED") == "✅ VALIDATED"
     assert th.badge_chip("WEAK") == "⚠️ WEAK"
 

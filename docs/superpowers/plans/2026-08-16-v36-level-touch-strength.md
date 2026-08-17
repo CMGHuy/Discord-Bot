@@ -80,6 +80,21 @@ Task 4 still begins by re-reading the selector as v31 actually left it before
 touching it — its real signature and candidate-source plumbing may not match
 what was assumed when this spec was written.
 
+## v32 has also landed, but not as this plan assumed
+
+`docs/superpowers/plans/implemented/2026-08-16-v32-unified-confidence-score.md`
+merged to `main` on 2026-08-17. The registry (`FactorContext`/`FACTORS`/
+`run_factors`) and the explicit `honesty_cap()` this plan's "must not become
+a backdoor into v32's honesty cap" constraint refers to are both real, live
+code. But `UNIFIED_CONFIDENCE` stays default-off: v32's TRAIN measurement
+found no factor with real positive win-rate lift, so `FACTORS` ships with
+only one inert factor, and the one-shot VALIDATION run then FAILed. Task 5
+(`factor_level_strength` in v32's `FACTORS`) can still register into the
+registry mechanically, but doing so has no live effect until a future spec
+re-measures the whole merged set against real TRAIN evidence -- there is no
+"v32 point budget" this factor draws from today. Full result:
+`docs/superpowers/plans/implemented/v32-train-preregistration.md`.
+
 ## File Structure
 
 | File | Responsibility |

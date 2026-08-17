@@ -67,7 +67,8 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.infra.jsonio import read_json
-from .confidence import ConfidenceResult, score_confidence
+from .confidence import LEVELS as _CONF_LEVELS
+from .confidence import ConfidenceResult, level_for_score, score_confidence
 from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
@@ -471,13 +472,47 @@ class LRUFrames(OrderedDict):
             self.popitem(last=False)
 
 
+def _rebucket_after_htf_penalty(conf: ConfidenceResult, new_score: int,
+                                target_count: int, penalty: int) -> ConfidenceResult:
+    """Re-level a confidence result after the HTF counter-trend penalty
+    lowers its score (v32 Task 6, Step 6).
+
+    UNIFIED_CONFIDENCE on: goes through level_for_score(), the single
+    source of truth for the v32 6-band table. This module used to hardcode
+    `1 + new_score // 20` -- a copy of the OLD 5-equal-band boundaries that
+    silently computes the wrong level the instant the bands become uneven
+    (v32's Level 4/5 are 15-point bands, not 20).
+
+    UNIFIED_CONFIDENCE off: keeps that exact hardcoded formula. The legacy
+    score is still positioned inside the OLD 5-equal-band scale
+    (confidence._LEGACY_LEVEL_RANGE), so "default off means nothing
+    changes" has to hold here too, not just inside score_confidence()
+    itself -- rebucketing a legacy-positioned score through the NEW,
+    uneven bands would silently promote some post-penalty scores (e.g. 76-79)
+    to a level higher than the unmodified formula ever gave them, even with
+    the flag off.
+    """
+    if config.UNIFIED_CONFIDENCE:
+        new_level, new_label = level_for_score(new_score, target_count)
+    else:
+        new_level = max(1, min(5, 1 + new_score // 20))
+        new_label = next(
+            (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
+            conf.label,
+        )
+    return ConfidenceResult(
+        level=new_level, score=new_score, label=new_label,
+        breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
+    )
+
+
 def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
                           rs_percentile=None, breadth=None) -> dict:
     """Real inputs for quality.score_plan (Task E37 wiring fix). Before this,
     attach_plan_v2 called build_confluence_plan with no quality_inputs at
     all, so _apply_quality's `if quality_inputs is None: return` made every
-    live v2 plan permanently quality_score=0/tier="C" -- scoring never ran,
-    not "scored low". direction/badge_status are NOT included here: plan_
+    live v2 plan permanently quality_score=0 -- scoring never ran, not
+    "scored low". direction/badge_status are NOT included here: plan_
     engine._apply_quality supplies those itself from the plan it just built
     (plan.direction/plan.badge), so putting them in this dict too raises a
     duplicate-keyword TypeError.
@@ -511,6 +546,11 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         "rs_percentile": rs_percentile,
         "mtf": rs_factors.mtf_alignment(df, scenario.direction),
         "breadth": breadth,
+        # v32 Task 11: rides along to _apply_quality, which pops it before
+        # forwarding the rest to score_plan() -- see that function's own
+        # comment. item.conf is set in _scan_one, well before attach_plan_v2
+        # (and this function) run in _sync_run_scan's later merge loop.
+        "confidence_level": item.conf.level if getattr(item, "conf", None) else None,
     }
 
 
@@ -687,7 +727,8 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
 
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
-              regime, effective_min_confluence: int) -> dict:
+              regime, effective_min_confluence: int,
+              rs_cache: dict = None, spy_df=None, breadth: float = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -828,6 +869,17 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         stats["data_quality_failed"] = True
         return stats
 
+    # RS percentile (v32 Task 7) depends only on this ticker's df/spy_df/the
+    # scan-wide universe cache -- not on horizon or direction -- so it's
+    # computed once per ticker here rather than once per horizon-scenario
+    # inside the loop below. rs_cache is None when the network-bound SPY/RS
+    # lookup failed for this scan (see _sync_run_scan); None propagates
+    # through cleanly (factor_rs treats it as absent, not a real reading).
+    rs_pctile = None
+    if rs_cache is not None:
+        rs_pctile = rs_factors.rs_percentile(
+            df, spy_df, universe_rels=list(rs_cache["rels"].values()))
+
     for horizon_key in horizons_to_scan:
         h = HORIZONS[horizon_key]
         if bars_available < MIN_BARS[horizon_key]:
@@ -920,9 +972,19 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             base_level_stats = trade_log.get_stats(base_level_preview)
             track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
 
+            # HTF bias moved ahead of score_confidence (v32 Task 7) so its
+            # reading can feed the unified factor registry's htf_bias/mtf
+            # inputs -- it used to run only after, purely for the
+            # counter-trend penalty below, which still reuses this same
+            # result rather than fetching it twice.
+            htf_result = get_htf_bias(df, horizon_key)
+            mtf_val = rs_factors.mtf_alignment(df, scenario.direction)
+
             conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
                                      target_confluence=target_confluence, stop_confluence=stop_confluence,
-                                     track_record=track_record)
+                                     track_record=track_record,
+                                     htf_bias=(htf_result["bias"] if htf_result else None),
+                                     rs_percentile=rs_pctile, mtf=mtf_val, breadth=breadth)
 
             # Multi-timeframe confluence: check this ticker's own
             # higher-timeframe EMA bias (50-day for short horizons,
@@ -930,7 +992,6 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # df -- no extra API call. A counter-trend signal gets a
             # configurable penalty subtracted from its raw score, which
             # can drop it one level and thus below MIN_ALERT_CONFIDENCE_LEVEL.
-            htf_result = get_htf_bias(df, horizon_key)
             htf_counter_trend = (
                 htf_result is not None
                 and htf_result["bias"] != scenario.direction
@@ -938,18 +999,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             if htf_counter_trend and config.HTF_COUNTER_TREND_PENALTY > 0:
                 penalty = config.HTF_COUNTER_TREND_PENALTY
                 new_score = max(0, conf.score - penalty)
-                # Re-bucket the level from the adjusted score using the
-                # same 20-point band boundaries as confidence.py uses.
-                new_level = max(1, min(5, 1 + new_score // 20))
-                from .confidence import LEVELS as _CONF_LEVELS
-                new_label = next(
-                    (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
-                    conf.label,
-                )
-                conf = ConfidenceResult(
-                    level=new_level, score=new_score, label=new_label,
-                    breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
-                )
+                conf = _rebucket_after_htf_penalty(conf, new_score, target_confluence[0], penalty)
+                new_level = conf.level
                 log.info(
                     "%s (%s, %s): HTF counter-trend (signal=%s, %d-day EMA=%s) -- "
                     "confidence reduced by %d pts to Lv%d(%d/100)",
@@ -1186,7 +1237,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # qualifying or not -- the require_confirmation gate below is applied
     # uniformly to the aggregated candidates, not decided per-ticker.
     per_ticker_results = map_tickers(
-        lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence),
+        lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
+                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth),
         tickers,
     )
 
@@ -1530,7 +1582,6 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 explanation=explanation,
                 confirmed_by=item.combined_from,
                 plan_id=plan_v2.plan_id if plan_v2 is not None else None,
-                tier=plan_v2.tier if plan_v2 is not None else None,
                 badge=plan_v2.badge if plan_v2 is not None else None,
                 quality_score=plan_v2.quality_score if plan_v2 is not None else None,
                 source=plan_v2.source if plan_v2 is not None else None,

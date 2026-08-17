@@ -26,3 +26,18 @@ def test_unknown_keys_ignored_and_missing_new_fields_defaulted():
 def test_json_safe():
     import json
     json.dumps(plan_to_dict(_plan()))   # must not raise
+
+
+def test_legacy_plan_record_with_tier_still_loads():
+    """v32 Task 11: A/B/C tier was retired from TradePlanV2. Persisted
+    records written before this land still carry a `tier` key -- loading
+    one must not raise, users have live plans on disk. Already true by
+    construction (plan_from_dict filters to known dataclass fields, see
+    test_unknown_keys_ignored_and_missing_new_fields_defaulted above), but
+    this pins the exact scenario the plan calls out by name."""
+    d = plan_to_dict(_plan())
+    d["tier"] = "A"
+    q = plan_from_dict(d)
+    assert q.ticker == "AAPL"
+    assert not hasattr(q, "tier")
+    assert q.confidence_level is None

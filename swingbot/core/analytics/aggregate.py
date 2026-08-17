@@ -85,7 +85,11 @@ def stats_by(closed: list[dict], dimension: str) -> list[StatRow]:
     return rows
 
 
-DIMENSIONS = ("strategy", "horizon", "tier", "badge", "confidence",
+# v32 Task 11: "tier" (A/B/C, quality.py's own 0-100 quality_score bands)
+# retired -- "confidence" (1-5 confidence level, the number that actually
+# gates whether an alert fires) already existed as a separate dimension and
+# covers the same "group trades by a quality classification" role.
+DIMENSIONS = ("strategy", "horizon", "badge", "confidence",
              "direction", "dow", "month", "ticker", "source")
 
 # Replaces the Task A13 stub -- now a plain module global, not populated
@@ -93,7 +97,6 @@ DIMENSIONS = ("strategy", "horizon", "tier", "badge", "confidence",
 _EXTRACTORS = {
     "strategy": lambda t: primary_strategy_label(t),
     "horizon": lambda t: t.get("horizon_key") or "unknown",
-    "tier": lambda t: t.get("tier") or "unknown",
     "badge": lambda t: t.get("badge") or "unknown",
     "source": lambda t: t.get("source") or "unknown",
     "confidence": lambda t: str(t["confidence_level"]) if t.get("confidence_level") is not None else "unknown",

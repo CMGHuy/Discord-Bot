@@ -42,7 +42,7 @@ def make_conf(level=4, label="High", score=80):
     return types.SimpleNamespace(level=level, label=label, score=score)
 
 
-def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
+def make_plan_v2(badge="VALIDATED", confidence_level=3, quality_breakdown=None,
                   entry_type="market", trigger_price=100.0, direction="bullish",
                   quality_score=72, badge_stats=None, plan_id="plan-1"):
     return TradePlanV2(
@@ -52,7 +52,7 @@ def make_plan_v2(badge="VALIDATED", tier="B", quality_breakdown=None,
         stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=120.0,
         breakeven_trigger_fraction=0.5, trail_atr_mult=2.0,
         quality_score=quality_score, quality_breakdown=quality_breakdown or [("regime", 15), ("htf", 8)],
-        tier=tier, badge=badge,
+        confidence_level=confidence_level, badge=badge,
         badge_stats=badge_stats or {"n": 40, "win_rate": 82.5, "expectancy_r": 0.9, "window": "2020-2023"},
         status="PENDING",
     )
@@ -91,19 +91,19 @@ def _build(item, perf_stats=None, layout="detailed"):
 
 def test_weak_plan_v2_gets_amber_color_and_weak_title_chip(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="WEAK", tier="C"))
+    item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))
     embed = _build(item)
     assert embed.color.value == 0xE67E22
-    assert embed.title.startswith(f"{theme.tier_chip('C')} ⚠️ WEAK · ")
+    assert embed.title.startswith(f"{theme.level_chip(1)} ⚠️ WEAK · ")
     assert "NVDA" in embed.title
 
 
-def test_validated_tier_b_plan_gets_tier_color_and_validated_title_chip(monkeypatch):
+def test_validated_level_3_plan_gets_level_color_and_validated_title_chip(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item)
     assert embed.color.value == 0xF1C40F
-    assert embed.title.startswith(f"{theme.tier_chip('B')} ✅ VALIDATED · ")
+    assert embed.title.startswith(f"{theme.level_chip(3)} ✅ VALIDATED · ")
     assert "NVDA" in embed.title
 
 
@@ -112,13 +112,13 @@ def test_no_v2_plan_falls_back_to_confidence_color_and_plain_title(monkeypatch):
     item = make_item(plan_v2=None, all_ok=True)
     embed = _build(item)
     assert embed.color.value == confidence_color(item.conf.level).value
-    assert not embed.title.startswith(("🅰", "🅱", "🅲"))
+    assert not embed.title.startswith(("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"))
     assert "NVDA" in embed.title
 
 
 def test_quality_and_badge_fields_render_when_plan_v2_has_quality_breakdown(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    plan_v2 = make_plan_v2(badge="VALIDATED", tier="A", quality_breakdown=[("regime", 15), ("htf", 8)])
+    plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=5, quality_breakdown=[("regime", 15), ("htf", 8)])
     item = make_item(plan_v2=plan_v2)
     embed = _build(item)
     field_names = [f.name for f in embed.fields]
@@ -132,7 +132,7 @@ def test_quality_and_badge_fields_render_when_plan_v2_has_quality_breakdown(monk
 
 def test_detailed_layout_still_has_confirmed_by_and_if_it_gets_there(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item, layout="detailed")
     field_names = [f.name for f in embed.fields]
     assert "Confirmed by" in field_names
@@ -141,7 +141,7 @@ def test_detailed_layout_still_has_confirmed_by_and_if_it_gets_there(monkeypatch
 
 def test_compact_layout_has_at_most_six_fields(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item, layout="compact")
     # Was <=5 pre-Task-B6; the always-on "🧭 Follow score" field added by
     # this task raises the compact-mode ceiling by exactly one field.
@@ -154,7 +154,7 @@ def test_compact_layout_drops_confirmed_by_and_what_changed_and_branches(monkeyp
     # build has something to diff against -- otherwise "what changed" is
     # always None on a first sighting regardless of layout, and the "it
     # got dropped for compact" assertion would be vacuously true.
-    seed_item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    seed_item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     _build(seed_item, layout="detailed")
 
     changed_plan = make_legacy_plan(entry=101.0)
@@ -162,7 +162,7 @@ def test_compact_layout_drops_confirmed_by_and_what_changed_and_branches(monkeyp
         result=make_result(), plan=changed_plan, conf=make_conf(),
         requirements=[RequirementCheck(key="min_reward", label="Min reward %", passed=True, detail="10.0% (needs 3.0%+)")],
         combined_from=[{"strategy": "RSI Pullback", "horizon_key": "2w"}],
-        plan_v2=make_plan_v2(badge="VALIDATED", tier="B"),
+        plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3),
     )
     embed = _build(item, layout="compact")
     field_names = [f.name for f in embed.fields]
@@ -174,11 +174,11 @@ def test_compact_layout_drops_confirmed_by_and_what_changed_and_branches(monkeyp
 
 def test_compact_layout_includes_one_line_quality_summary(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item, layout="compact")
     quality_fields = [f for f in embed.fields if f.name == "📐 Quality"]
     assert len(quality_fields) == 1
-    assert quality_fields[0].value.startswith("Tier B · 72/100 · ✅ VALIDATED")
+    assert quality_fields[0].value.startswith("Level 3 · 72/100 · ✅ VALIDATED")
     assert "OOS N=40 WR 82.5%" in quality_fields[0].value
     # B2's two separate pedigree fields are replaced, not duplicated, in compact mode.
     field_names = [f.name for f in embed.fields]
@@ -240,17 +240,17 @@ def _alert(embed_title, plan_v2):
 
 def test_ordered_alerts_ranks_plan_carrying_alerts_by_follow_score():
     # low: WEAK badge (0) + quality 50 (20) + no regime (0) + fresh (10) = 30
-    low = make_plan_v2(badge="WEAK", tier="C")
+    low = make_plan_v2(badge="WEAK", confidence_level=1)
     low.quality_score = 50
     low.regime_aligned = False
 
     # mid: VALIDATED (40) + quality 50 (20) + no regime (0) + fresh (10) = 60
-    mid = make_plan_v2(badge="VALIDATED", tier="B")
+    mid = make_plan_v2(badge="VALIDATED", confidence_level=3)
     mid.quality_score = 50
     mid.regime_aligned = False
 
     # high: VALIDATED (40) + quality 75 (30) + regime aligned (10) + fresh (10) = 90
-    high = make_plan_v2(badge="VALIDATED", tier="A")
+    high = make_plan_v2(badge="VALIDATED", confidence_level=5)
     high.quality_score = 75
     high.regime_aligned = True
 
@@ -265,7 +265,7 @@ def test_ordered_alerts_ranks_plan_carrying_alerts_by_follow_score():
 
 def test_weak_plan_gets_single_line_caution_as_first_field(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    plan_v2 = make_plan_v2(badge="WEAK", tier="C",
+    plan_v2 = make_plan_v2(badge="WEAK", confidence_level=1,
                             badge_stats={"n": 42, "win_rate": 63.4, "expectancy_r": 0.1, "window": "2020-2023"})
     item = make_item(plan_v2=plan_v2)
     embed = _build(item, layout="detailed")
@@ -279,7 +279,7 @@ def test_weak_plan_gets_single_line_caution_as_first_field(monkeypatch):
 
 def test_validated_plan_has_no_weak_field_anywhere(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     embed = _build(item, layout="detailed")
     assert not any(f.name.startswith("⚠️ WEAK") for f in embed.fields)
 
@@ -289,7 +289,7 @@ def test_weak_plan_detailed_mode_has_exactly_one_weak_field(monkeypatch):
     # caution on top of the existing badge_field_for(plan_v2) append would
     # leave two separately-named/valued "⚠️ WEAK"-ish fields in detailed mode.
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    item = make_item(plan_v2=make_plan_v2(badge="WEAK", tier="C"))
+    item = make_item(plan_v2=make_plan_v2(badge="WEAK", confidence_level=1))
     embed = _build(item, layout="detailed")
     weak_fields = [f for f in embed.fields if f.name.startswith("⚠️ WEAK")]
     assert len(weak_fields) == 1
@@ -300,11 +300,11 @@ def test_weak_plan_detailed_mode_has_exactly_one_weak_field(monkeypatch):
 
 
 def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order():
-    high = make_plan_v2(badge="VALIDATED", tier="A")
+    high = make_plan_v2(badge="VALIDATED", confidence_level=5)
     high.quality_score = 75
     high.regime_aligned = True
 
-    low = make_plan_v2(badge="WEAK", tier="C")
+    low = make_plan_v2(badge="WEAK", confidence_level=1)
     low.quality_score = 50
     low.regime_aligned = False
 
@@ -324,7 +324,7 @@ def test_ordered_alerts_keeps_legacy_alerts_after_plan_alerts_in_original_order(
 
 def test_follow_score_field_present_with_chip_and_components(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    plan_v2 = make_plan_v2(badge="VALIDATED", tier="A", quality_score=82)
+    plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=82)
     plan_v2.regime_aligned = True
     plan_v2.created_at = dt.date.today().isoformat()  # fresh as of "today"
     item = make_item(plan_v2=plan_v2)
@@ -339,7 +339,7 @@ def test_follow_score_field_present_with_chip_and_components(monkeypatch):
 
 def test_follow_score_field_present_in_compact_layout_too(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    plan_v2 = make_plan_v2(badge="VALIDATED", tier="A", quality_score=82)
+    plan_v2 = make_plan_v2(badge="VALIDATED", confidence_level=5, quality_score=82)
     plan_v2.regime_aligned = True
     plan_v2.created_at = dt.date.today().isoformat()
     item = make_item(plan_v2=plan_v2)
@@ -552,7 +552,7 @@ def test_kill_switch_blocked_v2_leg_rows_omit_pnl(monkeypatch):
     # already covers for a None sizing (tests/test_embeds_badges.py).
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     _stub_sizing(monkeypatch, shares=100.0, position_value=10_000.0, risk_amount=100.0)
-    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", tier="B"))
+    item = make_item(plan_v2=make_plan_v2(badge="VALIDATED", confidence_level=3))
     item.kill_switch_blocked = {"on": True, "reason": "drawdown >20%", "at": "2026-07-26T00:00:00+00:00"}
     embed = _build(item)
 

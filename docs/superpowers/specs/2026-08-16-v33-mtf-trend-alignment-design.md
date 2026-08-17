@@ -128,5 +128,12 @@ while the rest lose 10%, the honest answer may be a horizon-scoped gate.
 
 ## Depends on
 
-**v32 must land first.** The macro-anchor penalty is a factor inside the merged
-score, and the point budget it draws from is established by v32.
+**v32 landed** (2026-08-17) but not as this line assumed: the merged-score
+registry is real, live code, but `UNIFIED_CONFIDENCE` stays default-off --
+v32's TRAIN measurement found no factor with real positive win-rate lift,
+its own `FACTORS` list ships with only one inert factor, and its one-shot
+VALIDATION run FAILed. **There is no point budget v32 established** for
+this factor to draw from. See `docs/superpowers/plans/
+2026-08-16-v33-mtf-trend-alignment.md`'s (still a live plan, not moved to
+`implemented/`) own "v32 landed, but not as this plan assumed" section for
+the full detail; not re-derived here.

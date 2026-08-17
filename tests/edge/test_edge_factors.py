@@ -491,15 +491,15 @@ def _v1_inputs():
 
 
 def test_score_plan_is_bit_identical_without_edge_inputs():
-    """The registry badges and the A/B/C tier thresholds were built on the
-    current scoring. A caller that supplies no edge inputs -- which is
-    every caller today, including scripts/reports/audit_quality_score.py -- must
-    get exactly the score it got before."""
+    """The registry badges and the decile-audit thresholds were built on
+    the current scoring. A caller that supplies no edge inputs -- which is
+    every caller today, including the offline quality-score decile audit
+    under scripts/reports/ -- must get exactly the score it got before."""
     from swingbot.core.planning.quality import score_plan
     base = score_plan(**_v1_inputs())
     same = score_plan(**_v1_inputs(), rs_percentile=None, mtf=None,
                       breadth=None, candle_quality=None, gap_fragile=False)
-    assert (base.score, base.tier, base.breakdown) == (same.score, same.tier, same.breakdown)
+    assert (base.score, base.breakdown) == (same.score, same.breakdown)
     assert not any(name in ("rs", "mtf", "breadth", "candle")
                    for name, _ in base.breakdown)
 
@@ -527,7 +527,7 @@ def test_score_never_goes_negative_on_a_worst_case():
                        trigger_distance_pct=9.0, badge_status="WEAK",
                        rs_percentile=0.0, mtf=0, breadth=0.0,
                        candle_quality=0, gap_fragile=True)
-    assert worst.score == 0 and worst.tier == "C"
+    assert worst.score == 0
 
 
 def test_rs_rotation_report():

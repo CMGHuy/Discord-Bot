@@ -51,7 +51,7 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
 
     calibration_block = {
         "deciles": calibration.score_deciles(closed),
-        "tiers": calibration.tier_calibration(closed),
+        "levels": calibration.level_calibration(closed),
         "drift": calibration.badge_drift(closed, registry_entries),
     }
 

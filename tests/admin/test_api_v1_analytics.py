@@ -99,7 +99,7 @@ def test_plans_shape(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/analytics/plans").get_json(), {
         "funnel": dict, "in_flight": int, "fill_rate": dict,
-        "badges": dict, "tiers": dict,
+        "badges": dict, "confidence_levels": dict,
     })
 
 
@@ -111,18 +111,18 @@ def test_plans_serves_the_lifecycle_aggregation_over_real_plans(logged_in, monke
     import swingbot.core.planning.plan_store as plan_store_mod
 
     class FakePlan:
-        def __init__(self, status, badge, tier):
+        def __init__(self, status, badge, confidence_level):
             self.status = status
             self.status_history = []
             self.created_at = "2026-01-01"
             self.badge = badge
-            self.tier = tier
+            self.confidence_level = confidence_level
 
     class FakeStore:
         def all(self):
             return [
-                FakePlan("PENDING", "VALIDATED", "A"),
-                FakePlan("PENDING", "WEAK", "C"),
+                FakePlan("PENDING", "VALIDATED", 5),
+                FakePlan("PENDING", "WEAK", 1),
             ]
 
     monkeypatch.setattr(plan_store_mod, "PlanStore", FakeStore)
@@ -130,7 +130,7 @@ def test_plans_serves_the_lifecycle_aggregation_over_real_plans(logged_in, monke
     assert body["funnel"]["posted"] == 2
     assert body["in_flight"] == 2
     assert body["badges"] == {"VALIDATED": 1, "WEAK": 1}
-    assert body["tiers"] == {"A": 1, "C": 1}
+    assert body["confidence_levels"] == {"5": 1, "1": 1}
 
 
 def test_strategies_ships_series_not_svg(seed, logged_in):

@@ -128,5 +128,11 @@ rather than shipping unused wiring.
 
 ## Depends on
 
-**v32 must land first** — RS's scoring contribution lives in the merged score,
-and the gate's threshold calibration is measured against v32's level bands.
+**v32 landed** (2026-08-17) but not as this line assumed: RS was never
+measurable with v32's TRAIN harness (no historical per-date universe
+reconstruction available) so it was dropped from `FACTORS` for lack of
+evidence, and `UNIFIED_CONFIDENCE` stays default-off after v32's
+VALIDATION FAIL -- there is no live "merged score" or calibrated level
+band to measure this gate against yet. See `docs/superpowers/plans/
+2026-08-16-v34-relative-strength-gate.md`'s (still a live plan) own "v32
+landed, but not as this plan assumed" section for the full detail.

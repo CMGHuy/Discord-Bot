@@ -96,7 +96,6 @@ class TradePlanV2:
     trail_atr_mult: float
     quality_score: int
     quality_breakdown: list
-    tier: str                  # "A" | "B" | "C"
     badge: str                 # "VALIDATED" | "WEAK"
     badge_stats: dict
     status: str
@@ -125,6 +124,15 @@ class TradePlanV2:
     # presence is what makes the add fire at most once. The bot never sizes
     # real money -- this records what was suggested, not a position.
     pyramid_add: dict | None = None
+    # v32 Task 11: A/B/C tier (quality.py's own 0-100 quality_score bands)
+    # retired in favour of confidence LEVEL -- confidence.py's
+    # ConfidenceResult.level, the method-count-plus-quality gate that
+    # actually decides whether an alert fires (score_plan()'s quality_score
+    # never gated anything). Set from item.conf.level in
+    # _build_quality_inputs, a genuinely different number from
+    # quality_score -- optional because not every _apply_quality caller
+    # (e.g. the offline decile-audit script) has a live scan's conf in hand.
+    confidence_level: int | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -815,7 +823,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
         trail_atr_mult=exit_params["trail_atr_mult"],
         quality_score=0, quality_breakdown=[],
-        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+        badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
@@ -832,8 +840,14 @@ def _apply_quality(plan: TradePlanV2, quality_inputs: dict | None) -> None:
     if quality_inputs is None:
         return
     from swingbot.core.planning.quality import score_plan
+    # confidence_level rides along in quality_inputs (set by
+    # _build_quality_inputs from the live scan's item.conf.level) but is
+    # not one of score_plan()'s own kwargs -- pop it before the **spread,
+    # a plain dict passthrough would raise TypeError otherwise.
+    quality_inputs = dict(quality_inputs)
+    plan.confidence_level = quality_inputs.pop("confidence_level", None)
     q = score_plan(direction=plan.direction, badge_status=plan.badge, **quality_inputs)
-    plan.quality_score, plan.tier = q.score, q.tier
+    plan.quality_score = q.score
     plan.quality_breakdown = q.breakdown
 
 
@@ -932,7 +946,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         tp1_fraction=TP1_FRACTION, tp2=tp2,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
         trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
-        tier="C", badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+        badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
