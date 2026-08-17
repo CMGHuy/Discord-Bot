@@ -112,3 +112,49 @@ just applied more directly) performs comparably to the legacy scorer's
 base-level-plus-nudges formula on real, unseen data -- not a test of
 RS/MTF/breadth's promised gating influence, since none of the three
 survived TRAIN with assignable weight.
+
+## VALIDATION result (Task 10)
+
+**A plan gap found before running:** the plan's literal Step 2 command
+(`scripts/backtest/run_backtest_range.py --validation`) measures raw
+per-(strategy,horizon) win rates via `run_backtest()`, entirely independent
+of `score_confidence()`/`MIN_ALERT_CONFIDENCE_LEVEL` gating -- it cannot
+test what this pre-registration's gate actually describes (a comparison of
+two GATED alert populations). Built the real comparison instead:
+`scripts/backtest/v32_validation.py` scores every VALIDATION-window
+(2024-01-01..2025-12-31) trade with BOTH the legacy and the unified
+`score_confidence()` path (toggling `config.UNIFIED_CONFIDENCE` around each
+call, same scenario/context both times), gates each at
+`MIN_ALERT_CONFIDENCE_LEVEL`, and compares the two gated populations'
+win rate and volume. Smoke-tested on 2 tickers before the full run; the
+user explicitly confirmed running the one-shot VALIDATION now, given TRAIN's
+findings, before this was dispatched.
+
+**Run once, 2806 VALIDATION trades, `data/v32_validation.json`:**
+
+| | Legacy | Unified |
+|---|---|---|
+| Alerts (>= Level 4) | 2077 | 2172 |
+| Evaluated (win/loss) | 1487 | 1562 |
+| Win rate | 50.50% | 49.68% |
+
+- Volume delta: **+4.6%** (well inside the +/-30% budget -- volume actually
+  rose slightly, not fell).
+- Win-rate delta: **-0.82 percentage points** (a regression).
+
+**VERDICT: FAIL.** Per the pre-registered gate, "any regression in win
+rate" fails regardless of volume. Small in magnitude, but a regression is a
+regression -- not re-run, per the plan's own rule.
+
+**`UNIFIED_CONFIDENCE` stays default-off.** No config change. This is a
+measured, complete negative result for the spec's central hypothesis: after
+TRAIN emptied the quality-points pool (no factor -- including RS, MTF,
+market breadth, the three factors this spec exists to gate on -- kept
+assignable positive weight) and Task 9's `level_for_score` fix restored
+method-count as the level's driver, VALIDATION shows that restructured
+method-count-only gating performs slightly WORSE than the legacy scorer's
+existing base-level-plus-nudges formula, not better. The spec's premise
+("RS, MTF and breadth become able to change an alert's fate for the first
+time") does not ship in this version. Task 11 onward (tier retirement,
+documentation) proceeds regardless, per the plan's own framing -- those are
+independent cleanups, not conditioned on this VALIDATION passing.
