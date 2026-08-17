@@ -143,8 +143,8 @@ _REWARD_BAND_CASES = [
 @pytest.mark.parametrize("direction,entry,stop_loss,take_profit", _REWARD_BAND_CASES)
 def test_reward_always_at_least_min_times_risk(direction, entry, stop_loss, take_profit):
     # This is the assertion that names the bug: every plan's target must pay
-    # at least MIN_RISK_REWARD_RATIO times its own risk. The old
-    # STRATEGY_RR_OVERRIDE arithmetic (0.30-0.40) violated this by construction.
+    # at least MIN_RISK_REWARD_RATIO times its own risk. The old per-strategy
+    # fixed reward:risk arithmetic (0.30-0.40) violated this by construction.
     scenario = _make_scenario(direction=direction, entry=entry, stop_loss=stop_loss,
                               take_profit=take_profit)
 

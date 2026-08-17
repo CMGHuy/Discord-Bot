@@ -21,13 +21,13 @@ count (deviation > 1e-6); exits 1 if any mismatch is found. A mismatch here
 is a real correctness bug in the plan_engine extraction -- investigate it,
 do not loosen TOLERANCE or edit the frozen reference to make this pass.
 
-KNOWN EXCEPTION: plan_engine._rr_for() applies an RR_FLOOR = 0.30 clamp that
-the frozen legacy_trade_plan_at does not. This is currently inert (no real
-strategy/horizon R:R approaches 0.30), so mismatches from this clamp are not
-observed today. If a mismatch ever traces back to this specific RR_FLOOR clamp,
-that divergence is EXPECTED — the frozen module represents pre-clamp legacy
-behavior and must remain unchanged. Do not edit legacy_trade_plan_at or loosen
-TOLERANCE because of RR_FLOOR differences.
+KNOWN EXCEPTION (v31 Task 14/15): tp1 now diverges from the frozen reference
+BY DESIGN -- plan_engine prices every target off a real structural level
+(select_structural_target) instead of the frozen module's fixed per-strategy
+reward:risk arithmetic, which no longer exists in plan_engine at all. Only
+the stop assertion is still a meaningful parity check; a tp1 mismatch here
+is expected, not a regression, and must not be "fixed" by editing the frozen
+reference or loosening TOLERANCE.
 """
 import sys
 import warnings
@@ -86,10 +86,9 @@ def main() -> int:
     # one, since this harness exists to answer "did the Task-14 extraction
     # change sizing?", not to re-detect a measured feature. Forced off here
     # rather than documented as a caveat, so the answer cannot depend on the
-    # caller's .env. tests/test_sizing_parity.py pins the same flags.
+    # caller's .env. tests/test_sizing_parity.py pins the same flag.
     from swingbot import config
     config.LEVEL_LIFECYCLE_STOPS_ENABLED = False
-    config.LEVEL_LIFECYCLE_TARGETS_ENABLED = False
 
     if not CACHE_DIR.is_dir():
         print(f"no cache dir at {CACHE_DIR}; nothing to check")

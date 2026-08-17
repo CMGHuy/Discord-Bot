@@ -21,7 +21,6 @@ from swingbot.core.backtesting.registry import Badge, get_badge
 from swingbot.core.market.strategy_types import (
     BREAKEVEN_TRIGGER_FRACTION,
     HORIZONS,
-    STRATEGY_RR_OVERRIDE,
 )
 
 log = logging.getLogger("swing-bot.plan_engine")
@@ -29,7 +28,6 @@ log = logging.getLogger("swing-bot.plan_engine")
 # Same numbers backtest.py used before the extraction (parity-critical).
 STRUCTURE_BUFFER_ATR = 0.25   # cushion beyond swing high/low, in ATR units
 SR_VOLUME_STRENGTH_CEILING = 3.0
-RR_FLOOR = 0.30               # break-even WR at 0.30 is 76.9% (strategy_types.py:211)
 TRAIL_ATR_MULT = 2.5          # chandelier default; finalized by the Task 30 TRAIN grid
 TP1_FRACTION = 0.5            # fixed by spec §5
 DEFAULT_EXPIRY_BARS = 5
@@ -264,8 +262,10 @@ def select_structural_target(entry: float, stop_loss: float, is_bull: bool,
 #    level list via _lifecycle_levels, which returns
 #    market.levels_lifecycle.LevelState objects carrying .price (confirmed
 #    at levels_lifecycle.py:68). Confirmed usable as selector candidates
-#    directly (Task 13 uses .price); preferred_stop_anchor (:197) and
-#    gatekeepers_between (:184) signatures confirmed in the same module.
+#    directly (Task 13 uses .price); preferred_stop_anchor (:197) signature
+#    confirmed in the same module. (The module also had a gatekeepers-between
+#    helper at the time, used only by the targets_on branch Task 13 deleted;
+#    Task 14 removed it.)
 #
 # NOTE on plan-doc drift: the plan text says these three modules live under
 # swingbot.core.planning — they actually live under swingbot.core.market
@@ -277,12 +277,6 @@ def _safe_atr_value(entry: float, atr_val: float) -> float:
     if not np.isfinite(atr_val) or atr_val <= 0:
         return entry * 0.02
     return float(atr_val)
-
-
-def _rr_for(strategy: str, horizon_key: str) -> float:
-    rr_override = STRATEGY_RR_OVERRIDE.get(strategy)
-    rr = rr_override if rr_override is not None else HORIZONS[horizon_key]["reward_risk_ratio"]
-    return max(rr, RR_FLOOR)
 
 
 ATR_TARGET_LADDER = (1, 2, 3, 4, 5, 6, 8, 10)
@@ -383,9 +377,8 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
     move it beyond a level that has been *tested* rather than leaving it
     inside the noise a fresh level implies. (The old "target realism"
     adjustment -- pulling TP1 back inside a gatekeeper level -- was measured
-    inert, rejected 248/248, and is deleted here along with its
-    LEVEL_LIFECYCLE_TARGETS_ENABLED flag/branch; Task 14 removes the flag
-    itself.)
+    inert, rejected 248/248; its flag and branch, and the gatekeeper-lookup
+    helper it was the only caller of, are gone as of v31 Task 14.)
 
     Widening the stop changes risk, so `tp1` is RE-SELECTED against the new
     risk from the same `candidate_levels` the caller's builder used -- there

@@ -74,7 +74,7 @@ def _precomputed_series(df, strategy, horizon_key):
 
 @pytest.fixture(autouse=True)
 def _lifecycle_off(monkeypatch):
-    """Pin the level-lifecycle flags OFF for this module.
+    """Pin the level-lifecycle flag OFF for this module.
 
     This harness compares the CURRENT `_trade_plan_at` against
     `legacy_trade_plan_at`, a frozen pre-extraction copy. The level lifecycle
@@ -87,14 +87,15 @@ def _lifecycle_off(monkeypatch):
     stop. Pinning the flag keeps this harness answering its own question --
     "did the Task-14 extraction change sizing?" -- rather than re-detecting a
     feature that is already measured in
-    docs/superpowers/results/2026-08-08-level-lifecycle-*.md.
+    docs/superpowers/results/2026-08-08-level-lifecycle-*.md. (Its
+    stops-only sibling, the "pull TP1 back inside a blocking level" flag,
+    was measured inert and removed by v31 Task 14 -- there is only the one
+    flag to pin now.)
 
     scripts/reports/parity_sizing.py (the full-corpus version of this comparison)
-    forces the same two flags off in main(), for the same reason.
+    forces the same flag off in main(), for the same reason.
     """
     monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_STOPS_ENABLED", False,
-                        raising=False)
-    monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_TARGETS_ENABLED", False,
                         raising=False)
 
 

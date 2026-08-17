@@ -35,9 +35,8 @@ def df():
     return _frame()
 
 
-def _flags(monkeypatch, *, stops=False, targets=False):
+def _flags(monkeypatch, *, stops=False):
     monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_STOPS_ENABLED", stops, raising=False)
-    monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_TARGETS_ENABLED", targets, raising=False)
 
 
 # --- the fast path must be bit-identical ------------------------------------
@@ -93,7 +92,7 @@ def test_both_plan_paths_apply_the_same_adjustment(monkeypatch, df):
     _flags(monkeypatch)
     bt_off, live_off = price_both()
 
-    _flags(monkeypatch, stops=True, targets=True)
+    _flags(monkeypatch, stops=True)
     bt_on, live_on = price_both()
 
     assert live_off is not None and live_on is not None
@@ -117,7 +116,7 @@ def test_both_paths_agree_on_none(monkeypatch, df):
     monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", 20.0)
     monkeypatch.setattr(config, "MAX_RISK_REWARD_RATIO", 25.0)
     atr_series = atr(df, 14)
-    _flags(monkeypatch, stops=True, targets=True)
+    _flags(monkeypatch, stops=True)
 
     checked = 0
     for i in range(120, len(df) - 1, 5):
@@ -138,7 +137,7 @@ def _bars_changed_by_lifecycle(monkeypatch, df, strategy="RSI", horizon="4w"):
     for i in range(120, len(df) - 1, 5):
         _flags(monkeypatch)
         off = _trade_plan_at(df, i, "bullish", strategy, horizon, atr_series)
-        _flags(monkeypatch, stops=True, targets=True)
+        _flags(monkeypatch, stops=True)
         on = _trade_plan_at(df, i, "bullish", strategy, horizon, atr_series)
         if abs(off[1] - on[1]) > 1e-9 or abs(off[2] - on[2]) > 1e-9:
             changed.append((i, off, on))
@@ -173,7 +172,7 @@ def test_both_paths_agree_on_a_bar_the_lifecycle_actually_changes(monkeypatch, d
     assert changed, "no bar was changed -- see test_the_backtest_path_is_not_left_behind"
     i = changed[0][0]
 
-    _flags(monkeypatch, stops=True, targets=True)
+    _flags(monkeypatch, stops=True)
     bt = _trade_plan_at(df, i, "bullish", "RSI", "4w", atr(df, 14))
     live = plan_engine.build_strategy_plan(
         df, i, ticker="TEST", strategy="RSI", horizon_key="4w", direction="bullish")

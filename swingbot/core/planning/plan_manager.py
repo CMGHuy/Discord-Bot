@@ -60,12 +60,14 @@ def pyramid_add_fraction(plan) -> float:
 
     so `banked - f*R >= 0` iff `f <= tp1_fraction * (tp1 - entry) / R`.
 
-    The plan's own numbers are used rather than the R:R constant, so the
-    bound stays correct for every strategy in STRATEGY_RR_OVERRIDE and for
-    a plan whose TP1 was re-priced. A FIXED 0.5 add -- the size this rule
-    is usually quoted with -- violates the bound at every R:R this project
-    actually trades (TP1 sits near 0.35-0.5R, so the ceiling is 0.175-0.25)
-    and turns a winning campaign into a losing one on a clean stop-out.
+    The plan's own numbers are used rather than a fixed R:R constant, so the
+    bound stays correct regardless of which real level TP1 landed on (v31)
+    or whether it was re-priced. A FIXED 0.5 add -- the size this rule is
+    usually quoted with -- would violate the bound whenever TP1 sits below
+    1R (tp1_fraction * R:R < 0.5 for any R:R under 1.0/tp1_fraction) and
+    turn a winning campaign into a losing one on a clean stop-out; deriving
+    the ceiling from the plan avoids depending on which regime TP1 pricing
+    is in at all.
     """
     risk = abs(plan.entry_price - plan.stop_loss)
     if risk <= 0:

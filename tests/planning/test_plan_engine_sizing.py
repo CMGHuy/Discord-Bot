@@ -26,7 +26,7 @@ I = 79  # reference bar
 
 @pytest.fixture(autouse=True)
 def _lifecycle_off(monkeypatch):
-    """Pin the level-lifecycle flags OFF for this module.
+    """Pin the level-lifecycle flag OFF for this module.
 
     These are parity tests between `backtest._trade_plan_at` and the bare
     sizing builders it delegates to (`_atr_plan`, `_fibonacci_plan`, ...).
@@ -38,11 +38,9 @@ def _lifecycle_off(monkeypatch):
     Pinning the flag keeps these tests proving what they were written to
     prove: that the builders extracted out of `_trade_plan_at` are faithful.
     Agreement between the two plan paths WITH the lifecycle on is a different
-    property, covered by tests/test_levels_lifecycle_wiring.py.
+    property, covered by tests/market/test_levels_lifecycle_wiring.py.
     """
     monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_STOPS_ENABLED", False,
-                        raising=False)
-    monkeypatch.setattr("swingbot.config.LEVEL_LIFECYCLE_TARGETS_ENABLED", False,
                         raising=False)
 
 
@@ -110,11 +108,12 @@ def test_atr_plan_target_is_an_atr_band_at_or_past_the_floor(horizon_key, strate
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
 def test_fibonacci_parity(df, atr_series, direction):
     # v31 Task 8: tp is no longer parity-matched against
-    # backtest._trade_plan_at's old STRATEGY_RR_OVERRIDE/min_structure_rr
+    # backtest._trade_plan_at's old per-strategy fixed reward:risk
     # arithmetic (replaced by select_structural_target against real fib
-    # levels). backtest._trade_plan_at itself is NOT yet updated (that's
-    # Task 12) -- it still unconditionally unpacks _fibonacci_plan's return
-    # as a 2-tuple, which now raises whenever the builder declines (returns
+    # levels). At the time this test was written, backtest._trade_plan_at
+    # itself was not yet updated (that landed in Task 12) -- it still
+    # unconditionally unpacked _fibonacci_plan's return as a 2-tuple, which
+    # raised whenever the builder declined (returned
     # None), so it can no longer supply a live reference here. STOP is
     # verified against a hand-computed golden value using the same
     # buffer/max-risk-pct formula Task 8 keeps byte-for-byte -- same pattern

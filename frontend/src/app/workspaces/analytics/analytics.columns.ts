@@ -61,7 +61,6 @@ export const STRATEGY_COLUMNS: ColumnDef<StrategyRow>[] = [
   { key: 'strategy', header: 'Strategy' },
   { key: 'rolling', header: 'Rolling WR', width: '90px' },
   { key: 'status', header: 'Badge' },
-  { key: 'rr_override', header: 'R:R', numeric: true, value: (r) => (r.rr_override === null ? null : r.rr_override.toFixed(2)) },
   { key: 'n', header: 'OOS N', numeric: true, value: (r) => count(r.n) },
   { key: 'win_rate', header: 'OOS WR', numeric: true, value: (r) => rate(r.win_rate) },
   { key: 'expectancy_r', header: 'OOS ExpR', numeric: true, value: (r) => expectancy(r.expectancy_r) },

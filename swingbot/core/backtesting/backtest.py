@@ -29,12 +29,12 @@ were defended). `expectancy_r` is computed over ALL closed trades (wins,
 losses, scratches ~0R, and marked-to-market timeouts) -- that is the "does
 this strategy make money" number, and the one gated on for PASS/FAIL.
 
-R:R floor rationale (`STRATEGY_RR_OVERRIDE`, strategy_types.py): break-even
-win rate at reward:risk ratio X is 1/(1+X); at the hard floor of X=0.30 that
-is 76.9%, so the acceptance bar of WR>=80% is still profitable at the floor.
-R:R is never tuned below 0.30 -- a strategy could clear 80% win rate and
-still lose money if R:R dropped further, which would defeat the point of
-gating on win rate at all.
+Target pricing (v31): every plan's target is a real structural level --
+the nearest one beyond entry that pays at least `config.MIN_RISK_REWARD_RATIO`
+against the plan's own risk, capped at `config.MAX_RISK_REWARD_RATIO`
+(`plan_engine.select_structural_target`). No qualifying level means no
+plan, not a fallback to a fixed fraction of risk -- see plan_engine.py's
+sizing-builders comment block for the per-strategy candidate sources.
 
 Per-strategy entry-direction/horizon restrictions (`STRATEGY_GATES`,
 strategy_types.py) were selected by tuning on a 2020-2023 TRAIN window only
@@ -69,7 +69,7 @@ from swingbot.core.market.indicators import atr, elliott_wave3_entries
 # their defining modules (tests/test_entry_filters.py does exactly that).
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, SR_VOLUME_MULTIPLE  # noqa: F401
 from swingbot.core.market.strategy_types import (  # noqa: F401
-    BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES, STRATEGY_RR_OVERRIDE,
+    BREAKEVEN_TRIGGER_FRACTION, STRATEGY_GATES,
 )
 
 ENTRY_SHIFT = 0

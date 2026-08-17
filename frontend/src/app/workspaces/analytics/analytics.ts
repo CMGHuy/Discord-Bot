@@ -1175,14 +1175,11 @@ export class Analytics {
   /* -- SR61: the column glossary --------------------------------------- */
 
   /**
-   * The twelve `?` tips from `strategies.html:30-41`.
-   *
-   * Copied rather than paraphrased, with ONE correction. The original said the
-   * R:R override "falls back to a 0.35 default when not set". It does not:
-   * `plan_engine._rr_for` falls back to the HORIZON's `reward_risk_ratio`,
-   * floored at `RR_FLOOR` (0.30). Every strategy currently carries an override
-   * so the fallback is unreachable today, but copy that states a wrong rule is
-   * worse than no copy — this task's Step 3.
+   * The eleven `?` tips from `strategies.html:30-41` (originally twelve --
+   * v31 Task 14 removed the "R:R" entry along with the per-strategy fixed
+   * reward:risk override it described: every strategy's target is now a
+   * real structural level, chosen per-plan by
+   * plan_engine.select_structural_target).
    */
   protected readonly strategyGlossary: { term: string; gloss: string }[] = [
     {
@@ -1196,13 +1193,6 @@ export class Analytics {
         + 'bar in a one-shot backtest. WEAK = it did not. A live plan only '
         + 'gets full badge-quality points when its primary confirming method '
         + 'is VALIDATED.',
-    },
-    {
-      term: 'R:R',
-      gloss: "This strategy's override for the entry-to-TP1 risk:reward ratio. "
-        + "With no override the horizon's own ratio applies, floored at 0.30 — "
-        + 'below that floor a strategy can clear an 80% win rate and still '
-        + 'lose money.',
     },
     { term: 'OOS N', gloss: 'Number of trades in the out-of-sample backtest this badge is based on.' },
     {

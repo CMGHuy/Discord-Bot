@@ -187,28 +187,6 @@ def test_a_future_break_does_not_change_a_past_bar():
 
 # --- consumers --------------------------------------------------------------
 
-def test_gatekeepers_are_the_undelivered_ceilings_in_the_path():
-    df = _frame(_oscillating())
-    px = float(df["Close"].iloc[-1])
-    levels = ll.classify_levels(df, len(df) - 1, [px + 2, px + 5, px + 50], horizon_key="4w")
-
-    blockers = ll.gatekeepers_between(levels, entry=px, target=px + 10)
-
-    assert [round(b.price, 2) for b in blockers] == [round(px + 2, 2), round(px + 5, 2)]
-
-
-def test_delivered_levels_are_not_gatekeepers():
-    closes = _oscillating()
-    highs = closes + 1.0
-    closes[185:], highs[185:] = 140.0, 141.0   # blew through the 120 ceiling
-    df = _frame(closes, highs=highs)
-    px = float(df["Close"].iloc[-1])
-
-    levels = ll.classify_levels(df, len(df) - 1, [120.0], horizon_key="4w")
-    assert levels[0].state == "delivered"
-    assert ll.gatekeepers_between(levels, entry=100.0, target=130.0) == []
-
-
 def test_stop_anchor_prefers_a_tested_floor_over_a_fresh_one():
     closes = _oscillating()
     lows = closes - 1.0
