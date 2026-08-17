@@ -58,7 +58,7 @@ const RESPONSE: Dashboard = {
   // SR58. `pct` is deliberately null against a non-null `amount`: the store
   // must pass each through independently, and a fixture where both have
   // values cannot catch one being derived from the other.
-  scope: { mode: 'active' as const },
+  scope: { mode: 'today' as const },
   realized: { amount: 240.5, pct: null, n: 3, wins: 2, losses: 1 },
   account_balance: 10_000,
   open_pnl_pct: 1.5,
@@ -313,12 +313,12 @@ describe('DashboardStore', () => {
   /* -- SR58: the date scope -------------------------------------------- */
 
   describe('the date scope', () => {
-    it('defaults to active and sends it as a query parameter', () => {
+    it('defaults to today and sends it as a query parameter', () => {
       tick();
       const request = backend.expectOne((req) => req.url === '/api/v1/dashboard');
-      expect(request.request.params.get('mode')).toBe('active');
+      expect(request.request.params.get('mode')).toBe('today');
       request.flush(RESPONSE);
-      expect(store.scope()).toBe('active');
+      expect(store.scope()).toBe('today');
     });
 
     it('changing the scope refetches with the new mode', () => {
@@ -336,7 +336,7 @@ describe('DashboardStore', () => {
     it('selecting the current scope does not refetch', () => {
       tick();
       respond();
-      store.setScope('active');
+      store.setScope('today');
       backend.verify();
     });
 
@@ -356,7 +356,7 @@ describe('DashboardStore', () => {
       // If the two ever disagree the parameter silently did not take.
       tick();
       respond();
-      expect(store.appliedScope()).toBe('active');
+      expect(store.appliedScope()).toBe('today');
     });
 
     it('reports no applied scope before the first response', () => {

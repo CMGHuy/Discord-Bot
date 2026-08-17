@@ -71,7 +71,13 @@ function finiteNumber(value: unknown): number | null {
  */
 export const DashboardStore = signalStore(
   withState<DashboardSlice>({
-    data: null, loading: false, error: null, scope: 'active',
+    // 'active' ("Today + open") and 'today' were merged into one Today
+    // toggle -- the server already treated them identically for the
+    // realised figures, and Today's own definition now folds in "or still
+    // open, however old" (see Trades' `today` filter), so a separate
+    // "+ open" mode has nothing left to add. 'active' stays a valid value
+    // the server accepts, for any link that still names it.
+    data: null, loading: false, error: null, scope: 'today',
   }),
   withComputed(({ data }) => ({
     /** True until the first response, and never again. Distinguishes "no

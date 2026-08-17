@@ -202,14 +202,22 @@ import { TradeGroup } from './trade-group';
 
     <!-- SR53. The lifecycle strip: five counts, each a link into Trades
          filtered to that status. The Jinja dashboard had exactly this and the
-         SPA had the chips it navigated to with no numbers on them. -->
+         SPA had the chips it navigated to with no numbers on them.
+
+         The click-through also carries the page's OWN date scope now: in
+         Today, the today param narrows Trades to rows that either opened
+         today or are still open regardless of age -- see todayParam's
+         docstring. In All days it is omitted, so the click-through stays
+         all-time. Only the destination narrows this way; the counts on the
+         chips themselves stay exactly as they always were (see the note
+         below). -->
     @if (store.lifecycle().length) {
       <nav class="lifecycle" aria-label="Plans by lifecycle status">
         @for (entry of store.lifecycle(); track entry.status) {
           <a
             class="lc"
             routerLink="/trades"
-            [queryParams]="{ status: entry.status, outcome: null }"
+            [queryParams]="{ status: entry.status, outcome: null, today: todayParam() }"
             [attr.title]="lifecycleTip(entry.status)"
           >
             <span class="lc-count num">{{ entry.count }}</span>
@@ -227,7 +235,9 @@ import { TradeGroup } from './trade-group';
         entry trigger, TP1, then TP2/stop (or CANCELLED if it expires or
         invalidates before filling). PENDING/ACTIVE/PARTIAL counts are
         all-time; CLOSED/CANCELLED only count today's — click a card to filter
-        the board below by that status.
+        the board below by that status
+        @if (store.scope() !== 'all') { , narrowed in Today mode to what
+          opened today plus anything still open, however old }.
       </p>
     }
 
@@ -712,10 +722,12 @@ export class Dashboard {
 
   /* -- SR58: the date scope ------------------------------------------- */
 
-  /** The Jinja dashboard's three, in its order. `active` first because it is
-   *  the default and the one that answers "what is happening now". */
+  /** The Jinja dashboard had three; `active` ("Today + open") and `today`
+   *  are merged into this one Today button. The server already computed the
+   *  realised figures identically for both, and Today's definition now
+   *  folds in "or still open, however old" on its own (see `todayParam`),
+   *  so a separate "+ open" choice had nothing left to distinguish. */
   protected readonly scopes: { mode: DashboardScope; label: string }[] = [
-    { mode: 'active', label: 'Today + open' },
     { mode: 'today', label: 'Today' },
     { mode: 'all', label: 'All days' },
   ];
@@ -724,6 +736,14 @@ export class Dashboard {
    *  today's when the toggle is on All days. */
   protected readonly realizedLabel = computed(() =>
     this.store.scope() === 'all' ? 'Realised, all days' : 'Realised today',
+  );
+
+  /** The lifecycle strip's click-through date filter, mirroring this same
+   *  `=== 'all'` split -- `null` drops the query param entirely (an empty
+   *  string would land in the URL as `today=`), so All days keeps sending
+   *  what "click a card" always meant: status only, no date. */
+  protected readonly todayParam = computed(() =>
+    this.store.scope() === 'all' ? null : '1',
   );
 
   protected readonly riskTone = computed(() =>
