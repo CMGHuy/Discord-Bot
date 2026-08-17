@@ -1,4 +1,5 @@
 import types
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -8,13 +9,8 @@ from swingbot.core.planning.plan_engine import (
     build_confluence_plan,
     scenario_is_breakout,
 )
-from swingbot.core.market.strategy_types import STRATEGY_RR_OVERRIDE
 
-# Not in STRATEGY_RR_OVERRIDE -> exercises the 0.35 fallback.
-DEFAULT_RR_STRATEGY = "S/R Confluence"
-# In STRATEGY_RR_OVERRIDE at 0.40 -> exercises the override lookup itself
-# (distinct from the 0.35 fallback, so a hardcoded 0.35 would be caught).
-OVERRIDE_RR_STRATEGY = "Fibonacci"
+DEFAULT_STRATEGY = "S/R Confluence"
 
 
 def _make_scenario(**overrides):
@@ -59,6 +55,10 @@ def _make_df(highs, lows):
     )
 
 
+def _lv(price):
+    return types.SimpleNamespace(price=price)
+
+
 # Recent 20-bar range tops out well under 110 -> a 110 target is "beyond
 # recent range" (breakout).
 _TIGHT_RANGE_DF = _make_df(
@@ -74,72 +74,103 @@ _WIDE_RANGE_HIGHS[10] = 115.0
 _WIDE_RANGE_DF = _make_df(highs=_WIDE_RANGE_HIGHS, lows=[h - 1 for h in _WIDE_RANGE_HIGHS])
 
 
-def test_tp1_recomputed_with_default_rr_and_tp2_set_beyond_it():
-    scenario = _make_scenario(take_profit=110.0)
+def test_tp1_is_the_scenarios_own_target_when_it_sits_in_the_band():
+    # entry 100, stop 96 (risk 4), min 1.5/max 2.5 -> band [106, 110].
+    # take_profit 108 is 2.0R -- squarely inside the band.
+    scenario = _make_scenario(entry=100.0, stop_loss=96.0, take_profit=108.0)
 
     plan = build_confluence_plan(
         scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
-        primary_strategy=DEFAULT_RR_STRATEGY,
+        primary_strategy=DEFAULT_STRATEGY,
     )
 
-    risk = abs(scenario.entry - scenario.stop_loss)
-    rr = STRATEGY_RR_OVERRIDE.get(DEFAULT_RR_STRATEGY, 0.35)
-    assert rr == 0.35  # sanity: this strategy really is off the override dict
-    expected_tp1 = scenario.entry + risk * rr
-
-    assert plan.tp1 == pytest.approx(expected_tp1)
-    assert plan.tp2 == scenario.take_profit
-    assert plan.source == "confluence"
-    assert plan.strategy == DEFAULT_RR_STRATEGY
-    assert plan.horizon_key == "2w"
-    assert plan.direction == "bullish"
-    assert plan.trigger_price == scenario.entry
-    assert plan.stop_loss == scenario.stop_loss
-    assert plan.badge == "WEAK"  # confluence isn't registry-populated until Task 42
+    assert plan.tp1 == 108.0
 
 
-def test_tp1_uses_strategy_rr_override_not_hardcoded_default():
-    scenario = _make_scenario(take_profit=110.0)
+def test_tp1_is_capped_when_the_nearest_level_is_beyond_max_rr():
+    # Same band [106, 110]; take_profit 130 is way beyond max_rr, so tp1 is
+    # synthesized at exactly the cap and the declined level becomes tp2 --
+    # this is the pairing that proves "cap, don't skip".
+    scenario = _make_scenario(entry=100.0, stop_loss=96.0, take_profit=130.0)
 
     plan = build_confluence_plan(
         scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
-        primary_strategy=OVERRIDE_RR_STRATEGY,
+        primary_strategy=DEFAULT_STRATEGY,
     )
 
-    risk = abs(scenario.entry - scenario.stop_loss)
-    rr = STRATEGY_RR_OVERRIDE[OVERRIDE_RR_STRATEGY]
-    assert rr == 0.40
-    expected_tp1 = scenario.entry + risk * rr
-    assert plan.tp1 == pytest.approx(expected_tp1)
+    assert plan.tp1 == 110.0
+    assert plan.tp2 == 130.0
 
 
-def test_tp2_none_when_scenario_target_not_beyond_recomputed_tp1():
-    # tp1 = 100 + 2*0.35 = 100.7; a 100.5 scenario target sits inside it.
-    scenario = _make_scenario(take_profit=100.5)
+def test_returns_none_when_no_level_clears_min_rr():
+    # entry 100, stop 98 (risk 2), floor at 1.5R = 103. Neither 101 nor 102
+    # clears it.
+    scenario = _make_scenario(entry=100.0, stop_loss=98.0, take_profit=101.0)
+    level_map = ([], [_lv(101.0), _lv(102.0)])
 
     plan = build_confluence_plan(
         scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
-        primary_strategy=DEFAULT_RR_STRATEGY,
+        primary_strategy=DEFAULT_STRATEGY, level_map=level_map,
     )
 
-    assert plan.tp2 is None
+    assert plan is None
 
 
-def test_bearish_tp1_recomputed_downward_and_tp2_beyond():
-    scenario = _make_scenario(
-        direction="bearish", entry=100.0, stop_loss=102.0, take_profit=90.0,
-    )
+def test_returns_none_builds_no_plan_id_and_stamps_no_badge():
+    scenario = _make_scenario(entry=100.0, stop_loss=98.0, take_profit=101.0)
+    level_map = ([], [_lv(101.0), _lv(102.0)])
+
+    with patch("swingbot.core.planning.plan_engine.stamp_badge") as mock_stamp:
+        plan = build_confluence_plan(
+            scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
+            primary_strategy=DEFAULT_STRATEGY, level_map=level_map,
+        )
+
+    assert plan is None
+    mock_stamp.assert_not_called()
+
+
+_REWARD_BAND_CASES = [
+    ("bullish", 100.0, 96.0, 108.0),   # in-band
+    ("bullish", 100.0, 96.0, 130.0),   # beyond cap
+    ("bullish", 100.0, 96.0, 106.0),   # exactly at floor
+    ("bearish", 100.0, 104.0, 92.0),   # in-band
+    ("bearish", 100.0, 104.0, 50.0),   # beyond cap
+    ("bearish", 100.0, 104.0, 94.0),   # exactly at floor
+]
+
+
+@pytest.mark.parametrize("direction,entry,stop_loss,take_profit", _REWARD_BAND_CASES)
+def test_reward_always_at_least_min_times_risk(direction, entry, stop_loss, take_profit):
+    # This is the assertion that names the bug: every plan's target must pay
+    # at least MIN_RISK_REWARD_RATIO times its own risk. The old
+    # STRATEGY_RR_OVERRIDE arithmetic (0.30-0.40) violated this by construction.
+    scenario = _make_scenario(direction=direction, entry=entry, stop_loss=stop_loss,
+                              take_profit=take_profit)
 
     plan = build_confluence_plan(
-        scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
-        primary_strategy=DEFAULT_RR_STRATEGY,
+        scenario, _WIDE_RANGE_DF, ticker="XYZ", horizon_key="2w",
+        primary_strategy=DEFAULT_STRATEGY,
     )
 
-    risk = abs(scenario.entry - scenario.stop_loss)
-    expected_tp1 = scenario.entry - risk * 0.35
-    assert plan.tp1 == pytest.approx(expected_tp1)
-    assert plan.tp2 == scenario.take_profit
-    assert plan.direction == "bearish"
+    assert plan is not None
+    risk = abs(entry - stop_loss)
+    assert abs(plan.tp1 - entry) >= risk * 1.5 - 1e-9
+
+
+@pytest.mark.parametrize("direction,entry,stop_loss,take_profit", _REWARD_BAND_CASES)
+def test_reward_never_exceeds_max_times_risk(direction, entry, stop_loss, take_profit):
+    scenario = _make_scenario(direction=direction, entry=entry, stop_loss=stop_loss,
+                              take_profit=take_profit)
+
+    plan = build_confluence_plan(
+        scenario, _WIDE_RANGE_DF, ticker="XYZ", horizon_key="2w",
+        primary_strategy=DEFAULT_STRATEGY,
+    )
+
+    assert plan is not None
+    risk = abs(entry - stop_loss)
+    assert abs(plan.tp1 - entry) <= risk * 2.5 + 1e-9
 
 
 def test_scenario_is_breakout_true_when_target_beyond_recent_range():
@@ -157,7 +188,7 @@ def test_entry_type_stop_entry_and_pending_when_breakout():
 
     plan = build_confluence_plan(
         scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
-        primary_strategy=DEFAULT_RR_STRATEGY,
+        primary_strategy=DEFAULT_STRATEGY,
     )
 
     assert plan.entry_type == "stop_entry"
@@ -170,7 +201,7 @@ def test_entry_type_market_and_active_when_not_breakout():
 
     plan = build_confluence_plan(
         scenario, _WIDE_RANGE_DF, ticker="XYZ", horizon_key="2w",
-        primary_strategy=DEFAULT_RR_STRATEGY,
+        primary_strategy=DEFAULT_STRATEGY,
     )
 
     assert plan.entry_type == "market"

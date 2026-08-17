@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from swingbot import config
+from swingbot.core.market import levels
 from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
 from swingbot.core.backtesting.registry import Badge, get_badge
 from swingbot.core.market.strategy_types import (
@@ -769,24 +770,42 @@ def primary_strategy_for(scenario) -> str:
 
 
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
-                          primary_strategy, quality_inputs=None) -> TradePlanV2:
+                          primary_strategy, level_map=None,
+                          quality_inputs=None) -> TradePlanV2 | None:
     """THE constructor for confluence-source plans (a levels.build_scenarios
-    Scenario). TP1 is RECOMPUTED under the unified exit policy rather than
-    reusing the scenario's own target -- see spec §5; the scenario's own
-    take_profit survives as tp2 only when it still lies beyond the new TP1.
+    Scenario). TP1 is a real structural level -- select_structural_target
+    picks the nearest candidate that pays at least MIN_RISK_REWARD_RATIO,
+    capped at MAX_RISK_REWARD_RATIO (v31). Returns None when nothing
+    qualifies: there is deliberately no fallback to a fixed fraction of
+    risk, since that arithmetic is exactly the bug this plan fixes.
     `primary_strategy` is the real per-scenario attribution (see
-    primary_strategy_for)."""
+    primary_strategy_for). `level_map` is an optional (supports, resistances)
+    pair from levels.build_level_map -- when absent, the only honest
+    candidate is the scenario's own real target."""
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
-    risk = abs(entry - scenario.stop_loss)
-    rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)
-    tp1 = entry + risk * rr if is_bull else entry - risk * rr
 
-    tp2 = None
-    if scenario.take_profit is not None:
-        beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
-        if beyond_tp1:
-            tp2 = scenario.take_profit
+    if level_map is not None:
+        candidates = levels.target_candidates(*level_map, scenario.direction)
+    else:
+        candidates = [scenario.take_profit] if scenario.take_profit is not None else []
+
+    tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
+                                   config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if tp1 is None:
+        return None
+
+    if level_map is not None:
+        supports, resistances = level_map
+        resistances_prices = [float(lv.price) for lv in resistances]
+        supports_prices = [float(lv.price) for lv in supports]
+        tp2 = select_tp2(resistances_prices, supports_prices, scenario.direction, entry, tp1)
+    else:
+        tp2 = None
+        if scenario.take_profit is not None:
+            beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
+            if beyond_tp1:
+                tp2 = scenario.take_profit
 
     entry_type = "stop_entry" if scenario_is_breakout(scenario, df) else "market"
     created_at = df.index[-1].date().isoformat()
