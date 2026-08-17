@@ -124,11 +124,78 @@ progress lines stay out of context.
 
 ## Progress
 
-- [ ] Phase 1 — Ground truth and the selector
-- [ ] Phase 2 — Config and the confluence (live-alert) path
-- [ ] Phase 3 — The four strategy builders
-- [ ] Phase 4 — Lifecycle, dead code, and the parity harness
-- [ ] Phase 5 — Prove it, then ship it
+- [x] Phase 1 — Ground truth and the selector (Tasks 1-2, commits c0a275c, 7c4e119)
+- [x] Phase 2 — Config and the confluence (live-alert) path (Tasks 3-7, commits 2f34f9a..d49322b)
+- [x] Phase 3 — The four strategy builders (Tasks 8-11, commits 71704ea..4eddeaa)
+- [x] Phase 4 — Lifecycle, dead code, and the parity harness (Tasks 12-15, commits 6340a72..d561153)
+- [ ] Phase 5 — Prove it, then ship it (Task 16 done below; Tasks 17-18 need
+      explicit go-ahead before running -- Task 18 is a one-shot, irreversible
+      VALIDATION run per this plan's own methodology)
+
+### Task 16: Manual spot-check on real tickers, including AXON
+
+Live-data spot check, 2026-08-17. Not a committed script (per the task's own
+instruction) -- run via scratch REPL calls to the real pricing path
+(`levels.build_level_map` -> `levels.build_scenarios` ->
+`plan_engine.build_confluence_plan(level_map=...)` for the confluence path,
+`plan_engine.build_strategy_plan` for the strategy path), against real
+`get_daily_data` fetches, no synthetic data.
+
+**Confluence path, real priced plans found (horizon 4w, full 76-ticker
+watchlist scanned):**
+
+```
+CRWV: Entry 105.26 / TP1 99.63 / TP2 98.37 / SL 107.51 -> R:R = 2.500  [OK]
+WDC:  Entry 508.80 / TP1 531.84 / TP2 548.56 / SL 494.19 -> R:R = 1.577  [OK]
+```
+
+Both land inside [1.5, 2.5] as required. Zero out of band.
+
+**Strategy path, `!ticker`-equivalent (`build_strategy_plan` over every
+triggered strategy/horizon):** AXON itself has **zero triggered strategy
+signals today** (a real, independent market fact, confirmed via
+`evaluate_all("AXON", df)` returning 110 combos evaluated / 0 triggered) --
+so there is nothing for `!ticker AXON` to price right now regardless of this
+plan. Across the full watchlist, exactly one ticker had a triggered signal
+today:
+
+```
+V: VWAP/4w (bullish): Entry 364.15 / TP1 385.60 / SL 349.85 -> R:R = 1.500  [OK]
+```
+
+**The AXON failure that started this plan, eyeballed directly:** real AXON
+has no live signal today to run end-to-end, so the direct proof is
+`tests/planning/test_structural_target.py::test_the_axon_case` (entry
+617.38, stop 604.59 -- the exact numbers from the original bad alert):
+`select_structural_target` now returns **640.0** (1.77R; the old alert's
+621.85 is only 0.35R and is correctly rejected as failing to clear
+`MIN_RISK_REWARD_RATIO`). The shape that started this plan cannot recur.
+
+**Point 3 (a ticker with no plan, reported via `filtered_by_rr`, not
+posted):** the mechanism is unit-tested and passing
+(`test_a_plan_that_cannot_clear_min_rr_never_reaches_scan_items`,
+`test_returns_none_when_no_level_clears_min_rr`,
+`test_shadow_mode_keeps_the_legacy_alert_when_v2_rejects` -- Tasks 5-6). Live
+confirmation is more nuanced than "find one": scanning the full 76-ticker
+watchlist at both 4w and 2w horizons found **74-76 of 76 tickers producing no
+scenario at all** (levels.build_scenarios' own hard filter -- real market
+conditions, unrelated to this plan: mostly the pre-existing
+`min_stop_distance_pct` gate, e.g. AXON's nearest support sits 1.37% away
+against a 2.0% floor) but **zero live cases of a scenario building and then
+`build_confluence_plan` rejecting it** (`filtered_by_rr` specifically).
+This is the expected shape, not a gap: Task 5's own note observes that
+`levels._check_constraints` already requires `rr >= MIN_RISK_REWARD_RATIO`
+against `resistances[0]` (the nearest candidate) before a scenario is ever
+built, so the prefilter and the selector agree by construction for the
+common case -- a live `filtered_by_rr` divergence needs a specific shape
+(the nearest candidate clears the OLD, looser scenario-building check by a
+sliver while the selector's own epsilon/cap logic disagrees), which is real
+but not common. The counter and the drop-before-`scan_items` behavior are
+proven correct by the unit tests; today's watchlist simply didn't produce a
+live specimen at either horizon checked.
+
+**Verdict:** every priced plan found (3 of 3, across both the confluence and
+strategy paths) landed inside [1.5, 2.5]. None below 1.5, none above 2.5.
 
 ---
 
