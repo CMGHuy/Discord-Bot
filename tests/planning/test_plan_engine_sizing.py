@@ -3,14 +3,17 @@ backtest._trade_plan_at into plan_engine (Tasks 8-13)."""
 import numpy as np
 import pytest
 
+from swingbot import config
 from swingbot.core.backtesting import backtest
 from swingbot.core.market.indicators import atr
 from swingbot.core.planning.plan_engine import (
+    STRUCTURE_BUFFER_ATR,
     _atr_plan,
     _elliott_plan,
     _fibonacci_plan,
     _safe_atr_value,
     _sr_plan,
+    fib_target_candidates,
 )
 from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_RR_OVERRIDE
 
@@ -92,16 +95,57 @@ def test_atr_parity(df, atr_series, direction, hk):
 
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
 def test_fibonacci_parity(df, atr_series, direction):
+    # v31 Task 8: tp is no longer parity-matched against
+    # backtest._trade_plan_at's old STRATEGY_RR_OVERRIDE/min_structure_rr
+    # arithmetic (replaced by select_structural_target against real fib
+    # levels). backtest._trade_plan_at itself is NOT yet updated (that's
+    # Task 12) -- it still unconditionally unpacks _fibonacci_plan's return
+    # as a 2-tuple, which now raises whenever the builder declines (returns
+    # None), so it can no longer supply a live reference here. STOP is
+    # verified against a hand-computed golden value using the same
+    # buffer/max-risk-pct formula Task 8 keeps byte-for-byte -- same pattern
+    # test_atr_plan_bullish_golden uses. tp is either None (no fib level
+    # clears the floor) or within [MIN_RISK_REWARD_RATIO,
+    # MAX_RISK_REWARD_RATIO] times risk -- the assertion that names the bug.
     hk = "4w"
     lookback = HORIZONS[hk]["fib_lookback"]
     sh = df["High"].rolling(lookback).max()
     sl = df["Low"].rolling(lookback).min()
-    ref_entry, ref_stop, ref_tp = backtest._trade_plan_at(
-        df, I, direction, "Fibonacci", hk, atr_series, sh, sl)
     entry, atr_val = _entry_atr(df, atr_series)
-    stop, tp = _fibonacci_plan(entry, atr_val, float(sh.iloc[I]), float(sl.iloc[I]),
-                               direction, hk)
-    assert (stop, tp) == pytest.approx((ref_stop, ref_tp), abs=1e-9)
+    swing_high, swing_low = float(sh.iloc[I]), float(sl.iloc[I])
+    is_bull = direction == "bullish"
+    buffer = STRUCTURE_BUFFER_ATR * atr_val
+    expected_stop = swing_low - buffer if is_bull else swing_high + buffer
+    max_risk_amount = entry * (HORIZONS[hk]["max_risk_pct"] / 100)
+    if abs(entry - expected_stop) > max_risk_amount:
+        expected_stop = entry - max_risk_amount if is_bull else entry + max_risk_amount
+
+    candidates = fib_target_candidates(df, I, HORIZONS[hk], entry)
+    result = _fibonacci_plan(entry, atr_val, swing_high, swing_low,
+                             direction, hk, candidate_levels=candidates)
+    assert result is not None, "fixture must produce a qualifying fib target"
+    stop, tp = result
+    assert stop == pytest.approx(expected_stop, abs=1e-9)
+    risk = abs(entry - stop)
+    assert config.MIN_RISK_REWARD_RATIO * risk - 1e-6 <= abs(tp - entry) <= \
+        config.MAX_RISK_REWARD_RATIO * risk + 1e-6
+
+
+def test_fibonacci_targets_only_fibonacci_levels(df, atr_series):
+    hk = "4w"
+    direction = "bullish"
+    entry, atr_val = _entry_atr(df, atr_series)
+    lookback = HORIZONS[hk]["fib_lookback"]
+    sh = df["High"].rolling(lookback).max()
+    sl = df["Low"].rolling(lookback).min()
+    candidates = fib_target_candidates(df, I, HORIZONS[hk], entry)
+    result = _fibonacci_plan(entry, atr_val, float(sh.iloc[I]), float(sl.iloc[I]),
+                             direction, hk, candidate_levels=candidates)
+    assert result is not None, "fixture must produce a qualifying fib target"
+    stop, tp = result
+    risk = abs(entry - stop)
+    cap = entry + risk * config.MAX_RISK_REWARD_RATIO
+    assert any(abs(tp - c) < 1e-6 for c in candidates) or tp == pytest.approx(cap)
 
 
 @pytest.mark.parametrize("ratio", [0.5, 1.0, 2.5, np.nan])

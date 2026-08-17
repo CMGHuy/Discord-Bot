@@ -429,31 +429,59 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
     return stop, tp1, meta
 
 
-def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key):
-    """Structural sizing off the fib swing, risk-capped, R:R-override target."""
+def fib_target_candidates(df, index, h, entry) -> list[float]:
+    """The Fibonacci strategy's OWN levels on the target side: the swing
+    high/low that anchors the retracement, the 0.236/0.382/0.5/0.618/0.786
+    retracements themselves, and the 1.272/1.618 extensions of the same
+    swing. NOT the unified multi-method level map -- a Fibonacci plan
+    targets Fibonacci structure (plan v31).
+
+    `df` is sliced to `index` BEFORE computing the swing -- the same trap
+    `_lifecycle_levels` documents above: `df` here runs to the end of
+    history in the backtest, and `indicators.fibonacci_levels` takes the
+    trailing `lookback` bars of whatever it is given, so an unsliced call
+    would draw the swing out of bars the trade cannot have seen.
+
+    No `direction` param: candidates are returned unfiltered on both sides
+    of `entry` (extensions in both directions), and select_structural_target
+    is what picks the trade-direction side.
+    """
+    from swingbot.core.market import indicators
+    hist = df.iloc[:index + 1]
+    fib = indicators.fibonacci_levels(hist, h["fib_lookback"])
+    swing_high, swing_low = fib["swing_high"], fib["swing_low"]
+    diff = swing_high - swing_low
+    candidates = [swing_high, swing_low] + list(fib["levels"].values())
+    for ratio in (1.272, 1.618):
+        candidates.append(swing_high + ratio * diff)
+        candidates.append(swing_low - ratio * diff)
+    return candidates
+
+
+def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key,
+                    candidate_levels=None):
+    """Structural sizing off the fib swing, risk-capped. Target is the
+    nearest real Fibonacci level (fib_target_candidates) that pays at least
+    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31) -- see
+    select_structural_target. Returns None when no candidate clears the
+    floor: no fallback to a fixed fraction of risk."""
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     if is_bull:
-        stop_loss, take_profit = swing_low - buffer, swing_high
+        stop_loss = swing_low - buffer
     else:
-        stop_loss, take_profit = swing_high + buffer, swing_low
+        stop_loss = swing_high + buffer
 
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
-    risk_now = abs(entry - stop_loss)
-    override = STRATEGY_RR_OVERRIDE.get("Fibonacci")
-    if override is not None:
-        take_profit = entry + risk_now * override if is_bull else entry - risk_now * override
-    else:
-        min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
-        reward_now = abs(take_profit - entry)
-        target_rr = reward_now / risk_now if risk_now > 0 else min_rr
-        target_rr = max(min_rr, min(max_rr, target_rr))
-        bounded_reward = risk_now * target_rr
-        take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
     return stop_loss, take_profit
 
 
