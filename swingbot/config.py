@@ -148,6 +148,14 @@ FIELDS: list[Field] = [
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
                "clears this bar. No exceptions for a close miss."),
+    Field("MAX_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "Trade Filters & Risk",
+          "Max reward:risk ratio",
+          type="float", default="2.5", min=0, step=0.1,
+          help="The ceiling on how far a target may sit, as a multiple of the plan's own risk. "
+               "A real level further out than this does not disqualify the setup -- the target "
+               "is simply placed AT the ceiling instead, and that further level becomes TP2. "
+               "Together with 'Min reward:risk ratio' this is the band every trade plan's "
+               "target is chosen inside, for every strategy and every horizon."),
     Field("CONFLUENCE_DEVIATION_PCT", "CONFLUENCE_DEVIATION_PCT", "Trade Filters & Risk", "Confluence deviation %",
           type="float", default="5.0", min=0.5, step=0.5,
           help="How close (as a %) an independent strategy's own predicted level has to land to the scenario's "
