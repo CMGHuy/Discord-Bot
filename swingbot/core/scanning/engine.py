@@ -722,7 +722,8 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
 
 
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
-              regime, effective_min_confluence: int) -> dict:
+              regime, effective_min_confluence: int,
+              rs_cache: dict = None, spy_df=None, breadth: float = None) -> dict:
     """
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
@@ -863,6 +864,17 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         stats["data_quality_failed"] = True
         return stats
 
+    # RS percentile (v32 Task 7) depends only on this ticker's df/spy_df/the
+    # scan-wide universe cache -- not on horizon or direction -- so it's
+    # computed once per ticker here rather than once per horizon-scenario
+    # inside the loop below. rs_cache is None when the network-bound SPY/RS
+    # lookup failed for this scan (see _sync_run_scan); None propagates
+    # through cleanly (factor_rs treats it as absent, not a real reading).
+    rs_pctile = None
+    if rs_cache is not None:
+        rs_pctile = rs_factors.rs_percentile(
+            df, spy_df, universe_rels=list(rs_cache["rels"].values()))
+
     for horizon_key in horizons_to_scan:
         h = HORIZONS[horizon_key]
         if bars_available < MIN_BARS[horizon_key]:
@@ -955,9 +967,19 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             base_level_stats = trade_log.get_stats(base_level_preview)
             track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
 
+            # HTF bias moved ahead of score_confidence (v32 Task 7) so its
+            # reading can feed the unified factor registry's htf_bias/mtf
+            # inputs -- it used to run only after, purely for the
+            # counter-trend penalty below, which still reuses this same
+            # result rather than fetching it twice.
+            htf_result = get_htf_bias(df, horizon_key)
+            mtf_val = rs_factors.mtf_alignment(df, scenario.direction)
+
             conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
                                      target_confluence=target_confluence, stop_confluence=stop_confluence,
-                                     track_record=track_record)
+                                     track_record=track_record,
+                                     htf_bias=(htf_result["bias"] if htf_result else None),
+                                     rs_percentile=rs_pctile, mtf=mtf_val, breadth=breadth)
 
             # Multi-timeframe confluence: check this ticker's own
             # higher-timeframe EMA bias (50-day for short horizons,
@@ -965,7 +987,6 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # df -- no extra API call. A counter-trend signal gets a
             # configurable penalty subtracted from its raw score, which
             # can drop it one level and thus below MIN_ALERT_CONFIDENCE_LEVEL.
-            htf_result = get_htf_bias(df, horizon_key)
             htf_counter_trend = (
                 htf_result is not None
                 and htf_result["bias"] != scenario.direction
@@ -1211,7 +1232,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # qualifying or not -- the require_confirmation gate below is applied
     # uniformly to the aggregated candidates, not decided per-ticker.
     per_ticker_results = map_tickers(
-        lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence),
+        lambda t: _scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
+                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth),
         tickers,
     )
 
