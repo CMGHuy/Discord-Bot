@@ -35,6 +35,25 @@ yourself: `shadow` for ≥5 scan sessions (compare against legacy numbers via
 `python scripts/reports/shadow_parity_report.py`) → `on` for ≥5 clean sessions →
 enable scale-out + manager.
 
+**Target selection (v31): structural, banded, honest about "no setup."**
+Every plan's target is a real price level, not a fixed fraction of its own
+risk. `plan_engine.select_structural_target` picks the nearest candidate
+level beyond entry that pays at least `MIN_RISK_REWARD_RATIO` (1.5) against
+the plan's own risk, capped at `MAX_RISK_REWARD_RATIO` (2.5) — a level
+farther out than the cap doesn't disqualify the setup, it becomes TP2
+instead. Each strategy supplies its own candidate list: the unified level
+map for confluence-source plans, the fib swing/retracements/extensions for
+Fibonacci, the classic wave-3 projections for Elliott Wave, rolling
+structural highs/lows plus a volume-strength band for Support/Resistance,
+and an ATR ladder for the eight strategies with no native price structure
+(volatility itself is the structure). **When nothing on that list clears
+the floor, the plan is `None` — a real "no trade here" answer, not a
+fallback to a smaller, arithmetic-derived target.** A scan that filters a
+ticker out this way counts it under `filtered_by_rr` in the scan-summary
+log rather than silently dropping it; `!ticker` says "no qualifying setup:
+no level beyond entry pays X:1 against its own stop" instead of just
+omitting the trade-plans section.
+
 **Badges: what they legally claim.** Every v2 plan is stamped from
 `swingbot/core/validation_registry.json`:
 
@@ -213,7 +232,9 @@ actually trading at — never a projection dressed up as a promise.
 
 **The three honest levers**, and which feature moves which:
 - **Expectancy** — the strategy/entry-filter layer (`entry_filters.py`,
-  `strategy_types.py`'s `STRATEGY_GATES`/`STRATEGY_RR_OVERRIDE`), the
+  `strategy_types.py`'s `STRATEGY_GATES`), every plan's target-selection band
+  (`config.MIN_RISK_REWARD_RATIO`/`MAX_RISK_REWARD_RATIO`, the nearest real
+  level a plan's target may land on — see Plan Engine v2 below), the
   quality scoring in `quality.py` that tiers signals, and the validation
   registry (`swingbot/core/backtesting/registry.py`) that badges which strategies have
   actually earned trust out-of-sample. Nothing here can invent edge that

@@ -145,6 +145,30 @@ target = the next real support/resistance from here. There's no
 pullback/retest logic to wait for — either a qualifying level exists
 within reach today, or it doesn't (and no alert fires).
 
+## The target must pay for the risk, or there's no plan
+
+"The next real level" isn't automatically the target — it also has to be
+far enough out to be worth the trade. Every plan's target is the *nearest*
+real level beyond entry that pays at least `MIN_RISK_REWARD_RATIO` (1.5x
+the plan's own stop distance), capped at `MAX_RISK_REWARD_RATIO` (2.5x): a
+level sitting farther out than the cap doesn't get skipped, it becomes
+target 2 instead, and the plan's actual target 1 is priced at exactly the
+cap. Nearest-qualifying, not farthest-qualifying — a closer target inside
+the band is reached more often than a distant one, and the band already
+guarantees the payoff is worth it.
+
+**When nothing clears the floor, there's no plan for that ticker/horizon —
+same as no level existing at all.** This applies to every strategy that
+posts a trade plan, not just the confluence scenarios above: a
+Fibonacci-sourced plan targets a real retracement or extension of the fib
+swing, an Elliott Wave plan targets a real wave-3 projection, a
+Support/Resistance plan targets the real rolling structural high/low, and
+the strategies with no price structure of their own (EMA Crossover, VWAP,
+RSI, MACD, MA Ribbon, Break & Retest, RSI Divergence, Volume Profile) treat
+the ticker's own volatility as the structure — but every one of them is
+bound by the same real-level-or-nothing rule, never a fallback to a fixed
+fraction of risk.
+
 ## Minimum stop distance: hard filter, not just a warning
 
 A scenario is dropped entirely (`MIN_STOP_DISTANCE_PCT`, default **2%**)

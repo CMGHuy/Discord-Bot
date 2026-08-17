@@ -42,9 +42,6 @@ HORIZONS = {
         "fib_lookback": 15,       # ~3 trading weeks of range to draw levels from
         "sr_lookback": 10,        # ~2 trading weeks to establish a support/resistance level
         "atr_stop_multiple": 2.0,  # 2 ATR gives noise room without over-risking; max_risk_pct still caps it
-        "reward_risk_ratio": 0.40, # 2w: tight target for high win rate (0.4R target vs 1R stop)
-        "min_structure_rr": 0.35, # Fibonacci/Elliott: tight target → higher win rate
-        "max_structure_rr": 0.40,
         "max_risk_pct": 3.0,       # stop-loss can't be more than this % away from entry
         "sr_stop_pct": 3.0,
         "sr_target_min_pct": 5.0,  # matches MIN_REWARD_PCT floor -- no point recommending a <5% swing
@@ -59,9 +56,6 @@ HORIZONS = {
         "fib_lookback": 42,      # ~2 trading months of range to draw levels from
         "sr_lookback": 30,
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 0.50,  # 4w: moderate target, balances win rate vs profit
-        "min_structure_rr": 0.40,
-        "max_structure_rr": 0.50,
         "max_risk_pct": 7.0,        # O'Neil-style cut-loss ceiling
         "sr_stop_pct": 7.0,
         "sr_target_min_pct": 15.0,
@@ -76,9 +70,6 @@ HORIZONS = {
         "fib_lookback": 84,      # ~4 trading months
         "sr_lookback": 60,
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 0.60, # 2m: moderate R:R
-        "min_structure_rr": 0.45,
-        "max_structure_rr": 0.60,
         "max_risk_pct": 8.0,
         "sr_stop_pct": 8.0,
         "sr_target_min_pct": 16.0,
@@ -93,9 +84,6 @@ HORIZONS = {
         "fib_lookback": 126,     # ~6 trading months
         "sr_lookback": 90,
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 0.75,  # 3m: moderate R:R for medium-term holds
-        "min_structure_rr": 0.55,
-        "max_structure_rr": 0.75,
         "max_risk_pct": 9.0,
         "sr_stop_pct": 9.0,
         "sr_target_min_pct": 18.0,
@@ -110,9 +98,6 @@ HORIZONS = {
         "fib_lookback": 168,     # 42 * 4
         "sr_lookback": 120,      # 30 * 4
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 0.83,  # interpolated between 3m and 6m
-        "min_structure_rr": 0.60,
-        "max_structure_rr": 0.83,
         "max_risk_pct": 9.3,
         "sr_stop_pct": 9.3,
         "sr_target_min_pct": 18.7,
@@ -127,9 +112,6 @@ HORIZONS = {
         "fib_lookback": 210,     # 42 * 5
         "sr_lookback": 150,      # 30 * 5
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 0.92,  # interpolated between 3m and 6m
-        "min_structure_rr": 0.65,
-        "max_structure_rr": 0.92,
         "max_risk_pct": 9.7,
         "sr_stop_pct": 9.7,
         "sr_target_min_pct": 19.3,
@@ -144,9 +126,6 @@ HORIZONS = {
         "fib_lookback": 252,     # ~12 trading months
         "sr_lookback": 180,
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 1.00,  # 6m: wider target to capture the full multi-month move
-        "min_structure_rr": 0.70,
-        "max_structure_rr": 1.00,
         "max_risk_pct": 10.0,
         "sr_stop_pct": 10.0,
         "sr_target_min_pct": 20.0,
@@ -161,9 +140,6 @@ HORIZONS = {
         "fib_lookback": 294,     # 42 * 7
         "sr_lookback": 210,      # 30 * 7
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 1.08,  # extrapolated past 6m at the same slope
-        "min_structure_rr": 0.75,
-        "max_structure_rr": 1.08,
         "max_risk_pct": 10.3,
         "sr_stop_pct": 10.3,
         "sr_target_min_pct": 20.7,
@@ -178,9 +154,6 @@ HORIZONS = {
         "fib_lookback": 336,     # 42 * 8
         "sr_lookback": 240,      # 30 * 8
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 1.17,  # extrapolated past 6m at the same slope
-        "min_structure_rr": 0.80,
-        "max_structure_rr": 1.17,
         "max_risk_pct": 10.7,
         "sr_stop_pct": 10.7,
         "sr_target_min_pct": 21.3,
@@ -195,37 +168,12 @@ HORIZONS = {
         "fib_lookback": 378,     # 42 * 9
         "sr_lookback": 270,      # 30 * 9
         "atr_stop_multiple": 2.0,
-        "reward_risk_ratio": 1.25,  # extrapolated past 6m at the same slope
-        "min_structure_rr": 0.85,
-        "max_structure_rr": 1.25,
         "max_risk_pct": 11.0,
         "sr_stop_pct": 11.0,
         "sr_target_min_pct": 22.0,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 270,  # 30 * 9
     },
-}
-
-# ---------------------------------------------------------------------------
-# Reward:risk per strategy -- SINGLE SOURCE for backtest.py AND trade_plan.py.
-# HARD FLOOR 0.30: break-even win rate at R:R=X is 1/(1+X); at 0.30 that is
-# 76.9%, so an 80% win rate is profitable. Below 0.30 a strategy can clear
-# 80% win rate and still lose money -- never tune below the floor.
-# Mean-reversion-at-structure strategies get 0.40 (they enter at a level, so
-# the bounce has room); trend/breakout strategies get 0.35.
-# ---------------------------------------------------------------------------
-STRATEGY_RR_OVERRIDE: dict[str, float] = {
-    "EMA Crossover":      0.35,
-    "VWAP":               0.35,
-    "Fibonacci":          0.40,
-    "Support/Resistance": 0.35,
-    "RSI":                0.40,
-    "MACD":               0.35,
-    "Elliott Wave":       0.35,
-    "MA Ribbon":          0.35,
-    "Break & Retest":     0.35,
-    "RSI Divergence":     0.40,
-    "Volume Profile":     0.40,
 }
 
 # When a trade's favorable excursion covers this fraction of the distance to

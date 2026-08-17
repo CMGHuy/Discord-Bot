@@ -95,6 +95,10 @@ async def ticker_cmd(ctx, ticker: str):
     if plan_lines:
         lines.append("**Trade plans (v2)**")
         lines.extend(plan_lines)
+    elif any(r.triggered for r in results):
+        lines.append(
+            f"**Trade plans (v2)** — no qualifying setup: no level beyond entry "
+            f"pays {config.MIN_RISK_REWARD_RATIO:.1f}:1 against its own stop.")
 
     msg = "\n".join(lines)
     while len(msg) > 1990:

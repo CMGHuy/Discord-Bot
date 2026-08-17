@@ -15,12 +15,12 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from swingbot import config
+from swingbot.core.market import levels
 from swingbot.core.market.levels import MAX_TARGET2_LEG_MULTIPLE
 from swingbot.core.backtesting.registry import Badge, get_badge
 from swingbot.core.market.strategy_types import (
     BREAKEVEN_TRIGGER_FRACTION,
     HORIZONS,
-    STRATEGY_RR_OVERRIDE,
 )
 
 log = logging.getLogger("swing-bot.plan_engine")
@@ -28,7 +28,6 @@ log = logging.getLogger("swing-bot.plan_engine")
 # Same numbers backtest.py used before the extraction (parity-critical).
 STRUCTURE_BUFFER_ATR = 0.25   # cushion beyond swing high/low, in ATR units
 SR_VOLUME_STRENGTH_CEILING = 3.0
-RR_FLOOR = 0.30               # break-even WR at 0.30 is 76.9% (strategy_types.py:211)
 TRAIL_ATR_MULT = 2.5          # chandelier default; finalized by the Task 30 TRAIN grid
 TP1_FRACTION = 0.5            # fixed by spec §5
 DEFAULT_EXPIRY_BARS = 5
@@ -150,10 +149,129 @@ def plan_from_dict(d: dict) -> TradePlanV2:
     return TradePlanV2(**known)   # missing fields use dataclass defaults
 
 
+def select_structural_target(entry: float, stop_loss: float, is_bull: bool,
+                             candidate_levels, min_rr: float,
+                             max_rr: float) -> float | None:
+    """THE target price for every plan this engine builds.
+
+    Nearest real level beyond `entry` that pays at least `min_rr` times the
+    plan's own risk, capped at `max_rr`. Returns None when no candidate
+    clears the floor -- which means "there is no trade here", not "fall back
+    to something smaller". There is deliberately no fallback: pricing a
+    target off a fixed fraction of risk is exactly the arithmetic that made
+    every posted plan risk 3x what it stood to make (plan v31).
+
+    NEAREST-qualifying, not farthest: the floor already guarantees the
+    payoff, and a closer target is reached more often. Beyond `max_rr` the
+    result is a SYNTHETIC price at exactly `entry +/- risk * max_rr` -- not
+    the level, not None. That level is still a real level, and select_tp2
+    will pick it up as tp2 (the cap declines it as tp1, it does not delete
+    it).
+
+    `candidate_levels` is an iterable of plain prices; each caller supplies
+    ITS OWN source (unified level map for the confluence path, the
+    strategy's own native levels for the strategy builders -- see the
+    sizing-builders comment block above). Nothing is looked up in here, for
+    the same reason `_atr_plan` takes an injected `stop_mult`: this function
+    is shared by the live path and the backtest, and a hidden lookup would
+    price 2020 backtest bars off today's live data.
+    """
+    risk = abs(entry - stop_loss)
+    if risk <= 0 or min_rr <= 0:
+        return None
+    if max_rr < min_rr:
+        raise ValueError(f"max_rr {max_rr} < min_rr {min_rr}")
+
+    # Relative epsilon: a level sitting EXACTLY at the floor must qualify,
+    # and float arithmetic on a $600 stock does not land exactly.
+    eps = 1e-9 * max(1.0, abs(entry))
+    floor_dist, cap_dist = risk * min_rr, risk * max_rr
+
+    beyond = [float(p) for p in candidate_levels
+              if p and (p > entry if is_bull else p < entry)]
+    qualifying = [p for p in beyond if abs(p - entry) >= floor_dist - eps]
+    if not qualifying:
+        return None
+
+    nearest = min(qualifying, key=lambda p: abs(p - entry))
+    if abs(nearest - entry) > cap_dist + eps:
+        return entry + cap_dist if is_bull else entry - cap_dist
+    return nearest
+
+
 # ---------------------------------------------------------------------------
 # Sizing builders — extracted verbatim from backtest._trade_plan_at so the
 # backtest, live signals, and the plan manager all price identically.
 # ---------------------------------------------------------------------------
+
+# v31 Task 1 — candidate-level source for each of the six call sites that
+# will feed select_structural_target() (Task 2). Confirmed against source,
+# no production code changed here.
+#
+# 1. build_confluence_plan (:654+) — candidates come from the unified level
+#    map. swingbot.core.market.levels.build_level_map already returns
+#    (supports, resistances) as ordered Level lists, nearest-first (supports
+#    sorted by -price, resistances by price — market/levels.py:505). The
+#    ordered candidate list already exists: [lv.price for lv in resistances]
+#    (bullish) or [lv.price for lv in supports] (bearish). No change needed
+#    to build_level_map/build_scenarios, only threading (Task 4). Both
+#    holders of that map confirmed: engine.ScanItem.level_map
+#    (scanning/engine.py:173, consumed at :1248) and
+#    backtesting/backtest_scenarios.py:82-88, which re-splits an as-of map
+#    against the current bar's price.
+# 2. _fibonacci_plan (:314) — receives only swing_high/swing_low. Its native
+#    ladder is market.indicators.fibonacci_levels(df, h["fib_lookback"]):
+#    retracements at 0.236/0.382/0.5/0.618/0.786 measured down from the
+#    swing high (market/indicators.py:39-59). Confirmed: no extension ratios
+#    exist in that function today. Decision: ADD 1.272/1.618 extensions of
+#    the same swing as targets beyond swing_high — otherwise a bullish fib
+#    plan entering near the swing high has at most one candidate and returns
+#    None constantly.
+# 3. _elliott_plan (:366) — receives only wave2.
+#    market.indicators.elliott_wave3_entries (function at :215, docstring at
+#    :235-239) already hands every caller
+#    {wave0, wave1, wave2, wave0_idx, wave1_idx, wave2_idx} and its docstring
+#    explicitly says callers may reuse these without recomputing pivots.
+#    Native wave-3 targets are the classic projections off wave 2:
+#    wave2 ± k * |wave1 - wave0| for k in (1.0, 1.618, 2.618), plus wave1
+#    itself. Sign convention for the bearish branch (kind0 == "high",
+#    p2 < p0) confirmed at the call site.
+# 4. _sr_plan (:342) — takes no df at all; its target today is a pure
+#    percentage band interpolated by volume strength
+#    (h["sr_target_min_pct"]..h["sr_target_max_pct"]). It has no native
+#    levels. Its natural candidates are the structure the strategy actually
+#    trades: df["High"].rolling(h["sr_lookback"]).max().shift(1) and the
+#    matching rolling low, plus the existing percentage-band prices as a
+#    floor so the candidate list is never empty.
+# 5. _atr_plan (:170) — the fallback for 8 of 11 strategies (EMA Crossover,
+#    VWAP, RSI, MACD, MA Ribbon, Break & Retest, RSI Divergence, Volume
+#    Profile). It has no price structure of any kind; its only native scale
+#    is volatility. THE ONE OPEN DECISION IN THIS PLAN, now decided: an ATR
+#    ladder, entry ± k * atr_val for k in (1, 2, 3, 4, 5, 6, 8, 10). Rejected
+#    alternatives: borrowing the unified map (rejected by the spec's
+#    per-strategy decision), returning None for all eight strategies
+#    (rejected — empties !ticker, empties the backtest for those strategies,
+#    and therefore empties the badge registry that stamp_badge reads).
+#    Reason for the ladder: with atr_stop_multiple = 2.0 (confirmed above,
+#    HORIZONS[*]["atr_stop_multiple"], strategy_types.py) the risk is 2 ATR,
+#    so min_rr = 1.5 puts the floor at 3 ATR and max_rr = 2.5 at 5 ATR — the
+#    ladder brackets the whole band, the nearest-qualifying rule lands on
+#    3 ATR, and the answer is deterministic and honest ("this strategy's
+#    structure is volatility").
+# 6. apply_level_lifecycle (:233) — already builds or receives a classified
+#    level list via _lifecycle_levels, which returns
+#    market.levels_lifecycle.LevelState objects carrying .price (confirmed
+#    at levels_lifecycle.py:68). Confirmed usable as selector candidates
+#    directly (Task 13 uses .price); preferred_stop_anchor (:197) signature
+#    confirmed in the same module. (The module also had a gatekeepers-between
+#    helper at the time, used only by the targets_on branch Task 13 deleted;
+#    Task 14 removed it.)
+#
+# NOTE on plan-doc drift: the plan text says these three modules live under
+# swingbot.core.planning — they actually live under swingbot.core.market
+# (market/levels.py, market/indicators.py, market/levels_lifecycle.py).
+# Substance of every claim above is otherwise correct; only the package
+# name was stale.
 
 def _safe_atr_value(entry: float, atr_val: float) -> float:
     if not np.isfinite(atr_val) or atr_val <= 0:
@@ -161,14 +279,30 @@ def _safe_atr_value(entry: float, atr_val: float) -> float:
     return float(atr_val)
 
 
-def _rr_for(strategy: str, horizon_key: str) -> float:
-    rr_override = STRATEGY_RR_OVERRIDE.get(strategy)
-    rr = rr_override if rr_override is not None else HORIZONS[horizon_key]["reward_risk_ratio"]
-    return max(rr, RR_FLOOR)
+ATR_TARGET_LADDER = (1, 2, 3, 4, 5, 6, 8, 10)
 
 
-def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
-    """Default volatility sizing: ATR-multiple stop, R:R-override target.
+def atr_target_candidates(entry, atr_val, direction) -> list[float]:
+    """Volatility IS the structure for the eight strategies that size
+    through _atr_plan (EMA Crossover, VWAP, RSI, MACD, MA Ribbon,
+    Break & Retest, RSI Divergence, Volume Profile). None of them produces
+    a price level of its own, and borrowing the unified level map here was
+    rejected (plan v31) -- a MACD plan targeting a Fibonacci level is not a
+    MACD plan. So the candidates are this ticker's own ATR bands. At the
+    horizon default (atr_stop_multiple 2.0) risk is 2 ATR, which puts the
+    1.5R floor at 3 ATR and the 2.5R cap at 5 ATR: the ladder brackets the
+    whole band and the nearest-qualifying rule lands on 3 ATR."""
+    is_bull = direction == "bullish"
+    return [entry + k * atr_val if is_bull else entry - k * atr_val
+            for k in ATR_TARGET_LADDER]
+
+
+def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
+             candidate_levels=None):
+    """Default volatility sizing: ATR-multiple stop; target is the nearest
+    ATR-ladder candidate (atr_target_candidates) that pays at least
+    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31). Returns
+    None when nothing clears the floor.
 
     `stop_mult` (edge E31) is an INJECTED MAE-informed adjustment factor,
     never looked up here. That is deliberate: this function is the shared
@@ -178,23 +312,30 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     Callers that legitimately have a multiplier pass it in; the E33 fold
     harness will pass its own fold-train-derived value.
 
-    Scaling `risk_distance` (rather than the stop price) keeps R:R exactly
-    where it was -- the same distance feeds both the stop and the
-    R:R-override target, and the R:R table plus the 0.30 floor are frozen
-    constants this must not move.
+    Scaling `risk_distance` (rather than the stop price) keeps the stop's
+    ATR-multiple exact -- the same distance feeds both the stop and, via
+    select_structural_target's own risk argument, the target floor/cap.
+    `strategy` is accepted but unused: the ladder is identical for all
+    eight fallback strategies (kept for call-site signature parity, not
+    because a per-strategy R:R table survives here -- that table is
+    deleted in Task 14).
     """
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     risk_distance = h["atr_stop_multiple"] * atr_val
     if stop_mult is not None:
         risk_distance *= stop_mult
-    rr = _rr_for(strategy, horizon_key)
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if risk_distance > max_risk_amount:
         risk_distance = max_risk_amount
-    if is_bull:
-        return entry - risk_distance, entry + risk_distance * rr
-    return entry + risk_distance, entry - risk_distance * rr
+    stop_loss = entry - risk_distance if is_bull else entry + risk_distance
+
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
+    return stop_loss, take_profit
 
 
 # --- level lifecycle (P1) ---------------------------------------------------
@@ -231,31 +372,32 @@ def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
 
 
 def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
-                          strategy, horizon_key, level_map=None):
-    """Re-price (stop, tp1) against what price has actually done to nearby levels.
+                          strategy, horizon_key, level_map=None, candidate_levels=None):
+    """Re-price `stop` against what price has actually done to nearby levels --
+    move it beyond a level that has been *tested* rather than leaving it
+    inside the noise a fresh level implies. (The old "target realism"
+    adjustment -- pulling TP1 back inside a gatekeeper level -- was measured
+    inert, rejected 248/248; its flag and branch, and the gatekeeper-lookup
+    helper it was the only caller of, are gone as of v31 Task 14.)
 
-    Two independent, independently-flagged adjustments:
+    Widening the stop changes risk, so `tp1` is RE-SELECTED against the new
+    risk from the same `candidate_levels` the caller's builder used -- there
+    is no longer a frozen R:R formula to recompute it from (v31). If nothing
+    on that candidate list clears MIN_RISK_REWARD_RATIO against the wider
+    stop, the widening is rolled back entirely and the original (stop, tp1)
+    pair is returned untouched: a wider stop with no target that pays for it
+    is strictly worse than the tighter stop this function started with, and
+    the reward:risk guarantee is the contract, not the widening. Returns
+    (stop, tp1, meta).
 
-      * stop anchoring -- move the stop beyond a level that has been *tested*
-        rather than leaving it inside the noise a fresh level implies. The
-        target is re-derived from the new risk distance so the frozen R:R
-        table is preserved exactly (same arithmetic as _atr_plan).
-      * target realism -- pull TP1 back inside the nearest undelivered
-        "gatekeeper" standing between entry and target.
-
-    Both are capped by the frozen constants: max_risk_pct bounds the stop, and
-    an adjustment that would push R:R under RR_FLOOR is discarded rather than
-    applied. Returns (stop, tp1, meta).
-
-    COST NOTE: with a flag on and no level_map (i.e. in the backtest), this
+    COST NOTE: with the flag on and no level_map (i.e. in the backtest), this
     builds a level map per entry bar. Entries are sparse -- single digits per
     ticker/strategy/horizon -- but a full grid still pays it thousands of
-    times. Flags off is a bit-identical zero-cost fast path, which is why the
+    times. Flag off is a bit-identical zero-cost fast path, which is why the
     check comes first.
     """
     stops_on = getattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False)
-    targets_on = getattr(config, "LEVEL_LIFECYCLE_TARGETS_ENABLED", False)
-    if not (stops_on or targets_on):
+    if not stops_on:
         return stop, tp1, {}
 
     try:
@@ -270,101 +412,170 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
 
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
-    rr = _rr_for(strategy, horizon_key)
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     meta: dict = {}
 
-    if stops_on:
-        anchor = levels_lifecycle.preferred_stop_anchor(levels, direction=direction)
-        # Only a level that has actually held is worth moving a stop for; a
-        # fresh one is an untested guess and the ATR stop is already that.
-        if anchor is not None and anchor.state == "tested":
-            candidate = anchor.price - buffer if is_bull else anchor.price + buffer
-            risk = entry - candidate if is_bull else candidate - entry
-            # Widen only. Tightening onto a level would put the stop inside
-            # the very structure it is meant to sit behind.
-            if 0 < risk <= max_risk_amount and risk > abs(entry - stop):
-                stop = candidate
-                tp1 = entry + risk * rr if is_bull else entry - risk * rr
+    anchor = levels_lifecycle.preferred_stop_anchor(levels, direction=direction)
+    # Only a level that has actually held is worth moving a stop for; a
+    # fresh one is an untested guess and the ATR stop is already that.
+    if anchor is not None and anchor.state == "tested":
+        candidate = anchor.price - buffer if is_bull else anchor.price + buffer
+        risk = entry - candidate if is_bull else candidate - entry
+        # Widen only. Tightening onto a level would put the stop inside
+        # the very structure it is meant to sit behind.
+        if 0 < risk <= max_risk_amount and risk > abs(entry - stop):
+            new_tp1 = select_structural_target(
+                entry, candidate, is_bull, candidate_levels or [],
+                config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+            if new_tp1 is None:
+                # ROLL BACK. Widening the stop is a refinement; the
+                # reward:risk guarantee is the contract. A wider stop with
+                # no target that pays for it is strictly worse than the
+                # tighter stop we already had, so keep the original pair
+                # untouched -- do NOT keep the wide stop with the old
+                # target, which is exactly the inverted-R:R plan this
+                # change exists to stop shipping.
+                meta["lifecycle_stop_rolled_back"] = {
+                    "price": round(anchor.price, 4), "state": anchor.state}
+            else:
+                stop, tp1 = candidate, new_tp1
                 meta["lifecycle_stop"] = {"price": round(anchor.price, 4),
                                           "state": anchor.state,
                                           "touches": anchor.touches}
 
-    if targets_on:
-        blockers = levels_lifecycle.gatekeepers_between(levels, entry=entry, target=tp1)
-        if blockers:
-            gk = blockers[0]
-            candidate = gk.price - buffer if is_bull else gk.price + buffer
-            reward = candidate - entry if is_bull else entry - candidate
-            risk = abs(entry - stop)
-            if reward > 0 and risk > 0 and reward / risk >= RR_FLOOR:
-                tp1 = candidate
-                meta["lifecycle_target"] = {"price": round(gk.price, 4),
-                                            "state": gk.state,
-                                            "blockers": len(blockers)}
-            else:
-                # Recorded, not applied: pulling in here would break the frozen
-                # R:R floor, and that floor outranks this heuristic.
-                meta["lifecycle_target_skipped"] = len(blockers)
-
     return stop, tp1, meta
 
 
-def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key):
-    """Structural sizing off the fib swing, risk-capped, R:R-override target."""
+def fib_target_candidates(df, index, h, entry) -> list[float]:
+    """The Fibonacci strategy's OWN levels on the target side: the swing
+    high/low that anchors the retracement, the 0.236/0.382/0.5/0.618/0.786
+    retracements themselves, and the 1.272/1.618 extensions of the same
+    swing. NOT the unified multi-method level map -- a Fibonacci plan
+    targets Fibonacci structure (plan v31).
+
+    `df` is sliced to `index` BEFORE computing the swing -- the same trap
+    `_lifecycle_levels` documents above: `df` here runs to the end of
+    history in the backtest, and `indicators.fibonacci_levels` takes the
+    trailing `lookback` bars of whatever it is given, so an unsliced call
+    would draw the swing out of bars the trade cannot have seen.
+
+    No `direction` param: candidates are returned unfiltered on both sides
+    of `entry` (extensions in both directions), and select_structural_target
+    is what picks the trade-direction side.
+    """
+    from swingbot.core.market import indicators
+    hist = df.iloc[:index + 1]
+    fib = indicators.fibonacci_levels(hist, h["fib_lookback"])
+    swing_high, swing_low = fib["swing_high"], fib["swing_low"]
+    diff = swing_high - swing_low
+    candidates = [swing_high, swing_low] + list(fib["levels"].values())
+    for ratio in (1.272, 1.618):
+        candidates.append(swing_high + ratio * diff)
+        candidates.append(swing_low - ratio * diff)
+    return candidates
+
+
+def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_key,
+                    candidate_levels=None):
+    """Structural sizing off the fib swing, risk-capped. Target is the
+    nearest real Fibonacci level (fib_target_candidates) that pays at least
+    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31) -- see
+    select_structural_target. Returns None when no candidate clears the
+    floor: no fallback to a fixed fraction of risk."""
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     if is_bull:
-        stop_loss, take_profit = swing_low - buffer, swing_high
+        stop_loss = swing_low - buffer
     else:
-        stop_loss, take_profit = swing_high + buffer, swing_low
+        stop_loss = swing_high + buffer
 
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
-    risk_now = abs(entry - stop_loss)
-    override = STRATEGY_RR_OVERRIDE.get("Fibonacci")
-    if override is not None:
-        take_profit = entry + risk_now * override if is_bull else entry - risk_now * override
-    else:
-        min_rr, max_rr = h["min_structure_rr"], h["max_structure_rr"]
-        reward_now = abs(take_profit - entry)
-        target_rr = reward_now / risk_now if risk_now > 0 else min_rr
-        target_rr = max(min_rr, min(max_rr, target_rr))
-        bounded_reward = risk_now * target_rr
-        take_profit = entry + bounded_reward if is_bull else entry - bounded_reward
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
     return stop_loss, take_profit
 
 
-def _sr_plan(entry, volume_ratio, direction, horizon_key):
-    """Fixed-percent stop; target from volume strength unless R:R override set."""
+def sr_target_candidates(df, index, h, entry, volume_ratio) -> list[float]:
+    """The S/R strategy's OWN target-side candidates: the rolling
+    structural high/low over `h["sr_lookback"]` (`.shift(1)`, matching
+    `collect_candidate_levels`' no-lookahead convention -- levels.py:227-228),
+    plus the existing volume-strength percentage band. The band alone keeps
+    this list non-empty on a ticker whose rolling structure sits the wrong
+    side of entry: the same volume_ratio-interpolated point the old
+    arithmetic used (`sr_target_min_pct`..`sr_target_max_pct`, by strength),
+    plus both fixed band ENDS explicitly, in both directions -- v31 replaces
+    "pick one point" with "offer every real S/R candidate and let
+    select_structural_target choose the nearest-qualifying one."
+    """
     from swingbot.core.market.strategy import SR_VOLUME_MULTIPLE
 
-    h = HORIZONS[horizon_key]
-    is_bull = direction == "bullish"
+    high = df["High"].rolling(h["sr_lookback"]).max().shift(1).iloc[index]
+    low = df["Low"].rolling(h["sr_lookback"]).min().shift(1).iloc[index]
+    candidates = []
+    if np.isfinite(high):
+        candidates.append(float(high))
+    if np.isfinite(low):
+        candidates.append(float(low))
+
     if not np.isfinite(volume_ratio):
         volume_ratio = SR_VOLUME_MULTIPLE
-
-    stop_pct = h["sr_stop_pct"]
     strength = (volume_ratio - SR_VOLUME_MULTIPLE) / (SR_VOLUME_STRENGTH_CEILING - SR_VOLUME_MULTIPLE)
     strength = max(0.0, min(1.0, strength))
-    target_pct = h["sr_target_min_pct"] + (h["sr_target_max_pct"] - h["sr_target_min_pct"]) * strength
+    min_pct, max_pct = h["sr_target_min_pct"], h["sr_target_max_pct"]
+    target_pct = min_pct + (max_pct - min_pct) * strength
+    for pct in (target_pct, min_pct, max_pct):
+        candidates.append(entry * (1 + pct / 100))
+        candidates.append(entry * (1 - pct / 100))
+    return candidates
 
+
+def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None):
+    """Fixed-percent stop. Target is the nearest real S/R candidate
+    (sr_target_candidates) that pays at least MIN_RISK_REWARD_RATIO, capped
+    at MAX_RISK_REWARD_RATIO (v31). Returns None when no candidate clears
+    the floor."""
+    h = HORIZONS[horizon_key]
+    is_bull = direction == "bullish"
+    stop_pct = h["sr_stop_pct"]
     stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
-    override = STRATEGY_RR_OVERRIDE.get("Support/Resistance")
-    if override is not None:
-        risk = abs(entry - stop_loss)
-        take_profit = entry + risk * override if is_bull else entry - risk * override
-    else:
-        take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
+
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
     return stop_loss, take_profit
 
 
-def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
-    """Stop beyond wave-2 (buffered, risk-capped); R:R-override target."""
+def elliott_target_candidates(entry_level: dict, direction) -> list[float]:
+    """The Elliott strategy's OWN wave-3 projections: wave1 itself, and the
+    classic wave2 +/- k * |wave1 - wave0| projections for k in
+    (1.0, 1.618, 2.618), signed by direction -- wave 3 continues the same
+    way wave 1 did, so unlike a fib swing there is no mirror side to
+    include. Reuses the pivots elliott_wave3_entries already published
+    (indicators.py) -- callers must not recompute them."""
+    wave0, wave1, wave2 = entry_level["wave0"], entry_level["wave1"], entry_level["wave2"]
+    is_bull = direction == "bullish"
+    amplitude = abs(wave1 - wave0)
+    candidates = [wave1]
+    for k in (1.0, 1.618, 2.618):
+        candidates.append(wave2 + k * amplitude if is_bull else wave2 - k * amplitude)
+    return candidates
+
+
+def _elliott_plan(entry, atr_val, wave2, direction, horizon_key, candidate_levels=None):
+    """Stop beyond wave-2 (buffered, risk-capped). Target is the nearest
+    real wave-3 projection (elliott_target_candidates) that pays at least
+    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31). Returns
+    None when no candidate clears the floor."""
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     buffer = STRUCTURE_BUFFER_ATR * atr_val
@@ -374,9 +585,11 @@ def _elliott_plan(entry, atr_val, wave2, direction, horizon_key):
     if abs(entry - stop_loss) > max_risk_amount:
         stop_loss = entry - max_risk_amount if is_bull else entry + max_risk_amount
 
-    risk_now = abs(entry - stop_loss)
-    rr = _rr_for("Elliott Wave", horizon_key)
-    take_profit = entry + risk_now * rr if is_bull else entry - risk_now * rr
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
     return stop_loss, take_profit
 
 
@@ -517,16 +730,30 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         swing_low = float(df["Low"].rolling(lookback).min().iloc[index])
         if not (np.isfinite(swing_high) and np.isfinite(swing_low)):
             return None
-        stop, tp1 = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key)
+        candidates = fib_target_candidates(df, index, h, close)
+        result = _fibonacci_plan(close, atr_val, swing_high, swing_low, direction, horizon_key,
+                                 candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
     elif strategy == "Support/Resistance":
         vol_avg20 = df["Volume"].rolling(20).mean()
         ratio = float((df["Volume"] / vol_avg20).iloc[index])
-        stop, tp1 = _sr_plan(close, ratio, direction, horizon_key)
+        candidates = sr_target_candidates(df, index, h, close, ratio)
+        result = _sr_plan(close, ratio, direction, horizon_key, candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
     elif strategy == "Elliott Wave":
         _, _, entry_levels = elliott_wave3_entries(df, h["max_risk_pct"])
         if not entry_levels or index not in entry_levels:
             return None
-        stop, tp1 = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key)
+        candidates = elliott_target_candidates(entry_levels[index], direction)
+        result = _elliott_plan(close, atr_val, entry_levels[index]["wave2"], direction, horizon_key,
+                               candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
     else:
         # Only the genuine ATR-multiple path takes the MAE adjustment
         # (edge E31). The three branches above put their stop behind real
@@ -536,8 +763,12 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         # "give the ATR stop the room this strategy's winners actually
         # used", so they stay structure-derived on purpose.
         applied_stop_mult = stop_mult if stop_mult is not None else _resolve_stop_mult(strategy)
-        stop, tp1 = _atr_plan(close, atr_val, direction, horizon_key, strategy,
-                              stop_mult=applied_stop_mult)
+        candidates = atr_target_candidates(close, atr_val, direction)
+        result = _atr_plan(close, atr_val, direction, horizon_key, strategy,
+                           stop_mult=applied_stop_mult, candidate_levels=candidates)
+        if result is None:
+            return None
+        stop, tp1 = result
 
     # P1: the same adjuster backtest._trade_plan_at calls, with the level_map
     # this path already has (so it costs no extra level build here).
@@ -547,7 +778,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     stop, tp1, _lifecycle_meta = apply_level_lifecycle(
         df, index, entry=close, stop=stop, tp1=tp1, atr_val=atr_val,
         direction=direction, strategy=strategy, horizon_key=horizon_key,
-        level_map=level_map)
+        level_map=level_map, candidate_levels=candidates)
 
     if abs(close - stop) <= 0:
         return None
@@ -652,24 +883,42 @@ def primary_strategy_for(scenario) -> str:
 
 
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
-                          primary_strategy, quality_inputs=None) -> TradePlanV2:
+                          primary_strategy, level_map=None,
+                          quality_inputs=None) -> TradePlanV2 | None:
     """THE constructor for confluence-source plans (a levels.build_scenarios
-    Scenario). TP1 is RECOMPUTED under the unified exit policy rather than
-    reusing the scenario's own target -- see spec §5; the scenario's own
-    take_profit survives as tp2 only when it still lies beyond the new TP1.
+    Scenario). TP1 is a real structural level -- select_structural_target
+    picks the nearest candidate that pays at least MIN_RISK_REWARD_RATIO,
+    capped at MAX_RISK_REWARD_RATIO (v31). Returns None when nothing
+    qualifies: there is deliberately no fallback to a fixed fraction of
+    risk, since that arithmetic is exactly the bug this plan fixes.
     `primary_strategy` is the real per-scenario attribution (see
-    primary_strategy_for)."""
+    primary_strategy_for). `level_map` is an optional (supports, resistances)
+    pair from levels.build_level_map -- when absent, the only honest
+    candidate is the scenario's own real target."""
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
-    risk = abs(entry - scenario.stop_loss)
-    rr = STRATEGY_RR_OVERRIDE.get(primary_strategy, 0.35)
-    tp1 = entry + risk * rr if is_bull else entry - risk * rr
 
-    tp2 = None
-    if scenario.take_profit is not None:
-        beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
-        if beyond_tp1:
-            tp2 = scenario.take_profit
+    if level_map is not None:
+        candidates = levels.target_candidates(*level_map, scenario.direction)
+    else:
+        candidates = [scenario.take_profit] if scenario.take_profit is not None else []
+
+    tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
+                                   config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if tp1 is None:
+        return None
+
+    if level_map is not None:
+        supports, resistances = level_map
+        resistances_prices = [float(lv.price) for lv in resistances]
+        supports_prices = [float(lv.price) for lv in supports]
+        tp2 = select_tp2(resistances_prices, supports_prices, scenario.direction, entry, tp1)
+    else:
+        tp2 = None
+        if scenario.take_profit is not None:
+            beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
+            if beyond_tp1:
+                tp2 = scenario.take_profit
 
     entry_type = "stop_entry" if scenario_is_breakout(scenario, df) else "market"
     created_at = df.index[-1].date().isoformat()

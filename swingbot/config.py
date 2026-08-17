@@ -148,6 +148,14 @@ FIELDS: list[Field] = [
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
                "clears this bar. No exceptions for a close miss."),
+    Field("MAX_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "Trade Filters & Risk",
+          "Max reward:risk ratio",
+          type="float", default="2.5", min=0, step=0.1,
+          help="The ceiling on how far a target may sit, as a multiple of the plan's own risk. "
+               "A real level further out than this does not disqualify the setup -- the target "
+               "is simply placed AT the ceiling instead, and that further level becomes TP2. "
+               "Together with 'Min reward:risk ratio' this is the band every trade plan's "
+               "target is chosen inside, for every strategy and every horizon."),
     Field("CONFLUENCE_DEVIATION_PCT", "CONFLUENCE_DEVIATION_PCT", "Trade Filters & Risk", "Confluence deviation %",
           type="float", default="5.0", min=0.5, step=0.5,
           help="How close (as a %) an independent strategy's own predicted level has to land to the scenario's "
@@ -566,8 +574,10 @@ FIELDS: list[Field] = [
           help="Moves a stop out beyond a support/resistance level that price has actually "
                "tested and held, instead of leaving it at the ATR default inside that noise "
                "(swingbot/core/market/levels_lifecycle.py). Only ever widens, never tightens, is "
-               "capped by the horizon's max_risk_pct, and re-derives the target so the frozen "
-               "R:R table is preserved. Costs a level build per entry bar in backtests. "
+               "capped by the horizon's max_risk_pct, and re-selects the target against the new "
+               "risk from the same candidate levels the plan was built from -- rolling the "
+               "widening back entirely if nothing still clears the min reward:risk ratio at the "
+               "new stop. Costs a level build per entry bar in backtests. "
                "DEFAULT-ON since 2026-08-08 -- and the evidence behind that is deliberately "
                "modest: it PASSED the TRAIN fold gate (pooled +0.0056R, carried by the 2022 "
                "bear fold) and then cleared every clause of its one VALIDATION shot, but at "
@@ -576,17 +586,6 @@ FIELDS: list[Field] = [
                "flips across 11 strategies, trade count -0.5%) and the mechanism is sound, "
                "NOT because an edge was measured. Its validation budget is spent; see "
                "docs/superpowers/results/2026-08-08-level-lifecycle-stops-validation.md."),
-    Field("LEVEL_LIFECYCLE_TARGETS_ENABLED", "LEVEL_LIFECYCLE_TARGETS_ENABLED", "Universe & Scanning",
-          "Pull targets inside blocking levels",
-          type="checkbox", default="false",
-          help="Pulls TP1 back inside the nearest undelivered level standing between entry and "
-               "target -- the 'gatekeeper' that has to break for the plan to work. Skipped "
-               "(and recorded) whenever pulling in would push R:R under the frozen 0.30 floor. "
-               "MEASURED INERT 2026-08-08: across 428 entry bars the pull-in was rejected by "
-               "that floor 248 times out of 248 and applied ZERO times -- blockers sit adjacent "
-               "to entry, so the pulled-in target is a median 0.063 R:R against a 0.30 floor. "
-               "Turning this on is currently a no-op; it is kept only so the measurement is "
-               "reproducible. Do not lower RR_FLOOR to make it fire (design doc section 7.6)."),
     Field("AVWAP_LEVELS_ENABLED", "AVWAP_LEVELS_ENABLED", "Universe & Scanning",
           "Anchored VWAP level source enabled",
           type="checkbox", default="false",

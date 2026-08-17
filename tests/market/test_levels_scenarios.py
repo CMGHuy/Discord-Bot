@@ -64,3 +64,29 @@ def test_hard_requirements_are_hard():
     supports, resistances = levels.build_level_map(df, h, price)
     assert levels.build_scenarios(price, supports, resistances,
                                   min_reward_pct=500.0) == []
+
+
+def test_target_candidates_returns_the_direction_side_nearest_first(scenario_env):
+    df, price, _ = scenario_env
+    h = HORIZONS["4w"]
+    supports, resistances = levels.build_level_map(df, h, price)
+    assert supports and resistances, "fixture must have levels on both sides"
+
+    bullish = levels.target_candidates(supports, resistances, "bullish")
+    assert all(p > price for p in bullish)
+    assert bullish == sorted(bullish)
+
+    bearish = levels.target_candidates(supports, resistances, "bearish")
+    assert all(p < price for p in bearish)
+    assert bearish == sorted(bearish, reverse=True)
+
+
+def test_target_candidates_preserves_build_level_map_order(scenario_env):
+    df, price, _ = scenario_env
+    h = HORIZONS["4w"]
+    supports, resistances = levels.build_level_map(df, h, price)
+
+    assert levels.target_candidates(supports, resistances, "bullish") == \
+        [lv.price for lv in resistances]
+    assert levels.target_candidates(supports, resistances, "bearish") == \
+        [lv.price for lv in supports]

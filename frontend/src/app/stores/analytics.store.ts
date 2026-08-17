@@ -57,7 +57,6 @@ export interface StrategyRow {
   delta_vs_oos: number | null;
   /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
   decayed: boolean;
-  rr_override: number | null;
   gate_description: string | null;
   /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
    *  server could not compute, which the sparkline cannot plot. */

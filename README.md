@@ -94,4 +94,4 @@ swingbot/
 - `swingbot/core/market/strategy.py` → `HORIZONS` (per-horizon EMA/VWAP/Fibonacci/structure settings, shared by both engines)
 - `swingbot/core/scanning/confidence.py` → point weights for each of the 5+1 scoring factors, the honesty-gate thresholds
 - `swingbot/core/tracking/risk_metrics.py` → `MIN_CLOSED_TRADES` (how many closed trades before Sharpe/Sortino/etc. are shown)
-- `swingbot/config.py` (or the admin UI's Settings page) → `MIN_ALERT_CONFIDENCE_LEVEL`, `MIN_REWARD_PCT`, `MAX_STOP_LOSS_PCT`, `MIN_RISK_REWARD_RATIO`, `MIN_ANNUALIZED_VOLATILITY_PCT`, `DEDUP_TOLERANCE_PCT`, `DEFAULT_HISTORY_PERIOD`, session/scan timing
+- `swingbot/config.py` (or the admin UI's Settings page) → `MIN_ALERT_CONFIDENCE_LEVEL`, `MIN_REWARD_PCT`, `MAX_STOP_LOSS_PCT`, `MIN_RISK_REWARD_RATIO`, `MAX_RISK_REWARD_RATIO`, `MIN_ANNUALIZED_VOLATILITY_PCT`, `DEDUP_TOLERANCE_PCT`, `DEFAULT_HISTORY_PERIOD`, session/scan timing

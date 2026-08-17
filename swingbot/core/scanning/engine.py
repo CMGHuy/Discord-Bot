@@ -77,7 +77,7 @@ from swingbot.core.infra.notifier import notify_secondary
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.plan_engine import (build_confluence_plan,
-                                       primary_strategy_for, select_tp2)
+                                       primary_strategy_for)
 from swingbot.core.planning.plan_store import PlanStore
 from .regime import get_htf_bias, get_market_regime
 from swingbot.core.infra.state import StateStore
@@ -170,6 +170,7 @@ class ScanItem:
     combined_from: list = field(default_factory=list)
     htf_info: dict = None             # from get_htf_bias() -- None when HTF check is off or inconclusive
     plan_v2: object = None            # TradePlanV2 | None
+    plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
@@ -530,12 +531,17 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         plan = build_confluence_plan(
             scenario, df, ticker=ticker, horizon_key=horizon_key,
             primary_strategy=primary_strategy_for(scenario),
-            quality_inputs=quality_inputs)
-        if plan.tp2 is None and level_map is not None:
-            supports, resistances = level_map
-            plan.tp2 = select_tp2([lv.price for lv in resistances],
-                                  [lv.price for lv in supports],
-                                  plan.direction, plan.trigger_price, plan.tp1)
+            level_map=level_map, quality_inputs=quality_inputs)
+        if plan is None:
+            # No level beyond entry pays MIN_RISK_REWARD_RATIO against this
+            # scenario's own risk. That is a real answer -- "no trade here" --
+            # not a failure, so it is recorded rather than logged as a warning,
+            # and _sync_run_scan drops the item instead of falling through to
+            # the legacy scenario numbers (which is what plan_numbers_for_display
+            # does for plan=None, and would silently re-post the very prices
+            # this change exists to stop posting).
+            item.plan_v2_rejected = "no_qualifying_target"
+            return
         item.plan_v2 = plan
     except Exception:
         log.warning("plan_v2 construction failed for %s/%s", ticker,
@@ -1149,6 +1155,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     }
     conf_level_counts: dict = {}   # {1..5: number of scenarios scored at that level}
     filtered_by_confirmation = 0
+    filtered_by_rr = 0  # v31 Task 6: no level cleared MIN_RISK_REWARD_RATIO (plan_v2_rejected)
 
     # ANALYZE phase (Task E20): the per-ticker candidate-building work
     # (_scan_one) runs in a bounded thread pool via map_tickers() -- it's
@@ -1253,6 +1260,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     item.plan_v2.regime_aligned = not (
                         item.htf_info and item.htf_info.get("counter_trend", False)
                     )
+                if (config.PLAN_ENGINE_V2 == "on"
+                        and getattr(item, "plan_v2_rejected", None)):
+                    filtered_by_rr += 1
+                    log.debug("%s (%s, %s): no level clears %.1f:1 reward:risk -- skipped",
+                              item.result.ticker, item.result.horizon_key,
+                              item.result.trend, config.MIN_RISK_REWARD_RATIO)
+                    continue          # never reaches scan_items -> never alerts
             scan_items.append(item)
 
     # Kill switch (E47): computed once per scan, right here -- AFTER the
@@ -1292,10 +1306,11 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         "Signal funnel: %d ticker/horizon combo(s) checked -> %d had no qualifying entry point (no real "
         "support/resistance, or didn't meet min reward/stop/risk-reward requirements) -> %d scenario(s) found, "
         "%d fully qualifying (min strategies confirmed failed %d, min confidence failed %d) -> "
-        "%d still awaiting confirmation (automatic scan only) -> %d shown/posted",
+        "%d still awaiting confirmation (automatic scan only) -> %d filtered by structural reward:risk -> "
+        "%d shown/posted",
         checked_count, no_entry_point, scenarios_found_count, fully_qualifying_count,
         failed_counts["min_confluence"], failed_counts["min_confidence"],
-        filtered_by_confirmation, len(scan_items),
+        filtered_by_confirmation, filtered_by_rr, len(scan_items),
     )
 
     deduped = dedup_scan_items(scan_items)

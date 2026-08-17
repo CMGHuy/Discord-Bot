@@ -181,19 +181,6 @@ def classify_levels(df: pd.DataFrame, i: int, raw_levels,
 
 # --- consumers --------------------------------------------------------------
 
-def gatekeepers_between(levels, *, entry: float, target: float) -> list[LevelState]:
-    """Undelivered levels standing between entry and target, nearest first.
-
-    dsgex's Gatekeeper: the level that has to break for the plan to work. Two
-    of these in the path is a materially different trade from none, and the
-    planner currently cannot tell the difference.
-    """
-    lo, hi = (entry, target) if target >= entry else (target, entry)
-    blockers = [lv for lv in levels
-                if lv.state != "delivered" and lo < lv.price < hi]
-    return sorted(blockers, key=lambda lv: abs(lv.price - entry))
-
-
 def preferred_stop_anchor(levels, *, direction: str) -> LevelState | None:
     """The level a stop should sit beyond, or None if none has earned it.
 

@@ -34,6 +34,9 @@ whichever direction some indicator happened to trigger on):
   - bearish: price drops to the next support (target 1), and -- if that
     keeps going -- the support beyond it (target 2). Invalidated by
     breaking the next resistance above.
+(v31) plan_engine.build_confluence_plan adopts this scenario's own target 1
+as the plan's real TP1 outright -- it no longer recomputes a smaller target
+from a fixed fraction of risk and demotes this one to TP2.
 
 A scenario only qualifies if its target 1 sits at least MIN_REWARD_PCT
 away from TODAY'S CURRENT PRICE (e.g. a €100 stock needs a target at or
@@ -508,6 +511,19 @@ def build_level_map(df: pd.DataFrame, h: dict, current_price: float):
     supports = sorted([lv for lv in clustered if lv.price < current_price], key=lambda l: -l.price)
     resistances = sorted([lv for lv in clustered if lv.price > current_price], key=lambda l: l.price)
     return supports, resistances
+
+
+def target_candidates(supports: list, resistances: list, direction: str) -> list:
+    """Ordered candidate TARGET prices for a plan, nearest to entry first.
+
+    Just the trade-direction side of a build_level_map() pair, unwrapped to
+    plain prices -- bullish plans target resistance, bearish plans target
+    support. Both lists arrive nearest-first from build_level_map, and that
+    order IS the selection order plan_engine.select_structural_target walks,
+    so this must not re-sort.
+    """
+    side = resistances if direction == "bullish" else supports
+    return [float(lv.price) for lv in side]
 
 
 @dataclass

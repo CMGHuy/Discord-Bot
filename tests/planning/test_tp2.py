@@ -56,14 +56,21 @@ def test_build_strategy_plan_fills_tp2_from_level_map():
     close = float(df["Close"].iloc[79])
     # supports/resistances mirror levels.build_level_map's return shape:
     # (supports, resistances), nearest-first Level lists either side of price.
+    # v31: MACD's tp1 is now the ATR-ladder's ~3rd rung (>=1.5R out), not the
+    # old ~0.35R arithmetic -- close+2/close+4 used to sit beyond the old
+    # tiny tp1 but now sit well BELOW the new one, so select_tp2 would find
+    # nothing beyond tp1. Moved further out to stay beyond tp1 while still
+    # inside select_tp2's leg cap (MAX_TARGET2_LEG_MULTIPLE x the entry->tp1
+    # leg).
     supports = [Level(price=close - 10, sources=["EMA20"])]
     resistances = [
-        Level(price=close + 2, sources=["EMA20"]),
-        Level(price=close + 4, sources=["Fib 61.8%"]),
+        Level(price=close + 15, sources=["EMA20"]),
+        Level(price=close + 20, sources=["Fib 61.8%"]),
     ]
     p = build_strategy_plan(df, 79, ticker="AAPL", strategy="MACD",
                             horizon_key="4w", direction="bullish",
                             level_map=(supports, resistances))
+    assert p.tp1 < close + 15, "fixture assumption: tp1 must sit below the first resistance"
     assert p.tp2 is not None
     assert p.tp2 > p.tp1
 
@@ -84,10 +91,13 @@ def test_build_strategy_plan_tp2_stays_none_without_level_map():
 # plan and isn't just correct in exit_params_for()'s own unit tests.
 
 def _level_map_beyond_tp1(close):
+    # v31: see the close+2/close+4 -> close+15/close+20 note in
+    # test_build_strategy_plan_fills_tp2_from_level_map above -- same fixture,
+    # same reasoning, shared by the two tests below.
     supports = [Level(price=close - 10, sources=["EMA20"])]
     resistances = [
-        Level(price=close + 2, sources=["EMA20"]),
-        Level(price=close + 4, sources=["Fib 61.8%"]),
+        Level(price=close + 15, sources=["EMA20"]),
+        Level(price=close + 20, sources=["Fib 61.8%"]),
     ]
     return supports, resistances
 

@@ -2,14 +2,8 @@
 import pytest
 
 
-def test_rr_override_single_source_and_floor():
-    from swingbot.core.market.strategy_types import STRATEGY_RR_OVERRIDE, BREAKEVEN_TRIGGER_FRACTION
-    from swingbot.core.backtesting.backtest import STRATEGY_RR_OVERRIDE as BT_RR, ALL_STRATEGIES
-
-    assert BT_RR is STRATEGY_RR_OVERRIDE          # same object, not a copy
-    assert set(STRATEGY_RR_OVERRIDE) == set(ALL_STRATEGIES)
-    assert all(rr >= 0.30 for rr in STRATEGY_RR_OVERRIDE.values()), \
-        "R:R below 0.30 makes 80% win rate unprofitable (spec hard floor)"
+def test_breakeven_trigger_fraction_is_a_valid_fraction():
+    from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION
     assert 0.0 < BREAKEVEN_TRIGGER_FRACTION < 1.0
 
 

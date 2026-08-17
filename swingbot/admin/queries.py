@@ -41,7 +41,7 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES
 from swingbot.core.tracking.performance import TradeLog, primary_strategy_label
 from swingbot.core.planning.plan_engine import PlanStatus, plan_to_dict
 from swingbot.core.planning.plan_store import PlanStore
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES, STRATEGY_RR_OVERRIDE
+from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_GATES
 from swingbot.core.backtesting.registry import load_registry
 
 from .dashboard import is_today_berlin as _is_today_berlin
@@ -212,7 +212,6 @@ def _registry_rows() -> list[dict]:
             "live_wr": live_wr,
             "delta_vs_oos": (live_wr - rec["win_rate"]) if live_wr is not None else None,
             "decayed": bool(drift.get("drift_alert")),
-            "rr_override": STRATEGY_RR_OVERRIDE.get(rec["strategy"]),
             "gate_description": _gate_description(rec["strategy"]),
         })
     return rows
