@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-16 21:05:49 UTC",
+  "generated_at": "2026-08-17 11:19:31 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.7.1",
-    "bot": "1.1.4"
+    "bot": "1.2.0"
   },
   "releases": [
     {
@@ -456,6 +456,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-08-17",
+      "last_seen": "2026-08-17",
+      "commit": "f36e10d0",
+      "subject": "release(bot): 1.2.0 -- structural target selection",
+      "versions": {
+        "ui": "1.7.1",
+        "bot": "1.2.0"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
