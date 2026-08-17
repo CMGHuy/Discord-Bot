@@ -25,6 +25,21 @@ sector-ETF fetch, and a pre-scenario gate consuming `rs_score()`.
 - **Alert-volume loss ≤ ~30%.**
 - **DEPENDS ON v32.** RS's scoring contribution lives in the merged registry.
 
+## v32 landed, but not as this plan assumed
+
+`docs/superpowers/plans/implemented/2026-08-16-v32-unified-confidence-score.md`
+merged to `main` on 2026-08-17. The registry itself is real, live code, but
+`UNIFIED_CONFIDENCE` stays default-off: v32's own TRAIN measurement could
+not even MEASURE RS (needs a historical per-date cross-sectional universe
+reconstruction this repo's cache doesn't retain -- same limitation this
+plan will need to solve, not something v32 solved for it), so RS was
+dropped from `FACTORS` for lack of evidence, not because it was tested and
+failed. v32's one-shot VALIDATION run then FAILed regardless (the
+near-empty factor pool scored slightly worse than the legacy scorer).
+There is no live "merged registry" gating anything in production today,
+and no established weight for RS to inherit. Full result:
+`docs/superpowers/plans/implemented/v32-train-preregistration.md`.
+
 ## The 50.0 sentinel — read before writing any gate code
 
 `rs_percentile()` (`edge/factors.py:29-38`) returns **`50.0`**, not `None`, when

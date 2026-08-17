@@ -26,6 +26,33 @@ trend signals are reconciled down first.
   otherwise.
 - **DEPENDS ON v32.** The macro penalty is a factor in v32's `FACTORS` registry.
 
+## v32 landed, but not as this plan assumed -- read before starting Task 5
+
+`docs/superpowers/plans/implemented/2026-08-16-v32-unified-confidence-score.md`
+merged to `main` on 2026-08-17. The registry (`FactorResult`/`FactorContext`/
+`FACTORS`/`run_factors`, `_resolve_confluence`, `level_for_score`) is real,
+live code -- Task 5 below can still register a factor into it. But
+**`UNIFIED_CONFIDENCE` stays default-off**: v32's TRAIN measurement found no
+factor with real, positively-signed win-rate lift (14 of 15 measured
+factors were Wilson-overlapping, 1 was real but wrong-signed), so v32's own
+`FACTORS` list ships with only one inert, never-firing factor
+(`factor_gap`), and its one-shot VALIDATION run then FAILed (a small
+win-rate regression vs. the legacy scorer). There is no "point budget v32
+establishes" to draw from -- the merged score's quality-points pool is
+empty, and it is not live in production regardless. Full result:
+`docs/superpowers/plans/implemented/v32-train-preregistration.md`.
+
+This does not block Task 5 mechanically (the registry still accepts a new
+factor), but it changes what registering into it accomplishes: a factor
+added to `FACTORS` only affects scoring when `UNIFIED_CONFIDENCE` is on,
+which it is not, and won't be without a future spec re-measuring the whole
+merged set (this plan's macro-anchor factor included) against real TRAIN
+evidence. Task 5's "provisional until v33 Task 7" framing and the PASS
+criterion at the bottom of this plan ("win rate improves vs. v32
+baseline") should be re-read with this in mind before executing -- not
+rewritten here, since that is this plan's own scope to work out, not v32's
+closing task's.
+
 ## The four overlapping trend signals
 
 This plan's spec named three. Reading config for v32's plan found a fourth.

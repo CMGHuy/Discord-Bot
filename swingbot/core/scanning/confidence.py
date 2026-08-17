@@ -126,7 +126,7 @@ log = logging.getLogger("swing-bot.confidence")
 
 # v32 Task 9: Level 6 ("Elite") was conditional on TRAIN clearing n>=100,
 # point estimate >=90%, Wilson lower bound >=80% and above Level 5's own
-# point estimate (see docs/superpowers/plans/v32-train-preregistration.md).
+# point estimate (see docs/superpowers/plans/implemented/v32-train-preregistration.md).
 # It did not clear that bar -- n=0, not just short: with the quality-points
 # pool empty (every measured factor dropped, see factors.py), the +1
 # quality nudge that could reach honesty_cap(4+)=6 never fires (score is

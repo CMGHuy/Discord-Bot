@@ -9,7 +9,7 @@ Weights live in the FactorResult each function returns, so re-weighting on
 TRAIN evidence never edits control flow.
 
 The kept factor set and the reasoning behind every drop is
-docs/superpowers/plans/v32-factor-reconciliation.md (Task 1).
+docs/superpowers/plans/implemented/v32-factor-reconciliation.md (Task 1).
 """
 from __future__ import annotations
 
@@ -349,7 +349,7 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
     reconciliation to keep it visibly distinct, in the breakdown, from the
     honesty-cap base level -- both derive from the same target_count, a
     deliberate, flagged (not silently resolved) overlap. See
-    docs/superpowers/plans/v32-factor-reconciliation.md."""
+    docs/superpowers/plans/implemented/v32-factor-reconciliation.md."""
     count = max(0, int(ctx.target_count))
     points = 20 if count >= 4 else {0: 0, 1: 7, 2: 12, 3: 16}[count]
     return FactorResult(
@@ -392,7 +392,7 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
 #
 # Full reasoning, and the user's explicit sign-off on this near-empty
 # result (confirmed across three separate questions given how much it
-# changes): docs/superpowers/plans/v32-train-preregistration.md.
+# changes): docs/superpowers/plans/implemented/v32-train-preregistration.md.
 FACTORS[:] = [
     factor_gap,
 ]

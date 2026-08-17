@@ -13,7 +13,7 @@ in favour of confidence LEVEL as the single vocabulary. LEVEL_COLORS/
 level_chip() replace TIER_COLORS/tier_chip(), same 3-color visual language
 (green/yellow/grey) mapped onto the 5-level scale (UNIFIED_CONFIDENCE
 stayed default-off after v32's VALIDATION FAIL -- see
-docs/superpowers/plans/v32-train-preregistration.md -- so this is still the
+docs/superpowers/plans/implemented/v32-train-preregistration.md -- so this is still the
 1-5 legacy scale, not 1-6).
 """
 import discord

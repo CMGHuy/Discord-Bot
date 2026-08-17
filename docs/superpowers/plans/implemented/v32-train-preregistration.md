@@ -1,6 +1,6 @@
 # v32 TRAIN measurement and VALIDATION pre-registration
 
-Task 9 of `docs/superpowers/plans/2026-08-16-v32-unified-confidence-score.md`.
+Task 9 of `docs/superpowers/plans/implemented/2026-08-16-v32-unified-confidence-score.md`.
 Written before Task 10's VALIDATION run and not revised after seeing its
 result.
 

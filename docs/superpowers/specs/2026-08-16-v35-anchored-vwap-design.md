@@ -132,5 +132,10 @@ even though it removes no alerts.
 
 ## Depends on
 
-**v32 must land first** — AVWAP-confirmed levels feed stop/target confluence
-factors whose weights v32 establishes.
+**v32 landed** (2026-08-17) but established no weight for this factor to
+inherit: the stop/target confluence factors it feeds
+(`factor_target_confluence_quality`/`factor_stop_confluence`) both measured
+Wilson-overlapping on TRAIN and were dropped, and `UNIFIED_CONFIDENCE` stays
+default-off after v32's VALIDATION FAIL. See `docs/superpowers/plans/
+2026-08-16-v35-anchored-vwap.md`'s (still a live plan) own "v32 landed, but
+not as this plan assumed" section for the full detail.

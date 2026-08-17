@@ -46,6 +46,20 @@ is not a new anchor — it is running the measurement and turning it on.
 - **NO-LOOKAHEAD** applies to any new anchor.
 - **DEPENDS ON v32** — AVWAP-confirmed levels feed confluence factors v32 weights.
 
+## v32 landed, but not as this plan assumed
+
+`docs/superpowers/plans/implemented/2026-08-16-v32-unified-confidence-score.md`
+merged to `main` on 2026-08-17 -- `_resolve_confluence`/`FactorContext`/
+`FACTORS` are real, live code (this plan's line 131-132 note about
+asserting against `dict.fromkeys` at `confidence.py:243` if v32 hadn't
+landed no longer applies -- it has). But `UNIFIED_CONFIDENCE` stays
+default-off: v32's TRAIN measurement found `factor_target_confluence_quality`
+and `factor_stop_confluence` (the confluence factors this plan's
+AVWAP-confirmed levels would feed) both Wilson-overlapping -- no measured
+weight for AVWAP-derived confluence to inherit -- and the one-shot
+VALIDATION run then FAILed regardless. Full result:
+`docs/superpowers/plans/implemented/v32-train-preregistration.md`.
+
 ## File Structure
 
 | File | Responsibility |
@@ -128,8 +142,9 @@ Expected: PASS — these describe existing behavior.
 
 If `test_multiple_avwap_anchors_count_as_one_confirming_method` **fails**, the
 inflation guard does not hold and becomes a real implementation task; fix it
-here before continuing. (`_resolve_confluence` is introduced by v32 Task 6; if
-v32 has not landed, assert against `dict.fromkeys` at `confidence.py:243`.)
+here before continuing. (`_resolve_confluence` was introduced by v32 Task 6
+and has landed -- assert against it directly, not the pre-v32
+`dict.fromkeys` fallback this note used to require.)
 
 - [ ] **Step 3: Commit**
 
