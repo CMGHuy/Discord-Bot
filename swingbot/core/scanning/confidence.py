@@ -127,11 +127,43 @@ LEVELS = [
     (1, "Very Low", 0, 20),
     (2, "Low", 21, 40),
     (3, "Medium", 41, 60),
-    (4, "High", 61, 80),
-    (5, "Very High", 81, 100),
+    (4, "High", 61, 75),
+    (5, "Very High", 76, 90),
+    (6, "Elite", 91, 100),
 ]
 _LEVEL_LABELS = {lvl: label for lvl, label, _lo, _hi in LEVELS}
 _LEVEL_RANGE = {lvl: (lo, hi) for lvl, _label, lo, hi in LEVELS}
+
+# Method-count ceiling. Until v32 this was emergent -- min(5, target_count)
+# plus at most +2 of adjustment -- which meant extending the scale to 6
+# would have silently let TWO methods reach Elite. It is explicit now.
+_HONESTY_CAP = {0: 1, 1: 3, 2: 4, 3: 5}
+_MAX_LEVEL = 6
+
+# The pre-v32 5-band ranges, frozen here so the still-untouched legacy score
+# path (below, until Task 6 extracts it into _score_confidence_legacy) keeps
+# repositioning its cosmetic score inside the OLD band edges -- widening
+# LEVELS to 6 bands moved Level 4/5's edges (61-80 -> 61-75, 81-100 -> 76-90),
+# and the legacy path must stay bit-identical while UNIFIED_CONFIDENCE is off.
+_LEGACY_LEVEL_RANGE = {1: (0, 20), 2: (21, 40), 3: (41, 60), 4: (61, 80), 5: (81, 100)}
+
+
+def honesty_cap(target_count: int) -> int:
+    """Highest level `target_count` independent confirming methods may reach.
+    Level 6 needs 4+, one stricter than Level 5's 3+."""
+    return _HONESTY_CAP.get(max(0, int(target_count)), _MAX_LEVEL)
+
+
+def level_for_score(score: int, target_count: int) -> tuple:
+    """Map a 0-100 score to a level, then lower it to the honesty cap if the
+    method count does not support it. The cap never raises a level."""
+    level = _MAX_LEVEL
+    for lvl, _label, lo, hi in LEVELS:
+        if lo <= score <= hi:
+            level = lvl
+            break
+    level = min(level, honesty_cap(target_count))
+    return level, _LEVEL_LABELS[level]
 
 # Step 3's thresholds -- quality has to be genuinely strong or genuinely
 # weak to move the level at all; the broad 31-69 middle ground leaves the
@@ -480,8 +512,10 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
 
     # Displayed score is cosmetic: the quality score repositioned inside
     # the FINAL level's own band, so the number on screen never
-    # contradicts the level right next to it.
-    lo, hi = _LEVEL_RANGE[level]
+    # contradicts the level right next to it. Uses the frozen legacy
+    # ranges (see _LEGACY_LEVEL_RANGE), not the v32-widened LEVELS table --
+    # this whole function is the legacy path until Task 6 extracts it.
+    lo, hi = _LEGACY_LEVEL_RANGE[level]
     score = lo + round(quality_score / 100 * (hi - lo))
     score = max(lo, min(hi, score))
 
