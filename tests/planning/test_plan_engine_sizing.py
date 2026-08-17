@@ -15,6 +15,7 @@ from swingbot.core.planning.plan_engine import (
     _sr_plan,
     elliott_target_candidates,
     fib_target_candidates,
+    sr_target_candidates,
 )
 from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_RR_OVERRIDE
 
@@ -151,14 +152,39 @@ def test_fibonacci_targets_only_fibonacci_levels(df, atr_series):
 
 @pytest.mark.parametrize("ratio", [0.5, 1.0, 2.5, np.nan])
 def test_sr_parity(df, atr_series, ratio):
+    # v31 Task 10: same pattern as Tasks 8-9 -- tp is no longer
+    # parity-matched against backtest._trade_plan_at's old volume-strength
+    # arithmetic (backtest.py doesn't thread candidate_levels yet; Task 12).
+    # STOP is unchanged (doesn't depend on volume_ratio at all) so it's
+    # checked against the same fixed-percent formula directly; tp against
+    # the RR band.
     hk = "3m"
-    vr = df["Close"] * 0 + ratio  # constant series
-    ref_entry, ref_stop, ref_tp = backtest._trade_plan_at(
-        df, I, "bullish", "Support/Resistance", hk, atr_series,
-        volume_ratio_series=vr)
+    h = HORIZONS[hk]
     entry, atr_val = _entry_atr(df, atr_series)
-    stop, tp = _sr_plan(entry, ratio, "bullish", hk)
-    assert (stop, tp) == pytest.approx((ref_stop, ref_tp), abs=1e-9)
+    expected_stop = entry * (1 - h["sr_stop_pct"] / 100)
+
+    candidates = sr_target_candidates(df, I, h, entry, ratio)
+    result = _sr_plan(entry, ratio, "bullish", hk, candidate_levels=candidates)
+    assert result is not None, "fixture must produce a qualifying S/R target"
+    stop, tp = result
+    assert stop == pytest.approx(expected_stop, abs=1e-9)
+    risk = abs(entry - stop)
+    assert config.MIN_RISK_REWARD_RATIO * risk - 1e-6 <= abs(tp - entry) <= \
+        config.MAX_RISK_REWARD_RATIO * risk + 1e-6
+
+
+def test_sr_target_is_structure_or_band_never_a_risk_multiple(df, atr_series):
+    hk = "3m"
+    h = HORIZONS[hk]
+    entry, atr_val = _entry_atr(df, atr_series)
+    for ratio in (0.5, 1.0, 2.5, np.nan):
+        candidates = sr_target_candidates(df, I, h, entry, ratio)
+        result = _sr_plan(entry, ratio, "bullish", hk, candidate_levels=candidates)
+        assert result is not None, f"fixture must qualify for ratio={ratio}"
+        stop, tp = result
+        risk = abs(entry - stop)
+        cap = entry + risk * config.MAX_RISK_REWARD_RATIO
+        assert any(abs(tp - c) < 1e-6 for c in candidates) or tp == pytest.approx(cap)
 
 
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])

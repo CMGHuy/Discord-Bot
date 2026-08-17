@@ -485,27 +485,55 @@ def _fibonacci_plan(entry, atr_val, swing_high, swing_low, direction, horizon_ke
     return stop_loss, take_profit
 
 
-def _sr_plan(entry, volume_ratio, direction, horizon_key):
-    """Fixed-percent stop; target from volume strength unless R:R override set."""
+def sr_target_candidates(df, index, h, entry, volume_ratio) -> list[float]:
+    """The S/R strategy's OWN target-side candidates: the rolling
+    structural high/low over `h["sr_lookback"]` (`.shift(1)`, matching
+    `collect_candidate_levels`' no-lookahead convention -- levels.py:227-228),
+    plus the existing volume-strength percentage band. The band alone keeps
+    this list non-empty on a ticker whose rolling structure sits the wrong
+    side of entry: the same volume_ratio-interpolated point the old
+    arithmetic used (`sr_target_min_pct`..`sr_target_max_pct`, by strength),
+    plus both fixed band ENDS explicitly, in both directions -- v31 replaces
+    "pick one point" with "offer every real S/R candidate and let
+    select_structural_target choose the nearest-qualifying one."
+    """
     from swingbot.core.market.strategy import SR_VOLUME_MULTIPLE
 
-    h = HORIZONS[horizon_key]
-    is_bull = direction == "bullish"
+    high = df["High"].rolling(h["sr_lookback"]).max().shift(1).iloc[index]
+    low = df["Low"].rolling(h["sr_lookback"]).min().shift(1).iloc[index]
+    candidates = []
+    if np.isfinite(high):
+        candidates.append(float(high))
+    if np.isfinite(low):
+        candidates.append(float(low))
+
     if not np.isfinite(volume_ratio):
         volume_ratio = SR_VOLUME_MULTIPLE
-
-    stop_pct = h["sr_stop_pct"]
     strength = (volume_ratio - SR_VOLUME_MULTIPLE) / (SR_VOLUME_STRENGTH_CEILING - SR_VOLUME_MULTIPLE)
     strength = max(0.0, min(1.0, strength))
-    target_pct = h["sr_target_min_pct"] + (h["sr_target_max_pct"] - h["sr_target_min_pct"]) * strength
+    min_pct, max_pct = h["sr_target_min_pct"], h["sr_target_max_pct"]
+    target_pct = min_pct + (max_pct - min_pct) * strength
+    for pct in (target_pct, min_pct, max_pct):
+        candidates.append(entry * (1 + pct / 100))
+        candidates.append(entry * (1 - pct / 100))
+    return candidates
 
+
+def _sr_plan(entry, volume_ratio, direction, horizon_key, candidate_levels=None):
+    """Fixed-percent stop. Target is the nearest real S/R candidate
+    (sr_target_candidates) that pays at least MIN_RISK_REWARD_RATIO, capped
+    at MAX_RISK_REWARD_RATIO (v31). Returns None when no candidate clears
+    the floor."""
+    h = HORIZONS[horizon_key]
+    is_bull = direction == "bullish"
+    stop_pct = h["sr_stop_pct"]
     stop_loss = entry * (1 - stop_pct / 100) if is_bull else entry * (1 + stop_pct / 100)
-    override = STRATEGY_RR_OVERRIDE.get("Support/Resistance")
-    if override is not None:
-        risk = abs(entry - stop_loss)
-        take_profit = entry + risk * override if is_bull else entry - risk * override
-    else:
-        take_profit = entry * (1 + target_pct / 100) if is_bull else entry * (1 - target_pct / 100)
+
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
     return stop_loss, take_profit
 
 
