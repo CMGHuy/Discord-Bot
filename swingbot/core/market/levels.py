@@ -34,6 +34,9 @@ whichever direction some indicator happened to trigger on):
   - bearish: price drops to the next support (target 1), and -- if that
     keeps going -- the support beyond it (target 2). Invalidated by
     breaking the next resistance above.
+(v31) plan_engine.build_confluence_plan adopts this scenario's own target 1
+as the plan's real TP1 outright -- it no longer recomputes a smaller target
+from a fixed fraction of risk and demotes this one to TP2.
 
 A scenario only qualifies if its target 1 sits at least MIN_REWARD_PCT
 away from TODAY'S CURRENT PRICE (e.g. a €100 stock needs a target at or
