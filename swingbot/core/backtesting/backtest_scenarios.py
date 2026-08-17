@@ -109,7 +109,10 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, gates: dict) -> list:
                 continue
             plan = build_confluence_plan(
                 sc, window, ticker=ticker, horizon_key=horizon_key,
-                primary_strategy=primary_strategy_for(sc))
+                primary_strategy=primary_strategy_for(sc),
+                level_map=(supports, resistances))
+            if plan is None:
+                continue          # no qualifying target -> no trade, same as live
             last_accepted[sc.direction] = i
             out.append((i, plan))
     return out
