@@ -67,6 +67,11 @@ TRADE_ROW = {
     "opened_at": NULLABLE_STR,
     "closed_at": NULLABLE_STR,
     "has_note": bool,
+    # Whether this row's CURRENT status was entered today (Europe/Berlin
+    # calendar day) -- the Dashboard lifecycle strip's date scope, applied
+    # uniformly across all five statuses rather than hardcoded to
+    # CLOSED/CANCELLED. See `_row_from_plan`'s `today` field.
+    "today": bool,
     # SR53 — the plan's own numbers, so a row that has not filled is not
     # mostly nulls. `created_at` is the only time an unfilled plan has;
     # `trigger_price` is its only actionable price; `follow_score` is the
@@ -592,6 +597,92 @@ def test_has_note_total_is_the_post_filter_count(seed, logged_in, tmp_path):
     seed(trades=[_trade("aaaaaaaaaaaaaaaa"), _trade("bbbbbbbbbbbbbbbb")])
     _with_note("aaaaaaaaaaaaaaaa", tmp_path)
     assert logged_in.get("/api/v1/trades?has_note=1").get_json()["total"] == 1
+
+
+# --- today (Dashboard lifecycle-strip parity) -----------------------------
+# Before this, clicking any of the strip's five statuses always landed here
+# with only a `status` filter -- no date scope at all, regardless of the
+# page's own Today+open/Today/All days toggle. Those first two modes were
+# then merged into one "Today", defined as: a row opened today, OR it has
+# not closed yet AT ALL -- so PENDING/ACTIVE/PARTIAL stay in Today no matter
+# how old they are (matching the strip's own all-time counts for those three,
+# SR53), and only CLOSED/CANCELLED are actually date-restricted, by when
+# they opened.
+
+def _today_iso():
+    """Today in Europe/Berlin, which is what `is_today_berlin` compares to."""
+    from datetime import datetime, timedelta
+    from datetime import timezone as tz
+
+    from swingbot.admin.dashboard import is_today_berlin
+    now = datetime.now(tz.utc)
+    for delta in (0, 1, -1):
+        candidate = (now + timedelta(hours=delta)).isoformat()
+        if is_today_berlin(candidate):
+            return candidate
+    return now.isoformat()
+
+
+_OLD_ISO = "2026-08-01T10:00:00+00:00"
+
+
+@pytest.mark.parametrize("status", ["PENDING", "ACTIVE", "PARTIAL"])
+def test_today_includes_a_still_open_plan_no_matter_how_old(seed, logged_in, status):
+    """Not yet closed at all -- included regardless of `created_at`. This is
+    the "if trades are not yet closed, also show in Today view" half."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status=status)
+    plan["created_at"] = _OLD_ISO
+    seed(plans=[plan])
+
+    items = logged_in.get(f"/api/v1/trades?status={status}&today=1").get_json()["items"]
+    assert [r["id"] for r in items] == [plan["plan_id"]]
+
+
+def test_today_filters_a_closed_plan_by_when_it_opened(seed, logged_in):
+    """CLOSED (and CANCELLED) are the only statuses this actually narrows --
+    to whichever day the plan was created/opened on."""
+    old = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
+    old["created_at"] = _OLD_ISO
+    fresh = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
+    fresh["created_at"] = _today_iso()
+    seed(plans=[old, fresh])
+
+    items = logged_in.get("/api/v1/trades?status=CLOSED&today=1").get_json()["items"]
+    assert [r["id"] for r in items] == [fresh["plan_id"]]
+
+
+def test_today_includes_a_still_open_legacy_trade_no_matter_how_old(seed, logged_in):
+    trade = _trade("aaaaaaaaaaaaaaaa", status="open")
+    trade["opened_at"] = _OLD_ISO
+    seed(trades=[trade])
+
+    items = logged_in.get("/api/v1/trades?status=ACTIVE&today=1").get_json()["items"]
+    assert [r["id"] for r in items] == ["aaaaaaaaaaaaaaaa"]
+
+
+def test_today_filters_a_closed_legacy_trade_by_when_it_opened(seed, logged_in):
+    """A legacy row has no separate creation moment -- `opened_at` doubles
+    as both, so `today` reads the same field a plan row's `created_at`
+    equivalent does."""
+    old = _trade("aaaaaaaaaaaaaaaa", status="win")
+    old["opened_at"] = _OLD_ISO
+    fresh = _trade("bbbbbbbbbbbbbbbb", status="win")
+    fresh["opened_at"] = _today_iso()
+    seed(trades=[old, fresh])
+
+    items = logged_in.get("/api/v1/trades?status=CLOSED&today=1").get_json()["items"]
+    assert [r["id"] for r in items] == ["bbbbbbbbbbbbbbbb"]
+
+
+def test_today_false_returns_the_others(seed, logged_in):
+    old = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
+    old["created_at"] = _OLD_ISO
+    fresh = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
+    fresh["created_at"] = _today_iso()
+    seed(plans=[old, fresh])
+
+    items = logged_in.get("/api/v1/trades?status=CLOSED&today=0").get_json()["items"]
+    assert [r["id"] for r in items] == [old["plan_id"]]
 
 
 # --- SR7: the status-bar fields ------------------------------------------

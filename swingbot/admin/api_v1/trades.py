@@ -63,7 +63,10 @@ FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon",
                      # neither side. `tag` is deliberately NOT here -- journal
                      # tags are not on a trade row at all, so filtering by one
                      # needs the journal endpoint SR55 adds.
-                     "badge", "confidence"})
+                     "badge", "confidence",
+                     # The Dashboard lifecycle strip's "today" scope -- see
+                     # `_row_from_plan`'s `today` field.
+                     "today"})
 
 # Query-parameter name -> row key, where the two differ. `confidence` reads
 # better in a URL than `confidence_level` and is what the chip row calls it;
@@ -90,10 +93,10 @@ _OUTCOMES = frozenset({"win", "loss", "open", "closed"})
 # splitting it across two chips would be exposing a storage detail.
 _OPEN_STATUSES = frozenset({"ACTIVE", "PARTIAL"})
 
-# Compared as booleans, not as strings. `has_note` is a real bool on the row,
-# and the generic comparison below stringifies it -- so `?has_note=1` would
-# test "1" == "True" and quietly match nothing.
-_BOOLEAN_FILTERS = frozenset({"has_note"})
+# Compared as booleans, not as strings. `has_note` and `today` are real bools
+# on the row, and the generic comparison below stringifies it -- so
+# `?has_note=1` would test "1" == "True" and quietly match nothing.
+_BOOLEAN_FILTERS = frozenset({"has_note", "today"})
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 # Closed set, per the collection convention: an unsortable field is a 400.
@@ -124,6 +127,22 @@ def _held_hours(opened_at, closed_at) -> float | None:
         return max(0.0, (end - start).total_seconds() / 3600.0)
     except (TypeError, ValueError):
         return None
+
+
+def _in_today_scope(status: str, created_at: str | None) -> bool:
+    """Whether a row belongs to the Dashboard's Today scope.
+
+    Two ways in, matching how "Today" was defined once `active` ("Today +
+    open") and `today` were merged into one mode: the row opened today, OR
+    it has not closed yet AT ALL. A PENDING/ACTIVE/PARTIAL plan (or an open
+    legacy trade) stays in Today no matter how old it is -- exactly what the
+    lifecycle strip's own PENDING/ACTIVE/PARTIAL counts already do (SR53,
+    all-time) -- so this only actually narrows CLOSED/CANCELLED rows, to
+    whichever day they were opened. `created_at` is `plan.get("created_at")`
+    for a plan row, `t.get("opened_at")` for a legacy one -- both already
+    computed by the caller.
+    """
+    return status not in _TERMINAL or dash.is_today_berlin(created_at)
 
 
 def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
@@ -166,6 +185,10 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "opened_at": opened_at,
         "closed_at": closed_at,
         "has_note": plan["plan_id"] in noted or t.get("id") in noted,
+        # Dashboard lifecycle-strip parity: clicking any of the five used to
+        # land here with no date filter at all, regardless of the strip's
+        # own Today/All days toggle. See `_in_today_scope`.
+        "today": _in_today_scope(plan.get("status"), plan.get("created_at")),
         # SR53 — the plan's own numbers, for a row that has not filled.
         #
         # `opened_at` and `held_hours` both describe an execution, so both are
@@ -218,6 +241,11 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "opened_at": t.get("opened_at"),
         "closed_at": t.get("closed_at"),
         "has_note": t.get("id") in noted,
+        # See `_row_from_plan`'s "today" for what this represents. A legacy
+        # trade's "created_at" IS `opened_at` (see below) -- there is no
+        # separate creation moment before a v1 alert logs the trade.
+        "today": _in_today_scope(_LEGACY_STATUS.get(t.get("status"), "CLOSED"),
+                                 t.get("opened_at")),
         # SR53. A legacy trade has no plan, so it has no creation time apart
         # from its open, no trigger it waited on, and no ranking. Emitted as
         # null rather than omitted, so both origins return one shape -- the
