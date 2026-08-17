@@ -120,6 +120,7 @@ import logging
 from swingbot import config
 from swingbot.core.market.candlestick_patterns import detect_confirming_pattern
 from swingbot.core.market.volatility import adx_trend_strength, macd_momentum_aligned, rsi_trend_aligned, squeeze_breakout_confirmation
+from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
 
 log = logging.getLogger("swing-bot.confidence")
 
@@ -243,9 +244,21 @@ def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tup
     return adjustment, detail
 
 
-def score_confidence(scenario, regime_trend: str = None, df=None,
-                      target_confluence: tuple = None, stop_confluence: tuple = None,
-                      track_record: tuple = None) -> ConfidenceResult:
+def _resolve_confluence(explicit: tuple | None, sources: list) -> tuple:
+    """(count, family_names) from an explicit levels.count_confirming_strategies
+    tuple if given, else a fallback count over the scenario's own
+    already-clustered raw sources. Shared by both the legacy and unified
+    score_confidence paths so they can never disagree about what "N
+    strategies confirmed this" means."""
+    if explicit is not None:
+        return explicit
+    families = list(dict.fromkeys(sources))
+    return len(families), families
+
+
+def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
+                             target_confluence: tuple = None, stop_confluence: tuple = None,
+                             track_record: tuple = None) -> ConfidenceResult:
     """
     `target_confluence` / `stop_confluence`, if given, are (count,
     family_names) tuples from levels.count_confirming_strategies -- the
@@ -269,17 +282,8 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     """
     breakdown = {}
 
-    if target_confluence is not None:
-        target_count, target_families = target_confluence
-    else:
-        target_families = list(dict.fromkeys(scenario.target_sources))
-        target_count = len(target_families)
-
-    if stop_confluence is not None:
-        stop_count, stop_families = stop_confluence
-    else:
-        stop_families = list(dict.fromkeys(scenario.stop_sources))
-        stop_count = len(stop_families)
+    target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
+    stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
 
     # --- Step 1: base level, directly from strategy count -----------
     base_level = max(1, min(5, target_count))
@@ -527,4 +531,46 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
                pts_distance, pts_stop, pts_regime, pts_adx, pts_macd, pts_rsi, pts_squeeze, pts_candle,
                quality_adjustment, expectancy_adjustment, level, label, score)
 
+    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)
+
+
+def score_confidence(scenario, regime_trend: str = None, df=None,
+                     target_confluence: tuple = None, stop_confluence: tuple = None,
+                     track_record: tuple = None, **kwargs) -> ConfidenceResult:
+    """Dispatches to the pre-v32 scorer unless UNIFIED_CONFIDENCE is on, in
+    which case it runs the merged factor registry (swingbot.core.scanning.factors)
+    instead. Signature and ConfidenceResult shape are unchanged either way --
+    every existing caller keeps working. **kwargs carries the unified-only
+    inputs (htf_bias, rs_percentile, mtf, breadth, volume_ratio, atr_pct,
+    trigger_distance_pct, badge_status, gap_fragile) the legacy path never
+    read; Task 7 wires real values in from engine.py."""
+    if not getattr(config, "UNIFIED_CONFIDENCE", False):
+        return _score_confidence_legacy(
+            scenario, regime_trend=regime_trend, df=df,
+            target_confluence=target_confluence,
+            stop_confluence=stop_confluence, track_record=track_record)
+
+    target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
+    stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
+
+    ctx = FactorContext(
+        scenario=scenario, df=df, regime_trend=regime_trend,
+        target_count=target_count, target_families=target_families,
+        stop_count=stop_count, stop_families=stop_families,
+        **{k: kwargs.get(k) for k in
+           ("htf_bias", "rs_percentile", "mtf", "breadth", "volume_ratio",
+            "atr_pct", "trigger_distance_pct", "badge_status", "gap_fragile")
+           if k in kwargs},
+    )
+    raw, breakdown = run_factors(FACTORS, ctx)
+    score = max(0, min(100, raw))
+
+    # Method count is re-read AFTER the factors run: the squeeze and
+    # candlestick factors append to scenario.target_sources, so counting
+    # earlier would miss confirmations they just added.
+    target_count, _ = _resolve_confluence(None, scenario.target_sources)
+    level, label = level_for_score(score, target_count)
+    breakdown["Confirming methods"] = (
+        f"{target_count} independent method(s) -> caps at Level "
+        f"{honesty_cap(target_count)}")
     return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)

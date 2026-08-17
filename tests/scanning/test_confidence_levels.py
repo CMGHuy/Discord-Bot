@@ -36,3 +36,32 @@ def test_low_score_is_not_rescued_by_many_methods():
     """The cap only ever lowers a level, never raises one."""
     level, _label = level_for_score(5, target_count=9)
     assert level == 1
+
+
+# --- Task 6: score_confidence() runs the registry behind the flag -----
+
+from swingbot import config  # noqa: E402
+from swingbot.core.scanning.confidence import score_confidence  # noqa: E402
+
+# Captured by running the pre-Task-6 (legacy) score_confidence directly
+# against sample_scenario (regime_trend="bullish", df=None) before this
+# task touched the function -- see the Task 6 commit message.
+LEGACY_EXPECTED_LEVEL = 4
+LEGACY_EXPECTED_SCORE = 73
+
+
+def test_legacy_path_is_bit_identical_when_flag_off(monkeypatch, sample_scenario):
+    """Default-OFF must mean *nothing changes*. This is the safety property
+    the whole rollout depends on."""
+    monkeypatch.setattr(config, "UNIFIED_CONFIDENCE", False)
+    result = score_confidence(sample_scenario, regime_trend="bullish", df=None)
+    assert result.level == LEGACY_EXPECTED_LEVEL
+    assert result.score == LEGACY_EXPECTED_SCORE
+
+
+def test_unified_path_returns_same_result_shape(monkeypatch, sample_scenario):
+    monkeypatch.setattr(config, "UNIFIED_CONFIDENCE", True)
+    result = score_confidence(sample_scenario, regime_trend="bullish", df=None)
+    assert 1 <= result.level <= 6
+    assert 0 <= result.score <= 100
+    assert isinstance(result.breakdown, dict)

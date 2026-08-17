@@ -67,7 +67,8 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.infra.jsonio import read_json
-from .confidence import ConfidenceResult, score_confidence
+from .confidence import LEVELS as _CONF_LEVELS
+from .confidence import ConfidenceResult, level_for_score, score_confidence
 from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
@@ -469,6 +470,40 @@ class LRUFrames(OrderedDict):
         self.move_to_end(key)
         while len(self) > self.max_frames:
             self.popitem(last=False)
+
+
+def _rebucket_after_htf_penalty(conf: ConfidenceResult, new_score: int,
+                                target_count: int, penalty: int) -> ConfidenceResult:
+    """Re-level a confidence result after the HTF counter-trend penalty
+    lowers its score (v32 Task 6, Step 6).
+
+    UNIFIED_CONFIDENCE on: goes through level_for_score(), the single
+    source of truth for the v32 6-band table. This module used to hardcode
+    `1 + new_score // 20` -- a copy of the OLD 5-equal-band boundaries that
+    silently computes the wrong level the instant the bands become uneven
+    (v32's Level 4/5 are 15-point bands, not 20).
+
+    UNIFIED_CONFIDENCE off: keeps that exact hardcoded formula. The legacy
+    score is still positioned inside the OLD 5-equal-band scale
+    (confidence._LEGACY_LEVEL_RANGE), so "default off means nothing
+    changes" has to hold here too, not just inside score_confidence()
+    itself -- rebucketing a legacy-positioned score through the NEW,
+    uneven bands would silently promote some post-penalty scores (e.g. 76-79)
+    to a level higher than the unmodified formula ever gave them, even with
+    the flag off.
+    """
+    if config.UNIFIED_CONFIDENCE:
+        new_level, new_label = level_for_score(new_score, target_count)
+    else:
+        new_level = max(1, min(5, 1 + new_score // 20))
+        new_label = next(
+            (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
+            conf.label,
+        )
+    return ConfidenceResult(
+        level=new_level, score=new_score, label=new_label,
+        breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
+    )
 
 
 def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
@@ -938,18 +973,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             if htf_counter_trend and config.HTF_COUNTER_TREND_PENALTY > 0:
                 penalty = config.HTF_COUNTER_TREND_PENALTY
                 new_score = max(0, conf.score - penalty)
-                # Re-bucket the level from the adjusted score using the
-                # same 20-point band boundaries as confidence.py uses.
-                new_level = max(1, min(5, 1 + new_score // 20))
-                from .confidence import LEVELS as _CONF_LEVELS
-                new_label = next(
-                    (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
-                    conf.label,
-                )
-                conf = ConfidenceResult(
-                    level=new_level, score=new_score, label=new_label,
-                    breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
-                )
+                conf = _rebucket_after_htf_penalty(conf, new_score, target_confluence[0], penalty)
+                new_level = conf.level
                 log.info(
                     "%s (%s, %s): HTF counter-trend (signal=%s, %d-day EMA=%s) -- "
                     "confidence reduced by %d pts to Lv%d(%d/100)",
