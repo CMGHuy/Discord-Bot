@@ -378,31 +378,33 @@ def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
 
 
 def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
-                          strategy, horizon_key, level_map=None):
-    """Re-price (stop, tp1) against what price has actually done to nearby levels.
+                          strategy, horizon_key, level_map=None, candidate_levels=None):
+    """Re-price `stop` against what price has actually done to nearby levels --
+    move it beyond a level that has been *tested* rather than leaving it
+    inside the noise a fresh level implies. (The old "target realism"
+    adjustment -- pulling TP1 back inside a gatekeeper level -- was measured
+    inert, rejected 248/248, and is deleted here along with its
+    LEVEL_LIFECYCLE_TARGETS_ENABLED flag/branch; Task 14 removes the flag
+    itself.)
 
-    Two independent, independently-flagged adjustments:
+    Widening the stop changes risk, so `tp1` is RE-SELECTED against the new
+    risk from the same `candidate_levels` the caller's builder used -- there
+    is no longer a frozen R:R formula to recompute it from (v31). If nothing
+    on that candidate list clears MIN_RISK_REWARD_RATIO against the wider
+    stop, the widening is rolled back entirely and the original (stop, tp1)
+    pair is returned untouched: a wider stop with no target that pays for it
+    is strictly worse than the tighter stop this function started with, and
+    the reward:risk guarantee is the contract, not the widening. Returns
+    (stop, tp1, meta).
 
-      * stop anchoring -- move the stop beyond a level that has been *tested*
-        rather than leaving it inside the noise a fresh level implies. The
-        target is re-derived from the new risk distance so the frozen R:R
-        table is preserved exactly (same arithmetic as _atr_plan).
-      * target realism -- pull TP1 back inside the nearest undelivered
-        "gatekeeper" standing between entry and target.
-
-    Both are capped by the frozen constants: max_risk_pct bounds the stop, and
-    an adjustment that would push R:R under RR_FLOOR is discarded rather than
-    applied. Returns (stop, tp1, meta).
-
-    COST NOTE: with a flag on and no level_map (i.e. in the backtest), this
+    COST NOTE: with the flag on and no level_map (i.e. in the backtest), this
     builds a level map per entry bar. Entries are sparse -- single digits per
     ticker/strategy/horizon -- but a full grid still pays it thousands of
-    times. Flags off is a bit-identical zero-cost fast path, which is why the
+    times. Flag off is a bit-identical zero-cost fast path, which is why the
     check comes first.
     """
     stops_on = getattr(config, "LEVEL_LIFECYCLE_STOPS_ENABLED", False)
-    targets_on = getattr(config, "LEVEL_LIFECYCLE_TARGETS_ENABLED", False)
-    if not (stops_on or targets_on):
+    if not stops_on:
         return stop, tp1, {}
 
     try:
@@ -417,43 +419,37 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
 
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
-    rr = _rr_for(strategy, horizon_key)
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     buffer = STRUCTURE_BUFFER_ATR * atr_val
     meta: dict = {}
 
-    if stops_on:
-        anchor = levels_lifecycle.preferred_stop_anchor(levels, direction=direction)
-        # Only a level that has actually held is worth moving a stop for; a
-        # fresh one is an untested guess and the ATR stop is already that.
-        if anchor is not None and anchor.state == "tested":
-            candidate = anchor.price - buffer if is_bull else anchor.price + buffer
-            risk = entry - candidate if is_bull else candidate - entry
-            # Widen only. Tightening onto a level would put the stop inside
-            # the very structure it is meant to sit behind.
-            if 0 < risk <= max_risk_amount and risk > abs(entry - stop):
-                stop = candidate
-                tp1 = entry + risk * rr if is_bull else entry - risk * rr
+    anchor = levels_lifecycle.preferred_stop_anchor(levels, direction=direction)
+    # Only a level that has actually held is worth moving a stop for; a
+    # fresh one is an untested guess and the ATR stop is already that.
+    if anchor is not None and anchor.state == "tested":
+        candidate = anchor.price - buffer if is_bull else anchor.price + buffer
+        risk = entry - candidate if is_bull else candidate - entry
+        # Widen only. Tightening onto a level would put the stop inside
+        # the very structure it is meant to sit behind.
+        if 0 < risk <= max_risk_amount and risk > abs(entry - stop):
+            new_tp1 = select_structural_target(
+                entry, candidate, is_bull, candidate_levels or [],
+                config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+            if new_tp1 is None:
+                # ROLL BACK. Widening the stop is a refinement; the
+                # reward:risk guarantee is the contract. A wider stop with
+                # no target that pays for it is strictly worse than the
+                # tighter stop we already had, so keep the original pair
+                # untouched -- do NOT keep the wide stop with the old
+                # target, which is exactly the inverted-R:R plan this
+                # change exists to stop shipping.
+                meta["lifecycle_stop_rolled_back"] = {
+                    "price": round(anchor.price, 4), "state": anchor.state}
+            else:
+                stop, tp1 = candidate, new_tp1
                 meta["lifecycle_stop"] = {"price": round(anchor.price, 4),
                                           "state": anchor.state,
                                           "touches": anchor.touches}
-
-    if targets_on:
-        blockers = levels_lifecycle.gatekeepers_between(levels, entry=entry, target=tp1)
-        if blockers:
-            gk = blockers[0]
-            candidate = gk.price - buffer if is_bull else gk.price + buffer
-            reward = candidate - entry if is_bull else entry - candidate
-            risk = abs(entry - stop)
-            if reward > 0 and risk > 0 and reward / risk >= RR_FLOOR:
-                tp1 = candidate
-                meta["lifecycle_target"] = {"price": round(gk.price, 4),
-                                            "state": gk.state,
-                                            "blockers": len(blockers)}
-            else:
-                # Recorded, not applied: pulling in here would break the frozen
-                # R:R floor, and that floor outranks this heuristic.
-                meta["lifecycle_target_skipped"] = len(blockers)
 
     return stop, tp1, meta
 
@@ -789,7 +785,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     stop, tp1, _lifecycle_meta = apply_level_lifecycle(
         df, index, entry=close, stop=stop, tp1=tp1, atr_val=atr_val,
         direction=direction, strategy=strategy, horizon_key=horizon_key,
-        level_map=level_map)
+        level_map=level_map, candidate_levels=candidates)
 
     if abs(close - stop) <= 0:
         return None

@@ -16,11 +16,16 @@ def _run_with_forced_entry(monkeypatch, df, entry_bar, direction="bullish",
 
 
 def test_scratch_when_trigger_reached_then_returns_to_entry(monkeypatch):
-    # Constant 100 with 1% spread: every bar's high=100.5 >= trigger 100.35,
-    # and every bar's low=99.5 <= entry 100. Bar e+1 arms the break-even move
-    # (original stop 98 not hit, target 100.7 not hit), bar e+2 hits the moved
-    # stop at entry -> scratch at ~0R.
-    df = make_ohlcv(np.full(60, 100.0), spread_pct=1.0)
+    # v31: EMA Crossover (ATR fallback) now prices stop=98/target=103 for
+    # this entry (the ATR-ladder's real target, not the old ~100.7 R:R-
+    # override arithmetic) -- break-even arms at entry + 0.5*(target-entry)
+    # = 101.5, not the old 100.35. Bar e+1 spikes to 101.6 (high 102.11 >=
+    # 101.5, low 101.09 stays above stop 98, high stays below target 103)
+    # to arm the break-even move without closing the trade; bar e+2 reverts
+    # to 100.0 (low 99.5 <= entry 100) to hit the moved stop -> scratch.
+    closes = np.full(60, 100.0)
+    closes[41] = 101.6
+    df = make_ohlcv(closes, spread_pct=1.0)
     # frictions=False: this test pins the scratch-classification/exit-price
     # LOGIC (Task E11 leaves it exercising exact arithmetic, not economics --
     # the friction haircut is covered separately by test_edge_frictions.py).
@@ -35,8 +40,10 @@ def test_scratch_when_trigger_reached_then_returns_to_entry(monkeypatch):
 
 
 def test_win_when_target_hit_before_stop(monkeypatch):
+    # v31: target is now 103.0 (the ATR-ladder's real target), not the old
+    # ~100.7 R:R-override arithmetic.
     closes = np.full(60, 100.0)
-    closes[41:] = 101.0                  # bar e+1 jumps: high 101.5 >= target 100.7
+    closes[41:] = 103.6                  # bar e+1 jumps: high 104.12 >= target 103.0
     df = make_ohlcv(closes, spread_pct=1.0)
     s = _run_with_forced_entry(monkeypatch, df, entry_bar=40)
     assert s.wins == 1 and s.losses == 0 and s.scratches == 0

@@ -178,7 +178,8 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     # why this must be here and not only in build_strategy_plan.
     stop_loss, take_profit, _ = apply_level_lifecycle(
         df, i, entry=entry, stop=stop_loss, tp1=take_profit, atr_val=atr_val,
-        direction=direction, strategy=strategy, horizon_key=horizon_key)
+        direction=direction, strategy=strategy, horizon_key=horizon_key,
+        candidate_levels=candidates)
 
     return entry, stop_loss, take_profit
 
