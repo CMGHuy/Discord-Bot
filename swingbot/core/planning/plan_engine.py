@@ -285,8 +285,30 @@ def _rr_for(strategy: str, horizon_key: str) -> float:
     return max(rr, RR_FLOOR)
 
 
-def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
-    """Default volatility sizing: ATR-multiple stop, R:R-override target.
+ATR_TARGET_LADDER = (1, 2, 3, 4, 5, 6, 8, 10)
+
+
+def atr_target_candidates(entry, atr_val, direction) -> list[float]:
+    """Volatility IS the structure for the eight strategies that size
+    through _atr_plan (EMA Crossover, VWAP, RSI, MACD, MA Ribbon,
+    Break & Retest, RSI Divergence, Volume Profile). None of them produces
+    a price level of its own, and borrowing the unified level map here was
+    rejected (plan v31) -- a MACD plan targeting a Fibonacci level is not a
+    MACD plan. So the candidates are this ticker's own ATR bands. At the
+    horizon default (atr_stop_multiple 2.0) risk is 2 ATR, which puts the
+    1.5R floor at 3 ATR and the 2.5R cap at 5 ATR: the ladder brackets the
+    whole band and the nearest-qualifying rule lands on 3 ATR."""
+    is_bull = direction == "bullish"
+    return [entry + k * atr_val if is_bull else entry - k * atr_val
+            for k in ATR_TARGET_LADDER]
+
+
+def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
+             candidate_levels=None):
+    """Default volatility sizing: ATR-multiple stop; target is the nearest
+    ATR-ladder candidate (atr_target_candidates) that pays at least
+    MIN_RISK_REWARD_RATIO, capped at MAX_RISK_REWARD_RATIO (v31). Returns
+    None when nothing clears the floor.
 
     `stop_mult` (edge E31) is an INJECTED MAE-informed adjustment factor,
     never looked up here. That is deliberate: this function is the shared
@@ -296,23 +318,30 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None):
     Callers that legitimately have a multiplier pass it in; the E33 fold
     harness will pass its own fold-train-derived value.
 
-    Scaling `risk_distance` (rather than the stop price) keeps R:R exactly
-    where it was -- the same distance feeds both the stop and the
-    R:R-override target, and the R:R table plus the 0.30 floor are frozen
-    constants this must not move.
+    Scaling `risk_distance` (rather than the stop price) keeps the stop's
+    ATR-multiple exact -- the same distance feeds both the stop and, via
+    select_structural_target's own risk argument, the target floor/cap.
+    `strategy` is accepted but unused: the ladder is identical for all
+    eight fallback strategies (kept for call-site signature parity, not
+    because a per-strategy R:R table survives here -- that table is
+    deleted in Task 14).
     """
     h = HORIZONS[horizon_key]
     is_bull = direction == "bullish"
     risk_distance = h["atr_stop_multiple"] * atr_val
     if stop_mult is not None:
         risk_distance *= stop_mult
-    rr = _rr_for(strategy, horizon_key)
     max_risk_amount = entry * (h["max_risk_pct"] / 100)
     if risk_distance > max_risk_amount:
         risk_distance = max_risk_amount
-    if is_bull:
-        return entry - risk_distance, entry + risk_distance * rr
-    return entry + risk_distance, entry - risk_distance * rr
+    stop_loss = entry - risk_distance if is_bull else entry + risk_distance
+
+    take_profit = select_structural_target(
+        entry, stop_loss, is_bull, candidate_levels or [],
+        config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+    if take_profit is None:
+        return None
+    return stop_loss, take_profit
 
 
 # --- level lifecycle (P1) ---------------------------------------------------

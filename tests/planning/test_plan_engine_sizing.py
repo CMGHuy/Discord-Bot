@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from swingbot import config
-from swingbot.core.backtesting import backtest
 from swingbot.core.market.indicators import atr
 from swingbot.core.planning.plan_engine import (
     STRUCTURE_BUFFER_ATR,
@@ -13,11 +12,12 @@ from swingbot.core.planning.plan_engine import (
     _fibonacci_plan,
     _safe_atr_value,
     _sr_plan,
+    atr_target_candidates,
     elliott_target_candidates,
     fib_target_candidates,
     sr_target_candidates,
 )
-from swingbot.core.market.strategy_types import HORIZONS, STRATEGY_RR_OVERRIDE
+from swingbot.core.market.strategy_types import HORIZONS
 
 from tests.helpers import make_ohlcv
 
@@ -61,38 +61,50 @@ def _entry_atr(df, atr_series):
     return entry, _safe_atr_value(entry, float(atr_series.iloc[I]))
 
 
-# --- golden asserts (Task 8) -------------------------------------------------
+# --- golden asserts (Task 11) -------------------------------------------------
 
-def test_atr_plan_bullish_golden():
+ATR_FALLBACK_STRATEGIES = (
+    "EMA Crossover", "VWAP", "RSI", "MACD", "MA Ribbon",
+    "Break & Retest", "RSI Divergence", "Volume Profile",
+)
+
+
+def test_atr_plan_stop_is_atr_multiple_capped_by_max_risk_pct():
+    # Stop derivation is untouched by v31 -- same golden value as before.
     close, atr_val, h = 100.0, 2.0, "4w"
-    stop, tp1 = _atr_plan(close, atr_val, "bullish", h, "MACD")
     mult = HORIZONS[h]["atr_stop_multiple"]
-    rr = STRATEGY_RR_OVERRIDE["MACD"]
     exp_risk = min(mult * atr_val, close * HORIZONS[h]["max_risk_pct"] / 100)
+    candidates = atr_target_candidates(close, atr_val, "bullish")
+    result = _atr_plan(close, atr_val, "bullish", h, "MACD", candidate_levels=candidates)
+    assert result is not None
+    stop, tp = result
     assert stop == pytest.approx(close - exp_risk)
-    assert tp1 == pytest.approx(close + rr * exp_risk)
 
 
 def test_atr_plan_bearish_mirror():
-    stop, tp1 = _atr_plan(100.0, 2.0, "bearish", "4w", "MACD")
-    assert stop > 100.0 and tp1 < 100.0
+    candidates = atr_target_candidates(100.0, 2.0, "bearish")
+    result = _atr_plan(100.0, 2.0, "bearish", "4w", "MACD", candidate_levels=candidates)
+    assert result is not None
+    stop, tp = result
+    assert stop > 100.0 and tp < 100.0
 
-
-def test_rr_floor_applies():
-    stop, tp1 = _atr_plan(100.0, 2.0, "bullish", "4w", "MACD")
-    assert (tp1 - 100.0) / (100.0 - stop) >= 0.30 - 1e-9
-
-
-# --- characterization parity vs backtest._trade_plan_at (Tasks 8-11) ---------
 
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
-@pytest.mark.parametrize("hk", ["4w", "3m"])
-def test_atr_parity(df, atr_series, direction, hk):
-    ref_entry, ref_stop, ref_tp = backtest._trade_plan_at(
-        df, I, direction, "MACD", hk, atr_series)
-    entry, atr_val = _entry_atr(df, atr_series)
-    stop, tp = _atr_plan(entry, atr_val, direction, hk, "MACD")
-    assert (stop, tp) == pytest.approx((ref_stop, ref_tp), abs=1e-9)
+@pytest.mark.parametrize("strategy", ATR_FALLBACK_STRATEGIES)
+@pytest.mark.parametrize("horizon_key", ["2w", "4w", "3m"])
+def test_atr_plan_target_is_an_atr_band_at_or_past_the_floor(horizon_key, strategy, direction):
+    entry, atr_val = 100.0, 2.0
+    candidates = atr_target_candidates(entry, atr_val, direction)
+    result = _atr_plan(entry, atr_val, direction, horizon_key, strategy,
+                       candidate_levels=candidates)
+    assert result is not None, f"{strategy}/{horizon_key}/{direction} must qualify"
+    stop, tp = result
+    risk = abs(entry - stop)
+    reward = abs(tp - entry)
+    assert 1.5 - 1e-9 <= reward / risk <= 2.5 + 1e-9
+    cap = entry + risk * config.MAX_RISK_REWARD_RATIO if direction == "bullish" \
+        else entry - risk * config.MAX_RISK_REWARD_RATIO
+    assert any(abs(tp - c) < 1e-6 for c in candidates) or tp == pytest.approx(cap)
 
 
 @pytest.mark.parametrize("direction", ["bullish", "bearish"])
