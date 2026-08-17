@@ -150,6 +150,56 @@ def plan_from_dict(d: dict) -> TradePlanV2:
     return TradePlanV2(**known)   # missing fields use dataclass defaults
 
 
+def select_structural_target(entry: float, stop_loss: float, is_bull: bool,
+                             candidate_levels, min_rr: float,
+                             max_rr: float) -> float | None:
+    """THE target price for every plan this engine builds.
+
+    Nearest real level beyond `entry` that pays at least `min_rr` times the
+    plan's own risk, capped at `max_rr`. Returns None when no candidate
+    clears the floor -- which means "there is no trade here", not "fall back
+    to something smaller". There is deliberately no fallback: pricing a
+    target off a fixed fraction of risk is exactly the arithmetic that made
+    every posted plan risk 3x what it stood to make (plan v31).
+
+    NEAREST-qualifying, not farthest: the floor already guarantees the
+    payoff, and a closer target is reached more often. Beyond `max_rr` the
+    result is a SYNTHETIC price at exactly `entry +/- risk * max_rr` -- not
+    the level, not None. That level is still a real level, and select_tp2
+    will pick it up as tp2 (the cap declines it as tp1, it does not delete
+    it).
+
+    `candidate_levels` is an iterable of plain prices; each caller supplies
+    ITS OWN source (unified level map for the confluence path, the
+    strategy's own native levels for the strategy builders -- see the
+    sizing-builders comment block above). Nothing is looked up in here, for
+    the same reason `_atr_plan` takes an injected `stop_mult`: this function
+    is shared by the live path and the backtest, and a hidden lookup would
+    price 2020 backtest bars off today's live data.
+    """
+    risk = abs(entry - stop_loss)
+    if risk <= 0 or min_rr <= 0:
+        return None
+    if max_rr < min_rr:
+        raise ValueError(f"max_rr {max_rr} < min_rr {min_rr}")
+
+    # Relative epsilon: a level sitting EXACTLY at the floor must qualify,
+    # and float arithmetic on a $600 stock does not land exactly.
+    eps = 1e-9 * max(1.0, abs(entry))
+    floor_dist, cap_dist = risk * min_rr, risk * max_rr
+
+    beyond = [float(p) for p in candidate_levels
+              if p and (p > entry if is_bull else p < entry)]
+    qualifying = [p for p in beyond if abs(p - entry) >= floor_dist - eps]
+    if not qualifying:
+        return None
+
+    nearest = min(qualifying, key=lambda p: abs(p - entry))
+    if abs(nearest - entry) > cap_dist + eps:
+        return entry + cap_dist if is_bull else entry - cap_dist
+    return nearest
+
+
 # ---------------------------------------------------------------------------
 # Sizing builders — extracted verbatim from backtest._trade_plan_at so the
 # backtest, live signals, and the plan manager all price identically.
