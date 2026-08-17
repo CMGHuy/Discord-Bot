@@ -124,12 +124,12 @@
   "source": "strategy",
   "strategy": "Break & Retest",
   "horizon": null,
-  "status": "VALIDATED",
-  "n": 148,
-  "win_rate": 84.5,
-  "expectancy_r": 0.21,
+  "status": "WEAK",
+  "n": 112,
+  "win_rate": 49.1,
+  "expectancy_r": 0.195,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-17"
  },
  {
   "source": "strategy",
@@ -180,11 +180,11 @@
   "strategy": "MACD",
   "horizon": null,
   "status": "VALIDATED",
-  "n": 123,
-  "win_rate": 81.3,
-  "expectancy_r": 0.12,
+  "n": 112,
+  "win_rate": 50.0,
+  "expectancy_r": 0.219,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-17"
  },
  {
   "source": "strategy",
@@ -223,22 +223,22 @@
   "source": "strategy",
   "strategy": "VWAP",
   "horizon": null,
-  "status": "VALIDATED",
-  "n": 77,
-  "win_rate": 80.5,
-  "expectancy_r": 0.25,
+  "status": "WEAK",
+  "n": 75,
+  "win_rate": 49.3,
+  "expectancy_r": 0.302,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-17"
  },
  {
   "source": "strategy",
   "strategy": "Volume Profile",
   "horizon": null,
   "status": "VALIDATED",
-  "n": 47,
-  "win_rate": 83.0,
-  "expectancy_r": 0.479,
+  "n": 32,
+  "win_rate": 53.1,
+  "expectancy_r": 0.547,
   "window": "2024-01-01..2025-12-31",
-  "run_date": "2026-07-18"
+  "run_date": "2026-08-17"
  }
 ]

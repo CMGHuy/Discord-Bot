@@ -111,9 +111,9 @@ def pooled_max_dd_pct(trades, risk_pct=1.0):
     return max_dd
 
 
-def passes(stats, min_n):
+def passes(stats, min_n, pass_wr=80.0):
     return (stats["n_eval"] >= min_n
-            and stats["win_rate"] is not None and stats["win_rate"] >= 80
+            and stats["win_rate"] is not None and stats["win_rate"] >= pass_wr
             and stats["expectancy_r"] is not None and stats["expectancy_r"] > 0
             and stats["excluded_share"] <= 0.5)
 
@@ -258,6 +258,11 @@ def main():
     ap.add_argument("--run-date", dest="run_date", default=None,
                     help="YYYY-MM-DD stamped on emitted registry records "
                          "(required with --emit-registry; explicit for reproducibility)")
+    ap.add_argument("--pass-wr", dest="pass_wr", type=float, default=80.0,
+                    help="win-rate floor a registry record must clear to be stamped VALIDATED "
+                         "(build_registry_records' own pass_wr param, now CLI-exposed -- v31 "
+                         "moved this off the 80.0 default; see docs/claude/backtest-methodology.md "
+                         "'Acceptance gates' for why 80 no longer fits every engine)")
     ap.add_argument("--exit-model", dest="exit_model", choices=["v1", "v2"], default="v1")
     ap.add_argument("--scale-out", dest="scale_out", action="store_true")
     ap.add_argument("--frictions", dest="frictions", choices=["on", "off"], default="on",
@@ -298,7 +303,7 @@ def main():
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
         print(f"Merged {len(summaries)} records into {args.emit_registry} "
               f"(replayed from {args.from_json}, no backtest run)")
         return
@@ -374,7 +379,7 @@ def main():
         lines.append(f"-- excluded (bad data, Task E16): {len(excluded_bad_data)} of {len(tickers)} ticker(s) --")
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_bad_data)
         lines.append("")
-    lines.append(f"== {label} {date_from} .. {date_to} | pass: WR>=80, ExpR>0, N>={min_n}, excl<=50% ==")
+    lines.append(f"== {label} {date_from} .. {date_to} | pass: WR>={args.pass_wr:g}, ExpR>0, N>={min_n}, excl<=50% ==")
     lines.append(header)
     results = {}
     for strat in strategies:
@@ -384,7 +389,7 @@ def main():
         wr = f"{st['win_rate']:.1f}" if st["win_rate"] is not None else "n/a"
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         dd = f"{st['max_dd_pct']:.1f}" if st["max_dd_pct"] is not None else "n/a"
-        flag = "PASS" if passes(st, min_n) else "FAIL"
+        flag = "PASS" if passes(st, min_n, pass_wr=args.pass_wr) else "FAIL"
         row = f"{strat:22s} {st['n_eval']:5d} {wr:>6s} {er:>7s} {dd:>7s}"
         if show_runner_cols:
             awr = f"{st['avg_win_r']:+.3f}" if st["avg_win_r"] is not None else "n/a"
@@ -430,7 +435,7 @@ def main():
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
         print(f"Merged {len(summaries)} records into {args.emit_registry}")
     print("\nSaved backtest_range_summary.txt")
 

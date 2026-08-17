@@ -1,0 +1,19 @@
+{
+  "MACD": {
+    "n_eval": 112,
+    "wins": 56,
+    "losses": 56,
+    "scratches": 29,
+    "timeouts": 3,
+    "closed": 144,
+    "win_rate": 50.0,
+    "expectancy_r": 0.21938888888888888,
+    "excluded_share": 0.2222222222222222,
+    "avg_win_r": 1.5648035714285713,
+    "max_dd_pct": -14.854222890512403,
+    "runner_tp2_pct": 39.285714285714285,
+    "runner_trail_pct": 50.0,
+    "runner_be_pct": 3.571428571428571,
+    "runner_timeout_pct": 7.142857142857142
+  }
+}
