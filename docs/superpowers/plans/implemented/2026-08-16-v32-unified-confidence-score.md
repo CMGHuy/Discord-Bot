@@ -1260,15 +1260,39 @@ git commit -m "docs(v32): correct strategy.md, bump version, close the spec"
 ## Progress
 
 - [x] Task 1 — Factor reconciliation
-- [ ] Task 2 — Registry contract
-- [ ] Task 3 — Port confidence.py factors
-- [ ] Task 4 — Port quality.py components (RS/MTF/breadth)
-- [ ] Task 5 — Six levels + honesty cap
-- [ ] Task 6 — Rewire score_confidence behind the flag
-- [ ] Task 7 — Feed real RS/MTF/breadth to the gate
-- [ ] Task 8 — TRAIN factor-lift measurement
-- [ ] Task 9 — Re-weight, decide Level 6
-- [ ] Task 10 — VALIDATION run
-- [ ] Task 11 — Retire tier
-- [ ] Task 12 — Re-point audit + ablation
-- [ ] Task 13 — Docs + version bump
+- [x] Task 2 — Registry contract
+- [x] Task 3 — Port confidence.py factors
+- [x] Task 4 — Port quality.py components (RS/MTF/breadth)
+- [x] Task 5 — Six levels + honesty cap
+- [x] Task 6 — Rewire score_confidence behind the flag
+- [x] Task 7 — Feed real RS/MTF/breadth to the gate
+- [x] Task 8 — TRAIN factor-lift measurement
+- [x] Task 9 — Re-weight, decide Level 6
+- [x] Task 10 — VALIDATION run
+- [x] Task 11 — Retire tier
+- [x] Task 12 — Re-point audit + ablation
+- [x] Task 13 — Docs + version bump
+
+**Closed 2026-08-17, all 13 tasks complete — a negative result, not a
+partial one.** TRAIN measurement (Task 8) found no factor with real,
+positively-signed win-rate lift: 14 of 15 measured quality factors were
+Wilson-overlapping, the 15th (RSI trend alignment) had a real lift but the
+wrong sign, and RS/breadth (two of the three factors this spec's whole
+premise rests on) were never measurable with this repo's TRAIN cache at
+all. Task 9 dropped all of them; `FACTORS` ships with one inert factor
+(`factor_gap`, never fires). That same result forced a real architecture
+fix beyond re-weighting: `level_for_score()` (Task 5) derived level purely
+from the emptied quality score, which would have pinned every alert at
+Level 1 regardless of method count -- fixed to make `honesty_cap` the base
+level again, with quality only able to nudge it, restoring the Global
+Constraints' actual intent. Level 6 was removed on the same TRAIN result
+(n=0, not marginal). The one-shot VALIDATION run (Task 10) then FAILed: the
+restructured method-count-only gating scored a small win-rate regression
+against the legacy scorer it was meant to replace (-0.82pp), well within
+the volume budget but still a real regression, and volume alone can't clear
+that gate. `UNIFIED_CONFIDENCE` stays default-off. Tier retirement (Task
+11) and documentation (Task 13) shipped regardless, as real, live,
+observable changes -- see `docs/superpowers/plans/implemented/
+v32-train-preregistration.md` for the full numbers and every judgment call
+made along the way, several confirmed with the user given how much they
+changed the plan's own premise.
