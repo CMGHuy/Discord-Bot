@@ -124,6 +124,7 @@ import pytest
 from pathlib import Path
 import pandas as pd
 from swingbot.core.backtesting.backtest import run_backtest
+from swingbot.core.planning.plan_engine import TP1_FRACTION
 import swingbot.core.market.entry_filters as ef
 
 CACHE = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
@@ -158,18 +159,35 @@ def test_v2_scale_out_keeps_classification_and_expectancy():
     # the test deterministic regardless of how far the cache now extends.
     df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
     df = df.loc["2018-06-01":"2025-12-31"]
-    # frictions=False: the "expectancy can only drop by rounding noise" floor
-    # below is a v1-vs-v2 economics comparison, not a Task E11 concern --
-    # leaving v1's friction haircut on would just add unrelated slack to the
-    # inequality instead of testing the floor it's meant to pin.
+    # frictions=False: the floor below is a v1-vs-v2 economics comparison,
+    # not a Task E11 concern -- leaving v1's friction haircut on would just
+    # add unrelated slack to the inequality instead of testing the floor
+    # it's meant to pin.
     v1 = run_backtest("TSLA", df, "Elliott Wave", "4w", frictions=False)
     v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
     # TP1 unchanged => identical win/loss/scratch classification
     assert (v1.wins, v1.losses, v1.scratches) == (v2.wins, v2.losses, v2.scratches)
     # runner sub-outcomes partition the wins
     assert v2.runner_tp2 + v2.runner_trail + v2.runner_be + v2.runner_timeout == v2.wins
-    # runner floor is BE => expectancy can only drop by rounding noise
-    assert v2.expectancy_r >= v1.expectancy_r - 0.02
+    # v31: TP1 now sits at a real structural level (1.5-2.5R) instead of the
+    # old ~0.35-0.40R fixed fraction of risk this floor was originally
+    # derived against -- "expectancy can only drop by rounding noise" no
+    # longer holds. With TP1 already a substantial win, the runner leg
+    # riding BEYOND it has genuine two-sided risk: it can give back some of
+    # that gain before the trail catches it (this fixture's 2024-12-10 win
+    # does exactly that -- v1 exits 100% at TP1 for 2.5R, v2's runner half
+    # gives back part of the move for a blended 1.678R -- not a bug, the
+    # ordinary cost of "let winners run"). Losing trades stop out before TP1
+    # is ever touched, so no leg has split yet -- v1 and v2 must match
+    # exactly there. A winning trade's true worst case is
+    # plan_engine.TP1_FRACTION (0.5) of v1's own r_multiple for that same
+    # trade: half banked at TP1, the other half floored at breakeven (0R).
+    for v1_t, v2_t in zip(v1.trades, v2.trades):
+        assert v1_t.outcome == v2_t.outcome
+        if v1_t.outcome == "loss":
+            assert v2_t.r_multiple == pytest.approx(v1_t.r_multiple, abs=1e-9)
+        elif v1_t.outcome == "win":
+            assert v2_t.r_multiple >= v1_t.r_multiple * TP1_FRACTION - 0.02
 
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
 def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
@@ -181,20 +199,35 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
     # entry price, was reported as a flat 0.0% return despite a real,
     # positive-R win).
     #
-    # This pin needs a specific fixture shape (a runner_be win on TSLA under
-    # "Elliott Wave"/4w) that predates the rescue's strict wave-2 gate
-    # (2026-07 rescue plan, Task 105); that gate's TRAIN-adopted defaults
-    # suppress the exact trade this regression relies on. The gate's
-    # correctness is covered by tests/test_rescue_elliott.py -- this test is
-    # about return_pct arithmetic, not Elliott Wave signal quality -- so the
-    # gate is pinned off here to keep exercising the original known-good
-    # fixture regardless of future strategy tuning.
+    # This pin needs a specific fixture shape (a real runner_be win) that
+    # predates the rescue's strict wave-2 gate (2026-07 rescue plan,
+    # Task 105); that gate's TRAIN-adopted defaults suppress the exact
+    # trade this regression relies on. The gate's correctness is covered by
+    # tests/test_rescue_elliott.py -- this test is about return_pct
+    # arithmetic, not Elliott Wave signal quality -- so the gate is pinned
+    # off here to keep exercising a known-good fixture regardless of future
+    # strategy tuning.
+    #
+    # v31: TP1 sits at 1.5-2.5R now instead of the old ~0.35-0.40R fixed
+    # fraction of risk, which structurally guarantees every win's blended
+    # r_multiple is at least TP1_FRACTION * 1.5 = 0.75 (half banked at
+    # TP1's new floor, the other half floored at breakeven) -- the old
+    # "r_multiple < 0.5" proxy for "this must be a runner_be win" can never
+    # match anymore, not because the bug came back, but because that
+    # heuristic's own premise (a runner_be win prints a small positive R)
+    # no longer holds when TP1 itself is already substantial. TSLA/Elliott
+    # Wave/4w (this test's original fixture) no longer produces a real
+    # runner_be win in this window under the new pricing; DOCU/4w does
+    # (confirmed empirically, one real runner_be win with a genuinely
+    # nonzero return_pct on 2022-06-10), so the fixture moved rather than
+    # the test's actual assertion weakening -- and detection now checks the
+    # real `runner_outcome` field instead of the R-multiple proxy.
     baseline = dict(ef.DEFAULT_PARAMS["Elliott Wave"])
     ef.DEFAULT_PARAMS["Elliott Wave"].update(
         {"w2_min_retrace": None, "w2_max_retrace": None, "w2_max_duration_ratio": None})
     try:
-        df = pd.read_csv(CACHE / "TSLA.csv", index_col="Date", parse_dates=True)
-        v2 = run_backtest("TSLA", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
+        df = pd.read_csv(CACHE / "DOCU.csv", index_col="Date", parse_dates=True)
+        v2 = run_backtest("DOCU", df, "Elliott Wave", "4w", exit_model="v2", scale_out=True)
     finally:
         ef.DEFAULT_PARAMS["Elliott Wave"] = baseline
     for t in v2.trades:
@@ -205,7 +238,7 @@ def test_v2_scale_out_return_pct_matches_r_multiple_not_just_runner_leg():
         assert t.return_pct == pytest.approx(implied_return_pct)
     # At least one runner_be win must exist in this fixture and must show a
     # nonzero return_pct (the exact case the bug reported as 0.0%).
-    be_wins = [t for t in v2.trades if t.outcome == "win" and t.r_multiple < 0.5]
+    be_wins = [t for t in v2.trades if t.runner_outcome == "runner_be"]
     assert be_wins and all(t.return_pct != 0.0 for t in be_wins)
 
 @pytest.mark.skipif(not CACHE.is_dir(), reason="no OHLCV cache")
