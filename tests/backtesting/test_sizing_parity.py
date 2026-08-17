@@ -11,6 +11,16 @@ compares plan_engine against the *current* (post-delegation)
 layer of indirection and can no longer prove extraction correctness on its
 own.
 
+STOP ONLY as of plan v31 (docs/superpowers/plans/2026-08-16-v31-structural-targets.md,
+Task 15): the frozen reference's target arithmetic is now permanently stale
+-- plan_engine prices every target off a real structural level instead of a
+fixed per-strategy reward:risk ratio, and the frozen module (deliberately;
+see its own docstring) was never taught the new selector. Comparing tp1
+would just assert a known, designed-in divergence forever. Stop derivation
+is genuinely unchanged by v31 and remains a real, meaningful check. A bar
+where the new selector finds no qualifying target (`_trade_plan_at` returns
+None) is skipped, not compared -- the frozen side has no such concept.
+
 Runs on 3 fixed cached tickers x all 11 strategies x horizons {"4w", "3m"}
 for speed; `scripts/reports/parity_sizing.py` runs the same comparison over every
 cached ticker, every strategy, every horizon, every TRAIN-window entry bar.
@@ -118,6 +128,7 @@ def test_sizing_parity(ticker, strategy, horizon_key):
 
     entry_idx = np.where(bullish.values | bearish.values)[0]
     checked = 0
+    none_count = 0
     for i in entry_idx:
         if i < min_bars:
             continue
@@ -127,20 +138,32 @@ def test_sizing_parity(ticker, strategy, horizon_key):
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
         )
-        _, new_stop, new_tp = backtest._trade_plan_at(
+        new_plan = backtest._trade_plan_at(
             df, i, direction, strategy, horizon_key, atr_series,
             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
         )
+        if new_plan is None:
+            # v31: a real "no qualifying target" answer -- no level clears
+            # MIN_RISK_REWARD_RATIO against this bar's risk. Not a parity
+            # failure (the frozen legacy side has no such concept and always
+            # returns a tuple); just not comparable at this bar.
+            none_count += 1
+            continue
+        _, new_stop, new_tp = new_plan
 
         assert old_stop == pytest.approx(new_stop, abs=TOLERANCE), (
             f"{ticker}/{strategy}/{horizon_key} bar {i} ({direction}): "
             f"stop mismatch old={old_stop!r} new={new_stop!r}"
         )
-        assert old_tp == pytest.approx(new_tp, abs=TOLERANCE), (
-            f"{ticker}/{strategy}/{horizon_key} bar {i} ({direction}): "
-            f"tp1 mismatch old={old_tp!r} new={new_tp!r}"
-        )
+        # tp1 is NOT compared. It diverges from the frozen reference BY
+        # DESIGN as of plan v31 (docs/superpowers/plans/2026-08-16-v31-structural-targets.md):
+        # plan_engine now prices every target off a real structural level
+        # (plan_engine.select_structural_target) instead of the frozen
+        # module's fixed per-strategy reward:risk arithmetic. A tp1
+        # mismatch here is expected, not a regression -- do not add this
+        # assertion back.
         checked += 1
 
     if checked == 0:
-        pytest.skip(f"no entry signals for {ticker}/{strategy}/{horizon_key}")
+        pytest.skip(f"no entry signals for {ticker}/{strategy}/{horizon_key} "
+                    f"({none_count} bar(s) had no qualifying v31 target)")

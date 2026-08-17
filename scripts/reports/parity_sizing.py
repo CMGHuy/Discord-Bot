@@ -12,14 +12,16 @@ Runs every ticker cached under data/backtest_cache/ x every strategy in
 backtest.ALL_STRATEGIES x every horizon in HORIZONS x every entry bar whose
 entry date falls in the TRAIN window (2020-01-01..2023-12-31, same window
 scripts/backtest/run_backtest_range.py and scripts/backtest/tune_strategy.py use), comparing
-(stop, tp1) old vs new.
+stop old vs new (STOP ONLY -- see the v31 note below for why tp1 isn't).
 
     python scripts/reports/parity_sizing.py
 
-Prints the count compared, the max abs deviation seen, and the mismatch
-count (deviation > 1e-6); exits 1 if any mismatch is found. A mismatch here
-is a real correctness bug in the plan_engine extraction -- investigate it,
-do not loosen TOLERANCE or edit the frozen reference to make this pass.
+Prints the count compared, the count skipped as "no qualifying v31 target"
+(a bar where the new selector correctly declines, not an error), the max
+abs stop deviation seen, and the mismatch count (deviation > 1e-6); exits 1
+if any mismatch is found. A mismatch here is a real correctness bug in the
+plan_engine extraction -- investigate it, do not loosen TOLERANCE or edit
+the frozen reference to make this pass.
 
 KNOWN EXCEPTION (v31 Task 14/15): tp1 now diverges from the frozen reference
 BY DESIGN -- plan_engine prices every target off a real structural level
@@ -102,6 +104,7 @@ def main() -> int:
     compared = 0
     max_abs_dev = 0.0
     mismatches = 0
+    no_qualifying_target = 0
 
     for ti, ticker in enumerate(tickers, 1):
         df = _load_cached(CACHE_DIR / f"{ticker}.csv")
@@ -139,7 +142,7 @@ def main() -> int:
                             df, i, direction, strategy, horizon_key, atr_series,
                             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
                         )
-                        _, new_stop, new_tp = backtest._trade_plan_at(
+                        new_plan = backtest._trade_plan_at(
                             df, i, direction, strategy, horizon_key, atr_series,
                             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
                         )
@@ -147,20 +150,38 @@ def main() -> int:
                         print(f"    ! {strategy}/{horizon_key} bar {i}: {e}")
                         continue
 
+                    if new_plan is None:
+                        # v31: a real "no qualifying target" answer, not an
+                        # error and not a parity mismatch -- the frozen
+                        # reference has no such concept and always returns
+                        # a tuple. Counted separately so a run that quietly
+                        # compares zero bars is visible, not silent.
+                        no_qualifying_target += 1
+                        continue
+                    _, new_stop, new_tp = new_plan
+
                     compared += 1
-                    dev = max(abs(old_stop - new_stop), abs(old_tp - new_tp))
+                    # tp1 is NOT part of the deviation check. It diverges
+                    # from the frozen reference BY DESIGN as of plan v31
+                    # (docs/superpowers/plans/2026-08-16-v31-structural-targets.md,
+                    # Task 15) -- plan_engine prices every target off a real
+                    # structural level instead of the frozen module's fixed
+                    # per-strategy reward:risk arithmetic. Only stop is
+                    # still a meaningful parity check.
+                    dev = abs(old_stop - new_stop)
                     max_abs_dev = max(max_abs_dev, dev)
                     if dev > TOLERANCE:
                         mismatches += 1
                         print(
                             f"    MISMATCH {ticker} {strategy}/{horizon_key} bar {i} "
                             f"({entry_date}, {direction}): "
-                            f"old=({old_stop:.6f},{old_tp:.6f}) new=({new_stop:.6f},{new_tp:.6f}) "
-                            f"dev={dev:.8f}"
+                            f"old_stop={old_stop:.6f} new_stop={new_stop:.6f} "
+                            f"dev={dev:.8f} (tp1 not compared: old={old_tp:.6f} new={new_tp:.6f})"
                         )
 
     print(f"\ncompared: {compared}")
-    print(f"max abs deviation: {max_abs_dev:.10f}")
+    print(f"no qualifying v31 target (skipped, not a mismatch): {no_qualifying_target}")
+    print(f"max abs stop deviation: {max_abs_dev:.10f}")
     print(f"mismatches: {mismatches}")
     return 1 if mismatches else 0
 
