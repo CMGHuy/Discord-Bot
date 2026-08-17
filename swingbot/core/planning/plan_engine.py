@@ -155,6 +155,73 @@ def plan_from_dict(d: dict) -> TradePlanV2:
 # backtest, live signals, and the plan manager all price identically.
 # ---------------------------------------------------------------------------
 
+# v31 Task 1 — candidate-level source for each of the six call sites that
+# will feed select_structural_target() (Task 2). Confirmed against source,
+# no production code changed here.
+#
+# 1. build_confluence_plan (:654+) — candidates come from the unified level
+#    map. swingbot.core.market.levels.build_level_map already returns
+#    (supports, resistances) as ordered Level lists, nearest-first (supports
+#    sorted by -price, resistances by price — market/levels.py:505). The
+#    ordered candidate list already exists: [lv.price for lv in resistances]
+#    (bullish) or [lv.price for lv in supports] (bearish). No change needed
+#    to build_level_map/build_scenarios, only threading (Task 4). Both
+#    holders of that map confirmed: engine.ScanItem.level_map
+#    (scanning/engine.py:173, consumed at :1248) and
+#    backtesting/backtest_scenarios.py:82-88, which re-splits an as-of map
+#    against the current bar's price.
+# 2. _fibonacci_plan (:314) — receives only swing_high/swing_low. Its native
+#    ladder is market.indicators.fibonacci_levels(df, h["fib_lookback"]):
+#    retracements at 0.236/0.382/0.5/0.618/0.786 measured down from the
+#    swing high (market/indicators.py:39-59). Confirmed: no extension ratios
+#    exist in that function today. Decision: ADD 1.272/1.618 extensions of
+#    the same swing as targets beyond swing_high — otherwise a bullish fib
+#    plan entering near the swing high has at most one candidate and returns
+#    None constantly.
+# 3. _elliott_plan (:366) — receives only wave2.
+#    market.indicators.elliott_wave3_entries (function at :215, docstring at
+#    :235-239) already hands every caller
+#    {wave0, wave1, wave2, wave0_idx, wave1_idx, wave2_idx} and its docstring
+#    explicitly says callers may reuse these without recomputing pivots.
+#    Native wave-3 targets are the classic projections off wave 2:
+#    wave2 ± k * |wave1 - wave0| for k in (1.0, 1.618, 2.618), plus wave1
+#    itself. Sign convention for the bearish branch (kind0 == "high",
+#    p2 < p0) confirmed at the call site.
+# 4. _sr_plan (:342) — takes no df at all; its target today is a pure
+#    percentage band interpolated by volume strength
+#    (h["sr_target_min_pct"]..h["sr_target_max_pct"]). It has no native
+#    levels. Its natural candidates are the structure the strategy actually
+#    trades: df["High"].rolling(h["sr_lookback"]).max().shift(1) and the
+#    matching rolling low, plus the existing percentage-band prices as a
+#    floor so the candidate list is never empty.
+# 5. _atr_plan (:170) — the fallback for 8 of 11 strategies (EMA Crossover,
+#    VWAP, RSI, MACD, MA Ribbon, Break & Retest, RSI Divergence, Volume
+#    Profile). It has no price structure of any kind; its only native scale
+#    is volatility. THE ONE OPEN DECISION IN THIS PLAN, now decided: an ATR
+#    ladder, entry ± k * atr_val for k in (1, 2, 3, 4, 5, 6, 8, 10). Rejected
+#    alternatives: borrowing the unified map (rejected by the spec's
+#    per-strategy decision), returning None for all eight strategies
+#    (rejected — empties !ticker, empties the backtest for those strategies,
+#    and therefore empties the badge registry that stamp_badge reads).
+#    Reason for the ladder: with atr_stop_multiple = 2.0 (confirmed above,
+#    HORIZONS[*]["atr_stop_multiple"], strategy_types.py) the risk is 2 ATR,
+#    so min_rr = 1.5 puts the floor at 3 ATR and max_rr = 2.5 at 5 ATR — the
+#    ladder brackets the whole band, the nearest-qualifying rule lands on
+#    3 ATR, and the answer is deterministic and honest ("this strategy's
+#    structure is volatility").
+# 6. apply_level_lifecycle (:233) — already builds or receives a classified
+#    level list via _lifecycle_levels, which returns
+#    market.levels_lifecycle.LevelState objects carrying .price (confirmed
+#    at levels_lifecycle.py:68). Confirmed usable as selector candidates
+#    directly (Task 13 uses .price); preferred_stop_anchor (:197) and
+#    gatekeepers_between (:184) signatures confirmed in the same module.
+#
+# NOTE on plan-doc drift: the plan text says these three modules live under
+# swingbot.core.planning — they actually live under swingbot.core.market
+# (market/levels.py, market/indicators.py, market/levels_lifecycle.py).
+# Substance of every claim above is otherwise correct; only the package
+# name was stale.
+
 def _safe_atr_value(entry: float, atr_val: float) -> float:
     if not np.isfinite(atr_val) or atr_val <= 0:
         return entry * 0.02
