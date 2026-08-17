@@ -510,6 +510,19 @@ def build_level_map(df: pd.DataFrame, h: dict, current_price: float):
     return supports, resistances
 
 
+def target_candidates(supports: list, resistances: list, direction: str) -> list:
+    """Ordered candidate TARGET prices for a plan, nearest to entry first.
+
+    Just the trade-direction side of a build_level_map() pair, unwrapped to
+    plain prices -- bullish plans target resistance, bearish plans target
+    support. Both lists arrive nearest-first from build_level_map, and that
+    order IS the selection order plan_engine.select_structural_target walks,
+    so this must not re-sort.
+    """
+    side = resistances if direction == "bullish" else supports
+    return [float(lv.price) for lv in side]
+
+
 @dataclass
 class LevelTarget:
     price: float
