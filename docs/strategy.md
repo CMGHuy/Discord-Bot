@@ -343,6 +343,41 @@ Checks a benchmark index (default SPY) against its 200-day EMA to
 classify the broad market as bullish/bearish (`!regime` anytime). Feeds
 into confidence scoring for alignment.
 
+## Horizon-to-horizon trend alignment (measured, and OFF)
+
+A 2026-08 spec (v33) asked whether a setup that fights the *next horizon
+up* is worth alerting -- e.g. a `2w` bullish setup while the `4w` trend is
+bearish. Two checks were built and tested (`swingbot/core/market/mtf.py`),
+and each horizon's trend is read from **its own** `HORIZONS` EMA pair, not
+from a shared 50/200 proxy:
+
+- **Adjacent-horizon gate** (`MTF_ADJACENT_GATE`, **default off**) -- would
+  drop a scenario outright when the next horizon up trends against it.
+  `9m` is *exempt*: there is no horizon above it, so it is never gated.
+- **6m macro anchor** -- reads a shorter horizon's setup against the 6m
+  trend ("agrees with the 6m bullish trend" / "⚠️ counter to the 6m bearish
+  trend"). `6m`-`9m` are *exempt*: a horizon cannot anchor to itself or to
+  something shorter.
+
+**An exemption is not a pass.** Both checks return `exempt` / `aligned` /
+`opposed` as three distinct verdicts, and only a genuine `opposed` ever
+means anything: "we could not tell" is never recorded as agreement.
+
+**Neither ships as behaviour.** The macro anchor is worth **0 points**: its
+lift was measured rather than assumed, and the measurement came back at
+zero. It lives in the factor registry built by the v32 merged-score
+experiment described above, which is *itself* off by default
+(`UNIFIED_CONFIDENCE`) -- so on the default configuration it does
+not run at all, and if you turn that registry on it contributes information
+to the breakdown and nothing to the score. The
+adjacent gate's one-shot VALIDATION run (2024-2025, 2804 scenarios) showed
+a small win-rate **regression**, −0.51pp with fully overlapping confidence
+intervals, for a 6.6% cut in setups, so it stays off by default and the
+scoring described above remains the live description. It is left in place as
+an option you can enable, not as a recommendation. Numbers and the
+pre-registered PASS rule they were judged against:
+`docs/superpowers/plans/implemented/v33-train-preregistration.md`.
+
 ## Ticker symbol resolution
 
 Common aliases (`SPX`→`^GSPC`, `XAUUSD`→`GC=F`, `EURUSD`→`EURUSD=X`, etc.)

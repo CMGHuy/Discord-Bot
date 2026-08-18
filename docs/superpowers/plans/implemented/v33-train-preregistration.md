@@ -1,6 +1,6 @@
 # v33 TRAIN measurement and VALIDATION pre-registration
 
-Task 7 of `docs/superpowers/plans/2026-08-16-v33-mtf-trend-alignment.md`.
+Task 7 of `docs/superpowers/plans/implemented/2026-08-16-v33-mtf-trend-alignment.md`.
 Written before Task 8's VALIDATION run and **not to be revised after seeing
 its result** — the same discipline
 `docs/superpowers/plans/implemented/v32-train-preregistration.md` was held to.
@@ -339,3 +339,120 @@ repo can produce.
   FAIL. **No re-runs on FAIL**, no threshold tuning, no scope adjustment
   after seeing the number. A FAIL means `MTF_ADJACENT_GATE` stays
   `default="false"` and no `VERSION.json` bump is earned.
+
+---
+
+# VALIDATION result — **FAIL** (appended after the run)
+
+**Everything above this line is the pre-registration and is unchanged** — it
+was committed at `0dc75ee`, `git diff` against that commit was empty
+immediately before the run, and nothing above was edited after seeing the
+number. This section only records what came back.
+
+Run once, 2026-08-18, exit 0:
+
+```
+python scripts/backtest/measure_adjacent_gate_effect.py --validation \
+    --cache-dir <main checkout>/data/backtest_cache --json data/v33_validation.json
+```
+
+`2804 VALIDATION scenarios`, 2024-01-01..2025-12-31, 75 tickers x 10 horizons
+x 11 strategies. The instrument's NO-LOOKAHEAD guard passed first: 1230
+sampled (horizon, bar) pairs, 0 mismatches. The dump is gitignored for the
+same deploy reason as TRAIN's, so every number is recorded here.
+
+## The three pre-registered conditions, scored
+
+| # | Condition | Measured | Verdict |
+|---|---|---|---|
+| 1 | `ALL.after.wr` **>** `ALL.before.wr` (strict) | 47.981% vs **48.495%** — the gate **lowered** win rate by **0.515pp** | **FAIL** |
+| 2 | `ALL.volume_loss_pct` ≤ 30.0 | **6.63%** | pass |
+| 3 | `max` per-horizon `volume_loss_pct` ≤ 50.0 | **32.06%** (`2w`; next highest 7.66%) | pass |
+
+**Verdict: FAIL.** Condition 1 is unmet, and the rule is "any of the three
+unmet". Conditions 2 and 3 pass comfortably; they do not offset condition 1.
+
+**Mandatory reporting condition:** the before/after Wilson intervals **overlap**
+(`separated: false`) — before 48.50% [46.31, 50.69], after 47.98% [45.71,
+50.25]. As on TRAIN, the effect is not statistically demonstrated. The
+direction of the point estimate simply reversed: TRAIN +0.57pp, VALIDATION
+−0.51pp, both inside the noise. That is the textbook signature of a signal
+with no measurable edge, which is exactly what the pre-registration warned
+TRAIN's overlapping intervals might mean.
+
+## Step 1 table — VALIDATION, gate off vs. gate on
+
+Same format as TRAIN's table above: `scenarios / evaluated / wins`, win rate
+is `wins / evaluated`.
+
+| Horizon | before: scen / eval / wins | WR before (Wilson 95%) | after: scen / eval / wins | WR after (Wilson 95%) | volume cut | ΔWR | separated? |
+|---|---|---|---|---|---|---|---|
+| `2w` | 315 / 235 / 104 | 44.26% [38.0, 50.6] | 214 / 158 / 67 | 42.41% [35.0, 50.2] | **32.06%** | −1.85pp | no |
+| `4w` | 521 / 346 / 160 | 46.24% [41.1, 51.5] | 496 / 328 / 151 | 46.04% [40.7, 51.4] | 4.80% | −0.21pp | no |
+| `2m` | 347 / 245 / 117 | 47.76% [41.6, 54.0] | 337 / 239 / 113 | 47.28% [41.0, 53.6] | 2.88% | −0.47pp | no |
+| `3m` | 344 / 240 / 114 | 47.50% [41.3, 53.8] | 335 / 234 / 110 | 47.01% [40.7, 53.4] | 2.62% | −0.49pp | no |
+| `4m` | 238 / 171 / 84 | 49.12% [41.7, 56.6] | 235 / 170 / 84 | 49.41% [42.0, 56.9] | 1.26% | +0.29pp | no |
+| `5m` | 188 / 132 / 66 | 50.00% [41.6, 58.4] | 185 / 130 / 64 | 49.23% [40.8, 57.7] | 1.60% | −0.77pp | no |
+| `6m` | 190 / 134 / 65 | 48.51% [40.2, 56.9] | 185 / 130 / 61 | 46.92% [38.6, 55.5] | 2.63% | −1.58pp | no |
+| `7m` | 251 / 182 / 95 | 52.20% [45.0, 59.3] | 237 / 171 / 87 | 50.88% [43.4, 58.3] | 5.58% | −1.32pp | no |
+| `8m` | 209 / 155 / 81 | 52.26% [44.4, 60.0] | 193 / 143 / 73 | 51.05% [42.9, 59.1] | 7.66% | −1.21pp | no |
+| `9m` | 201 / 154 / 81 | 52.60% [44.7, 60.3] | 201 / 154 / 81 | 52.60% [44.7, 60.3] | 0.00% | +0.00pp | no |
+| **ALL** | **2804 / 1994 / 967** | **48.50% [46.3, 50.7]** | **2618 / 1857 / 891** | **47.98% [45.7, 50.3]** | **6.63%** | **−0.51pp** | **no** |
+
+`9m`'s 0.00% cut is the same correct sanity signature as on TRAIN: no horizon
+above it, so it is *exempt*, never gated. **Eight of the ten horizons moved
+negative**, including every horizon from `2m` up except `4m`. On TRAIN, nine
+of ten were positive. Nothing about the sign pattern survived the window
+change.
+
+**The `2w` watch item fired, and then some.** The pre-registration recorded
+(Step 2) that "if VALIDATION reproduces `2w` paying a >25% cut for a sub-1pp
+gain, a `2w` exemption is the *first* thing a follow-up spec should measure."
+VALIDATION paid **32.06%** of `2w`'s volume — above the 30% aggregate budget
+figure, though the pre-registered per-horizon condition was the looser ≤50%,
+which it still meets — for **−1.85pp**. Worse than the watch item's wording
+anticipated, and in the other direction. That remains a follow-up spec's
+question; it is not re-scoped here.
+
+**Comparator arm** (the horizon's *own* trend rather than the adjacent one):
+2804 / 1994 / 967 → 2386 / 1694 / 811, i.e. 48.50% [46.3, 50.7] → 47.87%
+[45.5, 50.3]; cut 14.91%, ΔWR **−0.62pp**, also overlapping. TRAIN's
+better-powered alternative did not survive either, so the FAIL is not "we
+gated on the wrong one of the two signals".
+
+**Neutral band, for the record only** (it was pre-registered as *excluded*,
+and stays excluded — this is not a re-scoping): with the 0.50% band the
+aggregate is 2695 / 1917 / 924 = 48.20% [46.0, 50.4], cut 3.89%, ΔWR
+−0.30pp, still overlapping and still negative. A band would not have rescued
+the gate.
+
+**6m macro anchor on VALIDATION**, also for the record: agree n=1346
+WR=46.7%, oppose n=23 WR=73.9% — i.e. the *counter*-macro arm won more often,
+on 23 evaluated scenarios. `_MACRO_ALIGNMENT_POINTS = 0` (committed in Task 7
+from TRAIN) was not under test and is unchanged; VALIDATION gives no reason
+to award it points, and the inverted sign on n=23 is not evidence of anything
+either.
+
+## What this means, and what was and was not done
+
+Per the pre-registration's own FAIL clause, and Task 8's brief:
+
+- `MTF_ADJACENT_GATE` **stays `default="false"`** in `swingbot/config.py`. The
+  gate ships as a measured, tested, off-by-default option, not as behaviour.
+- **No `VERSION.json` bump** — nothing a running container does changed. The
+  plan's `Bump: bot minor` header was a prediction conditional on a PASS.
+- `docs/strategy.md` gets a short note that the gate was measured and did not
+  clear VALIDATION, pointing here, so the next reader does not rediscover
+  this from scratch. It is **not** written up as a shipping feature.
+- **The command was run exactly once.** No re-run, no threshold change, no
+  window or cache-path change, no "double check". The FAIL is recorded as it
+  came back.
+
+**What a future spec may legitimately ask** (none of it licensed by this
+document, all of it needing its own pre-registration): whether a `2w`
+exemption changes the picture; whether the gate helps inside a narrower
+population (e.g. only scenarios that would clear `MIN_ALERT_CONFIDENCE_LEVEL`,
+which this offline harness structurally cannot filter on — see "What this
+Primary drops from the plan's wording"); or whether horizon-to-horizon trend
+belongs in scoring rather than as a hard filter. What it may **not** do is
+re-run this same measurement and read a different verdict off it.
