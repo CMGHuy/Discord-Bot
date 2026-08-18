@@ -48,6 +48,7 @@ class FactorContext:
     trigger_distance_pct: float | None = None
     badge_status: str | None = None
     gap_fragile: bool = False
+    macro_verdict: dict | None = None
     target_count: int = 0
     target_families: list = field(default_factory=list)
     stop_count: int = 0
@@ -393,6 +394,39 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
 # Full reasoning, and the user's explicit sign-off on this near-empty
 # result (confirmed across three separate questions given how much it
 # changes): docs/superpowers/plans/implemented/v32-train-preregistration.md.
+
+
+# --- v33 Task 5: 6m macro-anchor alignment ------------------------------
+
+_MACRO_ALIGNMENT_POINTS = 10   # provisional; re-derived in v33 Task 7
+
+
+def factor_macro_alignment(ctx: FactorContext) -> FactorResult | None:
+    """Agreement with the 6m macro anchor. Never blocks -- only the adjacent
+    check gates. Exempt horizons return None so they are omitted from the
+    breakdown rather than scored zero."""
+    verdict = ctx.macro_verdict
+    if not verdict or verdict["status"] == "exempt":
+        return None
+    if verdict["status"] == "aligned":
+        return FactorResult(
+            "Macro trend (6m)", _MACRO_ALIGNMENT_POINTS,
+            f"agrees with the 6m {verdict['trend']} trend "
+            f"(+{_MACRO_ALIGNMENT_POINTS})")
+    return FactorResult(
+        "Macro trend (6m)", 0,
+        f"⚠️ counter to the 6m {verdict['trend']} trend (+0)")
+
+
 FACTORS[:] = [
     factor_gap,
+    # Provisional, unlike factor_gap and unlike every excluded factor above:
+    # v33 Task 1's TRAIN measurement of the 6m macro anchor found only
+    # +2.1pp lift, Wilson-overlapping (n_opp=56) -- currently
+    # indistinguishable from the 13 factors already excluded above on the
+    # same "no measured positive lift" grounds. Registered anyway per this
+    # task's spec so v33 Task 7 can re-derive (or zero out) its weight from
+    # a real TRAIN sweep before VALIDATION. UNIFIED_CONFIDENCE is
+    # default-off, so this has zero live effect either way today.
+    factor_macro_alignment,
 ]

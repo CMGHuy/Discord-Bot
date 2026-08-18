@@ -436,6 +436,41 @@ def test_factors_registry_has_exactly_the_kept_factors():
     measurement found none with real, positively-signed lift (see
     factors.py's own comment above FACTORS for the full breakdown), so only
     factor_gap -- inert today, never fires -- remains in the active
-    registry. The other 18 stay defined and tested, just not registered."""
-    from swingbot.core.scanning.factors import FACTORS, factor_gap
-    assert FACTORS == [factor_gap]
+    registry. The other 18 stay defined and tested, just not registered.
+
+    v33 Task 5 adds factor_macro_alignment to the registry too, but as a
+    provisional, not-yet-TRAIN-supported entry (see the comment beside its
+    registration) -- re-derived or possibly zeroed out by v33 Task 7."""
+    from swingbot.core.scanning.factors import FACTORS, factor_gap, factor_macro_alignment
+    assert FACTORS == [factor_gap, factor_macro_alignment]
+
+
+# --- v33 Task 5: 6m macro-anchor alignment factor ---------------------
+
+from swingbot.core.scanning.factors import factor_macro_alignment  # noqa: E402
+
+
+def test_macro_alignment_scores_full_when_aligned():
+    ctx = _ctx(macro_verdict={"status": "aligned", "reason": "bullish trend agrees",
+                              "trend": "bullish"})
+    assert factor_macro_alignment(ctx).points == 10
+
+
+def test_macro_alignment_scores_zero_when_opposed():
+    ctx = _ctx(macro_verdict={"status": "opposed", "reason": "bearish trend opposes",
+                              "trend": "bearish"})
+    r = factor_macro_alignment(ctx)
+    assert r.points == 0
+    assert "⚠️" in r.line
+
+
+def test_macro_alignment_exempt_returns_none_not_zero():
+    """An exempt horizon has no macro reading. Scoring it 0 would penalise
+    every 6m-9m scenario for a check that cannot apply to it."""
+    ctx = _ctx(macro_verdict={"status": "exempt", "reason": "6m is at the anchor",
+                              "trend": None})
+    assert factor_macro_alignment(ctx) is None
+
+
+def test_macro_alignment_absent_returns_none():
+    assert factor_macro_alignment(_ctx()) is None

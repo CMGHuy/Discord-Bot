@@ -70,7 +70,7 @@ from swingbot.core.infra.jsonio import read_json
 from .confidence import LEVELS as _CONF_LEVELS
 from .confidence import ConfidenceResult, level_for_score, score_confidence
 from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
-from swingbot.core.market.mtf import adjacent_aligned
+from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
@@ -998,12 +998,14 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # result rather than fetching it twice.
             htf_result = get_htf_bias(df, horizon_key)
             mtf_val = rs_factors.mtf_alignment(df, scenario.direction)
+            macro_verdict = macro_aligned(df, horizon_key, scenario.direction)
 
             conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
                                      target_confluence=target_confluence, stop_confluence=stop_confluence,
                                      track_record=track_record,
                                      htf_bias=(htf_result["bias"] if htf_result else None),
-                                     rs_percentile=rs_pctile, mtf=mtf_val, breadth=breadth)
+                                     rs_percentile=rs_pctile, mtf=mtf_val, breadth=breadth,
+                                     macro_verdict=macro_verdict)
 
             # Multi-timeframe confluence: check this ticker's own
             # higher-timeframe EMA bias (50-day for short horizons,
