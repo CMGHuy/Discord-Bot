@@ -57,6 +57,24 @@ export function held(hours: number | null | undefined): string {
   return rest === 0 ? `${days}d` : `${days}d ${rest}h`;
 }
 
+/** A COMPLETED hold duration, at day/hour/minute precision -- unlike `held`,
+ *  which rounds to the nearest hour because it measures a LIVE position's
+ *  continuously-ticking age (minute-level jitter would be noise on a number
+ *  that changes every render). A closed trade's hold period is fixed, so the
+ *  extra precision is signal rather than noise. */
+export function heldPrecise(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined) return ABSENT;
+  const totalMinutes = Math.round(hours * 60);
+  const days = Math.floor(totalMinutes / 1440);
+  const hrs = Math.floor((totalMinutes % 1440) / 60);
+  const mins = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hrs) parts.push(`${hrs}h`);
+  if (mins || parts.length === 0) parts.push(`${mins}m`);
+  return parts.join(' ');
+}
+
 /**
  * How long ago, coarsely — "4h", "3d", "2mo".
  *

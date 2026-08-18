@@ -34,11 +34,18 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { dateTime, held, money, num, pct } from '../../ui/format';
+import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { Sparkline } from '../../ui/sparkline';
+import {
+  deriveClosedVisible,
+  deriveOpenVisible,
+  expectedPnlPct,
+  expectedR,
+  reconcileReorder,
+} from './dashboard.helpers';
 import { TradeGroup } from './trade-group';
 
 /**
@@ -274,12 +281,17 @@ import { TradeGroup } from './trade-group';
            means -- a filled, live position -- with Pending (waiting to fill)
            and Partial (already de-risked) behind it. Closed goes last: it is
            the one category that is no longer live. -->
+      <!-- Active/Pending/Partial share openVisible -- the shared picker
+           list with 'closed_at' dropped, since a position that has not
+           closed has nothing to put there. See openVisible/closedVisible
+           below for why each group gets its own derived list rather than
+           the raw visible signal. -->
       <sb-trade-group
         status="ACTIVE"
         heading="Active"
         explanation="Entry has filled — position is open and being tracked toward TP1/stop."
         [columns]="columns()"
-        [visible]="visible()"
+        [visible]="openVisible()"
         [pinned]="pinned"
         [rowKey]="rowKey"
         [emptyState]="activeEmptyState"
@@ -291,7 +303,7 @@ import { TradeGroup } from './trade-group';
         heading="Pending"
         explanation="Plan built and posted, but price has not yet reached the entry trigger."
         [columns]="columns()"
-        [visible]="visible()"
+        [visible]="openVisible()"
         [pinned]="pinned"
         [rowKey]="rowKey"
         [emptyState]="pendingEmptyState"
@@ -303,7 +315,7 @@ import { TradeGroup } from './trade-group';
         heading="Partial"
         explanation="TP1 hit — half the position closed, the remainder rides toward TP2 with its stop at break-even."
         [columns]="columns()"
-        [visible]="visible()"
+        [visible]="openVisible()"
         [pinned]="pinned"
         [rowKey]="rowKey"
         [emptyState]="partialEmptyState"
@@ -314,14 +326,18 @@ import { TradeGroup } from './trade-group';
            narrows it to today's closes (mirroring the lifecycle strip's own
            CLOSED count), All days shows the most recent closes regardless of
            date. The today input re-binds on every scope toggle rather than
-           only at mount -- see trade-group.ts's own constructor comment. -->
+           only at mount -- see trade-group.ts's own constructor comment.
+
+           closedVisible, not the raw visible list: 'now' (a live price) is
+           meaningless once a position has closed, and 'hold' (the completed
+           hold duration) belongs here and nowhere else. -->
       <sb-trade-group
         status="CLOSED"
         heading="Closed"
         [explanation]="closedExplanation()"
         [today]="closedToday()"
         [columns]="columns()"
-        [visible]="visible()"
+        [visible]="closedVisible()"
         [pinned]="pinned"
         [rowKey]="rowKey"
         [emptyState]="closedEmptyState()"
@@ -375,12 +391,42 @@ import { TradeGroup } from './trade-group';
          the realised amount (same sign, same field realized_pnl_amount
          Trade History already shows in its own "Realised" column) answers
          that without a second column. Only ever populated together: both are
-         null until a position closes. -->
+         null until a position closes.
+
+         pnl_pct itself is null for every PENDING/ACTIVE/PARTIAL row --
+         dashboard.py's closed_pnl needs an exit_price, which does not
+         exist until a position closes -- so those three groups fell through
+         to an em dash regardless of how good the plan looked. The else
+         branch computes what the % (and, in rMultipleCell below, the R)
+         WOULD be if price reaches target, from the same entry/stop/target
+         the Plan cell already shows; the dashed underline (PlanCell's own
+         "pending" look) marks it as projected rather than realised. -->
     <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">
-        {{ fmtPct(row.pnl_pct) }}
-        <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
-      </span>
+      @if (row.pnl_pct !== null) {
+        <span [class]="pnlClass(row.pnl_pct)">
+          {{ fmtPct(row.pnl_pct) }}
+          <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
+        </span>
+      } @else {
+        <span
+          class="expected"
+          [class]="pnlClass(expectedPnlPct(row))"
+          title="Projected P&L if price reaches target"
+        >{{ fmtPct(expectedPnlPct(row)) }}</span>
+      }
+    </ng-template>
+
+    <!-- See pnlCell above -- same real-vs-projected split, same reasoning. -->
+    <ng-template #rMultipleCell let-row>
+      @if (row.r_multiple !== null) {
+        {{ fmtR(row.r_multiple) }}
+      } @else {
+        <span
+          class="expected"
+          [class]="pnlClass(expectedR(row))"
+          title="Projected R if price reaches target"
+        >{{ fmtR(expectedR(row)) }}</span>
+      }
     </ng-template>
 
     <!-- Trades has these two (trades.ts's own openedCell/closedCell); the
@@ -577,6 +623,11 @@ import { TradeGroup } from './trade-group';
     /* Muted and smaller than the % it rides beside -- the percentage is the
        headline figure, the amount is context for it, not a second headline. */
     .pnl-amount { color: var(--text-secondary); font-size: var(--text-chip); }
+    /* Same "not real yet" language as PlanCell's own .entry.pending -- a
+       dashed underline rather than a colour, since the pos/neg palette
+       already means something else (gain vs loss) and this axis (realised
+       vs projected) is orthogonal to it. */
+    .expected { border-bottom: 1px dashed currentColor; }
     .absent { color: var(--text-faint); }
 
     @media (max-width: 720px) {
@@ -644,6 +695,8 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
   private readonly pnlCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('pnlCell');
+  private readonly rMultipleCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('rMultipleCell');
   private readonly statusCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('statusCell');
   private readonly directionCell =
@@ -719,10 +772,19 @@ export class Dashboard {
     );
   }
 
+  /** See dashboard.helpers.ts -- `deriveClosedVisible`/`deriveOpenVisible`
+   *  for what each group's own column order does and why, `reconcileReorder`
+   *  for how a drag inside one group's table writes back to the shared
+   *  picker list without leaking that group's own additions/omissions into
+   *  the other three. */
+  protected readonly closedVisible = computed(() => deriveClosedVisible(this.visible()));
+  protected readonly openVisible = computed(() => deriveOpenVisible(this.visible()));
+
   protected onReorder(order: string[]): void {
-    this.visible.set(order);
+    const merged = reconcileReorder(order, this.visible());
+    this.visible.set(merged);
     this.preferences.update((prefs) =>
-      writeTableColumns(prefs, DASHBOARD_TABLE_ID, this.density(), order),
+      writeTableColumns(prefs, DASHBOARD_TABLE_ID, this.density(), merged),
     );
   }
 
@@ -731,6 +793,7 @@ export class Dashboard {
     const cells: Record<string, TemplateRef<RowContext<TradeRow>>> = {
       ticker: this.tickerCell(),
       pnl_pct: this.pnlCell(),
+      r_multiple: this.rMultipleCell(),
       status: this.statusCell(),
       direction: this.directionCell(),
       plan: this.planCell(),
@@ -874,6 +937,7 @@ export class Dashboard {
 
   protected fmtPct = pct;
   protected fmtDate = dateTime;
+  protected fmtR = rMultiple;
 
   protected fmtMoney(value: number | null): string {
     return money(value, this.connection.currency());
@@ -885,6 +949,11 @@ export class Dashboard {
     if (value < 0) return 'neg';
     return '';
   }
+
+  /** See dashboard.helpers.ts's `expectedPnlPct`/`expectedR` for what a
+   *  projected value means and why it is null when it is. */
+  protected expectedPnlPct = expectedPnlPct;
+  protected expectedR = expectedR;
 
   /** Mouse activation, matching Trades: a row leads to its detail view. The
    *  ticker cell's anchor is the keyboard equivalent. */

@@ -1,6 +1,6 @@
 import { TradeRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { age, held, num, rMultiple, text } from '../../ui/format';
+import { age, held, heldPrecise, num, rMultiple, text } from '../../ui/format';
 
 /**
  * The seven columns the Trades list shows by default — spec 3 Decision 2.
@@ -87,6 +87,14 @@ export function tradeColumns(): ColumnDef<TradeRow>[] {
     { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true },
     { key: 'held', header: 'Held', value: (row) => held(row.held_hours), numeric: true, sortable: true },
     { key: 'actions', header: '', width: '1px' },
+
+    // Not in COMPACT_COLUMNS/FULL_COLUMNS or the picker -- the Dashboard's
+    // Closed group opts into this one explicitly, inserted ahead of
+    // 'opened_at' (see dashboard.ts's `closedVisible`). `held` above already
+    // covers a LIVE position's age at a glance; a CLOSED position's hold
+    // period is fixed rather than ticking, so the day/hour/minute precision
+    // here is signal rather than noise the way it would be on an open row.
+    { key: 'hold', header: 'Hold', value: (row) => heldPrecise(row.held_hours), numeric: true },
 
     /* -- individually re-addable through the column picker ---------------- */
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true },

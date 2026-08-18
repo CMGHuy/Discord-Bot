@@ -130,6 +130,16 @@ describe('trade column sets', () => {
     for (const k of ['entry', 'stop_loss', 'target']) expect(known).toContain(k);
   });
 
+  it('offers "hold" for the Dashboard Closed table without adding it to either picker set', () => {
+    // Not in COMPACT_COLUMNS/FULL_COLUMNS or the Trades picker -- the
+    // Dashboard's Closed group opts into it explicitly via `deriveClosedVisible`
+    // (dashboard.helpers.ts), inserted ahead of 'opened_at'.
+    const known = new Set(tradeColumns().map((c) => c.key));
+    expect(known).toContain('hold');
+    expect(COMPACT_COLUMNS).not.toContain('hold');
+    expect(FULL_COLUMNS).not.toContain('hold');
+  });
+
   it('only offers sortable on keys the API will accept', () => {
     // A sortable column the server rejects is a 400 on click, which is worse
     // than not offering the control.
