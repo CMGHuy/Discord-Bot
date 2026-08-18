@@ -41,7 +41,6 @@ class FactorContext:
     regime_trend: str | None = None
     htf_bias: str | None = None
     rs_percentile: float | None = None
-    mtf: int | None = None
     breadth: float | None = None
     volume_ratio: float | None = None
     atr_pct: float | None = None
@@ -259,16 +258,6 @@ def factor_rs(ctx: FactorContext) -> FactorResult | None:
     return FactorResult(
         "Relative strength", points,
         f"RS percentile {ctx.rs_percentile:.0f} vs the scanned universe (+{points})",
-    )
-
-
-def factor_mtf(ctx: FactorContext) -> FactorResult | None:
-    if ctx.mtf is None:
-        return None
-    points = {0: 0, 1: 3, 2: 6, 3: 10}.get(int(ctx.mtf), 0)
-    return FactorResult(
-        "Multi-timeframe alignment", points,
-        f"{int(ctx.mtf)}/3 higher timeframes agree (+{points})",
     )
 
 

@@ -2,8 +2,9 @@
 
 Every check here compares THIS bot's own horizons against each other, using
 each horizon's own ema_fast/ema_slow from HORIZONS. That is the difference
-from regime.get_htf_bias (a fixed 50/200 EMA proxy that only covers 5 of the
-10 horizons) and from factors.mtf_alignment (a weekly resample).
+from regime.get_htf_bias (a fixed 50/200 EMA proxy, covering all 10
+horizons) and from the now-retired weekly-resample `mtf_alignment` check
+(v33 Task 6: dropped as a scored input, -8.0pp non-overlapping TRAIN lift).
 
 Pure functions: no config reads, no I/O, so the gate that consumes them stays
 testable and the backtest can call them directly.

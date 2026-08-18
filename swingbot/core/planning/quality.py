@@ -108,12 +108,6 @@ def rs_points(rs_pctile: float | None) -> int:
     return int(round(max(0.0, min(rs_pctile - 50.0, 50.0)) / 5.0))
 
 
-def mtf_points(mtf_score: int | None) -> int:
-    if mtf_score is None:
-        return 0
-    return {0: 0, 1: 3, 2: 6, 3: 10}.get(int(mtf_score), 0)
-
-
 def breadth_points(breadth: float | None) -> int:
     if breadth is None:
         return 0
@@ -132,7 +126,7 @@ def gap_penalty(gap_fragile: bool) -> int:
 
 def score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio,
                atr_pct, trigger_distance_pct, badge_status,
-               rs_percentile=None, mtf=None, breadth=None,
+               rs_percentile=None, breadth=None,
                candle_quality=None, gap_fragile=False) -> QualityResult:
     """The edge inputs (E37) are keyword-only with inert defaults, so every
     existing caller -- including the offline decile-audit harness under
@@ -151,7 +145,6 @@ def score_plan(*, direction, regime, htf_bias, confluence_count, volume_ratio,
         ("badge", component_badge(badge_status)),
     ]
     for name, value, fn in (("rs", rs_percentile, rs_points),
-                            ("mtf", mtf, mtf_points),
                             ("breadth", breadth, breadth_points),
                             ("candle", candle_quality, candle_points)):
         if value is not None:

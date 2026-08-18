@@ -54,30 +54,6 @@ def test_rs_score_weights():
     assert rs_score(80.0, 40.0) == pytest.approx(0.7 * 80 + 0.3 * 40)
 
 
-def test_clean_uptrend_aligns_fully():
-    import numpy as np
-    from tests.conftest import make_ohlcv
-    from swingbot.core.edge.factors import mtf_alignment
-    rng = np.random.RandomState(1)
-    df = make_ohlcv(list(100 * np.cumprod(1 + rng.normal(0.0012, 0.01, 400))))
-    assert mtf_alignment(df, "bullish") == 3
-    assert mtf_alignment(df, "bearish") == 0
-
-
-def test_chop_scores_low():
-    import numpy as np
-    from tests.conftest import make_ohlcv
-    from swingbot.core.edge.factors import mtf_alignment
-    rng = np.random.default_rng(7)
-    level = 100.0
-    prices = [level]
-    for _ in range(399):
-        level += -0.05 * (level - 100.0) + rng.normal(0, 1.0)
-        prices.append(level)
-    df = make_ohlcv(np.array(prices), spread_pct=2.0)
-    assert mtf_alignment(df, "bullish") <= 1
-
-
 def test_weekly_frame_shape():
     from swingbot.core.edge.factors import weekly_frame
     df = make_trend_df(400, +0.25)
@@ -463,9 +439,8 @@ def test_strength_is_attached_when_the_divergence_pattern_is_described():
 
 def test_quality_v2_component_points():
     from swingbot.core.planning.quality import (breadth_points, candle_points,
-                                       gap_penalty, mtf_points, rs_points)
+                                       gap_penalty, rs_points)
     assert rs_points(50.0) == 0 and rs_points(100.0) == 10 and rs_points(75.0) == 5
-    assert mtf_points(0) == 0 and mtf_points(2) == 6 and mtf_points(3) == 10
     assert breadth_points(35.0) == 0 and breadth_points(60.0) == 5
     assert candle_points(8) == 4
     assert gap_penalty(True) == -10 and gap_penalty(False) == 0
@@ -476,9 +451,9 @@ def test_quality_v2_components_handle_absent_inputs():
     too small a universe for breadth). None must score 0, never crash and
     never be treated as a real reading."""
     from swingbot.core.planning.quality import (breadth_points, candle_points,
-                                       mtf_points, rs_points)
+                                       rs_points)
     assert rs_points(None) == 0 and breadth_points(None) == 0
-    assert mtf_points(None) == 0 and candle_points(None) == 0
+    assert candle_points(None) == 0
     assert rs_points(0.0) == 0          # below the 50 pivot, clamped
     assert breadth_points(95.0) == 5    # above 60, clamped
     assert candle_points(99) == 5       # cq clamped at 10 -> 5
@@ -497,24 +472,24 @@ def test_score_plan_is_bit_identical_without_edge_inputs():
     under scripts/reports/ -- must get exactly the score it got before."""
     from swingbot.core.planning.quality import score_plan
     base = score_plan(**_v1_inputs())
-    same = score_plan(**_v1_inputs(), rs_percentile=None, mtf=None,
+    same = score_plan(**_v1_inputs(), rs_percentile=None,
                       breadth=None, candle_quality=None, gap_fragile=False)
     assert (base.score, base.breakdown) == (same.score, same.breakdown)
-    assert not any(name in ("rs", "mtf", "breadth", "candle")
+    assert not any(name in ("rs", "breadth", "candle")
                    for name, _ in base.breakdown)
 
 
 def test_edge_components_append_rows_and_the_total_still_clamps():
     from swingbot.core.planning.quality import score_plan
-    maxed = score_plan(**_v1_inputs(), rs_percentile=100.0, mtf=3,
+    maxed = score_plan(**_v1_inputs(), rs_percentile=100.0,
                        breadth=70.0, candle_quality=10, gap_fragile=False)
     assert 0 <= maxed.score <= 100
     names = [n for n, _ in maxed.breakdown]
     assert names[:7] == [n for n, _ in score_plan(**_v1_inputs()).breakdown]
-    assert names[7:] == ["rs", "mtf", "breadth", "candle"]
+    assert names[7:] == ["rs", "breadth", "candle"]
 
     # The gap penalty only appears when it actually fires, and it subtracts.
-    fragile = score_plan(**_v1_inputs(), rs_percentile=100.0, mtf=3,
+    fragile = score_plan(**_v1_inputs(), rs_percentile=100.0,
                          breadth=70.0, candle_quality=10, gap_fragile=True)
     assert ("gap", -10) in fragile.breakdown
     assert fragile.score <= maxed.score
@@ -525,7 +500,7 @@ def test_score_never_goes_negative_on_a_worst_case():
     worst = score_plan(direction="bullish", regime="bearish", htf_bias="bearish",
                        confluence_count=0, volume_ratio=0.1, atr_pct=0.95,
                        trigger_distance_pct=9.0, badge_status="WEAK",
-                       rs_percentile=0.0, mtf=0, breadth=0.0,
+                       rs_percentile=0.0, breadth=0.0,
                        candle_quality=0, gap_fragile=True)
     assert worst.score == 0
 

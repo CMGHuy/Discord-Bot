@@ -55,7 +55,7 @@ _HISTORY_PATH = os.path.join(app_config.DATA_DIR, "retrospective_history.json")
 # yesterday" and stop repeating the suggestion that presumably caused it.
 _TUNABLE_KEYS = [
     "MIN_ALERT_CONFIDENCE_LEVEL", "MAX_STOP_LOSS_PCT", "MIN_RISK_REWARD_RATIO",
-    "HTF_COUNTER_TREND_PENALTY", "NEAR_TP_TIMEOUT_MINUTES", "NEAR_TP_TIMEOUT_THRESHOLD_PCT",
+    "NEAR_TP_TIMEOUT_MINUTES", "NEAR_TP_TIMEOUT_THRESHOLD_PCT",
 ]
 
 
@@ -843,26 +843,6 @@ def _analyse(closed: list, opened_today: list, still_open: list,
             )
         elif strat_wr == 100:
             lessons.append(f"'{strat}' was flawless today ({len(trades)} trades, all wins).")
-
-    # --- Direction (counter-trend) analysis ---
-    bull_wins = sum(1 for t in wins if t["direction"] == "bullish")
-    bull_all  = sum(1 for t in closed if t["direction"] == "bullish")
-    bear_wins = sum(1 for t in wins if t["direction"] == "bearish")
-    bear_all  = sum(1 for t in closed if t["direction"] == "bearish")
-
-    if bull_all >= 2 and bear_all >= 2:
-        bull_wr = round(bull_wins / bull_all * 100)
-        bear_wr = round(bear_wins / bear_all * 100)
-        if abs(bull_wr - bear_wr) >= 40:
-            better  = "Long" if bull_wr > bear_wr else "Short"
-            worse   = "Short" if bull_wr > bear_wr else "Long"
-            worse_wr = bear_wr if bull_wr > bear_wr else bull_wr
-            _escalate(
-                "direction_imbalance",
-                f"{better} trades strongly outperformed {worse} trades today ({max(bull_wr,bear_wr)}% vs {worse_wr}%)",
-                f"Check market regime: if the broader trend is against {worse} trades, raise `HTF_COUNTER_TREND_PENALTY`.",
-                config_key="HTF_COUNTER_TREND_PENALTY",
-            )
 
     # --- R-multiple and risk/reward ---
     r_mults = [r for t in losses if (r := _r_multiple(t)) is not None]

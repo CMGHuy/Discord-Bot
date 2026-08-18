@@ -306,7 +306,7 @@ def test_tight_stop_absent_scenario_returns_none():
 # --- Task 4: quality.py components, including RS/MTF/breadth ----------
 
 from swingbot.core.scanning.factors import (  # noqa: E402
-    factor_rs, factor_mtf, factor_breadth, factor_htf, factor_volume,
+    factor_rs, factor_breadth, factor_htf, factor_volume,
     factor_atr_percentile, factor_trigger_distance, factor_badge,
     factor_gap, factor_target_confluence_quality,
 )
@@ -326,17 +326,6 @@ def test_rs_absent_returns_none_not_zero():
     """None means the RS benchmark fetch failed. It must be omitted from the
     breakdown, not rendered as a real reading of zero."""
     assert factor_rs(_ctx()) is None
-
-
-def test_mtf_uses_the_discrete_alignment_ladder():
-    assert factor_mtf(_ctx(mtf=0)).points == 0
-    assert factor_mtf(_ctx(mtf=1)).points == 3
-    assert factor_mtf(_ctx(mtf=2)).points == 6
-    assert factor_mtf(_ctx(mtf=3)).points == 10
-
-
-def test_mtf_absent_returns_none():
-    assert factor_mtf(_ctx()) is None
 
 
 def test_breadth_scores_above_forty_percent_and_caps_at_sixty():

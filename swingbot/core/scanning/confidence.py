@@ -575,7 +575,7 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     which case it runs the merged factor registry (swingbot.core.scanning.factors)
     instead. Signature and ConfidenceResult shape are unchanged either way --
     every existing caller keeps working. **kwargs carries the unified-only
-    inputs (htf_bias, rs_percentile, mtf, breadth, volume_ratio, atr_pct,
+    inputs (htf_bias, rs_percentile, breadth, volume_ratio, atr_pct,
     trigger_distance_pct, badge_status, gap_fragile, macro_verdict) the
     legacy path never read; v32 Task 7 and v33 Task 5 wire real values in
     from engine.py."""
@@ -593,7 +593,7 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
         target_count=target_count, target_families=target_families,
         stop_count=stop_count, stop_families=stop_families,
         **{k: kwargs.get(k) for k in
-           ("htf_bias", "rs_percentile", "mtf", "breadth", "volume_ratio",
+           ("htf_bias", "rs_percentile", "breadth", "volume_ratio",
             "atr_pct", "trigger_distance_pct", "badge_status", "gap_fragile",
             "macro_verdict")
            if k in kwargs},
