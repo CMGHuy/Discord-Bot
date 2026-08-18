@@ -69,29 +69,55 @@ convention, scratch and timeout excluded. "Scenarios" counts every row
 outcome is known: that count, not the evaluated one, is the alert-volume
 cost.
 
+Every table below prints **scenarios, evaluated and wins**, so each stated
+win rate and Wilson interval can be recomputed from this document alone
+without the gitignored dump.
+
+**"Alert volume" here means backtest trade *entry* volume — a proxy for
+production alert volume, not equal to it.** See "What this Primary drops from
+the plan's wording" before the VALIDATION section for the full statement and
+for the `MIN_ALERT_CONFIDENCE_LEVEL` condition this measurement cannot apply.
+
 ---
 
 ## Step 1 — Per-horizon volume and win rate, gate off vs. gate on
 
-| Horizon | n before | WR before (Wilson 95%) | n after | WR after (Wilson 95%) | volume cut | ΔWR | separated? |
+**Reading the counts.** Each cell is `scenarios / evaluated / wins`, and the
+three are different populations on purpose:
+
+- **scenarios** — every row, scratch and timeout included. This is the
+  alert-volume number, because the gate drops a scenario *before* its outcome
+  is known. The `volume cut` column is computed from it.
+- **evaluated** — scenarios that resolved to a win or a loss (scratch and
+  timeout excluded), i.e. `backtest.py`'s own win-rate denominator.
+- **wins** — wins among the evaluated.
+
+**Every win rate and Wilson interval in this document is computed on
+`wins / evaluated`, never on `scenarios`.** All three counts are printed in
+every table below, so each stated interval can be recomputed from this
+document alone, without the (gitignored) raw dump.
+
+| Horizon | before: scen / eval / wins | WR before (Wilson 95%) | after: scen / eval / wins | WR after (Wilson 95%) | volume cut | ΔWR | separated? |
 |---|---|---|---|---|---|---|---|
-| `2w` | 470 | 42.73% [37.6, 48.1] | 345 | 42.91% [36.9, 49.1] | **26.60%** | +0.19pp | no |
-| `4w` | 827 | 42.56% [38.6, 46.6] | 780 | 43.84% [39.7, 48.1] | 5.68% | +1.29pp | no |
-| `2m` | 543 | 45.78% [40.9, 50.7] | 522 | 46.01% [41.0, 51.1] | 3.87% | +0.23pp | no |
-| `3m` | 528 | 47.10% [42.2, 52.0] | 511 | 47.53% [42.6, 52.5] | 3.22% | +0.43pp | no |
-| `4m` | 373 | 46.74% [40.9, 52.6] | 363 | 47.23% [41.4, 53.2] | 2.68% | +0.49pp | no |
-| `5m` | 306 | 46.58% [40.3, 53.0] | 295 | 46.46% [40.1, 53.0] | 3.59% | −0.12pp | no |
-| `6m` | 300 | 45.45% [39.0, 52.1] | 289 | 45.54% [39.0, 52.2] | 3.67% | +0.09pp | no |
-| `7m` | 404 | 47.10% [41.5, 52.8] | 380 | 48.01% [42.2, 53.9] | 5.94% | +0.92pp | no |
-| `8m` | 298 | 47.20% [40.6, 53.9] | 281 | 47.52% [40.7, 54.4] | 5.70% | +0.33pp | no |
-| `9m` | 288 | 45.62% [39.1, 52.3] | 288 | 45.62% [39.1, 52.3] | 0.00% | +0.00pp | no |
-| **ALL** | **4337** | **45.37% [43.6, 47.1]** | **4054** | **45.93% [44.1, 47.7]** | **6.53%** | **+0.57pp** | **no** |
+| `2w` | 470 / 337 / 144 | 42.73% [37.6, 48.1] | 345 / 247 / 106 | 42.91% [36.9, 49.1] | **26.60%** | +0.19pp | no |
+| `4w` | 827 / 571 / 243 | 42.56% [38.6, 46.6] | 780 / 536 / 235 | 43.84% [39.7, 48.1] | 5.68% | +1.29pp | no |
+| `2m` | 543 / 391 / 179 | 45.78% [40.9, 50.7] | 522 / 376 / 173 | 46.01% [41.0, 51.1] | 3.87% | +0.23pp | no |
+| `3m` | 528 / 397 / 187 | 47.10% [42.2, 52.0] | 511 / 385 / 183 | 47.53% [42.6, 52.5] | 3.22% | +0.43pp | no |
+| `4m` | 373 / 276 / 129 | 46.74% [40.9, 52.6] | 363 / 271 / 128 | 47.23% [41.4, 53.2] | 2.68% | +0.49pp | no |
+| `5m` | 306 / 234 / 109 | 46.58% [40.3, 53.0] | 295 / 226 / 105 | 46.46% [40.1, 53.0] | 3.59% | −0.12pp | no |
+| `6m` | 300 / 220 / 100 | 45.45% [39.0, 52.1] | 289 / 213 / 97 | 45.54% [39.0, 52.2] | 3.67% | +0.09pp | no |
+| `7m` | 404 / 293 / 138 | 47.10% [41.5, 52.8] | 380 / 277 / 133 | 48.01% [42.2, 53.9] | 5.94% | +0.92pp | no |
+| `8m` | 298 / 214 / 101 | 47.20% [40.6, 53.9] | 281 / 202 / 96 | 47.52% [40.7, 54.4] | 5.70% | +0.33pp | no |
+| `9m` | 288 / 217 / 99 | 45.62% [39.1, 52.3] | 288 / 217 / 99 | 45.62% [39.1, 52.3] | 0.00% | +0.00pp | no |
+| **ALL** | **4337 / 3150 / 1429** | **45.37% [43.6, 47.1]** | **4054 / 2950 / 1355** | **45.93% [44.1, 47.7]** | **6.53%** | **+0.57pp** | **no** |
 
 `9m`'s 0.00% cut is the correct sanity signature: `9m` has no horizon above
 it, so it is *exempt*, never gated.
 
 **Comparator arm** (Task 1 asked for it — the horizon's *own* trend rather
-than the adjacent one): cut 13.74%, ΔWR +1.10pp, also not separated. The own
+than the adjacent one): 4337 / 3150 / 1429 → 3741 / 2731 / 1269, i.e. 45.37%
+[43.6, 47.1] → 46.47% [44.6, 48.3]; cut 13.74%, ΔWR +1.10pp, also not
+separated (the intervals overlap). The own
 horizon is still the better-powered signal, and v33 gates on the adjacent one
 anyway because that is what the spec built; this is recorded so a future spec
 can revisit it with evidence rather than rediscover it.
@@ -144,11 +170,19 @@ coin flip (Wilson interval spanning 50%)?
 sensitivity only. A band chosen by scanning thresholds for the one that helps
 would be exactly the dredging this document refuses elsewhere.
 
-| Band | n inside | share | WR inside (Wilson 95%) | spans 50%? | opposed inside / total |
-|---|---|---|---|---|---|
-| <0.25% | 259 | 6.4% | 44.15% [37.2, 51.3] | yes | 63 / 283 |
-| **<0.50%** | **473** | **11.7%** | **41.76% [36.6, 47.1]** | **no** | **110 / 283** |
-| <1.00% | 839 | 20.7% | 41.14% [37.3, 45.1] | no | 175 / 283 |
+Same count convention as Step 1: `scenarios` is the volume number,
+`evaluated`/`wins` are what the win rate and its Wilson interval are computed
+on.
+
+| Band | scen inside | share | eval | wins | WR inside (Wilson 95%) | spans 50%? | opposed inside / total |
+|---|---|---|---|---|---|---|---|
+| <0.25% | 259 | 6.4% | 188 | 83 | 44.15% [37.2, 51.3] | yes | 63 / 283 |
+| **<0.50%** | **473** | **11.7%** | **340** | **142** | **41.76% [36.6, 47.1]** | **no** | **110 / 283** |
+| <1.00% | 839 | 20.7% | 598 | 246 | 41.14% [37.3, 45.1] | no | 175 / 283 |
+
+(`share` is of the 4048 scenarios that carry an adjacent-horizon margin at
+all — the remainder are `9m`, which has no adjacent horizon, plus rows with
+too little history.)
 
 **Decision: NO neutral band. `mtf.py` is unchanged.** Three independent
 reasons, any one of which is sufficient:
@@ -180,10 +214,15 @@ this plan pre-registered. Left as evidence for a future spec.
 
 ## Step 4 — `_MACRO_ALIGNMENT_POINTS` re-derived
 
-| Arm | n | WR | Wilson 95% |
-|---|---|---|---|
-| 6m anchor agrees | 2150 | 44.98% | [42.9, 47.1] |
-| 6m anchor opposes | 56 | 42.86% | [30.8, 55.9] |
+**Note the different `n` from Steps 1 and 3:** this step compares two arms of
+the *same* population rather than measuring a volume cut, so there is no
+scenario count to report — every `n` below is already the **evaluated**
+count (wins + losses), which is what its Wilson interval is computed on.
+
+| Arm | evaluated | wins | WR | Wilson 95% |
+|---|---|---|---|---|
+| 6m anchor agrees | 2150 | 967 | 44.98% | [42.9, 47.1] |
+| 6m anchor opposes | 56 | 24 | 42.86% | [30.8, 55.9] |
 
 Lift **+2.12pp, Wilson intervals overlapping almost entirely.**
 
@@ -229,6 +268,36 @@ that instruction is superseded by this pre-registration:
 python scripts/backtest/measure_adjacent_gate_effect.py --validation \
     --cache-dir <main checkout>/data/backtest_cache --json data/v33_validation.json
 ```
+
+### What this Primary drops from the plan's wording, and why
+
+The plan's Task 7 Step 5 template says: *"Primary: win rate at
+MIN_ALERT_CONFIDENCE_LEVEL=4 with MTF_ADJACENT_GATE=on."* The Primary below
+**deliberately drops the `MIN_ALERT_CONFIDENCE_LEVEL=4` condition**, and that
+substitution is recorded here rather than made silently:
+
+- The instrument measures **raw backtest trade entries**, which carry no
+  confidence score at all. A confidence level is produced by
+  `scanning.engine` + `run_factors` on live scan scenarios, and the replay
+  harness this population comes from never calls either (the same reason
+  `run_backtest_range.py` cannot see the gate — first section). There is no
+  path by which a `MIN_ALERT_CONFIDENCE_LEVEL` filter could be applied to
+  these rows, so the condition could not be honoured, only pretended to.
+- The condition is also **orthogonal to what is being tested**. The gate is a
+  filter that runs *before* scoring (`engine.py:925`, ahead of the confluence
+  and confidence work); a confidence-level threshold filters *after*. Testing
+  the gate on the unscored population measures the gate's own effect rather
+  than the interaction of two filters.
+
+**Consequently, "alert volume" throughout this document means backtest trade
+_entry_ volume — a proxy for production alert volume, not equal to it.** In
+production an entry must additionally clear the confidence-level threshold
+and the min-strategies-confirmed requirement before it becomes an alert, so
+the real alert count is strictly smaller than these scenario counts. The
+≤30% and ≤50% budgets below are therefore stated and judged against
+entry volume. This is the honest reading; a claim about production alert
+counts would need a live scan comparison, which no offline harness in this
+repo can produce.
 
 - **Primary:** win rate (wins / (wins + losses)) over the VALIDATION window
   2024-01-01..2025-12-31, **gate on vs. gate off on the same population** —
