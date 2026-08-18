@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-17 19:49:08 UTC",
+  "generated_at": "2026-08-18 20:57:56 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.7.2",
-    "bot": "1.2.1"
+    "bot": "1.2.2"
   },
   "releases": [
     {
@@ -482,6 +482,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "f60f49db",
+      "subject": "release(bot): 1.2.2 -- retire HTF_COUNTER_TREND_PENALTY and mtf_alignment quality-score input",
+      "versions": {
+        "ui": "1.7.2",
+        "bot": "1.2.2"
+      },
+      "changed": [
         "bot"
       ]
     }
