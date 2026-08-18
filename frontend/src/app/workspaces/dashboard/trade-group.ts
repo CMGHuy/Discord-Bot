@@ -76,11 +76,22 @@ export const OPEN_POSITIONS_CAP = 6;
   `,
   styles: `
     /* A visibly stronger rule than the --border used inside a table
-       (row dividers, the panel's own edge) -- three same-shaped tables
+       (row dividers, the panel's own edge) -- four same-shaped tables
        stacked in one flush panel need a break the eye catches without
        reading the heading text, not just a hairline that reads as another
-       row divider. */
-    .group + .group {
+       row divider.
+
+       :host + :host, not .group + .group: each group's .group div is
+       nested inside its OWN <sb-trade-group> host element, so two of them
+       are never adjacent siblings in the DOM -- the host elements are the
+       siblings. .group + .group can therefore never match and the rule it
+       was written as silently never fired. :host is display:inline by
+       default, which also breaks margin-top/padding-top, hence the
+       explicit block below. */
+    :host {
+      display: block;
+    }
+    :host + :host {
       margin-top: var(--space-20);
       border-top: 2px solid var(--border-strong);
       padding-top: var(--space-14);
@@ -134,6 +145,14 @@ export class TradeGroup {
    *  rendering an empty line. */
   readonly explanation = input<string | null>(null);
   readonly cap = input(OPEN_POSITIONS_CAP);
+  /** Tri-state, like `TradeQuery.today` itself: `true` narrows this group's
+   *  query to rows whose current status was entered today, `null`/omitted
+   *  leaves it unfiltered. Only the CLOSED group uses this today -- ACTIVE,
+   *  PENDING and PARTIAL stay all-time, matching the lifecycle strip above
+   *  the panel. Unlike `status` and `cap`, this one DOES change after mount:
+   *  it tracks the Dashboard's Today/All days toggle, which does not
+   *  recreate this component. */
+  readonly today = input<boolean | null>(null);
   readonly columns = input.required<ColumnDef<TradeRow>[]>();
   readonly visible = input.required<string[]>();
   readonly pinned = input<string[]>([]);
@@ -160,11 +179,14 @@ export class TradeGroup {
     // signal input is not guaranteed set yet at that point. `status` and
     // `cap` never actually change after creation -- each instance is
     // mounted once per category, in the template, and unmounted with the
-    // panel -- so this effect fires exactly once in practice, but stays
-    // correct if that ever stops being true.
+    // panel. `today` is different: the CLOSED group's caller re-binds it
+    // when the Dashboard's Today/All days toggle flips, and this effect
+    // re-runs because it reads that signal too, so the query stays in sync
+    // without remounting the component.
     effect(() => {
       this.trades.setQuery({
         status: this.status(),
+        today: this.today() ?? undefined,
         sort: '-opened_at',
         page: 1,
         per_page: this.cap(),

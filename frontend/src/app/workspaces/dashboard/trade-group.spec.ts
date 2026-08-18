@@ -108,4 +108,23 @@ describe('TradeGroup — sibling isolation', () => {
       r.flush({ items: [], total: 0, page: 1, per_page: 6 });
     }
   });
+
+  it('sends `today` for the CLOSED group only when the input is true, and omits it otherwise', () => {
+    const fixture = mount('CLOSED');
+    tick();
+
+    const first = backend.expectOne((r) => r.url === '/api/v1/trades');
+    expect(first.request.params.has('today')).toBe(false);
+    first.flush({ items: [], total: 0, page: 1, per_page: 6 });
+
+    // The Dashboard's Today/All days toggle re-binds this input on an
+    // already-mounted instance -- it does not remount the component -- so
+    // the effect must react to the change rather than firing once at mount.
+    fixture.componentRef.setInput('today', true);
+    tick();
+
+    const second = backend.expectOne((r) => r.url === '/api/v1/trades');
+    expect(second.request.params.get('today')).toBe('true');
+    second.flush({ items: [], total: 0, page: 1, per_page: 6 });
+  });
 });

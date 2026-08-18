@@ -262,16 +262,18 @@ import { TradeGroup } from './trade-group';
         above.
       </p>
 
-      <!-- Three groups, not one merged list. status=open (ACTIVE-or-PARTIAL)
-           is the only existing alias and it drops PENDING entirely; splitting
-           this way is also what "clear separation for each category" needs,
-           not just what the endpoint happens to support. Each group is its
-           own store instance -- see trade-group.ts -- so a slow or failed
-           fetch for one category never blocks or blanks the other two.
+      <!-- Four groups, not one merged list. status=open (ACTIVE-or-PARTIAL)
+           is the only existing alias and it drops PENDING and CLOSED
+           entirely; splitting this way is also what "clear separation for
+           each category" needs, not just what the endpoint happens to
+           support. Each group is its own store instance -- see
+           trade-group.ts -- so a slow or failed fetch for one category never
+           blocks or blanks the other three.
 
            Active first: it is what "what is happening right now" actually
            means -- a filled, live position -- with Pending (waiting to fill)
-           and Partial (already de-risked) behind it. -->
+           and Partial (already de-risked) behind it. Closed goes last: it is
+           the one category that is no longer live. -->
       <sb-trade-group
         status="ACTIVE"
         heading="Active"
@@ -305,6 +307,24 @@ import { TradeGroup } from './trade-group';
         [pinned]="pinned"
         [rowKey]="rowKey"
         [emptyState]="partialEmptyState"
+        (rowActivate)="open($event)"
+        (reorder)="onReorder($event)"
+      />
+      <!-- Closed last: unlike the three above, it is scope-aware -- Today
+           narrows it to today's closes (mirroring the lifecycle strip's own
+           CLOSED count), All days shows the most recent closes regardless of
+           date. The today input re-binds on every scope toggle rather than
+           only at mount -- see trade-group.ts's own constructor comment. -->
+      <sb-trade-group
+        status="CLOSED"
+        heading="Closed"
+        [explanation]="closedExplanation()"
+        [today]="closedToday()"
+        [columns]="columns()"
+        [visible]="visible()"
+        [pinned]="pinned"
+        [rowKey]="rowKey"
+        [emptyState]="closedEmptyState()"
         (rowActivate)="open($event)"
         (reorder)="onReorder($event)"
       />
@@ -547,6 +567,25 @@ export class Dashboard {
     title: 'No partial positions',
     hint: 'They appear here once TP1 hits and part of the position closes.',
   };
+
+  /** The Closed group's `today` input: `true` in Today mode (narrows to
+   *  trades closed today, same rule the lifecycle strip's CLOSED count
+   *  already uses), `null` in All days (unfiltered -- most recent closes). */
+  protected readonly closedToday = computed(() =>
+    this.store.scope() === 'all' ? null : true,
+  );
+
+  /** Copy for the Closed group, scope-aware like `realizedLabel` above --
+   *  wording that says "today" would mislead in All days, and vice versa. */
+  protected readonly closedExplanation = computed(() =>
+    this.store.scope() === 'all'
+      ? 'Fully closed (win, loss, or scratch) — most recent closes.'
+      : 'Fully closed today (win, loss, or scratch).',
+  );
+  protected readonly closedEmptyState = computed<EmptyState>(() => ({
+    title: this.store.scope() === 'all' ? 'No closed trades yet' : 'No trades closed today',
+    hint: 'They appear here once TP2 or a stop closes the remaining position.',
+  }));
 
   private readonly tickerCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('tickerCell');
