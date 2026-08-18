@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-18 12:45:07 UTC",
+  "generated_at": "2026-08-18 13:19:38 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.4",
+    "ui": "1.7.5",
     "bot": "1.2.1"
   },
   "releases": [
@@ -505,6 +505,19 @@
       "subject": "release(ui): 1.7.4 -- fix Closed table's Opened/Closed columns, real separator",
       "versions": {
         "ui": "1.7.4",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "c9a19b60",
+      "subject": "release(ui): 1.7.5 -- Closed table missing multi-day trades, P&L amount",
+      "versions": {
+        "ui": "1.7.5",
         "bot": "1.2.1"
       },
       "changed": [
