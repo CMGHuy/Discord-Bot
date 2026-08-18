@@ -34,7 +34,7 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { held, num, pct } from '../../ui/format';
+import { dateTime, held, num, pct } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
@@ -374,6 +374,14 @@ import { TradeGroup } from './trade-group';
     <ng-template #pnlCell let-row>
       <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
     </ng-template>
+
+    <!-- Trades has these two (trades.ts's own openedCell/closedCell); the
+         Dashboard never did, so opened_at/closed_at fell through to the
+         table's default cell renderer, which reads column.value -- and
+         neither column defines one, so every row rendered the "no value"
+         em dash regardless of what the row actually held. -->
+    <ng-template #openedCell let-row>{{ fmtDate(row.opened_at) }}</ng-template>
+    <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
   `,
   styles: `
     /* -- SR59: explanatory copy ----------------------------------- */
@@ -388,6 +396,34 @@ import { TradeGroup } from './trade-group';
       line-height: 1.5;
     }
     .explainer code { font-family: var(--font-mono); }
+
+    /* The break between the Active/Pending/Partial/Closed group tables.
+       Lives HERE rather than in trade-group.ts's own styles: a component's
+       emulated-encapsulation stylesheet can only style its own template's
+       elements, and "the sibling group before this one" is not one of
+       them -- there is no legal selector inside TradeGroup for "the
+       previous instance of myself". The previous attempt tried a
+       :host + :host rule anyway; Angular's compiler accepted it, but its
+       ShadowCSS shim cannot actually translate a repeated :host in one
+       compound selector and silently emitted an invalid selector in its
+       place (an nghost attribute selector joined to a literal, unclosed
+       "-shadowcsshost" token) -- not valid CSS, so the rule never matched
+       in the browser either (confirmed by grepping the built chunk).
+
+       This rule has none of that problem: the sb-trade-group tag here is a
+       plain child element of THIS component's own template, so a plain tag
+       selector needs no :host translation at all. A visibly stronger rule
+       than the --border used inside a table (row dividers, the panel's own
+       edge) -- four same-shaped tables stacked in one flush panel need a
+       break the eye catches without reading the heading text, not just a
+       hairline that reads as another row divider. */
+    sb-trade-group + sb-trade-group {
+      display: block;
+      margin-top: var(--space-20);
+      border-top: 2px solid var(--border-strong);
+      padding-top: var(--space-14);
+    }
+
     .footnote {
       margin-top: var(--space-8);
       color: var(--text-faint);
@@ -584,7 +620,13 @@ export class Dashboard {
   );
   protected readonly closedEmptyState = computed<EmptyState>(() => ({
     title: this.store.scope() === 'all' ? 'No closed trades yet' : 'No trades closed today',
-    hint: 'They appear here once TP2 or a stop closes the remaining position.',
+    // Not "TP2 or a stop" -- that names only the PARTIAL exit. A position
+    // closes on hitting ITS target or ITS stop regardless of which lifecycle
+    // stage it was in when that happened: straight from Active (stop before
+    // TP1, or a single-target strategy's only target) just as much as from
+    // Partial (TP2, or the break-even stop after TP1).
+    hint: 'They appear here once a position’s target or stop closes it out '
+      + '— whether that happens straight from Active or after TP1 from Partial.',
   }));
 
   private readonly tickerCell =
@@ -599,6 +641,10 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('planCell');
   private readonly confidenceCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('confidenceCell');
+  private readonly openedCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('openedCell');
+  private readonly closedCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('closedCell');
   private readonly preferences = inject(PreferencesStore);
 
   protected readonly tableId = DASHBOARD_TABLE_ID;
@@ -678,6 +724,8 @@ export class Dashboard {
       direction: this.directionCell(),
       plan: this.planCell(),
       confidence_level: this.confidenceCell(),
+      opened_at: this.openedCell(),
+      closed_at: this.closedCell(),
     };
     return tradeColumns().map((column) =>
       cells[column.key] ? { ...column, cell: cells[column.key] } : column,
@@ -814,6 +862,7 @@ export class Dashboard {
   );
 
   protected fmtPct = pct;
+  protected fmtDate = dateTime;
 
   protected pnlClass(value: number | null): string {
     if (value === null) return '';

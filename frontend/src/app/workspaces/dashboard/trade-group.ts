@@ -75,26 +75,15 @@ export const OPEN_POSITIONS_CAP = 6;
     </div>
   `,
   styles: `
-    /* A visibly stronger rule than the --border used inside a table
-       (row dividers, the panel's own edge) -- four same-shaped tables
-       stacked in one flush panel need a break the eye catches without
-       reading the heading text, not just a hairline that reads as another
-       row divider.
-
-       :host + :host, not .group + .group: each group's .group div is
-       nested inside its OWN <sb-trade-group> host element, so two of them
-       are never adjacent siblings in the DOM -- the host elements are the
-       siblings. .group + .group can therefore never match and the rule it
-       was written as silently never fired. :host is display:inline by
-       default, which also breaks margin-top/padding-top, hence the
-       explicit block below. */
+    /* Block, not the :host default of inline: a <sb-trade-group> is a
+       layout unit stacked with its siblings, and margin/padding-top on an
+       inline box is exactly the kind of thing that silently does nothing.
+       (The divider BETWEEN groups is not here -- see dashboard.ts's own
+       "sb-trade-group + sb-trade-group" rule and its comment for why one
+       component's styles cannot reach across to a sibling instance of
+       itself.) */
     :host {
       display: block;
-    }
-    :host + :host {
-      margin-top: var(--space-20);
-      border-top: 2px solid var(--border-strong);
-      padding-top: var(--space-14);
     }
     .group-head {
       display: flex;
