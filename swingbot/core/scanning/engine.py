@@ -70,6 +70,7 @@ from swingbot.core.infra.jsonio import read_json
 from .confidence import LEVELS as _CONF_LEVELS
 from .confidence import ConfidenceResult, level_for_score, score_confidence
 from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
+from swingbot.core.market.mtf import adjacent_aligned
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
@@ -780,6 +781,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "no_entry_point": 0,
         "scenarios_found": 0,
         "fully_qualifying": 0,
+        "mtf_misaligned": 0,
         "failed_counts": {
             "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
             "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
@@ -946,6 +948,23 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             if scenario.tight_stop:
                 log.info("%s (%s, %s): tight stop -- %.1f%% away, below this horizon's normal ATR cushion (%.1f%%)",
                           ticker, horizon_key, scenario.direction, scenario.stop_distance_pct, scenario.atr_floor_pct)
+
+            # v33 Task 4: adjacent-horizon hard gate. Drop this scenario
+            # before any scoring work happens for it if the NEXT horizon up
+            # trends against it -- e.g. a 2w bullish setup while the 4w
+            # trend is bearish. adjacent_aligned() already returns "exempt"
+            # (never "opposed") for the longest horizon (no horizon above
+            # it) and for an unknowable next-horizon trend, so only a
+            # genuine "opposed" verdict drops the scenario here; "exempt"
+            # and "aligned" both fall through unchanged. Default OFF
+            # (config.MTF_ADJACENT_GATE) -- flips on only after VALIDATION.
+            if config.MTF_ADJACENT_GATE:
+                mtf_verdict = adjacent_aligned(df, horizon_key, scenario.direction)
+                if mtf_verdict["status"] == "opposed":
+                    log.debug("%s/%s %s dropped: %s", ticker, horizon_key,
+                              scenario.direction, mtf_verdict["reason"])
+                    stats["mtf_misaligned"] += 1
+                    continue
 
             # Simulate EVERY supported strategy independently against
             # this ticker (see levels.count_confirming_strategies) and
@@ -1199,6 +1218,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     no_entry_point = 0
     scenarios_found_count = 0
     fully_qualifying_count = 0
+    mtf_misaligned = 0   # v33 Task 4: dropped by the adjacent-horizon hard gate
     data_quality_failed_count = 0   # E47: feeds check_kill_triggers' data_fail_frac
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
@@ -1257,6 +1277,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         no_entry_point += per_ticker["no_entry_point"]
         scenarios_found_count += per_ticker["scenarios_found"]
         fully_qualifying_count += per_ticker["fully_qualifying"]
+        mtf_misaligned += per_ticker["mtf_misaligned"]
         if per_ticker.get("data_quality_failed"):
             data_quality_failed_count += 1
         for key, count in per_ticker["failed_counts"].items():
@@ -1386,6 +1407,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_confluence": failed_counts["min_confluence"],
             "failed_min_confidence": failed_counts["min_confidence"],
             "awaiting_confirmation": filtered_by_confirmation,
+            "mtf_misaligned": mtf_misaligned,
             "shown": len(deduped),
             "min_confidence_level": config.MIN_ALERT_CONFIDENCE_LEVEL,
             "conf_level_counts": conf_level_counts,  # {1..5: count} across ALL found scenarios

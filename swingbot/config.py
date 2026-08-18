@@ -419,6 +419,12 @@ FIELDS: list[Field] = [
                "ticker's own higher-timeframe EMA trend. 15 is enough to drop a borderline Level 3 "
                "signal to Level 2 (and thus below the default MIN_ALERT_CONFIDENCE_LEVEL=3 gate). "
                "Set 0 to disable the penalty while keeping the counter-trend label visible."),
+    Field("MTF_ADJACENT_GATE", "MTF_ADJACENT_GATE", "Multi-Timeframe Confluence",
+          "Adjacent-horizon hard gate",
+          type="checkbox", default="false",
+          help="Drop a scenario when the next horizon up trends against it "
+               "(e.g. a 2w bullish setup while the 4w trend is bearish). "
+               "The longest horizon is exempt. Enable only after VALIDATION."),
 
     # --- Plan Engine v2 (rollout flags, spec 2026-07-11-v2-unified-plan-engine-design) ---
     Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",
