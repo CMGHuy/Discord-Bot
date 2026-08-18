@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-18 12:26:33 UTC",
+  "generated_at": "2026-08-18 12:45:07 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.3",
+    "ui": "1.7.4",
     "bot": "1.2.1"
   },
   "releases": [
@@ -492,6 +492,19 @@
       "subject": "release(ui): 1.7.3 -- Dashboard Closed trades table, group separator fix",
       "versions": {
         "ui": "1.7.3",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "04842fee",
+      "subject": "release(ui): 1.7.4 -- fix Closed table's Opened/Closed columns, real separator",
+      "versions": {
+        "ui": "1.7.4",
         "bot": "1.2.1"
       },
       "changed": [
