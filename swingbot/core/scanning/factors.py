@@ -353,8 +353,12 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
 # distinguishable win-rate lift:
 #   - 13 factors measured, Wilson-overlapping (indistinguishable from zero
 #     lift): target_distance, stop_confluence, target_confluence_quality,
-#     htf, adx, macd, squeeze, candlestick, mtf, volume, atr_percentile,
+#     htf, adx, macd, squeeze, candlestick, volume, atr_percentile,
 #     trigger_distance, badge, tight_stop.
+#     (This list named `mtf` as a 14th until v33 Task 6, contradicting its
+#     own "13" -- factor_mtf and the mtf_alignment signal behind it were
+#     retired outright on v33 Task 1's evidence, -8.0pp NON-overlapping,
+#     so it no longer belongs in a roster of merely-overlapping factors.)
 #   - 1 factor measured with a REAL, non-overlapping lift, but the WRONG
 #     sign: rsi (-0.056 -- higher "RSI confirms direction" points correlate
 #     with a LOWER win rate, the opposite of its designed premise). Kept as
@@ -387,13 +391,42 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
 
 # --- v33 Task 5: 6m macro-anchor alignment ------------------------------
 
-_MACRO_ALIGNMENT_POINTS = 10   # provisional; re-derived in v33 Task 7
+# MEASURED (v33 Task 7), not provisional: 0.
+#
+# TRAIN, 75 tickers x 10 horizons x 11 strategies, 4337 scenarios, via
+# scripts/backtest/measure_adjacent_gate_effect.py. Full tables and the
+# reasoning: docs/superpowers/plans/v33-train-preregistration.md (the raw
+# dump is gitignored -- data/ is bind-mounted on the deploy host):
+# the 6m anchor's agree arm is 45.0% [42.9, 47.1] on n=2150, its oppose arm
+# 42.9% [30.8, 55.9] on n=56. A +2.1pp point estimate whose Wilson intervals
+# overlap almost completely -- indistinguishable from zero lift, and the
+# oppose arm did NOT grow with the fuller sweep (n=56 both times), because
+# a 6m trend simply rarely opposes a shorter-horizon entry.
+#
+# Per horizon it is worse than merely weak: all six measurable horizons
+# overlap AND the sign flips (2w -7.5pp, 4w -1.9pp, 2m +24.1pp, 3m +7.3pp,
+# 4m -3.4pp, 5m -3.5pp, on 8-10 opposed scenarios each). Four of six point
+# the wrong way. That is the signature of noise, not of a weak real effect.
+#
+# v32 Task 9's rule -- "assign points from measured lift" -- is the same one
+# that excluded the 13 factors listed above on exactly these grounds, so the
+# only consistent value here is 0. Awarding points anyway would make this
+# factor the single exception to the discipline the rest of the file was
+# built on.
+_MACRO_ALIGNMENT_POINTS = 0
 
 
 def factor_macro_alignment(ctx: FactorContext) -> FactorResult | None:
     """Agreement with the 6m macro anchor. Never blocks -- only the adjacent
     check gates. Exempt horizons return None so they are omitted from the
-    breakdown rather than scored zero."""
+    breakdown rather than scored zero.
+
+    Both branches score 0 on the measurement above, so this factor is now
+    purely INFORMATIONAL: it contributes nothing to the score and exists to
+    put the macro reading (and its counter-trend warning) in the breakdown.
+    It stays registered for the same reason factor_gap does -- a correct,
+    tested implementation that costs nothing to carry -- and un-registering
+    it is a future re-weighting spec's call, not this one's."""
     verdict = ctx.macro_verdict
     if not verdict or verdict["status"] == "exempt":
         return None
@@ -409,13 +442,13 @@ def factor_macro_alignment(ctx: FactorContext) -> FactorResult | None:
 
 FACTORS[:] = [
     factor_gap,
-    # Provisional, unlike factor_gap and unlike every excluded factor above:
-    # v33 Task 1's TRAIN measurement of the 6m macro anchor found only
-    # +2.1pp lift, Wilson-overlapping (n_opp=56) -- currently
-    # indistinguishable from the 13 factors already excluded above on the
-    # same "no measured positive lift" grounds. Registered anyway per this
-    # task's spec so v33 Task 7 can re-derive (or zero out) its weight from
-    # a real TRAIN sweep before VALIDATION. UNIFIED_CONFIDENCE is
-    # default-off, so this has zero live effect either way today.
+    # v33 Task 7 ran the fuller TRAIN sweep this entry was registered
+    # pending, and the answer was the one Task 1 predicted: zero lift.
+    # _MACRO_ALIGNMENT_POINTS is now a MEASURED 0 (see its comment), which
+    # puts this factor in exactly factor_gap's position -- registered,
+    # correct, tested, and contributing nothing to the score. Kept rather
+    # than un-registered for the same reason: dropping genuinely-tested
+    # infrastructure serves no purpose that dropping an unsupported WEIGHT
+    # has not already served.
     factor_macro_alignment,
 ]
