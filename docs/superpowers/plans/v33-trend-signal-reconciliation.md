@@ -20,9 +20,49 @@ horizons × 11 strategies, `exit_model="v2"`, `scale_out=True` — the same
 harness shape and the same population as v32 Task 8
 (`scripts/backtest/measure_factor_lift.py`).
 
-**Sample size: 4337 scenarios** — the plan asked for ≥500. Identical count
-to v32's `data/v32_train_lift.json`, which is the expected cross-check: same
-window, same cache, same strategy/horizon grid.
+**Sample size: 4337 scenarios** — the plan asked for ≥500. The **entry set**
+is identical in size to v32's `data/v32_train_lift.json` (also 4337), as
+expected from the same window, cache and strategy/horizon grid.
+
+**The outcome resolution is not identical, and this is only an entry-count
+match — not a full reproduction of v32's run.**
+
+| | win | loss | scratch | timeout | evaluated | WR |
+|---|---|---|---|---|---|---|
+| v32 `v32_train_lift.json` | 1457 | 1701 | 983 | 196 | 3158 | 46.14% |
+| this measurement | 1429 | 1721 | 1000 | 187 | 3150 | 45.36% |
+
+About 30 trades (≈0.9% of evaluated) resolve differently, moving the pooled
+win rate 0.78pp. What was checked, and ruled out:
+
+- **Not the data.** The CSV cache is unchanged since 2026-08-07, well before
+  either run.
+- **Not the harness.** Both call
+  `run_backtest(ticker, df, strategy, hk, exit_model="v2", scale_out=True)`
+  identically.
+- **Not the exit arithmetic.** Diffing `swingbot/` between v32's
+  measurement commit (`59c150e`) and this branch's HEAD shows the only
+  changes on the backtest path are the A/B/C-tier removal (`backtest.py`,
+  `plan_engine.py`) and a config *help-string* edit — no change to entry,
+  target, stop or exit computation. v31's structural-target work was
+  already merged before `59c150e`, so it is not the cause either.
+- **Not run-to-run noise.** `run_backtest` is deterministic here: three
+  independent runs on this branch produced 1429/1721/1000/187 every time.
+
+The residual explanation is environment/config state at the time of v32's
+run (`.env` is the single config source and differs per worktree; several
+`config` values feed scenario construction). Pinning it exactly would mean
+reconstructing v32's environment, which is that plan's territory, not this
+task's.
+
+**What this does and does not affect.** Nothing here is a cross-run
+comparison — every number in this document is computed within this single
+self-consistent dataset, so the pairwise V values, the lifts and the
+per-horizon table are internally valid regardless. But the tightest result
+in the document, `adj_agree`'s 0.22pp Wilson gap, sits well inside a
+0.78pp shift in the base win rate. **Treat `adj_agree`'s separation as
+fragile to environment state, not as a settled fact** — one more reason
+Task 7's sweep, not this table, is the real test of the adjacent gate.
 
 | | |
 |---|---|
@@ -252,12 +292,21 @@ live path today the two readings land in **two different scores**:
   (`engine.py:999`), enough to drop a level and thus fall below
   `MIN_ALERT_CONFIDENCE_LEVEL`.
 
+**`factor_htf` is not the second half — it is inert.** It is defined in
+`scanning/factors.py` but never registered: `factors.py:396-398` reads
+`FACTORS[:] = [factor_gap,]`, v32's own outcome. So `factor_htf` contributes
+**zero regardless of whether `UNIFIED_CONFIDENCE` is on or off**, and
+switching that flag on would not create a +15/−15 collision inside one
+score. It would take a future re-weighting spec re-registering `factor_htf`
+for that to become possible.
+
 The plan's framing — "one signal is worth 15 raw points *plus* a factor
-score" — becomes literally true only when `UNIFIED_CONFIDENCE` is switched
-on: `factor_htf` (+15/0) and the penalty (−15) then hit the *same* score, a
-30-point swing out of 100 driven by one boolean. Today it is a 15-point
-component in one score and a 15-point penalty on another. Either way the
-same boolean is paid for twice, which is what matters for Decision 2.
+score" — is therefore right about the *count* and wrong about the *place*.
+The real, live double-count is `component_htf`'s 15 points in the
+plan-quality score plus the penalty's −15 on the confidence score: two
+scores, one boolean, paid for twice. That is what Decision 2 rests on, and
+it holds at today's flag settings without depending on `UNIFIED_CONFIDENCE`
+at all.
 
 ---
 
@@ -293,11 +342,15 @@ and a counter-trend *warning* is honest information for a human reader. What
 it has not earned is the right to be paid for **twice** — once as a
 component and again as a suppressor. Decision 2 removes the second copy.
 
-To be unambiguous for Task 6: `component_htf` / `factor_htf` **stay at their
-current 15 points**. This document does not re-weight them. Their lift is
-unmeasured on this population rather than measured-and-zero, and re-weighting
-the whole merged factor set on TRAIN is explicitly a future spec's job per
-v32's close-out, not a side effect of this reconciliation.
+To be unambiguous for Task 6: `component_htf` (`quality.py:25`) **stays at its
+current 15 points** in the plan-quality score, and `factor_htf`
+(`factors.py:284`) **stays defined and unregistered** — it is already inert,
+because `FACTORS[:] = [factor_gap,]`, so it scores 0 today whatever
+`UNIFIED_CONFIDENCE` is set to. This document re-weights neither and
+registers neither. Their lift is unmeasured on this population rather than
+measured-and-zero, and re-weighting the merged factor set on TRAIN is
+explicitly a future spec's job per v32's close-out, not a side effect of this
+reconciliation.
 
 `_HTF_EMA_PERIOD` needs **no change**. Task 6 Step 3's conditional ("if it
 was kept, extend `_HTF_EMA_PERIOD` to cover all ten horizons") is already
@@ -406,7 +459,8 @@ Concretely:
 |---|---|---|
 | `get_htf_bias` (`regime.py:46`) | **Keep** | No change to the function or `_HTF_EMA_PERIOD`. Fix the docstring at `:53`. Keep `HTF_CONFLUENCE_ENABLED`. |
 | `HTF_COUNTER_TREND_PENALTY` | **Retire** | Remove the `if` block at `engine.py:999-1010` **only**, plus the `Field` at `config.py:415` and the embed sentence at `embeds.py:623-624`. **Keep** the `htf_counter_trend` boolean at `engine.py:995-998` — `:1018` and `:1046` still read it, and Decision 1 keeps the embed warning it drives. |
-| `htf` quality component / `factor_htf` | **Keep** | Unchanged — it is the surviving half of the Decision 2 collapse. |
+| `component_htf` (`planning/quality.py:25`) | **Keep** | Unchanged at 15 points. This is the **live** surviving half of the Decision 2 collapse. |
+| `factor_htf` (`scanning/factors.py:284`) | **Keep, and leave unregistered** | Already inert — `FACTORS[:] = [factor_gap,]` (`factors.py:396-398`). Do **not** add it to `FACTORS` as part of this work; it contributes 0 today and re-registering it is a future re-weighting spec's decision, not Task 6's. |
 | `mtf_alignment` (`edge/factors.py:88`) | **Retire** | Remove it, `factor_mtf` (`scanning/factors.py:264`), `mtf_points` (`quality.py`), and the `mtf=` call sites at `engine.py:547` and `:981`. Check `tracking/retrospective.py` first. |
 | adjacent check | **Build** (Tasks 2–4) | Only signal with real positive lift. |
 
@@ -498,23 +552,40 @@ one horizon.
 
 ## Reproducing this
 
-The instrumentation was throwaway scratch tooling and is not committed —
-`measure_factor_lift.py`'s `collect_train_trades()` is the reusable version
-of the same loop, and reproducing this needs only four extra recorded
-fields on top of it:
+The instrumentation is committed as
+**`scripts/backtest/measure_trend_signal_overlap.py`**, following
+`measure_factor_lift.py`'s conventions (TRAIN-only, `--json` dump, one
+flushed progress line per ticker). Every number in this document comes from
+one run of it:
 
-```python
-mtf          = int(rs_factors.mtf_alignment(window, t.direction))     # S1
-htf          = get_htf_bias(window, hk)                               # S2
-htf_agree    = None if htf is None else (htf["bias"] == t.direction)
-penalty      = (htf_agree is False)                                   # S3
-nxt          = next horizon in HORIZONS key order (None for 9m)       # S4
-adj_agree    = None if nxt is None else (
-    ("bullish" if ema(close, HORIZONS[nxt]["ema_fast"]).iloc[i]
-                > ema(close, HORIZONS[nxt]["ema_slow"]).iloc[i]
-     else "bearish") == t.direction)
+```bash
+python scripts/backtest/measure_trend_signal_overlap.py --train \
+    --json data/v33_trend_overlap.json
 ```
 
-with `wilson_interval` and the win/loss convention taken from
-`measure_factor_lift.py` unchanged, and Cramér's V as defined under
-Methodology.
+Roughly 7 minutes over the 75-ticker cache. It emits, in order: the EMA
+precompute check, the 15-pair Cramér's V table, the six lift rows, the
+`mtf_alignment` per-value table, the per-horizon opposition table, the
+S2/S3 identity check, and the `htf`-vs-`adj` disagreement count — i.e. every
+table above.
+
+Two things worth knowing before running it:
+
+- **From a git worktree, pass `--cache-dir`.** `data/` is gitignored, so a
+  worktree gets its own empty `data/backtest_cache/`; point the flag at the
+  main checkout's cache. The script exits non-zero with that hint rather
+  than reporting an empty result.
+- **The EMA precompute is verified, not assumed.** The run aborts before
+  collecting anything if the full-series precompute disagrees with the real
+  `get_htf_bias` on any sampled bar, because a disagreement would mean every
+  `htf`/adjacent/macro number is lookahead-contaminated. `--verify-ema` runs
+  that check alone. Both the smoke run and the full run reported
+  `1230 sampled (horizon, bar) pairs, 0 mismatches`.
+
+Re-running it on this branch reproduces this document exactly — the
+committed script was run over the full cache and matched all 15 V values,
+all six lift rows, the `mtf` per-value table and the per-horizon table to
+the last digit. Note the environment caveat under Methodology: the *entry
+set* is stable, but outcome resolution has been observed to drift slightly
+with config/`.env` state, so a materially different pooled win rate on a
+re-run points at environment, not at this script.
