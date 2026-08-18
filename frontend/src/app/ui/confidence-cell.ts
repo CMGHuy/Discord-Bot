@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { DirectionArrow } from './direction-arrow';
 import { ABSENT } from './format';
 
 /**
@@ -13,25 +14,49 @@ import { ABSENT } from './format';
  * `var(--quality-{{level}})` looks tidier and turns a level outside 1–5 into
  * `var(--quality-9)`, which resolves to nothing — the text renders in the
  * inherited colour or none at all, and the cell silently disappears.
+ *
+ * `direction` is optional and, when given, renders DirectionArrow to the
+ * LEFT of the level -- the Dashboard's four lifecycle tables fold their own
+ * separate Direction column into this one to save the width, and every
+ * other call site (Trades, the detail views) simply never passes it, which
+ * leaves them exactly as before.
+ *
+ * The arrow sits OUTSIDE the level's own @if: a PENDING plan often has a
+ * direction (it is one of the plan's defining numbers) before it has ever
+ * been scored for confidence (which only exists once a trade is logged), so
+ * gating the arrow on `level() !== null` too would silently drop the one
+ * piece of direction information the row has left, now that there is no
+ * separate Direction column to fall back to.
  */
 @Component({
   selector: 'sb-confidence-cell',
+  imports: [DirectionArrow],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (level() !== null) {
-      <span class="conf">
+    <span class="conf">
+      @if (direction(); as dir) {
+        <sb-direction-arrow [direction]="dir" />
+      }
+      @if (level() !== null) {
         <span class="badge" [class]="band()">Lv{{ level() }}</span>
         @if (score() !== null) {
           <span class="sep">{{ ' · ' }}</span>
           <span class="score">{{ score() }}</span>
         }
-      </span>
-    } @else {
-      <span class="absent">{{ absent }}</span>
-    }
+      } @else {
+        <span class="absent">{{ absent }}</span>
+      }
+    </span>
   `,
   styles: `
-    .conf { font-family: var(--font-mono); font-size: var(--text-table); white-space: nowrap; }
+    .conf {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-4);
+      font-family: var(--font-mono);
+      font-size: var(--text-table);
+      white-space: nowrap;
+    }
     .badge { font-weight: 600; }
     .score { color: var(--text-secondary); }
     /* Spacing in the text, not a margin -- Angular strips whitespace between
@@ -49,6 +74,7 @@ import { ABSENT } from './format';
 export class ConfidenceCell {
   readonly level = input<number | null>(null);
   readonly score = input<number | null>(null);
+  readonly direction = input<string | null>(null);
 
   protected readonly absent = ABSENT;
 

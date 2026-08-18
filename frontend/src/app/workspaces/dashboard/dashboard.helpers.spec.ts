@@ -5,6 +5,8 @@ import {
   deriveOpenVisible,
   expectedPnlPct,
   expectedR,
+  expectedSlPct,
+  livePnlPct,
   reconcileReorder,
 } from './dashboard.helpers';
 
@@ -31,6 +33,13 @@ describe('deriveClosedVisible', () => {
   it('leaves a list with neither "now" nor "opened_at" only gaining "hold"', () => {
     expect(deriveClosedVisible(['num', 'status'])).toEqual(['num', 'status', 'hold']);
   });
+
+  it('drops "direction" -- it folds into the Confidence cell instead', () => {
+    const base = ['num', 'status', 'direction', 'confidence_level', 'opened_at'];
+    expect(deriveClosedVisible(base)).toEqual([
+      'num', 'status', 'confidence_level', 'hold', 'opened_at',
+    ]);
+  });
 });
 
 describe('deriveOpenVisible', () => {
@@ -42,6 +51,11 @@ describe('deriveOpenVisible', () => {
   it('is a no-op when "closed_at" is not present', () => {
     const base = ['num', 'status', 'ticker'];
     expect(deriveOpenVisible(base)).toEqual(base);
+  });
+
+  it('drops "direction" -- it folds into the Confidence cell instead', () => {
+    const base = ['num', 'direction', 'confidence_level', 'now'];
+    expect(deriveOpenVisible(base)).toEqual(['num', 'confidence_level', 'now']);
   });
 });
 
@@ -71,6 +85,12 @@ describe('reconcileReorder', () => {
     const order = ['num', 'now', 'closed_at', 'hold'];
     const base = ['num', 'now', 'closed_at'];
     expect(reconcileReorder(order, base)).toEqual(['num', 'now', 'closed_at']);
+  });
+
+  it('restores "direction" when a drag drops it, since every group omits it', () => {
+    const order = ['num', 'ticker'];
+    const base = ['num', 'ticker', 'direction'];
+    expect(reconcileReorder(order, base)).toEqual(['num', 'ticker', 'direction']);
   });
 });
 
@@ -143,5 +163,58 @@ describe('expectedR', () => {
     expect(
       expectedR({ entry: 100, trigger_price: null, target: null, stop_loss: 90, direction: 'bullish' }),
     ).toBeNull();
+  });
+});
+
+describe('expectedSlPct', () => {
+  it('is negative for a bullish row whose stop sits below entry', () => {
+    expect(expectedSlPct({ entry: 100, trigger_price: null, stop_loss: 90, direction: 'bullish' }))
+      .toBeCloseTo(-10);
+  });
+
+  it('is negative for a bearish row whose stop sits above entry', () => {
+    expect(expectedSlPct({ entry: 100, trigger_price: null, stop_loss: 110, direction: 'bearish' }))
+      .toBeCloseTo(-10);
+  });
+
+  it('falls back to trigger_price for a PENDING stop-entry row with no fill yet', () => {
+    expect(expectedSlPct({ entry: null, trigger_price: 100, stop_loss: 90, direction: 'bullish' }))
+      .toBeCloseTo(-10);
+  });
+
+  it('is null once neither entry nor trigger_price, or no stop, is known', () => {
+    expect(expectedSlPct({ entry: null, trigger_price: null, stop_loss: 90, direction: 'bullish' }))
+      .toBeNull();
+    expect(expectedSlPct({ entry: 100, trigger_price: null, stop_loss: null, direction: 'bullish' }))
+      .toBeNull();
+  });
+});
+
+describe('livePnlPct', () => {
+  it('is positive for a bullish row trading above entry', () => {
+    expect(livePnlPct({ entry: 100, trigger_price: null, current_price: 105, direction: 'bullish' }))
+      .toBeCloseTo(5);
+  });
+
+  it('is negative for a bullish row trading below entry', () => {
+    expect(livePnlPct({ entry: 100, trigger_price: null, current_price: 95, direction: 'bullish' }))
+      .toBeCloseTo(-5);
+  });
+
+  it('is positive for a bearish row trading below entry', () => {
+    expect(livePnlPct({ entry: 100, trigger_price: null, current_price: 95, direction: 'bearish' }))
+      .toBeCloseTo(5);
+  });
+
+  it('falls back to trigger_price for a PENDING stop-entry row with no fill yet', () => {
+    expect(livePnlPct({ entry: null, trigger_price: 100, current_price: 110, direction: 'bullish' }))
+      .toBeCloseTo(10);
+  });
+
+  it('is null once neither entry nor trigger_price, or no current_price, is known', () => {
+    expect(livePnlPct({ entry: null, trigger_price: null, current_price: 105, direction: 'bullish' }))
+      .toBeNull();
+    expect(livePnlPct({ entry: 100, trigger_price: null, current_price: null, direction: 'bullish' }))
+      .toBeNull();
   });
 });

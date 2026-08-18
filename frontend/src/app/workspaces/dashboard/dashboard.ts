@@ -18,7 +18,6 @@ import { DashboardStore } from '../../stores/dashboard.store';
 import { Button } from '../../ui/button';
 import { ColumnDef, Density, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
-import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell } from '../../ui/plan-cell';
 import { StatusCell } from '../../ui/status-cell';
 import {
@@ -38,12 +37,13 @@ import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
-import { Sparkline } from '../../ui/sparkline';
 import {
   deriveClosedVisible,
   deriveOpenVisible,
   expectedPnlPct,
   expectedR,
+  expectedSlPct,
+  livePnlPct,
   reconcileReorder,
 } from './dashboard.helpers';
 import { TradeGroup } from './trade-group';
@@ -77,8 +77,8 @@ import { TradeGroup } from './trade-group';
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    RouterLink, MetricCard, MetricChip, Sparkline, Panel, TradeGroup,
-    StatusCell, DirectionArrow, PlanCell, ConfidenceCell, Button, ControlRow,
+    RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
+    StatusCell, PlanCell, ConfidenceCell, Button, ControlRow,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the store is created on entry and
@@ -130,28 +130,19 @@ import { TradeGroup } from './trade-group';
       background scan only ever posts and logs fully-qualifying setups.
     </p>
 
-    <!-- SR58. Realised, scoped by the toggle above -- distinct from the
-         Open P&L card, which is unrealised and always all-open. -->
-    <div class="realized">
+    <!-- SR58 / reorg: Realised today, Account balance, Open P&L, Risk used
+         and Realised average all read together as one row -- Realised is
+         scoped by the toggle above and the other three are always all-open,
+         but they are all "the account right now" and splitting them into two
+         rows only used to say "these five cards were added at different
+         times", not anything about the numbers themselves. -->
+    <div class="primary">
       <sb-metric-card
         [label]="realizedLabel()"
         [value]="store.realizedAmount()"
         tone="pnl"
         [unit]="currencyUnit()"
       />
-      <sb-metric-card
-        label="Realised, average"
-        [value]="store.realizedPct()"
-        tone="pnl"
-        unit="%"
-      />
-      <span class="realized-count">
-        {{ store.realizedCount() }} closed{{ closedQualifier() }} ·
-        {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
-      </span>
-    </div>
-
-    <div class="primary">
       <sb-metric-card
         label="Account balance"
         [value]="store.balance()"
@@ -170,7 +161,17 @@ import { TradeGroup } from './trade-group';
         unit="%"
         [sub]="riskSub()"
       />
+      <sb-metric-card
+        label="Realised, average"
+        [value]="store.realizedPct()"
+        tone="pnl"
+        unit="%"
+      />
     </div>
+    <span class="realized-count">
+      {{ store.realizedCount() }} closed{{ closedQualifier() }} ·
+      {{ store.realizedWins() }}W / {{ store.realizedLosses() }}L
+    </span>
 
     <div class="chips">
       <sb-metric-chip label="Open trades" [value]="store.openTrades()" [decimals]="0" />
@@ -181,18 +182,6 @@ import { TradeGroup } from './trade-group';
       <!-- Expectancy is money per unit of risk, which is P&L direction, so it
            is one of the few figures here allowed the green/red pair. -->
       <sb-metric-chip label="Expectancy" [value]="store.expectancyR()" tone="pnl" unit="R" />
-
-      <!-- The equity chip is written out rather than composed from
-           MetricChip because MetricChip has no projection slot, and widening
-           its contract for this one call site would push a chart-shaped hole
-           into the five chips that will never use it. The classes below
-           deliberately mirror MetricChip's so the row reads as one set. -->
-      <div class="chip equity">
-        <span class="label">Equity 30d</span>
-        <sb-sparkline [points]="store.equityPoints()" label="Equity, last 30 days" />
-        <span class="value num" [class]="equityClass()">{{ equityChange() }}</span>
-      </div>
-
       <sb-metric-chip
         label="Position premium"
         [value]="store.positionPremium()"
@@ -364,9 +353,6 @@ import { TradeGroup } from './trade-group';
     <ng-template #statusCell let-row>
       <sb-status-cell [row]="row" />
     </ng-template>
-    <ng-template #directionCell let-row>
-      <sb-direction-arrow [direction]="row.direction" />
-    </ng-template>
     <ng-template #planCell let-row>
       <sb-plan-cell
         [entry]="row.entry"
@@ -375,8 +361,15 @@ import { TradeGroup } from './trade-group';
         [trigger]="row.trigger_price"
       />
     </ng-template>
+    <!-- Direction folds into this cell (no separate Direction column here --
+         see deriveClosedVisible/deriveOpenVisible) to save the width a whole
+         column cost for one glyph. -->
     <ng-template #confidenceCell let-row>
-      <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
+      <sb-confidence-cell
+        [level]="row.confidence_level"
+        [score]="row.confidence_score"
+        [direction]="row.direction"
+      />
     </ng-template>
 
     <!-- cells ---------------------------------------------------------- -->
@@ -394,13 +387,14 @@ import { TradeGroup } from './trade-group';
          null until a position closes.
 
          pnl_pct itself is null for every PENDING/ACTIVE/PARTIAL row --
-         dashboard.py's closed_pnl needs an exit_price, which does not
-         exist until a position closes -- so those three groups fell through
-         to an em dash regardless of how good the plan looked. The else
-         branch computes what the % (and, in rMultipleCell below, the R)
-         WOULD be if price reaches target, from the same entry/stop/target
-         the Plan cell already shows; the dashed underline (PlanCell's own
-         "pending" look) marks it as projected rather than realised. -->
+         dashboard.py's closed_pnl needs an exit_price, which does not exist
+         until a position closes -- so those three groups fell through to an
+         em dash regardless of how the position was actually doing. The else
+         branch reads the same way the Plan cell does (entry → target / stop)
+         but in P&L% instead of price: LIVE (where it is right now, real,
+         plain colour) → TP (green, dashed -- projected) - SL (red, dashed --
+         projected), from the same entry/stop/target/current_price the Plan
+         cell already shows. -->
     <ng-template #pnlCell let-row>
       @if (row.pnl_pct !== null) {
         <span [class]="pnlClass(row.pnl_pct)">
@@ -409,10 +403,15 @@ import { TradeGroup } from './trade-group';
         </span>
       } @else {
         <span
-          class="expected"
-          [class]="pnlClass(expectedPnlPct(row))"
-          title="Projected P&L if price reaches target"
-        >{{ fmtPct(expectedPnlPct(row)) }}</span>
+          class="pnl-plan"
+          title="Live P&L, then projected P&L at target and at stop"
+        >
+          <span [class]="pnlClass(livePnlPct(row))">{{ fmtPct(livePnlPct(row)) }}</span>
+          <span class="sep">{{ ' → ' }}</span>
+          <span class="tp expected">{{ fmtPct(expectedPnlPct(row)) }}</span>
+          <span class="sep">{{ ' - ' }}</span>
+          <span class="sl expected">{{ fmtPct(expectedSlPct(row)) }}</span>
+        </span>
       }
     </ng-template>
 
@@ -486,17 +485,14 @@ import { TradeGroup } from './trade-group';
     }
     .footnote code { font-family: var(--font-mono); }
 
-    /* -- SR58: scope toggle and realised row ---------------------- */
+    /* -- SR58: scope toggle ---------------------------------------- */
     .scope { margin-left: auto; }
-    .realized {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-8);
-      margin-bottom: var(--space-10);
-    }
+    /* :host's own grid gap (below) already separates this from .primary
+       above it -- no margin of its own needed, just the right alignment. */
     .realized-count {
-      margin-left: auto;
+      display: block;
+      max-width: 960px;
+      text-align: right;
       color: var(--text-faint);
       font-size: var(--text-chip);
       font-variant-numeric: tabular-nums;
@@ -526,9 +522,13 @@ import { TradeGroup } from './trade-group';
     }
     .primary {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      /* Five across, all in one row: Realised today, Account balance, Open
+         P&L, Risk used, Realised average -- reorganised out of the two
+         three-and-two rows this used to be, which read as an arbitrary
+         split rather than one "the account right now" line. */
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: var(--space-14);
-      /* Three across down to 1280px, which is the width the layout is
+      /* Five across down to 1280px, which is the width the layout is
          committed to (NG52). Below that they stack rather than shrink --
          a 23px metric in a 90px column is not a metric anyone can read. */
       max-width: 960px;
@@ -536,35 +536,14 @@ import { TradeGroup } from './trade-group';
 
     .chips {
       display: grid;
-      /* auto-fit rather than a fixed six: the chips are the secondary tier
-         and are allowed to reflow, where the three cards above are not. */
+      /* auto-fit rather than a fixed count: the chips are the secondary
+         tier and are allowed to reflow, where the five cards above are not.
+         Position premium sits in this row now that the two-wide equity chip
+         (removed) no longer pushes it onto a row of its own. */
       grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
       gap: var(--space-8);
       max-width: 960px;
     }
-    /* The equity chip carries a chart as well as a number, so it takes two
-       tracks where they exist -- a 100px sparkline shows noise, not shape. */
-    .equity { grid-column: span 2; }
-
-    .chip {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-8);
-      padding: var(--space-6) var(--space-10);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-    }
-    .label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      white-space: nowrap;
-    }
-    .equity sb-sparkline { flex: 1 1 auto; min-width: 60px; }
-    .value { font-size: var(--text-subhead); font-weight: 600; }
 
     /* SR53. One row, lifecycle order, sized to the count rather than the
        label -- the number is what is being read. */
@@ -628,11 +607,17 @@ import { TradeGroup } from './trade-group';
        already means something else (gain vs loss) and this axis (realised
        vs projected) is orthogonal to it. */
     .expected { border-bottom: 1px dashed currentColor; }
-    .absent { color: var(--text-faint); }
+
+    /* The live-to-target-to-stop P&L line -- same layout language as
+       PlanCell's own entry → target / stop (font, separators, fixed
+       target/stop colours), just in percent rather than price. */
+    .pnl-plan { font-family: var(--font-mono); font-size: var(--text-table); white-space: nowrap; }
+    .pnl-plan .sep { color: var(--text-faint); white-space: pre; }
+    .pnl-plan .tp { color: var(--pos); }
+    .pnl-plan .sl { color: var(--neg); }
 
     @media (max-width: 720px) {
       .primary { grid-template-columns: 1fr; }
-      .equity { grid-column: auto; }
     }
   `,
 })
@@ -699,8 +684,6 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('rMultipleCell');
   private readonly statusCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('statusCell');
-  private readonly directionCell =
-    viewChild.required<TemplateRef<RowContext<TradeRow>>>('directionCell');
   private readonly planCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('planCell');
   private readonly confidenceCell =
@@ -795,7 +778,6 @@ export class Dashboard {
       pnl_pct: this.pnlCell(),
       r_multiple: this.rMultipleCell(),
       status: this.statusCell(),
-      direction: this.directionCell(),
       plan: this.planCell(),
       confidence_level: this.confidenceCell(),
       opened_at: this.openedCell(),
@@ -916,16 +898,6 @@ export class Dashboard {
     return cap === null ? null : `of ${cap.toFixed(1)}% cap`;
   });
 
-  /** Signed, so a gain and a loss are told apart without reading the colour
-   *  -- which the ~8% who cannot rely on the green/red pair depend on. */
-  protected readonly equityChange = computed(() => pct(this.store.equityChangePct(), 1));
-
-  protected readonly equityClass = computed(() => {
-    const change = this.store.equityChangePct();
-    if (change === null) return 'absent';
-    return this.pnlClass(change);
-  });
-
   /** In risk-% sizing there is no single premium -- position value varies per
    *  trade with the stop distance, up to the max-position cap -- so the chip
    *  says "max" rather than presenting a ceiling as a typical cost. */
@@ -950,9 +922,11 @@ export class Dashboard {
     return '';
   }
 
-  /** See dashboard.helpers.ts's `expectedPnlPct`/`expectedR` for what a
-   *  projected value means and why it is null when it is. */
+  /** See dashboard.helpers.ts's own comments for what each of these means
+   *  and why it is null when it is. */
   protected expectedPnlPct = expectedPnlPct;
+  protected expectedSlPct = expectedSlPct;
+  protected livePnlPct = livePnlPct;
   protected expectedR = expectedR;
 
   /** Mouse activation, matching Trades: a row leads to its detail view. The
