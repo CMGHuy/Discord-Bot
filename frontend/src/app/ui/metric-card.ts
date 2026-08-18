@@ -27,6 +27,14 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
     </div>
   `,
   styles: `
+    /* A custom element has no display of its own by default (the browser
+       treats it as inline), so a row that stretches this host to match its
+       tallest sibling (flex/grid's own align-items: stretch) would stretch
+       an invisible box while .card -- which carries the actual border and
+       background -- stayed sized to its own content. block + height: 100%
+       is what makes the visible card, not just the host, fill that
+       stretched row height. */
+    :host { display: block; height: 100%; }
     .card {
       display: flex;
       flex-direction: column;
@@ -35,6 +43,8 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      height: 100%;
+      box-sizing: border-box;
     }
     .label {
       color: var(--text-secondary);

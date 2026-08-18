@@ -142,7 +142,14 @@ const NOT_CONTROL_ROWS = new Set([
   // Text and figures. Baseline or centre on running text is correct.
   'head', 'meta', 'cell', 'count', 'figures', 'tags',
   'jobhead', // a chip beside a timestamp
-  'realized', // two metric cards beside a closed-trade tally
+  // The Dashboard's three data-card rows (five metric cards, the metric-chip
+  // row, the lifecycle strip) -- rows of DISPLAYED figures, not controls, so
+  // sb-control-row's bottom-alignment answer does not apply. Flex here is
+  // what lets a card size to its own content (a long label) while still
+  // filling the row, and align-items: stretch is what makes every card in
+  // the row match its tallest sibling -- both are the point, not a stand-in
+  // for sb-control-row.
+  'primary', 'chips', 'lifecycle',
   'chip', // the inside of a bordered chip, not a row of controls
   'scan', // the scan-duration figures beside their sparkline
   'command-error', // <p role="alert">: message text with a dismiss affordance

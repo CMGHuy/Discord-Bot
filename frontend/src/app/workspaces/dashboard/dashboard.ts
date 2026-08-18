@@ -491,7 +491,6 @@ import { TradeGroup } from './trade-group';
        above it -- no margin of its own needed, just the right alignment. */
     .realized-count {
       display: block;
-      max-width: 960px;
       text-align: right;
       color: var(--text-faint);
       font-size: var(--text-chip);
@@ -520,40 +519,47 @@ import { TradeGroup } from './trade-group';
       color: var(--warn);
       font-size: var(--text-table);
     }
+    /* Flexbox, not a fixed grid track count, across all three rows below
+       (.primary, .chips, .lifecycle): equal width was never the actual
+       requirement, filling the row was -- a label long enough to need more
+       room should get it rather than every card being squeezed to the same
+       fraction. flex: 1 1 auto sizes each card to its own content first
+       (so a short "Lv4" card and a long "Position premium" one are allowed
+       to differ) and then grows every card by an equal SHARE of whatever
+       width is left, which is what actually fills the row edge to edge.
+       align-items: stretch (flex's own default, stated explicitly here
+       because it is the point) is what makes every card in the row match
+       the row's tallest one -- MetricCard/MetricChip's own host fills that
+       stretched height with their visible border/background box; see their
+       own height: 100% rule for why that isn't automatic. No max-width cap
+       any more: the row fills whatever width the page column has, matching
+       the Open positions tables below, which never had one. */
     .primary {
-      display: grid;
-      /* Five across, all in one row: Realised today, Account balance, Open
-         P&L, Risk used, Realised average -- reorganised out of the two
-         three-and-two rows this used to be, which read as an arbitrary
-         split rather than one "the account right now" line. */
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      display: flex;
+      align-items: stretch;
       gap: var(--space-14);
-      /* Five across down to 1280px, which is the width the layout is
-         committed to (NG52). Below that they stack rather than shrink --
-         a 23px metric in a 90px column is not a metric anyone can read. */
-      max-width: 960px;
     }
+    .primary > sb-metric-card { flex: 1 1 auto; min-width: 140px; }
 
     .chips {
-      display: grid;
-      /* auto-fit rather than a fixed count: the chips are the secondary
-         tier and are allowed to reflow, where the five cards above are not.
-         Position premium sits in this row now that the two-wide equity chip
-         (removed) no longer pushes it onto a row of its own. */
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      display: flex;
+      align-items: stretch;
+      flex-wrap: wrap;
       gap: var(--space-8);
-      max-width: 960px;
     }
+    .chips > sb-metric-chip { flex: 1 1 auto; min-width: 150px; }
 
     /* SR53. One row, lifecycle order, sized to the count rather than the
        label -- the number is what is being read. */
     .lifecycle {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      display: flex;
+      align-items: stretch;
+      flex-wrap: wrap;
       gap: var(--space-8);
-      max-width: 960px;
     }
     .lc {
+      flex: 1 1 auto;
+      min-width: 100px;
       display: grid;
       gap: 2px;
       padding: var(--space-8) var(--space-10);
@@ -617,7 +623,7 @@ import { TradeGroup } from './trade-group';
     .pnl-plan .sl { color: var(--neg); }
 
     @media (max-width: 720px) {
-      .primary { grid-template-columns: 1fr; }
+      .primary { flex-direction: column; }
     }
   `,
 })

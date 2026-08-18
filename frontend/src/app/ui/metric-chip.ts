@@ -20,6 +20,11 @@ import { MetricTone } from './metric-card';
     </div>
   `,
   styles: `
+    /* See MetricCard's identical comment: without this, a row that
+       stretches this host to match a taller sibling (a wrapped two-line
+       value, say) stretches the invisible host while the visible .chip box
+       stays sized to its own content. */
+    :host { display: block; height: 100%; }
     .chip {
       display: flex;
       align-items: baseline;
@@ -29,6 +34,8 @@ import { MetricTone } from './metric-card';
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      height: 100%;
+      box-sizing: border-box;
     }
     .label {
       color: var(--text-secondary);
