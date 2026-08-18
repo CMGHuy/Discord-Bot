@@ -59,17 +59,27 @@ This plan's spec named three. Reading config for v32's plan found a fourth.
 
 | Signal | Where | What it reads |
 |---|---|---|
-| `factors.mtf_alignment(df, direction) -> int` | `edge/factors.py:88` | **Weekly** resample: EMA10 slope+position, swing-low/high sequence, prior-week pivot. Scores 0–3. |
-| `get_htf_bias(df, horizon_key) -> dict\|None` | `scanning/regime.py:46` | Daily 50 EMA (`2w`/`4w`/`2m`) or 200 EMA (`3m`/`6m`). |
-| `HTF_COUNTER_TREND_PENALTY` | `config.py:401`, applied `engine.py:932` | Subtracts 15 raw score points when `get_htf_bias` opposes direction. |
+| `factors.mtf_alignment(df, direction) -> int` | *retired by Task 6* | **Weekly** resample: EMA10 slope+position, swing-low/high sequence, prior-week pivot. Scored 0–3. Task 1 measured a real, wrong-signed −8.0pp lift (Wilson non-overlapping); Task 6 deleted it as a scored input everywhere. |
+| `get_htf_bias(df, horizon_key) -> dict\|None` | `scanning/regime.py:46` | Daily 50 EMA (`2w`/`4w`/`2m`) or 200 EMA (`3m`–`9m`, all seven of the remaining horizons). |
+| `HTF_COUNTER_TREND_PENALTY` | *retired by Task 6* | Used to subtract 15 raw score points when `get_htf_bias` opposed direction. Task 1 found it an exact duplicate (Cramér's V = 1.0) of the `htf` label's agreement boolean; Task 6 removed the penalty and its config field, keeping only the informational label/embed warning. |
 | **NEW: adjacent-horizon check** | this plan | Next horizon's own `ema_fast`/`ema_slow` from `HORIZONS`. |
 
-Two are the *same signal counted twice*: `get_htf_bias` feeds both the `htf`
-quality component and the `HTF_COUNTER_TREND_PENALTY`.
+Two were the *same signal counted twice*: `get_htf_bias` fed both the `htf`
+quality component and `HTF_COUNTER_TREND_PENALTY` — Task 1/6 resolved this
+by keeping only the former (see the table above and
+`docs/superpowers/plans/v33-trend-signal-reconciliation.md`).
 
-**`get_htf_bias` only maps `2w`,`4w`,`2m`,`3m`,`6m`** (`_HTF_EMA_PERIOD`). The
-horizons `4m`, `5m`, `7m`, `8m`, `9m` return `None` — **half the horizons have
-no higher-timeframe signal at all today.** Task 1 must resolve this.
+**This table describes the pre-Task-1 state.** The claim that used to sit
+here — "`get_htf_bias` only maps `2w`,`4w`,`2m`,`3m`,`6m`; the horizons `4m`,
+`5m`, `7m`, `8m`, `9m` return `None`; half the horizons have no
+higher-timeframe signal at all today" — was **false even when this plan was
+written**: Task 1 measured `get_htf_bias` returning `None` zero times across
+4337 TRAIN scenarios, because `_HTF_EMA_PERIOD` has mapped all ten `HORIZONS`
+keys to an EMA period since commit `512200e` (2026-07-07), predating this
+plan. There was nothing for Task 1 to resolve here and no `_HTF_EMA_PERIOD`
+change was made. See the reconciliation doc's Decision 4 for the full
+measurement. Do not carry the "half the horizons have no signal" claim into
+Tasks 7–8.
 
 ## File Structure
 
