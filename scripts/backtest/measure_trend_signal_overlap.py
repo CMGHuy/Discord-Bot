@@ -33,6 +33,13 @@ pandas ewm(span=N, adjust=False) is strictly recursive, so ema(full).iloc[i]
 is bit-identical to ema(full.iloc[:i+1]).iloc[-1]. `--verify-ema` asserts
 that against the real get_htf_bias before trusting it.
 
+v33 Task 7 made two ADDITIVE changes and no others: `collect()` takes a
+`date_range` (defaulting to TRAIN, so Task 1's document still reproduces) and
+records a `*_margin` per EMA-pair reading for the neutral-band test. No
+table, lift, V value or JSON key here reads either. Task 7's own analysis
+lives in `measure_adjacent_gate_effect.py`, which imports `collect()` from
+here rather than re-deriving the population.
+
 Prints one flushed line per ticker (CLAUDE.md: any script running more than
 a couple of minutes must report progress per unit of work).
 
@@ -72,6 +79,18 @@ MACRO_EXEMPT = set(HKEYS[HKEYS.index(MACRO_ANCHOR):])
 
 SIGNALS = ("mtf_alignment", "htf_agree", "penalty_fired",
            "adj_agree", "own_agree", "macro_agree")
+
+# S1 was RETIRED by v33 Task 6 (commit e1e9309) on this very script's
+# evidence -- Decision 3, -8.0pp non-overlapping lift. Reading it therefore
+# stops being possible on any checkout after that commit, and every
+# `mtf_alignment` row here becomes None rather than 0-3. Discovered by v33
+# Task 7 when it re-ran the instrument. The alternative -- pinning a copy of
+# the deleted function inside this script -- would report a signal the bot no
+# longer has, which is worse than reporting that it is gone. Task 1's
+# published `mtf_alignment` numbers were computed at 75e8d77, before the
+# removal, and stand as a historical measurement; they are not reproducible
+# from HEAD and the document says so.
+_MTF_ALIGNMENT = getattr(rs_factors, "mtf_alignment", None)
 
 
 def wilson_interval(wins: int, n: int, z: float = 1.96) -> tuple:
@@ -136,6 +155,17 @@ def _trend_agrees(fast: pd.Series, slow: pd.Series, i: int, direction: str) -> b
              else "bearish") == direction)
 
 
+def _trend_margin(fast: pd.Series, slow: pd.Series, i: int, close: float) -> float | None:
+    """|ema_fast - ema_slow| / close at bar i -- how far from a flip the
+    verdict is. v33 Task 7 added this for the neutral-band test (brief Step
+    3: "measure win rate where |ema_fast - ema_slow| / close < 0.5%").
+    Additive only: no Task 1 table, lift, V value or JSON key reads it, so
+    every number in v33-trend-signal-reconciliation.md is unchanged."""
+    if not close:
+        return None
+    return abs(float(fast.iloc[i]) - float(slow.iloc[i])) / close
+
+
 def verify_ema_precompute(frames: dict, samples_per_horizon: int = 40) -> int:
     """Assert the full-series EMA precompute reproduces the real
     get_htf_bias bar for bar. Returns the number of mismatches, which must
@@ -162,8 +192,18 @@ def verify_ema_precompute(frames: dict, samples_per_horizon: int = 40) -> int:
     return mismatches
 
 
-def collect(frames: dict) -> list:
-    """One row per TRAIN trade entry bar, with all six trend readings."""
+def collect(frames: dict, date_range: tuple = TRAIN) -> list:
+    """One row per trade entry bar inside `date_range`, with all six trend
+    readings plus each EMA-pair reading's distance-from-flip margin.
+
+    `date_range` defaults to TRAIN, which is what Task 1's document was
+    computed against; v33 Task 7 parameterized it so Task 8 can run the
+    same instrument once over VALIDATION without editing this file (an
+    edited instrument between the two windows is not the same instrument).
+    It is deliberately NOT called `window`: that name is already taken by
+    the per-bar `df.iloc[:i+1]` slice below, and shadowing it silently
+    turns the date filter into a DataFrame comparison.
+    """
     rows = []
     for ticker, df in frames.items():
         close = df["Close"]
@@ -179,7 +219,7 @@ def collect(frames: dict) -> list:
                 summary = run_backtest(ticker, df, strategy, hk,
                                        exit_model="v2", scale_out=True)
                 for t in summary.trades:
-                    if not (TRAIN[0] <= t.entry_date <= TRAIN[1]):
+                    if not (date_range[0] <= t.entry_date <= date_range[1]):
                         continue
                     i = date_to_idx.get(t.entry_date)
                     if i is None or i < 60:
@@ -187,7 +227,8 @@ def collect(frames: dict) -> list:
                     window = df.iloc[:i + 1]
                     direction = t.direction
 
-                    mtf = int(rs_factors.mtf_alignment(window, direction))
+                    mtf = (int(_MTF_ALIGNMENT(window, direction))
+                           if _MTF_ALIGNMENT is not None else None)
 
                     # get_htf_bias, inlined against the precomputed EMA.
                     # Guards mirror the real function exactly: the config
@@ -204,18 +245,23 @@ def collect(frames: dict) -> list:
                     # stops holding.
                     penalty_fired = (htf_agree is False)
 
-                    adj_agree = None
+                    px = float(close.iloc[i])
+
+                    adj_agree = adj_margin = None
                     if nxt is not None and i + 1 >= HORIZONS[nxt]["ema_slow"]:
                         adj_agree = _trend_agrees(*hz_ema[nxt], i, direction)
+                        adj_margin = _trend_margin(*hz_ema[nxt], i, px)
 
-                    own_agree = None
+                    own_agree = own_margin = None
                     if i + 1 >= HORIZONS[hk]["ema_slow"]:
                         own_agree = _trend_agrees(*hz_ema[hk], i, direction)
+                        own_margin = _trend_margin(*hz_ema[hk], i, px)
 
-                    macro_agree = None
+                    macro_agree = macro_margin = None
                     if (hk not in MACRO_EXEMPT
                             and i + 1 >= HORIZONS[MACRO_ANCHOR]["ema_slow"]):
                         macro_agree = _trend_agrees(*hz_ema[MACRO_ANCHOR], i, direction)
+                        macro_margin = _trend_margin(*hz_ema[MACRO_ANCHOR], i, px)
 
                     rows.append({
                         "ticker": ticker, "horizon": hk, "strategy": strategy,
@@ -223,6 +269,9 @@ def collect(frames: dict) -> list:
                         "mtf_alignment": mtf, "htf_agree": htf_agree,
                         "penalty_fired": penalty_fired, "adj_agree": adj_agree,
                         "own_agree": own_agree, "macro_agree": macro_agree,
+                        # v33 Task 7 additions (neutral-band test only).
+                        "adj_margin": adj_margin, "own_margin": own_margin,
+                        "macro_margin": macro_margin,
                     })
                     n_rows += 1
         print(f"{ticker}: {n_rows} TRAIN entry-bar samples", flush=True)
@@ -265,9 +314,12 @@ def signal_lift(rows: list, label: str, agree_pred, oppose_pred) -> dict:
 
 
 def lift_table(rows: list) -> list:
+    # The None guards are for a post-Task-6 checkout, where mtf_alignment no
+    # longer exists and every row's reading is None: the split then reports
+    # n=0 on both arms rather than raising.
     out = [signal_lift(rows, "mtf_alignment (>=2 vs <=1)",
-                       lambda r: r["mtf_alignment"] >= 2,
-                       lambda r: r["mtf_alignment"] <= 1)]
+                       lambda r: r["mtf_alignment"] is not None and r["mtf_alignment"] >= 2,
+                       lambda r: r["mtf_alignment"] is not None and r["mtf_alignment"] <= 1)]
     for key, label in (("htf_agree", "get_htf_bias agrees vs opposes"),
                        ("adj_agree", "adjacent-horizon agrees vs opposes"),
                        ("own_agree", "own-horizon trend agrees vs opposes"),
@@ -362,6 +414,13 @@ def main() -> int:
         print("ABORT: EMA precompute disagrees with get_htf_bias -- results "
               "would be lookahead-contaminated.", file=sys.stderr)
         return 1
+
+    if _MTF_ALIGNMENT is None:
+        print("NOTE: edge/factors.py::mtf_alignment no longer exists (v33 "
+              "Task 6 retired it on this script's own evidence). Every "
+              "mtf_alignment reading below is None; its lift row and "
+              "per-value table are empty by construction, NOT a new "
+              "measurement.", flush=True)
 
     rows = collect(frames)
     print(f"\nTotal TRAIN scenarios: {len(rows)}", flush=True)
