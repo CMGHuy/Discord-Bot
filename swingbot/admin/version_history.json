@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-18 17:24:49 UTC",
+  "generated_at": "2026-08-18 18:23:30 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.9",
+    "ui": "1.7.10",
     "bot": "1.2.1"
   },
   "releases": [
@@ -570,6 +570,19 @@
       "subject": "release(ui): 1.7.9 -- summary rows fill the row, equal height per row",
       "versions": {
         "ui": "1.7.9",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "d60839b8",
+      "subject": "release(ui): 1.7.10 -- inline lifecycle counts, plan-lifecycle flow diagram",
+      "versions": {
+        "ui": "1.7.10",
         "bot": "1.2.1"
       },
       "changed": [
