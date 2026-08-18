@@ -6,6 +6,7 @@ import {
   expectedPnlPct,
   expectedR,
   expectedSlPct,
+  liveUnrealizedAmount,
   livePnlPct,
   reconcileReorder,
 } from './dashboard.helpers';
@@ -216,5 +217,43 @@ describe('livePnlPct', () => {
       .toBeNull();
     expect(livePnlPct({ entry: 100, trigger_price: null, current_price: null, direction: 'bullish' }))
       .toBeNull();
+  });
+});
+
+describe('liveUnrealizedAmount', () => {
+  it('is the full price move times shares before any leg has realized', () => {
+    // (105-100) * 10 = 50.
+    expect(
+      liveUnrealizedAmount({ entry: 100, current_price: 105, open_shares: 10, direction: 'bullish' }),
+    ).toBeCloseTo(50);
+  });
+
+  it('is HALVED for a PARTIAL row whose open_shares reflects a realized TP1 leg', () => {
+    // Same price move, same percentage -- but only half the shares are
+    // still exposed, so the dollar figure is half of the full-size case
+    // above: (105-100) * 5 = 25, not 50.
+    expect(
+      liveUnrealizedAmount({ entry: 100, current_price: 105, open_shares: 5, direction: 'bullish' }),
+    ).toBeCloseTo(25);
+  });
+
+  it('is negative for a bearish row trading against direction', () => {
+    expect(
+      liveUnrealizedAmount({ entry: 100, current_price: 105, open_shares: 10, direction: 'bearish' }),
+    ).toBeCloseTo(-50);
+  });
+
+  it('is null for a PENDING row -- no fill means no shares bought yet', () => {
+    // Unlike livePnlPct, this does NOT fall back to trigger_price: a
+    // percentage can be projected before a fill, a dollar figure cannot.
+    expect(
+      liveUnrealizedAmount({ entry: null, current_price: 105, open_shares: null, direction: 'bullish' }),
+    ).toBeNull();
+  });
+
+  it('is null once current_price is unknown', () => {
+    expect(
+      liveUnrealizedAmount({ entry: 100, current_price: null, open_shares: 10, direction: 'bullish' }),
+    ).toBeNull();
   });
 });

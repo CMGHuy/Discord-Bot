@@ -56,6 +56,11 @@ TRADE_ROW = {
     "target2": NULLABLE_NUMBER,
     "risk_reward": NULLABLE_NUMBER,
     "shares": NULLABLE_NUMBER,
+    # The share count still exposed to price movement -- `shares` is the
+    # ORIGINAL size at open and stays that after a TP1 partial closes part
+    # of the position; this is what a live P&L dollar figure must scale by
+    # instead. Equal to `shares` until a leg has realized. See `_open_shares`.
+    "open_shares": NULLABLE_NUMBER,
     "position_value": NULLABLE_NUMBER,
     "current_price": NULLABLE_NUMBER,
     "exit_price": NULLABLE_NUMBER,
@@ -303,6 +308,66 @@ def test_a_plan_with_no_trade_has_no_outcome(seed, logged_in):
     seed(plans=[_plan("11111111-1111-4111-8111-111111111111", status="PENDING")])
     row = logged_in.get("/api/v1/trades").get_json()["items"][0]
     assert row["outcome"] is None
+
+
+# --- open_shares -----------------------------------------------------------
+# A live P&L dollar figure has to scale by what is STILL held, not what was
+# originally bought -- a plan that closed half its size at TP1 has half the
+# shares left to move.
+
+def test_open_shares_is_the_full_size_before_any_leg_realizes(seed, logged_in):
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="ACTIVE")
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade["shares"] = 10
+    seed(plans=[plan], trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["shares"] == 10
+    assert row["open_shares"] == 10
+
+
+def test_open_shares_is_reduced_by_a_realized_tp1_leg(seed, logged_in):
+    """The reported bug: a PARTIAL position's live % is unaffected (it is
+    priced off one share), but its live DOLLAR figure must reflect that only
+    the remaining fraction is still exposed to further price movement."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan["legs_realized"] = [
+        {"fraction": 0.5, "exit_price": 110.0, "r": 1.8, "reason": "tp1"},
+    ]
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade["shares"] = 10
+    seed(plans=[plan], trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["shares"] == 10          # the original size, unchanged
+    assert row["open_shares"] == 5.0    # half realized -- half remains
+
+
+def test_open_shares_is_null_for_a_plan_with_no_fill_yet(seed, logged_in):
+    seed(plans=[_plan("11111111-1111-4111-8111-111111111111", status="PENDING")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["shares"] is None
+    assert row["open_shares"] is None
+
+
+def test_open_shares_matches_shares_for_a_legacy_open_trade(seed, logged_in):
+    """Legacy v1 trades have no PARTIAL status and never scale out."""
+    trade = _trade("aaaaaaaaaaaaaaaa", status="open")
+    trade["shares"] = 7
+    seed(trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["open_shares"] == 7
+
+
+def test_open_shares_is_null_for_a_closed_row(seed, logged_in):
+    """Not applicable once a position has closed -- the real, realized
+    dollar figure is `realized_pnl_amount`, not a live one."""
+    trade = _trade("aaaaaaaaaaaaaaaa", status="win")
+    seed(trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["open_shares"] is None
 
 
 def test_an_unknown_outcome_is_an_empty_set_not_an_error(seed, logged_in):

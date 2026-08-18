@@ -150,6 +150,9 @@ const NOT_CONTROL_ROWS = new Set([
   // the row match its tallest sibling -- both are the point, not a stand-in
   // for sb-control-row.
   'primary', 'chips', 'lifecycle',
+  // The plan-lifecycle diagram + its legend, centred as one figure beside
+  // the paragraph it illustrates -- not a row of controls either.
+  'lifecycle-figure',
   'chip', // the inside of a bordered chip, not a row of controls
   'scan', // the scan-duration figures beside their sparkline
   'command-error', // <p role="alert">: message text with a dismiss affordance

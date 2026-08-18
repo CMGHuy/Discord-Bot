@@ -92,6 +92,7 @@ function tradeResponse(detail: object, status = 'ACTIVE') {
     target2: 118,
     risk_reward: 2,
     shares: 10,
+    open_shares: 10,
     position_value: 1000,
     current_price: 105,
     exit_price: null,

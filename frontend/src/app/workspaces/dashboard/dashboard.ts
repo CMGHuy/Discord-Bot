@@ -44,6 +44,7 @@ import {
   expectedPnlPct,
   expectedR,
   expectedSlPct,
+  liveUnrealizedAmount,
   livePnlPct,
   reconcileReorder,
 } from './dashboard.helpers';
@@ -238,7 +239,39 @@ import { TradeGroup } from './trade-group';
         @if (store.scope() !== 'all') { , narrowed in Today mode to what
           opened today plus anything still open, however old }.
       </p>
-      <sb-plan-lifecycle-diagram />
+      <!-- Centred as a row, the diagram to the left of the terms it uses --
+           it is a figure illustrating the paragraph above, not more running
+           copy, and the rest of this page is left-aligned precisely so that
+           distinction reads. -->
+      <div class="lifecycle-figure">
+        <sb-plan-lifecycle-diagram />
+        <dl class="lifecycle-legend">
+          <div>
+            <dt>Fills</dt>
+            <dd>Price crosses the entry trigger and the position opens.</dd>
+          </div>
+          <div>
+            <dt>Expires</dt>
+            <dd>Price never reached the trigger within the plan's time window.</dd>
+          </div>
+          <div>
+            <dt>Invalidated</dt>
+            <dd>Price moved enough against the setup to invalidate it before triggering.</dd>
+          </div>
+          <div>
+            <dt>TP1 hit</dt>
+            <dd>Price reaches the first target — half the position closes and the stop moves to break-even.</dd>
+          </div>
+          <div>
+            <dt>Stop hit</dt>
+            <dd>Price hits the stop before ever reaching TP1 — the full position closes at a loss.</dd>
+          </div>
+          <div>
+            <dt>TP2 / trail stop</dt>
+            <dd>Price reaches the second target, or the trailing stop (which ratchets up after TP1) is hit — the remainder closes.</dd>
+          </div>
+        </dl>
+      </div>
     }
 
     <sb-panel heading="Open positions" [flush]="true">
@@ -410,7 +443,20 @@ import { TradeGroup } from './trade-group';
           class="pnl-plan"
           title="Live P&L, then projected P&L at target and at stop"
         >
-          <span [class]="pnlClass(livePnlPct(row))">{{ fmtPct(livePnlPct(row)) }}</span>
+          <span [class]="pnlClass(livePnlPct(row))">
+            {{ fmtPct(livePnlPct(row)) }}
+            <!-- Only once shares exist to have a dollar value at all -- a
+                 PENDING row still projects a live PERCENTAGE off its
+                 trigger, but has bought nothing yet. !== null, not a plain
+                 truthy check: a break-even position is a real $0.00, not
+                 "no value yet". Scaled by open_shares, not shares: a
+                 PARTIAL row already closed part of itself at TP1, so this
+                 is smaller than the same price move would show on the
+                 original size. -->
+            @if (liveUnrealizedAmount(row) !== null) {
+              <span class="pnl-amount"> ({{ fmtMoney(liveUnrealizedAmount(row)) }})</span>
+            }
+          </span>
           <span class="sep">{{ ' → ' }}</span>
           <span class="tp expected">{{ fmtPct(expectedPnlPct(row)) }}</span>
           <span class="sep">{{ ' - ' }}</span>
@@ -586,6 +632,47 @@ import { TradeGroup } from './trade-group';
       letter-spacing: 0.1em;
     }
 
+    /* margin: 0 auto centres the ROW (diagram + legend together) in the
+       page column, which is otherwise left-aligned throughout -- a figure
+       reads as a figure partly by not sharing the running copy's edge.
+       max-width caps it well short of the full-width column so it doesn't
+       stretch into two things floating far apart on a wide screen. */
+    .lifecycle-figure {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: var(--space-20);
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    sb-plan-lifecycle-diagram { flex: 1 1 420px; min-width: 320px; }
+    .lifecycle-legend {
+      flex: 1 1 260px;
+      max-width: 320px;
+      margin: 0;
+      display: grid;
+      gap: var(--space-6);
+    }
+    .lifecycle-legend > div {
+      display: flex;
+      gap: var(--space-8);
+      align-items: baseline;
+    }
+    .lifecycle-legend dt {
+      flex: 0 0 auto;
+      min-width: 96px;
+      color: var(--text);
+      font-weight: 600;
+      font-size: var(--text-chip);
+    }
+    .lifecycle-legend dd {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--text-chip);
+      line-height: 1.4;
+    }
+
     /* The panel is flush so the table can run edge to edge; anything else
        inside it has to bring its own padding. */
     .table-error {
@@ -614,9 +701,14 @@ import { TradeGroup } from './trade-group';
 
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
-    /* Muted and smaller than the % it rides beside -- the percentage is the
-       headline figure, the amount is context for it, not a second headline. */
-    .pnl-amount { color: var(--text-secondary); font-size: var(--text-chip); }
+    /* Smaller than the % it rides beside -- the percentage is the headline
+       figure, the amount is context for it, not a second headline -- but
+       the SAME colour: it is the same gain or loss in different units, and
+       a muted colour here read as a separate, less-certain number rather
+       than as the dollar side of the same figure. No colour of its own, so
+       it inherits pnlClass() from the span it sits inside (row.pnl_pct on
+       the Closed table, livePnlPct(row) on the other three). */
+    .pnl-amount { font-size: var(--text-chip); }
     /* Same "not real yet" language as PlanCell's own .entry.pending -- a
        dashed underline rather than a colour, since the pos/neg palette
        already means something else (gain vs loss) and this axis (realised
@@ -942,6 +1034,7 @@ export class Dashboard {
   protected expectedPnlPct = expectedPnlPct;
   protected expectedSlPct = expectedSlPct;
   protected livePnlPct = livePnlPct;
+  protected liveUnrealizedAmount = liveUnrealizedAmount;
   protected expectedR = expectedR;
 
   /** Mouse activation, matching Trades: a row leads to its detail view. The

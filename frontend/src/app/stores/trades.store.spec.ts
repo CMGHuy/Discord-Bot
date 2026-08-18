@@ -69,6 +69,7 @@ const ROW: TradeRow = {
   target2: null,
   risk_reward: 2,
   shares: 10,
+  open_shares: 10,
   position_value: 1000,
   current_price: 104,
   exit_price: null,

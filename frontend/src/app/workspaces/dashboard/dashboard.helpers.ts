@@ -119,6 +119,29 @@ export function livePnlPct(
   return pctMoveTo(entry, current_price, direction);
 }
 
+/** The LIVE unrealized dollar P&L at `current_price` -- pairs with
+ *  `livePnlPct` the way the Closed table pairs `pnl_pct` with
+ *  `realized_pnl_amount`.
+ *
+ *  Deliberately scaled by `open_shares`, not `shares`: a PARTIAL position
+ *  already closed part of itself at TP1, so `shares` (the ORIGINAL size at
+ *  open) overstates what is actually still exposed to further price
+ *  movement. The percentage is unaffected -- it is priced off one share --
+ *  but the dollar figure on a PARTIAL row is smaller than the same price
+ *  move would produce on the full original size, and this is what makes
+ *  that true instead of silently overstating it. Null (renders as nothing,
+ *  not a stray "($0.00)") whenever there is no fill yet -- a PENDING plan
+ *  has no shares bought and so no dollar figure to show, even though its
+ *  live PERCENTAGE already projects off the trigger. */
+export function liveUnrealizedAmount(
+  row: Pick<TradeRow, 'entry' | 'current_price' | 'open_shares' | 'direction'>,
+): number | null {
+  const { entry, current_price, open_shares, direction } = row;
+  if (entry === null || current_price === null || open_shares === null) return null;
+  const raw = (current_price - entry) * open_shares;
+  return direction === 'bullish' ? raw : -raw;
+}
+
 /** Same idea for R -- `closed_r`'s formula with `target` standing in for
  *  `exit_price`, which is exactly the reward:risk ratio a hit target
  *  delivers. */

@@ -55,8 +55,8 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
       <!-- branch: PENDING -> CANCELLED -->
       <line x1="70" y1="48" x2="70" y2="121" class="edge" marker-end="url(#lc-arrow)" />
-      <text x="83" y="88" class="edge-label" text-anchor="start">expires /</text>
-      <text x="83" y="101" class="edge-label" text-anchor="start">invalidated</text>
+      <text x="86" y="88" class="edge-label edge-label-left">expires /</text>
+      <text x="86" y="101" class="edge-label edge-label-left">invalidated</text>
 
       <!-- bypass: ACTIVE -> CLOSED, straight past PARTIAL -->
       <path d="M250,48 L250,95 L610,95 L610,48" class="edge" fill="none"
@@ -102,6 +102,13 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
       font-size: var(--text-micro);
       text-anchor: middle;
     }
+    /* A CSS rule beats a text-anchor="..." presentation attribute on the
+       SAME element every time (presentation attributes carry the lowest
+       priority there is), so the "expires / invalidated" labels need a
+       class of their own rather than an attribute fighting .edge-label's
+       middle -- which is exactly why they used to render centred ON the
+       branch's arrow line instead of beside it. */
+    .edge-label-left { text-anchor: start; }
 
     .node rect {
       fill: var(--surface);

@@ -84,6 +84,11 @@ export interface TradeRow {
   target2: number | null;
   risk_reward: number | null;
   shares: number | null;
+  /** The share count still exposed to price movement right now -- `shares`
+   *  is the ORIGINAL size at open and stays that after a TP1 partial closes
+   *  part of the position; a live P&L dollar figure has to scale by this
+   *  instead. Equal to `shares` until a leg has realized. */
+  open_shares: number | null;
   position_value: number | null;
   current_price: number | null;
   exit_price: number | null;

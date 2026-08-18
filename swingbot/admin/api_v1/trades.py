@@ -132,6 +132,27 @@ def _held_hours(opened_at, closed_at) -> float | None:
         return None
 
 
+def _open_shares(shares: float | None, legs_realized: list) -> float | None:
+    """The share count still exposed to price movement right now.
+
+    `shares` alone is the ORIGINAL size at open, and stays that number even
+    after a TP1 partial has already closed part of the position -- it is a
+    snapshot of what was bought, not what is still held. Unrealized P&L on
+    the remaining position needs the remainder: a plan that closed half at
+    TP1 has half the shares left to move, so its live dollar P&L is half
+    what the same price move would be on the original size, even though the
+    live PERCENTAGE (which is priced off one share, not the count) is
+    unaffected. `legs_realized` is `plan.legs_realized` -- each leg's
+    `fraction` is the share of the ORIGINAL position that leg closed (see
+    `plan_manager.py`'s `_step_active`/`_close_runner`), so summing them is
+    the total fraction gone and `1 -` that is what remains.
+    """
+    if shares is None:
+        return None
+    closed_fraction = sum(leg.get("fraction", 0) for leg in legs_realized)
+    return round(shares * max(0.0, 1.0 - closed_fraction), 4)
+
+
 def _in_today_scope(status: str, closed_at: str | None) -> bool:
     """Whether a row belongs to the Dashboard's Today scope.
 
@@ -195,6 +216,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "target2": plan.get("tp2"),
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
+        "open_shares": _open_shares(t.get("shares"), plan.get("legs_realized") or []),
         "position_value": t.get("position_value"),
         "current_price": None,
         "exit_price": t.get("exit_price"),
@@ -250,6 +272,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "target2": t.get("target2"),
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
+        # Legacy v1 trades have no PARTIAL status and never scale out --
+        # the full size stays open until the whole position closes at once.
+        "open_shares": t.get("shares") if t.get("status") == "open" else None,
         "position_value": t.get("position_value"),
         "current_price": None,
         "exit_price": t.get("exit_price"),
