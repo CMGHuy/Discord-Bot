@@ -611,11 +611,12 @@ def test_has_note_total_is_the_post_filter_count(seed, logged_in, tmp_path):
 # Before this, clicking any of the strip's five statuses always landed here
 # with only a `status` filter -- no date scope at all, regardless of the
 # page's own Today+open/Today/All days toggle. Those first two modes were
-# then merged into one "Today", defined as: a row opened today, OR it has
-# not closed yet AT ALL -- so PENDING/ACTIVE/PARTIAL stay in Today no matter
-# how old they are (matching the strip's own all-time counts for those three,
-# SR53), and only CLOSED/CANCELLED are actually date-restricted, by when
-# they opened.
+# then merged into one "Today", defined as: a row has not closed yet AT ALL,
+# OR it closed today -- so PENDING/ACTIVE/PARTIAL stay in Today no matter how
+# old they are (matching the strip's own all-time counts for those three,
+# SR53), and only CLOSED/CANCELLED are actually date-restricted, by whichever
+# day they actually CLOSED (not opened -- a multi-day swing that opened last
+# week and closed today belongs in today's Closed table).
 
 def _today_iso():
     """Today in Europe/Berlin, which is what `is_today_berlin` compares to."""
@@ -646,17 +647,39 @@ def test_today_includes_a_still_open_plan_no_matter_how_old(seed, logged_in, sta
     assert [r["id"] for r in items] == [plan["plan_id"]]
 
 
-def test_today_filters_a_closed_plan_by_when_it_opened(seed, logged_in):
+def test_today_filters_a_closed_plan_by_when_it_closed(seed, logged_in):
     """CLOSED (and CANCELLED) are the only statuses this actually narrows --
-    to whichever day the plan was created/opened on."""
-    old = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
-    old["created_at"] = _OLD_ISO
-    fresh = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
-    fresh["created_at"] = _today_iso()
-    seed(plans=[old, fresh])
+    to whichever day the position actually closed, NOT whichever day it was
+    opened. `fresh` opened long ago and closed today, proving a multi-day
+    swing still lands in today's Closed table."""
+    old_plan = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
+    old_trade = _trade("aaaaaaaaaaaaaaaa", plan_id=old_plan["plan_id"], status="win")
+    old_trade["opened_at"] = _OLD_ISO
+    old_trade["closed_at"] = _OLD_ISO
+    fresh_plan = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
+    fresh_trade = _trade("bbbbbbbbbbbbbbbb", plan_id=fresh_plan["plan_id"], status="win")
+    fresh_trade["opened_at"] = _OLD_ISO
+    fresh_trade["closed_at"] = _today_iso()
+    seed(plans=[old_plan, fresh_plan], trades=[old_trade, fresh_trade])
 
     items = logged_in.get("/api/v1/trades?status=CLOSED&today=1").get_json()["items"]
-    assert [r["id"] for r in items] == [fresh["plan_id"]]
+    assert [r["id"] for r in items] == [fresh_plan["plan_id"]]
+
+
+def test_today_filters_a_cancelled_plan_by_its_status_history(seed, logged_in):
+    """A CANCELLED plan never fills, so it has no trade and no `closed_at` at
+    all -- the only record of when it was cancelled is its own
+    `status_history`, appended by `record_transition` at cancel time."""
+    old_plan = _plan("11111111-1111-4111-8111-111111111111", status="CANCELLED")
+    old_plan["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": _OLD_ISO}]
+    fresh_plan = _plan("22222222-2222-4222-8222-222222222222", status="CANCELLED")
+    fresh_plan["status_history"] = [
+        {"status": "CANCELLED", "reason": "expired", "at": _today_iso()}
+    ]
+    seed(plans=[old_plan, fresh_plan])
+
+    items = logged_in.get("/api/v1/trades?status=CANCELLED&today=1").get_json()["items"]
+    assert [r["id"] for r in items] == [fresh_plan["plan_id"]]
 
 
 def test_today_includes_a_still_open_legacy_trade_no_matter_how_old(seed, logged_in):
@@ -668,14 +691,15 @@ def test_today_includes_a_still_open_legacy_trade_no_matter_how_old(seed, logged
     assert [r["id"] for r in items] == ["aaaaaaaaaaaaaaaa"]
 
 
-def test_today_filters_a_closed_legacy_trade_by_when_it_opened(seed, logged_in):
-    """A legacy row has no separate creation moment -- `opened_at` doubles
-    as both, so `today` reads the same field a plan row's `created_at`
-    equivalent does."""
+def test_today_filters_a_closed_legacy_trade_by_when_it_closed(seed, logged_in):
+    """`fresh` opened long ago and closed today -- proving this keys off
+    `closed_at`, not `opened_at`."""
     old = _trade("aaaaaaaaaaaaaaaa", status="win")
     old["opened_at"] = _OLD_ISO
+    old["closed_at"] = _OLD_ISO
     fresh = _trade("bbbbbbbbbbbbbbbb", status="win")
-    fresh["opened_at"] = _today_iso()
+    fresh["opened_at"] = _OLD_ISO
+    fresh["closed_at"] = _today_iso()
     seed(trades=[old, fresh])
 
     items = logged_in.get("/api/v1/trades?status=CLOSED&today=1").get_json()["items"]
@@ -683,14 +707,16 @@ def test_today_filters_a_closed_legacy_trade_by_when_it_opened(seed, logged_in):
 
 
 def test_today_false_returns_the_others(seed, logged_in):
-    old = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
-    old["created_at"] = _OLD_ISO
-    fresh = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
-    fresh["created_at"] = _today_iso()
-    seed(plans=[old, fresh])
+    old_plan = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
+    old_trade = _trade("aaaaaaaaaaaaaaaa", plan_id=old_plan["plan_id"], status="win")
+    old_trade["closed_at"] = _OLD_ISO
+    fresh_plan = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
+    fresh_trade = _trade("bbbbbbbbbbbbbbbb", plan_id=fresh_plan["plan_id"], status="win")
+    fresh_trade["closed_at"] = _today_iso()
+    seed(plans=[old_plan, fresh_plan], trades=[old_trade, fresh_trade])
 
     items = logged_in.get("/api/v1/trades?status=CLOSED&today=0").get_json()["items"]
-    assert [r["id"] for r in items] == [old["plan_id"]]
+    assert [r["id"] for r in items] == [old_plan["plan_id"]]
 
 
 # --- SR7: the status-bar fields ------------------------------------------

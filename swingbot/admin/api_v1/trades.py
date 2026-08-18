@@ -132,20 +132,38 @@ def _held_hours(opened_at, closed_at) -> float | None:
         return None
 
 
-def _in_today_scope(status: str, created_at: str | None) -> bool:
+def _in_today_scope(status: str, closed_at: str | None) -> bool:
     """Whether a row belongs to the Dashboard's Today scope.
 
     Two ways in, matching how "Today" was defined once `active` ("Today +
-    open") and `today` were merged into one mode: the row opened today, OR
-    it has not closed yet AT ALL. A PENDING/ACTIVE/PARTIAL plan (or an open
+    open") and `today` were merged into one mode: the row has not closed yet
+    AT ALL, OR it closed today. A PENDING/ACTIVE/PARTIAL plan (or an open
     legacy trade) stays in Today no matter how old it is -- exactly what the
     lifecycle strip's own PENDING/ACTIVE/PARTIAL counts already do (SR53,
     all-time) -- so this only actually narrows CLOSED/CANCELLED rows, to
-    whichever day they were opened. `created_at` is `plan.get("created_at")`
-    for a plan row, `t.get("opened_at")` for a legacy one -- both already
-    computed by the caller.
+    whichever day they actually CLOSED. Keying this off when the row was
+    *opened* instead (the previous behaviour) silently dropped any trade that
+    ran for more than a day: it closed today but opened earlier, so it never
+    matched "opened today" and vanished from the Dashboard's Closed table.
+    `closed_at` is `_terminal_at(plan, trade)` for a plan row, `t.get("closed_at")`
+    for a legacy one -- both already computed by the caller.
     """
-    return status not in _TERMINAL or dash.is_today_berlin(created_at)
+    return status not in _TERMINAL or dash.is_today_berlin(closed_at)
+
+
+def _terminal_at(plan: dict, trade: dict | None) -> str | None:
+    """When a plan-backed row actually reached its terminal state.
+
+    A CLOSED plan always has a trade behind it (closing a position is what
+    creates the close), so the trade's own `closed_at` is authoritative. A
+    CANCELLED plan never fills -- it has no trade at all -- so the only
+    record of when the cancellation happened is the plan's own
+    `status_history`, appended by `record_transition` at cancel time.
+    """
+    if trade and trade.get("closed_at"):
+        return trade["closed_at"]
+    history = plan.get("status_history") or []
+    return history[-1].get("at") if history else None
 
 
 def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
@@ -190,7 +208,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # Dashboard lifecycle-strip parity: clicking any of the five used to
         # land here with no date filter at all, regardless of the strip's
         # own Today/All days toggle. See `_in_today_scope`.
-        "today": _in_today_scope(plan.get("status"), plan.get("created_at")),
+        "today": _in_today_scope(plan.get("status"), _terminal_at(plan, trade)),
         # SR53 — the plan's own numbers, for a row that has not filled.
         #
         # `opened_at` and `held_hours` both describe an execution, so both are
@@ -242,11 +260,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "opened_at": t.get("opened_at"),
         "closed_at": t.get("closed_at"),
         "has_note": t.get("id") in noted,
-        # See `_row_from_plan`'s "today" for what this represents. A legacy
-        # trade's "created_at" IS `opened_at` (see below) -- there is no
-        # separate creation moment before a v1 alert logs the trade.
+        # See `_row_from_plan`'s "today" for what this represents.
         "today": _in_today_scope(_LEGACY_STATUS.get(t.get("status"), "CLOSED"),
-                                 t.get("opened_at")),
+                                 t.get("closed_at")),
         # SR53. A legacy trade has no plan, so it has no creation time apart
         # from its open, no trigger it waited on, and no ranking. Emitted as
         # null rather than omitted, so both origins return one shape -- the

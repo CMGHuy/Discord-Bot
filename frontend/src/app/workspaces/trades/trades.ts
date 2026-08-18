@@ -14,6 +14,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
+import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { Density } from '../../ui/data-table/data-table.types';
 import {
@@ -33,7 +34,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
-import { dateTime, pct, text } from '../../ui/format';
+import { dateTime, money, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
 import { ControlRow } from '../../ui/layout';
 import { ConfidenceCell } from '../../ui/confidence-cell';
@@ -281,8 +282,13 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
       />
     </ng-template>
 
+    <!-- See dashboard.ts's own pnlCell -- same pairing, same reasoning:
+         the % alone doesn't say how much money that was. -->
     <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
+      <span [class]="pnlClass(row.pnl_pct)">
+        {{ fmtPct(row.pnl_pct) }}
+        <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
+      </span>
     </ng-template>
 
     <ng-template #tierCell let-row>
@@ -399,6 +405,7 @@ type PendingAction = { kind: TradeActionKind; row: TradeRow } | null;
 
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
+    .pnl-amount { color: var(--text-secondary); font-size: var(--text-chip); }
 
     .actions { display: inline-flex; gap: var(--space-4); }
 
@@ -425,6 +432,8 @@ export class Trades {
   private readonly api = inject(ApiClient);
   private readonly preferences = inject(PreferencesStore);
   protected readonly store = inject(TradesStore);
+  /** For the currency symbol alone, same as the Dashboard's own use of it. */
+  private readonly connection = inject(ConnectionStore);
 
   /* Query parameters, arriving as inputs through withComponentInputBinding.
    * All strings, because that is what a URL carries. */
@@ -690,6 +699,10 @@ export class Trades {
   protected fmtDate = dateTime;
   protected fmtNum(value: number | null, decimals = 2): string {
     return value === null || value === undefined ? '—' : value.toFixed(decimals);
+  }
+
+  protected fmtMoney(value: number | null): string {
+    return money(value, this.connection.currency());
   }
 
   protected pnlClass(value: number | null): string {

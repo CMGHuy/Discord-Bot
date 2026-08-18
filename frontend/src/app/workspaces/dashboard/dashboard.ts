@@ -34,7 +34,7 @@ import {
   PINNED_COLUMNS,
   tradeColumns,
 } from '../trades/trades.columns';
-import { dateTime, held, num, pct } from '../../ui/format';
+import { dateTime, held, money, num, pct } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
@@ -371,8 +371,16 @@ import { TradeGroup } from './trade-group';
       <a class="row-link" [routerLink]="['/trades', row.id]">{{ row.ticker }}</a>
     </ng-template>
 
+    <!-- The % alone didn't say how much money that was -- pairing it with
+         the realised amount (same sign, same field realized_pnl_amount
+         Trade History already shows in its own "Realised" column) answers
+         that without a second column. Only ever populated together: both are
+         null until a position closes. -->
     <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
+      <span [class]="pnlClass(row.pnl_pct)">
+        {{ fmtPct(row.pnl_pct) }}
+        <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
+      </span>
     </ng-template>
 
     <!-- Trades has these two (trades.ts's own openedCell/closedCell); the
@@ -566,6 +574,9 @@ import { TradeGroup } from './trade-group';
 
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
+    /* Muted and smaller than the % it rides beside -- the percentage is the
+       headline figure, the amount is context for it, not a second headline. */
+    .pnl-amount { color: var(--text-secondary); font-size: var(--text-chip); }
     .absent { color: var(--text-faint); }
 
     @media (max-width: 720px) {
@@ -863,6 +874,10 @@ export class Dashboard {
 
   protected fmtPct = pct;
   protected fmtDate = dateTime;
+
+  protected fmtMoney(value: number | null): string {
+    return money(value, this.connection.currency());
+  }
 
   protected pnlClass(value: number | null): string {
     if (value === null) return '';

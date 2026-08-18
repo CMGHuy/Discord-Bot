@@ -32,6 +32,16 @@ export function share(value: number | null | undefined, decimals = 0): string {
   return `${value.toFixed(decimals)}%`;
 }
 
+/** A realised P&L amount, signed like `pct` -- it is the same gain/loss the
+ *  percentage names, just in currency rather than relative terms, so the two
+ *  read the same way at a glance. `unit` comes from
+ *  `ConnectionStore.currency()`, never a literal — see `MetricCard`'s note
+ *  on why. */
+export function money(value: number | null | undefined, unit: string, decimals = 2): string {
+  if (value === null || value === undefined) return ABSENT;
+  return `${value > 0 ? '+' : ''}${value.toFixed(decimals)} ${unit}`;
+}
+
 export function rMultiple(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;
