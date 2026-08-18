@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-18 14:03:57 UTC",
+  "generated_at": "2026-08-18 14:37:57 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.6",
+    "ui": "1.7.7",
     "bot": "1.2.1"
   },
   "releases": [
@@ -531,6 +531,19 @@
       "subject": "release(ui): 1.7.6 -- Dashboard per-group columns, Hold, projected P&L/R",
       "versions": {
         "ui": "1.7.6",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "5e91d26d",
+      "subject": "release(ui): 1.7.7 -- lifecycle CLOSED count, reload jank, card spacing",
+      "versions": {
+        "ui": "1.7.7",
         "bot": "1.2.1"
       },
       "changed": [
