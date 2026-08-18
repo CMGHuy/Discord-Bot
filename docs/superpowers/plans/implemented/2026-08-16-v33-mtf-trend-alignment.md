@@ -779,8 +779,16 @@ FAIL clause:
 - **`MTF_ADJACENT_GATE` stays `default="false"`.** The gate is committed,
   tested and wired into `scanning/engine.py`, but off — an option, not the
   bot's behaviour.
-- **No `VERSION.json` bump.** This plan's `Bump: bot minor` header was a
-  prediction conditional on a PASS; nothing a running container does changed.
+- **No `VERSION.json` bump for the gate itself.** This plan's `Bump: bot
+  minor` header was a prediction conditional on a PASS, and `MTF_ADJACENT_GATE`
+  staying off earns nothing on its own. Task 6's retirements are a different
+  matter: removing `HTF_COUNTER_TREND_PENALTY` and removing `mtf_alignment`
+  from `quality.score_plan()` are both default-on behavior changes a running
+  container does show — alerts previously suppressed by the penalty now post,
+  and every v2 plan's quality score, embed breakdown and `rank.follow_score`
+  shifted. That earned a `bot` patch bump, `1.2.1` → `1.2.2`, taken as a
+  standalone follow-up commit after this plan's close-out (not folded into
+  Task 6 itself, since the close-out here is what surfaced it).
 - **`_MACRO_ALIGNMENT_POINTS = 0`** (Task 7, re-derived from TRAIN):
   `factor_macro_alignment` ships registered and informational, contributing
   nothing to the score.
