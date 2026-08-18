@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-18 19:26:30 UTC",
+  "generated_at": "2026-08-18 20:05:18 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.12",
+    "ui": "1.7.13",
     "bot": "1.2.1"
   },
   "releases": [
@@ -609,6 +609,19 @@
       "subject": "release(ui): 1.7.12 -- diagram+legend same row/height, live expiry text",
       "versions": {
         "ui": "1.7.12",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "308627a3",
+      "subject": "release(ui): 1.7.13 -- Chart tab renders for real trades again",
+      "versions": {
+        "ui": "1.7.13",
         "bot": "1.2.1"
       },
       "changed": [
