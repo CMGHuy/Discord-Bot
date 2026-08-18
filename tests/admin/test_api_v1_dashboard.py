@@ -55,8 +55,8 @@ RELOCATED = [
 
 @pytest.fixture
 def seed(admin_app, tmp_path):
-    def _seed(trades=()):
-        (tmp_path / "plans.json").write_text("[]", encoding="utf-8")
+    def _seed(trades=(), plans=()):
+        (tmp_path / "plans.json").write_text(json.dumps(list(plans)), encoding="utf-8")
         (tmp_path / "trades.json").write_text(json.dumps(list(trades)), encoding="utf-8")
     return _seed
 
@@ -89,6 +89,74 @@ def test_lifecycle_counts_cover_the_five_plan_statuses(seed, logged_in):
 
     assert set(lifecycle) == {"PENDING", "ACTIVE", "PARTIAL", "CLOSED", "CANCELLED"}
     assert all(isinstance(n, int) for n in lifecycle.values())
+
+
+def test_lifecycle_closed_count_matches_the_closed_table(seed, logged_in):
+    """The strip's CLOSED number and the Closed table's row count come from
+    two different code paths -- `_plan_rows` counts PLANS by their own
+    `status_history`, `build_rows` (behind /api/v1/trades) lists rows by the
+    linked TRADE's `closed_at` and includes legacy trades that never had a
+    plan at all. Report: the two disagreed. This seeds one plan-backed close
+    and one legacy (planless) close, both today, and asserts the strip counts
+    both -- a plan-only count would read 1, not 2."""
+    from tests.admin.test_api_v1_trades import _plan, _today_iso, _trade
+
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="CLOSED")
+    plan_trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="win")
+    plan_trade["closed_at"] = _today_iso()
+
+    legacy = _trade("bbbbbbbbbbbbbbbb", status="win")  # no plan_id -- a legacy row
+    legacy["closed_at"] = _today_iso()
+
+    seed(plans=[plan], trades=[plan_trade, legacy])
+
+    lifecycle = logged_in.get("/api/v1/dashboard?mode=today").get_json()["lifecycle"]
+    table_total = logged_in.get("/api/v1/trades?status=CLOSED&today=1").get_json()["total"]
+
+    assert lifecycle["CLOSED"] == 2
+    assert lifecycle["CLOSED"] == table_total
+
+
+def test_lifecycle_closed_count_is_all_time_in_all_mode(seed, logged_in):
+    """`mode=all` must stop narrowing CLOSED/CANCELLED to today, the same way
+    the Closed table's own `today` input goes null in All days -- otherwise
+    the strip stays stuck at "today only" while the table shows every close,
+    which is a second way the two numbers can disagree."""
+    from tests.admin.test_api_v1_trades import _OLD_ISO, _today_iso, _trade
+
+    fresh = _trade("aaaaaaaaaaaaaaaa", status="win")
+    fresh["closed_at"] = _today_iso()
+    old = _trade("bbbbbbbbbbbbbbbb", status="loss")
+    old["closed_at"] = _OLD_ISO
+
+    seed(trades=[fresh, old])
+
+    today = logged_in.get("/api/v1/dashboard?mode=today").get_json()["lifecycle"]["CLOSED"]
+    all_days = logged_in.get("/api/v1/dashboard?mode=all").get_json()["lifecycle"]["CLOSED"]
+
+    assert today == 1
+    assert all_days == 2
+
+
+def test_lifecycle_cancelled_count_matches_the_table(seed, logged_in):
+    """CANCELLED plans never fill, so they have no trade and no `closed_at`
+    at all -- `trades._terminal_at` falls back to the plan's own
+    `status_history`, and the strip's count must use the same clock or the
+    two can disagree exactly the way CLOSED did."""
+    from tests.admin.test_api_v1_trades import _OLD_ISO, _plan, _today_iso
+
+    fresh = _plan("11111111-1111-4111-8111-111111111111", status="CANCELLED")
+    fresh["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": _today_iso()}]
+    old = _plan("22222222-2222-4222-8222-222222222222", status="CANCELLED")
+    old["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": _OLD_ISO}]
+
+    seed(plans=[fresh, old])
+
+    lifecycle = logged_in.get("/api/v1/dashboard?mode=today").get_json()["lifecycle"]
+    table_total = logged_in.get("/api/v1/trades?status=CANCELLED&today=1").get_json()["total"]
+
+    assert lifecycle["CANCELLED"] == 1
+    assert lifecycle["CANCELLED"] == table_total
 
 
 def test_relocated_metrics_are_absent(seed, logged_in):

@@ -85,14 +85,25 @@ def _risk_used() -> tuple[float | None, float | None]:
         return None, cap
 
 
-def _lifecycle_counts() -> dict:
+def _lifecycle_counts(mode: str) -> dict:
     """The five plan-lifecycle counts the Jinja dashboard's strip showed.
 
-    SR53. PENDING/ACTIVE/PARTIAL are all-time; CLOSED/CANCELLED count only
-    today's, because a lifetime CLOSED count is a number that only ever goes up
-    and says nothing about the session. `_plan_rows` already applies exactly
-    that scoping for the Jinja strip, so this projects its counts rather than
-    recomputing them -- the module's own "nothing is computed here" rule.
+    SR53. PENDING/ACTIVE/PARTIAL are all-time -- `_plan_rows` already counts
+    them that way, so those three are projected from it unchanged.
+
+    CLOSED/CANCELLED are NOT projected from `_plan_rows`: that function counts
+    PLANS only, by `status_history`'s own timestamp, which is two different
+    things from what the Dashboard's own Closed table (and the Trades
+    collection behind it, `trades.build_rows`) shows -- a plan-only count
+    misses legacy trades that never had a plan at all, and a `status_history`
+    timestamp is a different clock than the trade's own `closed_at`
+    (`trades._terminal_at`). Both gaps make the strip's number disagree with
+    what clicking through to the table actually lists. So CLOSED/CANCELLED
+    are counted from `build_rows()` instead -- the exact same rows and the
+    exact same `today` flag the Closed table's own query uses -- which makes
+    the two structurally unable to disagree. `mode` selects between them the
+    same way `today` is bound in trade-group.ts: 'all' counts every close
+    ever, anything else counts only today's.
 
     Returns an empty dict on failure rather than raising: this is the landing
     page, and one degraded panel is better than a 500 for the other nine
@@ -100,7 +111,16 @@ def _lifecycle_counts() -> dict:
     """
     try:
         from swingbot.admin.queries import _plan_rows
-        return dict(_plan_rows()["counts"])
+        from .trades import build_rows
+
+        counts = dict(_plan_rows()["counts"])
+        rows = build_rows()
+        for status in ("CLOSED", "CANCELLED"):
+            matching = [r for r in rows if r["status"] == status]
+            if mode != "all":
+                matching = [r for r in matching if r["today"]]
+            counts[status] = len(matching)
+        return counts
     except Exception:
         return {}
 
@@ -188,7 +208,7 @@ def dashboard():
         "expectancy_r": stats.get("expectancy_r"),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
-        "lifecycle": _lifecycle_counts(),
+        "lifecycle": _lifecycle_counts(mode),
         # SR58 -- the date scope, echoed back so the workspace can label the
         # figures it is showing rather than assume the request applied.
         "scope": {"mode": mode},

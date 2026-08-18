@@ -4,6 +4,7 @@ import {
   Component,
   TemplateRef,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -20,6 +21,10 @@ import {
   RowContext,
   SortSpec,
 } from './data-table.types';
+
+/** How long `loading` must stay true before the spinner shows -- see
+ *  `DataTable.showSpinner`'s own comment for why this exists at all. */
+export const SPINNER_DELAY_MS = 200;
 
 /**
  * The load-bearing table — spec `2026-08-08-v14-angular-workspaces-design.md`
@@ -55,6 +60,9 @@ import {
   imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
   template: `
     <div class="wrap" [attr.aria-busy]="loading()">
+      @if (showSpinner()) {
+        <span class="loading-spinner" aria-hidden="true"></span>
+      }
       @if (cards()) {
         <!-- SR24. A rendering MODE of this component, not a second component:
              same column defs, same sort, same pagination. A separate mobile
@@ -236,7 +244,37 @@ import {
     th.dragging { opacity: 0.5; }
     th:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .wrap { position: relative; }
-    .wrap[aria-busy='true'] { opacity: 0.6; transition: opacity var(--transition); }
+    /* pointer-events: none alongside the dim: without it a click mid-fetch
+       can land on a row that is about to be replaced, which reads as "I
+       clicked and nothing happened" -- itself a "frozen" symptom -- rather
+       than as the table simply being busy. */
+    .wrap[aria-busy='true'] {
+      opacity: 0.6;
+      transition: opacity var(--transition);
+      pointer-events: none;
+    }
+    /* See showSpinner's own comment for the delay this only appears after.
+       Same visual language as ChartContainer's spinner (border-top accent
+       colour, 700ms linear spin) -- one loading affordance across the app
+       rather than two that look slightly different. */
+    .loading-spinner {
+      position: absolute;
+      top: var(--space-8);
+      right: var(--space-8);
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border-strong);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+      z-index: 1;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .loading-spinner { animation-duration: 2.4s; }
+    }
 
     /* NG54. Cells are white-space:nowrap by design — a wrapped price is
      * worse than a scroll — so a wide column set makes the table wider than
@@ -398,6 +436,36 @@ export class DataTable<T> {
   /** The key currently being dragged, or null. Signal rather than a field so
    *  the header can style itself while the drag is in flight. */
   protected readonly dragging = signal<string | null>(null);
+
+  /**
+   * True only once `loading` has stayed true for `SPINNER_DELAY_MS`.
+   *
+   * Every refetch -- an event-stream push, a Today/All days toggle, a sort
+   * click -- keeps the previous `rows` on screen rather than clearing them
+   * first (correct: a table that flashes empty on every poll is worse than
+   * one that shows slightly stale data for a moment). But that leaves NO
+   * feedback that anything is happening at all beyond a 40% opacity dim
+   * (`.wrap[aria-busy]` below), which most local/event-driven fetches clear
+   * in well under a human's reaction time -- so the dim reads as a flicker
+   * or a rendering glitch rather than "updating", which is the "frozen"
+   * complaint this exists to fix. Gating the spinner on a short delay is
+   * what stops that flicker showing up as a SECOND flicker of its own: a
+   * fetch that settles inside the delay never shows a spinner at all, and
+   * one that takes longer gets an unambiguous "this is working" signal
+   * instead of just a hair less contrast.
+   */
+  protected readonly showSpinner = signal(false);
+
+  constructor() {
+    effect((onCleanup) => {
+      if (!this.loading()) {
+        this.showSpinner.set(false);
+        return;
+      }
+      const timer = setTimeout(() => this.showSpinner.set(true), SPINNER_DELAY_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+  }
 
   /** Expanded rows, by `rowKey`. Keyed rather than indexed so a refetch that
    *  reorders or repages the rows does not leave a different row expanded. */

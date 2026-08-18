@@ -7,9 +7,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DataTable } from './data-table';
+import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
   ColumnDef,
   EmptyState,
@@ -380,6 +380,60 @@ describe('DataTable', () => {
     fixture.detectChanges();
 
     expect(el().querySelector('.wrap')!.getAttribute('aria-busy')).toBe('true');
+  });
+
+  /* Report: a refetch reads as "frozen" rather than "updating" -- the dim
+   * alone (`.wrap[aria-busy]`) is the only feedback, and most local/event-
+   * driven fetches clear before a human would even register it. The spinner
+   * is the fix, gated on a short delay so IT doesn't become a second flicker
+   * on the fetches that were already fast enough. */
+  describe('the delayed loading spinner', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('does not show immediately when loading starts', () => {
+      host.loading.set(true);
+      fixture.detectChanges();
+
+      expect(el().querySelector('.loading-spinner')).toBeNull();
+    });
+
+    it('shows once loading has stayed true past the delay', () => {
+      host.loading.set(true);
+      fixture.detectChanges();
+
+      vi.advanceTimersByTime(SPINNER_DELAY_MS);
+      fixture.detectChanges();
+
+      expect(el().querySelector('.loading-spinner')).not.toBeNull();
+    });
+
+    it('never shows when loading clears before the delay elapses', () => {
+      host.loading.set(true);
+      fixture.detectChanges();
+
+      vi.advanceTimersByTime(SPINNER_DELAY_MS - 1);
+      host.loading.set(false);
+      fixture.detectChanges();
+
+      vi.advanceTimersByTime(SPINNER_DELAY_MS);
+      fixture.detectChanges();
+
+      expect(el().querySelector('.loading-spinner')).toBeNull();
+    });
+
+    it('hides again once loading clears after having shown', () => {
+      host.loading.set(true);
+      fixture.detectChanges();
+      vi.advanceTimersByTime(SPINNER_DELAY_MS);
+      fixture.detectChanges();
+      expect(el().querySelector('.loading-spinner')).not.toBeNull();
+
+      host.loading.set(false);
+      fixture.detectChanges();
+
+      expect(el().querySelector('.loading-spinner')).toBeNull();
+    });
   });
 });
 

@@ -451,7 +451,8 @@ import { TradeGroup } from './trade-group';
     }
     .explainer code { font-family: var(--font-mono); }
 
-    /* The break between the Active/Pending/Partial/Closed group tables.
+    /* The GAP between the Active/Pending/Partial/Closed group cards (each
+       card's own border/background is trade-group.ts's .group rule).
        Lives HERE rather than in trade-group.ts's own styles: a component's
        emulated-encapsulation stylesheet can only style its own template's
        elements, and "the sibling group before this one" is not one of
@@ -466,16 +467,15 @@ import { TradeGroup } from './trade-group';
 
        This rule has none of that problem: the sb-trade-group tag here is a
        plain child element of THIS component's own template, so a plain tag
-       selector needs no :host translation at all. A visibly stronger rule
-       than the --border used inside a table (row dividers, the panel's own
-       edge) -- four same-shaped tables stacked in one flush panel need a
-       break the eye catches without reading the heading text, not just a
-       hairline that reads as another row divider. */
+       selector needs no :host translation at all. --space-20 is the largest
+       spacing token the scale offers (v18 deliberately removed --space-28 as
+       unused) -- reported as the four tables running together with no
+       separation at all, so real margin plus each one's own card border
+       (rather than a shared hairline that reads as just another row
+       divider) is what actually answers that, not a bigger number. */
     sb-trade-group + sb-trade-group {
       display: block;
       margin-top: var(--space-20);
-      border-top: 2px solid var(--border-strong);
-      padding-top: var(--space-14);
     }
 
     .footnote {

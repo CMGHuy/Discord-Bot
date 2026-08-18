@@ -78,12 +78,26 @@ export const OPEN_POSITIONS_CAP = 6;
     /* Block, not the :host default of inline: a <sb-trade-group> is a
        layout unit stacked with its siblings, and margin/padding-top on an
        inline box is exactly the kind of thing that silently does nothing.
-       (The divider BETWEEN groups is not here -- see dashboard.ts's own
+       (The GAP between groups is not here -- see dashboard.ts's own
        "sb-trade-group + sb-trade-group" rule and its comment for why one
        component's styles cannot reach across to a sibling instance of
-       itself.) */
+       itself. This file owns each group's own card framing -- the border,
+       background and corner radius below -- which is a single :host rule
+       and has no such problem.) */
     :host {
       display: block;
+    }
+    /* Four same-shaped tables used to sit flush against each other inside
+       one shared panel, told apart only by a hairline divider that read as
+       just another row border -- reported as the tables running together
+       with no separation. Each group is now its own bordered card, so the
+       eye catches four distinct tables without reading the heading text. */
+    .group {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding-top: var(--space-14);
+      padding-bottom: var(--space-8);
     }
     .group-head {
       display: flex;
