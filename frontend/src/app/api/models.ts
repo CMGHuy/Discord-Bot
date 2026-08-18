@@ -256,6 +256,10 @@ export interface Dashboard {
     wins: number;
     losses: number;
   };
+  /** The plan-lifecycle diagram's "Expires" definition names this number --
+   *  projected from the server's own DEFAULT_EXPIRY_BARS constant rather
+   *  than the SPA hardcoding a second copy that could drift from it. */
+  default_expiry_bars: number;
 }
 
 /** The Jinja dashboard's three date scopes. `active` is today plus anything

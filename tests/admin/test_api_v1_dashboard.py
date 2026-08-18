@@ -45,6 +45,10 @@ DASHBOARD = {
     # SR58. The date-scope toggle and the realised figures it scopes.
     "scope": dict,
     "realized": dict,
+    # The plan-lifecycle diagram's own "Expires" definition names this
+    # number rather than hardcoding a copy of DEFAULT_EXPIRY_BARS that
+    # could drift from it silently.
+    "default_expiry_bars": int,
 }
 
 RELOCATED = [
@@ -74,6 +78,18 @@ def test_requires_auth(client):
 def test_returns_exactly_the_nine_metrics(seed, logged_in):
     seed()
     assert_shape(logged_in.get("/api/v1/dashboard").get_json(), DASHBOARD)
+
+
+def test_default_expiry_bars_is_the_real_constant_not_a_second_copy(seed, logged_in):
+    """The plan-lifecycle diagram's "Expires" definition names this number.
+    Projected from plan_engine.DEFAULT_EXPIRY_BARS rather than the SPA
+    hardcoding its own copy, which is exactly the kind of thing that drifts
+    silently the moment that constant changes."""
+    from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
+
+    seed()
+    body = logged_in.get("/api/v1/dashboard").get_json()
+    assert body["default_expiry_bars"] == DEFAULT_EXPIRY_BARS
 
 
 def test_lifecycle_counts_cover_the_five_plan_statuses(seed, logged_in):

@@ -252,7 +252,11 @@ import { TradeGroup } from './trade-group';
           </div>
           <div>
             <dt>Expires</dt>
-            <dd>Price never reached the trigger within the plan's time window.</dd>
+            <dd>
+              Price never reached the trigger within {{ store.defaultExpiryBars() }} bars
+              of the plan being posted (the default expiry window; an individual
+              plan can be built with a different one).
+            </dd>
           </div>
           <div>
             <dt>Invalidated</dt>
@@ -639,20 +643,46 @@ import { TradeGroup } from './trade-group';
        stretch into two things floating far apart on a wide screen. */
     .lifecycle-figure {
       display: flex;
-      align-items: center;
+      /* stretch, not center: the two children should share the ROW's own
+         height rather than each sitting at its own natural size with a gap
+         above or below whichever one is shorter. The diagram centres its
+         SVG vertically within that stretched height (its own :host), and
+         the legend spreads its six rows across it (align-content below) --
+         between the two, whichever side ends up taller sets the row's
+         height and the other one fills it, rather than looking mismatched. */
+      align-items: stretch;
       justify-content: center;
-      flex-wrap: wrap;
+      /* nowrap: the two MUST be one row, not wrap onto two stacked ones --
+         flex-wrap's default single-row-if-it-fits behaviour is not a
+         guarantee, and this was observed wrapping despite fitting the
+         column width. Stacks below 720px instead (media query at the
+         bottom), matching every other row on this page. */
+      flex-wrap: nowrap;
       gap: var(--space-20);
+      /* width: 100% alongside max-width, not max-width alone: this is a
+         GRID item (the Dashboard's own :host) that ALSO happens to be a
+         flex container -- under that combination "auto" resolved to a
+         shrink-to-fit width around the children's shrunk sizes instead of
+         the grid's own stretch default, so the row rendered at ~660px
+         (and centred inside itself) even though the column had 1300px to
+         give it and max-width said 960 was fine. Forcing width: 100% first
+         is what makes max-width actually the cap it looks like on paper. */
+      width: 100%;
       max-width: 960px;
       margin: 0 auto;
     }
-    sb-plan-lifecycle-diagram { flex: 1 1 420px; min-width: 320px; }
+    sb-plan-lifecycle-diagram { flex: 1 1 420px; min-width: 280px; max-width: 620px; }
     .lifecycle-legend {
-      flex: 1 1 260px;
-      max-width: 320px;
+      flex: 1 1 300px;
+      max-width: 340px;
       margin: 0;
       display: grid;
       gap: var(--space-6);
+      /* Spreads the six rows across the full stretched height (see
+         .lifecycle-figure's own comment) instead of clumping them at the
+         top with empty space below -- the grid equivalent of
+         justify-content: space-between. */
+      align-content: space-between;
     }
     .lifecycle-legend > div {
       display: flex;
@@ -725,6 +755,8 @@ import { TradeGroup } from './trade-group';
 
     @media (max-width: 720px) {
       .primary { flex-direction: column; }
+      .lifecycle-figure { flex-direction: column; align-items: center; }
+      sb-plan-lifecycle-diagram, .lifecycle-legend { max-width: 100%; }
     }
   `,
 })

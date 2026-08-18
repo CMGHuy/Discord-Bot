@@ -70,6 +70,7 @@ const RESPONSE: Dashboard = {
   expectancy_r: 0.3,
   equity_30d: { points: [], change_pct: 2 },
   position_premium: {},
+  default_expiry_bars: 5,
 };
 
 describe('DashboardStore', () => {

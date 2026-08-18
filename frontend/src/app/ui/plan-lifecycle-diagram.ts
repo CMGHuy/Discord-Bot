@@ -87,7 +87,20 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
     </svg>
   `,
   styles: `
-    :host { display: block; max-width: 680px; }
+    /* flex + centre, not block: the Dashboard stretches this host to match
+       its legend's height (align-items: stretch on the row that holds
+       them both), and the SVG itself cannot grow to fill that -- it has a
+       fixed aspect ratio (the viewBox) and width: 100%; height: auto
+       computes its height FROM its width, never the other way round. This
+       is what centres the SVG in whatever extra vertical room that
+       stretch hands the host, instead of it sitting flush at the top with
+       dead space below. */
+    :host {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 680px;
+    }
     svg { display: block; width: 100%; height: auto; overflow: visible; }
 
     .edge {

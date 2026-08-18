@@ -184,6 +184,11 @@ export const DashboardStore = signalStore(
       }));
     }),
 
+    /** The plan-lifecycle diagram's "Expires" definition names this number.
+     *  Null while loading rather than falling back to a guess -- a wrong
+     *  number in the legend is worse than a blank line for a beat. */
+    defaultExpiryBars: computed(() => data()?.default_expiry_bars ?? null),
+
     /** Risk used as a fraction of the cap, for a meter. Null rather than 0
      *  when either side is missing: an empty meter and a meter at zero look
      *  identical and mean opposite things. */

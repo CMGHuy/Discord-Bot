@@ -35,6 +35,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
+from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
 from swingbot.core.tracking.performance import TradeLog
 
 from . import ApiError, api_v1
@@ -209,6 +210,15 @@ def dashboard():
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
         "lifecycle": _lifecycle_counts(mode),
+        # The Dashboard's own plan-lifecycle diagram names this number in its
+        # "Expires" definition -- projected here rather than hardcoded a
+        # second time in the SPA, which is exactly the kind of copy that
+        # drifts silently the moment DEFAULT_EXPIRY_BARS changes. A PLAN's
+        # own `expiry_bars` can differ from this (plans.py/embeds.py already
+        # show the per-plan number where one exists); this is only the
+        # default new plans get built with, for a definition that has no
+        # one plan to read it from.
+        "default_expiry_bars": DEFAULT_EXPIRY_BARS,
         # SR58 -- the date scope, echoed back so the workspace can label the
         # figures it is showing rather than assume the request applied.
         "scope": {"mode": mode},
