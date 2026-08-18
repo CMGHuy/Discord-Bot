@@ -37,6 +37,7 @@ import { dateTime, held, money, num, pct, rMultiple } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
+import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
   deriveClosedVisible,
   deriveOpenVisible,
@@ -79,6 +80,7 @@ import { TradeGroup } from './trade-group';
   imports: [
     RouterLink, MetricCard, MetricChip, Panel, TradeGroup,
     StatusCell, PlanCell, ConfidenceCell, Button, ControlRow,
+    PlanLifecycleDiagram,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Provided here rather than in root: the store is created on entry and
@@ -217,6 +219,7 @@ import { TradeGroup } from './trade-group';
             [attr.title]="lifecycleTip(entry.status)"
           >
             <span class="lc-count num">{{ entry.count }}</span>
+            {{ ' ' }}
             <span class="lc-label">{{ entry.status }}</span>
           </a>
         }
@@ -235,6 +238,7 @@ import { TradeGroup } from './trade-group';
         @if (store.scope() !== 'all') { , narrowed in Today mode to what
           opened today plus anything still open, however old }.
       </p>
+      <sb-plan-lifecycle-diagram />
     }
 
     <sb-panel heading="Open positions" [flush]="true">
@@ -557,11 +561,16 @@ import { TradeGroup } from './trade-group';
       flex-wrap: wrap;
       gap: var(--space-8);
     }
+    /* One line -- "1 PENDING" -- not the count stacked over the label.
+       Baseline-aligned like a MetricChip's own label/value pair, just
+       count-first: this is a count of plans, not a labelled figure the
+       label should lead. */
     .lc {
       flex: 1 1 auto;
       min-width: 100px;
-      display: grid;
-      gap: 2px;
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-6);
       padding: var(--space-8) var(--space-10);
       background: var(--surface);
       border: 1px solid var(--border);
