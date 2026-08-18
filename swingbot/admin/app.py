@@ -258,9 +258,46 @@ def _ohlcv_frame(ticker: str):
 def _trade_for_levels(trade_id: str):
     """Look up a trade record by id for the ohlcv payload's optional
     `levels` block. Split out of the route for testability (tests
-    monkeypatch this), same pattern as `_ohlcv_frame`."""
+    monkeypatch this), same pattern as `_ohlcv_frame`.
+
+    `trade_id` here is whatever the SPA's row carried as `id` -- and for any
+    plan-backed position that is the PLAN id (`_row_from_plan`'s
+    `"id": plan["plan_id"]`), a 36-char dashed uuid4, not a trades.json id.
+    `get_trade_by_id` only ever matches the latter, so every plan-backed
+    trade -- which is to say essentially every trade, since a legacy
+    plan-less record is the exception -- 404'd here even though
+    `GET /api/v1/trades/<id>` resolves the exact same id fine one call away.
+    Mirrors that route's `_looks_like_a_plan_id` branch in
+    `api_v1/trades.py` rather than sharing it: that module imports from this
+    one's package at call time, and importing it back would be the circular
+    dependency the package docstring already warns about.
+    """
+    from swingbot.core.planning.plan_store import PlanStore
     from swingbot.core.tracking.performance import TradeLog
-    return TradeLog().get_trade_by_id(trade_id)
+
+    log = TradeLog()
+    if len(trade_id) == 36 and trade_id.count("-") == 4:
+        trade = next(
+            (t for t in log.get_trades(status=None, limit=None) or []
+             if t.get("plan_id") == trade_id),
+            None,
+        )
+    else:
+        trade = log.get_trade_by_id(trade_id)
+    if trade is None:
+        return None
+
+    # `working_stop` -- the live breakeven/trail floor `chart()` reads for the
+    # levels block -- is a PLAN field (`plan_manager.py`'s breakeven/trail
+    # steps write `plan.working_stop`; the trade record never carries it), so
+    # a trade dict alone can never supply it. Every plan-backed trade names
+    # its plan in `plan_id`; a legacy trade has none and simply keeps no
+    # working-stop line, same as before this lookup existed.
+    plan_id = trade.get("plan_id")
+    plan = PlanStore()._plans.get(plan_id) if plan_id else None
+    if plan is not None:
+        trade = {**trade, "working_stop": plan.get("working_stop")}
+    return trade
 
 
 # `trade_levels` and `ohlcv_bars` lived here so the Jinja chart and

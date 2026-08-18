@@ -491,7 +491,7 @@ def chart(ticker: str):
             "entry": _num(trade.get("entry")),
             "stop": _num(trade.get("stop_loss")),
             "target1": _num(trade.get("take_profit")),
-            "target2": _num(trade.get("target2_price")),
+            "target2": _num(trade.get("target2")),
             "working_stop": _num(trade.get("working_stop")),
         },
         # Passed through from chart_geometry unchanged, `source` included:

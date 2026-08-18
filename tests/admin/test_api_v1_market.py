@@ -79,7 +79,7 @@ def test_the_csv_cache_backs_a_failed_live_fetch(logged_in, tmp_path, monkeypatc
 _CHART_TRADE = {
     "id": "c1", "ticker": "AAPL", "direction": "bullish",
     "entry": 100.0, "stop_loss": 95.0, "take_profit": 108.0,
-    "target2_price": 115.0, "horizon_key": "4w",
+    "target2": 115.0, "horizon_key": "4w",
     "target_sources": ["EMA20"], "stop_sources": ["Rolling support"],
 }
 
@@ -159,6 +159,47 @@ def test_an_unknown_trade_id_is_404(logged_in, frame, monkeypatch):
                  "not_found", 404)
 
 
+def test_a_plan_backed_trade_resolves_by_its_plan_id(logged_in, frame, seed_trade,
+                                                      trade_log):
+    """The SPA's row id for a plan-backed position is the PLAN id
+    (`_row_from_plan`'s `"id": plan["plan_id"]`), not the trades.json id --
+    `GET /trades/<id>` already resolves both id spaces (`_looks_like_a_plan_id`
+    in api_v1/trades.py), but `_trade_for_levels` used to only ever try
+    `get_trade_by_id`, so this endpoint 404'd for every plan-backed trade
+    while the same id worked fine one call away. A real (unmocked) trade here,
+    not the `chart_trade` stub, because the stub is exactly what let this
+    regression ship without a failing test."""
+    import uuid
+    plan_id = str(uuid.uuid4())
+    seed_trade(plan_id=plan_id, entry=160.0, stop_loss=150.0, take_profit=180.0)
+
+    body = logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={plan_id}").get_json()
+
+    assert body["levels"] == {
+        "entry": 160.0, "stop": 150.0, "target1": 180.0,
+        "target2": None, "working_stop": None,
+    }
+
+
+def test_working_stop_is_read_from_the_trades_own_plan(logged_in, frame, seed_trade,
+                                                         tmp_path):
+    """`working_stop` -- the live breakeven/trail floor -- is a PLAN field
+    (`plan_manager.py` only ever writes `plan.working_stop`; the trade record
+    never carries one), so `_trade_for_levels` has to cross to the plan the
+    trade names in `plan_id` rather than read a key that is never there."""
+    import json
+    import uuid
+    plan_id = str(uuid.uuid4())
+    (tmp_path / "plans.json").write_text(json.dumps([
+        {"plan_id": plan_id, "working_stop": 165.0},
+    ]), encoding="utf-8")
+    trade_id = seed_trade(plan_id=plan_id, entry=160.0, stop_loss=150.0, take_profit=180.0)
+
+    body = logged_in.get(f"/api/v1/market/chart/AAPL?trade_id={trade_id}").get_json()
+
+    assert body["levels"]["working_stop"] == 165.0
+
+
 def test_chart_by_ticker_needs_no_trade(logged_in, frame):
     """The endpoint's subject is the TICKER. Without a trade there is no plan
     to draw, which is a chart with no levels and no overlays -- not an error,
@@ -228,7 +269,7 @@ def test_levels_use_the_chart_names(logged_in, frame, chart_trade):
 def test_a_null_second_target_stays_null(logged_in, frame, chart_trade):
     """Omitted, not drawn at zero -- a target2 line at 0.0 rescales the
     whole price axis and reads as a real level."""
-    chart_trade(target2_price=None)
+    chart_trade(target2=None)
     assert _chart(logged_in).get_json()["levels"]["target2"] is None
 
 
