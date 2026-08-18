@@ -1,0 +1,272 @@
+# v33 TRAIN measurement and VALIDATION pre-registration
+
+Task 7 of `docs/superpowers/plans/2026-08-16-v33-mtf-trend-alignment.md`.
+Written before Task 8's VALIDATION run and **not to be revised after seeing
+its result** — the same discipline
+`docs/superpowers/plans/implemented/v32-train-preregistration.md` was held to.
+
+---
+
+## How the measurement was taken, and why not with the brief's command
+
+Task 7's brief says to run
+`scripts/backtest/run_backtest_range.py --train --json data/v33_train.json`.
+**That command cannot measure this plan's work**, and was deliberately not
+used:
+
+- `run_backtest_range.py` simulates trades through
+  `swingbot.core.backtesting.backtest` / `backtest_scenarios`, a replay
+  harness.
+- The thing v33 built — `MTF_ADJACENT_GATE` — lives in
+  `swingbot/core/scanning/engine.py` (`_scan_one`'s per-scenario loop), and
+  `factor_macro_alignment` lives in `swingbot/core/scanning/factors.py`.
+  The replay harness never calls `scanning.engine` and never calls
+  `run_factors`, so **neither the gate nor the factor can influence its
+  output by any code path**. It would have produced a baseline unrelated to
+  the gate, and a PASS/FAIL read off it would have been meaningless.
+
+**What was run instead.** v33 Task 1 committed an instrument that records,
+per TRAIN trade entry bar, exactly the verdicts the gate keys on
+(`scripts/backtest/measure_trend_signal_overlap.py`). Task 7 added the
+companion `scripts/backtest/measure_adjacent_gate_effect.py`, which imports
+that instrument's `collect()` and **simulates the gate's real decision rule
+on the recorded verdicts**: "gate on" is the same population minus every
+scenario whose adjacent-horizon verdict is `opposed`. `exempt` and `aligned`
+are both kept, per the plan's Global Constraints, which forbid conflating
+exempt with opposed.
+
+```
+python scripts/backtest/measure_adjacent_gate_effect.py --train \
+    --cache-dir <main checkout>/data/backtest_cache --json data/v33_train.json
+```
+
+`data/v33_train.json`: **4337 TRAIN scenarios**, 2020-01-01..2023-12-31, 75
+tickers x 10 horizons x 11 strategies — the same population size v32's own
+TRAIN measurement used, and the same one Task 1 reported against.
+
+**Reproducibility, checked rather than assumed.** The sweep was run twice,
+independently, and the two JSON dumps compare **byte-for-byte identical**
+(4337 scenarios, 75 tickers, exit 0 both times). The instrument's own
+NO-LOOKAHEAD guard — asserting the full-series EMA precompute reproduces
+`get_htf_bias` bar for bar — passed on 1230 sampled (horizon, bar) pairs with
+0 mismatches, so no number below is lookahead-contaminated.
+
+**The simulated gate is the real gate.** `engine.py`'s `_scan_one` drops a
+scenario iff `adjacent_aligned(...)["status"] == "opposed"`; the instrument
+drops iff the recorded verdict is `False`, keeping exempt and aligned. Same
+rule, verified against the source rather than assumed.
+
+The JSON dumps are **gitignored on purpose** (`.gitignore`, same reasoning as
+commit `912e004`): `data/` is bind-mounted into the running containers on the
+deploy host, so a committed measurement dump under it breaks CI's `git
+reset`. Every number below is therefore recorded *here*, and re-derivable by
+re-running the two scripts named above. This overrides the brief's Step 6
+`git add data/v33_train.json`.
+
+Win rate is **wins / (wins + losses)** throughout — `backtest.py`'s own
+convention, scratch and timeout excluded. "Scenarios" counts every row
+*including* scratch/timeout, because the gate drops a scenario before its
+outcome is known: that count, not the evaluated one, is the alert-volume
+cost.
+
+---
+
+## Step 1 — Per-horizon volume and win rate, gate off vs. gate on
+
+| Horizon | n before | WR before (Wilson 95%) | n after | WR after (Wilson 95%) | volume cut | ΔWR | separated? |
+|---|---|---|---|---|---|---|---|
+| `2w` | 470 | 42.73% [37.6, 48.1] | 345 | 42.91% [36.9, 49.1] | **26.60%** | +0.19pp | no |
+| `4w` | 827 | 42.56% [38.6, 46.6] | 780 | 43.84% [39.7, 48.1] | 5.68% | +1.29pp | no |
+| `2m` | 543 | 45.78% [40.9, 50.7] | 522 | 46.01% [41.0, 51.1] | 3.87% | +0.23pp | no |
+| `3m` | 528 | 47.10% [42.2, 52.0] | 511 | 47.53% [42.6, 52.5] | 3.22% | +0.43pp | no |
+| `4m` | 373 | 46.74% [40.9, 52.6] | 363 | 47.23% [41.4, 53.2] | 2.68% | +0.49pp | no |
+| `5m` | 306 | 46.58% [40.3, 53.0] | 295 | 46.46% [40.1, 53.0] | 3.59% | −0.12pp | no |
+| `6m` | 300 | 45.45% [39.0, 52.1] | 289 | 45.54% [39.0, 52.2] | 3.67% | +0.09pp | no |
+| `7m` | 404 | 47.10% [41.5, 52.8] | 380 | 48.01% [42.2, 53.9] | 5.94% | +0.92pp | no |
+| `8m` | 298 | 47.20% [40.6, 53.9] | 281 | 47.52% [40.7, 54.4] | 5.70% | +0.33pp | no |
+| `9m` | 288 | 45.62% [39.1, 52.3] | 288 | 45.62% [39.1, 52.3] | 0.00% | +0.00pp | no |
+| **ALL** | **4337** | **45.37% [43.6, 47.1]** | **4054** | **45.93% [44.1, 47.7]** | **6.53%** | **+0.57pp** | **no** |
+
+`9m`'s 0.00% cut is the correct sanity signature: `9m` has no horizon above
+it, so it is *exempt*, never gated.
+
+**Comparator arm** (Task 1 asked for it — the horizon's *own* trend rather
+than the adjacent one): cut 13.74%, ΔWR +1.10pp, also not separated. The own
+horizon is still the better-powered signal, and v33 gates on the adjacent one
+anyway because that is what the spec built; this is recorded so a future spec
+can revisit it with evidence rather than rediscover it.
+
+**The honest headline: the gate's TRAIN effect is a small positive that is
+not statistically demonstrated.** Every horizon's before/after Wilson
+intervals overlap, and so does the aggregate's. +0.57pp on 4337 scenarios is
+a point estimate, not a proven edge. This is stated here, before VALIDATION,
+so that a PASS on Task 8 cannot later be sold as more than it is.
+
+## Step 2 — Per-horizon volume loss against the ≤~30% budget
+
+**Aggregate cut is 6.53%, far inside the plan's ≤~30% budget.** The cut is
+very unevenly distributed: `2w` alone accounts for 125 of the 283 dropped
+scenarios.
+
+`2w`'s 26.60% is confirmed against Task 1's independent measurement to the
+decimal, as is the 2.68–5.94% range across every other horizon.
+
+**Decision: no horizon-scoped exemption. The gate applies to all 10
+horizons.** Reasoning:
+
+1. `2w`'s 26.60% is **inside** the ≤~30% budget the plan set. The
+   pre-stated rule is a budget, and `2w` passes it. It is close to the
+   ceiling, which is why the plan insisted on measuring per horizon — but
+   close-and-inside is inside.
+2. Scoping `2w` out would have to be justified by its poor cost/benefit
+   (26.60% of its volume for +0.19pp). That ΔWR is **not Wilson-separated**,
+   and neither is any other horizon's. Choosing the gate's scope by ranking
+   ten non-separated point estimates is fitting to noise — precisely the
+   data-dredging that v32's discipline (and this plan's own
+   TRAIN-derived-weights rule) exists to prevent. A scope picked that way
+   would look good on TRAIN by construction and carry nothing into
+   VALIDATION.
+3. The aggregate budget is not under pressure (6.53% vs. 30%), so there is
+   no volume problem that an exemption is needed to solve.
+
+**Recorded as a pre-registered watch item, not a live gate:** if VALIDATION
+reproduces `2w` paying a >25% cut for a sub-1pp gain, a `2w` exemption is
+the *first* thing a follow-up spec should measure. It must be measured
+there, not assumed here.
+
+## Step 3 — Neutral-band test
+
+Brief's test: for scenarios where `|ema_fast − ema_slow| / close < 0.5%` on
+the **adjacent** horizon's EMAs, is the win rate indistinguishable from a
+coin flip (Wilson interval spanning 50%)?
+
+`0.5%` was the pre-committed threshold; `0.25%` and `1.0%` are reported as
+sensitivity only. A band chosen by scanning thresholds for the one that helps
+would be exactly the dredging this document refuses elsewhere.
+
+| Band | n inside | share | WR inside (Wilson 95%) | spans 50%? | opposed inside / total |
+|---|---|---|---|---|---|
+| <0.25% | 259 | 6.4% | 44.15% [37.2, 51.3] | yes | 63 / 283 |
+| **<0.50%** | **473** | **11.7%** | **41.76% [36.6, 47.1]** | **no** | **110 / 283** |
+| <1.00% | 839 | 20.7% | 41.14% [37.3, 45.1] | no | 175 / 283 |
+
+**Decision: NO neutral band. `mtf.py` is unchanged.** Three independent
+reasons, any one of which is sufficient:
+
+1. **The pre-committed test fails outright.** At the 0.5% band the Wilson
+   interval is [36.6%, 47.1%] — its upper bound is below 50%, so the band is
+   *not* indistinguishable from a coin flip. (It is also not distinguishable
+   from the population's own 45.4% base rate, which is the fairer null; by
+   that reading the band is simply an ordinary slice, not a noise pocket.)
+2. **An opposed verdict inside the band still discriminates.** Inside the
+   0.5% band, agree scores 42.86% (n=259) against oppose's 38.27% (n=81) —
+   a **+4.59pp lift with the same sign as outside the band** (+10.15pp).
+   Near-flat EMAs make the verdict weaker, not meaningless. Exempting them
+   would hand back signal, not noise.
+3. **A neutral band is a volume-relief mechanism, and there is no volume
+   problem.** The gate costs 6.53% against a 30% budget. Applying the band
+   anyway makes the gate strictly worse on the axis it exists for: the
+   aggregate ΔWR falls from **+0.57pp to +0.36pp** while the cut falls
+   6.53% → 3.99%. Paying win rate to buy back volume nobody needed is a bad
+   trade.
+
+The `<1.00%` row is worth recording because it points the same way even
+harder: outside a 1% band the verdict's lift is +16.48pp and **non-overlapping**
+(the only separated result anywhere in this measurement), while inside it the
+lift collapses to +0.87pp. That is a real gradient — margin size does track
+verdict quality — but it argues for *weighting* the verdict by margin in some
+future spec, not for the binary exemption v33 asked about, and it is not what
+this plan pre-registered. Left as evidence for a future spec.
+
+## Step 4 — `_MACRO_ALIGNMENT_POINTS` re-derived
+
+| Arm | n | WR | Wilson 95% |
+|---|---|---|---|
+| 6m anchor agrees | 2150 | 44.98% | [42.9, 47.1] |
+| 6m anchor opposes | 56 | 42.86% | [30.8, 55.9] |
+
+Lift **+2.12pp, Wilson intervals overlapping almost entirely.**
+
+The fuller sweep did **not** sharpen Task 1's finding: `n_oppose` is 56 in
+both, because a 6m trend simply rarely opposes a shorter-horizon entry. There
+is no bigger n to be had from this window.
+
+Per horizon it is worse than merely weak — every measurable horizon overlaps,
+**and the sign flips**:
+
+| Horizon | agree n / WR | oppose n / WR | lift |
+|---|---|---|---|
+| `2w` | 327 / 42.51% | 10 / 50.00% | −7.49pp |
+| `4w` | 562 / 42.53% | 9 / 44.44% | −1.92pp |
+| `2m` | 382 / 46.34% | 9 / 22.22% | +24.11pp |
+| `3m` | 387 / 47.29% | 10 / 40.00% | +7.29pp |
+| `4m` | 266 / 46.62% | 10 / 50.00% | −3.38pp |
+| `5m` | 226 / 46.46% | 8 / 50.00% | −3.54pp |
+
+Four of six point the wrong way, on 8–10 opposed scenarios each. That is the
+signature of noise, not of a weak-but-real effect.
+
+**Decision: `_MACRO_ALIGNMENT_POINTS = 0`, measured (no longer provisional).**
+
+v32 Task 9's rule — *assign points from measured lift* — is the same rule that
+excluded 13 factors from `FACTORS` on exactly these grounds
+(`factors.py`'s comment above `FACTORS`). Awarding this factor points anyway
+would make it the single exception to the discipline the rest of that file
+was built on. `factor_macro_alignment` **stays registered** in `FACTORS`,
+in exactly `factor_gap`'s position: correct, tested, contributing nothing to
+the score, and still carrying the 6m reading and its counter-trend warning
+into the breakdown as information.
+
+---
+
+## VALIDATION pre-registration
+
+**Task 8 must run this, not `run_backtest_range.py`** — see the first section
+for why that script cannot see the gate. The plan's Task 8 Step 2 names it;
+that instruction is superseded by this pre-registration:
+
+```
+python scripts/backtest/measure_adjacent_gate_effect.py --validation \
+    --cache-dir <main checkout>/data/backtest_cache --json data/v33_validation.json
+```
+
+- **Primary:** win rate (wins / (wins + losses)) over the VALIDATION window
+  2024-01-01..2025-12-31, **gate on vs. gate off on the same population** —
+  i.e. `adjacent_gate.ALL.after.wr` vs `adjacent_gate.ALL.before.wr` in the
+  emitted JSON. The comparator is the ungated same-window population, not
+  v32's number: the gate is a filter over a population, so the only
+  like-for-like baseline is that population unfiltered.
+
+- **PASS** requires **all three**:
+  1. `adjacent_gate.ALL.after.wr` **>** `adjacent_gate.ALL.before.wr`
+     (strictly; equal is a FAIL), **and**
+  2. `adjacent_gate.ALL.volume_loss_pct` **≤ 30.0**, **and**
+  3. `max(adjacent_gate[h].volume_loss_pct for h in the 10 horizons)`
+     **≤ 50.0**.
+
+- **FAIL:** any of the three unmet. Explicitly: a win rate that is equal or
+  lower, an aggregate cut above 30%, or any single horizon cut above 50%.
+
+- **Gate scope:** **all 10 horizons** (`2w`…`9m`), per Step 2. `9m` is
+  *exempt* by construction (no horizon above it) — that exemption is not a
+  pass and is not a scope exclusion.
+
+- **Neutral band:** **excluded**, per Step 3. `mtf.py`'s
+  `horizon_trend`/`adjacent_aligned` ship with no band.
+
+- **`_MACRO_ALIGNMENT_POINTS = 0`** is already committed and is *not* under
+  test here. It is a scoring weight; the gate is a filter. VALIDATION tests
+  the gate.
+
+- **Mandatory reporting condition (does not change the PASS bar).** TRAIN's
+  aggregate effect was +0.57pp with fully overlapping Wilson intervals. Task 8
+  must therefore report whether the VALIDATION before/after intervals are
+  separated, and if they are not, `docs/strategy.md` must describe the gate as
+  a **small, not statistically demonstrated** improvement. A PASS on point
+  estimate alone may flip the flag on; it may not be written up as a proven
+  edge.
+
+- **One shot.** Task 8 runs it once and records the result verbatim, PASS or
+  FAIL. **No re-runs on FAIL**, no threshold tuning, no scope adjustment
+  after seeing the number. A FAIL means `MTF_ADJACENT_GATE` stays
+  `default="false"` and no `VERSION.json` bump is earned.
