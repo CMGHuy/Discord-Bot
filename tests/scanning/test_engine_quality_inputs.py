@@ -6,7 +6,7 @@ actually proves the wiring rather than the isolated function signature.
 
 MTF was part of this wiring too until v33 Task 6 retired mtf_alignment as
 a scored input (-8.0pp non-overlapping TRAIN lift); see
-docs/superpowers/plans/v33-trend-signal-reconciliation.md."""
+docs/superpowers/plans/implemented/v33-trend-signal-reconciliation.md."""
 import json
 
 import numpy as np

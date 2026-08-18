@@ -1,6 +1,6 @@
 # v33 trend-signal reconciliation — TRAIN evidence and four decisions
 
-Task 1 of `docs/superpowers/plans/2026-08-16-v33-mtf-trend-alignment.md`.
+Task 1 of `docs/superpowers/plans/implemented/2026-08-16-v33-mtf-trend-alignment.md`.
 Written from a TRAIN-only measurement; **no VALIDATION data was read**, and
 nothing here consumes v33's one-shot validation budget.
 

@@ -749,11 +749,43 @@ git commit -m "feat(v33): VALIDATION result, docs, version bump"
 
 ## Progress
 
-- [ ] Task 1 — Reconcile four trend signals
-- [ ] Task 2 — `horizon_trend` / `adjacent_horizon`
-- [ ] Task 3 — Tri-state alignment verdicts
-- [ ] Task 4 — Adjacent-horizon hard gate
-- [ ] Task 5 — Macro-anchor factor
-- [ ] Task 6 — Retire subsumed signals
-- [ ] Task 7 — TRAIN sweep, per-horizon volume
-- [ ] Task 8 — VALIDATION, docs, bump
+- [x] Task 1 — Reconcile four trend signals
+- [x] Task 2 — `horizon_trend` / `adjacent_horizon`
+- [x] Task 3 — Tri-state alignment verdicts
+- [x] Task 4 — Adjacent-horizon hard gate
+- [x] Task 5 — Macro-anchor factor
+- [x] Task 6 — Retire subsumed signals
+- [x] Task 7 — TRAIN sweep, per-horizon volume
+- [x] Task 8 — VALIDATION, docs, bump
+
+## Close-out — all 8 tasks executed; the gate FAILed VALIDATION and is OFF
+
+Every task ran and is committed; that is what the boxes above record. **What
+they do not record — and what a reader must not infer from them — is that the
+feature shipped as behaviour. It did not.**
+
+Task 8's one-shot VALIDATION run (2804 scenarios, 2024-01-01..2025-12-31)
+returned **FAIL** on the first of the three pre-registered conditions: the
+gate *lowered* aggregate win rate, 47.98% vs. 48.50% ungated (−0.51pp), with
+overlapping Wilson intervals. The other two conditions passed (aggregate
+volume cut 6.63% ≤ 30%; worst horizon `2w` at 32.06% ≤ 50%), which does not
+offset condition 1. Full numbers, the run's exact command, and what a future
+spec may legitimately ask:
+`docs/superpowers/plans/implemented/v33-train-preregistration.md`.
+
+Consequently, per this plan's own Global Constraints and the pre-registration's
+FAIL clause:
+
+- **`MTF_ADJACENT_GATE` stays `default="false"`.** The gate is committed,
+  tested and wired into `scanning/engine.py`, but off — an option, not the
+  bot's behaviour.
+- **No `VERSION.json` bump.** This plan's `Bump: bot minor` header was a
+  prediction conditional on a PASS; nothing a running container does changed.
+- **`_MACRO_ALIGNMENT_POINTS = 0`** (Task 7, re-derived from TRAIN):
+  `factor_macro_alignment` ships registered and informational, contributing
+  nothing to the score.
+
+What v33 *did* land and keep: `swingbot/core/market/mtf.py`'s tri-state
+horizon-trend verdicts, the retirement of the subsumed weekly-resample
+`mtf_alignment` signal (Task 6, measured −8.0pp), and two committed
+measurement instruments under `scripts/backtest/`.

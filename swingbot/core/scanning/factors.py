@@ -395,7 +395,7 @@ def factor_target_confluence_quality(ctx: FactorContext) -> FactorResult | None:
 #
 # TRAIN, 75 tickers x 10 horizons x 11 strategies, 4337 scenarios, via
 # scripts/backtest/measure_adjacent_gate_effect.py. Full tables and the
-# reasoning: docs/superpowers/plans/v33-train-preregistration.md (the raw
+# reasoning: docs/superpowers/plans/implemented/v33-train-preregistration.md (the raw
 # dump is gitignored -- data/ is bind-mounted on the deploy host):
 # the 6m anchor's agree arm is 45.0% [42.9, 47.1] on n=2150, its oppose arm
 # 42.9% [30.8, 55.9] on n=56. A +2.1pp point estimate whose Wilson intervals

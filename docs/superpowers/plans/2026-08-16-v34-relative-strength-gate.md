@@ -40,6 +40,38 @@ There is no live "merged registry" gating anything in production today,
 and no established weight for RS to inherit. Full result:
 `docs/superpowers/plans/implemented/v32-train-preregistration.md`.
 
+## v33 also landed with its gate OFF — so "the v33 baseline" means ungated
+
+Added by v33's close-out (2026-08-18), because Step 5 of this plan's Phase 4
+tells you to pre-register *"PASS: win rate improves vs. the v33 baseline"*,
+and that phrase was written when v33's adjacent-horizon gate was expected to
+be live by now. **It is not.**
+`docs/superpowers/plans/implemented/2026-08-16-v33-mtf-trend-alignment.md`
+completed all 8 tasks, but its one-shot VALIDATION run FAILed: the gate
+*lowered* aggregate win rate (47.98% vs. 48.50% ungated, −0.51pp, overlapping
+Wilson intervals) while cutting 6.63% of entries, so `MTF_ADJACENT_GATE`
+stays `default="false"`. Numbers:
+`docs/superpowers/plans/implemented/v33-train-preregistration.md`.
+
+Consequences for this plan, none of which change its task structure:
+
+- **"The v33 baseline" is the ungated population**, i.e. the same baseline
+  v33 measured against. Do not write a pre-registration that compares RS
+  against a bot running the adjacent gate; nothing runs it.
+- **The comparator to state explicitly** is RS-gate-off vs. RS-gate-on on one
+  population in the VALIDATION window, exactly as v33 phrased its own Primary
+  — not a cross-plan comparison against v33's or v32's numbers.
+- **Two consecutive one-shot gates have now FAILed** (v32's merged score,
+  v33's adjacent gate), both with overlapping intervals in TRAIN that then
+  reversed sign in VALIDATION. Budget for that outcome here rather than
+  treating a PASS as the default path, and prefer a TRAIN effect that is
+  *Wilson-separated* before spending the VALIDATION shot.
+- v33 did leave usable infrastructure: `swingbot/core/market/mtf.py`'s
+  tri-state (`aligned` / `opposed` / `exempt`) verdict shape is the pattern
+  this plan's "unknown" representability work (Phase 1) should match, and
+  `scripts/backtest/measure_adjacent_gate_effect.py` is a worked example of
+  measuring a pre-scoring filter that the replay harness cannot see.
+
 ## The 50.0 sentinel — read before writing any gate code
 
 `rs_percentile()` (`edge/factors.py:29-38`) returns **`50.0`**, not `None`, when

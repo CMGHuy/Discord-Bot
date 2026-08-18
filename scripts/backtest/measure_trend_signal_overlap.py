@@ -2,7 +2,7 @@
 """v33 Task 1: TRAIN-only mutual overlap of the trend signals, via pairwise
 Cramer's V plus per-signal win-rate lift with Wilson intervals.
 
-Feeds `docs/superpowers/plans/v33-trend-signal-reconciliation.md`, whose
+Feeds `docs/superpowers/plans/implemented/v33-trend-signal-reconciliation.md`, whose
 four decisions retire `HTF_COUNTER_TREND_PENALTY` and `mtf_alignment` and
 set Task 7's per-horizon alert-volume budget. Committed so those numbers
 stay re-derivable rather than only narrated.

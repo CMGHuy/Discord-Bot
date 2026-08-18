@@ -33,7 +33,7 @@ data/v32_factor_correlation.json
 # Same reason as the v32 three above (912e004): data/ is bind-mounted into
 # the running containers, so a committed measurement dump under it breaks
 # CI's git reset on the deploy host. v33's numbers live in
-# docs/superpowers/plans/v33-train-preregistration.md; these are the raw
+# docs/superpowers/plans/implemented/v33-train-preregistration.md; these are the raw
 # dumps they were read from, re-derivable from the two scripts named there.
 #
 # A GLOB rather than the three named files (v33_trend_overlap / v33_train /

@@ -978,7 +978,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             # embed warning and plan_v2.regime_aligned below, but no longer
             # reduces the confidence score (v33: the penalty was an exact
             # duplicate of this boolean, Cramer's V = 1.0 -- see
-            # docs/superpowers/plans/v33-trend-signal-reconciliation.md).
+            # docs/superpowers/plans/implemented/v33-trend-signal-reconciliation.md).
             htf_counter_trend = (
                 htf_result is not None
                 and htf_result["bias"] != scenario.direction
