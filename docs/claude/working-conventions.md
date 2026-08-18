@@ -127,6 +127,26 @@ exactly that placeholder as its own newest pair, and it stayed there until the
 next release regenerated over it. Order is: bump commit, then regenerate, then
 commit the artifact.
 
+**The regeneration commit's message is not boilerplate.** `chore(ui):
+regenerate version_history.json for 1.7.6` on its own names the mechanical
+step but not what shipped — a reader scanning `git log` for "what changed in
+1.7.6" gets nothing from it. Carry the same summary the release commit above
+it used, plus the version number, e.g.:
+
+```
+chore(ui): 1.7.6 -- Dashboard per-group columns, Hold, projected P&L/R
+```
+
+not
+
+```
+chore(ui): regenerate version_history.json for 1.7.6
+```
+
+The mechanical fact (this commit exists because the generator must run after
+the bump commit, not before) is already explained above and does not need
+restating in every commit message.
+
 ### What `last_updated` in the sidebar actually is
 
 `get_versions()` also returns `last_updated` — `VERSION.json`'s own mtime — and
