@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-18 18:23:30 UTC",
+  "generated_at": "2026-08-18 18:57:49 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.7.10",
+    "ui": "1.7.11",
     "bot": "1.2.1"
   },
   "releases": [
@@ -583,6 +583,19 @@
       "subject": "release(ui): 1.7.10 -- inline lifecycle counts, plan-lifecycle flow diagram",
       "versions": {
         "ui": "1.7.10",
+        "bot": "1.2.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-08-18",
+      "last_seen": "2026-08-18",
+      "commit": "ebe82806",
+      "subject": "release(ui): 1.7.11 -- diagram legend+centering, partial P&L sizing, colour",
+      "versions": {
+        "ui": "1.7.11",
         "bot": "1.2.1"
       },
       "changed": [
