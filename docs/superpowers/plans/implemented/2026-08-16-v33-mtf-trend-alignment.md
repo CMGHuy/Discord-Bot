@@ -59,17 +59,27 @@ This plan's spec named three. Reading config for v32's plan found a fourth.
 
 | Signal | Where | What it reads |
 |---|---|---|
-| `factors.mtf_alignment(df, direction) -> int` | `edge/factors.py:88` | **Weekly** resample: EMA10 slope+position, swing-low/high sequence, prior-week pivot. Scores 0–3. |
-| `get_htf_bias(df, horizon_key) -> dict\|None` | `scanning/regime.py:46` | Daily 50 EMA (`2w`/`4w`/`2m`) or 200 EMA (`3m`/`6m`). |
-| `HTF_COUNTER_TREND_PENALTY` | `config.py:401`, applied `engine.py:932` | Subtracts 15 raw score points when `get_htf_bias` opposes direction. |
+| `factors.mtf_alignment(df, direction) -> int` | *retired by Task 6* | **Weekly** resample: EMA10 slope+position, swing-low/high sequence, prior-week pivot. Scored 0–3. Task 1 measured a real, wrong-signed −8.0pp lift (Wilson non-overlapping); Task 6 deleted it as a scored input everywhere. |
+| `get_htf_bias(df, horizon_key) -> dict\|None` | `scanning/regime.py:46` | Daily 50 EMA (`2w`/`4w`/`2m`) or 200 EMA (`3m`–`9m`, all seven of the remaining horizons). |
+| `HTF_COUNTER_TREND_PENALTY` | *retired by Task 6* | Used to subtract 15 raw score points when `get_htf_bias` opposed direction. Task 1 found it an exact duplicate (Cramér's V = 1.0) of the `htf` label's agreement boolean; Task 6 removed the penalty and its config field, keeping only the informational label/embed warning. |
 | **NEW: adjacent-horizon check** | this plan | Next horizon's own `ema_fast`/`ema_slow` from `HORIZONS`. |
 
-Two are the *same signal counted twice*: `get_htf_bias` feeds both the `htf`
-quality component and the `HTF_COUNTER_TREND_PENALTY`.
+Two were the *same signal counted twice*: `get_htf_bias` fed both the `htf`
+quality component and `HTF_COUNTER_TREND_PENALTY` — Task 1/6 resolved this
+by keeping only the former (see the table above and
+`docs/superpowers/plans/v33-trend-signal-reconciliation.md`).
 
-**`get_htf_bias` only maps `2w`,`4w`,`2m`,`3m`,`6m`** (`_HTF_EMA_PERIOD`). The
-horizons `4m`, `5m`, `7m`, `8m`, `9m` return `None` — **half the horizons have
-no higher-timeframe signal at all today.** Task 1 must resolve this.
+**This table describes the pre-Task-1 state.** The claim that used to sit
+here — "`get_htf_bias` only maps `2w`,`4w`,`2m`,`3m`,`6m`; the horizons `4m`,
+`5m`, `7m`, `8m`, `9m` return `None`; half the horizons have no
+higher-timeframe signal at all today" — was **false even when this plan was
+written**: Task 1 measured `get_htf_bias` returning `None` zero times across
+4337 TRAIN scenarios, because `_HTF_EMA_PERIOD` has mapped all ten `HORIZONS`
+keys to an EMA period since commit `512200e` (2026-07-07), predating this
+plan. There was nothing for Task 1 to resolve here and no `_HTF_EMA_PERIOD`
+change was made. See the reconciliation doc's Decision 4 for the full
+measurement. Do not carry the "half the horizons have no signal" claim into
+Tasks 7–8.
 
 ## File Structure
 
@@ -739,11 +749,51 @@ git commit -m "feat(v33): VALIDATION result, docs, version bump"
 
 ## Progress
 
-- [ ] Task 1 — Reconcile four trend signals
-- [ ] Task 2 — `horizon_trend` / `adjacent_horizon`
-- [ ] Task 3 — Tri-state alignment verdicts
-- [ ] Task 4 — Adjacent-horizon hard gate
-- [ ] Task 5 — Macro-anchor factor
-- [ ] Task 6 — Retire subsumed signals
-- [ ] Task 7 — TRAIN sweep, per-horizon volume
-- [ ] Task 8 — VALIDATION, docs, bump
+- [x] Task 1 — Reconcile four trend signals
+- [x] Task 2 — `horizon_trend` / `adjacent_horizon`
+- [x] Task 3 — Tri-state alignment verdicts
+- [x] Task 4 — Adjacent-horizon hard gate
+- [x] Task 5 — Macro-anchor factor
+- [x] Task 6 — Retire subsumed signals
+- [x] Task 7 — TRAIN sweep, per-horizon volume
+- [x] Task 8 — VALIDATION, docs, bump
+
+## Close-out — all 8 tasks executed; the gate FAILed VALIDATION and is OFF
+
+Every task ran and is committed; that is what the boxes above record. **What
+they do not record — and what a reader must not infer from them — is that the
+feature shipped as behaviour. It did not.**
+
+Task 8's one-shot VALIDATION run (2804 scenarios, 2024-01-01..2025-12-31)
+returned **FAIL** on the first of the three pre-registered conditions: the
+gate *lowered* aggregate win rate, 47.98% vs. 48.50% ungated (−0.51pp), with
+overlapping Wilson intervals. The other two conditions passed (aggregate
+volume cut 6.63% ≤ 30%; worst horizon `2w` at 32.06% ≤ 50%), which does not
+offset condition 1. Full numbers, the run's exact command, and what a future
+spec may legitimately ask:
+`docs/superpowers/plans/implemented/v33-train-preregistration.md`.
+
+Consequently, per this plan's own Global Constraints and the pre-registration's
+FAIL clause:
+
+- **`MTF_ADJACENT_GATE` stays `default="false"`.** The gate is committed,
+  tested and wired into `scanning/engine.py`, but off — an option, not the
+  bot's behaviour.
+- **No `VERSION.json` bump for the gate itself.** This plan's `Bump: bot
+  minor` header was a prediction conditional on a PASS, and `MTF_ADJACENT_GATE`
+  staying off earns nothing on its own. Task 6's retirements are a different
+  matter: removing `HTF_COUNTER_TREND_PENALTY` and removing `mtf_alignment`
+  from `quality.score_plan()` are both default-on behavior changes a running
+  container does show — alerts previously suppressed by the penalty now post,
+  and every v2 plan's quality score, embed breakdown and `rank.follow_score`
+  shifted. That earned a `bot` patch bump, `1.2.1` → `1.2.2`, taken as a
+  standalone follow-up commit after this plan's close-out (not folded into
+  Task 6 itself, since the close-out here is what surfaced it).
+- **`_MACRO_ALIGNMENT_POINTS = 0`** (Task 7, re-derived from TRAIN):
+  `factor_macro_alignment` ships registered and informational, contributing
+  nothing to the score.
+
+What v33 *did* land and keep: `swingbot/core/market/mtf.py`'s tri-state
+horizon-trend verdicts, the retirement of the subsumed weekly-resample
+`mtf_alignment` signal (Task 6, measured −8.0pp), and two committed
+measurement instruments under `scripts/backtest/`.

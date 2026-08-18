@@ -90,3 +90,21 @@ def test_unified_path_returns_same_result_shape(monkeypatch, sample_scenario):
     assert 1 <= result.level <= 5
     assert 0 <= result.score <= 100
     assert isinstance(result.breakdown, dict)
+
+
+def test_macro_verdict_kwarg_reaches_the_breakdown(monkeypatch, sample_scenario):
+    """v33 Task 5: score_confidence()'s **kwargs is filtered through a fixed
+    whitelist tuple (confidence.py) before it reaches FactorContext -- a
+    kwarg missing from that tuple is silently dropped, never raised. Every
+    factor-level test in test_factors.py builds FactorContext directly via
+    _ctx(), which bypasses that whitelist entirely and so can't catch a
+    reverted/typo'd tuple entry. This test goes through the real
+    score_confidence() call the way engine.py does, so it fails if
+    "macro_verdict" ever falls out of the whitelist tuple."""
+    monkeypatch.setattr(config, "UNIFIED_CONFIDENCE", True)
+    result = score_confidence(
+        sample_scenario, regime_trend="bullish", df=None,
+        macro_verdict={"status": "aligned", "reason": "bullish trend agrees",
+                       "trend": "bullish"},
+    )
+    assert "Macro trend (6m)" in result.breakdown

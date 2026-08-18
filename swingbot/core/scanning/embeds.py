@@ -620,8 +620,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             (
                 f"{signal_word} setup, but this ticker's own {ema_p}-day EMA trend is **{htf_bias_word}** "
                 f"(higher-timeframe bias for {htf_info['horizon_key']} horizon). "
-                f"Counter-trend setups have a lower base probability of following through -- "
-                f"confidence was reduced by {config.HTF_COUNTER_TREND_PENALTY} points to reflect this."
+                "Counter-trend setups have a lower base probability of following through."
             ),
             False,
         ))

@@ -67,9 +67,9 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.infra.jsonio import read_json
-from .confidence import LEVELS as _CONF_LEVELS
-from .confidence import ConfidenceResult, level_for_score, score_confidence
+from .confidence import score_confidence
 from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
+from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
@@ -193,7 +193,7 @@ class ScanItem:
 _QUALITY_COMPONENT_MAX = {
     "regime": 15, "htf": 15, "confluence": 20, "volume": 10,
     "atr_percentile": 10, "trigger_distance": 10, "badge": 20,
-    "rs": 10, "mtf": 10, "breadth": 5, "candle": 5,
+    "rs": 10, "breadth": 5, "candle": 5,
 }
 
 
@@ -472,40 +472,6 @@ class LRUFrames(OrderedDict):
             self.popitem(last=False)
 
 
-def _rebucket_after_htf_penalty(conf: ConfidenceResult, new_score: int,
-                                target_count: int, penalty: int) -> ConfidenceResult:
-    """Re-level a confidence result after the HTF counter-trend penalty
-    lowers its score (v32 Task 6, Step 6).
-
-    UNIFIED_CONFIDENCE on: goes through level_for_score(), the single
-    source of truth for the v32 6-band table. This module used to hardcode
-    `1 + new_score // 20` -- a copy of the OLD 5-equal-band boundaries that
-    silently computes the wrong level the instant the bands become uneven
-    (v32's Level 4/5 are 15-point bands, not 20).
-
-    UNIFIED_CONFIDENCE off: keeps that exact hardcoded formula. The legacy
-    score is still positioned inside the OLD 5-equal-band scale
-    (confidence._LEGACY_LEVEL_RANGE), so "default off means nothing
-    changes" has to hold here too, not just inside score_confidence()
-    itself -- rebucketing a legacy-positioned score through the NEW,
-    uneven bands would silently promote some post-penalty scores (e.g. 76-79)
-    to a level higher than the unmodified formula ever gave them, even with
-    the flag off.
-    """
-    if config.UNIFIED_CONFIDENCE:
-        new_level, new_label = level_for_score(new_score, target_count)
-    else:
-        new_level = max(1, min(5, 1 + new_score // 20))
-        new_label = next(
-            (lbl for lvl, lbl, _lo, _hi in _CONF_LEVELS if lvl == new_level),
-            conf.label,
-        )
-    return ConfidenceResult(
-        level=new_level, score=new_score, label=new_label,
-        breakdown={**conf.breakdown, "htf_counter_trend_penalty": -penalty},
-    )
-
-
 def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
                           rs_percentile=None, breadth=None) -> dict:
     """Real inputs for quality.score_plan (Task E37 wiring fix). Before this,
@@ -544,7 +510,6 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         "atr_pct": _atr_percentile(df),
         "trigger_distance_pct": abs(scenario.entry - current_price) / current_price * 100,
         "rs_percentile": rs_percentile,
-        "mtf": rs_factors.mtf_alignment(df, scenario.direction),
         "breadth": breadth,
         # v32 Task 11: rides along to _apply_quality, which pops it before
         # forwarding the rest to score_plan() -- see that function's own
@@ -780,6 +745,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "no_entry_point": 0,
         "scenarios_found": 0,
         "fully_qualifying": 0,
+        "mtf_misaligned": 0,
         "failed_counts": {
             "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
             "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0,
@@ -947,6 +913,23 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                 log.info("%s (%s, %s): tight stop -- %.1f%% away, below this horizon's normal ATR cushion (%.1f%%)",
                           ticker, horizon_key, scenario.direction, scenario.stop_distance_pct, scenario.atr_floor_pct)
 
+            # v33 Task 4: adjacent-horizon hard gate. Drop this scenario
+            # before any scoring work happens for it if the NEXT horizon up
+            # trends against it -- e.g. a 2w bullish setup while the 4w
+            # trend is bearish. adjacent_aligned() already returns "exempt"
+            # (never "opposed") for the longest horizon (no horizon above
+            # it) and for an unknowable next-horizon trend, so only a
+            # genuine "opposed" verdict drops the scenario here; "exempt"
+            # and "aligned" both fall through unchanged. Default OFF
+            # (config.MTF_ADJACENT_GATE) -- flips on only after VALIDATION.
+            if config.MTF_ADJACENT_GATE:
+                mtf_verdict = adjacent_aligned(df, horizon_key, scenario.direction)
+                if mtf_verdict["status"] == "opposed":
+                    log.debug("%s/%s %s dropped: %s", ticker, horizon_key,
+                              scenario.direction, mtf_verdict["reason"])
+                    stats["mtf_misaligned"] += 1
+                    continue
+
             # Simulate EVERY supported strategy independently against
             # this ticker (see levels.count_confirming_strategies) and
             # count how many land within CONFLUENCE_DEVIATION_PCT of
@@ -973,41 +956,33 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             track_record = (base_level_stats["win_rate"], base_level_stats["closed"])
 
             # HTF bias moved ahead of score_confidence (v32 Task 7) so its
-            # reading can feed the unified factor registry's htf_bias/mtf
-            # inputs -- it used to run only after, purely for the
-            # counter-trend penalty below, which still reuses this same
-            # result rather than fetching it twice.
+            # reading can feed the unified factor registry's htf_bias input
+            # -- it used to run only after, purely for the counter-trend
+            # penalty (retired, v33 Task 6). Still computed here first so
+            # the htf_counter_trend boolean below reuses this same result
+            # rather than fetching it twice.
             htf_result = get_htf_bias(df, horizon_key)
-            mtf_val = rs_factors.mtf_alignment(df, scenario.direction)
+            macro_verdict = macro_aligned(df, horizon_key, scenario.direction)
 
             conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
                                      target_confluence=target_confluence, stop_confluence=stop_confluence,
                                      track_record=track_record,
                                      htf_bias=(htf_result["bias"] if htf_result else None),
-                                     rs_percentile=rs_pctile, mtf=mtf_val, breadth=breadth)
+                                     rs_percentile=rs_pctile, breadth=breadth,
+                                     macro_verdict=macro_verdict)
 
             # Multi-timeframe confluence: check this ticker's own
             # higher-timeframe EMA bias (50-day for short horizons,
             # 200-day for longer ones) using the already-fetched daily
-            # df -- no extra API call. A counter-trend signal gets a
-            # configurable penalty subtracted from its raw score, which
-            # can drop it one level and thus below MIN_ALERT_CONFIDENCE_LEVEL.
+            # df -- no extra API call. Purely informational: it flags the
+            # embed warning and plan_v2.regime_aligned below, but no longer
+            # reduces the confidence score (v33: the penalty was an exact
+            # duplicate of this boolean, Cramer's V = 1.0 -- see
+            # docs/superpowers/plans/implemented/v33-trend-signal-reconciliation.md).
             htf_counter_trend = (
                 htf_result is not None
                 and htf_result["bias"] != scenario.direction
             )
-            if htf_counter_trend and config.HTF_COUNTER_TREND_PENALTY > 0:
-                penalty = config.HTF_COUNTER_TREND_PENALTY
-                new_score = max(0, conf.score - penalty)
-                conf = _rebucket_after_htf_penalty(conf, new_score, target_confluence[0], penalty)
-                new_level = conf.level
-                log.info(
-                    "%s (%s, %s): HTF counter-trend (signal=%s, %d-day EMA=%s) -- "
-                    "confidence reduced by %d pts to Lv%d(%d/100)",
-                    ticker, horizon_key, scenario.direction,
-                    scenario.direction, htf_result["ema_period"], htf_result["bias"],
-                    penalty, new_level, new_score,
-                )
 
             log.debug(
                 "%s %s (%s): target_confluence=%d(%s) stop_confluence=%d(%s) confidence=Lv%d(%d/100)%s",
@@ -1199,6 +1174,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     no_entry_point = 0
     scenarios_found_count = 0
     fully_qualifying_count = 0
+    mtf_misaligned = 0   # v33 Task 4: dropped by the adjacent-horizon hard gate
     data_quality_failed_count = 0   # E47: feeds check_kill_triggers' data_fail_frac
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
@@ -1257,6 +1233,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         no_entry_point += per_ticker["no_entry_point"]
         scenarios_found_count += per_ticker["scenarios_found"]
         fully_qualifying_count += per_ticker["fully_qualifying"]
+        mtf_misaligned += per_ticker["mtf_misaligned"]
         if per_ticker.get("data_quality_failed"):
             data_quality_failed_count += 1
         for key, count in per_ticker["failed_counts"].items():
@@ -1386,6 +1363,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_confluence": failed_counts["min_confluence"],
             "failed_min_confidence": failed_counts["min_confidence"],
             "awaiting_confirmation": filtered_by_confirmation,
+            "mtf_misaligned": mtf_misaligned,
             "shown": len(deduped),
             "min_confidence_level": config.MIN_ALERT_CONFIDENCE_LEVEL,
             "conf_level_counts": conf_level_counts,  # {1..5: count} across ALL found scenarios

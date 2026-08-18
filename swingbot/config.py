@@ -408,17 +408,15 @@ FIELDS: list[Field] = [
           "Higher-timeframe bias filter enabled",
           type="checkbox", default="true",
           help="Check each ticker's own higher-timeframe EMA bias (50-day for short horizons, 200-day for "
-               "longer ones) before accepting a signal. Counter-trend signals are penalised by "
-               "HTF_COUNTER_TREND_PENALTY confidence points and flagged in the embed. They still post -- "
-               "the filter is informational, not a hard suppressor -- unless the penalty drops them below "
-               "MIN_ALERT_CONFIDENCE_LEVEL after the reduction."),
-    Field("HTF_COUNTER_TREND_PENALTY", "HTF_COUNTER_TREND_PENALTY", "Multi-Timeframe Confluence",
-          "Counter-trend confidence score penalty",
-          type="number", default="15", min=0, max=40, step=5,
-          help="How many raw confidence score points are subtracted when a signal goes against its "
-               "ticker's own higher-timeframe EMA trend. 15 is enough to drop a borderline Level 3 "
-               "signal to Level 2 (and thus below the default MIN_ALERT_CONFIDENCE_LEVEL=3 gate). "
-               "Set 0 to disable the penalty while keeping the counter-trend label visible."),
+               "longer ones) before accepting a signal. Counter-trend signals are flagged in the embed "
+               "and in the plan-quality score's htf component -- the filter is informational only and "
+               "does not suppress or reduce the confidence score."),
+    Field("MTF_ADJACENT_GATE", "MTF_ADJACENT_GATE", "Multi-Timeframe Confluence",
+          "Adjacent-horizon hard gate",
+          type="checkbox", default="false",
+          help="Drop a scenario when the next horizon up trends against it "
+               "(e.g. a 2w bullish setup while the 4w trend is bearish). "
+               "The longest horizon is exempt. Enable only after VALIDATION."),
 
     # --- Plan Engine v2 (rollout flags, spec 2026-07-11-v2-unified-plan-engine-design) ---
     Field("PLAN_ENGINE_V2", "PLAN_ENGINE_V2", "Plan Engine v2", "Plan engine v2 mode",

@@ -79,42 +79,6 @@ def weekly_frame(daily_df: pd.DataFrame) -> pd.DataFrame:
          "Close": "last", "Volume": "sum"}).dropna()
 
 
-def _swing_lows(series: pd.Series, span: int = 2) -> list:
-    vals = series.values
-    return [vals[i] for i in range(span, len(vals) - span)
-            if vals[i] == min(vals[i - span:i + span + 1])]
-
-
-def mtf_alignment(daily_df: pd.DataFrame, direction: str) -> int:
-    """0-3: how many higher-timeframe boxes this direction ticks. Weekly
-    context is resampled from daily -- same data, longer lens."""
-    w = weekly_frame(daily_df)
-    if len(w) < 15:
-        return 0
-    bull = direction == "bullish"
-    score = 0
-
-    ema10 = w["Close"].ewm(span=10, adjust=False).mean()
-    ema_rising = ema10.iloc[-1] > ema10.iloc[-4]
-    above = w["Close"].iloc[-1] > ema10.iloc[-1]
-    if (above and ema_rising) if bull else (not above and not ema_rising):
-        score += 1
-
-    lows = _swing_lows(w["Low"].iloc[:-1])   # completed weeks only
-    highs = [-v for v in _swing_lows(-w["High"].iloc[:-1])]
-    if bull and len(lows) >= 2 and lows[-1] > lows[-2]:
-        score += 1
-    if not bull and len(highs) >= 2 and highs[-1] < highs[-2]:
-        score += 1
-
-    prev = w.iloc[-2]
-    pivot = (prev["High"] + prev["Low"] + prev["Close"]) / 3.0
-    daily_close = float(daily_df["Close"].iloc[-1])
-    if (daily_close > pivot) if bull else (daily_close < pivot):
-        score += 1
-    return score
-
-
 BREADTH_MIN_TICKERS = 20
 
 

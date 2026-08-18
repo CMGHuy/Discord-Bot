@@ -49,8 +49,8 @@ def get_htf_bias(df: pd.DataFrame, horizon_key: str) -> dict | None:
     fetched during the crawl phase -- no extra API calls needed.
 
     Uses longer-period EMAs on the daily bars as a timeframe proxy:
-      2w / 4w / 2m horizons → 50-day EMA (weekly trend proxy)
-      3m / 6m horizons       → 200-day EMA (monthly trend proxy)
+      2w / 4w / 2m horizons        → 50-day EMA (weekly trend proxy)
+      3m / 4m / 5m / 6m / 7m / 8m / 9m horizons → 200-day EMA (monthly trend proxy)
 
     Returns a dict:
         {
@@ -60,8 +60,8 @@ def get_htf_bias(df: pd.DataFrame, horizon_key: str) -> dict | None:
             "ema_value"   : float,
             "pct_above_ema": float,
         }
-    or None when HTF_CONFLUENCE_ENABLED is False, the horizon isn't
-    mapped (unsupported key), or not enough bars exist for the EMA.
+    or None when HTF_CONFLUENCE_ENABLED is False, or not enough bars exist
+    for the EMA.
     """
     if not app_config.HTF_CONFLUENCE_ENABLED:
         return None

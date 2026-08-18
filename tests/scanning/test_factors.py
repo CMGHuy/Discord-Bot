@@ -306,7 +306,7 @@ def test_tight_stop_absent_scenario_returns_none():
 # --- Task 4: quality.py components, including RS/MTF/breadth ----------
 
 from swingbot.core.scanning.factors import (  # noqa: E402
-    factor_rs, factor_mtf, factor_breadth, factor_htf, factor_volume,
+    factor_rs, factor_breadth, factor_htf, factor_volume,
     factor_atr_percentile, factor_trigger_distance, factor_badge,
     factor_gap, factor_target_confluence_quality,
 )
@@ -326,17 +326,6 @@ def test_rs_absent_returns_none_not_zero():
     """None means the RS benchmark fetch failed. It must be omitted from the
     breakdown, not rendered as a real reading of zero."""
     assert factor_rs(_ctx()) is None
-
-
-def test_mtf_uses_the_discrete_alignment_ladder():
-    assert factor_mtf(_ctx(mtf=0)).points == 0
-    assert factor_mtf(_ctx(mtf=1)).points == 3
-    assert factor_mtf(_ctx(mtf=2)).points == 6
-    assert factor_mtf(_ctx(mtf=3)).points == 10
-
-
-def test_mtf_absent_returns_none():
-    assert factor_mtf(_ctx()) is None
 
 
 def test_breadth_scores_above_forty_percent_and_caps_at_sixty():
@@ -436,6 +425,72 @@ def test_factors_registry_has_exactly_the_kept_factors():
     measurement found none with real, positively-signed lift (see
     factors.py's own comment above FACTORS for the full breakdown), so only
     factor_gap -- inert today, never fires -- remains in the active
-    registry. The other 18 stay defined and tested, just not registered."""
-    from swingbot.core.scanning.factors import FACTORS, factor_gap
-    assert FACTORS == [factor_gap]
+    registry. The other 18 stay defined and tested, just not registered.
+
+    v33 Task 5 added factor_macro_alignment to the registry as a
+    provisional entry; v33 Task 7's TRAIN sweep re-derived its weight as a
+    measured 0, so it now sits in exactly factor_gap's position -- kept,
+    tested, and contributing nothing. Both stay registered."""
+    from swingbot.core.scanning.factors import FACTORS, factor_gap, factor_macro_alignment
+    assert FACTORS == [factor_gap, factor_macro_alignment]
+
+
+# --- v33 Task 5: 6m macro-anchor alignment factor ---------------------
+
+from swingbot.core.scanning.factors import (  # noqa: E402
+    _MACRO_ALIGNMENT_POINTS, factor_macro_alignment)
+
+
+def test_macro_alignment_scores_its_measured_weight_when_aligned():
+    """v33 Task 7 re-derived _MACRO_ALIGNMENT_POINTS from TRAIN and got 0
+    (+2.1pp lift, Wilson-overlapping, n_oppose=56, sign-flipping across
+    horizons -- see the constant's comment). Asserted against the constant
+    rather than a literal so the test states the CONTRACT ("aligned scores
+    the factor's weight, opposed scores nothing") instead of re-pinning a
+    number a future re-weighting spec is allowed to move.
+
+    The separate assertion that the weight is currently 0 lives in
+    test_macro_alignment_weight_is_the_measured_zero below, so a silent
+    change to it fails loudly in one obvious place."""
+    ctx = _ctx(macro_verdict={"status": "aligned", "reason": "bullish trend agrees",
+                              "trend": "bullish"})
+    assert factor_macro_alignment(ctx).points == _MACRO_ALIGNMENT_POINTS
+
+
+def test_macro_alignment_weight_is_the_measured_zero():
+    """Guards v33 Task 7's actual decision. If this ever fails, someone
+    re-weighted the macro anchor -- which requires a NEW measurement, not a
+    hunch, per v32 Task 9's "assign points from measured lift" rule."""
+    assert _MACRO_ALIGNMENT_POINTS == 0
+
+
+def test_macro_alignment_still_reports_a_line_despite_scoring_zero():
+    """At 0 points the factor is informational, not absent: the breakdown
+    must still carry the macro reading, the same way an opposed verdict
+    carries its warning. A None here would silently drop the 6m context
+    from every alert."""
+    ctx = _ctx(macro_verdict={"status": "aligned", "reason": "bullish trend agrees",
+                              "trend": "bullish"})
+    r = factor_macro_alignment(ctx)
+    assert r is not None
+    assert "6m" in r.line
+
+
+def test_macro_alignment_scores_zero_when_opposed():
+    ctx = _ctx(macro_verdict={"status": "opposed", "reason": "bearish trend opposes",
+                              "trend": "bearish"})
+    r = factor_macro_alignment(ctx)
+    assert r.points == 0
+    assert "⚠️" in r.line
+
+
+def test_macro_alignment_exempt_returns_none_not_zero():
+    """An exempt horizon has no macro reading. Scoring it 0 would penalise
+    every 6m-9m scenario for a check that cannot apply to it."""
+    ctx = _ctx(macro_verdict={"status": "exempt", "reason": "6m is at the anchor",
+                              "trend": None})
+    assert factor_macro_alignment(ctx) is None
+
+
+def test_macro_alignment_absent_returns_none():
+    assert factor_macro_alignment(_ctx()) is None

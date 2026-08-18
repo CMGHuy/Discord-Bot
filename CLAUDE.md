@@ -112,6 +112,18 @@ final summary. Confirm it does — or add the `print(..., flush=True)` — *befo
 kicking it off, not hours into an unmonitorable run. The run this rule cost us
 is in `docs/claude/working-conventions.md`.
 
+**Mandatory: a subagent dispatched for multi-step or long-running work must
+keep a plain-text progress file the controller can safely check** (in the
+subagent-driven-development workflow, its own `task-N-report.md` under
+`.superpowers/sdd/<plan>/`) — updated at each real milestone, not written
+once as a draft at the start and left stale until the final report. The
+subagent's own tool-call transcript is off-limits for the controller to read
+directly (risks overflowing its context), so a report file that only gets
+touched at the start and at the very end leaves the controller with no way
+to tell "still working" from "silently stalled" for hours. This applies in
+particular whenever a subagent kicks off a background sweep/backtest of its
+own and then waits on it — update the file before waiting, not only after.
+
 ## Naming specs and plans
 
 **`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<document-name>.md`** — date,

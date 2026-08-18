@@ -1,8 +1,12 @@
-"""v32 Task 7: RS/MTF/breadth are computed during a scan but were never
+"""v32 Task 7: RS/breadth are computed during a scan but were never
 handed to score_confidence -- the whole premise of the unified score.
 Driven through the real _sync_run_scan code path (not a direct call), same
 pattern as test_engine_v2_plans.py's _sync_run_scan gate tests, so this
-actually proves the wiring rather than the isolated function signature."""
+actually proves the wiring rather than the isolated function signature.
+
+MTF was part of this wiring too until v33 Task 6 retired mtf_alignment as
+a scored input (-8.0pp non-overlapping TRAIN lift); see
+docs/superpowers/plans/implemented/v33-trend-signal-reconciliation.md."""
 import json
 
 import numpy as np
@@ -41,9 +45,9 @@ def _structured_df():
     return make_ohlcv(trend + box)
 
 
-def test_score_confidence_receives_rs_mtf_breadth(monkeypatch, tmp_path):
-    """Regression guard for the v32 premise: these three were computed and
-    then never handed to the gate. If this test fails, RS/MTF/breadth have
+def test_score_confidence_receives_rs_breadth(monkeypatch, tmp_path):
+    """Regression guard for the v32 premise: these were computed and
+    then never handed to the gate. If this test fails, RS/breadth have
     stopped influencing which alerts fire."""
     df = _structured_df()
 
@@ -87,4 +91,3 @@ def test_score_confidence_receives_rs_mtf_breadth(monkeypatch, tmp_path):
     assert captured, "fixture must produce at least one real scenario to exercise the wiring"
     assert all(c.get("rs_percentile") == 82.0 for c in captured)
     assert all(c.get("breadth") == 61.0 for c in captured)
-    assert all(c.get("mtf") is not None for c in captured)
