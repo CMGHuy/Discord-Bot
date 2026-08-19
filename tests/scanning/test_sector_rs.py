@@ -39,6 +39,7 @@ def _scan_item_for(ticker, sector=None, sector_frames=None, rs_percentile=65.0):
     sector_of_ticker = {ticker: sector} if sector else {}
     engine._apply_sector_rs(
         item, ticker, sector_of_ticker,
+        engine._etf_symbol_of_sector(),
         sector_frames if sector_frames is not None else {},
         spy_df=None,
     )
@@ -69,3 +70,22 @@ def test_unknown_sector_falls_back_to_ticker_only_rs():
 def test_missing_sector_etf_frame_falls_back_not_blocks():
     item = _scan_item_for("AAPL", sector="Technology", sector_frames={})
     assert item.rs_combined == item.rs_percentile
+
+
+def test_partial_sector_etf_fetch_failure_falls_back_not_corrupted():
+    """Task-review fix: sector_etf_frames non-empty (other sectors' ETFs
+    fetched fine this scan) but THIS ticker's own sector's ETF (XLF for
+    Financials) is specifically missing -- e.g. one of 11 sequential,
+    independently try/excepted sector-ETF fetches failed. Before the fix,
+    `if sector and sector_etf_frames` only checked the dict was non-empty,
+    so this fell through to sector_rs_percentile(), which can't tell
+    "wasn't fetched" from "genuinely at the median" and returns its own
+    50.0 sentinel either way -- silently corrupting item.rs_combined with
+    a synthetic reading instead of falling back to item.rs_percentile
+    alone."""
+    item = _scan_item_for(
+        "JPM", sector="Financials",
+        sector_frames={"XLK": object(), "XLE": object()},  # XLF absent
+    )
+    assert item.rs_combined == item.rs_percentile
+    assert item.sector_rs_percentile is None

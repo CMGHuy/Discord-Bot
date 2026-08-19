@@ -668,8 +668,13 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     return results
 
 
-def _sector_etfs_for_tickers(tickers: list) -> tuple:
-    """v34 Task 5: which sector ETFs does this watchlist touch?
+def _etf_symbol_of_sector() -> dict:
+    """v34 Task 5 fix: the sector-name -> SPDR ETF symbol resolution,
+    factored out so both `_sector_etfs_for_tickers` (which ETFs does this
+    watchlist need fetched) and `_apply_sector_rs` (was THIS ticker's own
+    sector ETF actually among the frames fetched this scan) share one
+    mapping instead of each inverting etfs.json's {symbol: sector} on its
+    own.
 
     Static-file lookup only, no network -- sp500.json's `sector` strings
     and etfs.json's `sector` strings come from the same GICS-style
@@ -677,6 +682,13 @@ def _sector_etfs_for_tickers(tickers: list) -> tuple:
     the ETF file's {symbol: sector} into {sector: symbol} is enough to
     translate a ticker's sector into the SPDR ETF that tracks it, with no
     separate translation table to maintain.
+    """
+    etf_of_symbol = universe.sector_map("etfs")          # {ETF symbol: sector}
+    return {sector: sym for sym, sector in etf_of_symbol.items()}
+
+
+def _sector_etfs_for_tickers(tickers: list) -> tuple:
+    """v34 Task 5: which sector ETFs does this watchlist touch?
 
     Returns (sector_of_ticker, needed_etf_symbols):
       - sector_of_ticker: {ticker: sector} for every ticker sp500.json
@@ -689,8 +701,7 @@ def _sector_etfs_for_tickers(tickers: list) -> tuple:
         carries no meaning downstream.
     """
     sector_of_ticker = universe.sector_map("sp500")
-    etf_of_symbol = universe.sector_map("etfs")          # {ETF symbol: sector}
-    etf_symbol_of_sector = {sector: sym for sym, sector in etf_of_symbol.items()}
+    etf_symbol_of_sector = _etf_symbol_of_sector()
     needed = sorted({
         etf_symbol_of_sector[sector_of_ticker[t]]
         for t in tickers
@@ -720,7 +731,8 @@ def _fetch_frames(symbols: list) -> dict:
 
 
 def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
-                      sector_etf_frames: dict, spy_df) -> None:
+                      etf_symbol_of_sector: dict, sector_etf_frames: dict,
+                      spy_df) -> None:
     """v34 Task 5: sets item.sector_rs_percentile and item.rs_combined in
     place -- the first live caller of sector_rs_percentile()/rs_score()
     (edge/factors.py, dormant with zero callers since E26/rs_score's
@@ -731,14 +743,29 @@ def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
     fetched this scan (network miss, or simply not in etfs.json) both fall
     back to the ticker-only rs_percentile, logged at debug level rather
     than treated as an error -- this is an expected, routine condition
-    (new tickers, a bad sector-ETF fetch), not a bug."""
+    (new tickers, a bad sector-ETF fetch), not a bug.
+
+    Task-review fix: the guard used to be `if sector and sector_etf_frames`
+    -- true as soon as ANY sector ETF frame was fetched this scan, not
+    necessarily THIS ticker's own sector's ETF. With 11 sequential,
+    independently try/excepted network fetches, a realistic partial
+    failure (most sector ETFs fetched, one missing) let a ticker in the
+    failed sector fall through to sector_rs_percentile() anyway, which
+    can't tell "this sector's ETF wasn't fetched" from "it was fetched and
+    genuinely sits at the median" -- both return its 50.0 sentinel. That
+    synthetic 50.0 would then corrupt item.rs_combined instead of falling
+    back to item.rs_percentile alone. Resolving the ticker's sector to its
+    specific ETF symbol first, and checking THAT symbol's presence in
+    sector_etf_frames, makes the guard ticker-specific instead of
+    scan-wide."""
     sector = sector_of_ticker.get(ticker)
+    etf_symbol = etf_symbol_of_sector.get(sector) if sector else None
     sector_pctile = None
-    if sector and sector_etf_frames:
+    if sector and etf_symbol and etf_symbol in sector_etf_frames:
         sector_pctile = rs_factors.sector_rs_percentile(sector, sector_etf_frames, spy_df)
     elif sector:
-        log.debug("Sector RS: no sector ETF frames available this scan -- "
-                  "%s (%s) falls back to ticker-only RS", ticker, sector)
+        log.debug("Sector RS: this ticker's sector ETF frame wasn't fetched "
+                  "this scan -- %s (%s) falls back to ticker-only RS", ticker, sector)
     else:
         log.debug("Sector RS: %s has no known sector (unmapped or "
                   "reclassified ticker) -- falls back to ticker-only RS", ticker)
@@ -1228,14 +1255,17 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # sector_etf_frames empty, which _apply_sector_rs below treats as
     # "unavailable this scan" and falls back to the ticker-only RS.
     sector_of_ticker: dict = {}
+    etf_symbol_of_sector: dict = {}
     sector_etf_frames: dict = {}
     try:
+        etf_symbol_of_sector = _etf_symbol_of_sector()
         sector_of_ticker, needed_sector_etfs = _sector_etfs_for_tickers(tickers)
         if needed_sector_etfs:
             sector_etf_frames = _fetch_frames(needed_sector_etfs)
     except Exception as e:
         log.warning("Could not fetch sector ETFs for relative-strength: %s", e)
         sector_of_ticker = {}
+        etf_symbol_of_sector = {}
         sector_etf_frames = {}
 
     # Market context (P0): stamp every crawled frame with the ctx_* block so
@@ -1382,7 +1412,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # see it if a later task wires it in. Never blocks: an unknown
             # sector or missing ETF frame falls back to rs_percentile alone.
             _apply_sector_rs(item, item.result.ticker, sector_of_ticker,
-                             sector_etf_frames, spy_df)
+                             etf_symbol_of_sector, sector_etf_frames, spy_df)
             item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
             if item.all_requirements_met:
                 # Deferred from _scan_one (fix for a task-review finding): only
