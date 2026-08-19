@@ -174,6 +174,8 @@ class ScanItem:
     plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
+    sector_rs_percentile: float | None = None  # percentile (0-100) of this ticker's sector ETF vs SPY; None when the sector is unknown or its ETF frame wasn't fetched this scan (v34 Task 5)
+    rs_combined: float | None = None  # rs_score(rs_percentile, sector_rs_percentile) -- 70/30 ticker/sector blend; falls back to rs_percentile alone when sector_rs_percentile is unavailable (v34 Task 5)
     breadth: float | None = None      # % of scanned universe above its own 50-EMA at scan time; None on a too-small universe (Task E28)
     intraday: bool | None = None      # 1h close vs today's VWAP on this plan's side; None = no reading = neutral, never blocks (Task E29)
 
@@ -666,6 +668,88 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     return results
 
 
+def _sector_etfs_for_tickers(tickers: list) -> tuple:
+    """v34 Task 5: which sector ETFs does this watchlist touch?
+
+    Static-file lookup only, no network -- sp500.json's `sector` strings
+    and etfs.json's `sector` strings come from the same GICS-style
+    vocabulary (e.g. "Information Technology", "Financials"), so inverting
+    the ETF file's {symbol: sector} into {sector: symbol} is enough to
+    translate a ticker's sector into the SPDR ETF that tracks it, with no
+    separate translation table to maintain.
+
+    Returns (sector_of_ticker, needed_etf_symbols):
+      - sector_of_ticker: {ticker: sector} for every ticker sp500.json
+        knows about (its own universe file, not the watchlist -- unrelated
+        tickers just won't be looked up). A ticker sp500.json doesn't have
+        (delisted, newly added, ETF-only watchlist, ...) is simply absent
+        -- the caller's `.get()` treats that the same as "unknown sector".
+      - needed_etf_symbols: the distinct, sorted list of ETF symbols to
+        fetch -- sorted only for deterministic test/log output, order
+        carries no meaning downstream.
+    """
+    sector_of_ticker = universe.sector_map("sp500")
+    etf_of_symbol = universe.sector_map("etfs")          # {ETF symbol: sector}
+    etf_symbol_of_sector = {sector: sym for sym, sector in etf_of_symbol.items()}
+    needed = sorted({
+        etf_symbol_of_sector[sector_of_ticker[t]]
+        for t in tickers
+        if sector_of_ticker.get(t) in etf_symbol_of_sector
+    })
+    return sector_of_ticker, needed
+
+
+def _fetch_frames(symbols: list) -> dict:
+    """Sequential fetch for a small side-list of symbols (sector ETFs,
+    currently at most the 11 SPDR sector funds in etfs.json) -- same
+    one-ticker-at-a-time contract as _crawl_latest_data and for the same
+    reason (the pinned yfinance version's shared module global isn't
+    thread-safe), just without progress tracking since this list is far
+    too short to need a UI progress bar. A symbol whose fetch fails is
+    simply absent from the result, exactly like _crawl_latest_data."""
+    frames = {}
+    for symbol in symbols:
+        try:
+            df = get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD)
+        except Exception as e:
+            log.warning("Sector RS: could not fetch %s: %s", symbol, e)
+            df = None
+        if df is not None:
+            frames[symbol] = df
+    return frames
+
+
+def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
+                      sector_etf_frames: dict, spy_df) -> None:
+    """v34 Task 5: sets item.sector_rs_percentile and item.rs_combined in
+    place -- the first live caller of sector_rs_percentile()/rs_score()
+    (edge/factors.py, dormant with zero callers since E26/rs_score's
+    introduction).
+
+    Must never raise or block an item: an unknown/reclassified ticker (not
+    in sp500.json's static sector map) or a sector whose ETF frame wasn't
+    fetched this scan (network miss, or simply not in etfs.json) both fall
+    back to the ticker-only rs_percentile, logged at debug level rather
+    than treated as an error -- this is an expected, routine condition
+    (new tickers, a bad sector-ETF fetch), not a bug."""
+    sector = sector_of_ticker.get(ticker)
+    sector_pctile = None
+    if sector and sector_etf_frames:
+        sector_pctile = rs_factors.sector_rs_percentile(sector, sector_etf_frames, spy_df)
+    elif sector:
+        log.debug("Sector RS: no sector ETF frames available this scan -- "
+                  "%s (%s) falls back to ticker-only RS", ticker, sector)
+    else:
+        log.debug("Sector RS: %s has no known sector (unmapped or "
+                  "reclassified ticker) -- falls back to ticker-only RS", ticker)
+    item.sector_rs_percentile = sector_pctile
+    item.rs_combined = (
+        rs_factors.rs_score(item.rs_percentile, sector_pctile)
+        if sector_pctile is not None and item.rs_percentile is not None
+        else item.rs_percentile
+    )
+
+
 def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
     """Order-preserving, error-isolated parallel map for the scan loop.
     The per-ticker work is pandas/numpy-heavy (releases the GIL in C) so
@@ -1136,6 +1220,24 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         spy_df = None
         rs_cache = None
 
+    # Sector-relative RS (v34 Task 5): fetch the distinct sector ETFs this
+    # watchlist touches alongside SPY -- first live activation of
+    # sector_rs_percentile()/rs_score() (edge/factors.py), dormant with
+    # zero callers since E26. Same try/except-must-never-break-the-scan
+    # pattern as the RS cache just above; a fetch failure leaves
+    # sector_etf_frames empty, which _apply_sector_rs below treats as
+    # "unavailable this scan" and falls back to the ticker-only RS.
+    sector_of_ticker: dict = {}
+    sector_etf_frames: dict = {}
+    try:
+        sector_of_ticker, needed_sector_etfs = _sector_etfs_for_tickers(tickers)
+        if needed_sector_etfs:
+            sector_etf_frames = _fetch_frames(needed_sector_etfs)
+    except Exception as e:
+        log.warning("Could not fetch sector ETFs for relative-strength: %s", e)
+        sector_of_ticker = {}
+        sector_etf_frames = {}
+
     # Market context (P0): stamp every crawled frame with the ctx_* block so
     # entry_filters.entries_for() can read the regime straight off `df`. This
     # is the live half of the channel that leaves apply_regime_gate inert
@@ -1274,6 +1376,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     fresh_data.get(item.result.ticker), spy_df,
                     universe_rels=list(rs_cache["rels"].values()),
                 )
+            # Sector RS (v34 Task 5): combine into item.rs_combined right
+            # after rs_percentile above, same "before attach_plan_v2" timing
+            # for the same reason -- so quality scoring/plan building could
+            # see it if a later task wires it in. Never blocks: an unknown
+            # sector or missing ETF frame falls back to rs_percentile alone.
+            _apply_sector_rs(item, item.result.ticker, sector_of_ticker,
+                             sector_etf_frames, spy_df)
             item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
             if item.all_requirements_met:
                 # Deferred from _scan_one (fix for a task-review finding): only
