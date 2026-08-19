@@ -47,6 +47,7 @@ HORIZONS = {
         "sr_target_min_pct": 5.0,  # matches MIN_REWARD_PCT floor -- no point recommending a <5% swing
         "sr_target_max_pct": 8.0,
         "max_holding_days": 14,    # backtest gives up here -- matches the intended hold
+        "rs_window": 21,           # ~1 trading month
     },
     "4w": {
         "label": "4-week swing",
@@ -61,6 +62,7 @@ HORIZONS = {
         "sr_target_min_pct": 15.0,
         "sr_target_max_pct": 25.0,  # baseline "sell into strength" zone
         "max_holding_days": 28,
+        "rs_window": 21,
     },
     "2m": {
         "label": "2-month swing",
@@ -75,6 +77,7 @@ HORIZONS = {
         "sr_target_min_pct": 16.0,
         "sr_target_max_pct": 27.0,
         "max_holding_days": 60,
+        "rs_window": 42,
     },
     "3m": {
         "label": "3-month swing",
@@ -89,6 +92,7 @@ HORIZONS = {
         "sr_target_min_pct": 18.0,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 90,
+        "rs_window": 63,
     },
     "4m": {
         "label": "4-month swing",
@@ -103,6 +107,7 @@ HORIZONS = {
         "sr_target_min_pct": 18.7,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 120,  # 30 * 4
+        "rs_window": 84,
     },
     "5m": {
         "label": "5-month swing",
@@ -117,6 +122,7 @@ HORIZONS = {
         "sr_target_min_pct": 19.3,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 150,  # 30 * 5
+        "rs_window": 105,
     },
     "6m": {
         "label": "6-month swing",
@@ -131,6 +137,7 @@ HORIZONS = {
         "sr_target_min_pct": 20.0,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 180,
+        "rs_window": 126,
     },
     "7m": {
         "label": "7-month swing",
@@ -145,6 +152,7 @@ HORIZONS = {
         "sr_target_min_pct": 20.7,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 210,  # 30 * 7
+        "rs_window": 147,
     },
     "8m": {
         "label": "8-month swing",
@@ -159,6 +167,7 @@ HORIZONS = {
         "sr_target_min_pct": 21.3,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 240,  # 30 * 8
+        "rs_window": 168,
     },
     "9m": {
         "label": "9-month swing",
@@ -173,6 +182,7 @@ HORIZONS = {
         "sr_target_min_pct": 22.0,
         "sr_target_max_pct": 30.0,
         "max_holding_days": 270,  # 30 * 9
+        "rs_window": 189,
     },
 }
 
