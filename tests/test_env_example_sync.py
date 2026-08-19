@@ -47,6 +47,37 @@ def test_every_setting_appears_in_env_example():
     )
 
 
+# The one class of setting whose VALUE must match the schema, against this
+# file's general "presence is asserted; values are not" rule. These are not
+# example values a reader may edit to taste: they are constants frozen by a
+# measurement and named in a pre-registration, and a stale copy here ships a
+# configuration that measurement found actively harmful. v34 is the worked
+# example -- `.env.example` kept the pre-sweep 60/40 for a commit after
+# config.py froze 0/25, and only a human review caught it.
+_FROZEN = {
+    # key: (value, the document that froze it)
+    "RS_LEADER_PERCENTILE": "docs/superpowers/plans/v34-train-preregistration.md",
+    "RS_LAGGARD_PERCENTILE": "docs/superpowers/plans/v34-train-preregistration.md",
+}
+
+
+def test_frozen_constants_match_the_schema_default():
+    from pathlib import Path
+    path = Path(__file__).resolve().parent.parent / ".env.example"
+    text = path.read_text(encoding="utf-8")
+    schema = {f.key: f.default for f in config.FIELDS}
+    for key, doc in _FROZEN.items():
+        m = re.search(rf"^{key}=(.*)$", text, re.MULTILINE)
+        assert m, f"{key} is missing from .env.example"
+        assert m.group(1).strip() == schema[key], (
+            f".env.example ships {key}={m.group(1).strip()!r} but the schema "
+            f"default is {schema[key]!r}. This value is frozen by {doc} -- it "
+            f"is not an example value to be edited to taste, and an installer "
+            f"copying this file would run a configuration that document "
+            f"measured and rejected. Change both together, or neither."
+        )
+
+
 def test_env_example_defines_no_setting_the_schema_does_not():
     unknown = sorted(_example_keys() - {f.key for f in config.FIELDS})
     assert not unknown, (

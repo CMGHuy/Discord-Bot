@@ -164,6 +164,17 @@ def test_blocked_scenarios_increment_the_funnel_counter(monkeypatch):
     assert funnel["rs_blocked"] == 1
 
 
+def _declared_default(key):
+    """The Field's DECLARED default, not the runtime global.
+
+    config.<ATTR> is whatever this machine's .env resolved to, so asserting
+    it would make the two guards below fail for an environmental reason
+    rather than a real regression. The frozen constant is the Field
+    default, so that is what gets guarded -- and then pinned onto the
+    runtime globals so the behavioural half of each test exercises it."""
+    return next(f for f in config.FIELDS if f.key == key).default
+
+
 def test_frozen_defaults_do_not_gate_bullish(monkeypatch):
     """v34 TRAIN froze RS_LEADER_PERCENTILE at 0, which disables the bullish
     half of the gate (a percentile is never negative, so `rs >= 0` always
@@ -172,15 +183,18 @@ def test_frozen_defaults_do_not_gate_bullish(monkeypatch):
     threshold it measured. Guards the frozen default itself, so a silent
     change to it fails a test rather than quietly re-enabling an arm that
     was measured to hurt."""
+    assert _declared_default("RS_LEADER_PERCENTILE") == "0"
     monkeypatch.setattr(config, "RS_GATE", True)
-    assert config.RS_LEADER_PERCENTILE == 0
+    monkeypatch.setattr(config, "RS_LEADER_PERCENTILE", 0.0)
     assert len(_scan_with(ticker="AAPL", direction="bullish", rs=10.0)) == 1
 
 
 def test_frozen_defaults_gate_a_bearish_non_laggard(monkeypatch):
     """The other half of the frozen shape: RS_LAGGARD_PERCENTILE = 25, so a
-    bearish setup at the 40th percentile is not a laggard and is dropped."""
+    bearish setup at the 40th percentile is not a laggard and is dropped,
+    while one at the 10th is kept."""
+    assert _declared_default("RS_LAGGARD_PERCENTILE") == "25"
     monkeypatch.setattr(config, "RS_GATE", True)
-    assert config.RS_LAGGARD_PERCENTILE == 25
+    monkeypatch.setattr(config, "RS_LAGGARD_PERCENTILE", 25.0)
     assert _scan_with(ticker="AAPL", direction="bearish", rs=40.0) == []
     assert len(_scan_with(ticker="AAPL", direction="bearish", rs=10.0)) == 1
