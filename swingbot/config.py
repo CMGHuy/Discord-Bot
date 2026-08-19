@@ -260,6 +260,17 @@ FIELDS: list[Field] = [
           help="How many past trading days the daily retrospective remembers (data/retrospective_history.json) "
                "in order to notice repeating problems (e.g. 'this is the 3rd day in a row VWAP has lost') instead "
                "of re-stating the same observation from scratch every day with no memory of yesterday."),
+    Field("RS_GATE", "RS_GATE", "Trade Filters & Risk", "Relative strength gate",
+          type="checkbox", default="false",
+          help="Require bullish setups on relative leaders and bearish setups on "
+               "relative laggards, versus SPY. FX, futures and indices are exempt. "
+               "Enable only after VALIDATION."),
+    Field("RS_LEADER_PERCENTILE", "RS_LEADER_PERCENTILE", "Trade Filters & Risk",
+          "RS leader percentile", type="float", default="60", min=50, max=100, step=5,
+          help="Bullish setups need combined RS at or above this percentile."),
+    Field("RS_LAGGARD_PERCENTILE", "RS_LAGGARD_PERCENTILE", "Trade Filters & Risk",
+          "RS laggard percentile", type="float", default="40", min=0, max=50, step=5,
+          help="Bearish setups need combined RS at or below this percentile."),
 
     # --- Data & display ---
     Field("DEFAULT_HISTORY_PERIOD", "DEFAULT_HISTORY_PERIOD", "Data & Display", "History period",
