@@ -42,6 +42,12 @@ data/v32_factor_correlation.json
 # remembers to list -- Task 7's own reproducibility re-run wrote a fourth
 # (data/v33_train_verify.json) that three explicit lines would have missed.
 data/v33_*.json
+# Same reason and same glob shape for v34's RS-gate measurement dumps
+# (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json).
+# The numbers live in docs/superpowers/plans/v34-train-preregistration.md;
+# these are the raw dumps they were read from, re-derivable by re-running
+# scripts/backtest/measure_rs_gate_effect.py.
+data/v34_*.json
 
 # Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
 # rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
