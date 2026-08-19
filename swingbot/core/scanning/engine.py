@@ -66,6 +66,7 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
+from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.jsonio import read_json
 from .confidence import score_confidence
 from swingbot.core.marketdata.data import get_currency_symbol, get_current_price, get_daily_data
@@ -1307,6 +1308,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     scenarios_found_count = 0
     fully_qualifying_count = 0
     mtf_misaligned = 0   # v33 Task 4: dropped by the adjacent-horizon hard gate
+    rs_blocked = 0   # v34 Task 6: dropped by the relative-strength gate
     data_quality_failed_count = 0   # E47: feeds check_kill_triggers' data_fail_frac
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
@@ -1414,6 +1416,30 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             _apply_sector_rs(item, item.result.ticker, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, spy_df)
             item.breadth = breadth  # Task E28: one scan-wide reading, same for every item
+
+            # Relative-strength gate (v34 Task 6): drop this scenario before
+            # confidence scoring (attach_plan_v2 below) if the ticker isn't a
+            # relative leader for a bullish setup, or isn't a relative
+            # laggard for a bearish one, using item.rs_combined (the 70%
+            # ticker / 30% sector blend from _apply_sector_rs just above) --
+            # NOT the bare ticker-only rs_percentile. rs_verdict() already
+            # returns "exempt" (never "block") for RS-ineligible symbols
+            # (FX, futures, indices) and for tickers RS couldn't be computed
+            # for at all this scan (rs_combined is None); only a genuine
+            # "block" verdict drops the scenario here. Default OFF
+            # (config.RS_GATE) -- flips on only after VALIDATION.
+            if config.RS_GATE:
+                rs_result = rs_verdict(
+                    item.result.ticker, item.result.trend,
+                    item.rs_combined if item.rs_combined is not None else 50.0,
+                    rs_available=item.rs_combined is not None,
+                )
+                if rs_result["status"] == "block":
+                    log.debug("%s %s dropped by RS gate: %s", item.result.ticker,
+                              item.result.trend, rs_result["reason"])
+                    rs_blocked += 1
+                    continue
+
             if item.all_requirements_met:
                 # Deferred from _scan_one (fix for a task-review finding): only
                 # build the v2 plan for a scenario that actually survives the
@@ -1503,6 +1529,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_confidence": failed_counts["min_confidence"],
             "awaiting_confirmation": filtered_by_confirmation,
             "mtf_misaligned": mtf_misaligned,
+            "rs_blocked": rs_blocked,
             "shown": len(deduped),
             "min_confidence_level": config.MIN_ALERT_CONFIDENCE_LEVEL,
             "conf_level_counts": conf_level_counts,  # {1..5: count} across ALL found scenarios
