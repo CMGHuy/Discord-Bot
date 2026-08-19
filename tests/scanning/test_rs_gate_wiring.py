@@ -130,7 +130,16 @@ def test_gate_off_by_default(monkeypatch):
 
 
 def test_gate_on_blocks_a_bullish_laggard(monkeypatch):
+    """The bullish half of the gate still works when it is switched on.
+
+    RS_LEADER_PERCENTILE is pinned rather than left at its default because
+    v34's TRAIN sweep froze that default at 0 (= bullish arm disabled; see
+    docs/superpowers/plans/v34-train-preregistration.md, Step 2). This test
+    is about the WIRING -- a block drops the scenario -- not about the
+    shipped default, which test_frozen_defaults_do_not_gate_bullish covers.
+    """
     monkeypatch.setattr(config, "RS_GATE", True)
+    monkeypatch.setattr(config, "RS_LEADER_PERCENTILE", 60.0)
     assert _scan_with(ticker="AAPL", direction="bullish", rs=10.0) == []
 
 
@@ -150,5 +159,28 @@ def test_gate_uses_combined_rs_not_bare_ticker_rs(monkeypatch):
 
 def test_blocked_scenarios_increment_the_funnel_counter(monkeypatch):
     monkeypatch.setattr(config, "RS_GATE", True)
+    monkeypatch.setattr(config, "RS_LEADER_PERCENTILE", 60.0)   # see above
     _items, funnel = _scan_with_funnel(ticker="AAPL", direction="bullish", rs=10.0)
     assert funnel["rs_blocked"] == 1
+
+
+def test_frozen_defaults_do_not_gate_bullish(monkeypatch):
+    """v34 TRAIN froze RS_LEADER_PERCENTILE at 0, which disables the bullish
+    half of the gate (a percentile is never negative, so `rs >= 0` always
+    holds). A bullish setup at the 10th percentile therefore SURVIVES with
+    the gate on -- the TRAIN sweep found a bullish gate negative at every
+    threshold it measured. Guards the frozen default itself, so a silent
+    change to it fails a test rather than quietly re-enabling an arm that
+    was measured to hurt."""
+    monkeypatch.setattr(config, "RS_GATE", True)
+    assert config.RS_LEADER_PERCENTILE == 0
+    assert len(_scan_with(ticker="AAPL", direction="bullish", rs=10.0)) == 1
+
+
+def test_frozen_defaults_gate_a_bearish_non_laggard(monkeypatch):
+    """The other half of the frozen shape: RS_LAGGARD_PERCENTILE = 25, so a
+    bearish setup at the 40th percentile is not a laggard and is dropped."""
+    monkeypatch.setattr(config, "RS_GATE", True)
+    assert config.RS_LAGGARD_PERCENTILE == 25
+    assert _scan_with(ticker="AAPL", direction="bearish", rs=40.0) == []
+    assert len(_scan_with(ticker="AAPL", direction="bearish", rs=10.0)) == 1

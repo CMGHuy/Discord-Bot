@@ -265,12 +265,24 @@ FIELDS: list[Field] = [
           help="Require bullish setups on relative leaders and bearish setups on "
                "relative laggards, versus SPY. FX, futures and indices are exempt. "
                "Enable only after VALIDATION."),
+    # Both defaults are FROZEN from the v34 TRAIN sweep
+    # (docs/superpowers/plans/v34-train-preregistration.md) and must not be
+    # changed without a new pre-registration and its own VALIDATION shot.
     Field("RS_LEADER_PERCENTILE", "RS_LEADER_PERCENTILE", "Trade Filters & Risk",
-          "RS leader percentile", type="float", default="60", min=50, max=100, step=5,
-          help="Bullish setups need combined RS at or above this percentile."),
+          "RS leader percentile", type="float", default="0", min=0, max=100, step=5,
+          help="Bullish setups need combined RS at or above this percentile. "
+               "0 disables the bullish half of the gate (a percentile is never "
+               "negative, so every bullish setup passes). It ships at 0 because "
+               "v34's TRAIN sweep found a bullish gate NEGATIVE at every "
+               "threshold measured -- 55/60/65/70/75 cost 28.6%-58.3% of alert "
+               "volume for -0.16 to -3.80pp of win rate."),
     Field("RS_LAGGARD_PERCENTILE", "RS_LAGGARD_PERCENTILE", "Trade Filters & Risk",
-          "RS laggard percentile", type="float", default="40", min=0, max=50, step=5,
-          help="Bearish setups need combined RS at or below this percentile."),
+          "RS laggard percentile", type="float", default="25", min=0, max=50, step=5,
+          help="Bearish setups need combined RS at or below this percentile. "
+               "25 is v34's TRAIN-frozen value: the bearish arm's win rate ran "
+               "monotonically with the threshold and only the bottom quartile "
+               "separated on Wilson intervals (32.1% -> 50.0%), for 8.6% of "
+               "total alert volume."),
 
     # --- Data & display ---
     Field("DEFAULT_HISTORY_PERIOD", "DEFAULT_HISTORY_PERIOD", "Data & Display", "History period",
