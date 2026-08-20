@@ -334,16 +334,24 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
     # price, no time dimension), so it registers as its own strategy
     # family -- see ALL_STRATEGY_FAMILIES.
     #
-    # FLAG-GATED, DEFAULT OFF (this plan's Global Constraints). Every
+    # FLAG-GATED, DEFAULT ON since 2026-08-20 (plan v35 Task 4). Every
     # other source in this function has been live since before the
     # validation registry was built; adding a 12th one changes what
     # count_confirming_strategies returns for EVERY scenario, which moves
     # the MIN_CONFLUENCE gate and the confidence score with it. That's a
-    # signal-quality change, not an additive annotation, so it stays dark
-    # until the E33 walk-forward folds and the E40 shadow forward-gate
-    # have actually judged it. The flag check sits OUTSIDE the try so a
-    # missing/renamed config Field fails loudly instead of silently
-    # turning this source off forever.
+    # signal-quality change, not an additive annotation, which is why it
+    # shipped dark for so long. It is on now because a pre-registered
+    # one-shot VALIDATION cleared a NON-DEGRADATION rule (-0.084pp win
+    # rate, overlapping Wilson intervals) -- not because an edge was
+    # measured, and NOT because E33 was overturned: E33 failed this
+    # component on an improvement gate in 2026-07-26 and v35 only earned a
+    # fresh shot because 52-week anchors changed the component itself.
+    # Both the budget and the question are closed; see
+    # docs/superpowers/plans/v35-avwap-preregistration.md and
+    # config.AVWAP_LEVELS_ENABLED's help text before reopening either.
+    # The flag check sits OUTSIDE the try so a missing/renamed config
+    # Field fails loudly instead of silently turning this source off
+    # forever.
     if config.AVWAP_LEVELS_ENABLED:
         try:
             from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
@@ -362,9 +370,13 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
     # bare "HVN"/"LVN" labels would have fallen through to themselves as
     # two unregistered families (the E30 trap again).
     #
-    # Flag-gated, default off, same reasoning as AVWAP above: it adds
-    # candidates, which moves cluster prices and can hand the Volume
-    # Profile family to scenarios that didn't have it. E33 judges it.
+    # Flag-gated, DEFAULT OFF -- and unlike AVWAP above (which v35 turned
+    # on) this one stays off: it adds candidates, which moves cluster
+    # prices and can hand the Volume Profile family to scenarios that
+    # didn't have it. E33 already judged it on 2026-07-26 and it FAILED
+    # (pooled -0.0002R, improving 1 of 3 folds against a gate needing 2)
+    # -- docs/superpowers/results/2026-07-26-edge-folds.md. That is a
+    # closed pre-registration, not a pending one.
     if config.VOLUME_PROFILE_NODES_ENABLED:
         try:
             nodes = volume_profile_nodes(df)
