@@ -33,7 +33,7 @@ TP1_FRACTION = 0.5            # fixed by spec §5
 RUNNER_FLOOR_FRACTION = 2.0 / 3.0   # v39: the runner's stop the instant TP1 fires locks
                                     # in this fraction of the entry->TP1 move (was 0.0,
                                     # i.e. plain breakeven). Spec:
-                                    # docs/superpowers/specs/2026-08-20-v39-runner-floor-protection-design.md
+                                    # docs/superpowers/specs/implemented/2026-08-20-v39-runner-floor-protection-design.md
 DEFAULT_EXPIRY_BARS = 5
 
 # Per-strategy exit-v2 overrides chosen by the Task 30 TRAIN grid under the

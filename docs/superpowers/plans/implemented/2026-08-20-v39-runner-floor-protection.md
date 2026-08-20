@@ -11,6 +11,27 @@ Bump: bot patch (1.3.0 → 1.3.1) — a tuning change to the runner's starting s
 
 **Tech Stack:** Python 3.11, pandas/numpy, pytest. Tests run via `python scripts/dev/testrun.py file <path>` (never the full suite mid-task).
 
+## Progress
+
+- **Completed 2026-08-20, all 5 tasks, one session:** Task 1 (`runner_floor`
+  + all three call sites + reason-label comparisons, plus the existing-test
+  rework `test_exit_sim_scaleout.py` needed — 2 of its tests genuinely
+  broke, 4 needed number updates, 1 needed a rounding-tolerance widening the
+  plan didn't anticipate: `test_legs_fractions_always_sum_to_one` hit a
+  round-half-to-even edge case once the floor's r-multiple (1.333...)
+  stopped being an exact 0.0). Task 2 (boundary coverage on both paths;
+  confirmed the two backtest boundary tests are real guards by temporarily
+  reverting the floor and watching them fail, per the plan's own Step 2).
+  Task 3 (Discord copy). Task 4 (docs staleness note).
+- **Deviation from the plan's literal text:** Task 5 bumped `bot` to
+  **1.3.2**, not the `1.3.1` the plan names — a concurrent, unrelated
+  session (`v35-anchored-vwap`) had already taken `1.3.1` before this plan
+  executed, and had left `version_history.json` unregenerated for it (fixed
+  in a separate commit, before this plan's own work, so the pre-implementation
+  baseline was genuinely green rather than carrying someone else's gap).
+- **Branch:** `worktree-2026-08-20-v39-runner-floor-protection`, merged to
+  `main`.
+
 ## Global Constraints
 
 - **The reason strings never change.** `"runner_be"`, `"runner_trail"`, `"tp1_runner_be"`, `"tp1_runner_trail"`, `"tp1_runner_tp2"`, `"runner_tp2"`, `"runner_timeout"` keep their exact current values. ~30 files pattern-match them, including frozen historical result JSONs under `docs/superpowers/results/*.json` (never rewritten retroactively) and `performance.py`'s win/loss classifier keying off `reason.startswith("tp1_")`. Only the **comparison** that selects between `_be` and `_trail` moves.
