@@ -22,7 +22,11 @@ are run. Several Edge flags only affect the LIVE path (plan builder,
 plan manager, scan loop) and are bit-identical here by construction --
 running them would score a meaningless 0.0000 delta and burn their
 one-shot pre-registration. They are listed in INERT_COMPONENTS with the
-wiring each would need, and are NOT run.
+wiring each would need, and are NOT run. A component can also land in
+INERT_COMPONENTS for a second reason -- its pre-registration budget is
+CLOSED (see docs/claude/backtest-methodology.md's closed-pre-registration
+table) rather than unmeasurable by construction; either way this dict's
+contract is the same: not run by this harness.
 """
 import argparse
 import json
@@ -46,10 +50,8 @@ from swingbot.core.marketdata.universe import liquidity_ok, universe_symbols  # 
 from swingbot.core.marketdata.watchlist import load_watchlist  # noqa: E402
 
 # Components the backtest can actually observe. Verified empirically
-# before registering (flip the flag, same windows, compare expectancy):
-# under tp2_mode="levels" AVWAP moves the number; under "none" nothing does.
+# before registering (flip the flag, same windows, compare expectancy).
 REGISTERED_COMPONENTS = {
-    "AVWAP_LEVELS_ENABLED": True,
     "VOLUME_PROFILE_NODES_ENABLED": True,
     # P1 level lifecycle. Observability verified before registering (3 symbols
     # x 2 strategies x 10 horizons): the stop leg moves expectancy in 2 of 3
@@ -61,6 +63,15 @@ REGISTERED_COMPONENTS = {
 
 # Flags that CANNOT be measured by this harness -- documented, not run.
 INERT_COMPONENTS = {
+    "AVWAP_LEVELS_ENABLED":
+        "Was REGISTERED here through the v35 measurement, which used this "
+        "harness. Removed after v35 closed the component's pre-registration "
+        "budget (two shots: E33 FAIL, v35 VALIDATION PASS on a non-"
+        "inferiority rule) -- see docs/claude/backtest-methodology.md's "
+        "closed pre-registration table. Re-listing it here would tell a "
+        "future run it can meaningfully re-measure a question that is "
+        "closed; reopening it needs a genuinely new mechanism, not another "
+        "grid.",
     "DATA_DRIVEN_STOPS_ENABLED":
         "E31/E32 reach plan_engine.build_strategy_plan only; the backtest "
         "sizes through backtest._trade_plan_at, which takes no stop_mult/"
