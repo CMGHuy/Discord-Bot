@@ -494,8 +494,8 @@ git commit -m "docs(v35): document anchored VWAP, bump version, close the spec"
 
 ## Progress
 
-- [ ] Task 1 — Characterize anchors, no-lookahead, inflation guard
-- [ ] Task 2 — Labelled anchors + 52-week extremes
-- [ ] Task 3 — Named sources in the level map
-- [ ] Task 4 — Measure and decide `AVWAP_LEVELS_ENABLED`
-- [ ] Task 5 — Docs and close-out
+- [x] Task 1 — Characterize anchors, no-lookahead, inflation guard
+- [x] Task 2 — Labelled anchors + 52-week extremes
+- [x] Task 3 — Named sources in the level map
+- [x] Task 4 — Measure and decide `AVWAP_LEVELS_ENABLED`
+- [x] Task 5 — Docs and close-out

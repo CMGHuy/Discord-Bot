@@ -50,6 +50,16 @@ data/v33_*.json
 # scripts/backtest/measure_rs_gate_effect.py.
 data/v34_*.json
 
+# Same reason again (912e004; v33 above generalized it to a glob) --
+# data/v35_validation.json and data/v35_validation_off.json were briefly
+# tracked and reproduced the identical deploy breakage. Numbers are
+# reconciled in prose in
+# docs/superpowers/plans/implemented/v35-avwap-preregistration.md sections
+# 5.2-5.3. Extension-less (not `*.json` like v33) because v35's scratch
+# also includes run logs, shell scripts and summary .txt dumps under the
+# same prefix -- all equally unwanted under a bind-mounted data/.
+data/v35_*
+
 # Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
 # rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
 # deliverables the backtest methodology in CLAUDE.md requires be committed.

@@ -116,6 +116,7 @@ level a person is looking at.
 """
 from dataclasses import dataclass, field
 import logging
+import re
 
 from swingbot import config
 from swingbot.core.market.candlestick_patterns import detect_confirming_pattern
@@ -278,6 +279,25 @@ def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tup
     return adjustment, detail
 
 
+# v35: each AVWAP anchor produces its own raw source label --
+# "Anchored VWAP (52w high)", "Anchored VWAP (swing low)", etc. (see
+# levels.collect_candidate_levels) -- naming the anchor for DISPLAY is the
+# whole point, but the fallback dedup below is plain string equality, so
+# without this fold every distinct anchor label would count as its own
+# confirming method and inflate the count with however many anchors a
+# ticker happens to have. The full label is kept wherever it's shown to a
+# user (charts, alerts) -- only this confluence COUNT collapses the family.
+#
+# Name is "AVWAP", not "Anchored VWAP" -- must match the family name
+# registered in levels.ALL_STRATEGY_FAMILIES / levels.strategy_family(),
+# which is what levels.py's own confluence path folds every per-anchor
+# label to. The two folding paths previously disagreed on this string
+# (same count, different name) even though nothing else in the codebase
+# ever registers "Anchored VWAP" as a family name.
+_AVWAP_FAMILY_RE = re.compile(r"^Anchored VWAP \(")
+_AVWAP_FAMILY_NAME = "AVWAP"
+
+
 def _resolve_confluence(explicit: tuple | None, sources: list) -> tuple:
     """(count, family_names) from an explicit levels.count_confirming_strategies
     tuple if given, else a fallback count over the scenario's own
@@ -286,7 +306,13 @@ def _resolve_confluence(explicit: tuple | None, sources: list) -> tuple:
     strategies confirmed this" means."""
     if explicit is not None:
         return explicit
-    families = list(dict.fromkeys(sources))
+    families = []
+    seen = set()
+    for source in sources:
+        family = _AVWAP_FAMILY_NAME if _AVWAP_FAMILY_RE.match(source) else source
+        if family not in seen:
+            seen.add(family)
+            families.append(family)
     return len(families), families
 
 

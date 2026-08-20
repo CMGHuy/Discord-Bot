@@ -48,8 +48,8 @@ def test_weekly_panel_renders(tmp_path, daily_df):
 def test_avwap_overlay_renders(tmp_path, daily_df):
     from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
     from swingbot.core.charts.decision_chart import render_decision_chart
-    avwaps = [{"series": anchored_vwap(daily_df, a), "anchor_label": f"⚓{a}"}
-              for a in avwap_anchors(daily_df)[:3]]
+    avwaps = [{"series": anchored_vwap(daily_df, idx), "anchor_label": f"⚓{label}"}
+              for idx, label in avwap_anchors(daily_df)[:3]]
     path = render_decision_chart("TEST", daily_df, FakePlan(),
                                  {"avwaps": avwaps}, str(tmp_path))
     assert_rendered(path)

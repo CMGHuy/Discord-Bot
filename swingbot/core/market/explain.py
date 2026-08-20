@@ -12,6 +12,8 @@ Format (3-5 lines max):
   Line 4: earnings warning, if applicable
 """
 
+from swingbot.core.market.levels import strategy_family
+
 # One very short phrase per strategy family -- just enough to say WHAT
 # the method measures, not a full sentence. Keeps line 1 scannable.
 _STRATEGY_SHORT = {
@@ -21,6 +23,7 @@ _STRATEGY_SHORT = {
     "Rolling S/R": "rolling S/R",
     "Zigzag Pivot": "pivot",
     "Bollinger Bands": "Bollinger Band",
+    "AVWAP": "anchored VWAP",
     "Donchian Channel": "Donchian",
     "Floor Pivot": "floor pivot",
     "Trendline": "trendline",
@@ -50,14 +53,19 @@ def build_explanation(result, earnings_info=None,
     if target_confluence:
         t_count, t_families = target_confluence
     else:
-        t_families = list(dict.fromkeys(scenario.target_sources))
+        # Same unfolded-dedup trap Task 3 fixed in confidence._resolve_confluence
+        # and levels.strategy_family: raw sources can carry several distinct
+        # per-anchor AVWAP labels ("Anchored VWAP (52w high)", "Anchored VWAP
+        # (swing low)", ...) that must fold to one confirming family before
+        # counting, or the method count inflates 1-for-1 with anchor count.
+        t_families = list(dict.fromkeys(strategy_family(s) for s in scenario.target_sources))
         t_count = len(t_families)
 
     # Stop strategies
     if stop_confluence:
         s_count, s_families = stop_confluence
     else:
-        s_families = list(dict.fromkeys(scenario.stop_sources))
+        s_families = list(dict.fromkeys(strategy_family(s) for s in scenario.stop_sources))
         s_count = len(s_families)
 
     t_str = _family_list(t_families)

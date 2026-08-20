@@ -624,13 +624,33 @@ FIELDS: list[Field] = [
                "docs/superpowers/results/2026-08-08-level-lifecycle-stops-validation.md."),
     Field("AVWAP_LEVELS_ENABLED", "AVWAP_LEVELS_ENABLED", "Universe & Scanning",
           "Anchored VWAP level source enabled",
-          type="checkbox", default="false",
-          help="Adds anchored-VWAP levels (swing-pivot and highest-volume anchors, "
-               "swingbot/core/edge/factors.py:avwap_anchors) to the candidate level map as a "
-               "12th price-producing strategy family. Unlike a pure annotation this SHIFTS "
-               "every confluence count -- a scenario can gain a confirming family and clear "
-               "MIN_CONFLUENCE it would previously have failed -- so it ships off until the "
-               "E33 walk-forward folds and the E40 shadow forward-gate have judged it."),
+          type="checkbox", default="true",
+          help="Adds anchored-VWAP levels (swing-pivot, highest-volume and 52-week-extreme "
+               "anchors, swingbot/core/edge/factors.py:avwap_anchors) to the candidate level "
+               "map as a 12th price-producing strategy family. Unlike a pure annotation this "
+               "SHIFTS every confluence count -- a scenario can gain a confirming family and "
+               "clear MIN_CONFLUENCE it would previously have failed. "
+               "DEFAULT-ON since 2026-08-20 (plan v35), and the evidence is deliberately "
+               "stated as NON-INFERIORITY, not edge: its pre-registered one-shot VALIDATION "
+               "(2024-2025) moved pooled win rate 48.80% -> 48.72% (-0.084pp), expectancy "
+               "-0.00037R and trade count -1, with WILDLY OVERLAPPING Wilson intervals. It is "
+               "on because it degrades nothing and the mechanism is sound, NOT because an edge "
+               "was measured. "
+               "THIS IS THE SECOND SHOT AND THE BUDGET IS SPENT. The first, Task E33's "
+               "walk-forward folds on 2026-07-26, FAILED it (pooled -0.0001R, improving 0 of 3 "
+               "folds) -- see docs/superpowers/results/2026-07-26-edge-folds.md. That result "
+               "was not overturned; it was re-asked. E33 gated on IMPROVEMENT, v35 pre-registered "
+               "a NON-DEGRADATION rule, and both runs agree AVWAP moves almost nothing. v35 "
+               "earned a fresh shot only because the component itself changed: 52-week extreme "
+               "anchors did not exist at E33, when all anchors collapsed into one price cluster. "
+               "Do NOT re-run this question -- reopening it needs a new mechanism, not another "
+               "grid. E40's shadow forward-gate never produced an AVWAP verdict and is not "
+               "pending on one. "
+               "Caveat on record: AVWAP lands within 5% of 48.5% of all candidate targets, so "
+               "it is a weak discriminator feeding MIN_CONFLUENCE and the confidence score; the "
+               "per-anchor labels DO fold to one 'AVWAP' family (verified on 264,595 real "
+               "targets, zero inflation). Full record: "
+               "docs/superpowers/plans/implemented/v35-avwap-preregistration.md."),
     Field("PYRAMIDING_ENABLED", "PYRAMIDING_ENABLED", "Universe & Scanning",
           "Pyramid-add suggestions enabled",
           type="checkbox", default="false",

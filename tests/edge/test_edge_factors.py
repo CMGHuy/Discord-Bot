@@ -159,47 +159,73 @@ def test_avwap_anchors_are_sorted_deduped_and_in_range():
     df = make_ohlcv(closes, volumes=vols)
 
     anchors = avwap_anchors(df, lookback=120)
-    assert anchors == sorted(set(anchors)), "anchors must be sorted and deduped"
-    assert all(0 <= a < len(df) for a in anchors)
-    assert 250 in anchors, "the highest-volume bar of the lookback must be an anchor"
+    indices = [idx for idx, _label in anchors]
+    assert indices == sorted(set(indices)), "anchors must be sorted and deduped"
+    assert all(0 <= idx < len(df) for idx in indices)
+    assert 250 in indices, "the highest-volume bar of the lookback must be an anchor"
     # Swing pivots need `span` confirming bars on each side, so no anchor may
     # sit inside the trailing unconfirmed window; the volume anchor is exempt
     # (it needs no confirmation) but here it is at 250, well clear of the end.
-    assert max(a for a in anchors if a != 250) < len(df) - 5
+    # The 52-week extremes are exempt too -- they need no trailing confirmation
+    # either, and can legitimately land on the most recent bar.
+    pivots = [idx for idx, label in anchors
+              if idx != 250 and not label.startswith("52w")]
+    assert max(pivots) < len(df) - 5
 
 
 def test_avwap_anchors_ignore_bars_before_the_lookback():
     """A 120-bar lookback must not anchor on ancient history -- except that
     the pivot scan and the volume scan both start at the same `start` bar,
-    so nothing older than that can ever be returned."""
+    so nothing older than that can ever be returned. The 52-week anchors are
+    a separate, wider window (up to 252 bars) that is deliberately NOT bounded
+    by `lookback` -- "the year's high/low" is a different question from "the
+    recent window's pivots" -- so they are excluded from this check by label."""
     from swingbot.core.edge.factors import avwap_anchors
     df = make_trend_df(300, +0.1)
-    assert all(a >= len(df) - 120 for a in avwap_anchors(df, lookback=120))
+    anchors = avwap_anchors(df, lookback=120)
+    bounded = [idx for idx, label in anchors if not label.startswith("52w")]
+    assert all(idx >= len(df) - 120 for idx in bounded)
 
 
 def test_avwap_levels_enter_the_level_map_when_enabled(monkeypatch):
+    """v35: each candidate is labelled with its own anchor, e.g.
+    "Anchored VWAP (52w high)" -- see avwap_anchors -- not a bare "AVWAP"."""
     from swingbot import config
     from swingbot.core.market import levels
     from swingbot.core.market.strategy_types import HORIZONS
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", True)
     df = make_trend_df(300, +0.2)
     cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
-    assert any(src == "AVWAP" for _, src in cands)
-    assert all(p > 0 for p, src in cands if src == "AVWAP")
+    assert any(src.startswith("Anchored VWAP (") for _, src in cands)
+    assert all(p > 0 for p, src in cands if src.startswith("Anchored VWAP ("))
+
+
+def test_avwap_ships_default_on_since_v35():
+    """v35 Task 4 flipped this default. It was default-off from E30 until
+    2026-08-20, waiting on a measurement; E33 then FAILED it on an
+    improvement gate (2026-07-26, pooled -0.0001R) and v35's own
+    pre-registered one-shot VALIDATION PASSED it on a non-degradation rule
+    (-0.084pp win rate, overlapping Wilson intervals).
+
+    The budget for this question is SPENT. If this assertion fails, someone
+    has flipped a judged default -- read
+    docs/superpowers/plans/implemented/v35-avwap-preregistration.md and
+    docs/superpowers/results/2026-07-26-edge-folds.md before changing it,
+    and do not re-run either measurement to justify the change."""
+    from swingbot import config
+    assert config.AVWAP_LEVELS_ENABLED is True
 
 
 def test_avwap_levels_absent_while_the_flag_is_off(monkeypatch):
-    """Default-off, per this plan's Global Constraints: a new level source
-    shifts every confluence count, so it stays dark until the walk-forward
-    folds (E33) and the shadow forward-gate (E40) have judged it."""
+    """The flag must still fully suppress the source when turned off -- it
+    is default-on since v35, but it remains a real off switch."""
     from swingbot import config
     from swingbot.core.market import levels
     from swingbot.core.market.strategy_types import HORIZONS
-    assert config.AVWAP_LEVELS_ENABLED is False, "this factor must ship default-off"
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", False)
     df = make_trend_df(300, +0.2)
     cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
-    assert not any(src == "AVWAP" for _, src in cands)
+    assert not any(src.startswith("Anchored VWAP (") for _, src in cands)
 
 
 def test_avwap_is_its_own_strategy_family():
@@ -212,6 +238,17 @@ def test_avwap_is_its_own_strategy_family():
     assert levels.strategy_family("AVWAP") == "AVWAP"
     assert levels.strategy_family("VWAP") == "VWAP"
     assert "AVWAP" in levels.ALL_STRATEGY_FAMILIES
+
+
+def test_avwap_per_anchor_labels_fold_to_one_family():
+    """v35: collect_candidate_levels now emits one source label PER ANCHOR
+    ("Anchored VWAP (52w high)", "Anchored VWAP (swing low)", ...) --
+    strategy_family() must fold every one of those back to the same
+    "AVWAP" family, or the confirming-strategy count inflates with however
+    many anchors a ticker happens to have."""
+    from swingbot.core.market import levels
+    assert levels.strategy_family("Anchored VWAP (52w high)") == "AVWAP"
+    assert levels.strategy_family("Anchored VWAP (swing low)") == "AVWAP"
 
 
 def _bar(df_idx, o, h, l, c, v, base_vol=1_000_000):
