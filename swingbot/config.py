@@ -460,9 +460,14 @@ FIELDS: list[Field] = [
                "compare against legacy numbers for a few sessions before trusting it live."),
     Field("SCALE_OUT_ENABLED", "SCALE_OUT_ENABLED", "Plan Engine v2", "Scale-out exits enabled",
           type="checkbox", default="true",
-          help="At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 "
-               "with a chandelier ATR trail. Backtested under this exact exit model (see README's "
-               "Plan Engine v2 section for the validated win-rate/expectancy numbers behind it)."),
+          help="At TP1, close 50% and move the stop to the runner floor -- entry plus 2/3 of "
+               "the entry-to-TP1 move (v39, was plain break-even) -- while the runner rides "
+               "toward TP2 behind a chandelier ATR trail that only ever ratchets that floor "
+               "further into profit. STALE NUMBERS: the win-rate/expectancy figures in README's "
+               "Plan Engine v2 section were measured under the pre-v39 break-even floor and have "
+               "not been re-measured against this one. v39 is strictly more protective of realized "
+               "gains, never less, so it shipped without a fresh pre-registration; a TRAIN/"
+               "VALIDATION run against the new floor is future work, not a gate this shipped behind."),
     Field("INTRADAY_MANAGER_V2", "INTRADAY_MANAGER_V2", "Plan Engine v2", "Intraday plan manager enabled",
           type="checkbox", default="true",
           help="The 60s monitor manages the full plan lifecycle: pending entry triggers, break-even "

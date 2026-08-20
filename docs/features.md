@@ -25,7 +25,7 @@ UI's "Plan Engine v2" section, hot-reloadable):
 | Flag | Values | Meaning |
 |---|---|---|
 | `PLAN_ENGINE_V2` | `off` / `shadow` / `on` | `off` = legacy behavior. `shadow` = v2 plans are computed and logged to `data/shadow_plans.jsonl` during scans but not posted (parity evidence for the cutover — compare with `python scripts/reports/shadow_parity_report.py`). `on` = alerts price and emit v2 plans. |
-| `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to break-even; the runner rides toward TP2 with a chandelier ATR trail. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
+| `SCALE_OUT_ENABLED` | `true`/`false` | At TP1, close 50% and move the stop to the **runner floor** — entry plus 2/3 of the entry→TP1 move (v39; it was plain break-even before) — while the runner rides toward TP2 with a chandelier ATR trail that only ratchets that floor further into profit. Enable only after `PLAN_ENGINE_V2=on` has run cleanly. |
 | `INTRADAY_MANAGER_V2` | `true`/`false` | The 60s monitor manages the full plan lifecycle (PENDING → ACTIVE → PARTIAL → CLOSED): entry triggers, break-even moves, TP1 partials, runner trail, invalidation — with a Discord alert per transition. `!plans` shows the live board. |
 
 **Defaults ship fully live** (`PLAN_ENGINE_V2=on`, `SCALE_OUT_ENABLED=true`,
@@ -34,6 +34,17 @@ immediately with no staged rollout required. If you'd rather stage it
 yourself: `shadow` for ≥5 scan sessions (compare against legacy numbers via
 `python scripts/reports/shadow_parity_report.py`) → `on` for ≥5 clean sessions →
 enable scale-out + manager.
+
+**The validated numbers below predate v39's runner floor.** Every win-rate
+and expectancy figure quoted for the scale-out exit model was measured with
+the runner's stop starting at plain break-even. v39 starts it at
+`entry + 2/3 × (tp1 − entry)` instead (`plan_engine.runner_floor`), which is
+strictly more protective of realized gains and never less — so it shipped
+default-on without a pre-registered re-validation, unlike every entry in
+`docs/claude/backtest-methodology.md`'s closed-pre-registrations table.
+Treat the cited numbers as a floor on the new model's performance, not a
+measurement of it, until a fresh TRAIN/VALIDATION run against the new floor
+is done.
 
 **Target selection (v31): structural, banded, honest about "no setup."**
 Every plan's target is a real price level, not a fixed fraction of its own
