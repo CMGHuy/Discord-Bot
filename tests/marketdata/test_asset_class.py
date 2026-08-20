@@ -39,3 +39,36 @@ def test_classification_uses_the_resolved_symbol_not_the_alias():
     """
     from swingbot.core.marketdata.ticker_utils import candidate_symbols
     assert classify(candidate_symbols("XAUUSD")[1]) == "future"
+
+
+@pytest.mark.parametrize("symbol,expected", [
+    ("BTC-USD", "crypto"), ("ETH-USD", "crypto"),
+])
+def test_resolved_crypto_forms_classify_as_crypto(symbol, expected):
+    assert classify(symbol) == expected
+
+
+def test_crypto_is_not_rs_eligible():
+    assert is_rs_eligible("BTC-USD") is False
+
+
+@pytest.mark.parametrize("symbol,expected", [
+    # Final-review Finding 1: the real gate call site (engine.py) passes
+    # the RAW watchlist string into rs_verdict() -> classify(), never a
+    # pre-resolved symbol. classify() must handle these unresolved forms
+    # itself, not merely a hand-resolved symbol handed to it by a test.
+    ("XAUUSD", "future"),
+    ("SPX", "index"),
+    ("BTC", "crypto"),
+    ("BTCUSD", "crypto"),
+])
+def test_classify_handles_unresolved_watchlist_aliases(symbol, expected):
+    assert classify(symbol) == expected
+
+
+@pytest.mark.parametrize("symbol", ["XAUUSD", "SPX", "BTC", "BTCUSD", "BTC-USD"])
+def test_unresolved_and_resolved_non_equity_forms_are_not_rs_eligible(symbol):
+    """The gate must never fire on these -- an unresolved alias reaching
+    is_rs_eligible() unhandled used to read as 'equity' and so was never
+    exempted, the exact bug this fix closes."""
+    assert is_rs_eligible(symbol) is False
