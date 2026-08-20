@@ -206,6 +206,7 @@ def test_entry_type_market_and_active_when_not_breakout():
 
     assert plan.entry_type == "market"
     assert plan.entry_price == scenario.entry
+    assert plan.status == PlanStatus.ACTIVE
 
 
 # v36 -- end-to-end wiring: real Level objects (with real touch-strength)
