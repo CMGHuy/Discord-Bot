@@ -9,7 +9,13 @@ def test_every_horizon_defines_an_rs_window():
 
 def test_rs_windows_increase_with_horizon_length():
     """A 2w setup asks 'strong lately?'; a 9m setup asks 'strong for months?'.
-    A laggard-over-6-months says little about a two-week swing."""
+    A laggard-over-6-months says little about a two-week swing.
+
+    `rs_window` has no live consumer in production -- the scan gate runs the
+    flat `RS_WINDOW=63` (edge/factors.py) for every horizon regardless of
+    this table. These assertions guard the table's shape only;
+    `scripts/backtest/measure_rs_gate_effect.py` consumes it for a
+    secondary/non-primary measurement arm."""
     windows = [HORIZONS[k]["rs_window"] for k in HORIZONS]
     assert windows == sorted(windows)
 

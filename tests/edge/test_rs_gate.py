@@ -18,12 +18,19 @@ def test_bullish_laggard_blocked():
 
 
 def test_bearish_laggard_passes():
-    """Symmetric: shorting a weak name is the mirror of buying a strong one."""
+    """The tri-state mechanism is symmetric: shorting a weak name runs the
+    same check, mirrored, as buying a strong one. (The shipped thresholds
+    make the gate behaviorally bearish-only -- RS_LEADER_PERCENTILE=0 --
+    but the mechanism under test here is not thresholds, it's the logic.)"""
     assert rs_verdict("AAPL", "bearish", 25.0, True)["status"] == "pass"
 
 
 def test_bearish_leader_blocked():
-    """Shorting a market leader is exactly as bad as buying a laggard."""
+    """Same tri-state mechanism, mirrored direction: shorting a market
+    leader fails the bearish laggard test the same way buying a laggard
+    fails the bullish leader test. This does not claim the two are equally
+    costly in practice -- TRAIN measured a bullish gate negative at every
+    threshold, which is why only the bearish arm ships active."""
     assert rs_verdict("AAPL", "bearish", 75.0, True)["status"] == "block"
 
 

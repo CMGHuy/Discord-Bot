@@ -765,6 +765,8 @@ async def _session_scan_tick():
                 fail_bits.append(f"{f['failed_min_confluence']} below min strategies")
             if f.get("failed_min_confidence", 0):
                 fail_bits.append(f"{f['failed_min_confidence']} below min confidence")
+            if f.get("rs_blocked", 0):
+                fail_bits.append(f"{f['rs_blocked']} blocked by RS gate")
             bullets = [
                 f"📡 {f['tickers']} tickers scanned",
                 f"🧮 {f['scenarios_found']} scenario(s) found",
