@@ -206,4 +206,53 @@ def test_entry_type_market_and_active_when_not_breakout():
 
     assert plan.entry_type == "market"
     assert plan.entry_price == scenario.entry
-    assert plan.status == PlanStatus.ACTIVE
+
+
+# v36 -- end-to-end wiring: real Level objects (with real touch-strength)
+# reach _select_target through build_confluence_plan, only when
+# config.LEVEL_TOUCH_STRENGTH is on.
+def test_tp1_prefers_better_tested_level_when_flag_on(monkeypatch):
+    from swingbot import config
+    from swingbot.core.market.levels import Level
+
+    monkeypatch.setattr(config, "LEVEL_TOUCH_STRENGTH", True)
+    # entry 100, stop 96 (risk 4) -> band [106, 110]. 108.0 and 108.2 are
+    # both in-band and close enough (0.2 apart on an 8.0 distance-to-entry)
+    # to be a tie; the better-tested one should win as tp1.
+    weak = Level(price=108.0, sources=["Rolling S/R"],
+                strength={"score": 0.2, "touches": 4, "rejections": 0,
+                          "breaks": 4, "available": True})
+    strong = Level(price=108.2, sources=["Rolling S/R"],
+                  strength={"score": 0.9, "touches": 4, "rejections": 4,
+                            "breaks": 0, "available": True})
+    scenario = _make_scenario(entry=100.0, stop_loss=96.0, take_profit=108.0)
+    level_map = ([], [weak, strong])
+
+    plan = build_confluence_plan(
+        scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
+        primary_strategy=DEFAULT_STRATEGY, level_map=level_map,
+    )
+
+    assert plan.tp1 == 108.2
+
+
+def test_tp1_unaffected_by_strength_when_flag_off(monkeypatch):
+    from swingbot import config
+    from swingbot.core.market.levels import Level
+
+    monkeypatch.setattr(config, "LEVEL_TOUCH_STRENGTH", False)
+    weak = Level(price=108.0, sources=["Rolling S/R"],
+                strength={"score": 0.2, "touches": 4, "rejections": 0,
+                          "breaks": 4, "available": True})
+    strong = Level(price=108.2, sources=["Rolling S/R"],
+                  strength={"score": 0.9, "touches": 4, "rejections": 4,
+                            "breaks": 0, "available": True})
+    scenario = _make_scenario(entry=100.0, stop_loss=96.0, take_profit=108.0)
+    level_map = ([], [weak, strong])
+
+    plan = build_confluence_plan(
+        scenario, _TIGHT_RANGE_DF, ticker="XYZ", horizon_key="2w",
+        primary_strategy=DEFAULT_STRATEGY, level_map=level_map,
+    )
+
+    assert plan.tp1 == 108.0

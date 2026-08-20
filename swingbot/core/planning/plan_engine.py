@@ -207,6 +207,102 @@ def select_structural_target(entry: float, stop_loss: float, is_bull: bool,
     return nearest
 
 
+# v36 -- how close two candidates' distance-from-entry must be to count as
+# "otherwise comparable" for the strength tiebreak below. Expressed as a
+# percentage of the nearest qualifying candidate's own distance (not of
+# price), since it's the entry->target leg -- the thing that actually
+# determines payoff -- that two targets need to have in common to be a real
+# tie. 5% comfortably covers this task's own fixtures (a $0.2 gap on a $10
+# distance-to-entry, ~2%) while still letting a candidate that's genuinely,
+# materially nearer (e.g. 10% closer) win outright on distance alone, per
+# the "tiebreaker, not override" contract.
+TARGET_TIE_TOLERANCE_PCT = 5.0
+
+
+def _select_target(candidate_levels: list, entry: float, *,
+                   stop_loss: float | None = None, is_bull: bool | None = None,
+                   min_rr: float | None = None, max_rr: float | None = None):
+    """Level-aware counterpart to select_structural_target: same nearest-
+    qualifying-beyond-floor logic, but works on Level objects (see
+    swingbot.core.market.levels.Level) so it can additionally use
+    Level.strength as a TIEBREAKER -- never an override -- among candidates
+    whose distance from entry is otherwise comparable (see
+    TARGET_TIE_TOLERANCE_PCT). Distance stays the primary criterion exactly
+    as in select_structural_target; this only decides among candidates that
+    function already judges to be a near-wash on distance.
+
+    Only meaningful where real Level objects with real touch-strength exist
+    -- currently just the confluence path (build_confluence_plan), gated
+    there behind config.LEVEL_TOUCH_STRENGTH. Strength is consulted only
+    when config.LEVEL_TOUCH_STRENGTH is on AND every tied candidate was
+    actually graded (Level.strength["available"] is True): an ungraded
+    level (no touch history yet, strength["available"] is False) must be
+    neither rewarded nor punished relative to a graded one, so if any tied
+    candidate lacks real grading, the tiebreak is skipped entirely and
+    distance alone decides -- which is exactly select_structural_target's
+    behavior, so an ungraded level still wins on its own merits (typically
+    being nearer, since it's the tied group's nearest that anchors it).
+
+    stop_loss/is_bull/min_rr/max_rr are optional so target-selection unit
+    tests can exercise the tiebreak in isolation without an RR floor/cap
+    getting in the way; build_confluence_plan always supplies all four, so
+    a live/backtest plan is filtered by RR exactly like
+    select_structural_target. When omitted: is_bull is inferred from
+    whether the candidates sit above (bullish target) or below (bearish
+    target) entry on average, and no RR floor/cap is applied -- every
+    candidate on the inferred side qualifies.
+    """
+    if not candidate_levels:
+        return None
+    if is_bull is None:
+        is_bull = (sum(lv.price for lv in candidate_levels) / len(candidate_levels)) > entry
+
+    beyond = [lv for lv in candidate_levels
+              if lv.price and (lv.price > entry if is_bull else lv.price < entry)]
+    if not beyond:
+        return None
+
+    eps = 1e-9 * max(1.0, abs(entry))
+    risk = abs(entry - stop_loss) if stop_loss is not None else None
+    has_rr = risk is not None and min_rr is not None and max_rr is not None
+
+    if has_rr:
+        # Same reject conditions as select_structural_target -- an invalid
+        # risk/RR pairing means "no trade", not "ignore the floor".
+        if risk <= 0 or min_rr <= 0:
+            return None
+        if max_rr < min_rr:
+            raise ValueError(f"max_rr {max_rr} < min_rr {min_rr}")
+        floor_dist = risk * min_rr
+        qualifying = [lv for lv in beyond if abs(lv.price - entry) >= floor_dist - eps]
+    else:
+        qualifying = beyond
+    if not qualifying:
+        return None
+
+    nearest_dist = min(abs(lv.price - entry) for lv in qualifying)
+
+    if has_rr:
+        cap_dist = risk * max_rr
+        if nearest_dist > cap_dist + eps:
+            # Same "synthetic price, not a real level" behavior as
+            # select_structural_target -- no real candidate to tiebreak on.
+            synthetic_price = entry + cap_dist if is_bull else entry - cap_dist
+            return levels.Level(price=synthetic_price, sources=[])
+
+    tolerance = nearest_dist * TARGET_TIE_TOLERANCE_PCT / 100.0
+    tied = [lv for lv in qualifying
+            if abs(lv.price - entry) - nearest_dist <= tolerance + eps]
+
+    def _is_graded(lv) -> bool:
+        return bool(lv.strength) and lv.strength.get("available") is True
+
+    if config.LEVEL_TOUCH_STRENGTH and len(tied) > 1 and all(_is_graded(lv) for lv in tied):
+        return max(tied, key=lambda lv: (lv.strength["score"], -abs(lv.price - entry)))
+
+    return min(qualifying, key=lambda lv: abs(lv.price - entry))
+
+
 # ---------------------------------------------------------------------------
 # Sizing builders — extracted verbatim from backtest._trade_plan_at so the
 # backtest, live signals, and the plan manager all price identically.
@@ -917,13 +1013,25 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
 
-    if level_map is not None:
-        candidates = levels.target_candidates(*level_map, scenario.direction)
+    if level_map is not None and config.LEVEL_TOUCH_STRENGTH:
+        # v36: real Level objects (with real touch-strength) exist here and
+        # only here -- use the strength-aware selector so a better-tested
+        # level can win a tie among otherwise-comparable candidates. Flag
+        # off must stay byte-for-byte identical to the branch below, so this
+        # path is entered ONLY when the flag is on.
+        supports, resistances = level_map
+        side = resistances if scenario.direction == "bullish" else supports
+        picked = _select_target(side, entry, stop_loss=scenario.stop_loss, is_bull=is_bull,
+                                min_rr=config.MIN_RISK_REWARD_RATIO,
+                                max_rr=config.MAX_RISK_REWARD_RATIO)
+        tp1 = picked.price if picked is not None else None
     else:
-        candidates = [scenario.take_profit] if scenario.take_profit is not None else []
-
-    tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
-                                   config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
+        if level_map is not None:
+            candidates = levels.target_candidates(*level_map, scenario.direction)
+        else:
+            candidates = [scenario.take_profit] if scenario.take_profit is not None else []
+        tp1 = select_structural_target(entry, scenario.stop_loss, is_bull, candidates,
+                                       config.MIN_RISK_REWARD_RATIO, config.MAX_RISK_REWARD_RATIO)
     if tp1 is None:
         return None
 
