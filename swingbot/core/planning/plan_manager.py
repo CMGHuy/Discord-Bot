@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        chandelier_stop, pending_expired,
-                                       pending_invalidated, record_transition)
+                                       pending_invalidated, record_transition,
+                                       runner_floor)
 from swingbot.core.planning.plan_store import PlanStore
 
 log = logging.getLogger("swing-bot.plan_manager")
@@ -78,7 +79,9 @@ def pyramid_add_fraction(plan) -> float:
 
 def maybe_pyramid(plan, price: float) -> dict | None:
     """Add size at +1R with the add's stop at the ORIGINAL entry. Only from
-    PARTIAL (TP1 banked, remainder stopped at breakeven).
+    PARTIAL (TP1 banked, remainder stopped at the v39 runner floor -- the
+    derivation below still assumes plain breakeven, which is now a strictly
+    conservative floor rather than the exact one, so the bound holds).
 
     A PURE DECISION, and a suggestion only -- the bot never sizes real
     money. 1R is taken from `abs(entry_price - stop_loss)`: TradePlanV2 has
@@ -269,7 +272,7 @@ class PlanManager:
             leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
                    "r": r1, "reason": "tp1"}
             plan.legs_realized.append(leg)
-            plan.working_stop = entry                     # runner floor = BE
+            plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
                               at=self._now())
             self.store.update(plan)
@@ -290,7 +293,12 @@ class PlanManager:
         sign = 1 if is_bull else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
-        stop = plan.working_stop if plan.working_stop is not None else entry
+        # A PARTIAL plan always has working_stop set (the TP1 branch above
+        # writes it). The fallback only fires for a plan persisted to
+        # data/plans.json before v39; using the floor there tightens those
+        # legacy runners too, and keeps the reason label below correct.
+        stop = (plan.working_stop if plan.working_stop is not None
+                else runner_floor(entry, plan.tp1))
 
         # Pyramiding (edge E38), flag-gated OFF and at most once per plan.
         # Emits a SUGGESTION only: no leg is realized, no stop is moved, no
@@ -306,7 +314,11 @@ class PlanManager:
 
         hit_stop = price <= stop if is_bull else price >= stop
         if hit_stop:
-            reason = "tp1_runner_be" if stop == entry else "tp1_runner_trail"
+            # v39: "tp1_runner_be" now means "closed at the initial post-TP1
+            # floor", not literally at entry. The string is unchanged on
+            # purpose -- see the same note in plan_engine._scale_out_exit_walk.
+            reason = ("tp1_runner_be" if stop == runner_floor(entry, plan.tp1)
+                      else "tp1_runner_trail")
             return self._close_runner(plan, price, reason, risk, sign)
 
         if plan.tp2 is not None:
@@ -323,7 +335,8 @@ class PlanManager:
                 atr_val = float(self.atr_fn(plan.ticker))
                 trail = chandelier_stop(extreme, atr_val, plan.trail_atr_mult,
                                         plan.direction)
-                floor = plan.working_stop if plan.working_stop is not None else entry
+                floor = (plan.working_stop if plan.working_stop is not None
+                         else runner_floor(entry, plan.tp1))
                 new_stop = max(floor, trail) if is_bull else min(floor, trail)
                 if new_stop != plan.working_stop:
                     plan.working_stop = new_stop
@@ -390,7 +403,7 @@ class PlanManager:
             leg = {"fraction": plan.tp1_fraction, "exit_price": fill,
                    "r": r1, "reason": "tp1"}
             plan.legs_realized.append(leg)
-            plan.working_stop = entry
+            plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
                               at=self._now())
             self.store.update(plan)
@@ -402,12 +415,16 @@ class PlanManager:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         risk = abs(plan.entry_price - plan.stop_loss)
-        stop = plan.working_stop if plan.working_stop is not None else plan.entry_price
+        stop = (plan.working_stop if plan.working_stop is not None
+                else runner_floor(plan.entry_price, plan.tp1))
 
         hit_stop = bar_low <= stop if is_bull else bar_high >= stop
         if hit_stop:
             fill = gap_stop_fill(bar_open, stop, plan.direction)
-            reason = "tp1_runner_be" if stop == plan.entry_price else "tp1_runner_trail"
+            # v39: "tp1_runner_be" == "closed at the initial post-TP1 floor".
+            reason = ("tp1_runner_be"
+                      if stop == runner_floor(plan.entry_price, plan.tp1)
+                      else "tp1_runner_trail")
             return self._close_runner(plan, fill, reason, risk, sign)
 
         if plan.tp2 is not None:

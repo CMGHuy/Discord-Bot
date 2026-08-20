@@ -30,6 +30,10 @@ STRUCTURE_BUFFER_ATR = 0.25   # cushion beyond swing high/low, in ATR units
 SR_VOLUME_STRENGTH_CEILING = 3.0
 TRAIL_ATR_MULT = 2.5          # chandelier default; finalized by the Task 30 TRAIN grid
 TP1_FRACTION = 0.5            # fixed by spec §5
+RUNNER_FLOOR_FRACTION = 2.0 / 3.0   # v39: the runner's stop the instant TP1 fires locks
+                                    # in this fraction of the entry->TP1 move (was 0.0,
+                                    # i.e. plain breakeven). Spec:
+                                    # docs/superpowers/specs/2026-08-20-v39-runner-floor-protection-design.md
 DEFAULT_EXPIRY_BARS = 5
 
 # Per-strategy exit-v2 overrides chosen by the Task 30 TRAIN grid under the
@@ -1180,13 +1184,34 @@ def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
     return extreme_close_since_tp1 + mult * atr_value
 
 
+def runner_floor(entry: float, tp1: float) -> float:
+    """The runner leg's stop the instant TP1 fires (v39).
+
+    ``entry + RUNNER_FLOOR_FRACTION * (tp1 - entry)`` -- 2/3 of the
+    entry->TP1 move locked in, so a reversal right after TP1 gives back at
+    most a third of that leg's gain instead of all of it. Replaces the plain
+    breakeven (``entry``) floor the scale-out model shipped with.
+
+    One formula, both directions: ``tp1 - entry`` is already signed per
+    direction (positive for a bullish plan, negative for a bearish one), so
+    no ``is_bull`` branch is needed at any call site.
+
+    Single source of truth. ``plan_manager.py`` imports this rather than
+    re-declaring the expression, exactly as it already does for
+    ``chandelier_stop`` -- the live poll path, the overnight bar-check path
+    and this module's backtest walk must never drift apart.
+    """
+    return entry + RUNNER_FLOOR_FRACTION * (tp1 - entry)
+
+
 def _scale_out_exit_walk(
     df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int,
 ) -> ExitResult:
     """Hybrid scale-out walk (spec Sec5). Phase 1 (pre-TP1) is byte-identical
     to _single_leg_exit_walk; a stop/scratch/timeout before TP1 returns the
     same single full-fraction leg. TP1 touch banks tp1_fraction at tp1 and
-    hands the rest to the runner: stop starts at entry (BE) and ratchets
+    hands the rest to the runner: stop starts at the v39 runner floor
+    (entry + 2/3 x (tp1 - entry), see runner_floor) and ratchets
     toward profit via a chandelier trail (Task 26) as the runner rides, with
     an optional TP2 target (Task 25). Task 27 still owes runner-timeout
     test coverage."""
@@ -1249,26 +1274,36 @@ def _scale_out_exit_walk(
 
     leg1 = {"fraction": frac1, "exit_price": tp1, "r": round(rr, 3), "reason": "tp1"}
 
-    # ---- phase 2: runner. Stop starts at entry (BE); protects bars AFTER
-    # the TP1 bar (same "subsequent bars only" convention as the BE move).
-    # Task 25 added the TP2 branch; Task 26 adds the chandelier ratchet: the
-    # stop trails the extreme close since TP1 by trail_atr_mult x ATR(14),
-    # only ever moving toward profit (never back down toward BE).
-    runner_stop = entry_price
+    # ---- phase 2: runner. Stop starts at the v39 runner floor (entry +
+    # RUNNER_FLOOR_FRACTION x (tp1 - entry)), NOT at plain breakeven; it
+    # protects bars AFTER the TP1 bar (same "subsequent bars only"
+    # convention as the BE move). Task 25 added the TP2 branch; Task 26 adds
+    # the chandelier ratchet: the stop trails the extreme close since TP1 by
+    # trail_atr_mult x ATR(14), only ever moving toward profit (never back
+    # down toward the floor).
+    runner_stop = runner_floor(entry_price, tp1)
     runner_exit = runner_reason = None
     exit_index = None
     tp2 = plan.tp2
     extreme_close = float(close[tp1_index])
     atr_series = atr_indicator(df, 14)
     checked_stop = runner_stop   # the level checked against the CURRENT bar; stays
-                                 # at the initial BE value if the loop below never runs
+                                 # at the initial runner-floor value if the loop
+                                 # below never runs
 
     for j in range(tp1_index + 1, end + 1):
         checked_stop = runner_stop   # snapshot BEFORE this bar's own ratchet
         hi, lo = float(high[j]), float(low[j])
         if (lo <= runner_stop) if is_bull else (hi >= runner_stop):
             runner_exit, exit_index = runner_stop, j
-            runner_reason = "runner_be" if runner_stop == entry_price else "runner_trail"
+            # v39: "runner_be" now means "closed at its initial post-TP1
+            # floor", not literally at entry. The STRING is deliberately
+            # unchanged -- ~30 files pattern-match it, including frozen
+            # result JSONs under docs/superpowers/results/ and
+            # performance.py's reason.startswith("tp1_") classifier.
+            runner_reason = ("runner_be"
+                             if runner_stop == runner_floor(entry_price, tp1)
+                             else "runner_trail")
             break
         if tp2 is not None and ((hi >= tp2) if is_bull else (lo <= tp2)):
             runner_exit, exit_index, runner_reason = tp2, j, "runner_tp2"
@@ -1323,8 +1358,9 @@ def simulate_exit(
     move), or timeout -- extracted verbatim from backtest.py's run_backtest
     loop. ``scale_out=True`` walks the hybrid scale-out exit (Task 24+):
     pre-TP1 phase is identical to the single-leg walk; TP1 touch banks
-    tp1_fraction and hands the rest to a runner whose stop starts at
-    break-even, ratchets via a chandelier ATR trail (Task 26), and can also
+    tp1_fraction and hands the rest to a runner whose stop starts at the
+    v39 runner floor (runner_floor: entry + 2/3 of the entry->TP1 move),
+    ratchets via a chandelier ATR trail (Task 26), and can also
     exit at an optional TP2 (Task 25).
     """
     # Resolved eagerly per the interface contract -- both the single-leg

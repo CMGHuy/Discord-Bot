@@ -64,6 +64,7 @@ def test_tp1_touch_banks_partial_and_moves_to_partial(tmp_path):
     assert d["r"] == (110.5 - 100.0) / 5.0
     p = store.get("p1")
     assert p.status == PlanStatus.PARTIAL
-    assert p.working_stop == 100.0                   # runner starts at BE
+    assert p.working_stop == pytest.approx(106.66666666666667)   # v39 runner floor:
+                                                                 # 100 + (2/3)*(110-100)
     assert p.legs_realized == [{"fraction": 0.5, "exit_price": 110.5,
                                 "r": d["r"], "reason": "tp1"}]
