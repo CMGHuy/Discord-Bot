@@ -1,6 +1,6 @@
 # v34 TRAIN measurement and VALIDATION pre-registration
 
-Task 7 of `docs/superpowers/plans/2026-08-16-v34-relative-strength-gate.md`.
+Task 7 of `docs/superpowers/plans/implemented/2026-08-16-v34-relative-strength-gate.md`.
 Written before Task 8's VALIDATION run and **not to be revised after seeing its
 result** — the same discipline
 `docs/superpowers/plans/implemented/v32-train-preregistration.md` and
@@ -497,3 +497,140 @@ sampled pairs, 0 mismatches). The second run additionally wrote
   monotone dose-response across five thresholds, and one separated interval —
   which is a better hand than either predecessor held, and still not a
   prediction of a PASS.
+
+---
+
+# The VALIDATION result — appended after the shot, nothing above revised
+
+Task 8 ran the pre-registered command **once**, on 2026-08-20:
+
+```
+python scripts/backtest/measure_rs_gate_effect.py --validation \
+    --cache-dir <main checkout>/data/backtest_cache \
+    --json data/v34_validation.json --rows-out data/v34_validation_rows.json
+```
+
+Nothing above this line was edited before or after reading the number. This
+section is an appendix, in the same shape v33's pre-registration recorded its
+own FAIL (`v33-train-preregistration.md`, commit `0d2fdb4`).
+
+**Population: 2804 VALIDATION scenarios**, 2024-01-01..2025-12-31, 75 tickers,
+9/9 sector ETFs. 2564 bullish / 240 bearish, 86 RS-exempt, 2 synthetic-50, 508
+without a sector ETF. Ungated **48.50% [46.3, 50.7]** (967 / 1994), E[R]
+**+0.403**. The RS-panel guard passed as on both TRAIN runs (204 sampled
+(symbol, bar) pairs, 0 mismatches). **2804 reproduces v33's published
+VALIDATION scenario count to the row**, the same independent cross-check the
+TRAIN population gave against v33's 4337.
+
+## Primary metric — **PASS**
+
+`combined_w63.bearish_only_whole_population["25"]`:
+
+| | scenarios | evaluated | wins | WR | Wilson | E[R] |
+|---|---|---|---|---|---|---|
+| before | 2804 | 1994 | 967 | **48.4955%** | [46.31, 50.69] | +0.4034 |
+| after | 2690 | 1931 | 959 | **49.6634%** | [47.44, 51.89] | +0.4342 |
+
+- `after.wr > before.wr` strictly — **met** (0.4966338684619368 > 0.48495486459378134).
+- `volume_loss_pct` ≤ 30.0 — **met** (4.065620542082739, 114 of 2804 dropped).
+
+**Both conditions met: PASS.** ΔWR **+1.17pp**, ΔE[R] **+0.031**.
+`RS_GATE` flips to `default="true"`.
+
+## The four mandatory reporting conditions
+
+**1. Whole-population Wilson intervals: NOT separated** ([46.31, 50.69] →
+[47.44, 51.89]). Same as TRAIN. Per this document's own rule, the gate is
+written up in `docs/strategy.md` as a **small, not statistically demonstrated**
+improvement, never as a proven edge.
+
+**2. Bearish arm:** 240 / 173 / 41 = **23.70% [17.98, 30.56]** → 126 / 110 / 33
+= **30.00% [22.23, 39.12]**, **+6.30pp**, arm cut 47.5%, **NOT separated**.
+
+TRAIN's one separated result lived here (32.09% → 50.00%, disjoint). VALIDATION
+reproduces the **sign at a smaller magnitude and loses the separation** — on a
+bearish population of 240 versus TRAIN's 662, i.e. roughly a third of the
+power. The discrimination check does reproduce and is the sharper statement:
+kept (RS ≤ 25) **30.28% [22.44, 39.45]** on 109 evaluated versus dropped
+(RS > 25) **12.70% [6.58, 23.11]** on 63 evaluated.
+
+**3. E[R] rose on both readings** — whole population +0.4034 → +0.4342, bearish
+arm −0.2748 → −0.2294. No "win rate up, expectancy down" caveat is owed.
+
+The bearish arm's expectancy nevertheless stays **negative after gating**,
+where TRAIN had it at +0.431. The gate improves the pooled numbers by removing
+the worst shorts, not by making shorts profitable in this window.
+
+**4. Strategy composition — the TRAIN caveat reproduces and worsens slightly.**
+Of 239 eligible bearish scenarios:
+
+| Strategy | n | share | WR off | kept | WR on |
+|---|---|---|---|---|---|
+| **RSI Divergence** | 180 | **75.3%** | 23.1% [16.7, 31.0] | 110 | 30.6% [22.4, 40.3] |
+| Break & Retest | 31 | 13.0% | 23.8% [10.6, 45.1] | 10 | 28.6% [8.2, 64.1] |
+| Elliott Wave | 15 | 6.3% | 18.2% [5.1, 47.7] | 4 | 33.3% [6.1, 79.2] |
+| EMA Crossover | 13 | 5.4% | 40.0% [16.8, 68.7] | 1 | 0.0% [0.0, 79.3] |
+
+TRAIN was 72.5% RSI Divergence; VALIDATION is 75.3%. **This result is
+substantially a statement about RSI Divergence shorts** and is not to be
+described as strategy-neutral. EMA Crossover's reversal rests on one kept
+scenario.
+
+## Reported, outside the pass bar
+
+**By year** (eligible bearish), same sign twice: 2024 n=104, 19.12% → 25.53%
+(62 kept); 2025 n=135, 26.92% → 33.87% (63 kept).
+
+**Per horizon**, all ten positive, cuts 2.91%–5.40%:
+
+| Horizon | WR before | WR after | cut | ΔWR |
+|---|---|---|---|---|
+| `2w` | 44.26% | 45.09% | 5.40% | +0.83pp |
+| `4w` | 46.24% | 47.73% | 4.61% | +1.49pp |
+| `2m` | 47.76% | 48.74% | 3.46% | +0.98pp |
+| `3m` | 47.50% | 48.31% | 2.91% | +0.81pp |
+| `4m` | 49.12% | 50.60% | 4.20% | +1.48pp |
+| `5m` | 50.00% | 51.59% | 5.32% | +1.59pp |
+| `6m` | 48.51% | 49.23% | 4.21% | +0.72pp |
+| `7m` | 52.20% | 53.67% | 3.59% | +1.47pp |
+| `8m` | 52.26% | 53.29% | 3.35% | +1.03pp |
+| `9m` | 52.60% | 53.64% | 3.48% | +1.04pp |
+| **ALL** | **48.50%** | **49.66%** | **4.07%** | **+1.17pp** |
+
+**The dose-response reproduces.** Whole-population ΔWR at laggard
+45 / 40 / 35 / 30 / 25 is +0.39 / +0.71 / +0.76 / +1.09 / **+1.17pp** — monotone
+in the same direction as TRAIN, with the frozen threshold at the top of the
+gradient. That is evidence, not selection: 25 was frozen before this window was
+touched.
+
+**Sector RS again beats ticker-only RS** at the shipped threshold: +1.17pp for
+a 4.07% cut on `rs_combined`, versus +0.74pp for a 1.68% cut on the bare
+`rs_percentile`. Step 3's decision to keep Task 5's wiring holds on VALIDATION
+as it did on TRAIN.
+
+**Rotation profile of the VALIDATION window** (deliberately not examined before
+the shot): **6 leader changes over 8 quarters, 6 distinct leaders** (XLE, XLF,
+XLK, XLU, XLV, XLY). VALIDATION spans rotations too, so the procyclicality
+objection does not apply to this window either.
+
+## What was and was not done
+
+- `RS_GATE` flips to **`default="true"`** in `swingbot/config.py`, and
+  `.env.example` with it. `RS_LEADER_PERCENTILE=0` and
+  `RS_LAGGARD_PERCENTILE=25` are unchanged — the shot was spent on those exact
+  values and they stay frozen.
+- `docs/strategy.md` documents the gate as it actually ships: bearish-only, on
+  `rs_combined`, with the overlapping-interval and RSI-Divergence-concentration
+  caveats stated in the section itself rather than left in this file.
+- **The per-horizon `rs_window` key stays dormant and is documented as a known
+  gap**, not as a feature. It was never under test.
+- The command was run **once**. No re-run, no threshold change, no window or
+  cache-path change.
+
+**What a future spec may legitimately ask** (none of it licensed here, all of
+it needing its own pre-registration): whether wiring `HORIZONS[hk]["rs_window"]`
+in helps once it is measured on its own terms rather than as a secondary arm;
+whether the bearish finding holds outside RSI Divergence, on a population where
+that strategy is not three quarters of the sample; and whether a bullish arm
+becomes viable under a benchmark other than SPY. What it may **not** do is
+re-read this same measurement for a different verdict.
