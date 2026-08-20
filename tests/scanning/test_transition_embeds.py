@@ -25,11 +25,15 @@ def test_be_moved_embed():
     assert any("100" in (f.value or "") for f in e.fields)
 
 
-def test_tp1_partial_embed_mentions_runner():
+def test_tp1_partial_embed_mentions_runner_and_its_floor():
     e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0})
     assert "💰" in e.title
     joined = " ".join(f.value or "" for f in e.fields)
-    assert "runner" in joined.lower() and "break-even" in joined.lower()
+    assert "runner" in joined.lower()
+    # v39: the runner's stop is no longer break-even, so the copy must not
+    # say so -- it names the fraction of the TP1 move the floor protects.
+    assert "2/3 of the tp1 move" in joined.lower()
+    assert "break-even" not in joined.lower()
 
 
 def test_close_reasons_have_distinct_copy():

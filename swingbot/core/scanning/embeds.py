@@ -999,7 +999,7 @@ _EVENT_STYLE = {
 _CLOSE_STYLE = {
     "loss":            ("🔴 Stopped out — {ticker}", discord.Color.red()),
     "scratch":         ("⚪ Scratched at break-even — {ticker}", discord.Color.light_grey()),
-    "tp1_runner_be":   ("🟢 Win — runner closed at break-even — {ticker}", discord.Color.green()),
+    "tp1_runner_be":   ("🟢 Win — runner closed at its floor — {ticker}", discord.Color.green()),
     "tp1_runner_tp2":  ("🟢🟢 Win — runner hit TP2 — {ticker}", discord.Color.green()),
     "tp1_runner_trail": ("🟢 Win — trail locked profit — {ticker}", discord.Color.green()),
 }
@@ -1029,7 +1029,8 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
                         value=f"{d['fraction']:.0%} @ {d['exit_price']:.2f} "
                               f"({d['r']:+.2f}R)")
         embed.add_field(name="Runner",
-                        value="runner active, stop at break-even", inline=False)
+                        value="runner active, stop protecting 2/3 of the TP1 move",
+                        inline=False)
     elif event.transition == "closed":
         embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
     embed.set_footer(text=f"v2 plan {plan.plan_id[:8]}")
