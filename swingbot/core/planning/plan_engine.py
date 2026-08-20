@@ -356,13 +356,17 @@ def _atr_plan(entry, atr_val, direction, horizon_key, strategy, stop_mult=None,
 # _trade_plan_at. Anything that touches stop/target must be shared by both or
 # it is unmeasurable by construction.
 
-def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
+def _lifecycle_levels(df, index, horizon_key, entry, level_map=None, ticker=None):
     """Classified levels at `index`, from the caller's level_map when it has
     one (live already builds it) or built on the spot (the backtest does not).
 
     The backtest branch slices df to `index` BEFORE building levels: `df`
     there runs to the end of history, so an unsliced build_level_map would
     draw levels out of bars the trade cannot have seen.
+
+    `ticker` is only used to key the v36 touch-strength cache when the
+    on-the-spot branch below runs -- when `level_map` is supplied, grading
+    (if any) already happened wherever that map was built.
     """
     from swingbot.core.market import levels_lifecycle
 
@@ -373,14 +377,15 @@ def _lifecycle_levels(df, index, horizon_key, entry, level_map=None):
         from swingbot.core.market import levels as levels_mod
         hist = df.iloc[:index + 1]
         supports, resistances = levels_mod.build_level_map(
-            hist, HORIZONS[horizon_key], entry)
+            hist, HORIZONS[horizon_key], entry, ticker=ticker, horizon_key=horizon_key)
         raw = list(supports) + list(resistances)
 
     return levels_lifecycle.classify_levels(df, index, raw, horizon_key=horizon_key)
 
 
 def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
-                          strategy, horizon_key, level_map=None, candidate_levels=None):
+                          strategy, horizon_key, level_map=None, candidate_levels=None,
+                          ticker=None):
     """Re-price `stop` against what price has actually done to nearby levels --
     move it beyond a level that has been *tested* rather than leaving it
     inside the noise a fresh level implies. (The old "target realism"
@@ -409,7 +414,7 @@ def apply_level_lifecycle(df, index, *, entry, stop, tp1, atr_val, direction,
         return stop, tp1, {}
 
     try:
-        levels = _lifecycle_levels(df, index, horizon_key, entry, level_map)
+        levels = _lifecycle_levels(df, index, horizon_key, entry, level_map, ticker=ticker)
     except Exception:
         log.debug("level lifecycle unavailable at %s/%s", strategy, horizon_key, exc_info=True)
         return stop, tp1, {}
@@ -786,7 +791,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
     stop, tp1, _lifecycle_meta = apply_level_lifecycle(
         df, index, entry=close, stop=stop, tp1=tp1, atr_val=atr_val,
         direction=direction, strategy=strategy, horizon_key=horizon_key,
-        level_map=level_map, candidate_levels=candidates)
+        level_map=level_map, candidate_levels=candidates, ticker=ticker)
 
     if abs(close - stop) <= 0:
         return None

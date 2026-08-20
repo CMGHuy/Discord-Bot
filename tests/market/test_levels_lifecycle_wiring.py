@@ -308,9 +308,9 @@ def test_levels_are_built_without_lookahead_in_the_backtest_branch(monkeypatch, 
     from swingbot.core.market import levels as levels_mod
     real = levels_mod.build_level_map
 
-    def spy(hist, h, price):
+    def spy(hist, h, price, **kwargs):
         seen["bars"] = len(hist)
-        return real(hist, h, price)
+        return real(hist, h, price, **kwargs)
 
     monkeypatch.setattr(levels_mod, "build_level_map", spy)
     i = 200

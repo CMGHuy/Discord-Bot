@@ -123,9 +123,13 @@ def _vectorized_entries(df: pd.DataFrame, strategy: str, horizon_key: str):
     return entries_for(strategy, df, horizon_key)
 
 
-def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None):
+def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_high_series=None, swing_low_series=None, volume_ratio_series=None, entry_levels=None, ticker=None):
     """Sizing lives in plan_engine (single source of truth shared with live
     plans); this wrapper only picks the branch from the precomputed series.
+
+    `ticker` (v36) only matters for the level touch-strength cache key inside
+    apply_level_lifecycle's on-the-spot build_level_map call -- every caller
+    here evaluates one ticker at a time, so it is safe to default to None.
     Parity with the original inline implementation is now narrower than the
     module docstring below used to claim (v31): tests/test_plan_engine_sizing.py
     locks STOP parity only -- target pricing diverged from the pre-extraction
@@ -179,7 +183,7 @@ def _trade_plan_at(df, i, direction, strategy, horizon_key, atr_series, swing_hi
     stop_loss, take_profit, _ = apply_level_lifecycle(
         df, i, entry=entry, stop=stop_loss, tp1=take_profit, atr_val=atr_val,
         direction=direction, strategy=strategy, horizon_key=horizon_key,
-        candidate_levels=candidates)
+        candidate_levels=candidates, ticker=ticker)
 
     return entry, stop_loss, take_profit
 
@@ -276,7 +280,8 @@ def run_backtest(
         direction = "bullish" if bullish_entries.values[i] else "bearish"
         plan_at = _trade_plan_at(
             df, i, direction, strategy, horizon_key, atr_series,
-            swing_high_series, swing_low_series, volume_ratio_series, entry_levels
+            swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
+            ticker=ticker,
         )
         if plan_at is None:
             continue            # no qualifying target -> not a trade
@@ -292,7 +297,8 @@ def run_backtest(
                 if cache_key != _lm_cache_key:
                     from swingbot.core.market.levels import build_level_map
                     _lm_supports, _lm_resistances = build_level_map(
-                        df.iloc[:i + 1], HORIZONS[horizon_key], entry)
+                        df.iloc[:i + 1], HORIZONS[horizon_key], entry,
+                        ticker=ticker, horizon_key=horizon_key)
                     _lm_cache_key = cache_key
                 tp2 = select_tp2(
                     [lv.price for lv in _lm_resistances],

@@ -982,7 +982,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             continue
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
-        supports, resistances = levels.build_level_map(df, h, current_price)
+        supports, resistances = levels.build_level_map(df, h, current_price, ticker=ticker, horizon_key=horizon_key)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
         floor_pct = levels.atr_floor_pct(df, current_price, h)

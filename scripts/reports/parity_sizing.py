@@ -145,6 +145,7 @@ def main() -> int:
                         new_plan = backtest._trade_plan_at(
                             df, i, direction, strategy, horizon_key, atr_series,
                             swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
+                            ticker=ticker,
                         )
                     except Exception as e:
                         print(f"    ! {strategy}/{horizon_key} bar {i}: {e}")

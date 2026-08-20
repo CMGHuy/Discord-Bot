@@ -71,6 +71,7 @@ def _plan_from_unrounded(df, i, t, ticker, strategy, horizon_key, series):
     entry, stop_loss, take_profit = _trade_plan_at(
         df, i, t.direction, strategy, horizon_key, atr_series,
         swing_high_series, swing_low_series, volume_ratio_series, entry_levels,
+        ticker=ticker,
     )
     return TradePlanV2(
         plan_id="parity", ticker=ticker, created_at=t.entry_date,

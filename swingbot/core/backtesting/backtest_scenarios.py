@@ -56,7 +56,8 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
         return cache[key]
     window = df.iloc[:bar_index + 1]
     price = float(window["Close"].iloc[-1])
-    result = levels.build_level_map(window, HORIZONS[horizon_key], price)
+    result = levels.build_level_map(window, HORIZONS[horizon_key], price,
+                                    ticker=ticker, horizon_key=horizon_key)
     cache[key] = result
     return result
 

@@ -26,9 +26,9 @@ def test_cache_hits_within_5_bar_bucket(monkeypatch):
     """Cache should return the same result for bar indices in the same 5-bar bucket."""
     calls = {"n": 0}
     real = bs.levels.build_level_map
-    def counting(df, h, price):
+    def counting(df, h, price, **kwargs):
         calls["n"] += 1
-        return real(df, h, price)
+        return real(df, h, price, **kwargs)
     monkeypatch.setattr(bs.levels, "build_level_map", counting)
 
     df = make_ohlcv([100 + i * 0.3 for i in range(120)])
