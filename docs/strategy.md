@@ -42,6 +42,14 @@ indicator. Every scan gathers candidate levels from:
   Turtle Trader breakout channel)
 - **Classic floor trader pivot points** (PP/R1/S1/R2/S2, projected off
   the prior session's range)
+- **Anchored VWAP** (volume-weighted average price run from a specific
+  bar, not a rolling window) — anchored to the bars that actually mean
+  something: up to 2 recent swing lows, up to 2 recent swing highs, the
+  single highest-volume bar in the lookback (a capitulation/breakout day
+  the market remembers), and the 52-week high/low. Each anchor is
+  labelled by the event it represents — "Anchored VWAP (swing low)",
+  "Anchored VWAP (52w high)", etc. — not by a bar index, so an alert says
+  what the level actually is.
 
 Levels from different methods that land close together (within 1.5% of
 each other) get merged into one, more-confirmed level — a Fibonacci
@@ -49,6 +57,28 @@ each other) get merged into one, more-confirmed level — a Fibonacci
 stronger level than either alone. **Confidence is built directly from
 this**: how many independent methods agree on the target is the single
 biggest factor in how confident an alert is (see below).
+
+**All anchored-VWAP anchors count as one family.** A ticker can easily
+carry 4-6 AVWAP anchors at once (two swing lows, two swing highs, a
+volume spike, both 52-week extremes), and several of them landing near
+the same price is common, not rare. If each labelled anchor counted as
+its own confirming method, confluence would inflate for free — a ticker
+with a busy pivot history would look more confirmed than one with a
+quiet one, for reasons that have nothing to do with the level itself.
+So every "Anchored VWAP (...)" label folds back to the single "AVWAP"
+strategy family for confluence-counting purposes: however many anchors
+cluster on a level, it contributes at most one method to that level's
+count, the same as EMA or Fibonacci contributes one regardless of how
+many of their own lines land there.
+
+Anchored VWAP is on by default (`AVWAP_LEVELS_ENABLED`) as of 2026-08,
+but — like the Bollinger squeeze breakout above — it only ever adds
+candidate levels and feeds confluence/confidence; it gates nothing on
+its own. It shipped on a **non-inferiority** basis, not a demonstrated
+edge: a pre-registered one-shot VALIDATION run moved pooled win rate by
+-0.084pp with heavily overlapping Wilson confidence intervals — measured
+to not hurt the win rate, not proven to help it. Full measurement:
+`docs/superpowers/plans/v35-avwap-preregistration.md`.
 
 ## Three extra filters for genuine 5%+ move candidates
 
