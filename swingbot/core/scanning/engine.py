@@ -758,15 +758,27 @@ def _apply_sector_rs(item: "ScanItem", ticker: str, sector_of_ticker: dict,
     back to item.rs_percentile alone. Resolving the ticker's sector to its
     specific ETF symbol first, and checking THAT symbol's presence in
     sector_etf_frames, makes the guard ticker-specific instead of
-    scan-wide."""
+    scan-wide.
+
+    Final-review fix (Finding 3): that guard still missed a second sentinel
+    trigger inside sector_rs_percentile() itself (edge/factors.py, not
+    modified here) -- it also returns the synthetic 50.0 when fewer than 2
+    sector ETFs *overall* produced a computable relative-return this scan
+    (`mine is None or len(rels) < 2`), even when THIS ticker's own sector
+    ETF frame is present. A heavy partial fetch failure (most sector ETFs
+    missing, but this ticker's happens to be one of the one or two that
+    made it) used to reach sector_rs_percentile() anyway and get its 50.0
+    sentinel back, corrupting rs_combined the same way. Requiring at least
+    2 sector ETF frames overall closes that second path to the same bug."""
     sector = sector_of_ticker.get(ticker)
     etf_symbol = etf_symbol_of_sector.get(sector) if sector else None
     sector_pctile = None
-    if sector and etf_symbol and etf_symbol in sector_etf_frames:
+    if sector and etf_symbol and etf_symbol in sector_etf_frames and len(sector_etf_frames) >= 2:
         sector_pctile = rs_factors.sector_rs_percentile(sector, sector_etf_frames, spy_df)
     elif sector:
         log.debug("Sector RS: this ticker's sector ETF frame wasn't fetched "
-                  "this scan -- %s (%s) falls back to ticker-only RS", ticker, sector)
+                  "this scan (or too few sector ETF frames were fetched overall) "
+                  "-- %s (%s) falls back to ticker-only RS", ticker, sector)
     else:
         log.debug("Sector RS: %s has no known sector (unmapped or "
                   "reclassified ticker) -- falls back to ticker-only RS", ticker)
@@ -1427,13 +1439,21 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             # branch always passes (v34 Task 7 measured a bullish gate
             # NEGATIVE at every threshold). rs_verdict() already returns
             # "exempt" (never "block") for RS-ineligible symbols (FX, futures,
-            # indices) and for tickers RS couldn't be computed for at all this
-            # scan (rs_combined is None); only a genuine "block" verdict drops
-            # the scenario here. Default ON (config.RS_GATE) since v34 Task 8's
-            # one-shot VALIDATION PASS -- 48.50% -> 49.66% win rate for a 4.07%
-            # alert-volume cut, on OVERLAPPING intervals, so this is a measured
-            # small improvement and not a demonstrated edge
-            # (docs/superpowers/plans/implemented/v34-train-preregistration.md).
+            # indices, crypto) and when the RS benchmark itself failed to
+            # compute this scan (rs_combined is None, a scan-wide SPY/RS-cache
+            # failure); only a genuine "block" verdict drops the scenario here.
+            # Known gap (final-review Finding 2): this rs_available signal is
+            # structurally blind to the PER-TICKER case -- a ticker with too
+            # little history gets rs_percentile()'s synthetic 50.0 sentinel
+            # (edge/factors.py), which reaches here as an *available* reading
+            # indistinguishable from a genuine median, so it's judged as one.
+            # See docs/strategy.md's RS gate section for the full writeup; not
+            # fixed here because it's a decision-making behavior change the
+            # v34 VALIDATION run never measured. Default ON (config.RS_GATE)
+            # since v34 Task 8's one-shot VALIDATION PASS -- 48.50% -> 49.66%
+            # win rate for a 4.07% alert-volume cut, on OVERLAPPING intervals,
+            # so this is a measured small improvement and not a demonstrated
+            # edge (docs/superpowers/plans/implemented/v34-train-preregistration.md).
             if config.RS_GATE:
                 rs_result = rs_verdict(
                     item.result.ticker, item.result.trend,

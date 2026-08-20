@@ -89,3 +89,20 @@ def test_partial_sector_etf_fetch_failure_falls_back_not_corrupted():
     )
     assert item.rs_combined == item.rs_percentile
     assert item.sector_rs_percentile is None
+
+
+def test_fewer_than_two_total_sector_frames_falls_back_not_corrupted():
+    """Final-review Finding 3: THIS ticker's own sector ETF frame IS present,
+    but fewer than 2 sector ETF frames were fetched overall this scan (heavy
+    partial fetch failure). sector_rs_percentile() (edge/factors.py) has its
+    own synthetic-50.0 sentinel for `len(rels) < 2` that the ticker-specific
+    guard alone doesn't cover -- the guard must also require enough sector
+    ETF frames overall, or this reaches sector_rs_percentile() and gets its
+    50.0 sentinel back, corrupting item.rs_combined instead of falling back
+    to item.rs_percentile alone."""
+    item = _scan_item_for(
+        "AAPL", sector="Technology",
+        sector_frames={"XLK": object()},  # only this ticker's own ETF, 1 total
+    )
+    assert item.rs_combined == item.rs_percentile
+    assert item.sector_rs_percentile is None
