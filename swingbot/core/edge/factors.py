@@ -129,29 +129,46 @@ def anchored_vwap(df: pd.DataFrame, anchor_idx: int) -> pd.Series:
     return (tp * part["Volume"]).cumsum() / part["Volume"].cumsum()
 
 
-def avwap_anchors(df: pd.DataFrame, lookback: int = 120) -> list:
-    """Anchor bars that mean something: recent swing pivots + the highest-
-    volume day (a capitulation/breakout bar everyone remembers).
+_FIFTY_TWO_WEEK_BARS = 252
 
-    Pivots need `span` bars of confirmation on BOTH sides, so the scan
-    stops `span` bars short of the end -- an unconfirmed low that is only
-    a low because the data ran out is not a swing low. That also keeps
-    this side of the no-lookahead rule: every bar this reads is at or
-    before the frame's last bar, and no anchor depends on a bar that
-    hadn't printed yet when the anchor formed."""
+
+def avwap_anchors(df: pd.DataFrame, lookback: int = 120) -> list:
+    """Anchor bars that mean something, each with a human-readable label:
+    recent swing pivots, the highest-volume day (a capitulation/breakout bar
+    everyone remembers), and the 52-week extremes.
+
+    Pivots need `span` bars of confirmation on BOTH sides, so the scan stops
+    `span` bars short of the end -- an unconfirmed low that is only a low
+    because the data ran out is not a swing low. That also keeps this side of
+    the no-lookahead rule: every bar this reads is at or before the frame's
+    last bar, and no anchor depends on a bar that hadn't printed yet when the
+    anchor formed. The 52-week extremes are backward-looking for the same
+    reason.
+
+    Returns [(bar_index, label)], sorted by index. Labels are rendered to the
+    user, so they name the event, never the bar number."""
     n = len(df)
     start = max(0, n - lookback)
     lows, highs = df["Low"].values, df["High"].values
-    anchors = set()
     span = 5
+    anchors: dict[int, str] = {}
+
     pivots_lo = [i for i in range(max(start, span), n - span)
                  if lows[i] == min(lows[i - span:i + span + 1])]
     pivots_hi = [i for i in range(max(start, span), n - span)
                  if highs[i] == max(highs[i - span:i + span + 1])]
-    anchors.update(pivots_lo[-2:])
-    anchors.update(pivots_hi[-2:])
-    anchors.add(start + int(df["Volume"].values[start:].argmax()))
-    return sorted(anchors)
+    for i in pivots_lo[-2:]:
+        anchors[i] = "swing low"
+    for i in pivots_hi[-2:]:
+        anchors[i] = "swing high"
+
+    anchors[start + int(df["Volume"].values[start:].argmax())] = "volume spike"
+
+    yr_start = max(0, n - _FIFTY_TWO_WEEK_BARS)
+    anchors[yr_start + int(highs[yr_start:].argmax())] = "52w high"
+    anchors[yr_start + int(lows[yr_start:].argmin())] = "52w low"
+
+    return sorted(anchors.items())
 
 
 def pattern_quality_at_level(df: pd.DataFrame, idx: int, level: float,
