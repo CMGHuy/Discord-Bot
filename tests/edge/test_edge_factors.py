@@ -209,7 +209,7 @@ def test_avwap_ships_default_on_since_v35():
 
     The budget for this question is SPENT. If this assertion fails, someone
     has flipped a judged default -- read
-    docs/superpowers/plans/v35-avwap-preregistration.md and
+    docs/superpowers/plans/implemented/v35-avwap-preregistration.md and
     docs/superpowers/results/2026-07-26-edge-folds.md before changing it,
     and do not re-run either measurement to justify the change."""
     from swingbot import config

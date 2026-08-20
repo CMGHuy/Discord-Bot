@@ -78,7 +78,7 @@ its own. It shipped on a **non-inferiority** basis, not a demonstrated
 edge: a pre-registered one-shot VALIDATION run moved pooled win rate by
 -0.084pp with heavily overlapping Wilson confidence intervals — measured
 to not hurt the win rate, not proven to help it. Full measurement:
-`docs/superpowers/plans/v35-avwap-preregistration.md`.
+`docs/superpowers/plans/implemented/v35-avwap-preregistration.md`.
 
 ## Three extra filters for genuine 5%+ move candidates
 

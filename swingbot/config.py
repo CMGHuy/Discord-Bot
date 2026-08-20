@@ -618,7 +618,7 @@ FIELDS: list[Field] = [
                "it is a weak discriminator feeding MIN_CONFLUENCE and the confidence score; the "
                "per-anchor labels DO fold to one 'AVWAP' family (verified on 264,595 real "
                "targets, zero inflation). Full record: "
-               "docs/superpowers/plans/v35-avwap-preregistration.md."),
+               "docs/superpowers/plans/implemented/v35-avwap-preregistration.md."),
     Field("PYRAMIDING_ENABLED", "PYRAMIDING_ENABLED", "Universe & Scanning",
           "Pyramid-add suggestions enabled",
           type="checkbox", default="false",

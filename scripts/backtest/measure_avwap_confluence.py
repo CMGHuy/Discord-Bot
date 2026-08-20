@@ -9,7 +9,7 @@ run_backtest_range.py's named-strategy path never calls
 levels.count_confirming_strategies at all (that lives only in
 backtest_scenarios.replay_scenarios), so the confluence question this
 measures is invisible to the standard harness. Result of the 2026-08-20 run:
-docs/superpowers/plans/v35-avwap-preregistration.md section 5.1.
+docs/superpowers/plans/implemented/v35-avwap-preregistration.md section 5.1.
 
 
 The plan's Global Constraint is "method count must not inflate with anchor
@@ -160,7 +160,10 @@ def main():
         print(f"[{ti}/{len(tickers)}] {tkr} bars={n_bars} targets={n_targets} "
               f"leaks={len(leaks)}", flush=True)
 
-    config.AVWAP_LEVELS_ENABLED = False
+    # No reset here: this process exits right after, and the per-bar loop
+    # above always leaves config.AVWAP_LEVELS_ENABLED True as its last write
+    # (line ~111) -- which now matches the judged default (v35), not a
+    # stale pre-v35 False this used to force back on exit.
 
     def mean(c):
         tot = sum(c.values())

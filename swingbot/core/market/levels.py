@@ -347,7 +347,7 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
     # component on an improvement gate in 2026-07-26 and v35 only earned a
     # fresh shot because 52-week anchors changed the component itself.
     # Both the budget and the question are closed; see
-    # docs/superpowers/plans/v35-avwap-preregistration.md and
+    # docs/superpowers/plans/implemented/v35-avwap-preregistration.md and
     # config.AVWAP_LEVELS_ENABLED's help text before reopening either.
     # The flag check sits OUTSIDE the try so a missing/renamed config
     # Field fails loudly instead of silently turning this source off

@@ -3,7 +3,7 @@
 **Written:** 2026-08-20, **before** any win-rate number for either arm existed.
 **Component:** `AVWAP_LEVELS_ENABLED` (anchored-VWAP levels as a 12th
 price-producing strategy family in `levels.collect_candidate_levels`).
-**Plan:** `docs/superpowers/plans/2026-08-16-v35-anchored-vwap.md`, Task 4.
+**Plan:** `docs/superpowers/plans/implemented/2026-08-16-v35-anchored-vwap.md`, Task 4.
 
 ---
 
@@ -268,10 +268,12 @@ Run once on 2026-08-20, both arms, the §3 command with `--validation`. Window
 - closed-trade delta **-1 (-0.04%)**
 - **Wilson intervals overlap** (heavily — the two are nearly coincident)
 
-Per strategy: 5 of 11 are bit-identical. Movers: Volume Profile +3.52pp (N=33 ->
-31), MA Ribbon +0.36pp, RSI Divergence -0.16pp, Break & Retest -0.46pp, VWAP
--0.68pp, EMA Crossover -2.00pp (N=25 -> 26). Every one of these is far inside
-sampling noise at its N. (RSI shows 100.00% in both arms on N=22 — a
+Per strategy: 5 of 11 are win-rate-identical (4 fully bit-identical --
+Fibonacci, Support/Resistance, RSI, Elliott Wave -- plus MACD, whose win rate
+and trade counts match but whose expectancy_r/max_dd_pct differ). Movers:
+Volume Profile +3.52pp (N=33 -> 31), MA Ribbon +0.36pp, RSI Divergence
+-0.16pp, Break & Retest -0.46pp, VWAP -0.68pp, EMA Crossover -2.00pp (N=25 ->
+26). Every one of these is far inside sampling noise at its N. (RSI shows 100.00% in both arms on N=22 — a
 pre-existing artefact of the baseline system, identical in both arms and
 unrelated to AVWAP.)
 
