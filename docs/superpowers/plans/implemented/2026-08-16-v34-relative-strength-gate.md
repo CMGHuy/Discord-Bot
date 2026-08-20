@@ -743,34 +743,55 @@ git commit -m "feat(v34): TRAIN threshold sweep and pre-registration"
 **Files:**
 - Modify: `swingbot/config.py`, `docs/strategy.md`, `VERSION.json`
 
-- [ ] **Step 1: Confirm the pre-registration is committed and unedited**
+- [x] **Step 1: Confirm the pre-registration is committed and unedited**
 
-- [ ] **Step 2: Run VALIDATION once**
+Committed at `5fec126`, the only commit touching it, clean working tree.
 
-Run: `python scripts/backtest/run_backtest_range.py --validation --json data/v34_validation.json`
+- [x] **Step 2: Run VALIDATION once**
 
-- [ ] **Step 3: Record the result verbatim. Do not re-run on FAIL.**
+~~`python scripts/backtest/run_backtest_range.py --validation --json data/v34_validation.json`~~
+**This command was wrong and was NOT run.** `run_backtest_range.py` drives
+`swingbot.core.backtesting.backtest`, a replay harness that never calls
+`swingbot/core/scanning/engine.py`, so the gate cannot influence its output by
+any code path — the same "unmeasurable by construction" trap that burned
+`DATA_DRIVEN_STOPS_ENABLED`'s shot. Superseded by the pre-registration, which
+names the purpose-built instrument instead:
 
-- [ ] **Step 4: On PASS, flip `RS_GATE` to `default="true"`**
+```
+python scripts/backtest/measure_rs_gate_effect.py --validation \
+    --cache-dir <main checkout>/data/backtest_cache \
+    --json data/v34_validation.json --rows-out data/v34_validation_rows.json
+```
 
-- [ ] **Step 5: Document in `docs/strategy.md`**
+- [x] **Step 3: Record the result verbatim. Do not re-run on FAIL.**
 
-Cover the symmetric rule, per-horizon windows, the non-equity exemption, and
-that exemptions are not passes.
+**PASS**, recorded in full in the pre-registration's appended result section.
+Run once, no re-run.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 4: On PASS, flip `RS_GATE` to `default="true"`** — done, in
+`swingbot/config.py` and `.env.example` together.
+
+- [x] **Step 5: Document in `docs/strategy.md`**
+
+~~Cover the symmetric rule, per-horizon windows~~ — both stale by the time this
+step ran. What was documented is what shipped: the **bearish-only** rule (the
+bullish arm measured negative and is disabled via `RS_LEADER_PERCENTILE=0`),
+the per-horizon windows as a **known gap** rather than a working feature (Task
+3's key has zero consumers), the non-equity exemption, and that exemptions are
+not passes.
+
+- [x] **Step 6: Run the full suite**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`
 
-- [ ] **Step 7: Bump `VERSION.json`, close the spec**
+- [x] **Step 7: Bump `VERSION.json`, close the spec**
 
-```bash
-git mv docs/superpowers/specs/2026-08-16-v34-relative-strength-gate-design.md docs/superpowers/specs/implemented/
-git mv docs/superpowers/plans/2026-08-16-v34-relative-strength-gate.md docs/superpowers/plans/implemented/
-git add -A
-git commit -m "feat(v34): VALIDATION result, docs, version bump"
-```
+`bot` 1.2.2 → **1.3.0** (minor: RS stops being advisory and starts removing
+alerts on the default configuration), then regenerate
+`swingbot/admin/version_history.json`. `ui` unchanged. The pre-registration and
+the Task 1 tracing note move to `implemented/` alongside the plan and spec, and
+every reference to their old paths is re-pointed in the same commit.
 
 ---
 
@@ -790,11 +811,24 @@ git commit -m "feat(v34): VALIDATION result, docs, version bump"
 
 ## Progress
 
-- [ ] Task 1 — Trace the RS value path
-- [ ] Task 2 — Asset-class classification
-- [ ] Task 3 — Per-horizon RS windows
-- [ ] Task 4 — Symmetric gate, tri-state verdict
-- [ ] Task 5 — Sector ETFs + `rs_score` activation
-- [ ] Task 6 — Apply the gate in the scan loop
-- [ ] Task 7 — TRAIN sweep + pre-registration
-- [ ] Task 8 — VALIDATION, docs, bump
+- [x] Task 1 — Trace the RS value path (`plans/implemented/v34-rs-value-path.md`)
+- [x] Task 2 — Asset-class classification
+- [x] Task 3 — Per-horizon RS windows — **shipped dormant.** `HORIZONS[hk]["rs_window"]`
+      is defined for all ten horizons and has **zero consumers**; the scan runs
+      the flat `RS_WINDOW = 63` for every horizon. Measured anyway in Task 7 and
+      it was *worse* than the flat window, so it was never wired in. Documented
+      as a known gap in `docs/strategy.md`, not as a feature.
+- [x] Task 4 — Gate + tri-state verdict — **shipped asymmetric, not symmetric.**
+      `RS_LEADER_PERCENTILE=0` disables the bullish arm, which measured negative
+      at every TRAIN threshold.
+- [x] Task 5 — Sector ETFs + `rs_score` activation — kept, not reverted:
+      `rs_combined` beat ticker-only RS on TRAIN *and* on VALIDATION.
+- [x] Task 6 — Apply the gate in the scan loop
+- [x] Task 7 — TRAIN sweep + pre-registration (`plans/implemented/v34-train-preregistration.md`)
+- [x] Task 8 — VALIDATION **PASS**, docs, bump. 48.50% → 49.66% (+1.17pp) for a
+      4.07% alert-volume cut, overlapping intervals. `RS_GATE` ships
+      `default="true"`; `bot` 1.2.2 → 1.3.0.
+
+**Read the pre-registration's appended result section before citing any number
+from this plan's body** — the plan was written expecting a symmetric gate, and
+that is not what the measurement allowed to ship.

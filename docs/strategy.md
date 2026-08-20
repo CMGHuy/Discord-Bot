@@ -343,6 +343,71 @@ Checks a benchmark index (default SPY) against its 200-day EMA to
 classify the broad market as bullish/bearish (`!regime` anytime). Feeds
 into confidence scoring for alignment.
 
+## Relative strength gate (measured, and ON)
+
+Relative strength versus SPY had always been advisory — it fed a ranking
+score and had never stopped an alert. A 2026-08 spec (v34) asked whether it
+should, and the answer that came back was narrower than the question:
+
+**Bearish setups only.** A short is dropped unless the ticker's combined
+relative strength sits **at or below the 25th percentile** of the watchlist
+(`RS_LAGGARD_PERCENTILE`, `swingbot/core/edge/rs_gate.py`). Requiring a short
+to be a genuine relative laggard — not merely below the median — is the
+condition under which shorts stopped being the losing half of the book.
+
+**Bullish setups are not gated at all.** `RS_LEADER_PERCENTILE` ships at `0`,
+which structurally disables that half: a percentile is never negative, so
+every bullish setup passes. This is not an oversight to be tuned later. A
+bullish gate measured **negative at every threshold tested** on TRAIN
+(55/60/65/70/75 cost 28.6%-58.3% of alert volume for −0.16 to −3.80pp of win
+rate), and it flipped sign when the lookback or the sector blend changed. The
+gate is asymmetric because the data is.
+
+**What it reads is a blend, not the bare ticker percentile.** `rs_combined` is
+70% the ticker's own cross-sectional RS percentile and 30% its sector ETF's
+(`rs_score()` / `sector_rs_percentile()` in `swingbot/core/edge/factors.py`,
+wired into the scan by `_apply_sector_rs`). The scan side-fetches the sector
+ETFs its watchlist touches for this. The blend was measured against ticker-only
+RS rather than assumed better, and it won at every threshold on both arms — so
+the sector wiring stayed. If a ticker's sector or its ETF is unavailable, the
+blend falls back to the ticker-only percentile for that ticker alone.
+
+**Exemptions are not passes.** The verdict is tri-state — `pass` / `block` /
+`exempt`. FX, futures and indices are exempt because RS versus SPY is not a
+meaningful comparison for them, and so is any ticker whose RS could not be
+computed this scan. Only a genuine `block` ever drops a scenario; "we could not
+run the comparison" is never recorded as agreement.
+
+**Per-horizon RS lookback windows exist in the config and are not used.**
+`HORIZONS[hk]["rs_window"]` is defined for all ten horizons, but nothing reads
+it: the scan computes one RS percentile per ticker on the flat 63-day
+`RS_WINDOW` and every horizon shares it. This is a **known gap, not a working
+feature** — do not read the per-horizon key as live behaviour. It was measured
+anyway as a candidate and came back *worse* than the flat window, so there is
+no case for wiring it in without a fresh pre-registered measurement.
+
+**What VALIDATION actually said.** The one-shot run over 2024-2025 (2804
+scenarios) came back **PASS**: win rate **48.50% → 49.66%, +1.17pp**, for a
+**4.07%** cut in alert volume, with expectancy rising +0.403 → +0.434. All ten
+horizons moved the same way, on cuts between 2.9% and 5.4%.
+
+Three things temper that, and they are the reason `RS_GATE` is described here
+as a small improvement rather than an edge:
+
+- **The confidence intervals overlap** ([46.3, 50.7] → [47.4, 51.9]). The
+  improvement is a point estimate that is *not* statistically demonstrated.
+- **It is mostly a statement about one strategy.** Only 4 of 11 strategies
+  produce bearish signals at all, and **75.3%** of the bearish population is
+  RSI Divergence. The gate is not strategy-neutral, whatever the pooled number
+  looks like.
+- **Shorts are still not profitable in that window**, merely less unprofitable:
+  the bearish arm goes 23.70% → 30.00% and its expectancy −0.275 → −0.229. The
+  pooled gain comes from removing the worst shorts, not from making shorts win.
+
+Turn it off with `RS_GATE=false`. Numbers, the frozen thresholds and the
+pre-registered PASS rule they were judged against:
+`docs/superpowers/plans/implemented/v34-train-preregistration.md`.
+
 ## Horizon-to-horizon trend alignment (measured, and OFF)
 
 A 2026-08 spec (v33) asked whether a setup that fights the *next horizon
