@@ -31,7 +31,8 @@ def rs_verdict(symbol: str, direction: str, rs_value: float,
         return {"status": "exempt",
                 "reason": f"{classify(symbol)} is exempt from RS-vs-SPY"}
     if not rs_available:
-        return {"status": "exempt", "reason": "RS unavailable for this ticker"}
+        return {"status": "exempt",
+                "reason": "RS unavailable this scan (benchmark fetch failed)"}
 
     if direction == "bullish":
         if rs_value >= config.RS_LEADER_PERCENTILE:

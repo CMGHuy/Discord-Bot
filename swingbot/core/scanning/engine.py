@@ -221,9 +221,17 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         # Cap at 3 overlay lines -- v35 Task 2 added 52-week extreme anchors
         # to avwap_anchors, so an uncapped chart can now draw up to 7 lines
         # instead of the pre-v35 3 this cap originally held it to.
+        #
+        # avwap_anchors() returns anchors sorted ASCENDING by bar index, and
+        # the 52-week extremes draw from a 252-bar window vs. 120 for swing
+        # pivots -- so slicing [:3] (oldest-first) systematically favours
+        # the 52-week anchors and can crowd out the volume spike and every
+        # swing pivot, none of which was the intent of the original cap.
+        # [-3:] keeps the most recent 3 events instead, which is the more
+        # useful default for a chart meant to show current structure.
         ctx["avwaps"] = [{"series": rs_factors.anchored_vwap(df, idx),
                           "anchor_label": label}
-                         for idx, label in rs_factors.avwap_anchors(df)[:3]]
+                         for idx, label in rs_factors.avwap_anchors(df)[-3:]]
     except Exception:
         pass
 

@@ -21,7 +21,20 @@ handed a raw watchlist entry or an already-resolved Yahoo symbol.
 from __future__ import annotations
 
 _OVERRIDES: dict[str, str] = {
-    # Symbols the suffix heuristic gets wrong. Keep small and justified.
+    # ALIASES keys (ticker_utils.py) that are ALSO real, fetchable Yahoo
+    # tickers in their own right. data.py's get_daily_data() tries the bare
+    # symbol FIRST and only falls back to ALIASES's mapping if that fetch
+    # fails -- so for these specific keys, the bare symbol is what actually
+    # gets analyzed, never the alias. Without this override, classify()'s
+    # walk-all-candidates search finds the alias's non-equity classification
+    # (e.g. "GOLD" -> GC=F -> "future") and wrongly exempts a symbol whose
+    # real fetched data is an ordinary equity/ETF. Keep small and justified.
+    "GOLD": "equity",  # NYSE: Barrick Gold Corp. ALIASES maps GOLD -> GC=F,
+                       # but that fallback is unreachable -- GOLD itself is a
+                       # valid, liquid Yahoo ticker.
+    "OIL": "etf",      # iPath S&P GSCI Crude Oil ETN, historically traded as
+                       # "OIL" on Yahoo. ALIASES's CL=F fallback never fires
+                       # if the bare symbol still resolves.
 }
 
 _RS_ELIGIBLE = {"equity", "etf"}
@@ -64,10 +77,19 @@ def classify(symbol: str) -> str:
     candidate the fetch layer would have tried also reads as equity/unknown;
     any candidate that resolves to fx/future/index/crypto is enough to
     exempt the whole symbol.
+
+    Exception: a bare symbol listed in _OVERRIDES short-circuits the walk
+    entirely (see that dict's comment) -- these are ALIASES keys that are
+    themselves real, fetchable tickers, so the walk-for-a-non-equity-verdict
+    logic above would otherwise wrongly exempt them via their alias's
+    classification, which data.py's actual fetch order never reaches.
     """
     if not symbol:
         return "equity"
     sym = symbol.strip().upper()
+
+    if sym in _OVERRIDES:
+        return _OVERRIDES[sym]
 
     from swingbot.core.marketdata.ticker_utils import candidate_symbols
     for candidate in candidate_symbols(sym):
