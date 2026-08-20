@@ -2,12 +2,14 @@
 
 Run: python scripts/backtest/measure_avwap_confluence.py [n_tickers]
 
-Purpose-built instrument, in the same spirit as
-scripts/backtest/measure_rs_gate_effect.py (v34): run_backtest_range.py's
-named-strategy path never calls levels.count_confirming_strategies at all
-(that lives only in backtest_scenarios.replay_scenarios), so the confluence
-question this measures is invisible to the standard harness. Result of the
-2026-08-20 run: docs/superpowers/plans/v35-avwap-preregistration.md section 5.1.
+Purpose-built instrument, in the same spirit as the measurement behind
+LEVEL_LIFECYCLE_STOPS_ENABLED's "on by default, not a demonstrated edge"
+precedent (docs/superpowers/results/2026-08-08-level-lifecycle-stops-validation.md):
+run_backtest_range.py's named-strategy path never calls
+levels.count_confirming_strategies at all (that lives only in
+backtest_scenarios.replay_scenarios), so the confluence question this
+measures is invisible to the standard harness. Result of the 2026-08-20 run:
+docs/superpowers/plans/v35-avwap-preregistration.md section 5.1.
 
 
 The plan's Global Constraint is "method count must not inflate with anchor

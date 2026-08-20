@@ -126,6 +126,21 @@ only" convention). Computed by `scripts/backtest/compare_backtest_json.py`. Two 
   admitting "worse". **Fixed before any win-rate number for either arm was
   read.**
 
+  **Caveat on that SE figure, added at §5.4 review:** the ~1.6pp SE is the
+  *independent*-binomial figure (two unrelated samples of size ~1000 each). The
+  two arms here are not independent -- same tickers, same window, same
+  strategies, differing only in whether AVWAP candidates enter the level map --
+  and §3's own harness verification found only ~4.9% of trades differ between
+  them at all. The standard error of a *paired* difference that close to
+  identical is well under the independent-binomial 1.6pp, so citing 1.6pp
+  understates how tight the comparison actually is. That makes the 0.50pp
+  margin **more permissive relative to what was really run** than the
+  independent-binomial framing implies, not the conservative, comfortably-wide
+  margin the SE comparison was meant to suggest. The margin is kept as
+  pre-registered (changing it post hoc would be exactly the dredging this
+  document exists to prevent); the point is that its statistical justification
+  was looser than stated, not that the number itself needs revision.
+
 - **B — confluence guard.** Mean confluence-count delta **< +0.500 methods per
   target**, measured on the **TRAIN** window by `scripts/backtest/measure_avwap_confluence.py`,
   fixed-target arm (level map held still, so the delta is purely the
@@ -150,7 +165,8 @@ outcome is **FAIL (on TRAIN)** — a complete result, not an unfinished task.
 **Reporting rule, not a PASS clause.** Wilson 95% intervals for both arms are
 reported. Overlap does **not** fail the run, but a PASS with overlapping
 intervals must be recorded as "on by default, but not a demonstrated edge" —
-the same formulation v34's `RS_GATE` result used.
+the same formulation used for `LEVEL_LIFECYCLE_STOPS_ENABLED` (see
+`docs/superpowers/results/2026-08-08-level-lifecycle-stops-validation.md`).
 
 **One shot.** FAIL means `AVWAP_LEVELS_ENABLED` stays default-off, and **that is
 a completed result, not a failure to retry.** Combined with E33, a second FAIL
@@ -273,9 +289,24 @@ Scored against the §4 reading rule exactly as pre-registered:
 
 **Consequence, per §4:** `AVWAP_LEVELS_ENABLED` default flips to `true`.
 
+**Stated plainly, because this is the one sentence a future reader must not
+miss: under a strict/literal reading of the brief's own PASS text ("no
+win-rate regression versus AVWAP off"), this run is a FAIL.** The point
+estimate did regress: 48.72% (on) < 48.80% (off). It is the pre-registered
+0.50pp non-inferiority margin in clause A -- not the raw point estimate --
+that turns this into a PASS. Clauses B and C would have passed under any
+reasonable reading of the brief; clause A is the one place the pre-registered
+rule, rather than the naive reading, decides the verdict.
+
 **Mandatory caveat, per §4's reporting rule:** the Wilson intervals overlap
 almost entirely, so this is recorded as **"on by default, but not a demonstrated
-edge"** — the same formulation v34's `RS_GATE` result used. What was measured is
+edge"** — the same formulation used for `LEVEL_LIFECYCLE_STOPS_ENABLED`
+(default-on since 2026-08-08 on a PASS that "cleared every clause of its one
+VALIDATION shot, but ... below the strength threshold fixed in advance, i.e.
+NO MEASURABLE out-of-sample effect. It is on because it degrades nothing ...
+NOT because an edge was measured" — see
+`docs/superpowers/results/2026-08-08-level-lifecycle-stops-validation.md` and
+that flag's help text in `swingbot/config.py`). What was measured is
 that anchored VWAP **does not degrade** the system, not that it improves it. The
 win-rate delta (-0.084pp), the expectancy delta (-0.00037R) and the trade-count
 delta (-1 trade) are all indistinguishable from zero. This is a
