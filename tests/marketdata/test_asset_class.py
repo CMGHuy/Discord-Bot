@@ -72,3 +72,26 @@ def test_unresolved_and_resolved_non_equity_forms_are_not_rs_eligible(symbol):
     is_rs_eligible() unhandled used to read as 'equity' and so was never
     exempted, the exact bug this fix closes."""
     assert is_rs_eligible(symbol) is False
+
+
+@pytest.mark.parametrize("symbol,expected", [
+    # classify() vs data.py fetch-semantics finding: GOLD and OIL are
+    # ALIASES keys (ticker_utils.py) that are ALSO real, fetchable Yahoo
+    # tickers. data.py's get_daily_data() tries the bare symbol first and
+    # only falls back to the ALIASES mapping if that fetch fails, so these
+    # must classify as what actually gets fetched (equity/etf), not as
+    # what their alias implies (future) -- the walk-all-candidates default
+    # would otherwise wrongly exempt them from the RS gate.
+    ("GOLD", "equity"),
+    ("OIL", "etf"),
+])
+def test_aliases_keys_that_are_also_real_tickers_classify_by_the_bare_symbol(symbol, expected):
+    assert classify(symbol) == expected
+
+
+@pytest.mark.parametrize("symbol", ["GOLD", "OIL"])
+def test_aliases_keys_that_are_also_real_tickers_are_rs_eligible(symbol):
+    """The opposite-direction bug from the unresolved-alias fix above:
+    these must NOT be exempted, because the data actually fetched for them
+    is ordinary equity/ETF data, not the futures/ETN the alias implies."""
+    assert is_rs_eligible(symbol) is True
