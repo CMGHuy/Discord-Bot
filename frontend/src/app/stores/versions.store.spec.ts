@@ -170,6 +170,40 @@ describe('VersionsStore', () => {
       expect(b.start + b.width).toBeLessThanOrEqual(1.000001);
     });
 
+    it('draws the newest segment flush to the strip\'s leading edge', () => {
+      // RESPONSE's `ui` lane has two runs (1.0.0 then 1.2.0); the current one
+      // is the flip's whole point — it must be at start 0, not buried at the
+      // trailing edge where the old oldest-first axis put it.
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      const current = ui.segments[ui.segments.length - 1];
+      expect(current.current).toBe(true);
+      expect(current.start).toBeCloseTo(0, 5);
+    });
+
+    it('trails the earliest segment off toward the strip\'s far edge', () => {
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      const earliest = ui.segments[0];
+      // ui's absentWidth is 0 (it existed from the first release), so the
+      // earliest segment's trailing edge lands exactly at 1.
+      expect(earliest.start + earliest.width).toBeCloseTo(1, 5);
+    });
+
+    it('captures paired versions from the run-closing release', () => {
+      // a3 closes ui's current run and carries { ui: '1.2.0', bot: '1.1.2',
+      // worker: '0.1.0' } -- pairedWith is that snapshot minus ui itself.
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      const current = ui.segments[ui.segments.length - 1];
+      expect(current.pairedWith).toEqual({ bot: '1.1.2', worker: '0.1.0' });
+    });
+
+    it('excludes a component that had not shipped yet from pairedWith', () => {
+      // a2 closes ui's first run (a1..a2, both ui 1.0.0) and carries
+      // { ui: '1.0.0', bot: '1.1.2', worker: null } -- worker must not appear.
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      const earliest = ui.segments[0];
+      expect(earliest.pairedWith).toEqual({ bot: '1.1.2' });
+    });
+
     it('survives a single release without dividing by zero', () => {
       // One release means a zero-length time span. `tEnd` is floored at `t0 + 1`
       // precisely so this divides by 1 rather than 0 and yields a full-width

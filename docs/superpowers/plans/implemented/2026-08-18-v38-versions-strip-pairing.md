@@ -797,7 +797,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 ## Progress
 
-- [ ] Task 1: Flip the strip's time axis in the store
-- [ ] Task 2: Capture paired versions on every segment
-- [ ] Task 3: Flip the template to match — ticks and the absent region
-- [ ] Task 4: Hover tooltip with paired versions + cross-lane spotlight
+- [x] Task 1: Flip the strip's time axis in the store
+- [x] Task 2: Capture paired versions on every segment
+- [x] Task 3: Flip the template to match — ticks and the absent region
+- [x] Task 4: Hover tooltip with paired versions + cross-lane spotlight
