@@ -261,12 +261,17 @@ FIELDS: list[Field] = [
                "in order to notice repeating problems (e.g. 'this is the 3rd day in a row VWAP has lost') instead "
                "of re-stating the same observation from scratch every day with no memory of yesterday."),
     Field("RS_GATE", "RS_GATE", "Trade Filters & Risk", "Relative strength gate",
-          type="checkbox", default="false",
-          help="Require bullish setups on relative leaders and bearish setups on "
-               "relative laggards, versus SPY. FX, futures and indices are exempt. "
-               "Enable only after VALIDATION."),
+          type="checkbox", default="true",
+          help="Require bearish setups to sit in the bottom quartile of combined "
+               "relative strength versus SPY. FX, futures and indices are exempt, "
+               "and so is any ticker RS could not be computed for -- an exemption "
+               "is never counted as a pass. The bullish half is disabled "
+               "(RS_LEADER_PERCENTILE=0) because it measured negative. ON by "
+               "default since v34's one-shot VALIDATION: 48.50% -> 49.66% win "
+               "rate (+1.17pp) for 4.07% of alert volume, on overlapping "
+               "confidence intervals -- a small improvement, not a proven edge."),
     # Both defaults are FROZEN from the v34 TRAIN sweep
-    # (docs/superpowers/plans/v34-train-preregistration.md) and must not be
+    # (docs/superpowers/plans/implemented/v34-train-preregistration.md) and must not be
     # changed without a new pre-registration and its own VALIDATION shot.
     Field("RS_LEADER_PERCENTILE", "RS_LEADER_PERCENTILE", "Trade Filters & Risk",
           "RS leader percentile", type="float", default="0", min=0, max=100, step=5,

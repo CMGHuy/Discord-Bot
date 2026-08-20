@@ -124,7 +124,14 @@ def _scan_with(ticker, direction, rs, sector_rs=None, horizon="4w"):
     return items
 
 
-def test_gate_off_by_default(monkeypatch):
+def test_gate_switched_off_blocks_nothing(monkeypatch):
+    """RS_GATE=false is a full bypass, not a softer gate.
+
+    This used to be named test_gate_off_by_default. RS_GATE now ships
+    `default="true"` (v34 Task 8's VALIDATION PASS), so the name would have
+    asserted a default that is no longer the shipped one -- while the test
+    itself pins the flag explicitly and never read the default at all.
+    """
     monkeypatch.setattr(config, "RS_GATE", False)
     assert len(_scan_with(ticker="AAPL", direction="bullish", rs=10.0)) == 1
 
@@ -134,9 +141,9 @@ def test_gate_on_blocks_a_bullish_laggard(monkeypatch):
 
     RS_LEADER_PERCENTILE is pinned rather than left at its default because
     v34's TRAIN sweep froze that default at 0 (= bullish arm disabled; see
-    docs/superpowers/plans/v34-train-preregistration.md, Step 2). This test
-    is about the WIRING -- a block drops the scenario -- not about the
-    shipped default, which test_frozen_defaults_do_not_gate_bullish covers.
+    docs/superpowers/plans/implemented/v34-train-preregistration.md, Step 2).
+    This test is about the WIRING -- a block drops the scenario -- not about
+    the shipped default, which test_frozen_defaults_do_not_gate_bullish covers.
     """
     monkeypatch.setattr(config, "RS_GATE", True)
     monkeypatch.setattr(config, "RS_LEADER_PERCENTILE", 60.0)

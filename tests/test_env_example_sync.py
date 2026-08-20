@@ -56,8 +56,8 @@ def test_every_setting_appears_in_env_example():
 # config.py froze 0/25, and only a human review caught it.
 _FROZEN = {
     # key: (value, the document that froze it)
-    "RS_LEADER_PERCENTILE": "docs/superpowers/plans/v34-train-preregistration.md",
-    "RS_LAGGARD_PERCENTILE": "docs/superpowers/plans/v34-train-preregistration.md",
+    "RS_LEADER_PERCENTILE": "docs/superpowers/plans/implemented/v34-train-preregistration.md",
+    "RS_LAGGARD_PERCENTILE": "docs/superpowers/plans/implemented/v34-train-preregistration.md",
 }
 
 
