@@ -42,8 +42,10 @@ def test_middle_band_blocks_neither_direction():
 def test_unknown_rs_is_exempt_not_blocked():
     """THE critical case. rs_percentile returns 50.0 when it cannot compute,
     which is indistinguishable from a real median reading. If unknown were
-    treated as a value, every ticker with a failed RS fetch would be silently
-    blocked in both directions by the middle-band rule above."""
+    treated as a value, a scan whose RS benchmark itself failed to compute
+    would silently block every ticker in both directions by the middle-band
+    rule above. (A single ticker's own thin-history sentinel is a separate,
+    known gap -- it reaches here as rs_available=True; see rs_gate.py.)"""
     v = rs_verdict("AAPL", "bullish", 50.0, False)
     assert v["status"] == "exempt"
     assert "unavailable" in v["reason"]
