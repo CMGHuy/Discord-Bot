@@ -80,22 +80,32 @@ def test_breaks_score_low():
 def test_recent_touches_outweigh_old_ones():
     """Decay weights make recent touches dominate the aggregate score.
 
-    To isolate the decay formula (not incidental lookback effects), we mix
-    rejections and breaks: rejections score high, breaks score 0. By putting
-    rejections recent in one scenario and old in another, we show that
-    decay -- not incidental quality variations -- determines which scenario
-    scores higher."""
-    # Scenario A: Rejections old (indices 0-5), breaks recent (indices 6-20).
-    # Weighted average pulled down by recent low-quality breaks.
-    rows_a = [(99.0, 101.0, 100.8)] * 6 + [(98.0, 101.0, 98.5)] * 15
+    To isolate the decay formula and prove it is load-bearing, both scenarios
+    must have IDENTICAL counts of each outcome type (rejections and breaks).
+    Only the temporal position differs. With non-decaying (constant) weights,
+    both scenarios would score identically: (3*Q + 3*0)/6 = Q/2. With decay,
+    whichever scenario has high-quality touches (rejections) positioned
+    recently scores higher."""
+    # Both scenarios: 3 rejections + 3 breaks, separated by filler bars.
+    # Only temporal position differs.
+
+    # Scenario A: Rejections old (indices 0-2), filler (3-12), breaks recent (13-15).
+    # Rejection: pierces below level but closes above it.
+    # Break: pierces below level and closes below it.
+    rows_a = [(95.0, 105.0, 102.0)] * 3 + [(200.0, 201.0, 200.5)] * 10 + [(95.0, 105.0, 95.0)] * 3
     g_a = grade_level(_bars(rows_a), 100.0, "bullish", halflife_bars=20)
 
-    # Scenario B: Breaks old (indices 0-5), rejections recent (indices 6-20).
-    # Weighted average pulled up by recent high-quality rejections.
-    rows_b = [(98.0, 101.0, 98.5)] * 6 + [(99.0, 101.0, 100.8)] * 15
+    # Scenario B: Breaks old (indices 0-2), filler (3-12), rejections recent (13-15).
+    rows_b = [(95.0, 105.0, 95.0)] * 3 + [(200.0, 201.0, 200.5)] * 10 + [(95.0, 105.0, 102.0)] * 3
     g_b = grade_level(_bars(rows_b), 100.0, "bullish", halflife_bars=20)
 
-    # Recent high-quality touches dominate the score, so B > A.
+    # Verify identical touch counts: both have 3 rejections, 3 breaks.
+    assert g_a["rejections"] == 3 and g_a["breaks"] == 3
+    assert g_b["rejections"] == 3 and g_b["breaks"] == 3
+
+    # With decay, recent high-quality (rejections) in B outweigh old high-quality in A.
+    # This proves the decay formula is load-bearing: equal counts + different positions
+    # => different scores, so decay (not count imbalance) drives the result.
     assert g_b["score"] > g_a["score"]
 
 
