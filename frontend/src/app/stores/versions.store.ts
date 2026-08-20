@@ -25,6 +25,12 @@ export interface LaneSegment {
   firstSeen: string;
   lastSeen: string;
   current: boolean;
+  /** Every other component's version as of this segment's last_seen -- the
+   *  ceiling reached while this version was active. Never includes the
+   *  segment's own component, and never a component that hadn't shipped
+   *  yet (null on the wire -- absent must not read as a value, same rule
+   *  `absentWidth` already enforces for this lane's own component). */
+  pairedWith: Record<string, string>;
 }
 
 export interface Lane {
@@ -218,13 +224,20 @@ export const VersionsStore = signalStore(
         // is mirrored around the strip's midpoint.
         let cursor = absentWidth;
         const segments = runs.map((run, i) => {
+          const closingRelease = ordered.find((r) => t(r.last_seen) === run.to);
           const segment: LaneSegment = {
             version: run.version,
             start: 1 - cursor - widths[i],
             width: widths[i],
             firstSeen: ordered.find((r) => t(r.date) === run.from)?.date ?? '',
-            lastSeen: ordered.find((r) => t(r.last_seen) === run.to)?.last_seen ?? '',
+            lastSeen: closingRelease?.last_seen ?? '',
             current: i === runs.length - 1,
+            pairedWith: Object.fromEntries(
+              Object.entries(closingRelease?.versions ?? {}).filter(
+                (entry): entry is [string, string] =>
+                  entry[0] !== component && entry[1] !== null,
+              ),
+            ),
           };
           cursor += widths[i];
           return segment;

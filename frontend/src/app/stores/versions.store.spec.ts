@@ -188,6 +188,22 @@ describe('VersionsStore', () => {
       expect(earliest.start + earliest.width).toBeCloseTo(1, 5);
     });
 
+    it('captures paired versions from the run-closing release', () => {
+      // a3 closes ui's current run and carries { ui: '1.2.0', bot: '1.1.2',
+      // worker: '0.1.0' } -- pairedWith is that snapshot minus ui itself.
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      const current = ui.segments[ui.segments.length - 1];
+      expect(current.pairedWith).toEqual({ bot: '1.1.2', worker: '0.1.0' });
+    });
+
+    it('excludes a component that had not shipped yet from pairedWith', () => {
+      // a2 closes ui's first run (a1..a2, both ui 1.0.0) and carries
+      // { ui: '1.0.0', bot: '1.1.2', worker: null } -- worker must not appear.
+      const ui = store.lanes().find((l) => l.component === 'ui')!;
+      const earliest = ui.segments[0];
+      expect(earliest.pairedWith).toEqual({ bot: '1.1.2' });
+    });
+
     it('survives a single release without dividing by zero', () => {
       // One release means a zero-length time span. `tEnd` is floored at `t0 + 1`
       // precisely so this divides by 1 rather than 0 and yields a full-width
