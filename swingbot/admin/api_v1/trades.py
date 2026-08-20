@@ -196,6 +196,15 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     t = trade or {}
     opened_at = t.get("opened_at")
     closed_at = t.get("closed_at")
+    # A PARTIAL plan has already banked TP1: the position it still carries is
+    # the runner, not the original one, so "the plan" it displays has to be
+    # the runner's own numbers -- working_stop (break-even, then wherever the
+    # chandelier trail has since moved it) and TP2, not the original entry
+    # stop/TP1 that already happened. `or` falls back to the original level
+    # only for the pre-Task-66 edge case where one of these was never set.
+    is_partial = plan.get("status") == "PARTIAL"
+    current_stop = (plan.get("working_stop") if is_partial else None) or plan.get("stop_loss")
+    current_target = (plan.get("tp2") if is_partial else None) or plan.get("tp1")
     return {
         "id": plan["plan_id"],
         "origin": "plan",
@@ -211,8 +220,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "confidence_score": t.get("confidence_score"),
         "quality_score": plan.get("quality_score"),
         "entry": plan.get("entry_price"),
-        "stop_loss": plan.get("stop_loss"),
-        "target": plan.get("tp1"),
+        "stop_loss": current_stop,
+        "target": current_target,
         "target2": plan.get("tp2"),
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
@@ -223,6 +232,11 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
         "r_multiple": dash.closed_r(t) if trade else None,
+        # Transient -- consumed and stripped by `_attach_unrealized_pnl`
+        # once a live price exists to compute pnl_pct/r_multiple/
+        # realized_pnl_amount for a row that hasn't closed yet.
+        "_legs": plan.get("legs_realized") or [],
+        "_risk_stop": plan.get("stop_loss"),
         "held_hours": _held_hours(opened_at, closed_at),
         "opened_at": opened_at,
         "closed_at": closed_at,
@@ -281,6 +295,11 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t),
         "r_multiple": dash.closed_r(t),
+        # Transient -- see `_row_from_plan`'s matching fields. Legacy v1
+        # trades never scale out, so `_legs` is always empty and `_risk_stop`
+        # is always the same value already shown as `stop_loss`.
+        "_legs": [],
+        "_risk_stop": t.get("stop_loss"),
         "held_hours": _held_hours(t.get("opened_at"), t.get("closed_at")),
         "opened_at": t.get("opened_at"),
         "closed_at": t.get("closed_at"),
@@ -524,6 +543,8 @@ def get_trade(trade_id: str):
 
     _attach_current_prices([row])
     _attach_status_fields([row])
+    _attach_unrealized_pnl([row])
+    _strip_internal_fields([row])
     return jsonify(row)
 
 
@@ -618,12 +639,14 @@ def list_trades():
             rows = [r for r in rows if str(r.get(field) or "") == str(value)]
 
     field, direction = params.sort or ("opened_at", "desc")
-    # progress_pct is attached AFTER slicing (it needs a live price), so a
-    # sort on it has to compute the field for the whole set first -- otherwise
-    # it would sort on a column that is None for every row.
-    if _SORT_ALIASES.get(field) == "progress_pct":
+    # progress_pct/pnl_pct/r_multiple are only live-priced AFTER slicing
+    # (a price is fetched for at most one page of tickers) -- a sort on any
+    # of the three has to compute it for the whole set first, or it sorts on
+    # a column that is still None for every open row.
+    if _SORT_ALIASES.get(field) == "progress_pct" or field in ("pnl_pct", "r_multiple"):
         _attach_current_prices(rows)
         _attach_status_fields(rows)
+        _attach_unrealized_pnl(rows)
     rows = _sorted_rows(rows, field, direction == "desc")
 
     total = len(rows)
@@ -632,6 +655,8 @@ def list_trades():
 
     _attach_current_prices(page_rows)
     _attach_status_fields(page_rows)
+    _attach_unrealized_pnl(page_rows)
+    _strip_internal_fields(page_rows)
     return jsonify(collection(page_rows, total, params.page, params.per_page))
 
 
@@ -701,6 +726,47 @@ def _attach_status_fields(rows: list[dict]) -> None:
                         "status_label": row["status"]})
         else:
             row.update(_status_fields(row, row.get("current_price")))
+
+
+def _attach_unrealized_pnl(rows: list[dict]) -> None:
+    """Live pnl_pct/r_multiple/realized_pnl_amount for a row that hasn't
+    closed yet -- must run AFTER `_attach_current_prices` so `current_price`
+    is there to compute from.
+
+    `_row_from_plan`/`_row_from_trade` leave these three None on every
+    still-open row (there is no exit_price yet for `dash.closed_pnl`/
+    `closed_r` to read), which is the exact display gap that made a PARTIAL
+    position look unpriced -- it has real live P&L, just not the terminal
+    kind those two functions compute.
+
+    Reads `_legs`/`_risk_stop` (transient, set by the two row builders) with
+    `.get`, not `.pop`: like `_attach_status_fields`, this may run twice on
+    the same row objects when a request sorts by a field that needs a price
+    for every row, not just the page (see the `_SORT_ALIASES` branch in
+    `list_trades`) -- popping here would make the second pass recompute from
+    an empty/missing fallback and silently overwrite the first pass's real
+    numbers. `_strip_internal_fields` removes both once, at the very end.
+    """
+    for row in rows:
+        if row["status"] in _TERMINAL or row["status"] == "PENDING":
+            continue
+        price = row.get("current_price")
+        entry, direction = row.get("entry"), row.get("direction")
+        if price is None or entry is None:
+            continue
+        row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
+        row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
+        row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
+            entry, direction, row.get("shares"), row.get("_legs"), price)
+
+
+def _strip_internal_fields(rows: list[dict]) -> None:
+    """Drop the transient `_legs`/`_risk_stop` keys `_attach_unrealized_pnl`
+    reads -- must run exactly once, after every other row transform, so
+    neither leaks onto the wire and breaks the row's declared shape."""
+    for row in rows:
+        row.pop("_legs", None)
+        row.pop("_risk_stop", None)
 
 
 def _attach_current_prices(rows: list[dict]) -> None:

@@ -900,3 +900,126 @@ def test_rows_without_progress_sort_last_in_both_directions(seed, logged_in, pri
 
     assert items[-1]["progress_pct"] is None, "a row with no progress must sort last"
     assert items[0]["progress_pct"] is not None
+
+
+# --- reported bug: a PARTIAL row showed the ORIGINAL TP1/stop, not the
+# runner's real numbers, and no live P&L at all while still open ----------
+
+def test_partial_plan_shows_the_runner_target_and_stop(seed, logged_in):
+    """TP1 already banked -- the position this row now represents is the
+    runner, so "the plan" has to mean working_stop/TP2, not the original
+    entry stop/TP1 that already happened."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": 130.0, "working_stop": 101.0})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    seed(plans=[plan], trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["target"] == 130.0      # tp2, not tp1
+    assert row["stop_loss"] == 101.0   # working_stop, not the original stop
+    assert row["target2"] == 130.0
+
+
+def test_partial_plan_falls_back_when_the_runner_fields_are_unset(seed, logged_in):
+    """A PARTIAL plan predating tp2/working_stop (or a strategy with no
+    stretch target) still has to show SOMETHING rather than None."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": None, "working_stop": None})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    seed(plans=[plan], trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["target"] == 110.0
+    assert row["stop_loss"] == 95.0
+
+
+def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):
+    """Only PARTIAL gets the runner substitution -- an ACTIVE plan hasn't hit
+    TP1 yet, so its stop/target really are the original entry stop/TP1."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="ACTIVE")
+    plan.update({"stop_loss": 95.0, "tp1": 110.0, "tp2": 130.0, "working_stop": 101.0})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    seed(plans=[plan], trades=[trade])
+
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["target"] == 110.0
+    assert row["stop_loss"] == 95.0
+
+
+# --- reported bug: no live P&L at all while a position is still open -----
+
+def test_active_trade_gets_live_unrealized_pnl(seed, logged_in, priced):
+    plan, trade = _open_pair(entry=100.0, sl=90.0, tp=120.0)
+    seed(plans=[plan], trades=[trade])
+    priced(110.0)
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+    assert row["pnl_pct"] == 10.0                    # (110-100)/100 * 100
+    assert row["r_multiple"] == 1.0                   # (110-100)/(100-90)
+    assert row["realized_pnl_amount"] is not None
+
+
+def test_partial_trade_blends_realized_and_unrealized_dollars(seed, logged_in, priced):
+    """The reported bug: a partial position does not have the same size as
+    the original -- half already banked at TP1's own price, half still
+    riding at the live price -- so the $ figure must blend both, even though
+    the % stays a simple live-price comparison (matches closed_pnl's own
+    single-price convention once a trade is fully closed)."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"entry_price": 100.0, "direction": "bullish", "stop_loss": 90.0,
+                "tp1": 110.0, "tp2": 130.0, "working_stop": 100.0,
+                "legs_realized": [{"fraction": 0.5, "exit_price": 110.0,
+                                    "r": 1.0, "reason": "tp1"}]})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade.update({"entry": 100.0, "direction": "bullish", "shares": 10})
+    seed(plans=[plan], trades=[trade])
+    priced(120.0)                      # runner still short of tp2
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+    # % stays simple/live-price-only: (120-100)/100 * 100
+    assert row["pnl_pct"] == 20.0
+    # $ blends the banked TP1 leg (5 sh * (110-100)) with the still-open
+    # remainder (5 sh * (120-100)) -- NOT 10 sh * (120-100), which would
+    # pretend the whole original position was still exposed to the move.
+    assert row["realized_pnl_amount"] == 5 * (110.0 - 100.0) + 5 * (120.0 - 100.0)
+
+
+def test_unrealized_pnl_uses_the_original_stop_not_the_working_stop(seed, logged_in, priced):
+    """r_multiple measures progress against what was originally risked --
+    using the tightened working_stop instead would inflate every PARTIAL
+    row's R the moment the stop moved to break-even."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"entry_price": 100.0, "direction": "bullish", "stop_loss": 90.0,
+                "tp1": 110.0, "tp2": 130.0, "working_stop": 100.0})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade.update({"entry": 100.0, "direction": "bullish", "stop_loss": 90.0})
+    seed(plans=[plan], trades=[trade])
+    priced(120.0)
+
+    row = logged_in.get("/api/v1/trades?status=open").get_json()["items"][0]
+    assert row["r_multiple"] == 2.0    # (120-100) / (100-90), not / (100-100)
+
+
+def test_a_closed_row_keeps_its_terminal_pnl_not_a_live_one(seed, logged_in, priced):
+    """A CLOSED/CANCELLED row must not be overwritten by the live-price path
+    -- it already has the real, terminal number from dash.closed_pnl."""
+    trade = _trade("aaaaaaaaaaaaaaaa", status="win")
+    seed(trades=[trade])
+    priced(999.0)                      # must never be consulted for this row
+
+    row = logged_in.get("/api/v1/trades?status=CLOSED").get_json()["items"][0]
+    assert row["pnl_pct"] == round((108.0 - 101.0) / 101.0 * 100, 2)
+
+
+def test_no_internal_bookkeeping_fields_leak_onto_the_wire(seed, logged_in, priced):
+    """`_legs`/`_risk_stop` are transient, consumed by `_attach_unrealized_pnl`
+    -- the contract check below fails loudly on any undeclared key."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0, "r": 1.0,
+                              "reason": "tp1"}]
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    seed(plans=[plan], trades=[trade])
+    priced(115.0)
+
+    body = logged_in.get("/api/v1/trades").get_json()
+    assert_collection(body, TRADE_ROW)

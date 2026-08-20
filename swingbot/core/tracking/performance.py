@@ -489,7 +489,24 @@ class TradeLog:
         # Re-acquire it to actually apply the mutations and save, so a concurrent
         # refresh() between the computation and the write can't cause us to save
         # stale data or lose the status updates.
-        open_trades = [t for t in self._trades if t["ticker"] == ticker and t["status"] == "open"]
+        #
+        # `plan_id`-linked trades are excluded: this loop only ever knows the
+        # trade's ORIGINAL stop_loss/take_profit (snapshotted once at
+        # log_trade() time and never updated), but a v2 plan-linked trade's
+        # real levels move once it fills -- TP1 hit moves the stop to
+        # break-even and hands the runner a NEW target (TP2), which this
+        # trade record never sees. Left unguarded, the runner's own price
+        # (now sitting at/above the stale `take_profit`==TP1) re-triggers
+        # `hit_target` on the very next scan and closes the trade record
+        # early at essentially the TP1 price again -- before plan_manager's
+        # own accurate TP2/trailing-stop check ever runs. That leaves the
+        # trade already "won"/closed by the time close_plan_trade() looks
+        # for an open trade to attach the real runner leg to, so the actual
+        # close is silently dropped. plan_manager.py is the sole authority
+        # on when a plan-linked trade closes -- matches the same guard
+        # check_near_tp_timeout() already applies below, for the same reason.
+        open_trades = [t for t in self._trades if t["ticker"] == ticker
+                       and t["status"] == "open" and not t.get("plan_id")]
         if not open_trades:
             return []
 
