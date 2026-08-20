@@ -353,7 +353,9 @@ should, and the answer that came back was narrower than the question:
 relative strength sits **at or below the 25th percentile** of the watchlist
 (`RS_LAGGARD_PERCENTILE`, `swingbot/core/edge/rs_gate.py`). Requiring a short
 to be a genuine relative laggard — not merely below the median — is the
-condition under which shorts stopped being the losing half of the book.
+condition under which the bearish arm stopped being the *worst* part of the
+book. It does not make it a good one: shorts remain unprofitable on the
+window that decided this release (see below).
 
 **Bullish setups are not gated at all.** `RS_LEADER_PERCENTILE` ships at `0`,
 which structurally disables that half: a percentile is never negative, so

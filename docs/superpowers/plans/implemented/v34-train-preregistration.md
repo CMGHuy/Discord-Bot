@@ -510,9 +510,12 @@ python scripts/backtest/measure_rs_gate_effect.py --validation \
     --json data/v34_validation.json --rows-out data/v34_validation_rows.json
 ```
 
-Nothing above this line was edited before or after reading the number. This
-section is an appendix, in the same shape v33's pre-registration recorded its
-own FAIL (`v33-train-preregistration.md`, commit `0d2fdb4`).
+No claim, number, threshold or criterion above this line was edited before or
+after reading the result — the one exception, stated so a skeptic does not have
+to find it: line 3's back-reference to the plan file gained an `implemented/`
+path segment in the same commit that moved both documents, which changes no
+content. This section is an appendix, in the same shape v33's pre-registration
+recorded its own FAIL (`v33-train-preregistration.md`, commit `0d2fdb4`).
 
 **Population: 2804 VALIDATION scenarios**, 2024-01-01..2025-12-31, 75 tickers,
 9/9 sector ETFs. 2564 bullish / 240 bearish, 86 RS-exempt, 2 synthetic-50, 508

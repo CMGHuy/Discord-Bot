@@ -58,6 +58,11 @@ _FROZEN = {
     # key: (value, the document that froze it)
     "RS_LEADER_PERCENTILE": "docs/superpowers/plans/implemented/v34-train-preregistration.md",
     "RS_LAGGARD_PERCENTILE": "docs/superpowers/plans/implemented/v34-train-preregistration.md",
+    # The flag itself, for the same reason as the two thresholds it governs:
+    # v34 Task 8's VALIDATION PASS turned it on, and an .env.example still
+    # shipping RS_GATE=false would hand an installer a bot that silently
+    # skips the filter the release is named after.
+    "RS_GATE": "docs/superpowers/plans/implemented/v34-train-preregistration.md",
 }
 
 

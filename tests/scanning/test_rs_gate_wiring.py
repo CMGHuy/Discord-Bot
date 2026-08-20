@@ -1,5 +1,7 @@
 """v34 Task 6: applying the RS gate (rs_verdict, Task 4) as a pre-scenario
-filter in the scan loop, behind config.RS_GATE (default off).
+filter in the scan loop, behind config.RS_GATE -- default ON since v34 Task 8's
+VALIDATION PASS. Every test here pins the flag with monkeypatch rather than
+relying on that default, which is why flipping it changed nothing below.
 
 Driven through the real _sync_run_scan pipeline -- same recipe as
 test_mtf_gate.py (itself borrowed from test_engine_v2_plans.py /

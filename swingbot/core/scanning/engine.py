@@ -1419,15 +1419,21 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
             # Relative-strength gate (v34 Task 6): drop this scenario before
             # confidence scoring (attach_plan_v2 below) if the ticker isn't a
-            # relative leader for a bullish setup, or isn't a relative
-            # laggard for a bearish one, using item.rs_combined (the 70%
-            # ticker / 30% sector blend from _apply_sector_rs just above) --
-            # NOT the bare ticker-only rs_percentile. rs_verdict() already
-            # returns "exempt" (never "block") for RS-ineligible symbols
-            # (FX, futures, indices) and for tickers RS couldn't be computed
-            # for at all this scan (rs_combined is None); only a genuine
-            # "block" verdict drops the scenario here. Default OFF
-            # (config.RS_GATE) -- flips on only after VALIDATION.
+            # relative laggard for a bearish setup, using item.rs_combined
+            # (the 70% ticker / 30% sector blend from _apply_sector_rs just
+            # above) -- NOT the bare ticker-only rs_percentile. In practice
+            # only bearish setups are gated: RS_LEADER_PERCENTILE ships at 0
+            # and a percentile is never negative, so rs_verdict()'s bullish
+            # branch always passes (v34 Task 7 measured a bullish gate
+            # NEGATIVE at every threshold). rs_verdict() already returns
+            # "exempt" (never "block") for RS-ineligible symbols (FX, futures,
+            # indices) and for tickers RS couldn't be computed for at all this
+            # scan (rs_combined is None); only a genuine "block" verdict drops
+            # the scenario here. Default ON (config.RS_GATE) since v34 Task 8's
+            # one-shot VALIDATION PASS -- 48.50% -> 49.66% win rate for a 4.07%
+            # alert-volume cut, on OVERLAPPING intervals, so this is a measured
+            # small improvement and not a demonstrated edge
+            # (docs/superpowers/plans/implemented/v34-train-preregistration.md).
             if config.RS_GATE:
                 rs_result = rs_verdict(
                     item.result.ticker, item.result.trend,
