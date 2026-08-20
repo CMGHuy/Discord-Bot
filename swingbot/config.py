@@ -694,6 +694,13 @@ FIELDS: list[Field] = [
                "the strategy or it does nothing. Structure-derived stops (Fibonacci, Elliott "
                "Wave, Support/Resistance) are never scaled. R:R is preserved -- the same "
                "distance feeds stop and target. Off until the E33 walk-forward folds judge it."),
+    Field("LEVEL_TOUCH_STRENGTH", "LEVEL_TOUCH_STRENGTH", "Universe & Scanning",
+          "Level touch-strength grading",
+          type="checkbox", default="false",
+          help="Grade each support/resistance level by how convincingly price has "
+               "respected it historically (rejections vs breaks, decayed by age), "
+               "and prefer better-tested levels as targets. Enable only after "
+               "VALIDATION."),
 ]
 
 _CASTERS = {

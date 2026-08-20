@@ -63,6 +63,7 @@ very tight stop is more exposed to being clipped by ordinary daily noise
 rather than a genuine reversal.
 """
 import math
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -74,6 +75,7 @@ from swingbot.core.market.volatility import bollinger_bands
 from swingbot.core.market.trendlines import trendline_levels
 from swingbot.core.market.fvg import find_fair_value_gaps
 from swingbot.core.market.strategy import compute_hvn_level
+from swingbot.core.market.level_strength import grade_level
 
 # Candidate levels within this % of each other get merged into one,
 # combined-confidence level rather than shown as separate near-duplicate
@@ -109,6 +111,7 @@ MAX_TARGET2_LEG_MULTIPLE = 3.0
 class Level:
     price: float
     sources: list
+    strength: dict | None = None   # v36; None = not graded (config.LEVEL_TOUCH_STRENGTH off)
 
 
 def _cluster_levels(candidates: list, tolerance_pct: float = CLUSTER_TOLERANCE_PCT) -> list:
@@ -528,11 +531,46 @@ def simulate_all_strategy_levels(df: pd.DataFrame, h: dict, current_price: float
     return by_family
 
 
-def build_level_map(df: pd.DataFrame, h: dict, current_price: float):
-    """Returns (supports, resistances): Level lists below/above current_price, nearest first."""
+# v36 touch-strength cache: the grade only changes when a new daily bar
+# arrives, so it's keyed on (ticker, rounded price, last bar date, horizon) --
+# recomputing it every scan of an unchanged bar is pure waste. Capped so a
+# long-running bot doesn't grow this without bound; oldest entries evicted
+# first once the cap is hit.
+_STRENGTH_CACHE_MAX_ENTRIES = 4000
+_strength_cache: "OrderedDict[tuple, dict]" = OrderedDict()
+
+
+def _graded_strength(df: pd.DataFrame, level_price: float, direction: str,
+                     halflife_bars: int, ticker, horizon_key) -> dict:
+    key = (ticker, round(level_price, 2), str(df.index[-1].date()), horizon_key)
+    cached = _strength_cache.get(key)
+    if cached is not None:
+        return cached
+    grade = grade_level(df, level_price, direction, halflife_bars)
+    _strength_cache[key] = grade
+    if len(_strength_cache) > _STRENGTH_CACHE_MAX_ENTRIES:
+        _strength_cache.popitem(last=False)
+    return grade
+
+
+def build_level_map(df: pd.DataFrame, h: dict, current_price: float,
+                    ticker: str | None = None, horizon_key: str | None = None):
+    """Returns (supports, resistances): Level lists below/above current_price, nearest first.
+
+    `ticker` and `horizon_key` are optional -- they only matter for keying the
+    v36 touch-strength cache (see `_graded_strength`) when
+    config.LEVEL_TOUCH_STRENGTH is on. Grading is skipped entirely when the
+    flag is off, so callers that never enable it can leave both unset.
+    """
     clustered = _cluster_levels(collect_candidate_levels(df, h, current_price))
     supports = sorted([lv for lv in clustered if lv.price < current_price], key=lambda l: -l.price)
     resistances = sorted([lv for lv in clustered if lv.price > current_price], key=lambda l: l.price)
+    if config.LEVEL_TOUCH_STRENGTH:
+        halflife_bars = h.get("touch_decay_halflife", 21)
+        for lv in supports:
+            lv.strength = _graded_strength(df, lv.price, "bullish", halflife_bars, ticker, horizon_key)
+        for lv in resistances:
+            lv.strength = _graded_strength(df, lv.price, "bearish", halflife_bars, ticker, horizon_key)
     return supports, resistances
 
 
