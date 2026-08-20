@@ -287,8 +287,15 @@ def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tup
 # confirming method and inflate the count with however many anchors a
 # ticker happens to have. The full label is kept wherever it's shown to a
 # user (charts, alerts) -- only this confluence COUNT collapses the family.
+#
+# Name is "AVWAP", not "Anchored VWAP" -- must match the family name
+# registered in levels.ALL_STRATEGY_FAMILIES / levels.strategy_family(),
+# which is what levels.py's own confluence path folds every per-anchor
+# label to. The two folding paths previously disagreed on this string
+# (same count, different name) even though nothing else in the codebase
+# ever registers "Anchored VWAP" as a family name.
 _AVWAP_FAMILY_RE = re.compile(r"^Anchored VWAP \(")
-_AVWAP_FAMILY_NAME = "Anchored VWAP"
+_AVWAP_FAMILY_NAME = "AVWAP"
 
 
 def _resolve_confluence(explicit: tuple | None, sources: list) -> tuple:

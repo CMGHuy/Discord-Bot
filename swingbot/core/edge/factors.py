@@ -132,7 +132,7 @@ def anchored_vwap(df: pd.DataFrame, anchor_idx: int) -> pd.Series:
 _FIFTY_TWO_WEEK_BARS = 252
 
 
-def avwap_anchors(df: pd.DataFrame, lookback: int = 120) -> list:
+def avwap_anchors(df: pd.DataFrame, lookback: int = 120) -> list[tuple[int, str]]:
     """Anchor bars that mean something, each with a human-readable label:
     recent swing pivots, the highest-volume day (a capitulation/breakout bar
     everyone remembers), and the 52-week extremes.

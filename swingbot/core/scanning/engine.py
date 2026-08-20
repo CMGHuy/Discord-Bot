@@ -215,9 +215,12 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         pass
 
     try:
+        # Cap at 3 overlay lines -- v35 Task 2 added 52-week extreme anchors
+        # to avwap_anchors, so an uncapped chart can now draw up to 7 lines
+        # instead of the pre-v35 3 this cap originally held it to.
         ctx["avwaps"] = [{"series": rs_factors.anchored_vwap(df, idx),
                           "anchor_label": label}
-                         for idx, label in rs_factors.avwap_anchors(df)]
+                         for idx, label in rs_factors.avwap_anchors(df)[:3]]
     except Exception:
         pass
 

@@ -1,6 +1,5 @@
 from swingbot import config
-from swingbot.core.market import levels
-from swingbot.core.market.levels import _cluster_levels, build_level_map
+from swingbot.core.market.levels import build_level_map
 from swingbot.core.market.strategy_types import HORIZONS
 from tests.helpers import make_ohlcv
 
@@ -42,7 +41,31 @@ def test_avwap_family_still_counts_once_for_confluence():
     count, families = _resolve_confluence(
         None, ["Anchored VWAP (52w high)", "Anchored VWAP (swing low)", "EMA"])
     assert count == 2
-    assert families == ["Anchored VWAP", "EMA"]
+    assert families == ["AVWAP", "EMA"]
+
+
+def test_avwap_family_folds_in_explain_fallback_path():
+    """explain.build_explanation's own fallback (used when no explicit
+    (count, families) confluence tuple is passed in) has its own dedup,
+    separate from confidence._resolve_confluence and levels.strategy_family
+    -- verify it folds multiple per-anchor AVWAP labels to one family too,
+    same shape as test_avwap_family_still_counts_once_for_confluence above."""
+    from types import SimpleNamespace
+
+    from swingbot.core.market.explain import build_explanation
+
+    scenario = SimpleNamespace(
+        direction="bullish",
+        take_profit=100.0, target_distance_pct=5.0,
+        stop_loss=95.0, stop_distance_pct=5.0,
+        target2_price=None, target2_distance_pct=None,
+        target_sources=["Anchored VWAP (52w high)", "Anchored VWAP (swing low)", "EMA"],
+        stop_sources=["Anchored VWAP (swing low)"],
+    )
+    result = SimpleNamespace(ticker="TEST", horizon_label="4W", scenario=scenario)
+    text = build_explanation(result)
+    assert "2 methods" in text
+    assert "anchored VWAP" in text
 
 
 def test_avwap_disabled_produces_no_avwap_levels(monkeypatch):
