@@ -166,7 +166,11 @@ def test_avwap_anchors_are_sorted_deduped_and_in_range():
     # Swing pivots need `span` confirming bars on each side, so no anchor may
     # sit inside the trailing unconfirmed window; the volume anchor is exempt
     # (it needs no confirmation) but here it is at 250, well clear of the end.
-    assert max(idx for idx in indices if idx != 250) < len(df) - 5
+    # The 52-week extremes are exempt too -- they need no trailing confirmation
+    # either, and can legitimately land on the most recent bar.
+    pivots = [idx for idx, label in anchors
+              if idx != 250 and not label.startswith("52w")]
+    assert max(pivots) < len(df) - 5
 
 
 def test_avwap_anchors_ignore_bars_before_the_lookback():
