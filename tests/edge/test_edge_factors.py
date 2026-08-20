@@ -188,14 +188,16 @@ def test_avwap_anchors_ignore_bars_before_the_lookback():
 
 
 def test_avwap_levels_enter_the_level_map_when_enabled(monkeypatch):
+    """v35: each candidate is labelled with its own anchor, e.g.
+    "Anchored VWAP (52w high)" -- see avwap_anchors -- not a bare "AVWAP"."""
     from swingbot import config
     from swingbot.core.market import levels
     from swingbot.core.market.strategy_types import HORIZONS
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", True)
     df = make_trend_df(300, +0.2)
     cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
-    assert any(src == "AVWAP" for _, src in cands)
-    assert all(p > 0 for p, src in cands if src == "AVWAP")
+    assert any(src.startswith("Anchored VWAP (") for _, src in cands)
+    assert all(p > 0 for p, src in cands if src.startswith("Anchored VWAP ("))
 
 
 def test_avwap_levels_absent_while_the_flag_is_off(monkeypatch):
@@ -209,7 +211,7 @@ def test_avwap_levels_absent_while_the_flag_is_off(monkeypatch):
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", False)
     df = make_trend_df(300, +0.2)
     cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
-    assert not any(src == "AVWAP" for _, src in cands)
+    assert not any(src.startswith("Anchored VWAP (") for _, src in cands)
 
 
 def test_avwap_is_its_own_strategy_family():
@@ -222,6 +224,17 @@ def test_avwap_is_its_own_strategy_family():
     assert levels.strategy_family("AVWAP") == "AVWAP"
     assert levels.strategy_family("VWAP") == "VWAP"
     assert "AVWAP" in levels.ALL_STRATEGY_FAMILIES
+
+
+def test_avwap_per_anchor_labels_fold_to_one_family():
+    """v35: collect_candidate_levels now emits one source label PER ANCHOR
+    ("Anchored VWAP (52w high)", "Anchored VWAP (swing low)", ...) --
+    strategy_family() must fold every one of those back to the same
+    "AVWAP" family, or the confirming-strategy count inflates with however
+    many anchors a ticker happens to have."""
+    from swingbot.core.market import levels
+    assert levels.strategy_family("Anchored VWAP (52w high)") == "AVWAP"
+    assert levels.strategy_family("Anchored VWAP (swing low)") == "AVWAP"
 
 
 def _bar(df_idx, o, h, l, c, v, base_vol=1_000_000):
