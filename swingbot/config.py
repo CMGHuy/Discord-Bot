@@ -264,12 +264,16 @@ FIELDS: list[Field] = [
           type="checkbox", default="true",
           help="Require bearish setups to sit in the bottom quartile of combined "
                "relative strength versus SPY. FX, futures and indices are exempt, "
-               "and so is any ticker RS could not be computed for -- an exemption "
-               "is never counted as a pass. The bullish half is disabled "
-               "(RS_LEADER_PERCENTILE=0) because it measured negative. ON by "
-               "default since v34's one-shot VALIDATION: 48.50% -> 49.66% win "
-               "rate (+1.17pp) for 4.07% of alert volume, on overlapping "
-               "confidence intervals -- a small improvement, not a proven edge."),
+               "and so is any scan where the RS benchmark itself failed to "
+               "compute (SPY/RS-cache failure) -- an exemption is never counted "
+               "as a pass. A single ticker with too little history for its own "
+               "RS reading is NOT exempt: it gets the ambiguous 50.0 sentinel "
+               "and is judged as if it were a real median (see docs/strategy.md). "
+               "The bullish half is disabled (RS_LEADER_PERCENTILE=0) because it "
+               "measured negative. ON by default since v34's one-shot VALIDATION: "
+               "48.50% -> 49.66% win rate (+1.17pp) for 4.07% of alert volume, on "
+               "overlapping confidence intervals -- a small improvement, not a "
+               "proven edge."),
     # Both defaults are FROZEN from the v34 TRAIN sweep
     # (docs/superpowers/plans/implemented/v34-train-preregistration.md) and must not be
     # changed without a new pre-registration and its own VALIDATION shot.

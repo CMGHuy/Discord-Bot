@@ -375,10 +375,28 @@ the sector wiring stayed. If a ticker's sector or its ETF is unavailable, the
 blend falls back to the ticker-only percentile for that ticker alone.
 
 **Exemptions are not passes.** The verdict is tri-state — `pass` / `block` /
-`exempt`. FX, futures and indices are exempt because RS versus SPY is not a
-meaningful comparison for them, and so is any ticker whose RS could not be
-computed this scan. Only a genuine `block` ever drops a scenario; "we could not
-run the comparison" is never recorded as agreement.
+`exempt`. FX, futures, indices and crypto are exempt because RS versus SPY is
+not a meaningful comparison for them, and so is any scan where the RS
+benchmark itself failed to compute (a scan-wide SPY/RS-cache failure). Only a
+genuine `block` ever drops a scenario; "we could not run the comparison" is
+never recorded as agreement.
+
+**Known gap: a single ticker's own thin history is not exempt.** The
+exemption above only fires on a scan-wide RS failure, not on a per-ticker
+one. `rs_percentile()` (`edge/factors.py`) returns the synthetic median
+`50.0` — not `None` — when a ticker has too little history (under ~64 bars)
+for a real reading, and the gate's `rs_available` signal
+(`item.rs_combined is not None`) can't see that: it is only ever `False` on
+the scan-wide failure, never on this per-ticker sentinel case. So a ticker
+with too little history to actually compute RS reaches the gate as an
+*available* 50.0 reading, judged exactly as if it were a genuine median —
+which a bearish setup at the 25 laggard threshold cannot pass (50 > 25) and
+so gets blocked by a comparison that was never really run. This is disclosed
+in the VALIDATION numbers (2 "synthetic-50" rows out of 2804 scenarios) —
+VALIDATION measured the gate exactly as shipped, sentinel case included —
+and is left as a known, documented gap rather than patched here, since
+plumbing real per-ticker availability would change decision-making behavior
+VALIDATION never measured.
 
 **Per-horizon RS lookback windows exist in the config and are not used.**
 `HORIZONS[hk]["rs_window"]` is defined for all ten horizons, but nothing reads
