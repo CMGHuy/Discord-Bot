@@ -4,12 +4,13 @@ import {
   ElementRef,
   effect,
   inject,
+  signal,
   viewChild,
 } from '@angular/core';
 
 import { Release } from '../../api/models';
 import { PaginationComponent } from '../../ui/pagination';
-import { VersionsStore } from '../../stores/versions.store';
+import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
 /**
  * Versions — the release timeline behind every component in `VERSION.json`.
@@ -97,8 +98,8 @@ import { VersionsStore } from '../../stores/versions.store';
                         [style.width.%]="segment.width * 100"
                         [style.background]="segment.current ? null : versionTint(segment.version)"
                         (click)="store.toggleFilter(lane.component, segment.version)"
-                        [attr.title]="lane.component + ' ' + segment.version
-                          + ' · ' + segment.firstSeen + ' → ' + segment.lastSeen"></button>
+                        (pointerenter)="hovered.set({ lane: lane.component, segment })"
+                        (pointerleave)="hovered.set(null)"></button>
               }
             </div>
           </div>
@@ -108,7 +109,23 @@ import { VersionsStore } from '../../stores/versions.store';
                [style.width.%]="store.bracket().width * 100"
                title="The releases listed below"></div>
         </div>
+        @if (hovered(); as h) {
+          <div class="overlay-row">
+            <div class="spotlight" [style.left.%]="h.segment.start * 100"
+                 [style.width.%]="h.segment.width * 100"></div>
+          </div>
+        }
       </div>
+
+      @if (hovered(); as h) {
+        <div class="tooltip">
+          <strong>{{ h.lane }} {{ h.segment.version }}</strong>
+          @for (pair of pairedEntries(h.segment); track pair[0]) {
+            <div>paired with: {{ pair[0] }} {{ pair[1] }}</div>
+          }
+          <div class="when">{{ h.segment.firstSeen }} → {{ h.segment.current ? 'now' : h.segment.lastSeen }}</div>
+        </div>
+      }
 
       <div class="legend">
         <span><i class="sw seg"></i>a version was live</span>
@@ -205,7 +222,8 @@ import { VersionsStore } from '../../stores/versions.store';
     .chip.moved { cursor: pointer; }
     .chip.quiet { color: var(--text-faint); cursor: default; }
 
-    .strip { display: flex; flex-direction: column; gap: var(--space-6); }
+    .strip { display: flex; flex-direction: column; gap: var(--space-6);
+              position: relative; overflow: hidden; }
     .lane { display: flex; align-items: center; gap: var(--space-8); }
     .lane-name { width: 4.5rem; flex: none; font-family: var(--font-mono);
                  font-size: var(--text-micro); color: var(--text-muted); }
@@ -223,6 +241,32 @@ import { VersionsStore } from '../../stores/versions.store';
     .bracket-row { position: relative; height: 12px; margin-left: calc(4.5rem + var(--space-8)); }
     .bracket { position: absolute; top: 0; height: 100%; border: 1px solid var(--text-faint);
                border-radius: 3px; background: var(--surface-raised); }
+
+    /* Track-aligned, same left offset as .bracket-row -- an absolutely
+       positioned block with only left/right set (no width) auto-sizes to
+       exactly the track's own width, the same trick .bracket-row already
+       relies on for its own left/width percentages. */
+    .overlay-row { position: absolute; top: 0; bottom: 0;
+                    left: calc(4.5rem + var(--space-8)); right: 0;
+                    pointer-events: none; }
+    /* The 9999px spread dims everything outside this element's own left/width
+       in one paint -- clipped to .strip's bounds by its overflow: hidden,
+       so it never bleeds into the basis line above or the legend below. */
+    .spotlight { position: absolute; top: 0; bottom: 0;
+                  box-shadow: 0 0 0 9999px var(--overlay-dim);
+                  pointer-events: none; }
+
+    /* Same custom-tooltip convention as line-chart.ts's pointer tooltip:
+       position: absolute with no explicit left/top, so it renders at its
+       static in-flow position (right after .strip, above .legend) rather
+       than tracking the cursor -- deliberately, since it must not be
+       clipped by .strip's own overflow: hidden. */
+    .tooltip { position: absolute; padding: var(--space-6) var(--space-8);
+                background: var(--surface-overlay); border: 1px solid var(--border-strong);
+                border-radius: var(--radius); font-size: var(--text-micro); color: var(--text);
+                display: flex; flex-direction: column; gap: var(--space-2);
+                pointer-events: none; }
+    .tooltip .when { color: var(--text-faint); }
 
     .legend {
       display: flex; flex-wrap: wrap; gap: var(--space-14);
@@ -263,6 +307,15 @@ import { VersionsStore } from '../../stores/versions.store';
 export class Versions {
   protected readonly store = inject(VersionsStore);
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
+
+  protected readonly hovered = signal<{ lane: string; segment: LaneSegment } | null>(null);
+
+  /** `Object.entries` for the template's `@for` -- keeps the tooltip's
+   *  paired-version rows from needing a pipe or a second computed just to
+   *  iterate a plain object. */
+  protected pairedEntries(segment: LaneSegment): [string, string][] {
+    return Object.entries(segment.pairedWith);
+  }
 
   protected isFiltered(component: string, version: string): boolean {
     const active = this.store.filter();

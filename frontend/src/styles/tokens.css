@@ -43,6 +43,7 @@
   --surface: #10121a;
   --surface-raised: #171a25;
   --surface-overlay: #1e2230;
+  --overlay-dim: rgba(10, 11, 16, .72);
   --border: #232838;
   --border-strong: #333a4f;
 

@@ -112,4 +112,34 @@ describe('Versions', () => {
     // end -- regardless of the exact dates in the fixture.
     expect(leftPct + widthPct).toBeCloseTo(100, 1);
   });
+
+  it('shows paired versions on hover, worded "paired with" not "compatible", and spotlights the matching time slice in every lane', async () => {
+    const fixture = seed(PAIRED);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    // components: ['ui', 'bot'] -- the ui lane renders first, so this is
+    // its current segment (ui 1.2.0, closed by release a2).
+    const current = host.querySelector('.segment.current') as HTMLButtonElement;
+    current.dispatchEvent(new Event('pointerenter'));
+    fixture.detectChanges();
+
+    const tooltip = host.querySelector('.tooltip');
+    expect(tooltip?.textContent).toContain('ui 1.2.0');
+    expect(tooltip?.textContent).toContain('paired with: bot 1.1.2');
+    expect(tooltip?.textContent).not.toContain('compatible');
+
+    // The spotlight must line up exactly with the hovered segment's own
+    // geometry -- same fractions, not a hand-rederived copy.
+    const spotlight = host.querySelector('.spotlight') as HTMLElement;
+    expect(spotlight).toBeTruthy();
+    expect(spotlight.style.left).toBe(current.style.left);
+    expect(spotlight.style.width).toBe(current.style.width);
+
+    current.dispatchEvent(new Event('pointerleave'));
+    fixture.detectChanges();
+    expect(host.querySelector('.tooltip')).toBeNull();
+    expect(host.querySelector('.spotlight')).toBeNull();
+  });
 });
