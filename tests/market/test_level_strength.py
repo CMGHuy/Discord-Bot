@@ -43,3 +43,63 @@ def test_zero_or_negative_level_returns_no_touches():
 
 def test_empty_frame_returns_no_touches():
     assert find_touches(_bars([]), level=100.0) == []
+
+
+from swingbot.core.market.level_strength import grade_level
+
+
+def test_untouched_level_is_neutral_and_flagged_unavailable():
+    """A freshly-formed level has no history. It must score NEUTRAL, not bad --
+    otherwise the system structurally prefers old levels over good ones."""
+    df = _bars([(200.0, 201.0, 200.5)] * 50)
+    g = grade_level(df, level=100.0, direction="bullish", halflife_bars=60)
+    assert g["available"] is False
+    assert g["touches"] == 0
+    assert g["score"] == pytest.approx(0.5)
+
+
+def test_repeated_rejections_score_high():
+    """Wick below the level, close back above = the level held."""
+    rows = [(99.0, 101.0, 100.8)] * 3 + [(105.0, 106.0, 105.5)] * 20
+    g = grade_level(_bars(rows), level=100.0, direction="bullish", halflife_bars=60)
+    assert g["rejections"] == 3
+    assert g["breaks"] == 0
+    assert g["score"] > 0.6
+
+
+def test_breaks_score_low():
+    """Closing THROUGH the level is a failure, and must not score like a
+    bounce -- a bare proximity count would rate a destroyed level as
+    well-tested."""
+    rows = [(98.0, 101.0, 98.5)] * 3 + [(90.0, 91.0, 90.5)] * 20
+    g = grade_level(_bars(rows), level=100.0, direction="bullish", halflife_bars=60)
+    assert g["breaks"] == 3
+    assert g["score"] < 0.4
+
+
+def test_recent_touches_outweigh_old_ones():
+    """Same touch, different age. A rejection three weeks ago is stronger
+    evidence than one eight months ago."""
+    recent = _bars([(105.0, 106.0, 105.5)] * 40 + [(99.0, 101.0, 100.8)] * 3)
+    old = _bars([(99.0, 101.0, 100.8)] * 3 + [(105.0, 106.0, 105.5)] * 40)
+    g_recent = grade_level(recent, 100.0, "bullish", halflife_bars=20)
+    g_old = grade_level(old, 100.0, "bullish", halflife_bars=20)
+    assert g_recent["score"] > g_old["score"]
+
+
+def test_score_is_bounded_to_unit_interval():
+    rows = [(99.0, 101.0, 100.8)] * 40
+    g = grade_level(_bars(rows), 100.0, "bullish", halflife_bars=60)
+    assert 0.0 <= g["score"] <= 1.0
+
+
+def test_every_horizon_defines_a_touch_decay_halflife():
+    from swingbot.core.market.strategy_types import HORIZONS
+    for key, settings in HORIZONS.items():
+        assert "touch_decay_halflife" in settings, f"{key} missing halflife"
+
+
+def test_halflives_increase_with_horizon_length():
+    from swingbot.core.market.strategy_types import HORIZONS
+    values = [HORIZONS[k]["touch_decay_halflife"] for k in HORIZONS]
+    assert values == sorted(values)
