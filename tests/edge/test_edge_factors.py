@@ -159,22 +159,28 @@ def test_avwap_anchors_are_sorted_deduped_and_in_range():
     df = make_ohlcv(closes, volumes=vols)
 
     anchors = avwap_anchors(df, lookback=120)
-    assert anchors == sorted(set(anchors)), "anchors must be sorted and deduped"
-    assert all(0 <= a < len(df) for a in anchors)
-    assert 250 in anchors, "the highest-volume bar of the lookback must be an anchor"
+    indices = [idx for idx, _label in anchors]
+    assert indices == sorted(set(indices)), "anchors must be sorted and deduped"
+    assert all(0 <= idx < len(df) for idx in indices)
+    assert 250 in indices, "the highest-volume bar of the lookback must be an anchor"
     # Swing pivots need `span` confirming bars on each side, so no anchor may
     # sit inside the trailing unconfirmed window; the volume anchor is exempt
     # (it needs no confirmation) but here it is at 250, well clear of the end.
-    assert max(a for a in anchors if a != 250) < len(df) - 5
+    assert max(idx for idx in indices if idx != 250) < len(df) - 5
 
 
 def test_avwap_anchors_ignore_bars_before_the_lookback():
     """A 120-bar lookback must not anchor on ancient history -- except that
     the pivot scan and the volume scan both start at the same `start` bar,
-    so nothing older than that can ever be returned."""
+    so nothing older than that can ever be returned. The 52-week anchors are
+    a separate, wider window (up to 252 bars) that is deliberately NOT bounded
+    by `lookback` -- "the year's high/low" is a different question from "the
+    recent window's pivots" -- so they are excluded from this check by label."""
     from swingbot.core.edge.factors import avwap_anchors
     df = make_trend_df(300, +0.1)
-    assert all(a >= len(df) - 120 for a in avwap_anchors(df, lookback=120))
+    anchors = avwap_anchors(df, lookback=120)
+    bounded = [idx for idx, label in anchors if not label.startswith("52w")]
+    assert all(idx >= len(df) - 120 for idx in bounded)
 
 
 def test_avwap_levels_enter_the_level_map_when_enabled(monkeypatch):
