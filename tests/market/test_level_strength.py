@@ -78,13 +78,25 @@ def test_breaks_score_low():
 
 
 def test_recent_touches_outweigh_old_ones():
-    """Same touch, different age. A rejection three weeks ago is stronger
-    evidence than one eight months ago."""
-    recent = _bars([(105.0, 106.0, 105.5)] * 40 + [(99.0, 101.0, 100.8)] * 3)
-    old = _bars([(99.0, 101.0, 100.8)] * 3 + [(105.0, 106.0, 105.5)] * 40)
-    g_recent = grade_level(recent, 100.0, "bullish", halflife_bars=20)
-    g_old = grade_level(old, 100.0, "bullish", halflife_bars=20)
-    assert g_recent["score"] > g_old["score"]
+    """Decay weights make recent touches dominate the aggregate score.
+
+    To isolate the decay formula (not incidental lookback effects), we mix
+    rejections and breaks: rejections score high, breaks score 0. By putting
+    rejections recent in one scenario and old in another, we show that
+    decay -- not incidental quality variations -- determines which scenario
+    scores higher."""
+    # Scenario A: Rejections old (indices 0-5), breaks recent (indices 6-20).
+    # Weighted average pulled down by recent low-quality breaks.
+    rows_a = [(99.0, 101.0, 100.8)] * 6 + [(98.0, 101.0, 98.5)] * 15
+    g_a = grade_level(_bars(rows_a), 100.0, "bullish", halflife_bars=20)
+
+    # Scenario B: Breaks old (indices 0-5), rejections recent (indices 6-20).
+    # Weighted average pulled up by recent high-quality rejections.
+    rows_b = [(98.0, 101.0, 98.5)] * 6 + [(99.0, 101.0, 100.8)] * 15
+    g_b = grade_level(_bars(rows_b), 100.0, "bullish", halflife_bars=20)
+
+    # Recent high-quality touches dominate the score, so B > A.
+    assert g_b["score"] > g_a["score"]
 
 
 def test_score_is_bounded_to_unit_interval():
