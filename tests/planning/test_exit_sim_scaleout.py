@@ -340,3 +340,59 @@ def test_legs_fractions_always_sum_to_one():
     assert sum(l["fraction"] for l in result.legs) == pytest.approx(1.0)
     assert result.r_total == pytest.approx(
         sum(l["fraction"] * l["r"] for l in result.legs), abs=0.001)
+
+
+# ---------------------------------------------------------------------------
+# v39: the runner floor. The formula itself, both directions, and the
+# boundary guard proving the stop is no longer plain breakeven.
+# ---------------------------------------------------------------------------
+
+def test_runner_floor_is_two_thirds_of_the_tp1_move():
+    # One formula, no is_bull branch: (tp1 - entry) carries the sign.
+    assert RUNNER_FLOOR_FRACTION == pytest.approx(2.0 / 3.0)
+    assert runner_floor(100.0, 110.0) == pytest.approx(106.66666666666667)
+    assert runner_floor(100.0, 90.0) == pytest.approx(93.33333333333333)
+    # A degenerate plan whose tp1 sits on entry floors at entry, exactly as
+    # the pre-v39 model did. (_scale_out_exit_walk returns "no_trade" before
+    # ever reaching phase 2 when risk <= 0, so that case never gets here.)
+    assert runner_floor(100.0, 100.0) == pytest.approx(100.0)
+
+
+def test_bullish_runner_stops_at_the_floor_not_at_plain_breakeven():
+    # Bar 2 dips to 103.0 -- ABOVE the old breakeven floor (entry 100) and
+    # BELOW the v39 floor (106.666...7). Pre-v39 this bar survived and the
+    # trade timed out at that bar's close (104.0, r_total 1.4); now it must
+    # close at the floor. This is the regression guard: if the boundary
+    # silently reverted to entry, this test fails.
+    df = make_ohlcv([
+        100.0,
+        (100.0, 111.0, 99.5, 110.5),     # 1: TP1 banked
+        (110.0, 110.5, 103.0, 104.0),    # 2: low between old BE and the new floor
+    ])
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_be"
+    assert result.exit_index == 2
+    assert result.legs[1]["exit_price"] == pytest.approx(106.66666666666667)
+    assert result.legs[1]["r"] == pytest.approx(1.333)
+    assert result.r_total == pytest.approx(1.667)
+
+
+def test_bearish_runner_stops_at_the_floor_not_at_plain_breakeven():
+    # Mirror image: bar 2 rallies to 97.0 -- BELOW the old breakeven floor
+    # (entry 100) and ABOVE the v39 floor (93.333...3). Pre-v39 this
+    # survived to a 96.0 timeout (r_total 1.4).
+    df = make_ohlcv([
+        100.0,
+        (100.0, 100.5, 89.0, 90.5),      # 1: TP1 banked
+        (91.0, 97.0, 90.5, 96.0),        # 2: high between the new floor and old BE
+    ])
+    plan = _plan(direction="bearish", stop_loss=105.0, tp1=90.0, tp2=None)
+    result = simulate_exit(df, signal_index=0, plan=plan, scale_out=True)
+    assert result.outcome == "win"
+    assert result.runner_outcome == "runner_be"
+    assert result.exit_index == 2
+    assert result.legs[1]["exit_price"] == pytest.approx(93.33333333333333)
+    assert result.legs[1]["r"] == pytest.approx(1.333)
+    assert result.r_total == pytest.approx(1.667)
