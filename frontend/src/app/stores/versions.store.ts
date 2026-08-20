@@ -211,11 +211,16 @@ export const VersionsStore = signalStore(
           floor / (scale || 1),
         ).map((w) => w * scale);
 
+        // Newest-first: the axis is flipped last, after every existing
+        // width/position computation, so applyFloor and the run-collapsing
+        // above are untouched. `cursor` still accumulates chronologically
+        // (oldest to newest) exactly as before; only the emitted `start`
+        // is mirrored around the strip's midpoint.
         let cursor = absentWidth;
         const segments = runs.map((run, i) => {
           const segment: LaneSegment = {
             version: run.version,
-            start: cursor,
+            start: 1 - cursor - widths[i],
             width: widths[i],
             firstSeen: ordered.find((r) => t(r.date) === run.from)?.date ?? '',
             lastSeen: ordered.find((r) => t(r.last_seen) === run.to)?.last_seen ?? '',
@@ -244,8 +249,10 @@ export const VersionsStore = signalStore(
       // `visible` is newest-first, so its last row is the oldest on screen.
       const from = t(rows[rows.length - 1].date);
       const to = t(rows[0].last_seen);
-      const start = (from - t0) / span;
-      return { start, width: Math.max((to - from) / span, 2 / Math.max(1, stripWidth())) };
+      const chronoStart = (from - t0) / span;
+      const width = Math.max((to - from) / span, 2 / Math.max(1, stripWidth()));
+      // Same mirror as lanes() above — flipped last, after the width floor.
+      return { start: 1 - chronoStart - width, width };
     }),
   })),
   withComputed(({ data, lanes, stripWidth }) => ({
