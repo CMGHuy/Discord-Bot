@@ -200,14 +200,28 @@ def test_avwap_levels_enter_the_level_map_when_enabled(monkeypatch):
     assert all(p > 0 for p, src in cands if src.startswith("Anchored VWAP ("))
 
 
+def test_avwap_ships_default_on_since_v35():
+    """v35 Task 4 flipped this default. It was default-off from E30 until
+    2026-08-20, waiting on a measurement; E33 then FAILED it on an
+    improvement gate (2026-07-26, pooled -0.0001R) and v35's own
+    pre-registered one-shot VALIDATION PASSED it on a non-degradation rule
+    (-0.084pp win rate, overlapping Wilson intervals).
+
+    The budget for this question is SPENT. If this assertion fails, someone
+    has flipped a judged default -- read
+    docs/superpowers/plans/v35-avwap-preregistration.md and
+    docs/superpowers/results/2026-07-26-edge-folds.md before changing it,
+    and do not re-run either measurement to justify the change."""
+    from swingbot import config
+    assert config.AVWAP_LEVELS_ENABLED is True
+
+
 def test_avwap_levels_absent_while_the_flag_is_off(monkeypatch):
-    """Default-off, per this plan's Global Constraints: a new level source
-    shifts every confluence count, so it stays dark until the walk-forward
-    folds (E33) and the shadow forward-gate (E40) have judged it."""
+    """The flag must still fully suppress the source when turned off -- it
+    is default-on since v35, but it remains a real off switch."""
     from swingbot import config
     from swingbot.core.market import levels
     from swingbot.core.market.strategy_types import HORIZONS
-    assert config.AVWAP_LEVELS_ENABLED is False, "this factor must ship default-off"
     monkeypatch.setattr(config, "AVWAP_LEVELS_ENABLED", False)
     df = make_trend_df(300, +0.2)
     cands = levels.collect_candidate_levels(df, HORIZONS["4w"], float(df["Close"].iloc[-1]))
