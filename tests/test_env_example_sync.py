@@ -63,6 +63,11 @@ _FROZEN = {
     # shipping RS_GATE=false would hand an installer a bot that silently
     # skips the filter the release is named after.
     "RS_GATE": "docs/superpowers/plans/implemented/v34-train-preregistration.md",
+    # v35's own instance of the exact same drift: a final-review pass caught
+    # .env.example still shipping AVWAP_LEVELS_ENABLED=false after v35's
+    # one-shot VALIDATION PASS turned it on, and nothing had been guarding
+    # the value since -- the same silent-revert risk RS_GATE closes above.
+    "AVWAP_LEVELS_ENABLED": "docs/superpowers/plans/implemented/v35-avwap-preregistration.md",
 }
 
 
