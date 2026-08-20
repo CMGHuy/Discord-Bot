@@ -347,10 +347,10 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
     if config.AVWAP_LEVELS_ENABLED:
         try:
             from swingbot.core.edge.factors import anchored_vwap, avwap_anchors
-            for a in avwap_anchors(df):
-                v = float(anchored_vwap(df, a).iloc[-1])
+            for anchor_idx, anchor_label in avwap_anchors(df):
+                v = float(anchored_vwap(df, anchor_idx).iloc[-1])
                 if v > 0:
-                    candidates.append((v, "AVWAP"))
+                    candidates.append((v, f"Anchored VWAP ({anchor_label})"))
         except Exception:
             pass
 
@@ -388,8 +388,19 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float) ->
 # one currently among these).
 _STRATEGY_FAMILY_PREFIXES = [
     ("EMA", "EMA"),
-    # AVWAP before VWAP is belt-and-braces, not a real ambiguity: matching
-    # is startswith, so "AVWAP" never hits the "VWAP" prefix anyway. Listed
+    # v35: collect_candidate_levels now emits one labelled source PER
+    # ANCHOR -- "Anchored VWAP (52w high)", "Anchored VWAP (swing low)",
+    # etc. (see avwap_anchors) -- so every anchor must fold back to the
+    # SAME "AVWAP" family here, or the method count inflates 1-for-1 with
+    # however many anchors this ticker happens to have (the exact trap
+    # this plan's Global Constraints forbid). Listed before the bare
+    # "AVWAP" entry only for readability; there's no real prefix
+    # ambiguity since "Anchored VWAP (" and "AVWAP" share no common start.
+    ("Anchored VWAP (", "AVWAP"),
+    # Bare "AVWAP" is no longer emitted by collect_candidate_levels (kept
+    # for any caller still passing the pre-v35 label directly). AVWAP
+    # before VWAP is belt-and-braces, not a real ambiguity: matching is
+    # startswith, so "AVWAP" never hits the "VWAP" prefix anyway. Listed
     # explicitly so an anchored VWAP is registered rather than falling
     # through strategy_family()'s "return label" default into a family
     # name that isn't in ALL_STRATEGY_FAMILIES.

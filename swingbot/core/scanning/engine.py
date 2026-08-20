@@ -215,8 +215,9 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         pass
 
     try:
-        ctx["avwaps"] = [{"series": rs_factors.anchored_vwap(df, a), "anchor_label": f"⚓{a}"}
-                          for a in rs_factors.avwap_anchors(df)[:3]]
+        ctx["avwaps"] = [{"series": rs_factors.anchored_vwap(df, idx),
+                          "anchor_label": label}
+                         for idx, label in rs_factors.avwap_anchors(df)]
     except Exception:
         pass
 
