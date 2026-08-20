@@ -87,7 +87,8 @@ import { VersionsStore } from '../../stores/versions.store';
             <span class="lane-name">{{ lane.component }}</span>
             <div class="track">
               @if (lane.absentWidth > 0) {
-                <div class="absent" [style.width.%]="lane.absentWidth * 100"
+                <div class="absent" [style.left.%]="(1 - lane.absentWidth) * 100"
+                     [style.width.%]="lane.absentWidth * 100"
                      title="This component did not exist yet"></div>
               }
               @for (segment of lane.segments; track segment.start) {
@@ -117,8 +118,8 @@ import { VersionsStore } from '../../stores/versions.store';
       </div>
 
       <div class="ticks">
-        <span>{{ store.firstDate() }}</span>
         <span class="now">{{ store.lastDate() }} &#9650; now</span>
+        <span>{{ store.firstDate() }}</span>
       </div>
 
       @if (store.dense()) {
@@ -217,7 +218,7 @@ import { VersionsStore } from '../../stores/versions.store';
                border-radius: 2px; cursor: pointer;
                box-shadow: inset 0 0 0 1px var(--bg); }
     .segment.current { background: var(--accent); }
-    .absent { position: absolute; left: 0; top: 0; height: 100%;
+    .absent { position: absolute; top: 0; height: 100%;
               border: 1px dashed var(--border-strong); border-radius: 2px; }
     .bracket-row { position: relative; height: 12px; margin-left: calc(4.5rem + var(--space-8)); }
     .bracket { position: absolute; top: 0; height: 100%; border: 1px solid var(--text-faint);
