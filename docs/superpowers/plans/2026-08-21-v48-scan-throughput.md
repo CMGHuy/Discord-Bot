@@ -1,11 +1,18 @@
-# v44 — Scan Throughput Implementation Plan
+# v48 — Scan Throughput Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Version: ui 1.8.0 · bot 1.3.2
 Bump: `bot patch` · `ui patch`
 
-**Spec:** `docs/superpowers/specs/2026-08-21-v44-scan-throughput-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-21-v47-scan-throughput-design.md`
+
+**On the two numbers:** this plan is `v48`, its spec is `v47` — a number appears
+exactly once across `specs/` and `plans/` (see `docs/claude/document-conventions.md`).
+**The code you write cites `v47`, not `v48`:** commit prefixes (`feat(v47): …`),
+test names and source comments below all point a future reader at the spec, which
+is where the rationale lives. Use them exactly as written; do not "correct" them
+to `v48`.
 
 **Goal:** Make the live scan read the already-maintained daily cache instead of
 re-downloading 10 years of history per ticker per tick, fetch genuine cache
@@ -17,8 +24,9 @@ cache-first lookup via `data_refresh.is_stale()` + `data_store.load_from_disk()`
 routing misses to a `cold` list instead of fetching inline. (2) The `cold` list is
 fetched sequentially below a threshold and through a `ProcessPoolExecutor` above
 it — processes, not threads, because the pinned yfinance's shared `_DFS` global is
-not reentrant. (3) `run_scenario_backtest()` maps `(ticker, horizon)` pairs across
-a process pool. No new container, no new deployable, no dependency bump.
+not reentrant. (3) `run_scenario_backtest()` maps one task per ticker (all
+horizons inside) across a process pool. No new container, no new deployable, no
+dependency bump.
 
 **Tech Stack:** Python 3.11+, pandas, yfinance 0.2.66 (pinned — do not change),
 `concurrent.futures.ProcessPoolExecutor`, pytest.
@@ -82,8 +90,8 @@ a process pool. No new container, no new deployable, no dependency bump.
 Append to `tests/test_config_flags.py`:
 
 ```python
-def test_v44_throughput_fields_exist_with_documented_defaults():
-    """v44: the scan's cache-freshness bar, the cold-fetch cutover point and
+def test_v47_throughput_fields_exist_with_documented_defaults():
+    """v47: the scan's cache-freshness bar, the cold-fetch cutover point and
     the process-pool size are all configurable, and their defaults match the
     spec. FETCH_WORKERS=0 means auto -- a Field default is a string cast by
     int(), so a computed cpu_count default cannot live in the schema."""
@@ -107,7 +115,7 @@ def test_v44_throughput_fields_exist_with_documented_defaults():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `python -m pytest tests/test_config_flags.py::test_v44_throughput_fields_exist_with_documented_defaults -v`
+Run: `python -m pytest tests/test_config_flags.py::test_v47_throughput_fields_exist_with_documented_defaults -v`
 Expected: FAIL with `KeyError: 'SCAN_CACHE_MAX_AGE_HOURS'`
 
 - [ ] **Step 3: Add the fields**
@@ -143,7 +151,7 @@ In `swingbot/config.py`, immediately after the `SCAN_WORKERS` `Field(...)` entry
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `python -m pytest tests/test_config_flags.py::test_v44_throughput_fields_exist_with_documented_defaults -v`
+Run: `python -m pytest tests/test_config_flags.py::test_v47_throughput_fields_exist_with_documented_defaults -v`
 Expected: PASS
 
 - [ ] **Step 5: Add the keys to `.env.example`**
@@ -166,7 +174,7 @@ Expected: PASS (this is the test that catches a `Field` added without an
 
 ```bash
 git add swingbot/config.py .env.example tests/test_config_flags.py
-git commit -m "feat(v44): add scan cache-freshness, cold-fetch threshold and pool-size settings"
+git commit -m "feat(v47): add scan cache-freshness, cold-fetch threshold and pool-size settings"
 ```
 
 ---
@@ -199,7 +207,7 @@ cache can be trusted. **This task is the load-bearing guard for the whole plan.*
 Create `tests/marketdata/test_frame_equivalence.py`:
 
 ```python
-"""v44: a cached frame must be indistinguishable from a live-download frame.
+"""v47: a cached frame must be indistinguishable from a live-download frame.
 
 The whole cache-first design rests on this. fetch_interval_data() resolves
 symbols through the same candidate_symbols() helper as get_daily_data(), uses
@@ -274,7 +282,7 @@ OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 
 
 def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.DataFrame | None:
-    """v44: load_from_disk() plus the shape guarantees a live download gives.
+    """v47: load_from_disk() plus the shape guarantees a live download gives.
 
     The cache-first scan (core/scanning/engine.py:_crawl_latest_data) feeds
     these frames to exactly the same consumers a fresh yf.download() frame
@@ -326,7 +334,7 @@ Expected: PASS (4 tests)
 
 ```bash
 git add swingbot/core/marketdata/data_store.py tests/marketdata/test_frame_equivalence.py
-git commit -m "feat(v44): normalize cache-loaded frames to the live-download shape"
+git commit -m "feat(v47): normalize cache-loaded frames to the live-download shape"
 ```
 
 ---
@@ -350,7 +358,7 @@ git commit -m "feat(v44): normalize cache-loaded frames to the live-download sha
 Create `tests/scanning/test_crawl_cache_first.py`:
 
 ```python
-"""v44: the scan reads market_data/daily/*.csv first and only fetches misses.
+"""v47: the scan reads market_data/daily/*.csv first and only fetches misses.
 
 At 5-minute ticks over a 6.5h session this is the difference between ~78 full
 10-year downloads per ticker per day and ~1.
@@ -445,7 +453,7 @@ Add `_load_cached_daily` immediately above `_crawl_latest_data`:
 
 ```python
 def _load_cached_daily(ticker: str):
-    """v44: today's daily bar from market_data/daily/{TICKER}.csv, or None.
+    """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
 
     None means "cold" -- missing, stale, or unreadable -- and the caller
     fetches it instead. `market_data_refresh` (commands/scanning.py) already
@@ -534,7 +542,7 @@ Expected: PASS, `0 failed`
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_crawl_cache_first.py
-git commit -m "feat(v44): serve the scan crawl from the daily cache, collect cold tickers"
+git commit -m "feat(v47): serve the scan crawl from the daily cache, collect cold tickers"
 ```
 
 ---
@@ -558,7 +566,7 @@ git commit -m "feat(v44): serve the scan crawl from the daily cache, collect col
 Create `tests/scanning/test_cold_fetch_pool.py`:
 
 ```python
-"""v44: cold tickers fetch sequentially below the threshold, pooled above it."""
+"""v47: cold tickers fetch sequentially below the threshold, pooled above it."""
 import pytest
 
 from swingbot import config
@@ -690,7 +698,7 @@ def _fetch_one_ticker(ticker: str) -> tuple:
 
 
 def _fetch_cold_frames(tickers: list, progress: "ScanProgress" = None) -> list:
-    """v44: fetch the cache misses, sequentially or pooled.
+    """v47: fetch the cache misses, sequentially or pooled.
 
     PROCESSES, never threads. The pinned yfinance 0.2.66 builds download() on a
     shared module-level global (_DFS) that it writes non-reentrantly; the
@@ -755,7 +763,7 @@ Expected: PASS (5 tests) — the Task 3 behaviour is unchanged by the swap
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_cold_fetch_pool.py
-git commit -m "feat(v44): fetch cold tickers through a process pool above the threshold"
+git commit -m "feat(v47): fetch cold tickers through a process pool above the threshold"
 ```
 
 ---
@@ -779,7 +787,7 @@ incidental coverage.
 Create `tests/scanning/test_no_cross_ticker_mixing.py`:
 
 ```python
-"""v44 regression guard: a fetched frame must belong to ITS OWN ticker.
+"""v47 regression guard: a fetched frame must belong to ITS OWN ticker.
 
 This is not a hypothetical. The scan's crawl used to run through a
 ThreadPoolExecutor; yfinance 0.2.66 builds download() on a shared, non-reentrant
@@ -788,7 +796,7 @@ the same concurrent batch were once logged as open paper trades with
 byte-identical entry/stop/target/confidence values -- one ticker's price data
 had been attributed to the other. The crawl was made sequential in response.
 
-v44 restores concurrency using PROCESSES instead of threads, so the shared
+v47 restores concurrency using PROCESSES instead of threads, so the shared
 global is not shared. This test asserts the routing that makes that claim true:
 each ticker's frame carries a price signature derived from its own symbol, so a
 swap is detectable without any network and without trusting Yahoo's data.
@@ -896,7 +904,7 @@ unsafe and must be fixed before proceeding, not worked around in the test.
 
 ```bash
 git add tests/scanning/test_no_cross_ticker_mixing.py
-git commit -m "test(v44): guard the cold-fetch path against cross-ticker data mixing"
+git commit -m "test(v47): guard the cold-fetch path against cross-ticker data mixing"
 ```
 
 ---
@@ -923,7 +931,7 @@ benchmark (`engine.py:1267`) and up to 11 SPDR sector ETFs (`_fetch_frames`,
 Create `tests/scanning/test_sidelist_cache_first.py`:
 
 ```python
-"""v44: SPY and the sector ETFs come from the cache too.
+"""v47: SPY and the sector ETFs come from the cache too.
 
 They are ~12 further sequential fetches per scan on top of the watchlist crawl.
 """
@@ -1010,7 +1018,7 @@ def _fetch_frames(symbols: list) -> dict:
     """Cache-first resolution for a small side-list of symbols (sector ETFs,
     currently at most the 11 SPDR sector funds in etfs.json).
 
-    v44: warm symbols come from market_data/daily/*.csv and cost no network;
+    v47: warm symbols come from market_data/daily/*.csv and cost no network;
     the cold remainder goes through _fetch_cold_frames, which is sequential at
     this size (11 symbols is far below COLD_FETCH_PROCESS_THRESHOLD) and so
     keeps the same one-at-a-time behaviour this list has always had. A symbol
@@ -1031,7 +1039,7 @@ def _fetch_frames(symbols: list) -> dict:
 
 
 def _daily_frame_for(symbol: str):
-    """v44: cache-first single-symbol daily frame, for the regime benchmark.
+    """v47: cache-first single-symbol daily frame, for the regime benchmark.
 
     Returns None on a cache miss whose fetch also failed -- callers already
     treat that as "unavailable this scan"."""
@@ -1072,7 +1080,7 @@ guard depends on `_fetch_frames`'s contract, which this task preserves
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_sidelist_cache_first.py
-git commit -m "feat(v44): serve the regime benchmark and sector ETFs from the daily cache"
+git commit -m "feat(v47): serve the regime benchmark and sector ETFs from the daily cache"
 ```
 
 ---
@@ -1098,7 +1106,7 @@ git commit -m "feat(v44): serve the regime benchmark and sector ETFs from the da
 Create `tests/backtesting/test_scenario_parallel.py`:
 
 ```python
-"""v44: parallel scenario replay must be output-identical to sequential.
+"""v47: parallel scenario replay must be output-identical to sequential.
 
 This is the gate protecting the closed pre-registrations in
 docs/claude/backtest-methodology.md -- a changed aggregate here would silently
@@ -1262,7 +1270,7 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
 
-    v44: each ticker is replayed across a process pool, all horizons inside
+    v47: each ticker is replayed across a process pool, all horizons inside
     one task. Every task is fully independent -- it reads one frame and
     contributes only to its own result lists -- and aggregation happens
     strictly after every task returns, so the output is identical to the
@@ -1311,7 +1319,7 @@ Expected: PASS, `0 failed`
 
 ```bash
 git add swingbot/core/backtesting/backtest_scenarios.py tests/backtesting/test_scenario_parallel.py
-git commit -m "feat(v44): replay scenario backtests across a process pool"
+git commit -m "feat(v47): replay scenario backtests across a process pool"
 ```
 
 ---
@@ -1323,7 +1331,7 @@ git commit -m "feat(v44): replay scenario backtests across a process pool"
 **Files:**
 - Modify: `VERSION.json`
 - Modify: `docs/claude/known-traps.md`
-- Modify: `docs/superpowers/plans/2026-08-21-v44-scan-throughput.md` (Progress block)
+- Modify: `docs/superpowers/plans/2026-08-21-v48-scan-throughput.md` (Progress block)
 
 **Interfaces:**
 - Consumes: everything above.
@@ -1350,7 +1358,7 @@ that the live scan does not read `market_data/`. That is now false. Replace the
 - Scans run through `map_tickers()` (`SCAN_WORKERS`, default 4). Anything
   touching shared state (`state.confirm_or_update`, funnel counters) must stay
   serial/post-join.
-- **The live scan reads `market_data/daily/` now (v44).** `_crawl_latest_data`
+- **The live scan reads `market_data/daily/` now (v47).** `_crawl_latest_data`
   is cache-first: `_load_cached_daily()` serves any ticker whose CSV is fresher
   than `SCAN_CACHE_MAX_AGE_HOURS` (6h), and only the cold remainder is fetched.
   So the two OHLCV caches are no longer "backtest reads one, scan reads
@@ -1413,8 +1421,8 @@ Then add to the bottom of this plan file, filling in the real numbers:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add VERSION.json docs/claude/known-traps.md docs/superpowers/plans/2026-08-21-v44-scan-throughput.md
-git commit -m "docs(v44): record the live scan's new cache dependency, bump versions"
+git add VERSION.json docs/claude/known-traps.md docs/superpowers/plans/2026-08-21-v48-scan-throughput.md
+git commit -m "docs(v47): record the live scan's new cache dependency, bump versions"
 ```
 
 - [ ] **Step 7: Close the plan out**
@@ -1423,7 +1431,7 @@ Per `docs/claude/document-conventions.md`, move the plan and its spec into
 `implemented/` as part of the closing commit:
 
 ```bash
-git mv docs/superpowers/plans/2026-08-21-v44-scan-throughput.md docs/superpowers/plans/implemented/
-git mv docs/superpowers/specs/2026-08-21-v44-scan-throughput-design.md docs/superpowers/specs/implemented/
-git commit -m "docs(v44): close out the scan-throughput plan"
+git mv docs/superpowers/plans/2026-08-21-v48-scan-throughput.md docs/superpowers/plans/implemented/
+git mv docs/superpowers/specs/2026-08-21-v47-scan-throughput-design.md docs/superpowers/specs/implemented/
+git commit -m "docs(v47): close out the scan-throughput plan"
 ```

@@ -41,6 +41,52 @@ genuinely new document takes the next. A document split across files reuses the
 parent's number with a `_N` part suffix rather than consuming N numbers
 (`v6-gatekeeper_1…_12` are parts of one document, not twelve numbers).
 
+### A plan never shares its spec's number
+
+**A number appears exactly once across `specs/` and `plans/` combined —
+`implemented/` included.** A plan built from a spec takes **the next free
+number**, not the spec's. `v47-scan-throughput-design.md` (spec) is followed by
+`v48-scan-throughput.md` (plan): one subject, two documents, two numbers.
+
+This is what "one repo-wide counter" above already implies, written out because
+the repo spent a long time doing the opposite. **Fifteen numbers are shared
+between a spec and its plan** — `v0`, `v2`, `v5`, `v7`, `v8`, `v10`, `v30`–`v36`,
+`v39`, `v44` — because "the plan for spec `vN`" felt like it should read `vN`.
+It is a tempting mistake, so check before naming a plan:
+
+```bash
+# The number you are about to use must return NOTHING.
+find docs/superpowers/specs docs/superpowers/plans -name "*-v48-*"
+```
+
+**Re-run that check immediately before you commit, not just when you pick the
+name.** The counter is a shared mutable resource and this tree hosts concurrent
+sessions, so "next free" goes stale between choosing and committing. It happened
+twice while this very section was being written: another session committed
+`bf3db38 docs(v44): opex-day caution implementation plan` in the window between
+this session reading the maximum as `v43` and committing its own `v44` spec, and
+then moved its own gamma-flip plan `v45 → v46` after colliding a second time.
+Two documents ended up claiming `v44`, and the later claim had to move — which is
+the tie-break: **whoever committed the number first keeps it.** A collision found
+before you commit costs a rename; one found after costs a rename plus every
+reference.
+
+Why the pairing is the wrong instinct: the number is an identifier for **one
+document**, not a topic key. A spec routinely spawns more than one plan
+(`v15-jinja-cutover` fed `v16-angular-migration` and left the cutover to a later
+plan), and a plan routinely draws on more than one spec — so "the `v36` document"
+has to name a single file, or every cross-reference becomes ambiguous about which
+of the two it means. Pairing also silently consumes the next number without
+writing it down, which is how a later document ends up colliding.
+
+**The fifteen historical duplicates stay as they are.** They are committed and
+cross-referenced, and "never renumber a committed one" outranks tidiness. They
+are the reason for this section, not a backlog.
+
+Link a plan to its spec in the plan's `**Spec:**` header line instead. That is
+the durable connection between the two, and unlike a shared number it survives
+one spec feeding several plans.
+
 **Renaming a document is not renumbering it.** The 2026-08-13 sweep moved every
 existing file to this layout and rewrote all 151 references across 57 files; the
 numbers themselves were untouched. Two specs that had never had a number and no

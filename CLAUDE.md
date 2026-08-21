@@ -139,6 +139,19 @@ find docs/superpowers/specs docs/superpowers/plans -name '*.md' \
 `find`, not `ls` on the two directories — closed documents live one level down
 in `implemented/`, and missing them returns a stale maximum.
 
+**A plan never shares its spec's number.** A number appears exactly once across
+`specs/` and `plans/` combined, `implemented/` included — so the plan built from
+spec `v47` is `v48`, not `v47`. Fifteen historical pairs *do* share a number
+(`v36` spec + `v36` plan, and 14 others); they stay as they are, and they are why
+this is now spelled out. Link the plan to its spec with a `**Spec:**` header line
+instead of a shared number.
+
+**Re-check the number immediately before committing** —
+`find docs/superpowers/specs docs/superpowers/plans -name "*-v48-*"` must return
+nothing. Concurrent sessions share this tree and race this counter: on
+2026-08-21 two sessions both committed a `v44`, and the second had to renumber.
+First commit wins the number.
+
 **When a plan stops being live work, `git mv` it — and every spec it was built
 from — into `implemented/` as part of the closing commit**, so the top level of
 `plans/` and `specs/` is exactly the live work. `implemented/` means "off the

@@ -1,4 +1,4 @@
-# v44 — Scan throughput for a growing watchlist
+# v47 — Scan throughput for a growing watchlist
 
 Version: ui 1.8.0 · bot 1.3.2
 Bump: `bot patch` · `ui patch`
