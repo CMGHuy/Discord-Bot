@@ -50,27 +50,44 @@ def opex_tier(date: datetime.date) -> str | None:
 
 - "3rd Friday of the month" computed by pure date arithmetic (no external
   calendar package).
-- Holiday shift: a small static module-level tuple of known NYSE full-day
-  holidays (New Year's Day, MLK Day, Presidents' Day, Good Friday, Memorial
-  Day, Juneteenth, Independence Day, Labor Day, Thanksgiving, Christmas —
-  observed-date rules included) covering the years the bot will realistically
-  run. If the 3rd Friday lands on one of these, `opex_tier` returns
-  `'monthly'` for the preceding Thursday instead. This table needs periodic
-  manual updates for future years — documented with a comment noting the
-  last year covered, so a future maintainer knows when to extend it.
+- Holiday shift: a static module-level frozenset of NYSE full-day closures
+  **that fall on a Friday** — the only ones that can displace an expiration.
+  A Friday closure does two things: it cancels that week's weekly expiration,
+  and if it was the nominal third Friday it moves the monthly expiration back
+  to the Thursday. Confirmed during the v40 survey that the repo has no
+  existing holiday list and no `pandas_market_calendars` dependency, so this
+  table is new; it is scoped to Fridays on purpose and must not be used as a
+  general market calendar. It needs manual extension for future years —
+  carried with a `LAST_YEAR_COVERED` constant so a maintainer knows when.
+
+  Two real collisions land inside the 2026-2030 window the table covers, and
+  both are worth keeping as tests: **2026-06-19** (Juneteenth) and
+  **2030-04-19** (Good Friday) are each the nominal third Friday of their
+  month *and* a full-day closure, so expiration moves to the Thursday.
 - Quarterly "triple/quad witching" Fridays (Mar/Jun/Sep/Dec) are classified
   as `'monthly'`, not a distinct tier — YAGNI; add a third tier later only if
   the two-tier behavior proves insufficient in practice.
 - Fully unit-testable with no mocking: feed it known dates, assert the tier.
 
-### 2. Context integration (`swingbot/core/market/market_context.py`)
+### 2. Tier resolution — a module, not a context column
 
-`get()` (existing, ~line 125-144) already computes and caches a `ctx_regime`
-column per scan cycle, short-circuiting to `None` when its enabling flag is
-off. This spec adds a `ctx_opex_tier` column using the identical pattern:
-computed once per scan cycle from `opex_tier(today)`, cached the same way,
-and hard-`None` whenever `OPEX_CAUTION_ENABLED` is off — so a disabled flag
-costs nothing extra per scan.
+**Corrected 2026-08-21 while writing plan v44; the original draft said to add
+a `ctx_opex_tier` column to `market_context`. Reading the code showed that to
+be wrong on two counts:**
+
+- `market_context.get()` returns `None` whenever `REGIME_GATES_ENABLED` is off
+  (`market_context.py:134-135`). Routing opex through `CTX_COLUMNS` would wire
+  this feature's on/off switch to an unrelated flag — turning regime gating off
+  would silently stop opex caution too, with nothing saying so.
+- The context block exists to align an **external** series (SPY-derived regime)
+  onto a ticker's index without lookahead; `market_context.py`'s docstring
+  argues that at length. Opex has no external series — the tier is a pure
+  function of the bar's own date — so there is nothing to align and the
+  machinery buys nothing.
+
+The tier is therefore resolved by `opex.current_tier()` in the new module,
+called once per scan in `engine.py` and passed down, rather than recomputed per
+ticker per horizon.
 
 ### 3. Gate (`swingbot/core/market/entry_filters.py`)
 
@@ -78,15 +95,35 @@ New `apply_opex_caution(...)`, added alongside the existing
 `apply_regime_gate` (~line 112), called from the same site in the entry
 pipeline immediately after it:
 
-| `ctx_opex_tier` | Confirmation threshold | Near-close entry suppression | Stop/size adjustment |
-|---|---|---|---|
-| `'monthly'` | `+OPEX_MONTHLY_THRESHOLD_BUMP` | suppress new entries inside `OPEX_NEAR_CLOSE_SUPPRESS_MINUTES` of `SESSION_END_HOUR` | stop widened by `OPEX_STOP_WIDEN_PCT`, size cut by `OPEX_SIZE_REDUCTION_PCT` |
-| `'weekly'` | `+OPEX_WEEKLY_THRESHOLD_BUMP` | none | none |
-| `None` | no change | no change | no change |
+| tier | Min confidence level | Min strategies confirmed | Near-close entry suppression | Stop/size adjustment |
+|---|---|---|---|---|
+| `'monthly'` | `+OPEX_MONTHLY_CONFIDENCE_BUMP` (capped Lv5) | `+OPEX_MONTHLY_CONFLUENCE_BUMP` (capped 10) | suppress new entries inside `OPEX_NEAR_CLOSE_SUPPRESS_MINUTES` of **16:00 US/Eastern** | stop widened by `OPEX_STOP_WIDEN_PCT` (ATR path only), size cut by `OPEX_SIZE_REDUCTION_PCT` |
+| `'weekly'` | no change | `+OPEX_WEEKLY_CONFLUENCE_BUMP` (capped 10) | none | none |
+| `None` | no change | no change | no change | no change |
 
-The near-close suppression window is evaluated against wall-clock time versus
-the existing `SESSION_END_HOUR` config (`config.py:118-121`) — no new
-session-hours concept, just a new offset applied to the existing one.
+**Corrected 2026-08-21 while writing plan v44.** Three things the original
+draft got wrong, each found by reading the code:
+
+- **The bumps are integers, not floats.** Both gates are integer dials —
+  `MIN_ALERT_CONFIDENCE_LEVEL` is a `select` over `1..5` (`config.py:174-176`)
+  and `MIN_TARGET_CONFLUENCE_COUNT` a `number` over `1..10`
+  (`config.py:167-173`). A float bump has nowhere to land. Since a single
+  1-5 level dial cannot express two tiers of "bump" from a default of 4,
+  monthly takes both dials and weekly takes the confluence dial only — that
+  asymmetry is what makes weekly the lighter tier.
+- **The near-close anchor is 16:00 US/Eastern, not `SESSION_END_HOUR`.**
+  `SESSION_END_HOUR` defaults to `23` **Europe/Berlin** (`config.py:121-123`),
+  which is 17:00 ET — an hour *after* the US close. A window measured back
+  from it would have fired entirely after the market shut.
+- **Only the ATR stop is widened.** `plan_engine.py:770-776` documents that
+  fib / Elliott / S-R stops sit behind real structure and must not be scaled,
+  because scaling slides the stop off the level it exists to hide behind.
+
+Both gates meet in one helper, `_build_requirement_checks` (`embeds.py:174`),
+which is where the tightening lands. Suppression is expressed as an extra
+`RequirementCheck` rather than a separate code path, so it feeds the existing
+`all_requirements_met` gate and the funnel counters — open-trade monitoring,
+which shares the same scan tick, is untouched.
 
 Every alert embed gets a small "⚠️ OPEX" (monthly) or "⚠️ Weekly opex"
 (weekly) note whenever `ctx_opex_tier` is set, independent of whether that
@@ -101,12 +138,13 @@ New "Options / Opex" section, following the existing `Field(...)` shape
 
 - `OPEX_CAUTION_ENABLED` — checkbox, default `false`. Master switch, off
   until validated, matching every other new-behavior flag in this repo.
-- `OPEX_MONTHLY_THRESHOLD_BUMP` — float, starting default `1.0`.
-- `OPEX_WEEKLY_THRESHOLD_BUMP` — float, starting default `0.5` (smaller than
-  the monthly bump).
-- `OPEX_NEAR_CLOSE_SUPPRESS_MINUTES` — int, starting default `30`.
-- `OPEX_STOP_WIDEN_PCT` — float, starting default `10` (percent).
-- `OPEX_SIZE_REDUCTION_PCT` — float, starting default `25` (percent).
+- `OPEX_MONTHLY_CONFIDENCE_BUMP` — int, default `1` (levels added, capped Lv5).
+- `OPEX_MONTHLY_CONFLUENCE_BUMP` — int, default `1` (strategies added, capped 10).
+- `OPEX_WEEKLY_CONFLUENCE_BUMP` — int, default `1` (the only weekly tightening).
+- `OPEX_NEAR_CLOSE_SUPPRESS_MINUTES` — int, default `60`, measured back from
+  16:00 US/Eastern.
+- `OPEX_STOP_WIDEN_PCT` — float, default `10` (percent, ATR path only).
+- `OPEX_SIZE_REDUCTION_PCT` — float, default `25` (percent, both sizing modes).
 
 These starting defaults ship behind `OPEX_CAUTION_ENABLED=false`; per
 `docs/claude/backtest-methodology.md`'s TRAIN/VALIDATION discipline, they
