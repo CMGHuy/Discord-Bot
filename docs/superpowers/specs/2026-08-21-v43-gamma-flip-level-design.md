@@ -23,11 +23,12 @@ trader's own judgment — it does not feed the bot's trading signals.
   `entry_filters.py` or any scan-pipeline gate. It's informational, shown
   only in the admin UI. Wiring it into signal generation is a plausible
   future spec, not this one.
-- **Not exact dealer positioning.** The GEX model assumes standard
-  retail-long convention (customers net-long calls, net-long puts; dealers
-  short calls/long deltas, long puts) because true dealer inventory isn't
-  observable from public data. This is a documented estimate, not ground
-  truth — the UI must say so.
+- **Not exact dealer positioning.** True dealer inventory isn't observable
+  from public data, so the model rests on the standard published assumption:
+  customers overwrite calls (leaving dealers **long gamma** against call open
+  interest) and buy puts for protection (leaving dealers **short gamma**
+  against put open interest). See §2 for the resulting sign convention. This
+  is a documented estimate, not ground truth — the UI must say so.
 - **No paid data provider.** yfinance option chains only, per the chosen
   approach — no SpotGamma/Tradytics/Unusual-Whales-style integration.
 - **No live on-demand re-fetch from the UI.** The page reads the
@@ -37,16 +38,30 @@ trader's own judgment — it does not feed the bot's trading signals.
 
 ## Design
 
-### 1. Fetch (`swingbot/core/market/options_data.py`, new)
+**Module placement corrected 2026-08-21 while writing plan v46.** This spec
+put both new modules under `core/market/`. The repo's actual split is
+`marketdata/` fetches and caches (`data_refresh.py`, `fmp_client.py`) while
+`market/` analyses (`volatility.py`, `levels.py`), so the work lands as three
+modules: `marketdata/options_chain.py` (fetch), `market/gamma_exposure.py`
+(maths), `market/gamma_store.py` (snapshot assembly + persistence).
+
+### 1. Fetch (`swingbot/core/marketdata/options_chain.py`, new)
 
 For each of the 78 watchlist tickers: `yfinance.Ticker(sym).options` for the
 expiration list, then `option_chain(date)` (calls + puts: strike,
 `openInterest`, `impliedVolatility`) for the nearest `GEX_EXPIRATIONS_COUNT`
-expirations (default 2–3 — near-dated OI dominates dealer gamma; further out
-adds fetch cost for diminishing signal). Reuses the existing `with_backoff`
-retry helper (`swingbot/core/marketdata/data_refresh.py:143`) since
-option-chain endpoints are exactly as rate-limit-prone as the price
-endpoints it already guards.
+expirations (default 3 — near-dated OI dominates dealer gamma; further out
+adds fetch cost for diminishing signal).
+
+**Corrected 2026-08-21:** this spec named a `with_backoff` helper at
+`data_refresh.py:143`. The real helper is `_with_retry` (`data_refresh.py:141`),
+and **the job deliberately does not use it.** Retrying inside a 78-ticker
+sweep multiplies the worst case by the attempt count *and* its backoff delays,
+turning a throttled window into a sweep that overruns its own 45-minute
+cadence. A failed ticker is instead recorded as `fetch_failed` and picked up
+by the next cycle, which is soon enough for a figure that moves with open
+interest. What *is* reused is the per-symbol isolation invariant
+`data_refresh.py:14` states — "a rate-limited window must not kill the loop".
 
 **Load management**: ~78 tickers × 2-3 expirations × 2 calls (calls+puts)
 ≈ 150-230 requests per refresh cycle. Fetches are staggered with a small
@@ -60,22 +75,48 @@ afterthought.
 ### 2. Gamma exposure math (`swingbot/core/market/gamma_exposure.py`, new)
 
 Per contract: Black-Scholes gamma(S, K, T, σ, r) × `openInterest` × 100
-(contract multiplier) × S². Net dealer GEX per strike = (put-side
-contribution) − (call-side contribution), following the standard
-SpotGamma-style convention (dealers short gamma against customer long
-calls, long gamma against customer long puts). Documented inline as a
-**modeled estimate**, not measured dealer inventory.
+(contract multiplier) × S². Documented inline as a **modeled estimate**, not
+measured dealer inventory.
+
+**Sign convention — corrected 2026-08-21 while writing plan v46.** This spec
+originally said net GEX = (put side) − (call side). That is backwards, and
+the error is not cosmetic: it inverts the flip level, so a page built on it
+would tell the reader that hedging dampens moves exactly when it amplifies
+them. The standard published convention is:
+
+```
+net_gex = Σ(call gamma × OI) − Σ(put gamma × OI)
+```
+
+because customers are net *sellers* of calls (covered-call overwriting), so
+dealers are **long gamma against call open interest**; and customers are net
+*buyers* of puts (protection), so dealers are **short gamma against put open
+interest**. Positive net GEX therefore means dealer hedging leans against
+price moves and dampens realised volatility.
 
 **Gamma flip level**: build the net-GEX profile across a range of
 hypothetical spot prices (re-price gamma at each candidate price, holding
 OI/IV fixed), then find the zero-crossing via linear interpolation between
 the two adjacent evaluated prices where cumulative GEX changes sign.
 
-**Sparse-data handling**: a ticker whose chain has fewer than 5
-OI-bearing strikes, or missing IV on the strikes that do have OI, is
-skipped — not shown with a fabricated number. The page lists it with an
-"insufficient options data" note instead of a flip level, per the earlier
-scoping decision to prefer an honest gap over a low-confidence guess.
+**Sparse-data handling**: a ticker with fewer than 5 usable strikes across
+both sides is reported as `insufficient_data` rather than given a fabricated
+number, per the scoping decision to prefer an honest gap over a
+low-confidence guess.
+
+**Measured 2026-08-21, and load-bearing:** yfinance returns
+`impliedVolatility == 0.00001` as a *sentinel* for "no vol available", not as
+a real 0.001% vol. On SPY's own front expiration — the most liquid options
+market there is — **173 of 253 call strikes carried it**, leaving 80 usable.
+Taken literally, that sentinel produces an astronomically large fictional
+gamma that dominates the whole sum, so filtering `IV <= 0.01` is what makes
+the number mean anything, not a defensive nicety.
+
+**Also measured: `T = 0` is a live division-by-zero.** Black-Scholes gamma
+divides by `sigma * sqrt(T)`, and the front expiration *on* an expiry day has
+`T = 0` — exactly the situation this feature most cares about. `T` is floored
+at one hour rather than skipped, so same-day gamma stays finite (and
+genuinely very large, which is real rather than an artefact).
 
 **Output** per successfully-computed ticker: `{ symbol, spot, flip_level,
 net_gex_notional, distance_pct, expirations_used, as_of }`, written to
@@ -144,7 +185,7 @@ Uses `require_auth` from `auth.py`, matching every other `api_v1` endpoint.
   option chain** (a handful of strikes with known OI/IV) where the
   zero-crossing is computable by hand — verifies the BS-gamma math and
   interpolation with no network dependency.
-- `options_data.py`: integration-style test using a **recorded/fixture
+- `options_chain.py`: integration-style test using a **recorded/fixture
   yfinance response** (no live network calls) covering the fetch → parse
   pipeline; confirm existing test conventions for mocking yfinance in this
   repo before writing (check `tests/` for the pattern already used by
@@ -166,7 +207,7 @@ Uses `require_auth` from `auth.py`, matching every other `api_v1` endpoint.
 
 Two independent halves after the shared fetch/math foundation lands:
 
-1. **Sequential first**: `options_data.py` → `gamma_exposure.py` (math
+1. **Sequential first**: `options_chain.py` → `gamma_exposure.py` (math
    depends on fetched data shape) → refresh job wiring in `bot.py`.
 2. **Then parallel**: admin API (`gamma.py` + `api_v1/__init__.py`
    registration + `spa.py` WORKSPACES entry) and the Angular page

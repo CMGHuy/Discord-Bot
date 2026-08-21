@@ -1,4 +1,5 @@
 Version: ui 1.8.0 · bot 1.3.2
+Spec: docs/superpowers/specs/2026-08-21-v42-opex-day-caution-design.md
 Bump: bot minor (1.3.2 → 1.4.0) — alert gating, alert content and trade-plan
 risk parameters change observably on opex days. `ui` none (new settings render
 themselves through the existing generic Settings page).
