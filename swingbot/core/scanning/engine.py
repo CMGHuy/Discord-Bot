@@ -1092,12 +1092,33 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             htf_result = get_htf_bias(df, horizon_key)
             macro_verdict = macro_aligned(df, horizon_key, scenario.direction)
 
+            # v36 Task 5: look up the Level this scenario's target actually
+            # is (whichever side matches trade direction -- resistances for
+            # a bullish scenario, supports for a bearish one) so its
+            # touch-strength grading (Task 3's Level.strength; None unless
+            # config.LEVEL_TOUCH_STRENGTH is on) can feed factor_level_strength.
+            # Same match-by-price-within-tolerance convention as
+            # count_confirming_strategies above, reusing the same
+            # CONFLUENCE_DEVIATION_PCT rather than inventing a new tolerance.
+            # Skipped entirely when the flag is off: Level.strength is always
+            # None then anyway (Task 3), so target_strength ends up None and
+            # factor_level_strength correctly omits itself from the breakdown.
+            target_strength = None
+            if config.LEVEL_TOUCH_STRENGTH and scenario.take_profit:
+                target_levels = resistances if scenario.direction == "bullish" else supports
+                for lvl in target_levels:
+                    deviation_pct = abs(lvl.price - scenario.take_profit) / scenario.take_profit * 100
+                    if deviation_pct <= config.CONFLUENCE_DEVIATION_PCT:
+                        target_strength = lvl.strength
+                        break
+
             conf = score_confidence(scenario, regime_trend=(regime.trend if regime else None), df=df,
                                      target_confluence=target_confluence, stop_confluence=stop_confluence,
                                      track_record=track_record,
                                      htf_bias=(htf_result["bias"] if htf_result else None),
                                      rs_percentile=rs_pctile, breadth=breadth,
-                                     macro_verdict=macro_verdict)
+                                     macro_verdict=macro_verdict,
+                                     target_strength=target_strength)
 
             # Multi-timeframe confluence: check this ticker's own
             # higher-timeframe EMA bias (50-day for short horizons,

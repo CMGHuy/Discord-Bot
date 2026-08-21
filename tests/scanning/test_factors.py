@@ -430,9 +430,14 @@ def test_factors_registry_has_exactly_the_kept_factors():
     v33 Task 5 added factor_macro_alignment to the registry as a
     provisional entry; v33 Task 7's TRAIN sweep re-derived its weight as a
     measured 0, so it now sits in exactly factor_gap's position -- kept,
-    tested, and contributing nothing. Both stay registered."""
-    from swingbot.core.scanning.factors import FACTORS, factor_gap, factor_macro_alignment
-    assert FACTORS == [factor_gap, factor_macro_alignment]
+    tested, and contributing nothing. Both stay registered.
+
+    v36 Task 5 added factor_level_strength as a third provisional entry
+    (_LEVEL_STRENGTH_MAX=10), pending its own TRAIN re-weighting in Task 6/9."""
+    from swingbot.core.scanning.factors import (
+        FACTORS, factor_gap, factor_macro_alignment, factor_level_strength,
+    )
+    assert FACTORS == [factor_gap, factor_macro_alignment, factor_level_strength]
 
 
 # --- v33 Task 5: 6m macro-anchor alignment factor ---------------------
@@ -494,3 +499,36 @@ def test_macro_alignment_exempt_returns_none_not_zero():
 
 def test_macro_alignment_absent_returns_none():
     assert factor_macro_alignment(_ctx()) is None
+
+
+# --- v36 Task 5: level touch strength ---------------------------------
+
+from swingbot.core.scanning.factors import factor_level_strength  # noqa: E402
+
+
+def test_level_strength_scores_high_for_a_well_respected_level():
+    # int(round(0.9 * _LEVEL_STRENGTH_MAX)) == 9, not 10: 0.9 * 10 is exactly
+    # 9.0 in float, and no rounding mode reaches 10 from an exact 9.0 without
+    # breaking the "scores zero" case below, which relies on round(0.5) == 0
+    # (Python's round-half-to-even). 9/10 is still unambiguously "high".
+    ctx = _ctx(target_strength={"score": 0.9, "touches": 5, "rejections": 5,
+                                "breaks": 0, "available": True})
+    r = factor_level_strength(ctx)
+    assert r.points == 9
+    assert "5 rejection" in r.line
+
+
+def test_level_strength_scores_zero_for_a_repeatedly_broken_level():
+    ctx = _ctx(target_strength={"score": 0.05, "touches": 4, "rejections": 0,
+                                "breaks": 4, "available": True})
+    assert factor_level_strength(ctx).points == 0
+
+
+def test_ungraded_level_returns_none_not_zero():
+    ctx = _ctx(target_strength={"score": 0.5, "touches": 0, "rejections": 0,
+                                "breaks": 0, "available": False})
+    assert factor_level_strength(ctx) is None
+
+
+def test_absent_strength_returns_none():
+    assert factor_level_strength(_ctx()) is None

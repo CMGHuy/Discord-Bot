@@ -52,6 +52,7 @@ class FactorContext:
     target_families: list = field(default_factory=list)
     stop_count: int = 0
     stop_families: list = field(default_factory=list)
+    target_strength: dict | None = None
 
 
 Factor = Callable[[FactorContext], "FactorResult | None"]
@@ -440,6 +441,25 @@ def factor_macro_alignment(ctx: FactorContext) -> FactorResult | None:
         f"⚠️ counter to the 6m {verdict['trend']} trend (+0)")
 
 
+# --- v36 Task 5: level touch strength -----------------------------------
+
+_LEVEL_STRENGTH_MAX = 10   # provisional; re-derived in Task 6
+
+
+def factor_level_strength(ctx: FactorContext) -> FactorResult | None:
+    """How convincingly price has respected the target level before.
+    An ungraded level returns None -- omitted from the breakdown rather than
+    scored zero, so a brand-new level is not reported as a weak one."""
+    s = ctx.target_strength
+    if not s or not s.get("available"):
+        return None
+    points = int(round(s["score"] * _LEVEL_STRENGTH_MAX))
+    return FactorResult(
+        "Level touch strength", points,
+        f"{s['rejections']} rejection(s) vs {s['breaks']} break(s) "
+        f"across {s['touches']} touch(es) (+{points})")
+
+
 FACTORS[:] = [
     factor_gap,
     # v33 Task 7 ran the fuller TRAIN sweep this entry was registered
@@ -451,4 +471,8 @@ FACTORS[:] = [
     # infrastructure serves no purpose that dropping an unsupported WEIGHT
     # has not already served.
     factor_macro_alignment,
+    # v36 Task 5: provisional weight (_LEVEL_STRENGTH_MAX=10), pending
+    # Task 6/9's TRAIN-evidence re-weighting -- same status as every other
+    # provisional factor in this file until measured.
+    factor_level_strength,
 ]

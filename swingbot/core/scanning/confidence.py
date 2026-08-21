@@ -602,9 +602,9 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     instead. Signature and ConfidenceResult shape are unchanged either way --
     every existing caller keeps working. **kwargs carries the unified-only
     inputs (htf_bias, rs_percentile, breadth, volume_ratio, atr_pct,
-    trigger_distance_pct, badge_status, gap_fragile, macro_verdict) the
-    legacy path never read; v32 Task 7 and v33 Task 5 wire real values in
-    from engine.py."""
+    trigger_distance_pct, badge_status, gap_fragile, macro_verdict,
+    target_strength) the legacy path never read; v32 Task 7, v33 Task 5 and
+    v36 Task 5 wire real values in from engine.py."""
     if not getattr(config, "UNIFIED_CONFIDENCE", False):
         return _score_confidence_legacy(
             scenario, regime_trend=regime_trend, df=df,
@@ -621,7 +621,7 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
         **{k: kwargs.get(k) for k in
            ("htf_bias", "rs_percentile", "breadth", "volume_ratio",
             "atr_pct", "trigger_distance_pct", "badge_status", "gap_fragile",
-            "macro_verdict")
+            "macro_verdict", "target_strength")
            if k in kwargs},
     )
     raw, breakdown = run_factors(FACTORS, ctx)
