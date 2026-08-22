@@ -84,7 +84,7 @@ def render_equity_curve(curve: dict, out_dir: str, *, spy_overlay: list = None,
     ax.set_title("Equity Curve", color=TEXT_COLOR, fontsize=12, fontweight="bold")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     fig.autofmt_xdate()
-    legend = ax.legend(loc="upper left", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
+    ax.legend(loc="upper left", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
     return _save(fig, out_dir, filename)
 
 
