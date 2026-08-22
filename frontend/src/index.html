@@ -17,6 +17,15 @@
   <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a0b10">
+  <!-- iOS Safari ignores the manifest above for "Add to Home Screen" (pre
+       iOS 16.4) -- these three are what it actually reads: standalone
+       display (no browser chrome), a dark status bar to match the app's own
+       background, and the label under the home-screen icon. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bomeo Capital">
   <!-- No font <link> here: the faces are declared in src/styles/fonts.css and
        the .woff2 files are served by Flask from /static/vendor/. See that
        file for why they are not bundled and not linked. -->
@@ -34,5 +43,6 @@
 </head>
 <body>
   <sb-root></sb-root>
+  <noscript>Please enable JavaScript to continue using this application.</noscript>
 </body>
 </html>

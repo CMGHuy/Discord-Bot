@@ -1,6 +1,7 @@
 import {
   ApplicationConfig,
   inject,
+  isDevMode,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
@@ -8,6 +9,7 @@ import {
 import { APP_BASE_HREF } from '@angular/common';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
+import { provideServiceWorker } from '@angular/service-worker';
 
 import {
   authInterceptor,
@@ -65,5 +67,23 @@ export const appConfig: ApplicationConfig = {
     // shell, and stops every workspace firing a doomed request on load.
     // It must be registered after provideHttpClient: it makes an HTTP call.
     provideAppInitializer(() => inject(SessionStore).boot()),
+    // Registered at an ABSOLUTE root path ('/ngsw-worker.js'), not the
+    // relative 'ngsw-worker.js' the schematic defaults to. A relative script
+    // URL resolves against the CURRENT PAGE's own URL (not <base href>,
+    // which only governs asset/link resolution), so its result depends on
+    // which workspace happened to load it -- '/trades/ngsw-worker.js' from
+    // one page, '/ngsw-worker.js' from another. An absolute path is
+    // unambiguous, and `scope: '/'` is what actually matters: the app's real
+    // navigable URLs are root-level (/dashboard, /trades, ... -- see
+    // APP_BASE_HREF above), not under /app/ where the rest of the bundle
+    // lives, so the default /app/-scoped registration could never control
+    // them or the manifest's start_url ("/dashboard"), and the app would
+    // never be considered installable. spa.py serves this exact file at the
+    // origin root for precisely this (see its ngsw_root() route).
+    provideServiceWorker('/ngsw-worker.js', {
+      enabled: !isDevMode(),
+      scope: '/',
+      registrationStrategy: 'registerWhenStable:30000',
+    }),
   ],
 };
