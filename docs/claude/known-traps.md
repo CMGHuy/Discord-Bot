@@ -92,7 +92,7 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   browser would silently operate on *the current page only* — a ticker filter
   would quietly mean "matches among these 25", which is worse than no paging
   at all. All six filters, all 14 sort columns and the pager go through
-  `_query_closed_trades()`, which survived the Jinja deletion precisely
+  `query_closed_trades()`, which survived the Jinja deletion precisely
   because it is builder-level and the v1 API uses it too. If you add a Trade
   History control, add it there too; do not filter or sort rows client-side.
   **The filter dropdown *options* used to be the deliberate exception** — the

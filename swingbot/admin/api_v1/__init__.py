@@ -72,7 +72,7 @@ def collection(items: list, total: int, page: int, per_page: int) -> dict:
     """The one collection envelope.
 
     `total` is the count AFTER filtering but BEFORE slicing -- the contract
-    `_query_closed_trades()` already implements, generalised rather than
+    `query_closed_trades()` already implements, generalised rather than
     reinvented. Passing `len(items)` here silently produces a one-page
     result set, so callers must pass the pre-slice count.
     """
