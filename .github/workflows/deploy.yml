@@ -125,6 +125,32 @@ jobs:
           fi
           echo "OK: <base href=\"/app/\">"
 
+  # ── 2c. Compose file sanity check ──────────────────────────────────────────
+  # docker-compose.yml itself is never exercised by container-healthcheck
+  # below -- that job proves the bot/admin containers work via plain
+  # `docker run`, not `docker compose`. Nothing else in this pipeline would
+  # catch a broken compose file, e.g. a required `${VAR:?...}` interpolation
+  # on a profile-gated service breaking `docker compose config` for EVERY
+  # profile, not just the one that needs the variable -- a real mistake made
+  # (and caught locally, not in CI) while adding the `cloudflared` service;
+  # see its comment in docker-compose.yml. Checked in both the default
+  # profile (what a bare `docker compose up` resolves, no .env needed) and
+  # the `tunnel` profile with a stub token (what the Hetzner server resolves
+  # once CLOUDFLARE_TUNNEL_TOKEN/COMPOSE_PROFILES=tunnel are set in its
+  # .env), so neither path can silently stop parsing.
+  compose-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate docker-compose.yml (default profile)
+        run: docker compose config --quiet
+
+      - name: Validate docker-compose.yml (tunnel profile)
+        run: |
+          COMPOSE_PROFILES=tunnel CLOUDFLARE_TUNNEL_TOKEN=ci-stub \
+            docker compose config --quiet
+
   # ── 3. Docker build + container health ────────────────────────────────────
   # Builds the real Docker image (same Dockerfile used in production) and
   # actually starts both entrypoints to prove the containers come up
@@ -453,18 +479,21 @@ jobs:
   # before returning (see deploy/deploy.sh). The server no longer builds
   # anything.
   #
-  # needs BOTH container-healthcheck (the image to pull) AND cleanup (the
-  # disk space to pull it into). Cleanup moved to run from the start of the
-  # workflow rather than after deploy specifically so the box's disk is freed
-  # BEFORE this job asks it to pull a new image -- a disk that's already full
-  # is exactly what makes a `docker pull` fail, and finding that out
-  # mid-deploy is worse than finding it out before. That guarantee only holds
-  # if this job actually waits for cleanup to finish rather than merely
-  # starting after it by convention: without this in `needs`, the two jobs
-  # race, and nothing stops the pull from landing before the prune does on
-  # the exact disk-is-nearly-full run this ordering exists to protect.
+  # needs container-healthcheck (the image to pull), cleanup (the disk space
+  # to pull it into), AND compose-lint (a docker-compose.yml that still
+  # parses in every profile -- deploy.sh runs `docker compose up` on the
+  # server, so a broken compose file fails there instead of here otherwise).
+  # Cleanup moved to run from the start of the workflow rather than after
+  # deploy specifically so the box's disk is freed BEFORE this job asks it to
+  # pull a new image -- a disk that's already full is exactly what makes a
+  # `docker pull` fail, and finding that out mid-deploy is worse than finding
+  # it out before. That guarantee only holds if this job actually waits for
+  # cleanup to finish rather than merely starting after it by convention:
+  # without this in `needs`, the two jobs race, and nothing stops the pull
+  # from landing before the prune does on the exact disk-is-nearly-full run
+  # this ordering exists to protect.
   deploy:
-    needs: [container-healthcheck, cleanup]
+    needs: [container-healthcheck, cleanup, compose-lint]
     # Skip on a manual run against a branch, where nothing was published --
     # deploying would silently re-run whatever :latest currently points at.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

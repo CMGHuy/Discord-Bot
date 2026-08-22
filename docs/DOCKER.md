@@ -175,6 +175,12 @@ front of it if you do -- see Security notes below) or just tunnel to it
 over SSH (`ssh -L 1234:localhost:1234 user@your-vm`) and browse to
 `http://localhost:1234` locally without exposing the port at all.
 
+A third option needing no open port at all: the `cloudflared` service already
+defined in `docker-compose.yml` (off by default, behind the `tunnel` Compose
+profile) gives the admin UI a real public hostname via a Cloudflare Tunnel.
+See [DEPLOY_HETZNER.md's "Cloudflare Tunnel" section](DEPLOY_HETZNER.md#cloudflare-tunnel-exposing-the-admin-ui-at-a-real-domain)
+for setup.
+
 Running both the bot and a second instance of itself (e.g. testing on
 your laptop while the real one runs on a VM) with the **same bot token**
 will make both instances receive and respond to the same Discord events

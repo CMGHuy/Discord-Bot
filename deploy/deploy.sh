@@ -118,6 +118,17 @@ fi
 echo "==> Pulling $IMAGE"
 docker pull "$IMAGE"
 
+# cloudflared is a stock, third-party image (cloudflare/cloudflared), not one
+# this pipeline builds or verifies -- it never runs the app image, so it's
+# deliberately absent from the digest check below. Naming it explicitly pulls
+# it regardless of whether the `tunnel` profile is currently active (Compose
+# resolves an explicitly-named service even when its profile is off), so a
+# plain redeploy keeps it patched whenever it IS enabled, and pre-warms it for
+# whoever enables it later. Best-effort: a Docker Hub hiccup here must not
+# block deploying the actual bot/admin update.
+echo "==> Pulling cloudflared (Cloudflare Tunnel image)"
+docker compose pull cloudflared || echo "WARNING: could not pull cloudflared -- continuing deploy anyway" >&2
+
 echo "==> Starting services"
 # --no-build is the assertion, not an optimisation: if anything ever makes
 # this server build its own image again, the artifact that was tested in CI
@@ -177,6 +188,10 @@ fi
 # digest. Comparing digests rather than tags is the point: `:latest` can be
 # repointed under a running container, and a container keeps whatever it
 # started from.
+#
+# bot/admin only -- cloudflared runs a different, third-party image
+# (cloudflare/cloudflared) that this pipeline never builds or publishes, so
+# it can never match $WANT and has nothing to verify here.
 echo "==> Verifying the containers run the image this deploy pulled"
 WANT=$(docker image inspect --format '{{.Id}}' "$IMAGE")
 MISMATCH=""
