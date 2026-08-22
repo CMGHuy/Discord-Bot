@@ -46,7 +46,6 @@ def build_explanation(result, earnings_info=None,
     scenario = result.scenario
     is_bull = scenario.direction == "bullish"
     level_word = "resistance" if is_bull else "support"
-    opp_word = "support" if is_bull else "resistance"
     arrow = "↑" if is_bull else "↓"
 
     # Target strategies
@@ -63,10 +62,9 @@ def build_explanation(result, earnings_info=None,
 
     # Stop strategies
     if stop_confluence:
-        s_count, s_families = stop_confluence
+        _, s_families = stop_confluence
     else:
         s_families = list(dict.fromkeys(strategy_family(s) for s in scenario.stop_sources))
-        s_count = len(s_families)
 
     t_str = _family_list(t_families)
     s_str = _family_list(s_families)
