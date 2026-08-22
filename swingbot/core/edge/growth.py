@@ -119,9 +119,9 @@ def growth_report(stats: dict, target: float = 10.0) -> str:
         lines.append(f"projected: {trades} more trades -> ETA {eta}")
         lines.append("")
         lines.append("sensitivity (what the levers buy you):")
-        for label, e2, tpm2 in ((f"expectancy +0.05R", e + 0.05, tpm),
-                                (f"frequency +20/mo", e, tpm + 20),
-                                (f"both", e + 0.05, tpm + 20)):
+        for label, e2, tpm2 in (("expectancy +0.05R", e + 0.05, tpm),
+                                ("frequency +20/mo", e, tpm + 20),
+                                ("both", e + 0.05, tpm + 20)):
             t2 = trades_to_multiple(remaining, risk, e2)
             d2 = eta_days(t2, tpm2)
             eta2 = f"{t2} trades, ~{d2 / 365.25:.1f} yrs" if d2 else "n/a"

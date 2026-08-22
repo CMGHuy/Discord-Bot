@@ -700,17 +700,17 @@ def _build_breakdown(closed: list) -> str:
     sep = "─" * 55
 
     if by_strategy:
-        lines += [f"  BY STRATEGY", hdr, sep]
+        lines += ["  BY STRATEGY", hdr, sep]
         for strat, trades in sorted(by_strategy.items(), key=lambda kv: -len(kv[1])):
             lines.append(_row(strat[:22], trades))
 
     if by_horizon:
-        lines += ["", f"  BY HORIZON", hdr, sep]
+        lines += ["", "  BY HORIZON", hdr, sep]
         for hz, trades in sorted(by_horizon.items(), key=lambda kv: -len(kv[1])):
             lines.append(_row(hz[:22], trades))
 
     if by_conf:
-        lines += ["", f"  BY CONFIDENCE LEVEL", hdr, sep]
+        lines += ["", "  BY CONFIDENCE LEVEL", hdr, sep]
         for lv in sorted(by_conf.keys()):
             lines.append(_row(f"Level {lv}", by_conf[lv]))
 
