@@ -30,15 +30,6 @@ class StateStore:
     def _save(self):
         atomic_write_json(self.path, self._data)
 
-    def get_last_trend(self, key: str) -> str | None:
-        """`key` is typically `SignalResult.state_key` (ticker|strategy|horizon)."""
-        return self._data.get(key, {}).get("trend")
-
-    def set_last_trend(self, key: str, trend: str):
-        with _LOCK:
-            self._data.setdefault(key, {})["trend"] = trend
-            self._save()
-
     def confirm_or_update(self, key: str, new_value: str, required_confirmations: int = 2) -> bool:
         """
         Call this every scan with the signal's current state_value.
