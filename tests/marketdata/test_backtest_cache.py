@@ -126,3 +126,26 @@ def test_fetch_tries_alias_candidates(monkeypatch):
     assert calls == ["SPX", "^GSPC"]
     assert df is not None
     assert len(df) == 500
+
+
+def test_fetch_tries_next_candidate_on_exception(monkeypatch):
+    """If a candidate's yf.download() raises an exception (e.g. ConnectionError),
+    fetch() must catch it and try the next candidate, not propagate.
+    This mirrors the empty-DataFrame case but for the exception path."""
+    import yfinance as yf
+
+    calls = []
+
+    def fake_download(symbol, **kwargs):
+        calls.append(symbol)
+        if symbol == "SPX":
+            raise ConnectionError("boom")
+        if symbol == "^GSPC":
+            return _make_df(500)
+        return pd.DataFrame()
+
+    monkeypatch.setattr(yf, "download", fake_download)
+    df = bc.fetch("SPX")
+    assert calls == ["SPX", "^GSPC"]
+    assert df is not None
+    assert len(df) == 500

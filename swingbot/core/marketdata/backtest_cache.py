@@ -72,9 +72,12 @@ def fetch(ticker: str) -> pd.DataFrame | None:
     import yfinance as yf  # local import: keeps module import cheap + test-safe
 
     for candidate in candidate_symbols(ticker):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            df = yf.download(candidate, period="max", auto_adjust=True, progress=False)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df = yf.download(candidate, period="max", auto_adjust=True, progress=False)
+        except Exception:
+            continue
         normalized = normalize_ohlcv(df)
         if normalized is not None:
             return normalized
