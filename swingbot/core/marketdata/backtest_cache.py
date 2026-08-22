@@ -22,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 from swingbot import config
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger("swing-bot.backtest_cache")
 
@@ -64,13 +65,20 @@ def normalize_ohlcv(df: pd.DataFrame | None) -> pd.DataFrame | None:
 
 def fetch(ticker: str) -> pd.DataFrame | None:
     """Full available daily history (IPO -> now), split/dividend adjusted,
-    normalized to the cache's canonical shape. Returns None on empty."""
+    normalized to the cache's canonical shape. Tries each of
+    ticker_utils.candidate_symbols(ticker) in order (same resolution every
+    sibling fetch path in this package uses), returning the first non-empty
+    result. Returns None if none resolve."""
     import yfinance as yf  # local import: keeps module import cheap + test-safe
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        df = yf.download(ticker, period="max", auto_adjust=True, progress=False)
-    return normalize_ohlcv(df)
+    for candidate in candidate_symbols(ticker):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            df = yf.download(candidate, period="max", auto_adjust=True, progress=False)
+        normalized = normalize_ohlcv(df)
+        if normalized is not None:
+            return normalized
+    return None
 
 
 def ensure_cached(ticker: str, force: bool = False) -> CacheResult:

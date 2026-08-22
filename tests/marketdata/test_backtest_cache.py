@@ -105,3 +105,24 @@ def test_ensure_cached_background_skips_cached_without_fetch(monkeypatch):
     t = bc.ensure_cached_background("AAPL")
     t.join(timeout=5)
     assert calls == []  # already cached -> no background fetch
+
+
+def test_fetch_tries_alias_candidates(monkeypatch):
+    """SPX has no direct Yahoo symbol -- ticker_utils.ALIASES maps it to
+    ^GSPC. fetch() must try candidates in the same order data.get_daily_data
+    does, or alias tickers silently never get cached (the v40 audit bug)."""
+    import yfinance as yf
+
+    calls = []
+
+    def fake_download(symbol, **kwargs):
+        calls.append(symbol)
+        if symbol == "^GSPC":
+            return _make_df(500)
+        return pd.DataFrame()
+
+    monkeypatch.setattr(yf, "download", fake_download)
+    df = bc.fetch("SPX")
+    assert calls == ["SPX", "^GSPC"]
+    assert df is not None
+    assert len(df) == 500
