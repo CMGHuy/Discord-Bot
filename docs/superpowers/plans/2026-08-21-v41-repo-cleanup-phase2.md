@@ -32,12 +32,16 @@ Bump: bot patch
 - Verify every task with `python scripts/dev/testrun.py file <the test file
   the task touches>` before committing it (~7s per file — this repo's
   documented fast path; never re-run the full suite per task).
-- Task 13 (the version bump) is the LAST task, and only runs after
+- Task 18 (the version bump) is the LAST task, and only runs after
   `python scripts/dev/testrun.py full` shows `0 failed, 0 xfailed` with
-  Tasks 1-12 all committed.
+  Tasks 1-17 all committed.
 - No new dependencies. Nothing under `.claude/worktrees/` is touched by this
   plan.
-- Source of every task: `docs/superpowers/results/2026-08-21-repo-cleanup-audit.md`.
+- Source of Tasks 1-13, 18: `docs/superpowers/results/2026-08-21-repo-cleanup-audit.md`.
+  Tasks 14-17 were added 2026-08-22 from a follow-up pyflakes sweep run
+  during this plan's own brainstorming pass — same rigor (pyflakes hit,
+  hand-verified against real call sites for re-export/side-effect false
+  positives before being added), different source, not in the audit doc.
 
 ## Not in this plan (and why)
 
@@ -75,11 +79,14 @@ not forgotten:
 
 ## Parallelisation
 
-Tasks 1, 2, 3, 6, 7, 8, 9, 10, 11, 12 touch disjoint files and may run
-concurrently. **Tasks 4 and 5 both edit `core/tracking/retrospective.py`
+Tasks 1, 2, 3, 6, 8, 9, 10, 11, 12, 14, 15, 16 touch disjoint files and may
+run concurrently. **Tasks 4 and 5 both edit `core/tracking/retrospective.py`
 and must run sequentially** (either order — they touch different line
-ranges, but it's one file, one working tree). Task 13 must run last, after
-every other task is committed and the full suite is green.
+ranges, but it's one file, one working tree). **Tasks 7 and 17 both edit
+`core/charts/analytics_charts.py` and must run sequentially** for the same
+reason (Task 7 touches `_save`, lines 20-48; Task 17 touches
+`render_equity_curve`, line 86 — disjoint ranges, same file). Task 18 must
+run last, after every other task is committed and the full suite is green.
 
 ---
 
@@ -1163,7 +1170,268 @@ caller. Found by the v40 audit."
 
 ---
 
-### Task 13: Bump `VERSION.json` (bot patch) and regenerate `version_history.json`
+### Task 14: Remove the dead `from swingbot import config` import in `versions.py`
+
+**Files:**
+- Modify: `swingbot/admin/api_v1/versions.py:31`
+- Test: `tests/admin/test_api_v1_versions.py` (existing — no new test needed, this changes zero output)
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: no signature change — `config` is never referenced anywhere
+  else in this file, so removing the import cannot change output. (Found
+  by a pyflakes sweep during v41's own brainstorming pass, 2026-08-22 —
+  same audit lineage as the rest of this plan, one task late.)
+
+- [ ] **Step 1: Confirm the import is genuinely unused**
+
+Run: `python -m pyflakes swingbot/admin/api_v1/versions.py`
+Expected output:
+```
+swingbot/admin/api_v1/versions.py:31:1: 'swingbot.config' imported but unused
+```
+
+Run: `git grep -n "config\." swingbot/admin/api_v1/versions.py`
+Expected: no output — `config` is not referenced anywhere in the file.
+
+- [ ] **Step 2: Remove the import**
+
+Delete this line:
+
+```python
+from swingbot import config
+```
+
+- [ ] **Step 3: Verify pyflakes is clean and existing tests still pass**
+
+Run: `python -m pyflakes swingbot/admin/api_v1/versions.py`
+Expected: no output.
+
+Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_versions.py`
+Expected: PASS, same pass count as before this change.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add swingbot/admin/api_v1/versions.py
+git commit -m "chore(v41): remove dead swingbot.config import in versions.py
+
+config was imported and never referenced anywhere in the file. No
+output change. Found by a pyflakes sweep during v41's own
+brainstorming pass."
+```
+
+---
+
+### Task 15: Fix the no-op `f`-string prefix in `commands/history.py`
+
+**Files:**
+- Modify: `swingbot/commands/history.py:245`
+- Test: `tests/commands/test_history_format.py` (new — `_format_generated_plan`
+  has no existing test coverage at all)
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: no signature or output change — this is a string literal with
+  no `{}` placeholders, so the leading `f` was always a no-op. Same species
+  as Task 4's fix in `growth.py`/`retrospective.py`, missed by the v40
+  audit because `commands/*.py` was only grep-swept, never read line by
+  line (see the audit's own "Coverage gaps" section).
+
+- [ ] **Step 1: Write the failing test**
+
+Create `tests/commands/test_history_format.py` (and `tests/commands/__init__.py`
+if the directory doesn't already have one):
+
+```python
+from types import SimpleNamespace
+
+from swingbot.commands.history import _format_generated_plan
+
+
+def test_format_generated_plan_timeout_line_text():
+    """The timeout line's f-string has no {} placeholders -- the f prefix
+    was a no-op. Pin the literal text so a future edit can't silently
+    reintroduce a missing placeholder either."""
+    trade = SimpleNamespace(direction="bullish", outcome="timeout",
+                             r_multiple=None, exit_date=None)
+    line = _format_generated_plan("RSI", "4w", trade, "$")
+    assert "→ ⏳ timed out (no exit within max hold)" in line
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python -m pytest tests/commands/test_history_format.py -v`
+Expected: this actually PASSES already (the `f` prefix is a no-op, so
+current output already matches) — the point of this step is confirming
+the test is well-formed and reaches the target line, not a red/green
+cycle. Run `python -m pyflakes swingbot/commands/history.py` alongside it
+and confirm it reports the `F541` hit at line 245.
+
+- [ ] **Step 3: Fix `history.py`**
+
+Change:
+
+```python
+        exit_str = f"→ ⏳ timed out (no exit within max hold)"
+```
+
+to:
+
+```python
+        exit_str = "→ ⏳ timed out (no exit within max hold)"
+```
+
+- [ ] **Step 4: Verify pyflakes is clean and the test still passes**
+
+Run: `python -m pyflakes swingbot/commands/history.py`
+Expected: no `F541` hit remains.
+
+Run: `python -m pytest tests/commands/test_history_format.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add swingbot/commands/history.py tests/commands/test_history_format.py
+git commit -m "style(v41): drop no-op f-string prefix in history.py
+
+The timeout line's f-string had no {} in it -- the f prefix did
+nothing. Same species as Task 4's growth.py/retrospective.py fix;
+missed there because commands/*.py was only grep-swept by the v40
+audit, never read line by line. No output change. Adds the first unit
+test for _format_generated_plan, which had none."
+```
+
+---
+
+### Task 16: Remove the dead `title` local in `trade_chart.py`
+
+**Files:**
+- Modify: `swingbot/core/charts/trade_chart.py:426-431`
+- Test: `tests/charts/test_trade_chart_v2.py` (existing — no new test needed, this changes zero output)
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: no signature change. `title` is built and never passed
+  anywhere — the mplfinance `title=` kwarg was deliberately dropped in
+  favor of a top-left legend block (see the comment at the `_plot_kwargs`
+  dict two lines below, already in the file: "No `title=`: the centered
+  mplfinance title is replaced by the top-left legend block"). The string
+  build was never removed when that happened.
+
+- [ ] **Step 1: Confirm the variable is read nowhere in the function**
+
+Run: `python -m pyflakes swingbot/core/charts/trade_chart.py`
+Expected output includes:
+```
+swingbot/core/charts/trade_chart.py:428:5 local variable 'title' is assigned to but never used
+```
+
+Run: `git grep -n "\btitle\b" swingbot/core/charts/trade_chart.py`
+Expected: the only reference to the bare `title` identifier is its own
+assignment; every other hit is the substring inside a comment or a
+differently-named variable (e.g. "chart title", "Panel title").
+
+- [ ] **Step 2: Remove the dead block**
+
+Delete these lines:
+
+```python
+
+    # Single-line title (first row only — stats are drawn separately with color)
+    title = (
+        f"{ticker} — {strategy} ({horizon_label}) — {direction_label}"
+        f"  [{currency_symbol.strip()}, {window_note}]"
+    )
+```
+
+(leaving exactly one blank line between the MACD stat-token block above and
+the "Volume now overlays..." comment below — do not leave two).
+
+- [ ] **Step 3: Verify pyflakes is clean and existing tests still pass**
+
+Run: `python -m pyflakes swingbot/core/charts/trade_chart.py`
+Expected: no `title`-related warning remains.
+
+Run: `python scripts/dev/testrun.py file tests/charts/test_trade_chart_v2.py`
+Expected: PASS, same pass count as before this change (output is
+byte-identical — this local was never read).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add swingbot/core/charts/trade_chart.py
+git commit -m "refactor(v41): remove dead title local in trade_chart.py
+
+title was computed and never used -- the mplfinance title= kwarg it
+was built for was deliberately dropped in favor of a legend block, and
+the string-building code was left behind. No output change. Found by
+a pyflakes sweep during v41's own brainstorming pass."
+```
+
+---
+
+### Task 17: Remove the unused `legend` local in `analytics_charts.py`
+
+**Files:**
+- Modify: `swingbot/core/charts/analytics_charts.py:86`
+- Test: `tests/charts/test_analytics_charts.py` (existing — no new test needed, this changes zero output)
+- **Sequencing:** must run after Task 7 (both edit this file — Task 7 touches
+  `_save`, lines 20-48; this task touches `render_equity_curve`, line 86;
+  disjoint ranges, but one file, one working tree).
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: no signature change. `ax.legend(...)`'s return value is
+  assigned to `legend` and never read — the call's side effect (drawing
+  the legend on the axes) still happens; only the unused assignment goes.
+
+- [ ] **Step 1: Confirm the variable is read nowhere in the function**
+
+Run: `python -m pyflakes swingbot/core/charts/analytics_charts.py`
+Expected output includes:
+```
+swingbot/core/charts/analytics_charts.py:86:5: local variable 'legend' is assigned to but never used
+```
+
+- [ ] **Step 2: Drop the unused assignment, keep the call**
+
+Change:
+
+```python
+    legend = ax.legend(loc="upper left", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
+```
+
+to:
+
+```python
+    ax.legend(loc="upper left", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
+```
+
+- [ ] **Step 3: Verify pyflakes is clean and existing tests still pass**
+
+Run: `python -m pyflakes swingbot/core/charts/analytics_charts.py`
+Expected: no `legend`-related warning remains.
+
+Run: `python scripts/dev/testrun.py file tests/charts/test_analytics_charts.py`
+Expected: PASS, same pass count as before this change (the rendered
+figure is byte-identical — only the discarded return value goes).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add swingbot/core/charts/analytics_charts.py
+git commit -m "refactor(v41): remove unused legend local in analytics_charts.py
+
+ax.legend()'s return value was assigned and never read; the call's
+side effect (drawing the legend) is unaffected. No output change.
+Found by a pyflakes sweep during v41's own brainstorming pass."
+```
+
+---
+
+### Task 18: Bump `VERSION.json` (bot patch) and regenerate `version_history.json`
 
 **Files:**
 - Modify: `VERSION.json`
@@ -1171,7 +1439,7 @@ caller. Found by the v40 audit."
 
 **Interfaces:** None.
 
-This is the LAST task. Do not start it until Tasks 1-12 are all committed
+This is the LAST task. Do not start it until Tasks 1-17 are all committed
 and `python scripts/dev/testrun.py full` shows `0 failed, 0 xfailed`.
 
 - [ ] **Step 1: Confirm the full suite is green**
