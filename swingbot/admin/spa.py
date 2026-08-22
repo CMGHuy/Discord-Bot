@@ -107,6 +107,28 @@ def asset(filename: str):
     return response
 
 
+#: The two files Angular's service worker needs to find at the ORIGIN ROOT,
+#: not just under /app/ where the rest of the bundle lives. A service worker
+#: registered at /app/'s scope cannot control the app's real navigable URLs
+#: (/dashboard, /trades, ... -- root-level, see APP_BASE_HREF in
+#: app.config.ts), so the manifest's start_url would sit outside its scope
+#: and the app would never be considered installable. `asset()` above
+#: already serves both at /app/ngsw-worker.js and /app/ngsw.json; these two
+#: routes serve the SAME files, from the SAME directory, at the root as well.
+_NGSW_FILES = ("ngsw-worker.js", "ngsw.json")
+
+
+@spa.route(f"/<any({', '.join(repr(f) for f in _NGSW_FILES)}):filename>")
+def ngsw_root(filename: str):
+    if not is_built():
+        return ("Not Found", 404)
+    response = send_from_directory(APP_DIR, filename)
+    # Never cached: this is how the browser notices a new deploy of the
+    # service worker at all. Same reasoning as INDEX_CACHE above.
+    response.headers["Cache-Control"] = INDEX_CACHE
+    return response
+
+
 def register(app) -> None:
     """Mount the SPA routes, skipping any URL the Jinja UI still owns.
 

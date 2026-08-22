@@ -42,6 +42,11 @@ def built(tmp_path, monkeypatch):
     (app_dir / "index.html").write_text(
         "<!doctype html><sb-root></sb-root>", encoding="utf-8")
     (app_dir / "main-ABCD1234.js").write_text("console.log(1)", encoding="utf-8")
+    # A real `ng build` with the service worker enabled emits these two
+    # alongside index.html -- present here so the fixture matches what
+    # actually ships, the same reasoning as the two files above.
+    (app_dir / "ngsw-worker.js").write_text("// service worker", encoding="utf-8")
+    (app_dir / "ngsw.json").write_text('{"configVersion": 1}', encoding="utf-8")
     monkeypatch.setattr(spa, "APP_DIR", str(app_dir))
     return app_dir
 
@@ -121,6 +126,49 @@ def test_index_is_never_cached(client, built):
         cache = client.get(path).headers["Cache-Control"]
         assert "no-cache" in cache, path
         assert "immutable" not in cache, path
+
+
+# --------------------------------------------------------------------------
+# The service worker: must be reachable at the ORIGIN ROOT, not just /app/
+# --------------------------------------------------------------------------
+#
+# The app's real navigable URLs are root-level (/dashboard, /trades, ... --
+# APP_BASE_HREF overrides the router back to '/', see
+# test_the_build_base_href_matches_where_flask_serves_the_bundle above). A
+# service worker registered at the default /app/ scope (where the rest of
+# the bundle lives) cannot control those, so Chrome would never consider the
+# app installable: manifest.webmanifest's start_url ("/dashboard") would sit
+# outside the worker's scope. These two files are therefore ALSO served at
+# the root, in addition to (not instead of) /app/ngsw-worker.js and
+# /app/ngsw.json, which the existing asset() route already covers for free.
+
+def test_ngsw_worker_served_at_root(client, built):
+    response = client.get("/ngsw-worker.js")
+
+    assert response.status_code == 200
+    assert response.data == (built / "ngsw-worker.js").read_bytes()
+
+
+def test_ngsw_json_served_at_root(client, built):
+    response = client.get("/ngsw.json")
+
+    assert response.status_code == 200
+    assert response.data == (built / "ngsw.json").read_bytes()
+
+
+@pytest.mark.parametrize("path", ["/ngsw-worker.js", "/ngsw.json"])
+def test_ngsw_files_are_never_cached(client, path, built):
+    """The one thing a service worker must never receive stale: this is how
+    the browser notices a new deploy at all. Same reasoning as index.html."""
+    cache = client.get(path).headers["Cache-Control"]
+    assert "no-cache" in cache
+    assert "immutable" not in cache
+
+
+@pytest.mark.parametrize("path", ["/ngsw-worker.js", "/ngsw.json"])
+def test_ngsw_files_404_when_unbuilt(client, path, tmp_path, monkeypatch):
+    monkeypatch.setattr(spa, "APP_DIR", str(tmp_path / "never-built"))
+    assert client.get(path).status_code == 404
 
 
 # --------------------------------------------------------------------------
