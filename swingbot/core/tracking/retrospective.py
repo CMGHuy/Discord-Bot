@@ -67,7 +67,10 @@ def _load_history() -> list[dict]:
     try:
         with open(_HISTORY_PATH) as f:
             return json.load(f)
+    except FileNotFoundError:
+        return []
     except Exception:
+        log.warning("retrospective: failed to load history from %s", _HISTORY_PATH, exc_info=True)
         return []
 
 
@@ -135,6 +138,7 @@ def _to_berlin(iso_str: str) -> dt.datetime | None:
             d = d.astimezone(_BERLIN_TZ)
         return d
     except Exception:
+        log.warning("retrospective: unparseable timestamp %r for Berlin conversion", iso_str, exc_info=True)
         return None
 
 
