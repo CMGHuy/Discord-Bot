@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-22 15:14:29 UTC",
+  "generated_at": "2026-08-22 19:55:21 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.8.1",
-    "bot": "1.3.2"
+    "bot": "1.3.3"
   },
   "releases": [
     {
@@ -732,6 +732,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-08-22",
+      "last_seen": "2026-08-22",
+      "commit": "cb7a23db",
+      "subject": "chore(v41): bump bot patch version for the repo-cleanup fixes",
+      "versions": {
+        "ui": "1.8.1",
+        "bot": "1.3.3"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
