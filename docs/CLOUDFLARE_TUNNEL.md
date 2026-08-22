@@ -23,24 +23,38 @@ a few minutes to hours to propagate.
 1. [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/) →
    **Networks → Tunnels → Create a tunnel**.
 2. Choose **Cloudflared**, name it (e.g. `swing-bot-admin`), **Save tunnel**.
-3. On the next screen (**Install and run a connector**) you only need the
-   token — skip the OS-specific install command shown there, since it runs
-   as its own container instead (step 2 below). The token is the long string
-   after `--token` in the sample command, or copy it directly from the
-   **Docker** tab.
-4. Click **Next**, then add a **Public Hostname**:
-   - Subdomain: `www` (and repeat this whole tunnel step for the bare
-     `bomeo-capital.com` apex if you want both to resolve)
-   - Domain: `bomeo-capital.com`
-   - Type: `HTTP`
-   - URL: `admin:1234` — the compose service name, not `localhost`; both
-     containers share the same Docker network, and `cloudflared` reaches
-     `admin` the same way the healthchecks in `docker-compose.yml` do.
-   - Save.
+3. On **Install and run a connector**, you only need the token — skip the
+   OS-specific install command shown there, since it runs as its own
+   container instead (step 2 below). The token is the long string after
+   `--token` in the sample command, or copy it directly from the **Docker**
+   tab.
+4. Open the tunnel's **Hostname routes** tab (Cloudflare has renamed this
+   screen more than once — it's the one that sits alongside "CIDR routes",
+   "Published application routes" and "Live logs"; older dashboards call it
+   "Public Hostname". Whatever the label, it's the tab that maps a domain to
+   a local service). Use its add-route button to create **two** entries, both
+   pointing at the same service so the admin UI answers on both:
 
-This is a *dashboard-managed* tunnel — the hostname → service routing rule
-lives in Cloudflare, not in a `config.yml` in this repo, so changing it later
-is just editing the Public Hostname entry, no redeploy needed.
+   | Subdomain   | Domain              | Type   | URL           |
+   | ----------- | ------------------- | ------ | ------------- |
+   | `www`       | `bomeo-capital.com` | `HTTP` | `admin:1234`  |
+   | *(blank)*   | `bomeo-capital.com` | `HTTP` | `admin:1234`  |
+
+   `admin:1234` is the compose service name, not `localhost` — both
+   containers share the same Docker network, and `cloudflared` reaches
+   `admin` the same way the healthchecks in `docker-compose.yml` do.
+
+   **If saving either route fails with "A DNS record with this name already
+   exists":** the domain has a leftover DNS record from before it was on this
+   tunnel (this happened for both `www` and the bare apex when this doc was
+   written). Go to the regular [Cloudflare dashboard](https://dash.cloudflare.com/)
+   → the `bomeo-capital.com` site → **DNS → Records**, delete the conflicting
+   row (named `www` or `bomeo-capital.com`/`@`), then retry saving the route
+   — it auto-creates the correct CNAME once the old record is out of the way.
+
+This is a *dashboard-managed* tunnel — the hostname → service routing rules
+live in Cloudflare, not in a `config.yml` in this repo, so changing either
+one later is just editing its route entry, no redeploy needed.
 
 ## 2. Configure the server
 
@@ -60,12 +74,14 @@ to add to the pipeline itself.
 
 ## 3. Verify
 
-`docker compose logs -f cloudflared` should show it registering connections;
-then browse to `https://www.bomeo-capital.com` and confirm the admin UI's
-login prompt appears. The admin UI's own HTTP Basic Auth
-(`ADMIN_USERNAME`/`ADMIN_PASSWORD`) is still the only auth in front of it
-unless you add a [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
-policy on the same hostname in the Zero Trust dashboard for a second,
+`docker compose logs -f cloudflared` should show it registering connections
+and an `Updated to new configuration` line listing **both**
+`www.bomeo-capital.com` and `bomeo-capital.com` in its ingress rules. Then
+browse to both `https://www.bomeo-capital.com` and `https://bomeo-capital.com`
+and confirm the admin UI's login prompt appears at each. The admin UI's own
+HTTP Basic Auth (`ADMIN_USERNAME`/`ADMIN_PASSWORD`) is still the only auth in
+front of it unless you add a [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+policy on the same hostnames in the Zero Trust dashboard for a second,
 stronger layer — worth doing since this makes the admin UI reachable from
 the open internet by hostname, which the SSH-tunnel and closed-firewall
 options in [DEPLOY_HETZNER.md](DEPLOY_HETZNER.md#accessing-the-admin-ui)

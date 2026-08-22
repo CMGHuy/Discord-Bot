@@ -152,12 +152,13 @@ services:
         condition: service_healthy
 
   cloudflared:
-    # Cloudflare Tunnel: gives the admin UI a real public hostname
-    # (https://www.bomeo-capital.com) with no inbound port opened on the
-    # server -- the tunnel dials OUT to Cloudflare's edge, the same
-    # outbound-only shape as the bot's own connection to Discord's Gateway.
-    # See docs/CLOUDFLARE_TUNNEL.md for how to create the tunnel, point its
-    # Public Hostname at http://admin:1234, and get the token below.
+    # Cloudflare Tunnel: gives the admin UI real public hostnames
+    # (https://www.bomeo-capital.com and https://bomeo-capital.com) with no
+    # inbound port opened on the server -- the tunnel dials OUT to
+    # Cloudflare's edge, the same outbound-only shape as the bot's own
+    # connection to Discord's Gateway. See docs/CLOUDFLARE_TUNNEL.md for how
+    # to create the tunnel, add hostname routes for both pointing at
+    # http://admin:1234, and get the token below.
     #
     # This is a dashboard-managed tunnel (`tunnel run` with just a token --
     # no config.yml/credentials.json on disk), so the routing rule (which
