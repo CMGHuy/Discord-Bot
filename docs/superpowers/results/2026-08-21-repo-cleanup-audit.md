@@ -1,6 +1,7 @@
 # Repo cleanup audit (Phase 1 of v40)
 
-Design: `docs/superpowers/specs/2026-08-21-v40-repo-cleanup-audit-design.md`.
+Design: `docs/superpowers/specs/implemented/2026-08-21-v40-repo-cleanup-audit-design.md`
+(moved there 2026-08-22 when its one plan, v41, closed).
 Six parallel read-only forks, one per subsystem, run concurrently with plan
 v36 (which lives in a separate, unmerged worktree — nothing here reflects
 v36's in-progress changes; `core/planning` etc. were audited at their
@@ -206,3 +207,13 @@ to `main`, use this document as the input: the 1 confirmed bug and the 14
 guardrail-cleared candidates are low-risk enough for a first, small cleanup
 plan; the 8 suspected items need one more targeted look (repro attempt or a
 human UX/behavior call) before any of them become a task.
+
+**Status (2026-08-22): closed.** Phase 2 shipped as plan
+`docs/superpowers/plans/implemented/2026-08-21-v41-repo-cleanup-phase2.md` —
+all 14 candidates and the 1 confirmed bug landed (bar one explicitly declined
+consolidation, recorded in that plan's "Not in this plan" section); of the 8
+suspected items, 2 became tasks (the two bare excepts, the missing
+disclaimer), 1 was confirmed a non-issue (the density note), and the
+remaining 5 were re-examined and explicitly declined rather than silently
+dropped. See that plan's Progress block for the full closing account,
+including two Important findings its own final review caught and fixed.

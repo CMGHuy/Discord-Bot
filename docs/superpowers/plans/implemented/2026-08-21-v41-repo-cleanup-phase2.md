@@ -16,6 +16,9 @@ script), each independently testable and independently committable.
 run, per the audit's own scope note that Angular tooling wasn't exercised).
 
 Bump: bot patch
+Edge: none (integrity) — dead-code removal, a real bug fix (alias-ticker
+resolution), figure-leak/logging hygiene, and one doc/comment drift fix.
+No discriminator added or sharpened, no R harvested, no volume gained.
 
 ## Global Constraints
 
@@ -37,7 +40,9 @@ Bump: bot patch
   Tasks 1-17 all committed.
 - No new dependencies. Nothing under `.claude/worktrees/` is touched by this
   plan.
-- Source of Tasks 1-13, 18: `docs/superpowers/results/2026-08-21-repo-cleanup-audit.md`.
+- Source of Tasks 1-12, 18: `docs/superpowers/results/2026-08-21-repo-cleanup-audit.md`.
+  (There is no Task 13 — numbering jumps 12→14 by design, see below; the
+  real task count is 17, not 18.)
   Tasks 14-17 were added 2026-08-22 from a follow-up pyflakes sweep run
   during this plan's own brainstorming pass — same rigor (pyflakes hit,
   hand-verified against real call sites for re-export/side-effect false
@@ -76,6 +81,17 @@ not forgotten:
   helpers** — legitimate small consolidation candidate, but `plan_engine.py`
   is v36's most heavily edited file (135 lines changed); deferred to avoid
   editing a file this close to a just-landed feature merge in the same pass.
+- **The audit's suggested shared chart-save helper** (one `stamp_disclaimer:
+  bool` helper in `chart_style.py` consolidating the 4-way duplicated
+  disclaimer-stamp + `try/finally: plt.close(fig)` logic across
+  `analytics_charts.py`/`portfolio_charts.py`/`decision_chart.py`/
+  `trade_chart.py`) — Tasks 7/8/9 fix the leak and the disclaimer gap in
+  each file individually instead, per this plan's "zero speculative
+  changes" framing; each fix is one line, and factoring four call sites
+  into a shared helper is a design change the audit itself only floated as
+  an option, not a requirement. Left as a legitimate follow-up, not done
+  here. (Added retroactively during the final whole-branch review, which
+  flagged that the original writing of this section missed it.)
 
 ## Parallelisation
 
@@ -102,7 +118,7 @@ run last, after every other task is committed and the full suite is green.
 - Produces: no signature change — `fetch(ticker: str) -> pd.DataFrame | None`
   still returns the same shape, just resolves more tickers successfully.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/marketdata/test_backtest_cache.py`:
 
@@ -128,13 +144,13 @@ def test_fetch_tries_alias_candidates(monkeypatch):
     assert len(df) == 500
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/marketdata/test_backtest_cache.py::test_fetch_tries_alias_candidates -v`
 Expected: FAIL — `assert calls == ["SPX", "^GSPC"]` fails because `calls == ["SPX"]`
 (current `fetch()` only tries the raw ticker).
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `swingbot/core/marketdata/backtest_cache.py`, add the import near the top
 (alongside the existing `from swingbot import config`):
@@ -164,14 +180,14 @@ def fetch(ticker: str) -> pd.DataFrame | None:
     return None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/marketdata/test_backtest_cache.py -v`
 Expected: PASS, all tests in the file (this confirms the fix doesn't break
 the 11 existing tests that monkeypatch `bc.fetch` wholesale — they're
 unaffected since they replace `fetch` entirely).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/marketdata/backtest_cache.py tests/marketdata/test_backtest_cache.py
@@ -198,7 +214,7 @@ which all loop ticker_utils.candidate_symbols(). Found by the v40 audit."
   no other file in `swingbot/`, `commands/`, `admin/`, `scripts/` calls them
   (verified — only their own test did).
 
-- [ ] **Step 1: Update the test to exercise the real (non-dead) API**
+- [x] **Step 1: Update the test to exercise the real (non-dead) API**
 
 `get_last_trend`/`set_last_trend` exist only so `test_statestore_atomic` has
 something simple to call — replace it with a call through
@@ -224,13 +240,13 @@ def test_statestore_atomic(tmp_path):
     assert reloaded.confirm_or_update("AAPL|Fibonacci|4w", "bullish", required_confirmations=1) is False
 ```
 
-- [ ] **Step 2: Run test to verify it passes against current code**
+- [x] **Step 2: Run test to verify it passes against current code**
 
 Run: `python -m pytest tests/infra/test_jsonio.py::test_statestore_atomic -v`
 Expected: PASS (this only changes which public method the test calls;
 `get_last_trend`/`set_last_trend` still exist at this point).
 
-- [ ] **Step 3: Delete the dead methods**
+- [x] **Step 3: Delete the dead methods**
 
 In `swingbot/core/infra/state.py`, remove:
 
@@ -248,12 +264,12 @@ In `swingbot/core/infra/state.py`, remove:
 
 (the blank line before `confirm_or_update` stays — just this block goes).
 
-- [ ] **Step 4: Run test to verify it still passes**
+- [x] **Step 4: Run test to verify it still passes**
 
 Run: `python -m pytest tests/infra/test_jsonio.py -v`
 Expected: PASS, all tests in the file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/infra/state.py tests/infra/test_jsonio.py
@@ -278,7 +294,7 @@ now exercises confirm_or_update instead. Found by the v40 audit."
   exact same string as before; `opp_word` and `s_count` were computed and
   never read, so removing them cannot change output.
 
-- [ ] **Step 1: Confirm neither variable is read anywhere in the function**
+- [x] **Step 1: Confirm neither variable is read anywhere in the function**
 
 Run: `python -m pyflakes swingbot/core/market/explain.py`
 Expected output includes:
@@ -287,7 +303,7 @@ swingbot/core/market/explain.py:49:5 local variable 'opp_word' is assigned to bu
 swingbot/core/market/explain.py:66:9 local variable 's_count' is assigned to but never used
 ```
 
-- [ ] **Step 2: Remove `opp_word`**
+- [x] **Step 2: Remove `opp_word`**
 
 Delete this line from `build_explanation`:
 
@@ -295,7 +311,7 @@ Delete this line from `build_explanation`:
     opp_word = "support" if is_bull else "resistance"
 ```
 
-- [ ] **Step 3: Remove `s_count`**
+- [x] **Step 3: Remove `s_count`**
 
 Change:
 
@@ -318,7 +334,7 @@ to:
         s_families = list(dict.fromkeys(strategy_family(s) for s in scenario.stop_sources))
 ```
 
-- [ ] **Step 4: Verify pyflakes is clean and existing tests still pass**
+- [x] **Step 4: Verify pyflakes is clean and existing tests still pass**
 
 Run: `python -m pyflakes swingbot/core/market/explain.py`
 Expected: no output (no warnings).
@@ -328,7 +344,7 @@ Run: `python scripts/dev/testrun.py file tests/scanning/test_embeds_v3.py`
 Expected: both PASS, same pass count as before this change (output text is
 byte-identical — these locals were never read).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/market/explain.py
@@ -353,13 +369,13 @@ the v40 audit."
 - Produces: no signature or output change — these are string literals with
   no `{}` placeholders, so the leading `f` was always a no-op.
 
-- [ ] **Step 1: Confirm both files' no-op f-strings via pyflakes**
+- [x] **Step 1: Confirm both files' no-op f-strings via pyflakes**
 
 Run: `python -m pyflakes swingbot/core/edge/growth.py swingbot/core/tracking/retrospective.py`
 Expected output includes six `F541 f-string is missing placeholders` hits:
 three at `growth.py:122-124`, three at `retrospective.py:703,708,713`.
 
-- [ ] **Step 2: Fix `growth.py`**
+- [x] **Step 2: Fix `growth.py`**
 
 Change:
 
@@ -377,7 +393,7 @@ to:
                                 ("both", e + 0.05, tpm + 20)):
 ```
 
-- [ ] **Step 3: Fix `retrospective.py`**
+- [x] **Step 3: Fix `retrospective.py`**
 
 Change each of the three lines:
 
@@ -403,7 +419,7 @@ to:
         lines += ["", "  BY CONFIDENCE LEVEL", hdr, sep]
 ```
 
-- [ ] **Step 4: Verify pyflakes is clean and existing tests still pass**
+- [x] **Step 4: Verify pyflakes is clean and existing tests still pass**
 
 Run: `python -m pyflakes swingbot/core/edge/growth.py swingbot/core/tracking/retrospective.py`
 Expected: no `F541` hits remain.
@@ -412,7 +428,7 @@ Run: `python scripts/dev/testrun.py file tests/tracking/test_retrospective_v2.py
 Run: `python scripts/dev/testrun.py file tests/edge/test_edge_heat.py`
 Expected: both PASS (output text is byte-identical to before).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/edge/growth.py swingbot/core/tracking/retrospective.py
@@ -439,7 +455,7 @@ Six f-strings across growth.py and retrospective.py had no {} in them
   both now log, matching the file's dominant pattern (e.g. `_save_history`'s
   `except Exception: log.exception(...)`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/tracking/test_retrospective_v2.py`:
 
@@ -469,13 +485,13 @@ def test_to_berlin_logs_on_unparseable_timestamp(caplog):
                for r in caplog.records)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/tracking/test_retrospective_v2.py::test_load_history_logs_on_corrupt_file tests/tracking/test_retrospective_v2.py::test_to_berlin_logs_on_unparseable_timestamp -v`
 Expected: FAIL — `assert any(...)` fails on both since `caplog.records` is empty
 (nothing is logged today).
 
-- [ ] **Step 3: Add logging to `_load_history`**
+- [x] **Step 3: Add logging to `_load_history`**
 
 Change:
 
@@ -506,7 +522,7 @@ def _load_history() -> list[dict]:
 — matches the module's own "presumably caused it" framing elsewhere — while
 a genuinely corrupt/unreadable file now logs.)
 
-- [ ] **Step 4: Add logging to `_to_berlin`**
+- [x] **Step 4: Add logging to `_to_berlin`**
 
 Change:
 
@@ -545,12 +561,12 @@ def _to_berlin(iso_str: str) -> dt.datetime | None:
         return None
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `python -m pytest tests/tracking/test_retrospective_v2.py -v`
 Expected: PASS, all tests in the file.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/tracking/retrospective.py tests/tracking/test_retrospective_v2.py
@@ -580,7 +596,7 @@ on failure); only visibility changes. Found by the v40 audit."
   `CONFIDENCE_EMOJI`/`CONFIDENCE_ANSI` (zero external consumers) and the
   unused `discord` import are removed.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/scanning/test_engine_v2_plans.py`:
 
@@ -596,12 +612,12 @@ def test_engine_has_no_discord_dependency():
     assert "import discord" not in src
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/scanning/test_engine_v2_plans.py::test_engine_has_no_discord_dependency -v`
 Expected: FAIL — `import discord` is still present.
 
-- [ ] **Step 3: Delete the unused import**
+- [x] **Step 3: Delete the unused import**
 
 In `swingbot/core/scanning/engine.py`, delete this line (and the blank line
 that follows it, keeping one blank line between the stdlib imports and
@@ -612,7 +628,7 @@ import discord
 
 ```
 
-- [ ] **Step 4: Remove the dead re-exports and fix the stale shim comment**
+- [x] **Step 4: Remove the dead re-exports and fix the stale shim comment**
 
 Change:
 
@@ -651,7 +667,7 @@ from .embeds import (  # noqa: F401
 )
 ```
 
-- [ ] **Step 5: Verify no external consumer of the removed names, then run tests**
+- [x] **Step 5: Verify no external consumer of the removed names, then run tests**
 
 Run: `git grep -n "CONFIDENCE_EMOJI\|CONFIDENCE_ANSI"`
 Expected: only hits inside `swingbot/core/scanning/embeds.py` (where they're
@@ -661,7 +677,7 @@ still defined and used directly) and this plan/audit doc — no
 Run: `python scripts/dev/testrun.py file tests/scanning/test_engine_v2_plans.py`
 Expected: PASS, all tests in the file, including the new one.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/core/scanning/engine.py tests/scanning/test_engine_v2_plans.py
@@ -695,7 +711,7 @@ charts ARE Discord-posted, same audience as trade/decision/portfolio
 charts, so the missing disclaimer here is drift, not an intentional
 admin-only exemption (resolves the audit's "suspected" item).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/charts/test_analytics_charts.py`:
 
@@ -713,12 +729,12 @@ def test_save_stamps_disclaimer(tmp_path):
     assert any(t.get_text() == DISCLAIMER_TEXT for t in fig.texts)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/charts/test_analytics_charts.py::test_save_stamps_disclaimer -v`
 Expected: FAIL — `fig.texts` is empty.
 
-- [ ] **Step 3: Add `DISCLAIMER_TEXT` to the import and stamp it in `_save`**
+- [x] **Step 3: Add `DISCLAIMER_TEXT` to the import and stamp it in `_save`**
 
 Change:
 
@@ -765,12 +781,12 @@ def _save(fig, out_dir: str, filename: str) -> str:
     return path
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/charts/test_analytics_charts.py`
 Expected: PASS, all tests in the file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/analytics_charts.py tests/charts/test_analytics_charts.py
@@ -798,7 +814,7 @@ Found by the v40 audit."
   guaranteed closed (was previously leaked, since `plt.close(fig)` ran
   unconditionally after `savefig`, never reached if `savefig` raised).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/charts/test_portfolio_charts.py`:
 
@@ -822,7 +838,7 @@ def test_save_closes_figure_even_if_savefig_raises(tmp_path, monkeypatch):
     assert fignum not in plt.get_fignums()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/charts/test_portfolio_charts.py::test_save_closes_figure_even_if_savefig_raises -v`
 Expected: FAIL — `RuntimeError` propagates correctly, but
@@ -830,7 +846,7 @@ Expected: FAIL — `RuntimeError` propagates correctly, but
 because `plt.close(fig)` sat after the raising `fig.savefig(...)` call,
 unreached).
 
-- [ ] **Step 3: Wrap `savefig` in `try/finally`**
+- [x] **Step 3: Wrap `savefig` in `try/finally`**
 
 Change:
 
@@ -858,14 +874,14 @@ def _save(fig, out_dir: str, name: str) -> str:
     return path
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/charts/test_portfolio_charts.py`
 Expected: PASS, all tests in the file (including the existing
 `test_every_renderer_saves_through_the_disclaimer_helper` structural test,
 which still holds — `fig.savefig(` still appears exactly once).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/portfolio_charts.py tests/charts/test_portfolio_charts.py
@@ -891,7 +907,7 @@ long-running bot process. Found by the v40 audit."
   behaves identically on success; on a `savefig` failure, the figure is now
   guaranteed closed.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/charts/test_decision_chart.py`:
 
@@ -915,13 +931,13 @@ def test_savefig_failure_still_closes_figure(tmp_path, daily_df, monkeypatch):
     assert len(plt.get_fignums()) == open_before
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/charts/test_decision_chart.py::test_savefig_failure_still_closes_figure -v`
 Expected: FAIL — `RuntimeError` propagates, but `plt.get_fignums()` grew by
 one (the figure this call created was never closed).
 
-- [ ] **Step 3: Wrap `savefig` in `try/finally`**
+- [x] **Step 3: Wrap `savefig` in `try/finally`**
 
 Change:
 
@@ -945,12 +961,12 @@ to:
     return path
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/charts/test_decision_chart.py`
 Expected: PASS, all tests in the file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/charts/decision_chart.py tests/charts/test_decision_chart.py
@@ -973,7 +989,7 @@ guard correctly -- audit was wrong to flag it, no change there.)"
 **Interfaces:** None — documentation and a comment only, zero code
 behavior change.
 
-- [ ] **Step 1: Confirm the real symbol name**
+- [x] **Step 1: Confirm the real symbol name**
 
 Run: `git grep -n "^def query_closed_trades"`
 Expected: `swingbot/admin/dashboard.py:272:def query_closed_trades(...):` —
@@ -982,7 +998,7 @@ exists anywhere: `git grep -n "_query_closed_trades"` should list only the
 two doc/comment sites being fixed here (plus this plan and the audit doc,
 which aren't touched by this task).
 
-- [ ] **Step 2: Fix the comment in `admin/api_v1/__init__.py`**
+- [x] **Step 2: Fix the comment in `admin/api_v1/__init__.py`**
 
 Change:
 
@@ -1002,7 +1018,7 @@ to:
     result set, so callers must pass the pre-slice count.
 ```
 
-- [ ] **Step 3: Fix `docs/claude/known-traps.md`**
+- [x] **Step 3: Fix `docs/claude/known-traps.md`**
 
 Change:
 
@@ -1016,14 +1032,14 @@ to:
   `query_closed_trades()`, which survived the Jinja deletion precisely
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `git grep -n "_query_closed_trades"`
 Expected: no matches (the audit doc and this plan file are not part of the
 working tree search scope for correctness — they're historical records of
 the finding, not live documentation, and are left as-is).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/claude/known-traps.md swingbot/admin/api_v1/__init__.py
@@ -1054,7 +1070,7 @@ as binary and silently skip its contents in text search, so the `Edit` tool
 (which matches on literal string content) cannot reliably target a NUL byte
 either. Do this fix with a small Python script instead.
 
-- [ ] **Step 1: Confirm the three occurrences and their exact byte offset**
+- [x] **Step 1: Confirm the three occurrences and their exact byte offset**
 
 Run:
 
@@ -1069,7 +1085,7 @@ print('NUL byte count:', data.count(b'\x00'))
 
 Expected: `NUL byte count: 3`
 
-- [ ] **Step 2: Replace the NUL byte with `|` everywhere in the file**
+- [x] **Step 2: Replace the NUL byte with `|` everywhere in the file**
 
 Run:
 
@@ -1090,7 +1106,7 @@ horizon key like `4w`/`3m`, neither of which contains `|` — checked via
 `git grep -n "strategy:" swingbot/core/market/strategy_types.py` and the
 `HORIZONS` definition, both plain alphanumeric/space names.)
 
-- [ ] **Step 3: Verify the file is now readable by grep tooling and the fix is complete**
+- [x] **Step 3: Verify the file is now readable by grep tooling and the fix is complete**
 
 Run: `git grep -n "cell.strategy" frontend/src/app/workspaces/analytics/analytics.ts`
 Expected: this now RETURNS matches (before this fix, the NUL byte made
@@ -1112,7 +1128,7 @@ print('OK')
 
 Expected: `OK`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/analytics/analytics.ts
@@ -1137,7 +1153,7 @@ two historical plan/spec docs under `docs/superpowers/*/implemented/`
 reference it, describing the v27 restructure that already ran it; neither
 is live documentation).
 
-- [ ] **Step 1: Confirm there is no live caller**
+- [x] **Step 1: Confirm there is no live caller**
 
 Run: `git grep -n "migrate_market_data"`
 Expected: only `docs/superpowers/specs/implemented/2026-08-15-v26-repo-restructure-design.md`
@@ -1145,19 +1161,19 @@ and `docs/superpowers/plans/implemented/2026-08-15-v27-repo-restructure.md`
 — both `implemented/`, both historical records of the migration that
 already ran, neither a live caller.
 
-- [ ] **Step 2: Delete the file**
+- [x] **Step 2: Delete the file**
 
 ```bash
 git rm scripts/data/migrate_market_data.py
 ```
 
-- [ ] **Step 3: Verify nothing breaks**
+- [x] **Step 3: Verify nothing breaks**
 
 Run: `python scripts/dev/testrun.py fast`
 Expected: PASS, same counts as before this task (no test imports this
 script — it's a standalone CLI tool, confirmed in Step 1).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "chore(v41): delete completed one-shot migrate_market_data.py
@@ -1183,7 +1199,7 @@ caller. Found by the v40 audit."
   by a pyflakes sweep during v41's own brainstorming pass, 2026-08-22 —
   same audit lineage as the rest of this plan, one task late.)
 
-- [ ] **Step 1: Confirm the import is genuinely unused**
+- [x] **Step 1: Confirm the import is genuinely unused**
 
 Run: `python -m pyflakes swingbot/admin/api_v1/versions.py`
 Expected output:
@@ -1194,7 +1210,7 @@ swingbot/admin/api_v1/versions.py:31:1: 'swingbot.config' imported but unused
 Run: `git grep -n "config\." swingbot/admin/api_v1/versions.py`
 Expected: no output — `config` is not referenced anywhere in the file.
 
-- [ ] **Step 2: Remove the import**
+- [x] **Step 2: Remove the import**
 
 Delete this line:
 
@@ -1202,7 +1218,7 @@ Delete this line:
 from swingbot import config
 ```
 
-- [ ] **Step 3: Verify pyflakes is clean and existing tests still pass**
+- [x] **Step 3: Verify pyflakes is clean and existing tests still pass**
 
 Run: `python -m pyflakes swingbot/admin/api_v1/versions.py`
 Expected: no output.
@@ -1210,7 +1226,7 @@ Expected: no output.
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_versions.py`
 Expected: PASS, same pass count as before this change.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/versions.py
@@ -1238,7 +1254,7 @@ brainstorming pass."
   audit because `commands/*.py` was only grep-swept, never read line by
   line (see the audit's own "Coverage gaps" section).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/commands/test_history_format.py` (and `tests/commands/__init__.py`
 if the directory doesn't already have one):
@@ -1259,7 +1275,7 @@ def test_format_generated_plan_timeout_line_text():
     assert "→ ⏳ timed out (no exit within max hold)" in line
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/commands/test_history_format.py -v`
 Expected: this actually PASSES already (the `f` prefix is a no-op, so
@@ -1268,7 +1284,7 @@ the test is well-formed and reaches the target line, not a red/green
 cycle. Run `python -m pyflakes swingbot/commands/history.py` alongside it
 and confirm it reports the `F541` hit at line 245.
 
-- [ ] **Step 3: Fix `history.py`**
+- [x] **Step 3: Fix `history.py`**
 
 Change:
 
@@ -1282,7 +1298,7 @@ to:
         exit_str = "→ ⏳ timed out (no exit within max hold)"
 ```
 
-- [ ] **Step 4: Verify pyflakes is clean and the test still passes**
+- [x] **Step 4: Verify pyflakes is clean and the test still passes**
 
 Run: `python -m pyflakes swingbot/commands/history.py`
 Expected: no `F541` hit remains.
@@ -1290,7 +1306,7 @@ Expected: no `F541` hit remains.
 Run: `python -m pytest tests/commands/test_history_format.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/commands/history.py tests/commands/test_history_format.py
@@ -1320,7 +1336,7 @@ test for _format_generated_plan, which had none."
   mplfinance title is replaced by the top-left legend block"). The string
   build was never removed when that happened.
 
-- [ ] **Step 1: Confirm the variable is read nowhere in the function**
+- [x] **Step 1: Confirm the variable is read nowhere in the function**
 
 Run: `python -m pyflakes swingbot/core/charts/trade_chart.py`
 Expected output includes:
@@ -1333,7 +1349,7 @@ Expected: the only reference to the bare `title` identifier is its own
 assignment; every other hit is the substring inside a comment or a
 differently-named variable (e.g. "chart title", "Panel title").
 
-- [ ] **Step 2: Remove the dead block**
+- [x] **Step 2: Remove the dead block**
 
 Delete these lines:
 
@@ -1349,7 +1365,7 @@ Delete these lines:
 (leaving exactly one blank line between the MACD stat-token block above and
 the "Volume now overlays..." comment below — do not leave two).
 
-- [ ] **Step 3: Verify pyflakes is clean and existing tests still pass**
+- [x] **Step 3: Verify pyflakes is clean and existing tests still pass**
 
 Run: `python -m pyflakes swingbot/core/charts/trade_chart.py`
 Expected: no `title`-related warning remains.
@@ -1358,7 +1374,7 @@ Run: `python scripts/dev/testrun.py file tests/charts/test_trade_chart_v2.py`
 Expected: PASS, same pass count as before this change (output is
 byte-identical — this local was never read).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add swingbot/core/charts/trade_chart.py
@@ -1387,7 +1403,7 @@ a pyflakes sweep during v41's own brainstorming pass."
   assigned to `legend` and never read — the call's side effect (drawing
   the legend on the axes) still happens; only the unused assignment goes.
 
-- [ ] **Step 1: Confirm the variable is read nowhere in the function**
+- [x] **Step 1: Confirm the variable is read nowhere in the function**
 
 Run: `python -m pyflakes swingbot/core/charts/analytics_charts.py`
 Expected output includes:
@@ -1395,7 +1411,7 @@ Expected output includes:
 swingbot/core/charts/analytics_charts.py:86:5: local variable 'legend' is assigned to but never used
 ```
 
-- [ ] **Step 2: Drop the unused assignment, keep the call**
+- [x] **Step 2: Drop the unused assignment, keep the call**
 
 Change:
 
@@ -1409,7 +1425,7 @@ to:
     ax.legend(loc="upper left", fontsize=8, framealpha=0.9, facecolor=CHIP_BG, edgecolor=SPINE_COLOR, labelcolor=TEXT_COLOR)
 ```
 
-- [ ] **Step 3: Verify pyflakes is clean and existing tests still pass**
+- [x] **Step 3: Verify pyflakes is clean and existing tests still pass**
 
 Run: `python -m pyflakes swingbot/core/charts/analytics_charts.py`
 Expected: no `legend`-related warning remains.
@@ -1418,7 +1434,7 @@ Run: `python scripts/dev/testrun.py file tests/charts/test_analytics_charts.py`
 Expected: PASS, same pass count as before this change (the rendered
 figure is byte-identical — only the discarded return value goes).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add swingbot/core/charts/analytics_charts.py
@@ -1442,14 +1458,14 @@ Found by a pyflakes sweep during v41's own brainstorming pass."
 This is the LAST task. Do not start it until Tasks 1-17 are all committed
 and `python scripts/dev/testrun.py full` shows `0 failed, 0 xfailed`.
 
-- [ ] **Step 1: Confirm the full suite is green**
+- [x] **Step 1: Confirm the full suite is green**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed, 0 xfailed` (skipped count and total pass count may
 differ from any baseline recorded elsewhere in the docs — what matters
 here is zero failures).
 
-- [ ] **Step 2: Bump the bot patch version**
+- [x] **Step 2: Bump the bot patch version**
 
 Read the current `bot` value from `VERSION.json` (this plan does not
 hardcode it — it depends on what v36 landed at). Increment its patch
@@ -1461,18 +1477,18 @@ version-worthy change per `docs/claude/working-conventions.md`'s
 observable-difference test (Task 11 fixes a grep-tooling landmine, not
 user-visible behavior).
 
-- [ ] **Step 3: Commit the version bump alone**
+- [x] **Step 3: Commit the version bump alone**
 
 ```bash
 git add VERSION.json
 git commit -m "chore(v41): bump bot patch version for the repo-cleanup fixes"
 ```
 
-- [ ] **Step 4: Regenerate `version_history.json` AFTER the bump commit lands**
+- [x] **Step 4: Regenerate `version_history.json` AFTER the bump commit lands**
 
 Run: `python scripts/dev/build_version_matrix.py`
 
-- [ ] **Step 5: Verify the regeneration is correct**
+- [x] **Step 5: Verify the regeneration is correct**
 
 Run: `python -m pytest tests/scripts/test_build_version_matrix.py -v`
 Expected: PASS, all tests.
@@ -1491,7 +1507,7 @@ print(h)
 Expected: the new `bot` version from Step 2 appears, paired with the
 current `ui` version, with a real (non-'uncommitted') commit hash.
 
-- [ ] **Step 6: Commit the regenerated history**
+- [x] **Step 6: Commit the regenerated history**
 
 ```bash
 git add swingbot/admin/version_history.json
@@ -1512,3 +1528,48 @@ git commit -m "chore(v41): regenerate version_history.json after the patch bump"
   discover:** the audit's trade_chart.py leak claim was independently
   verified (via `ast`) to be incorrect before this plan was written — no
   task references it as broken.
+
+## Progress (executed via subagent-driven-development, 2026-08-22)
+
+All 17 tasks (numbered 1-12, 14-18 — see the Global Constraints note on
+why there is no Task 13) implemented, committed, and reviewed clean in
+`.claude/worktrees/2026-08-21-v41-repo-cleanup-phase2` (branch
+`worktree-2026-08-21-v41-repo-cleanup-phase2`), base `216d98c`.
+
+- **Task 1 needed one fix round**: the brief's own pseudocode omitted a
+  `try/except Exception: continue` per candidate that all three sibling
+  fetch paths have, so a raising (not just empty) primary candidate would
+  have skipped the alias fallback — the exact bug class this task exists
+  to fix, on a different path. Fixed in `378e887`, re-reviewed clean.
+- **Tasks 6 and 11 both shipped without their implementer writing a
+  report file**, despite being asked. Both were caught by their task
+  reviewers, who independently re-verified the code directly (diff +
+  `git grep` for Task 6, a byte-level NUL-count check for Task 11) and
+  found it correct — no code defect, but CLAUDE.md's mandatory-progress-
+  file rule went unenforced twice with the same implementer tier. Worth
+  a harness-level fix (the controller refusing to dispatch a task review
+  until the report file exists) rather than trusting the next plan to do
+  better by convention alone.
+- **The final whole-branch review found two Important issues** neither
+  per-task review could see: Task 16's `title` removal orphaned
+  `window_note`/`window_expanded` in the same file (fresh pyflakes debt
+  traded for old), and Task 1's fix round added a silent
+  `except Exception: continue` — the exact anti-pattern Task 5 exists to
+  fix, elsewhere in this same plan. Both fixed in one dispatch
+  (`e88470b`, `652d133`), re-reviewed clean, no new breakage.
+- Six Minor findings from task reviews and the final review were
+  adjudicated and parked rather than fixed — a declined audit
+  consolidation now recorded above, a numbering-count nit fixed above, a
+  potential log-flood risk in `_to_berlin` that needs a real malformed-
+  timestamp corpus to matter, an over-broad test docstring, and two
+  narrower-than-claimed fixes (Task 1 doesn't cover the bulk populator's
+  own `fetch()`; Task 10 didn't rename the test alias that's the likely
+  source of the drift it fixed) — each named as a follow-up, not silently
+  dropped. Full detail in the SDD ledger at
+  `.superpowers/sdd/2026-08-21-v41-repo-cleanup-phase2/progress.md`
+  (deleted once this closes — the git history and this section are the
+  durable record).
+- Final gate: `python scripts/dev/testrun.py full` — 2017 passed, 0
+  failed, 0 xfailed, run three times across the plan (pre-work baseline,
+  pre-Task-18, post-fix-wave), clean every time.
+- 21 commits total: `216d98c..652d133`.
