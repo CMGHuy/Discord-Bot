@@ -52,8 +52,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-import discord
-
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
 from swingbot.core.market import levels
@@ -89,12 +87,17 @@ from swingbot.core.charts.decision_chart import render_decision_chart
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.charts.trendline_fit import fit_trendline
 from swingbot.core.marketdata.watchlist import load_watchlist
-# Several of these are unused HERE and re-exported on purpose: core/scan_engine.py
-# is an `import *` shim over this module, and callers reach them through it
-# (admin/helpers.py imports CONFIDENCE_COLORS, commands/trades.py uses
-# scan_engine.regenerate_chart_for_trade). Check for importers before deleting one.
+# Several of these are unused HERE and re-exported on purpose: callers reach
+# them via `from swingbot.core.scanning import engine as scan_engine` --
+# the live equivalent of the old core/scan_engine.py `import *` shim,
+# removed 2026-08-15 by the v27 repo restructure (admin/helpers.py imports
+# CONFIDENCE_COLORS, commands/trades.py uses
+# scan_engine.regenerate_chart_for_trade). Check for importers before
+# deleting one. CONFIDENCE_EMOJI/CONFIDENCE_ANSI were removed from this
+# re-export list 2026-08-21 -- zero external consumers via scan_engine.*
+# (they're still used directly inside embeds.py itself).
 from .embeds import (  # noqa: F401
-    CONFIDENCE_COLORS, CONFIDENCE_EMOJI, CONFIDENCE_ANSI,
+    CONFIDENCE_COLORS,
     confidence_color, _build_requirement_checks, build_embed, build_simple_alert,
     plan_numbers_for_display,
     regenerate_chart_for_trade, build_closed_trade_embed, notify_closed_trades,

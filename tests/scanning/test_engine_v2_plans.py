@@ -13,6 +13,17 @@ from swingbot.core.scanning.engine import ScanProgress
 from tests.helpers import make_ohlcv
 
 
+def test_engine_has_no_discord_dependency():
+    """docs/claude/architecture.md: core/ has no Discord dependency by
+    design. engine.py had a stray, unused `import discord` -- guard
+    against it coming back."""
+    import inspect
+    from swingbot.core.scanning import engine
+
+    src = inspect.getsource(engine)
+    assert "import discord" not in src
+
+
 @pytest.fixture(autouse=True)
 def isolate_data_dir(tmp_path, monkeypatch):
     """Point `config.DATA_DIR` somewhere this test owns.
