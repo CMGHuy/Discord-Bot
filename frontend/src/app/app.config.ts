@@ -17,6 +17,7 @@ import {
   loadingInterceptor,
 } from './api/interceptors';
 import { routes } from './app.routes';
+import { PwaUpdateService } from './pwa/pwa-update.service';
 import { SessionStore } from './stores/session.store';
 
 export const appConfig: ApplicationConfig = {
@@ -85,5 +86,11 @@ export const appConfig: ApplicationConfig = {
       scope: '/',
       registrationStrategy: 'registerWhenStable:30000',
     }),
+    // Fire-and-forget: init() returns void, so this never delays bootstrap
+    // the way SessionStore's does above. Without it, an installed PWA can
+    // stay open indefinitely and never notice a new deploy -- see
+    // PwaUpdateService's own doc comment for why "the SW downloads it
+    // eventually" is not the same as "the app updates".
+    provideAppInitializer(() => inject(PwaUpdateService).init()),
   ],
 };
