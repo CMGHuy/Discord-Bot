@@ -138,6 +138,25 @@ def test_build_decision_context_never_raises(daily_df):
     assert isinstance(ctx, dict)          # missing pieces -> keys absent, no raise
 
 
+def test_savefig_failure_still_closes_figure(tmp_path, daily_df, monkeypatch):
+    """A savefig failure must not leak the matplotlib Figure -- same class
+    of bug as portfolio_charts.py's, fixed in the same audit pass."""
+    import matplotlib.figure
+    import matplotlib.pyplot as plt
+    from swingbot.core.charts.decision_chart import render_decision_chart
+
+    def _boom(self, *a, **kw):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(matplotlib.figure.Figure, "savefig", _boom)
+    open_before = len(plt.get_fignums())
+
+    with pytest.raises(RuntimeError):
+        render_decision_chart("TEST", daily_df, FakePlan(), {}, str(tmp_path))
+
+    assert len(plt.get_fignums()) == open_before
+
+
 def test_render_decision_chart_saves_through_the_disclaimer():
     """Task E97: decision_chart.py has exactly one savefig call (unlike
     portfolio_charts.py's shared _save() helper, this is a single one-pager

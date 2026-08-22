@@ -138,6 +138,8 @@ def render_decision_chart(symbol: str, daily_df: pd.DataFrame, plan,
              fontsize=7, ha="right")
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, f"{symbol}_decision.png")
-    fig.savefig(path, facecolor=CHART_BG, bbox_inches="tight")
-    plt.close(fig)
+    try:
+        fig.savefig(path, facecolor=CHART_BG, bbox_inches="tight")
+    finally:
+        plt.close(fig)
     return path
