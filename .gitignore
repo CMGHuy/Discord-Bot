@@ -60,6 +60,11 @@ data/v34_*.json
 # same prefix -- all equally unwanted under a bind-mounted data/.
 data/v35_*
 
+# v36 TRAIN scratch (four-arm comparison JSON + timing check) -- numbers
+# reconciled in prose in
+# docs/superpowers/results/2026-08-22-level-touch-strength-train.md.
+data/v36_*.json
+
 # Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
 # rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
 # deliverables the backtest methodology in CLAUDE.md requires be committed.
