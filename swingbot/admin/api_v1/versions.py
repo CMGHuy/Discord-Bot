@@ -28,7 +28,6 @@ from typing import Any
 
 from flask import jsonify
 
-from swingbot import config
 from swingbot.admin import helpers as _helpers
 
 from . import api_v1
