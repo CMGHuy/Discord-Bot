@@ -3,6 +3,11 @@ Spec: docs/superpowers/specs/2026-08-21-v43-gamma-flip-level-design.md
 Bump: ui minor (1.8.0 → 1.9.0) — a new workspace. bot minor (1.3.2 → 1.4.0,
 shared with v44 if both land in one release) — a new background collector and
 a new persisted data file; no change to trading or alert behaviour.
+Edge: none (integrity) — explicitly not a trading signal (the spec's own
+Non-goals: not consumed by any scan-pipeline gate); a read-only
+market-context page for the trader's own judgment. Buys no edge and must say
+so. (Added retroactively 2026-08-22 — this plan predates the `Edge:` header
+convention.)
 
 # Gamma flip level Implementation Plan
 

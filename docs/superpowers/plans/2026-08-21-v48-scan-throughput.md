@@ -4,6 +4,10 @@
 
 Version: ui 1.8.0 · bot 1.3.2
 Bump: `bot patch` · `ui patch`
+Edge: none (integrity) — a throughput/scalability fix. Same setups, same
+alerts, same edge per trade; only the crawl gets faster so the watchlist can
+grow. Buys no edge and must say so. (Added retroactively 2026-08-22 — this
+plan predates the `Edge:` header convention.)
 
 **Spec:** `docs/superpowers/specs/2026-08-21-v47-scan-throughput-design.md`
 

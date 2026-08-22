@@ -2,6 +2,10 @@
 
 Version: ui 1.8.0 · bot 1.3.2
 Bump: `bot patch` · `ui patch`
+Edge: none (integrity) — a throughput/scalability fix. Same setups, same
+alerts, same edge per trade; only the crawl gets faster so the watchlist can
+grow. Buys no edge and must say so. (Added retroactively 2026-08-22 — this
+spec predates the `Edge:` header convention.)
 
 `bot patch` and not minor: the bot does exactly what it did before, faster. Nobody
 "has to look at it anew" — the alerts, the horizons and the plans are unchanged.

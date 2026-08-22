@@ -3,6 +3,11 @@ Spec: docs/superpowers/specs/2026-08-21-v42-opex-day-caution-design.md
 Bump: bot minor (1.3.2 → 1.4.0) — alert gating, alert content and trade-plan
 risk parameters change observably on opex days. `ui` none (new settings render
 themselves through the existing generic Settings page).
+Edge: expectancy — sharpens the discriminator on opex days rather than adding
+a new one, by raising the confidence/confluence bar and suppressing
+near-close entries on a population the spec's own Problem section identifies
+as elevated-whipsaw-risk. (Added retroactively 2026-08-22 — this plan
+predates the `Edge:` header convention.)
 
 # Opex-day caution Implementation Plan
 

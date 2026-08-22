@@ -3,6 +3,12 @@ Bump: bot minor (1.3.2 → 1.4.0) — alert gating, alert content (badge), and
 trade-plan risk parameters (stop/size) change observably on opex days. `ui`
 none: new settings render automatically on the existing generic Settings
 page via the `Field(...)` mechanism, same as every other config flag.
+Edge: expectancy — sharpens the discriminator on opex days (raises the
+confidence/confluence bar, suppresses near-close entries) rather than
+adding a new one; the mechanism is removing a population of setups this
+spec's own Problem section identifies as elevated-whipsaw-risk, not
+observed as negative-expectancy yet. (Added retroactively 2026-08-22 —
+this spec predates the `Edge:` header convention.)
 
 # Opex-day caution gating
 

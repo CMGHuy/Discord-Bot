@@ -3,6 +3,11 @@ Bump: ui minor (1.8.0 → 1.9.0) — new workspace page. bot minor
 (1.3.2 → 1.4.0, independent of [[opex-day-caution-design]]'s bump if that
 ships separately) — new background data-collection job and new persisted
 data file; no change to trading/alert behavior.
+Edge: none (integrity) — explicitly not a trading signal per this spec's own
+Non-goals ("Gamma exposure (GEX) is not consumed by entry_filters.py or any
+scan-pipeline gate"); a read-only market-context page for the trader's own
+judgment. Buys no edge and must say so. (Added retroactively 2026-08-22 —
+this spec predates the `Edge:` header convention.)
 
 # Gamma flip level page
 
