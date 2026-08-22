@@ -134,14 +134,25 @@ jobs:
   # profile, not just the one that needs the variable -- a real mistake made
   # (and caught locally, not in CI) while adding the `cloudflared` service;
   # see its comment in docker-compose.yml. Checked in both the default
-  # profile (what a bare `docker compose up` resolves, no .env needed) and
-  # the `tunnel` profile with a stub token (what the Hetzner server resolves
-  # once CLOUDFLARE_TUNNEL_TOKEN/COMPOSE_PROFILES=tunnel are set in its
-  # .env), so neither path can silently stop parsing.
+  # profile (what a bare `docker compose up` resolves) and the `tunnel`
+  # profile with a stub token (what the Hetzner server resolves once
+  # CLOUDFLARE_TUNNEL_TOKEN/COMPOSE_PROFILES=tunnel are set in its .env), so
+  # neither path can silently stop parsing.
+  #
+  # `bot`/`admin` both declare `env_file: - .env`, which -- unlike ${VAR}
+  # substitution -- Compose requires to actually exist on disk to resolve
+  # `config` at all, regardless of profile. This repo's real `.env` is
+  # gitignored and never present on a fresh runner, so a stub copied from
+  # `.env.example` (the same file `hetzner-setup.sh` seeds a fresh server
+  # from) stands in for it here -- its actual values don't matter, only that
+  # the file exists.
   compose-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - name: Seed a stub .env (env_file requires it to exist)
+        run: cp .env.example .env
 
       - name: Validate docker-compose.yml (default profile)
         run: docker compose config --quiet
