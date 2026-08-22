@@ -424,12 +424,6 @@ def generate_trade_chart(
         _macd_clr = TARGET_COLOR if "bull" in _macd_dir.lower() else (STOP_COLOR if "bear" in _macd_dir.lower() else MACD_LINE_COLOR)
         _stat_tokens += [_SEP, (f"MACD {_macd_dir}", _macd_clr)]
 
-    # Single-line title (first row only — stats are drawn separately with color)
-    title = (
-        f"{ticker} — {strategy} ({horizon_label}) — {direction_label}"
-        f"  [{currency_symbol.strip()}, {window_note}]"
-    )
-
     # Volume now overlays the price panel (volume_panel=0 below), so panel 0
     # carries both and the indicator panels shift down one: MACD=1, RSI=2.
     # Figure height is DERIVED from the ratios actually in use -- the old
