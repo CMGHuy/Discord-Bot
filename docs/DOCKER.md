@@ -178,8 +178,7 @@ over SSH (`ssh -L 1234:localhost:1234 user@your-vm`) and browse to
 A third option needing no open port at all: the `cloudflared` service already
 defined in `docker-compose.yml` (off by default, behind the `tunnel` Compose
 profile) gives the admin UI a real public hostname via a Cloudflare Tunnel.
-See [DEPLOY_HETZNER.md's "Cloudflare Tunnel" section](DEPLOY_HETZNER.md#cloudflare-tunnel-exposing-the-admin-ui-at-a-real-domain)
-for setup.
+See [CLOUDFLARE_TUNNEL.md](CLOUDFLARE_TUNNEL.md) for setup.
 
 Running both the bot and a second instance of itself (e.g. testing on
 your laptop while the real one runs on a VM) with the **same bot token**
