@@ -21,8 +21,10 @@ def _save(fig, out_dir: str, name: str) -> str:
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, name)
     fig.text(0.99, 0.01, DISCLAIMER_TEXT, color=MUTED_TEXT_COLOR, fontsize=6, ha="right")
-    fig.savefig(path, facecolor=CHART_BG, bbox_inches="tight")
-    plt.close(fig)
+    try:
+        fig.savefig(path, facecolor=CHART_BG, bbox_inches="tight")
+    finally:
+        plt.close(fig)
     return path
 
 

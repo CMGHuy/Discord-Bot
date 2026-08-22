@@ -67,6 +67,25 @@ def test_fold_evidence_renders(tmp_path):
     assert_rendered(path)
 
 
+def test_save_closes_figure_even_if_savefig_raises(tmp_path, monkeypatch):
+    """A savefig failure (disk full, bad path, encoder error) must not leak
+    the matplotlib Figure in this long-running bot process."""
+    import matplotlib.pyplot as plt
+    from swingbot.core.charts.portfolio_charts import _save
+
+    def _boom(*a, **kw):
+        raise RuntimeError("disk full")
+
+    fig, ax = plt.subplots()
+    fignum = fig.number
+    monkeypatch.setattr(fig, "savefig", _boom)
+
+    with pytest.raises(RuntimeError):
+        _save(fig, str(tmp_path), "test.png")
+
+    assert fignum not in plt.get_fignums()
+
+
 def test_every_renderer_saves_through_the_disclaimer_helper():
     """Task E97: _save() is the ONLY place DISCLAIMER_TEXT gets drawn onto a
     portfolio chart -- if any render_* function called fig.savefig directly
