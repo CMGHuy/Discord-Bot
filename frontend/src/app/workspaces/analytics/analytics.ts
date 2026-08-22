@@ -1409,7 +1409,7 @@ export class Analytics {
   private readonly heatIndex = computed(() => {
     const index = new Map<string, HeatmapCell>();
     for (const cell of this.store.heatmap()?.cells ?? []) {
-      index.set(`${cell.strategy} ${cell.horizon}`, cell);
+      index.set(`${cell.strategy}|${cell.horizon}`, cell);
     }
     return index;
   });
@@ -1418,13 +1418,13 @@ export class Analytics {
    *  than a faint tint, so "untested" and "tested and terrible" look
    *  different. */
   protected heat(strategy: string, horizon: string): number {
-    const cell = this.heatIndex().get(`${strategy} ${horizon}`);
+    const cell = this.heatIndex().get(`${strategy}|${horizon}`);
     if (!cell || cell.win_rate === null) return 0;
     return Math.max(0, Math.min(1, cell.win_rate / 100));
   }
 
   protected heatLabel(strategy: string, horizon: string): string {
-    const cell = this.heatIndex().get(`${strategy} ${horizon}`);
+    const cell = this.heatIndex().get(`${strategy}|${horizon}`);
     if (!cell || cell.win_rate === null) return ABSENT;
     return `${cell.win_rate.toFixed(0)}% (${cell.n ?? 0})`;
   }
