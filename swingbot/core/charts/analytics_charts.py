@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .chart_style import (
-    CHART_BG, CHIP_BG, DOWN_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
+    CHART_BG, CHIP_BG, DISCLAIMER_TEXT, DOWN_COLOR, GRID_COLOR, MUTED_TEXT_COLOR,
     SPINE_COLOR, TARGET_COLOR, TEXT_COLOR, UP_COLOR,
 )
 
@@ -41,6 +41,7 @@ def _new_dark_axes(figsize=_FIGSIZE):
 def _save(fig, out_dir: str, filename: str) -> str:
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, filename)
+    fig.text(0.99, 0.01, DISCLAIMER_TEXT, color=MUTED_TEXT_COLOR, fontsize=6, ha="right")
     try:
         fig.savefig(path, dpi=_DPI, bbox_inches="tight", facecolor=CHART_BG)
     finally:

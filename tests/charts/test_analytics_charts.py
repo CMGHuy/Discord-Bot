@@ -82,3 +82,16 @@ def test_render_strategy_heatmap_win_rate(tmp_path):
 def test_render_strategy_heatmap_expectancy(tmp_path):
     path = render_strategy_heatmap(_fixture_rows(), str(tmp_path), value="expectancy_r", filename="heatmap_exp.png")
     assert os.path.exists(path)
+
+
+def test_save_stamps_disclaimer(tmp_path):
+    """render_equity_curve/render_calibration/etc. are posted to Discord via
+    commands/stats.py -- same disclaimer requirement as every other chart
+    type. _save() was the one save path in this module missing it."""
+    import matplotlib.pyplot as plt
+    from swingbot.core.charts.analytics_charts import _save
+    from swingbot.core.charts.chart_style import DISCLAIMER_TEXT
+
+    fig, ax = plt.subplots()
+    _save(fig, str(tmp_path), "test.png")
+    assert any(t.get_text() == DISCLAIMER_TEXT for t in fig.texts)
