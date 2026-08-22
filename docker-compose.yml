@@ -170,7 +170,13 @@ services:
     # variable straight out of the project's .env file, same as it does for
     # ${...} substitution above) -- already set that way on the Hetzner
     # server per the deploy doc.
-    image: cloudflare/cloudflared:latest
+    #
+    # Pinned to a specific release, not `:latest` -- same reasoning as
+    # SWING_BOT_IMAGE's immutable sha- tags: `:latest` can move under a
+    # running container without anyone deciding it should. Bump deliberately
+    # by editing this tag; check the current release at
+    # https://github.com/cloudflare/cloudflared/releases/latest.
+    image: cloudflare/cloudflared:2026.8.2
     container_name: swing-bot-cloudflared
     restart: unless-stopped
     profiles: ["tunnel"]

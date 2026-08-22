@@ -120,12 +120,15 @@ docker pull "$IMAGE"
 
 # cloudflared is a stock, third-party image (cloudflare/cloudflared), not one
 # this pipeline builds or verifies -- it never runs the app image, so it's
-# deliberately absent from the digest check below. Naming it explicitly pulls
-# it regardless of whether the `tunnel` profile is currently active (Compose
-# resolves an explicitly-named service even when its profile is off), so a
-# plain redeploy keeps it patched whenever it IS enabled, and pre-warms it for
-# whoever enables it later. Best-effort: a Docker Hub hiccup here must not
-# block deploying the actual bot/admin update.
+# deliberately absent from the digest check below. Its tag in
+# docker-compose.yml is a pinned release, not `:latest` (same reasoning as
+# SWING_BOT_IMAGE), so this pull normally just confirms that exact version is
+# already local -- it only fetches something new right after the compose
+# file's pin is bumped. Naming it explicitly pulls it regardless of whether
+# the `tunnel` profile is currently active (Compose resolves an
+# explicitly-named service even when its profile is off), so it's pre-warmed
+# for whoever enables the profile later. Best-effort: a Docker Hub hiccup
+# here must not block deploying the actual bot/admin update.
 echo "==> Pulling cloudflared (Cloudflare Tunnel image)"
 docker compose pull cloudflared || echo "WARNING: could not pull cloudflared -- continuing deploy anyway" >&2
 
