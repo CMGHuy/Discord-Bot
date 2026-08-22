@@ -76,7 +76,8 @@ def fetch(ticker: str) -> pd.DataFrame | None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df = yf.download(candidate, period="max", auto_adjust=True, progress=False)
-        except Exception:
+        except Exception as e:
+            log.warning("backtest cache: candidate %s failed for %s: %s", candidate, ticker, e)
             continue
         normalized = normalize_ohlcv(df)
         if normalized is not None:
