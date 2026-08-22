@@ -242,7 +242,7 @@ def _format_generated_plan(strat: str, horiz: str, t, cur: str) -> str:
     r_str = f"{t.r_multiple:+.2f}R" if t.r_multiple is not None else "—"
 
     if t.outcome == "timeout":
-        exit_str = f"→ ⏳ timed out (no exit within max hold)"
+        exit_str = "→ ⏳ timed out (no exit within max hold)"
     elif t.exit_date:
         exit_str = f"→ exit {t.exit_date} ({r_str})"
     else:
