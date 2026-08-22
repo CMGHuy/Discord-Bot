@@ -6,8 +6,9 @@ none (the Settings page renders the new Field automatically; no new page).
 Edge: expectancy — the mechanism removes a negative-expectancy population
 (scenarios whose confluence count is inflated by redundant detectors) rather
 than extracting more R from the ones that survive.
-Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22 from
-`C:\Users\HuyCao\Downloads\Vibe-Trading-main`. The matrix→scalar reduction is
+Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
+(untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. The
+matrix→scalar reduction is
 adapted from its `agent/backtest/regime.py` (rolling correlation matrix reduced
 to an edge-density scalar); the permutation control is from
 `agent/src/factors/bench_runner_strict.py` (same-universe random control,

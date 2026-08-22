@@ -133,6 +133,30 @@ Two cases the three levels do not spell out:
   becoming a different chart is a `ui` minor. One document, two levels, two
   independent release commits.
 
+**`Edge:`** — the profit mechanism the work buys, and its expected direction.
+One of `expectancy`, `harvest`, `volume`, or `none (integrity)`; see
+"Prioritise expectancy and win rate" in the root `CLAUDE.md` for what each
+means and why expectancy is the objective while win rate is only a constraint.
+
+Like `Bump:`, it is a **prediction made while the reasoning is still in
+context**, not a label applied at release. And like `Bump:`, a wrong prediction
+is amended in the closing commit with one clause saying why — a plan that
+predicted `expectancy` and measured nothing is the most useful record this repo
+can keep, because it is the exact shape of the mistake the one-shot budget
+exists to make expensive.
+
+`Edge: none (integrity)` is a first-class answer, not an admission. Repo
+cleanup, a look-ahead test, a version-history fix and a closed pre-registration
+all buy zero edge and are all worth doing. The line exists so that work
+**states** it buys none, rather than borrowing the language of a profit
+improvement it does not deliver. A spec that cannot name its mechanism has
+usually not decided what it is for.
+
+Note the two lines answer different questions and routinely disagree: a
+negative result is `Bump: none` but often `Edge: expectancy` (removing a
+negative-expectancy population is a profit improvement that ships no code),
+while a UI refresh can be `Bump: ui minor` and `Edge: none (integrity)`.
+
 **`## Parallelisation`** — its own section, below.
 
 ## How long a document may be
@@ -282,6 +306,35 @@ flight, and what is designed but still to be built.
 - **The `SessionStart` hook only globs `plans/*.md`**, so a moved plan drops out
   of the cursor's "active plan" line by design. To resume one, move it back up
   first.
+
+## A plan whose code never reached `main` moves to `no-lift/`, not `implemented/`
+
+`implemented/` (above) is for plans whose work is done, however that turned
+out — and it assumes `main` has at least some of that history, even a rolled-
+back one. **A plan built and measured entirely on its own worktree branch,
+found to buy no edge, and deliberately never merged is a different case**: `git
+mv` it and its spec into `docs/superpowers/plans/no-lift/` and
+`docs/superpowers/specs/no-lift/` instead, on `main`, as its own commit (the
+worktree branch keeps its own closing commit separately — the two histories
+never need to agree, since `main` never received the branch).
+
+- **This is not a softer version of `implemented/`.** A plan there may still
+  have shipped inert, default-off code on `main` (`AVWAP_LEVELS_ENABLED`
+  before it flipped on, or `LEVEL_TOUCH_STRENGTH` if it had landed that way).
+  `no-lift/` means `main`'s tree has *none* of the plan's code — only its
+  docs, moved over deliberately so the live-plan list stays accurate.
+- **State this explicitly in the plan's own closing note**, not just in the
+  commit message: which branch the code lives on, and that it was a
+  considered decision not to merge, not an oversight. `v36` is the example —
+  see `docs/superpowers/plans/no-lift/2026-08-16-v36-level-touch-strength.md`.
+- **The branch and worktree are not deleted as part of this.** "Never delete a
+  branch whose name contains 'backup'" in the root `CLAUDE.md` is about a
+  different case, but the caution generalizes: an unmerged branch with real,
+  tested work is the only copy of that work, and deleting it is a decision for
+  the human partner, not a default step of closing the plan.
+- **`docs/claude/backtest-methodology.md`'s closed pre-registration table still
+  gets a row** — the TRAIN/VALIDATION result is exactly what that table
+  exists to record, whether or not the code shipped.
 
 ## Worktrees are named after the plan
 

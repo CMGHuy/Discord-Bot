@@ -1,9 +1,26 @@
 # Level Touch Strength Implementation Plan
 
+> **CLOSED 2026-08-22, no-go — NOT merged to `main`.** Tasks 1–5's code was
+> implemented and tested on worktree branch
+> `worktree-2026-08-16-v36-level-touch-strength` only; Tasks 6/7 stopped
+> short of VALIDATION. See
+> `docs/superpowers/results/2026-08-22-level-touch-strength-train.md`:
+> the confidence factor measured net negative on TRAIN, the selection
+> tiebreak measured a no-op (no qualifying ties in the TRAIN sample), and
+> the one-shot VALIDATION was deliberately not spent on a config with no
+> measured lift. Since the feature showed no benefit, the branch was left
+> unmerged rather than landed inert on `main` — the code exists only on
+> that branch/worktree for future reference or salvage, should someone
+> revisit the underlying idea (see "If this is revisited" in the results
+> doc). This plan lives under `plans/no-lift/` rather than
+> `plans/implemented/` specifically because nothing it built reached
+> `main`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Version: ui 1.7.0 · bot 1.1.4
 Bump: bot minor
+Edge: none (no lift measured on TRAIN — see closing note above)
 
 **Goal:** Grade every candidate level by how convincingly price has respected it
 historically and how recently, then use that grade in target selection and
@@ -796,10 +813,12 @@ git commit -m "feat(v36): VALIDATION result, docs, version bump"
 
 ## Progress
 
-- [ ] Task 1 — `find_touches`
-- [ ] Task 2 — `grade_level` + per-horizon decay
-- [ ] Task 3 — `Level.strength` + cache + duration check
-- [ ] Task 4 — Target selection *(blocked on v31)*
-- [ ] Task 5 — Confidence factor
-- [ ] Task 6 — TRAIN, four arms
-- [ ] Task 7 — VALIDATION, docs, bump
+- [x] Task 1 — `find_touches`
+- [x] Task 2 — `grade_level` + per-horizon decay
+- [x] Task 3 — `Level.strength` + cache + duration check
+- [x] Task 4 — Target selection *(blocked on v31)*
+- [x] Task 5 — Confidence factor
+- [x] Task 6 — TRAIN, four arms (Steps 1 and 3 only; Steps 2/4-6 skipped — see
+      closing note and `results/2026-08-22-level-touch-strength-train.md`)
+- [ ] Task 7 — VALIDATION, docs, bump — **not run, deliberately.** No-go
+      recorded instead; `LEVEL_TOUCH_STRENGTH` stays default-off.

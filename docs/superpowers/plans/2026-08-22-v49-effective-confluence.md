@@ -5,8 +5,9 @@ returns for every scenario, moving both the `MIN_TARGET_CONFLUENCE_COUNT` gate
 and the confidence base level. Observably different alert stream. `ui` none.
 Edge: expectancy — removes a negative-expectancy population (scenarios whose
 confluence count is inflated by redundant detectors).
-Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22 from
-`C:\Users\HuyCao\Downloads\Vibe-Trading-main`. Reduction adapted from
+Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
+(untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. Reduction
+adapted from
 `agent/backtest/regime.py`; permutation control from
 `agent/src/factors/bench_runner_strict.py`. Not measured on this repo's data
 before adoption. **Revert lever:** `EFFECTIVE_CONFLUENCE_ENABLED = false` —

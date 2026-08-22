@@ -1,7 +1,33 @@
 Version: ui 1.7.2 · bot 1.2.1
-Bump: ui minor (1.7.2 → 1.8.0); bot none
+Bump: ui minor (1.7.2 → 1.8.0); bot none — **prediction held**, shipped as
+`ui 1.8.0`.
 
 # Versions strip: newest-first axis + paired-version hover
+
+## Status: closed 2026-08-21 — all four sections shipped
+
+Executed component-by-component with no plan file (see
+`docs/claude/document-conventions.md`, "Not every spec has a plan"). This table
+exists so the next reader does not mistake a plan-less spec for unfinished work.
+
+| § | Section | Commit | Landed as |
+|---|---|---|---|
+| 1 | Strip axis flip — store | `d88a556` | `versions.store.ts:230` `start: 1 - cursor - widths[i]`; same mirror in `bracket()` at `:268` |
+| 1 | Strip axis flip — template | `3decb88` | `.ticks` order swapped; `versions.ts:138` renders `lastDate() ▲ now` first |
+| 2 | `LaneSegment.pairedWith` | `266c1c4` | Interface field `versions.store.ts:33`, built at `:235` |
+| 3 | Custom hover tooltip | `f9385ef` | `hovered` signal `versions.ts:311`; `(pointerenter)`/`(pointerleave)` at `:101-102` |
+| 4 | Cross-lane spotlight | `f9385ef` | `.spotlight` rule `versions.ts:255`, bound at `:114`; `--overlay-dim` added to `styles/tokens.css:46` |
+
+Testing, as specified: `versions.store.spec.ts:173` asserts the newest segment
+sits flush at the leading edge post-flip, `:196` asserts `pairedWith` on the `a3`
+fixture equals `{ bot: '1.1.2', worker: '0.1.0' }`, and `:199` covers the
+not-yet-shipped-component exclusion. `versions.spec.ts:116` asserts the tooltip
+wording is "paired with" and **not** "compatible" — the non-goal held.
+
+**One drafting note, for accuracy:** §4 states `tokens.css` "has no scrim/dim
+token today (checked)". That was true when the spec was written; `f9385ef` added
+`--overlay-dim` as part of the work. The line is left as written rather than
+rewritten after the fact.
 
 ## Problem
 

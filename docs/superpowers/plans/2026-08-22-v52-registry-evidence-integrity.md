@@ -6,8 +6,9 @@ qualifier.
 Edge: none (integrity) — this buys no edge and must say so. It makes an
 existing silent failure mode (a badge that describes deleted arithmetic, and a
 registry row emitted from an unhealthy run) visible.
-Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22 from
-`C:\Users\HuyCao\Downloads\Vibe-Trading-main`. Evidence decay (90d aging / 180d
+Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
+(untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. Evidence
+decay (90d aging / 180d
 stale, derived at read time, never persisted) is from
 `agent/src/strategy_discovery/models.py`; the hard-gate refusal tokens are from
 `agent/src/skills/backtest-diagnose/SKILL.md` and

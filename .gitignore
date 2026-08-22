@@ -1,3 +1,6 @@
+# ==========================================================================
+# Runtime state (bot-written JSON/JSONL under data/, watched by hot-reload)
+# ==========================================================================
 state.json
 trades.json
 plans.json
@@ -11,31 +14,36 @@ analytics_snapshot.json
 market_data_state.json
 scan_telemetry.jsonl
 docs/superpowers/results/_quarterly_wf_result.json
+validation_results.json
+
+# ==========================================================================
+# Secrets and local config
+# ==========================================================================
 .env
 .env.bak
 data/admin_session_secret
-__pycache__/
+
+# ==========================================================================
+# Data directories (market data cache, backtest cache, backups, exports)
+# ==========================================================================
 exports/
 market_data/
 data/backtest_cache/
 data/backups/
-.vscode/
-.claude/settings.local.json
-.claude/worktrees/
-logs/
-backtest_range_summary.txt
-validation_results.json
+
+# ==========================================================================
+# TRAIN/VALIDATION scratch dumps -- numbers are reconciled in prose in each
+# plan's own results doc / preregistration; these raw dumps are re-derivable
+# by re-running the script named there. data/ is bind-mounted into the
+# running containers, so a committed dump under it breaks CI's git reset on
+# the deploy host (912e004) -- hence a glob per version rather than trusting
+# every future session to remember to list its own ad-hoc filename.
+# ==========================================================================
 data/replay_r_sequence.json
 data/replay_result.json
 data/v32_train_lift.json
 data/v32_validation.json
 data/v32_factor_correlation.json
-# Same reason as the v32 three above (912e004): data/ is bind-mounted into
-# the running containers, so a committed measurement dump under it breaks
-# CI's git reset on the deploy host. v33's numbers live in
-# docs/superpowers/plans/implemented/v33-train-preregistration.md; these are the raw
-# dumps they were read from, re-derivable from the two scripts named there.
-#
 # A GLOB rather than the three named files (v33_trend_overlap / v33_train /
 # v33_validation), because the deploy breakage this prevents is caused by ANY
 # new dump under data/, and the ad-hoc ones are exactly the ones nobody
@@ -43,38 +51,42 @@ data/v32_factor_correlation.json
 # (data/v33_train_verify.json) that three explicit lines would have missed.
 data/v33_*.json
 # Same reason and same glob shape for v34's RS-gate measurement dumps
-# (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json).
-# The numbers live in
-# docs/superpowers/plans/implemented/v34-train-preregistration.md;
-# these are the raw dumps they were read from, re-derivable by re-running
-# scripts/backtest/measure_rs_gate_effect.py.
+# (data/v34_train.json, data/v34_train_rows.json, data/v34_validation.json),
+# re-derivable via scripts/backtest/measure_rs_gate_effect.py.
 data/v34_*.json
-
-# Same reason again (912e004; v33 above generalized it to a glob) --
 # data/v35_validation.json and data/v35_validation_off.json were briefly
-# tracked and reproduced the identical deploy breakage. Numbers are
-# reconciled in prose in
-# docs/superpowers/plans/implemented/v35-avwap-preregistration.md sections
-# 5.2-5.3. Extension-less (not `*.json` like v33) because v35's scratch
-# also includes run logs, shell scripts and summary .txt dumps under the
-# same prefix -- all equally unwanted under a bind-mounted data/.
+# tracked and reproduced the identical deploy breakage. Extension-less (not
+# `*.json` like v33) because v35's scratch also includes run logs, shell
+# scripts and summary .txt dumps under the same prefix -- all equally
+# unwanted under a bind-mounted data/.
 data/v35_*
 
-# Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
-# rule (fafcdc9) that hid the whole directory, including *.md/*.json validation
-# deliverables the backtest methodology in CLAUDE.md requires be committed.
-# Caught when Task E80's results doc silently failed to `git add`.
-docs/superpowers/results/*.log
-
-# pytest scratch: .pytest-last-run.log is where scripts/dev/testrun.py parks full
-# pytest output so only its 1-3 line verdict reaches the caller's context.
+# ==========================================================================
+# Test/build byproducts
+# ==========================================================================
+__pycache__/
+backtest_range_summary.txt
+# pytest scratch: .pytest-last-run.log is where scripts/dev/testrun.py parks
+# full pytest output so only its 1-3 line verdict reaches the caller's context.
 .pytest_cache/
 .pytest-last-run.log
 
-# Angular SPA (sub-project 4). `frontend/` has its own .gitignore from
-# `ng new`; these are here as well because the root file is where anyone
-# looks, and because static/app/ is OUTSIDE frontend/ and its own file
-# therefore cannot cover it.
+# ==========================================================================
+# Logs
+# ==========================================================================
+logs/
+# Noisy raw run logs only -- narrowed from a blanket docs/superpowers/results/
+# rule (fafcdc9) that hid the whole directory, including *.md/*.json
+# validation deliverables the backtest methodology in CLAUDE.md requires be
+# committed. Caught when Task E80's results doc silently failed to `git add`.
+docs/superpowers/results/*.log
+
+# ==========================================================================
+# Frontend (Angular SPA, sub-project 4). `frontend/` has its own .gitignore
+# from `ng new`; these are here as well because the root file is where
+# anyone looks, and because static/app/ is OUTSIDE frontend/ and its own
+# file therefore cannot cover it.
+# ==========================================================================
 frontend/node_modules/
 frontend/dist/
 frontend/.angular/
@@ -83,5 +95,19 @@ frontend/.angular/
 # ship whichever bundle someone last built by hand.
 swingbot/admin/static/app/
 
-# Brainstorming visual-companion sessions: mockups and server state, not source.
+# ==========================================================================
+# Editor / tooling config and local-only Claude Code state
+# ==========================================================================
+.vscode/
+.claude/settings.local.json
+.claude/worktrees/
+
+# ==========================================================================
+# Brainstorming and vendored reference material -- not source, never shipped
+# ==========================================================================
+# Brainstorming visual-companion sessions: mockups and server state.
 .superpowers/
+# HKUDS/Vibe-Trading, vendored locally for reading only (see the Origin:
+# header of the v49-v52 plans/specs it informed). Not this repo's code,
+# never committed.
+Vibe-Trading-main/

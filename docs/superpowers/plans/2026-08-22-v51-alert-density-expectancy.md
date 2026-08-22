@@ -8,8 +8,9 @@ confluence population's negative expectancy is concentrated on high-alert-densit
 days, where many simultaneous alerts are one market-wide condition wearing many
 tickers. If true, a later throttle removes a negative population. If false, that
 is recorded and the idea is closed.
-Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22 from
-`C:\Users\HuyCao\Downloads\Vibe-Trading-main`. The busy-day vs quiet-day PnL
+Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
+(untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. The
+busy-day vs quiet-day PnL
 comparison is from `agent/src/skills/trade-journal/SKILL.md`, where it diagnoses
 overtrading in a human. Reframed here as a correlation question about a
 mechanical scanner; the bucket edges are this repo's, chosen for a 75-ticker

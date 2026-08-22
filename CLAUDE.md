@@ -22,6 +22,45 @@ the SPA is built by a Node stage in the Dockerfile, so a deploy needs it. Deploy
 SIGHUP (schema lives in `swingbot/config.py` — every setting is one `Field`
 entry that feeds both the env parser and the admin UI's Settings page).
 
+## Prioritise expectancy and win rate (read before choosing what to work on)
+
+**The bot exists to make money on paper trades, and every plan competes for the
+same finite budget of pre-registered shots.** Rank candidate work by expected
+effect on **pooled expectancy (`ExpR`) first, win rate second**, and say so out
+loud when a plan is chosen over a higher-impact alternative.
+
+The two are not the same objective and can move against each other: break-even
+win rate at reward:risk `X` is `1/(1+X)`, so widening targets lowers win rate
+while raising expectancy. **Expectancy is the objective; win rate is a
+constraint** (the `>= 50` acceptance gate). A change that raises win rate while
+lowering `ExpR` is a regression, not a win.
+
+Every new spec and plan carries an **`Edge:`** header line next to `Bump:`,
+naming the profit mechanism and its expected direction — one of:
+
+- `Edge: expectancy` — adds or sharpens a discriminator, or removes a
+  negative-expectancy population.
+- `Edge: harvest` — same setups, more R extracted (exits, targets, sizing).
+- `Edge: volume` — same edge per trade, applied to more qualifying setups.
+- `Edge: none (integrity)` — correctness, tooling, hygiene, refactor. Legitimate
+  and sometimes urgent, but it must **say** it buys no edge rather than implying
+  one.
+
+Where the pooled numbers currently stand (`results/2026-07-pooled-validation.md`,
+VALIDATION 2024–25): VALIDATED strategies 84.2% WR / +0.259R over 814 trades;
+WEAK strategies 76.2% / +0.191R over 1389; **confluence scan 53.5% / −0.171R
+over 4641** — the largest population in the book and the only negative one.
+Re-derive these before leaning on them; do not quote them as current without
+checking.
+
+**This rule does not loosen a single acceptance gate.** It governs *what to work
+on*, never *what threshold to accept*. It is not a licence to re-run a closed
+pre-registration, to re-read the tainted 2024–25 window for selection, or to
+reach a win-rate bar by shrinking `N`. A profit motive is exactly the pressure
+`docs/claude/backtest-methodology.md` was written to resist — when the two
+conflict, the methodology wins and the plan gets a *new* pre-registered
+hypothesis or nothing.
+
 ## Token discipline (read first — this repo has context landmines)
 
 - **NEVER read a plan file whole** — `cockpit-v3.md` is 662 KB, `edge-engine-v4.md`
@@ -161,6 +200,13 @@ and rolled-back plans alike, so read a moved plan's Progress block before
 assuming its code ships. Derive "done" from deliverables and merge commits — the
 `[x]` boxes lie in both directions.
 
+**A plan measured on its own worktree branch and found to buy no edge, whose
+code is deliberately never merged to `main`, moves to `plans/no-lift/` /
+`specs/no-lift/` instead** — not `implemented/`, which assumes `main` carries
+at least some of the plan's history. `v36` is the example. See
+`docs/claude/document-conventions.md` for the full rule, including why the
+branch and worktree still aren't deleted as part of this.
+
 **A worktree executing a plan takes that plan's file stem** as both its
 directory and its branch name.
 
@@ -227,8 +273,11 @@ Not auto-loaded — read the relevant one before starting work in that area.
   deleted the entire Jinja UI for a *patch*). Read before bumping a version.
 - `docs/claude/document-conventions.md` (13 KB) — everything about authoring a
   spec or plan: filenames and the `vN` counter, the `implemented/` rule, and the
-  three that bind every new document — a **`Bump:`** header line predicting the
-  release level the work earns; a **`## Parallelisation`** section naming which
+  four that bind every new document — a **`Bump:`** header line predicting the
+  release level the work earns; an **`Edge:`** header line naming the profit
+  mechanism (`expectancy` / `harvest` / `volume` / `none (integrity)`) per
+  "Prioritise expectancy and win rate" above; a **`## Parallelisation`** section
+  naming which
   tasks may run concurrently and what forces the rest sequential (the test is
   disjoint *files* plus no contract dependency — this working tree is shared, so
   two agents on one file overwrite rather than merge); and a **length budget**,

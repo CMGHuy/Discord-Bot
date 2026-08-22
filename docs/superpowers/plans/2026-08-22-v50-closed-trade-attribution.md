@@ -5,8 +5,9 @@ Edge: none (integrity) — this ships no edge. It measures where R actually come
 from and how long losers are held, so the next expectancy/harvest plan is aimed
 at something instead of guessed at. Say that plainly; do not let a diagnostic
 borrow the language of an improvement.
-Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22 from
-`C:\Users\HuyCao\Downloads\Vibe-Trading-main`. The disposition-ratio thresholds
+Origin: EXTERNAL — HKUDS/Vibe-Trading, read 2026-08-22, now vendored
+(untracked, gitignored) at `Vibe-Trading-main/` in this repo's root. The
+disposition-ratio thresholds
 (medium ≥ 1.2, high ≥ 1.5) are taken verbatim from
 `agent/src/skills/trade-journal/SKILL.md`; the exit-reason table is modelled on
 `agent/backtest/metrics.py:by_exit_reason_stats`. Those bands are that project's
