@@ -301,7 +301,6 @@ def generate_trade_chart(
         fib_window_bars = min(len(df) - earliest_fib_bar, len(df))
 
     effective_lookback_days = max(lookback_days, trendline_window_bars, fib_window_bars, 1)
-    window_expanded = effective_lookback_days > lookback_days
 
     recent = df.tail(effective_lookback_days).copy()
     recent_len = len(recent)
@@ -324,16 +323,6 @@ def generate_trade_chart(
     )
 
     direction_label = "LONG (buy)" if is_bull else "SHORT (sell)"
-    if window_expanded:
-        _expand_reasons = []
-        if trendline_window_bars > lookback_days:
-            _expand_reasons.append("trendline")
-        if fib_window_bars > lookback_days:
-            _expand_reasons.append("Fibonacci anchors")
-        _reason = " & ".join(_expand_reasons) if _expand_reasons else "overlay"
-        window_note = f"last {effective_lookback_days} sessions, extended from {lookback_days} to fit the {_reason}"
-    else:
-        window_note = f"last {lookback_days} sessions"
 
     # ---------------------------------------------------------------
     # Indicator panels: MACD, RSI, Keltner Channel
