@@ -455,6 +455,43 @@ def test_no_heat_blocked_attr_adds_no_field():
     assert not [f for f in embed.fields if "heat cap" in f.name.lower()]
 
 
+def test_monthly_opex_renders_a_headline_field(monkeypatch):
+    # v44: flagged on every alert that day, exactly like heat_blocked above.
+    # The tightened gates already decided what posts; this tells the reader
+    # what kind of day the survivors were found on.
+    from swingbot.core.market import opex
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", True)
+    monkeypatch.setattr(opex, "current_tier", lambda *a, **k: opex.MONTHLY)
+    embed = _build(make_item())
+    opex_fields = [f for f in embed.fields if "OPEX" in f.name]
+    assert len(opex_fields) == 1
+    assert "expiration" in opex_fields[0].value.lower()
+
+
+def test_weekly_opex_renders_a_distinct_headline_field(monkeypatch):
+    from swingbot.core.market import opex
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", True)
+    monkeypatch.setattr(opex, "current_tier", lambda *a, **k: opex.WEEKLY)
+    embed = _build(make_item())
+    assert [f for f in embed.fields if "eekly opex" in f.name]
+
+
+def test_no_opex_field_off_an_expiration_day(monkeypatch):
+    from swingbot.core.market import opex
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", True)
+    monkeypatch.setattr(opex, "current_tier", lambda *a, **k: None)
+    embed = _build(make_item())
+    assert not [f for f in embed.fields if "opex" in f.name.lower()]
+
+
+def test_no_opex_field_when_the_flag_is_off(monkeypatch):
+    # The whole feature is inert by default: even on a real third Friday the
+    # embed must be byte-identical to today's.
+    monkeypatch.setattr(config, "OPEX_CAUTION_ENABLED", False)
+    embed = _build(make_item())
+    assert not [f for f in embed.fields if "opex" in f.name.lower()]
+
+
 def test_cluster_blocked_item_renders_headline_field_with_size_zero():
     # Edge plan E8: correlated-cluster cap is flagged on the embed, never
     # hidden -- engine.py sets item.cluster_blocked right before build_embed.

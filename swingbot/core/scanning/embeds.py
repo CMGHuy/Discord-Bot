@@ -517,6 +517,14 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
             False,
         ))
 
+    # Flagged on every alert that day, exactly like heat_blocked above: the
+    # tightened gates already decided what posts, and this tells the reader
+    # what kind of day the survivors were found on so they can apply their
+    # own judgement to entry timing.
+    opex_note = opex.badge()
+    if opex_note is not None:
+        sections["headline"].append((opex_note[0], opex_note[1], False))
+
     cluster_blocked = getattr(item, "cluster_blocked", None)
     if cluster_blocked is not None:
         # Same flagged-not-hidden pattern as the portfolio heat cap above
