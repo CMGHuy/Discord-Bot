@@ -31,6 +31,8 @@ EXIT_REASONS: tuple[str, ...] = (
 
 _RUNNER_SUBSTRINGS = ("runner_tp2", "runner_trail", "runner_be")
 
+_EXIT_REASON_SET = frozenset(EXIT_REASONS)
+
 
 def resolve_outcome(trade: dict) -> str:
     """status is the coarse open/win/loss/closed vocabulary TradeLog has
@@ -665,6 +667,63 @@ def holding_period_split(closed: list[dict]) -> list[dict]:
         out.append({"bucket": name, "n": len(members),
                     "win_rate": win_rate(members),
                     "avg_return_pct": round(sum(rets) / len(rets), 4) if rets else None})
+    return out
+
+
+def _exit_reason_bucket(trade: dict) -> str:
+    """Which EXIT_REASONS bucket a closed trade belongs to.
+
+    Exact match on the raw reason text first, so "runner_tp2" cannot be
+    swallowed by a looser substring rule that would also match "tp2" inside it;
+    then resolve_outcome, which is the one place that knows prose like
+    "scratch exit" means scratch; then "other". Never a fuzzy fallback beyond
+    those two -- absorbing an unknown string into whichever bucket it happens to
+    share letters with is how a table like this starts lying.
+    """
+    text = close_reason_text(trade)
+    if text in _EXIT_REASON_SET:
+        return text
+    outcome = resolve_outcome(trade)
+    if outcome in _EXIT_REASON_SET:
+        return outcome
+    return "other"
+
+
+def exit_reason_split(closed: list[dict]) -> list[dict]:
+    """R attributed to the exit path that produced it -- one row per
+    EXIT_REASONS entry, in EXIT_REASONS order.
+
+    `total_r` AND `avg_r`, always. The question this answers is *where the R
+    comes from*, and a reason with a superb average over three trades has
+    contributed nothing; neither column is readable without `n` next to it.
+
+    Every reason is reported even at n=0, on holding_period_split's rule: a
+    bucket that never fires is a finding about the exit design, not a row to
+    drop. `avg_r` and `win_rate` are None for an empty bucket, never 0 -- "no
+    trades exited this way" and "they all lost" must not look the same.
+
+    A trade whose R is uncomputable still counts in `n` and contributes nothing
+    to `total_r`: it happened, and pretending it scored 0R would be worse than
+    admitting the record is incomplete.
+
+    `share_pct` is deliberately unrounded so the rows sum to exactly 100;
+    rounding is the formatter's job.
+    """
+    if not closed:
+        return []
+    buckets: dict[str, list[dict]] = {reason: [] for reason in EXIT_REASONS}
+    for trade in closed:
+        buckets[_exit_reason_bucket(trade)].append(trade)
+    out = []
+    for reason in EXIT_REASONS:
+        members = buckets[reason]
+        rs = [r for r in (r_multiple(t) for t in members) if r is not None]
+        out.append({"reason": reason,
+                    "n": len(members),
+                    "share_pct": len(members) / len(closed) * 100,
+                    "total_r": round(sum(rs), 4),
+                    "avg_r": round(sum(rs) / len(rs), 4) if rs else None,
+                    "win_rate": win_rate(members)})
     return out
 
 
