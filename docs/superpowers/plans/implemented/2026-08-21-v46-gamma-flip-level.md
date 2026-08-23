@@ -9,6 +9,26 @@ market-context page for the trader's own judgment. Buys no edge and must say
 so. (Added retroactively 2026-08-22 — this plan predates the `Edge:` header
 convention.)
 
+## Status: SUSPENDED 2026-08-23
+
+Suspended by the human partner before any implementation began. **No code from
+this plan exists on `main` or on any branch** — the only commits carrying `v46`
+are `e8187da` (this plan) and `fac5f5e` (its spec, `v43`). Every task box below
+is unticked and accurate.
+
+Filed under `implemented/` because that directory means "off the live list",
+not "shipped" — see `docs/claude/document-conventions.md`. It is not under
+`no-lift/`: nothing here was measured and found wanting, because nothing was
+built. Resuming means starting at Task 1.
+
+Worth re-reading before resuming: the `Edge: none (integrity)` header. This
+plan is 10 tasks across a new background collector, a new persisted JSON cache,
+a new Flask endpoint and a new Angular workspace, and by its own spec's
+Non-goals it feeds no scan-pipeline gate. It competes for the same budget as
+work that does move `ExpR`.
+
+---
+
 # Gamma flip level Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
