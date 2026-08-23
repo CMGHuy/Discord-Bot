@@ -138,8 +138,13 @@ export class TextInput {
    *
    * The value stays a string either way — `<input type="number">` reports
    * one, and the settings API takes one.
+   *
+   * `date` was added for the Analytics range filter, which had two raw
+   * `<input type="date">` because nothing here covered it. The native picker
+   * is the right control -- it is keyboard-accessible, localised by the
+   * browser, and this app never needs a range calendar.
    */
-  readonly type = input<'text' | 'search' | 'number' | 'password'>('text');
+  readonly type = input<'text' | 'search' | 'number' | 'password' | 'date'>('text');
   readonly disabled = input(false);
 
   /** Passed through to the element for `number` fields, straight from the
