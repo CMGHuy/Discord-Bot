@@ -53,6 +53,12 @@ export const routes: Routes = [
       import('./workspaces/analytics/analytics').then((m) => m.Analytics),
   },
   {
+    path: 'calendar',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./workspaces/calendar/calendar').then((m) => m.Calendar),
+  },
+  {
     path: 'watchlist',
     canMatch: [authGuard],
     loadComponent: () => import('./workspaces/watchlist/watchlist').then((m) => m.Watchlist),

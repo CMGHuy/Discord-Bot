@@ -141,4 +141,57 @@ suite (`test_the_committed_file_matches_the_current_generator`).
 
 ## Progress
 
-Not started.
+**Complete.** All 12 tasks implemented on branch
+`worktree-2026-08-22-v53-pnl-calendar`, one commit per task, TDD throughout
+(every step's test was run red before its implementation).
+
+Gates at close: backend `2210 passed, 136 skipped, 0 failed` (0 xfailed);
+frontend `912 passed` across 58 files; `npx tsc --noEmit -p tsconfig.app.json`
+clean.
+
+**Bump taken: `ui` 1.8.3 -> 1.8.4**, not the 1.8.1 -> 1.8.2 this header
+predicted. VERSION.json had moved on twice (v51, v52) between authoring and
+execution; the *level* the header predicted -- a `ui` patch, `bot` none -- is
+what was applied.
+
+### Corrections made to the plan while executing it
+
+Seven, each recorded in the commit that made it. They are listed here because
+a plan read later is evidence, and a plan whose text disagrees with the code
+it produced is misleading evidence.
+
+1. **`CalendarStore`'s refetch effect double-fired.** As written, `onInit`
+   called `store.load()` inside an `effect`, and `load()` reads `month`,
+   `strategy` and `horizon` -- so those reads became effect dependencies and
+   every `setStrategy`/`setMonth`/`stepMonth` issued TWO requests. Three
+   specs caught it ("found 2 requests"). Fixed with `untracked()`.
+2. **`Button`'s selector is `button[sb-button]`, not `<sb-button>`.** The
+   element form the plan wrote (Task 9) would have rendered an unknown
+   element.
+3. **`MetricCard`'s tone vocabulary is `plain|pnl|caution`**, not the
+   `pos|neg` Task 10 wrote. `pnl` is the only tone allowed to go green or
+   red and takes its sign from the value itself.
+4. **Money units come from `ConnectionStore.currency()`, never the literal
+   `'$'`** the plan used in Tasks 9, 10 and 11. `format.ts:38` and
+   `metric-card.ts:77` both say so, and analytics/dashboard/trades all obey
+   it -- a euro account must not read its own figures labelled in dollars.
+5. **The drawer specs need `installDialogPolyfill()`.** `Drawer` is a real
+   `<dialog>` and jsdom implements neither `showModal()` nor `close()`; all
+   five of Task 11's specs threw until the repo's existing polyfill was
+   installed in `seed()`.
+6. **`spa.WORKSPACES` needs `"calendar"`.** Task 12 added the Angular route
+   but not the Flask rule, so `/calendar` would have worked when clicked and
+   404ed on reload or a pasted link. `test_every_angular_route_is_served_on_reload`
+   was the single red test in the first full-gate run.
+7. **The controls block had to use `sb-control-row`.** `tokens.spec.ts`'s
+   "no workspace hand-rolls a control row" failed on the hand-rolled flex
+   row. The month stepper stays hand-rolled and is now declared in
+   `NOT_CONTROL_ROWS` with its reason.
+
+Also worth carrying forward: **the plan's frontend verification commands do
+not work in this repo.** `npx tsc --noEmit -p tsconfig.json` is a no-op (the
+root config is solution-style -- `"files": []` plus references -- and exits 0
+on a file with an undefined type name); use `-p tsconfig.app.json`. And
+`npx vitest run <file>` fails at `document is not defined`, because the runner
+is Angular's `@angular/build:unit-test`, which supplies the jsdom environment;
+use `npx ng test --include=<file>`.

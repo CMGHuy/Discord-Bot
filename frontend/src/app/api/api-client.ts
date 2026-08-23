@@ -11,6 +11,7 @@ import {
   AnalyticsSnapshot,
   AnalyticsStrategies,
   BotRestartResult,
+  CalendarDayTrades,
   ChartResponse,
   ClearResult,
   Dashboard,
@@ -25,6 +26,7 @@ import {
   KillswitchResult,
   LogClearResult,
   Logs,
+  PnlCalendar,
   Preferences,
   Proposal,
   ProposalList,
@@ -410,6 +412,33 @@ export class ApiClient {
       `${this.base}/market/chart/${encodeURIComponent(ticker)}`,
       { params: toParams(params) },
     );
+  }
+
+  /** One month of daily P&L, plus the all-history context beside it. */
+  calendarPnl(query: {
+    month: string;
+    strategy?: string;
+    horizon?: string;
+  }): Observable<PnlCalendar> {
+    let params = new HttpParams().set('month', query.month);
+    if (query.strategy) params = params.set('strategy', query.strategy);
+    if (query.horizon) params = params.set('horizon', query.horizon);
+    return this.http.get<PnlCalendar>(`${this.base}/calendar/pnl`, { params });
+  }
+
+  /** Every trade closed on one day. 404s for a day with no closes, which
+   *  the store surfaces as an empty drawer rather than an error. */
+  calendarPnlDay(query: {
+    date: string;
+    strategy?: string;
+    horizon?: string;
+  }): Observable<CalendarDayTrades> {
+    let params = new HttpParams().set('date', query.date);
+    if (query.strategy) params = params.set('strategy', query.strategy);
+    if (query.horizon) params = params.set('horizon', query.horizon);
+    return this.http.get<CalendarDayTrades>(`${this.base}/calendar/pnl/day`, {
+      params,
+    });
   }
 }
 

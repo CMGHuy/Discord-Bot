@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-23 11:46:56 UTC",
+  "generated_at": "2026-08-23 12:40:20 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.8.3",
+    "ui": "1.8.4",
     "bot": "1.4.3"
   },
   "releases": [
@@ -790,8 +790,8 @@
     {
       "date": "2026-08-23",
       "last_seen": "2026-08-23",
-      "commit": "uncommitted",
-      "subject": "working tree",
+      "commit": "ae373038",
+      "subject": "feat(v52): registry evidence integrity -- decay verdicts and refusal tokens",
       "versions": {
         "ui": "1.8.3",
         "bot": "1.4.3"
@@ -799,6 +799,19 @@
       "changed": [
         "ui",
         "bot"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "last_seen": "2026-08-23",
+      "commit": "uncommitted",
+      "subject": "working tree",
+      "versions": {
+        "ui": "1.8.4",
+        "bot": "1.4.3"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

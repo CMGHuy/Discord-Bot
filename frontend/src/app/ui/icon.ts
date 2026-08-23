@@ -22,6 +22,7 @@ export const ICON_NAMES = [
   'dashboard',
   'trades',
   'analytics',
+  'calendar',
   'watchlist',
   'risk',
   'system',
@@ -43,6 +44,9 @@ const PATHS: Record<IconName, string> = {
   trades: 'M5 2v3 M5 11v3 M3.5 5h3v6h-3z M11 2v2 M11 12v2 M9.5 4h3v8h-3z',
   // Rising bars.
   analytics: 'M2 14V9 M6 14V5 M10 14V7 M14 14V3',
+  // A month grid: a header bar over ruled day cells.
+  calendar:
+    'M2.5 3.5h11v10h-11z M2.5 6.5h11 M5.5 1.5v2 M10.5 1.5v2 M5.5 9.5h1 M9.5 9.5h1 M5.5 11.5h1 M9.5 11.5h1',
   // An eye: the list you are watching but not in.
   watchlist: 'M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z M8 9.8A1.8 1.8 0 1 0 8 6.2a1.8 1.8 0 0 0 0 3.6z',
   // A shield: protection, the killswitch, the heat cap.
