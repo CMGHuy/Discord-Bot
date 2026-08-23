@@ -141,3 +141,57 @@ export class Async {
   protected readonly rows = computed(() => Array.from({ length: this.skeletonRows() }));
   protected readonly cols = computed(() => Array.from({ length: this.skeletonCols() }));
 }
+
+export interface AsyncSource<T> {
+  data: () => T | null;
+  loading: () => boolean;
+  error: () => string | null;
+}
+
+export interface AsyncInputs {
+  loading: boolean;
+  error: string | null;
+  empty: boolean;
+  staleAsOf: string | null;
+}
+
+/**
+ * Maps a store slice onto sb-async's inputs, preserving the v13 refetch rule.
+ *
+ * dashboard.store.ts records it: a refetch failure keeps the previous data
+ * on screen, because replacing nine live numbers with an error panel over one
+ * failed poll is worse than showing slightly stale numbers next to a warning.
+ * Binding [error]="store.error()" straight through would break that on every
+ * screen at once, so the mapping lives here and every call site uses it.
+ *
+ *   nothing on screen + error   -> error   ("there is nothing to show, and why")
+ *   data on screen    + error   -> stale   ("these numbers stopped updating")
+ *   nothing on screen + loading -> loading (skeleton)
+ *   data on screen    + loading -> neither (a background refresh must not blank
+ *                                           a screen the reader is reading)
+ */
+export function asyncInputs<T>(
+  source: AsyncSource<T>,
+  opts: { isEmpty: (data: T) => boolean; now?: () => Date },
+): AsyncInputs {
+  const data = source.data();
+  const error = source.error();
+  const has = data !== null;
+
+  if (!has) {
+    return {
+      loading: source.loading(),
+      error: source.loading() ? null : error,
+      empty: false,
+      staleAsOf: null,
+    };
+  }
+
+  const clock = opts.now ?? (() => new Date());
+  const stamp = clock();
+  const staleAsOf = error
+    ? `${String(stamp.getHours()).padStart(2, '0')}:${String(stamp.getMinutes()).padStart(2, '0')}`
+    : null;
+
+  return { loading: false, error: null, empty: opts.isEmpty(data), staleAsOf };
+}
