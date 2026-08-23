@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 import discord
 
+from swingbot.core.market import opex
 from swingbot import config
 from swingbot.core.planning import account
 from swingbot.core.planning.account import compute_position_size, load_account_config
@@ -171,7 +172,9 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
-def _build_requirement_checks(scenario, target_confluence: tuple, conf, effective_min_confluence: int) -> list:
+def _build_requirement_checks(scenario, target_confluence: tuple, conf,
+                              effective_min_confluence: int,
+                              effective_min_confidence: int) -> list:
     """
     Evaluates EVERY configured requirement against one scenario --
     always all of them, never stopping at the first failure -- and
@@ -211,10 +214,24 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf, effectiv
             ),
         ),
         RequirementCheck(
-            key="min_confidence", label="Min confidence level", passed=conf.level >= config.MIN_ALERT_CONFIDENCE_LEVEL,
-            detail=f"Lv{conf.level} {conf.label} (needs Lv{config.MIN_ALERT_CONFIDENCE_LEVEL}+)",
+            key="min_confidence", label="Min confidence level", passed=conf.level >= effective_min_confidence,
+            detail=f"Lv{conf.level} {conf.label} (needs Lv{effective_min_confidence}+)",
         ),
     ]
+
+    # Appended only while the window is open, so an ordinary day's embeds
+    # and funnel counters keep exactly the shape they have today. A failing
+    # check blocks the post via `all_requirements_met` and is counted in the
+    # funnel, which is what makes the quiet hour explainable afterwards.
+    if opex.suppress_new_entries():
+        checks.append(RequirementCheck(
+            key="opex_close_window", label="Outside the opex close window", passed=False,
+            detail=(
+                f"Monthly opex: no new entries within "
+                f"{config.OPEX_NEAR_CLOSE_SUPPRESS_MINUTES} min of the 16:00 US/Eastern close."
+            ),
+        ))
+
     return checks
 
 
@@ -499,6 +516,14 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
              f"suggested size **0 shares**. Close or trim a position to free heat."),
             False,
         ))
+
+    # Flagged on every alert that day, exactly like heat_blocked above: the
+    # tightened gates already decided what posts, and this tells the reader
+    # what kind of day the survivors were found on so they can apply their
+    # own judgement to entry timing.
+    opex_note = opex.badge()
+    if opex_note is not None:
+        sections["headline"].append((opex_note[0], opex_note[1], False))
 
     cluster_blocked = getattr(item, "cluster_blocked", None)
     if cluster_blocked is not None:

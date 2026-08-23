@@ -61,6 +61,7 @@ from datetime import datetime, timezone
 
 from swingbot import config as app_config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.market import opex
 
 try:
     from zoneinfo import ZoneInfo as _ZoneInfo
@@ -489,6 +490,15 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
                 ticker_atr_pct, app_config.PORTFOLIO_TARGET_DAILY_VOL_PCT, open_positions)
         risk_pct = edge_sizing.effective_risk_pct(risk_pct, kelly_risk=kelly, vol_risk=vol)
         mode = "risk_pct"
+
+    # Opex size reduction, applied after the edge estimators so it composes
+    # with kelly/vol_target rather than being overwritten by them. BOTH modes
+    # are scaled: account_pct never reads risk_pct, so scaling only that one
+    # would silently exempt every account_pct user.
+    _opex_size_mult = opex.size_mult()
+    if _opex_size_mult != 1.0:
+        risk_pct *= _opex_size_mult
+        position_pct *= _opex_size_mult
 
     if balance <= 0 or entry <= 0:
         return None

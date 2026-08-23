@@ -72,7 +72,7 @@ independently testable.
   `US_CLOSE_TIME: datetime.time`, `monthly_expiration(year: int, month: int) -> datetime.date`,
   `opex_tier(day: datetime.date) -> str | None`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/market/test_opex_calendar.py`:
 
@@ -155,12 +155,12 @@ def test_monthly_expiration_is_a_thursday_or_friday_every_month():
             assert got.month == month
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/market/test_opex_calendar.py`
 Expected: FAIL — `ModuleNotFoundError: No module named 'swingbot.core.market.opex'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `swingbot/core/market/opex.py`:
 
@@ -279,12 +279,12 @@ def opex_tier(day: dt.date) -> str | None:
     return None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/market/test_opex_calendar.py`
 Expected: PASS (all parametrised cases green)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/market/opex.py tests/market/test_opex_calendar.py
@@ -317,7 +317,7 @@ is a `number` over `1..10` (`config.py:167-173`). A float bump has nowhere to
 land. Monthly gets both dials; weekly gets the confluence dial only, which is
 what makes it the lighter tier.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_opex_config.py`:
 
@@ -368,12 +368,12 @@ def test_reduction_percentages_are_in_range():
     assert 0 <= config.OPEX_SIZE_REDUCTION_PCT < 100
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/test_opex_config.py`
 Expected: FAIL — `AssertionError: OPEX_CAUTION_ENABLED missing from the config schema`
 
-- [ ] **Step 3: Add the fields**
+- [x] **Step 3: Add the fields**
 
 In `swingbot/config.py`, insert immediately after the `NEAR_CLOSE_THRESHOLD_PCT`
 field (which ends at line 195), keeping the `Field(...)` shape used throughout:
@@ -426,7 +426,7 @@ field (which ends at line 195), keeping the `Field(...)` shape used throughout:
                "in 'account_pct' mode."),
 ```
 
-- [ ] **Step 4: Add the same seven keys to `.env.example`**
+- [x] **Step 4: Add the same seven keys to `.env.example`**
 
 Append to the appropriate section of `.env.example` (values may differ from
 the schema defaults; only presence is asserted):
@@ -442,7 +442,7 @@ OPEX_STOP_WIDEN_PCT=10.0
 OPEX_SIZE_REDUCTION_PCT=25.0
 ```
 
-- [ ] **Step 5: Run both tests to verify they pass**
+- [x] **Step 5: Run both tests to verify they pass**
 
 Run: `python scripts/dev/testrun.py file tests/test_opex_config.py`
 Expected: PASS
@@ -451,7 +451,7 @@ Run: `python scripts/dev/testrun.py file tests/test_env_example_sync.py`
 Expected: PASS — this is the guard that catches a `Field` added without its
 `.env.example` line.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add swingbot/config.py .env.example tests/test_opex_config.py
@@ -483,7 +483,7 @@ Every `tier` parameter defaults to the sentinel `_UNSET`, meaning "resolve it
 from the clock". Later tasks pass an explicit tier so one scan resolves the
 calendar once instead of per ticker per horizon.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/market/test_opex_policy.py`:
 
@@ -614,12 +614,12 @@ def test_badge_present_for_both_tiers(opex_on):
     assert opex.badge(None) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/market/test_opex_policy.py`
 Expected: FAIL — `AttributeError: module 'swingbot.core.market.opex' has no attribute 'current_tier'`
 
-- [ ] **Step 3: Append the policy layer to `swingbot/core/market/opex.py`**
+- [x] **Step 3: Append the policy layer to `swingbot/core/market/opex.py`**
 
 ```python
 # ---------------------------------------------------------------------------
@@ -767,12 +767,12 @@ def badge(tier=_UNSET) -> tuple[str, str] | None:
     return None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/market/test_opex_policy.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/market/opex.py tests/market/test_opex_policy.py
@@ -811,7 +811,7 @@ receives its threshold as a parameter resolved once per scan at
 `engine.py:1220`; this task gives the confidence side the same shape rather
 than reaching into `config` from inside the helper.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scanning/test_opex_gates.py`:
 
@@ -876,12 +876,12 @@ def test_thresholds_are_unchanged_off_an_opex_day(monkeypatch):
     assert opex.effective_min_confluence(2, tier) == 2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_opex_gates.py`
 Expected: FAIL — `TypeError: _build_requirement_checks() takes 4 positional arguments but 5 were given`
 
-- [ ] **Step 3: Thread the effective confidence level through**
+- [x] **Step 3: Thread the effective confidence level through**
 
 In `swingbot/core/scanning/embeds.py`, change the signature at line 174:
 
@@ -927,7 +927,7 @@ pass it at the call site (line 1374), and forward it at line 1139:
                 effective_min_confluence, effective_min_confidence)
 ```
 
-- [ ] **Step 4: Run the new test and the existing scan suites**
+- [x] **Step 4: Run the new test and the existing scan suites**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_opex_gates.py`
 Expected: PASS
@@ -939,7 +939,7 @@ catches a missed call site of the widened signature.
 Run: `python scripts/dev/testrun.py file tests/scanning/test_confidence_levels.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/scanning/engine.py swingbot/core/scanning/embeds.py tests/scanning/test_opex_gates.py
@@ -969,7 +969,7 @@ counted into `stats["failed_counts"]` at `engine.py:1141-1144`, so the funnel
 summary explains the quiet hour instead of leaving it a mystery. Open-trade
 monitoring is untouched.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/scanning/test_opex_gates.py`:
 
@@ -987,12 +987,12 @@ def test_close_window_check_absent_outside_the_window(monkeypatch):
     assert "opex_close_window" not in keys
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_opex_gates.py::test_close_window_check_appears_only_while_suppressing`
 Expected: FAIL — `AttributeError: module 'swingbot.core.scanning.embeds' has no attribute 'opex'`
 
-- [ ] **Step 3: Add the check**
+- [x] **Step 3: Add the check**
 
 Add `from swingbot.core.market import opex` to `embeds.py`'s imports, then
 append inside `_build_requirement_checks`, immediately before `return checks`:
@@ -1014,12 +1014,12 @@ append inside `_build_requirement_checks`, immediately before `return checks`:
     return checks
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_opex_gates.py`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/scanning/embeds.py tests/scanning/test_opex_gates.py
@@ -1046,7 +1046,7 @@ sit behind — a deliberate E31 decision this task must not quietly reverse.
 Composing at line 777 respects that automatically, because that local is only
 consumed by `_atr_plan`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/planning/test_opex_stop_size.py`:
 
@@ -1122,13 +1122,13 @@ def test_zero_widen_is_a_no_op(df, monthly_opex, monkeypatch):
     assert opex.stop_mult() == 1.0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/planning/test_opex_stop_size.py`
 Expected: FAIL — `test_stop_is_wider_on_monthly_opex` fails because both
 plans produce the identical stop: `plan_engine` does not consult `opex` yet.
 
-- [ ] **Step 3: Compose the multiplier**
+- [x] **Step 3: Compose the multiplier**
 
 In `swingbot/core/planning/plan_engine.py`, replace line 777:
 
@@ -1143,7 +1143,7 @@ In `swingbot/core/planning/plan_engine.py`, replace line 777:
 
 with `from swingbot.core.market import opex` added to the module's imports.
 
-- [ ] **Step 4: Run the test and the plan-engine suite**
+- [x] **Step 4: Run the test and the plan-engine suite**
 
 Run: `python scripts/dev/testrun.py file tests/planning/test_opex_stop_size.py`
 Expected: PASS
@@ -1153,7 +1153,7 @@ Expected: PASS — with the flag off, `stop_mult()` returns 1.0, so every
 existing plan's stop must be byte-identical. A failure here means the
 multiplier leaked into the flag-off path.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/planning/plan_engine.py tests/planning/test_opex_stop_size.py
@@ -1179,7 +1179,7 @@ them from `balance * position_pct` (line 501-502) and never reads `risk_pct` at
 all. Scaling only `risk_pct` would leave `account_pct` users with no size
 reduction and nothing saying so.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/planning/test_opex_stop_size.py`:
 
@@ -1220,12 +1220,12 @@ def test_size_is_untouched_when_the_flag_is_off(monkeypatch):
     assert got["shares"] == pytest.approx(20, abs=0.01)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/planning/test_opex_stop_size.py`
 Expected: FAIL — both opex cases return 20 shares, not 15.
 
-- [ ] **Step 3: Apply the multiplier**
+- [x] **Step 3: Apply the multiplier**
 
 In `swingbot/core/planning/account.py`, insert after line 491 (the
 `mode = "risk_pct"` that closes the edge-mode block) and before the
@@ -1244,7 +1244,7 @@ In `swingbot/core/planning/account.py`, insert after line 491 (the
 
 with `from swingbot.core.market import opex` added to the module's imports.
 
-- [ ] **Step 4: Run the test and the sizing suite**
+- [x] **Step 4: Run the test and the sizing suite**
 
 Run: `python scripts/dev/testrun.py file tests/planning/test_opex_stop_size.py`
 Expected: PASS
@@ -1254,7 +1254,7 @@ Expected: PASS — sizing is read by `engine.py:283`, `embeds.py:327`,
 `embeds.py:414`, `performance.py:370` and `admin/dashboard.py:495`, so this is
 the point to sweep the fast tier rather than one file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/planning/account.py tests/planning/test_opex_stop_size.py
@@ -1281,7 +1281,7 @@ gates changed the outcome — the reader needs the context to apply their own
 judgement. This follows the `heat_blocked` precedent directly above it
 (`embeds.py:491-501`, "Blocking is FLAGGED, never hidden").
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/scanning/test_embeds_v3.py`, directly below
 `test_no_heat_blocked_attr_adds_no_field` (line 452-455) so the opex cases sit
@@ -1326,13 +1326,13 @@ def test_no_opex_field_when_the_flag_is_off(monkeypatch):
     assert not [f for f in embed.fields if "opex" in f.name.lower()]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_embeds_v3.py`
 Expected: FAIL — `assert len(opex_fields) == 1` fails with `0`, because
 `build_embed` does not yet add the field.
 
-- [ ] **Step 3: Add the headline field**
+- [x] **Step 3: Add the headline field**
 
 In `swingbot/core/scanning/embeds.py`, inside `build_embed`, immediately after
 the `heat_blocked` block (which ends at line 501):
@@ -1347,14 +1347,14 @@ the `heat_blocked` block (which ends at line 501):
         sections["headline"].append((opex_note[0], opex_note[1], False))
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_embeds_v3.py`
 Expected: PASS — including the file's ~40 pre-existing embed assertions,
 which must be unchanged: with the flag off `badge()` returns None and no
 embed gains a field.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/scanning/embeds.py tests/scanning/test_embeds_v3.py
@@ -1370,14 +1370,14 @@ git commit -m "feat(v44): flag opex days on every alert embed"
 - Modify: `VERSION.json` (`bot` 1.3.2 → 1.4.0)
 - Modify: `data/version_history.json` (regenerated)
 
-- [ ] **Step 1: Run the full suite via the subagent**
+- [x] **Step 1: Run the full suite via the subagent**
 
 Dispatch the `test-runner` subagent so ~1150 progress lines stay out of
 context. Expected: `0 failed`, `0 xfailed`. Reference baseline is
 `1686 passed, 66 skipped, 0 failed`; the count will have risen by the tests
 this plan adds, and a changed count is not a failure — only `failed` is.
 
-- [ ] **Step 2: Confirm the feature is genuinely inert by default**
+- [x] **Step 2: Confirm the feature is genuinely inert by default**
 
 Run: `git stash list` (expect nothing pending), then confirm
 `OPEX_CAUTION_ENABLED=false` is what `.env.example` ships and that
@@ -1388,19 +1388,19 @@ python -c "from swingbot import config; print(config.OPEX_CAUTION_ENABLED)"
 ```
 Expected: `False`
 
-- [ ] **Step 3: Document the feature**
+- [x] **Step 3: Document the feature**
 
 Add one line to the scan-pipeline section of `docs/claude/architecture.md`
 naming `swingbot/core/market/opex.py` as the opex calendar + policy module,
 and noting that it is deliberately NOT a `market_context` column.
 
-- [ ] **Step 4: Bump the version and regenerate history**
+- [x] **Step 4: Bump the version and regenerate history**
 
 Set `bot` to `1.4.0` in `VERSION.json`, then regenerate and commit
 `data/version_history.json` in the same commit — the local gate runs before
 the bump and structurally cannot catch a missed regeneration.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add VERSION.json data/version_history.json docs/claude/architecture.md
@@ -1430,3 +1430,57 @@ git commit -m "chore(v44): bot 1.4.0 -- opex-day caution"
 
 Phase 1 (Tasks 1-3) must complete before any of Phase 2 starts — every
 Phase 2 task consumes Task 3's policy helpers.
+
+---
+
+## Progress (executed via executing-plans, 2026-08-23)
+
+All 9 tasks implemented and committed in
+`.claude/worktrees/2026-08-21-v44-opex-day-caution` (branch
+`worktree-2026-08-21-v44-opex-day-caution`), base `a8962af`. Full suite on
+the finished branch: **2074 passed, 136 skipped, 0 failed, 0 xfailed**.
+`bot` 1.3.3 -> 1.4.0 (the plan predicted 1.3.2 -> 1.4.0; `main` had already
+moved the patch line on).
+
+Four things in the plan were wrong and were corrected while executing:
+
+- **Task 4's test stub could not run.** `_build_requirement_checks` unpacks
+  `target_confluence` as `(count, families)`, not `(families, count)`, and it
+  reads `scenario.constraints` plus three distance attributes the stub did not
+  define. The corrected stub uses an empty `constraints` dict so every
+  unrelated `c.get(key, True)` passes and only the two rewired checks can fail.
+- **Task 5 would have raised mid-scan.** The task asserts the new
+  `opex_close_window` key is "counted into `stats["failed_counts"]`", but
+  `failed_counts` is a plain dict in both the per-ticker literal
+  (`engine.py:889`) and the run-level merge literal (`engine.py:1350`), so an
+  unlisted key is a `KeyError` the first time the window fires. Both literals
+  gained a slot, and `progress.funnel` publishes
+  `failed_opex_close_window` — without that the count is recorded and never
+  shown, leaving the quiet hour exactly as unexplained as the task's own
+  rationale says it must not be.
+- **Task 6's first test found a real hole in Task 3.** The
+  `OPEX_CAUTION_ENABLED` gate lived only inside `current_tier()`, so
+  `stop_mult(MONTHLY)` still widened with the flag off. Callers pass an
+  explicit tier *by design* — resolving the calendar once per scan is the
+  whole point — so that shortcut was also a way around the master switch.
+  `_resolve()` and `suppress_new_entries()` now re-check the flag themselves,
+  and `tests/market/test_opex_policy.py` pins the contract.
+- **Task 6's composition line broke an existing contract**, caught by the fast
+  tier three tests later: `(applied_stop_mult or 1.0) * opex.stop_mult()`
+  rewrote `stop_mult_applied` from `None` to `1.0` on *every* ordinary plan,
+  and `None` is the documented "no multiplier applied" value that
+  `tests/edge/test_edge_stops.py` asserts on. The multiplier now composes only
+  when opex actually returns one. Task 6's own composition test also compared
+  two plans that were both widened (1.32 against 1.452); the reference now runs
+  with opex off.
+
+Task 6's separate composition test also gained an assertion on
+`stop_mult_applied` directly, since that field is the thing the contract is
+about.
+
+**The feature ships inert:** `OPEX_CAUTION_ENABLED=false` in `.env.example`,
+`config.OPEX_CAUTION_ENABLED is False` in a fresh interpreter, and every
+policy helper returns the unmodified base value in that state. No backtest was
+run and none is claimed — this plan's `Edge: expectancy` is a hypothesis about
+opex-day populations, not a measured result, and the flag stays off until
+someone pre-registers and measures it.

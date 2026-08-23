@@ -293,6 +293,52 @@ FIELDS: list[Field] = [
                "separated on Wilson intervals (32.1% -> 50.0%), for 8.6% of "
                "total alert volume."),
 
+    # --- Options / Opex ---
+    # Two tiers. Monthly (the third-Friday expiration, when every listed
+    # equity and index option expires together) is when pinning and unwind
+    # whipsaw are worst, so it takes all four behaviours. A plain weekly
+    # Friday takes only the confluence bump, which is what makes it "light".
+    Field("OPEX_CAUTION_ENABLED", "OPEX_CAUTION_ENABLED", "Options / Opex",
+          "Opex-day caution enabled",
+          type="checkbox", default="false",
+          help="Trade more cautiously on options-expiration days: a higher bar to alert, "
+               "no new entries into the US close, a wider ATR stop and a smaller position. "
+               "Off = every day is treated identically, exactly as before. Enable only "
+               "after VALIDATION."),
+    Field("OPEX_MONTHLY_CONFIDENCE_BUMP", "OPEX_MONTHLY_CONFIDENCE_BUMP", "Options / Opex",
+          "Monthly opex: confidence levels added",
+          type="number", default="1", min=0, max=4, step=1,
+          help="Added to 'Min confidence level to alert' on a monthly (third-Friday) expiration, "
+               "capped at Lv5. 0 disables this tightening. Weekly expirations never take it."),
+    Field("OPEX_MONTHLY_CONFLUENCE_BUMP", "OPEX_MONTHLY_CONFLUENCE_BUMP", "Options / Opex",
+          "Monthly opex: strategies added",
+          type="number", default="1", min=0, max=9, step=1,
+          help="Added to 'Min strategies confirmed' on a monthly expiration, capped at 10."),
+    Field("OPEX_WEEKLY_CONFLUENCE_BUMP", "OPEX_WEEKLY_CONFLUENCE_BUMP", "Options / Opex",
+          "Weekly opex: strategies added",
+          type="number", default="1", min=0, max=9, step=1,
+          help="Added to 'Min strategies confirmed' on any other Friday expiration, capped at 10. "
+               "This is the only tightening a weekly expiration applies."),
+    Field("OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", "OPEX_NEAR_CLOSE_SUPPRESS_MINUTES", "Options / Opex",
+          "Monthly opex: no new entries within (minutes of the US close)",
+          type="number", default="60", min=0, max=390, step=15,
+          help="On a monthly expiration, stop opening new trades this many minutes before "
+               "16:00 US/Eastern, when pinning and unwind volatility peak. 0 disables the window. "
+               "Open trades are still monitored and can still close normally."),
+    Field("OPEX_STOP_WIDEN_PCT", "OPEX_STOP_WIDEN_PCT", "Options / Opex",
+          "Monthly opex: ATR stop widened by %",
+          type="float", default="10.0", min=0, max=100, step=5,
+          help="Widens the ATR-derived stop distance on a monthly expiration, to survive "
+               "expiration-day whipsaw. Structure-derived stops (Fibonacci, Elliott, "
+               "support/resistance) are deliberately NOT widened -- scaling those slides the "
+               "stop off the level it exists to sit behind."),
+    Field("OPEX_SIZE_REDUCTION_PCT", "OPEX_SIZE_REDUCTION_PCT", "Options / Opex",
+          "Monthly opex: position size reduced by %",
+          type="float", default="25.0", min=0, max=90, step=5,
+          help="Cuts the suggested position size on a monthly expiration. Applies to both "
+               "sizing modes: it scales risk-per-trade in 'risk_pct' mode and the allocation "
+               "in 'account_pct' mode."),
+
     # --- Data & display ---
     Field("DEFAULT_HISTORY_PERIOD", "DEFAULT_HISTORY_PERIOD", "Data & Display", "History period",
           default="10y", help="How much daily history to pull for live scanning, e.g. 10y, 5y, 2y, 1y."),
