@@ -159,3 +159,58 @@ def load_rows(*, trade_log=None, journal=None) -> list[dict]:
         # dollar figures came from trades.json and are fine.
         entries = []
     return joined_rows(trades, entries)
+
+
+def _sum_or_none(values: list[float | None]) -> float | None:
+    """Sum the computable values, or None if none are.
+
+    `sum([])` is `0`, which is exactly the conflation Global Constraint 5
+    forbids -- a day with no computable dollar figure must not render as a
+    flat $0 day.
+    """
+    present = [v for v in values if v is not None]
+    if not present:
+        return None
+    return round(sum(present), 2)
+
+
+def bucket_by_day(rows: list[dict]) -> dict[str, list[dict]]:
+    """`{"YYYY-MM-DD": [row, ...]}`. Days with no rows simply have no key."""
+    buckets: dict[str, list[dict]] = {}
+    for row in rows:
+        buckets.setdefault(row["day"], []).append(row)
+    return buckets
+
+
+def day_summary(day: str, rows: list[dict]) -> dict:
+    """One grid cell: net dollars, net R, count, win rate.
+
+    `win_rate` delegates to `metrics.win_rate` rather than counting inline,
+    so a "closed" exit with no win/loss verdict is excluded from both
+    numerator and denominator here exactly as it is everywhere else.
+    """
+    return {
+        "date": day,
+        "net_pnl_amount": _sum_or_none([r["pnl_amount"] for r in rows]),
+        "net_r": _sum_or_none([r["r_multiple"] for r in rows]),
+        "trade_count": len(rows),
+        "win_rate": metrics.win_rate(
+            [{"status": r["outcome"]} for r in rows]
+        ),
+    }
+
+
+def month_grid(rows: list[dict], month: str) -> dict:
+    """Every day of `month` (`YYYY-MM`) that had a close, plus the totals.
+
+    Days are ascending. The totals are computed over the month's rows as one
+    pool rather than by averaging the per-day summaries -- a 1-trade day and
+    a 9-trade day must not carry equal weight in the month's win rate.
+    """
+    scoped = [r for r in rows if r["day"][:7] == month]
+    buckets = bucket_by_day(scoped)
+    days = [day_summary(day, buckets[day]) for day in sorted(buckets)]
+    totals = day_summary(month, scoped)
+    # `date` on a month total would invite reading it as a day.
+    totals.pop("date", None)
+    return {"month": month, "days": days, "totals": totals}

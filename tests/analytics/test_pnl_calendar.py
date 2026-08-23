@@ -118,3 +118,86 @@ def test_a_row_carries_exactly_the_declared_keys():
 
     rows = joined_rows([_trade("a" * 16)], [_entry("a" * 16)])
     assert set(rows[0]) == set(ROW_KEYS)
+
+
+from swingbot.core.analytics.pnl_calendar import (bucket_by_day, day_summary,
+                                                  month_grid)
+
+
+def _day_rows():
+    """Three closes: two on 2026-08-03 (+50, -20), one on 2026-08-05 (+80).
+
+    Hand-computed: 08-03 net +30.0 with 1 win of 2 -> 50.0% WR; 08-05 net
+    +80.0, 100.0% WR. Month total +110.0 over 3 trades, 2 wins -> 66.67%.
+    """
+    return joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=50.0,
+                   status="win", exit_price=110.0),
+            _trade("b" * 16, closed_at="2026-08-03T20:30:00+00:00", pnl=-20.0,
+                   status="loss", exit_price=96.0),
+            _trade("c" * 16, closed_at="2026-08-05T20:00:00+00:00", pnl=80.0,
+                   status="win", exit_price=115.0),
+        ],
+        [],
+    )
+
+
+def test_bucket_by_day_groups_on_the_sliced_day():
+    buckets = bucket_by_day(_day_rows())
+    assert sorted(buckets) == ["2026-08-03", "2026-08-05"]
+    assert len(buckets["2026-08-03"]) == 2
+
+
+def test_day_summary_sums_dollars_and_r_and_computes_win_rate():
+    buckets = bucket_by_day(_day_rows())
+    summary = day_summary("2026-08-03", buckets["2026-08-03"])
+    assert summary["date"] == "2026-08-03"
+    assert summary["net_pnl_amount"] == pytest.approx(30.0)
+    # r: (110-100)/5 = +2.0 and (96-100)/5 = -0.8  ->  +1.2
+    assert summary["net_r"] == pytest.approx(1.2)
+    assert summary["trade_count"] == 2
+    assert summary["win_rate"] == pytest.approx(50.0)
+
+
+def test_day_summary_returns_none_not_zero_when_nothing_is_computable():
+    """Global Constraint 5. A day whose only trade has no dollar figure is
+    not a flat $0 day."""
+    trade = _trade("a" * 16, pnl=None, exit_price=None, status="closed")
+    rows = joined_rows([trade], [])
+    summary = day_summary("2026-08-03", rows)
+    assert summary["net_pnl_amount"] is None
+    assert summary["net_r"] is None
+    # status "closed" is neither a win nor a loss, so there is no win rate.
+    assert summary["win_rate"] is None
+    assert summary["trade_count"] == 1
+
+
+def test_month_grid_omits_days_with_no_closes():
+    """Global Constraint 6 -- a day you did not trade is not a flat day."""
+    grid = month_grid(_day_rows(), "2026-08")
+    assert grid["month"] == "2026-08"
+    assert [d["date"] for d in grid["days"]] == ["2026-08-03", "2026-08-05"]
+    assert grid["totals"]["net_pnl_amount"] == pytest.approx(110.0)
+    assert grid["totals"]["trade_count"] == 3
+    assert grid["totals"]["win_rate"] == pytest.approx(66.67, abs=0.01)
+
+
+def test_month_grid_scopes_to_the_requested_month_only():
+    rows = joined_rows(
+        [
+            _trade("a" * 16, closed_at="2026-07-31T20:00:00+00:00"),
+            _trade("b" * 16, closed_at="2026-08-01T20:00:00+00:00"),
+            _trade("c" * 16, closed_at="2026-09-01T20:00:00+00:00"),
+        ],
+        [],
+    )
+    assert [d["date"] for d in month_grid(rows, "2026-08")["days"]] == ["2026-08-01"]
+
+
+def test_month_grid_on_a_month_with_no_trades_is_empty_not_an_error():
+    grid = month_grid(_day_rows(), "2026-01")
+    assert grid["days"] == []
+    assert grid["totals"]["trade_count"] == 0
+    assert grid["totals"]["net_pnl_amount"] is None
+    assert grid["totals"]["win_rate"] is None
