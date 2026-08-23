@@ -1,6 +1,6 @@
 """Day-level P&L aggregation behind the /calendar admin workspace.
 
-Spec: `docs/superpowers/specs/2026-08-22-v53-pnl-calendar-design.md`.
+Spec: `docs/superpowers/specs/implemented/2026-08-22-v53-pnl-calendar-design.md`.
 
 **Why this module exists next to `metrics.calendar_returns`.** That function
 compounds *percentage* return per calendar MONTH. This one sums *dollars* and

@@ -25,7 +25,7 @@ Part 1.
   `CalendarDayTrades` interfaces; `ApiClient.calendarPnl(query)` and
   `ApiClient.calendarPnlDay(query)`.
 
-- [ ] **Step 1: Write the failing check**
+- [x] **Step 1: Write the failing check**
 
 `models.ts` is types only and `api-client.ts` is one thin method per
 endpoint, so the type-checker is the test here rather than a `.spec.ts` —
@@ -37,12 +37,12 @@ adding this one line at the top of the `ApiClient` class body in
   private readonly _v53Check: PnlCalendar | null = null;
 ```
 
-- [ ] **Step 2: Run the build to verify it fails**
+- [x] **Step 2: Run the build to verify it fails**
 
 Run: `cd frontend && npx tsc --noEmit -p tsconfig.json`
 Expected: FAIL — `TS2304: Cannot find name 'PnlCalendar'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `frontend/src/app/api/models.ts`:
 
@@ -161,12 +161,12 @@ existing model imports):
   }
 ```
 
-- [ ] **Step 4: Run the build to verify it passes**
+- [x] **Step 4: Run the build to verify it passes**
 
 Run: `cd frontend && npx tsc --noEmit -p tsconfig.json`
 Expected: PASS — no errors
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/api/models.ts frontend/src/app/api/api-client.ts
@@ -194,7 +194,7 @@ git commit -m "feat(v53): add calendar models and ApiClient methods"
   `setStrategy(value)`, `setHorizon(value)`, `selectDay(date)`,
   `closeDay()`, `valueFor(day)`, `signedIntensity(day)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/stores/calendar.store.spec.ts`:
 
@@ -422,12 +422,12 @@ describe('CalendarStore', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/stores/calendar.store.spec.ts`
 Expected: FAIL — `Cannot find module './calendar.store'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `frontend/src/app/stores/calendar.store.ts`:
 
@@ -655,12 +655,12 @@ export const CalendarStore = signalStore(
 );
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/stores/calendar.store.spec.ts`
 Expected: PASS — 12 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/stores/calendar.store.ts \
@@ -683,7 +683,7 @@ git commit -m "feat(v53): add the calendar store with money/R metric toggle"
   weekend: boolean }`; `monthMatrix(month: string) -> GridCell[][]`;
   `monthLabel(month: string) -> string`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/workspaces/calendar/calendar.helpers.spec.ts`:
 
@@ -755,12 +755,12 @@ describe('monthLabel', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.helpers.spec.ts`
 Expected: FAIL — `Cannot find module './calendar.helpers'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `frontend/src/app/workspaces/calendar/calendar.helpers.ts`:
 
@@ -852,12 +852,12 @@ export function monthLabel(month: string): string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.helpers.spec.ts`
 Expected: PASS — 8 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.helpers.ts \
@@ -883,7 +883,7 @@ git commit -m "feat(v53): add month-grid date math for the calendar"
 - Produces: `export class Calendar` with selector `sb-calendar`, plus the
   protected members Tasks 10 and 11 extend.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/workspaces/calendar/calendar.spec.ts`:
 
@@ -1038,12 +1038,12 @@ describe('Calendar grid', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — `Cannot find module './calendar'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `frontend/src/app/workspaces/calendar/calendar.ts`:
 
@@ -1275,7 +1275,7 @@ export class Calendar {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS — 6 passed
@@ -1286,7 +1286,7 @@ matching `valueChange` output. So `[value]` + `(valueChange)` is the correct
 form here — `[(value)]="…"` would need a writable target and cannot call a
 store method.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts \
@@ -1310,7 +1310,7 @@ git commit -m "feat(v53): render the month P&L grid with a money/R toggle"
 - Produces: `streakLabel()`, `weekdayValue(weekday)`, `extremeLabel(day)`
   on `Calendar`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/workspaces/calendar/calendar.spec.ts`:
 
@@ -1378,13 +1378,13 @@ describe('Calendar summary strip', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — the four new tests get `null` from
 `querySelector('.totals')` / `.callouts` and `0` rows for `.dow-row`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `frontend/src/app/workspaces/calendar/calendar.ts`, add `MetricCard` to
 the `imports` array and its import line:
@@ -1514,12 +1514,12 @@ Add these members to the `Calendar` class:
 
 Import `CalendarWeekday` alongside `CalendarDay` from `../../api/models`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS — 11 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts \
@@ -1541,7 +1541,7 @@ git commit -m "feat(v53): add month totals, weekday breakdown and streak callout
   `frontend/src/app/ui/layout.ts` — inputs `open`, `heading`, output `closed`.
 - Produces: `tradeValue(trade)` on `Calendar`. No new exports.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/workspaces/calendar/calendar.spec.ts`:
 
@@ -1638,13 +1638,13 @@ describe('Calendar day drawer', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.spec.ts`
 Expected: FAIL — the five new drawer tests find no `.day-row` /
 `.day-empty` elements.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Add `Drawer` to the `imports` array and its import:
 
@@ -1734,12 +1734,12 @@ Add these members:
 
 Import `CalendarTrade` alongside the other model types.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/workspaces/calendar/calendar.spec.ts`
 Expected: PASS — 17 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/app/workspaces/calendar/calendar.ts \
@@ -1764,7 +1764,7 @@ git commit -m "feat(v53): open a day's closed trades in the calendar drawer"
 - Produces: the `/calendar` route and its sidebar entry. Nothing else
   consumes these.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `frontend/src/app/app.routes.spec.ts` (match the file's existing
 style — read it first; it already walks the `routes` table):
@@ -1797,13 +1797,13 @@ stream and the session store for a one-line array check. The typing already
 carries it — `icon` is declared `IconName`, so a nav entry naming an icon
 that does not exist fails the build rather than a test.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/app.routes.spec.ts src/app/ui/icon.spec.ts`
 Expected: FAIL — `expected undefined to be defined` for the route, and
 `ICON_NAMES` does not contain `'calendar'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `frontend/src/app/app.routes.ts`, add after the `analytics` route (the
 IA's order is: what is true now, the entities, then the analysis — the
@@ -1837,20 +1837,20 @@ Update that array's doc comment — it says "The six workspaces"; it is now
 seven plus Versions. Say what is actually there rather than leaving a
 comment that miscounts.
 
-- [ ] **Step 4: Run the frontend suite to verify it passes**
+- [x] **Step 4: Run the frontend suite to verify it passes**
 
 Run: `cd frontend && npm test`
 Expected: PASS — all suites green, including the new
 `calendar.spec.ts`, `calendar.helpers.spec.ts` and `calendar.store.spec.ts`.
 
-- [ ] **Step 5: Run the full backend gate**
+- [x] **Step 5: Run the full backend gate**
 
 Run: `python scripts/dev/testrun.py full`
 Expected: `0 failed`, `0 xfailed`. The pass count rises from the 1686
 baseline by the 21 core + 15 route tests this plan adds. A *changed* count
 is not a failure — only `failed` is.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/app/app.routes.ts frontend/src/app/app.routes.spec.ts \
@@ -1859,7 +1859,7 @@ git add frontend/src/app/app.routes.ts frontend/src/app/app.routes.spec.ts \
 git commit -m "feat(v53): route and navigate to the calendar workspace"
 ```
 
-- [ ] **Step 7: Close out the plan**
+- [x] **Step 7: Close out the plan**
 
 This is the last task of the last part, so follow the **Close-out** section
 in `2026-08-22-v53-pnl-calendar_0-index.md` — it covers moving all three

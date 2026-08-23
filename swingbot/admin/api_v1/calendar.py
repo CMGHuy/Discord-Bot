@@ -1,6 +1,6 @@
 """GET /api/v1/calendar/* -- the day-level P&L calendar surface.
 
-Spec: `docs/superpowers/specs/2026-08-22-v53-pnl-calendar-design.md`.
+Spec: `docs/superpowers/specs/implemented/2026-08-22-v53-pnl-calendar-design.md`.
 
 **"UI renders, analytics computes."** Every figure here is computed by
 `swingbot.core.analytics.pnl_calendar`; these routes select, scope and

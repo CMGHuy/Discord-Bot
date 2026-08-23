@@ -28,7 +28,7 @@ Part 2 (`_2-frontend`) consumes the JSON response shapes Tasks 4 and 5 finalize.
   `available_filters(rows) -> dict` → `{"strategies": [...], "horizons": [...]}`;
   `load_rows(*, trade_log=None, journal=None) -> list[dict]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/analytics/test_pnl_calendar.py`:
 
@@ -155,13 +155,13 @@ def test_a_row_carries_exactly_the_declared_keys():
     assert set(rows[0]) == set(ROW_KEYS)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_pnl_calendar.py`
 Expected: FAIL — `ModuleNotFoundError: No module named
 'swingbot.core.analytics.pnl_calendar'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `swingbot/core/analytics/pnl_calendar.py`:
 
@@ -329,12 +329,12 @@ def load_rows(*, trade_log=None, journal=None) -> list[dict]:
     return joined_rows(trades, entries)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_pnl_calendar.py`
 Expected: PASS — 8 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/analytics/pnl_calendar.py tests/analytics/test_pnl_calendar.py
@@ -357,7 +357,7 @@ git commit -m "feat(v53): join closed trades with journal entries by day"
   `month_grid(rows, month: str) -> dict` with exactly `month`, `days`,
   `totals`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/analytics/test_pnl_calendar.py`:
 
@@ -445,12 +445,12 @@ def test_month_grid_on_a_month_with_no_trades_is_empty_not_an_error():
     assert grid["totals"]["win_rate"] is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_pnl_calendar.py`
 Expected: FAIL — `ImportError: cannot import name 'bucket_by_day'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `swingbot/core/analytics/pnl_calendar.py`:
 
@@ -510,12 +510,12 @@ def month_grid(rows: list[dict], month: str) -> dict:
     return {"month": month, "days": days, "totals": totals}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_pnl_calendar.py`
 Expected: PASS — 14 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/analytics/pnl_calendar.py tests/analytics/test_pnl_calendar.py
@@ -538,7 +538,7 @@ git commit -m "feat(v53): summarise P&L per day and per month"
   `best_worst_days(rows) -> dict` → `{"best": dict | None, "worst": dict | None}`;
   `day_streak(rows) -> dict` → `{"direction": str | None, "days": int}`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/analytics/test_pnl_calendar.py`:
 
@@ -646,12 +646,12 @@ def test_day_streak_on_an_empty_set():
     assert day_streak([]) == {"direction": None, "days": 0}
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_pnl_calendar.py`
 Expected: FAIL — `ImportError: cannot import name 'best_worst_days'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `swingbot/core/analytics/pnl_calendar.py`:
 
@@ -761,12 +761,12 @@ def day_streak(rows: list[dict]) -> dict:
     return {"direction": direction, "days": days}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_pnl_calendar.py`
 Expected: PASS — 22 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/core/analytics/pnl_calendar.py tests/analytics/test_pnl_calendar.py
@@ -791,7 +791,7 @@ git commit -m "feat(v53): add weekday breakdown, day extremes and day streak"
   exactly the keys `month`, `days`, `totals`, `day_of_week`, `best_day`,
   `worst_day`, `streak`, `filters`. Also `_month_param()`, used by Task 5.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/admin/test_api_v1_calendar.py`:
 
@@ -935,13 +935,13 @@ def test_an_unknown_query_parameter_is_rejected(seed, logged_in):
     assert_error(logged_in.get("/api/v1/calendar/pnl?tickr=AAPL"), "invalid", 400)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_calendar.py`
 Expected: FAIL — every request 404s (`assert_error` reports `not_found`
 instead of the expected code) because no `/calendar/pnl` rule is registered.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `swingbot/admin/api_v1/calendar.py`:
 
@@ -1058,12 +1058,12 @@ Then add the module to the register tuple in
                    versions, watchlist)  # (register routes)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_calendar.py`
 Expected: PASS — 8 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/calendar.py swingbot/admin/api_v1/__init__.py \
@@ -1086,7 +1086,7 @@ git commit -m "feat(v53): serve the month P&L grid from /api/v1/calendar/pnl"
   returning exactly `{date, trades}`, where each trade carries exactly
   `pnl_calendar.ROW_KEYS`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/admin/test_api_v1_calendar.py`:
 
@@ -1178,13 +1178,13 @@ def test_a_missing_or_malformed_date_is_a_400(seed, logged_in):
                  "invalid", 400)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_calendar.py`
 Expected: FAIL — the new tests 404 with code `not_found` where they expect
 `auth` / `invalid` / a body, since `/calendar/pnl/day` has no rule.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `swingbot/admin/api_v1/calendar.py`:
 
@@ -1230,12 +1230,12 @@ def calendar_pnl_day():
     return jsonify({"date": date, "trades": day_rows})
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_api_v1_calendar.py`
 Expected: PASS — 15 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add swingbot/admin/api_v1/calendar.py tests/admin/test_api_v1_calendar.py
