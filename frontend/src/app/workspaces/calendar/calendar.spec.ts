@@ -12,7 +12,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
-import { PnlCalendar } from '../../api/models';
+import { CalendarTrade, PnlCalendar } from '../../api/models';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Calendar } from './calendar';
 
 const RESPONSE: PnlCalendar = {
@@ -46,6 +47,9 @@ const RESPONSE: PnlCalendar = {
  * do with the code under test.
  */
 export function seed(payload: PnlCalendar = RESPONSE): ComponentFixture<Calendar> {
+  // The day drawer is a real `<dialog>`, and jsdom implements neither
+  // showModal() nor close(); see the polyfill for why `<dialog>` stays.
+  installDialogPolyfill();
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
@@ -206,5 +210,93 @@ describe('Calendar summary strip', () => {
 
     const monday = el(fixture).querySelectorAll('.dow-row')[0];
     expect(monday.textContent).toContain('R');
+  });
+});
+
+const TRADE: CalendarTrade = {
+  trade_id: 'a'.repeat(16),
+  ticker: 'AAPL',
+  strategy: 'EMA20',
+  horizon: '4w',
+  direction: 'bullish',
+  day: '2026-08-03',
+  closed_at: '2026-08-03T20:00:00+00:00',
+  outcome: 'win',
+  pnl_amount: 50,
+  r_multiple: 2,
+  mfe_r: 2.4,
+  mae_r: -0.3,
+  exit_efficiency: 83,
+  tags: ['clean-exit'],
+  auto_lesson: 'Held to target.',
+};
+
+describe('Calendar day drawer', () => {
+  const openDay = async (fixture: ComponentFixture<Calendar>, trades: CalendarTrade[]) => {
+    // `seed()` already pinned the month and flushed both grid requests.
+    fixture.componentInstance.store.selectDay('2026-08-03');
+    TestBed.inject(HttpTestingController)
+      .expectOne((r) => r.url === '/api/v1/calendar/pnl/day')
+      .flush({ date: '2026-08-03', trades });
+    await fixture.whenStable();
+    fixture.detectChanges();
+  };
+
+  it('stays closed until a day is chosen', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el(fixture).querySelector('.day-row')).toBeNull();
+  });
+
+  it('lists every trade closed that day', async () => {
+    const fixture = seed();
+    await openDay(fixture, [TRADE, { ...TRADE, trade_id: 'b'.repeat(16), ticker: 'MSFT' }]);
+
+    const rows = el(fixture).querySelectorAll('.day-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('AAPL');
+    expect(rows[1].textContent).toContain('MSFT');
+  });
+
+  it('shows the journal half when the join found one', async () => {
+    const fixture = seed();
+    await openDay(fixture, [TRADE]);
+
+    const row = el(fixture).querySelector('.day-row');
+    expect(row?.textContent).toContain('Held to target.');
+    expect(row?.textContent).toContain('clean-exit');
+  });
+
+  it('omits the journal half for an unjournaled trade rather than showing blanks', async () => {
+    const fixture = seed();
+    await openDay(fixture, [
+      { ...TRADE, tags: [], auto_lesson: null, mfe_r: null, mae_r: null, exit_efficiency: null },
+    ]);
+
+    const row = el(fixture).querySelector('.day-row');
+    expect(row?.textContent).toContain('AAPL');
+    expect(row?.querySelector('.lesson')).toBeNull();
+    expect(row?.querySelector('.tags')).toBeNull();
+  });
+
+  it('says so when a day comes back with nothing under the current filter', async () => {
+    const fixture = seed();
+    await openDay(fixture, []);
+
+    expect(el(fixture).querySelector('.day-empty')).not.toBeNull();
+    expect(el(fixture).querySelectorAll('.day-row')).toHaveLength(0);
+  });
+
+  it('clears the selection when the drawer is dismissed', async () => {
+    const fixture = seed();
+    await openDay(fixture, [TRADE]);
+
+    fixture.componentInstance.store.closeDay();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.store.selectedDay()).toBeNull();
+    expect(el(fixture).querySelector('.day-row')).toBeNull();
   });
 });

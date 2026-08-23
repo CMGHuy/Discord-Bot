@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import { CalendarDay, CalendarWeekday } from '../../api/models';
+import { CalendarDay, CalendarTrade, CalendarWeekday } from '../../api/models';
 import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { Button } from '../../ui/button';
 import { ABSENT, money, rMultiple } from '../../ui/format';
-import { Panel } from '../../ui/layout';
+import { Drawer, Panel } from '../../ui/layout';
 import { MetricCard } from '../../ui/metric-card';
 import { Select } from '../../ui/form-controls';
 import { GridCell, monthLabel, monthMatrix } from './calendar.helpers';
@@ -16,7 +16,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, MetricCard, Panel, Select],
+  imports: [Button, Drawer, MetricCard, Panel, Select],
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   providers: [CalendarStore],
@@ -142,6 +142,46 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         </tbody>
       </table>
     </sb-panel>
+
+    <sb-drawer
+      [open]="store.selectedDay() !== null"
+      [heading]="store.selectedDay() ?? ''"
+      (closed)="store.closeDay()"
+    >
+      @if (store.dayLoading()) {
+        <p class="day-loading">Loading...</p>
+      } @else if ((store.dayTrades() ?? []).length === 0) {
+        <p class="day-empty">No closed trades on this day under the current filter.</p>
+      } @else {
+        @for (trade of store.dayTrades() ?? []; track trade.trade_id) {
+          <article class="day-row">
+            <header>
+              <strong>{{ trade.ticker }}</strong>
+              <span class="meta">{{ trade.strategy }} · {{ trade.horizon }}</span>
+              <span class="amount" [class.pos]="(trade.pnl_amount ?? 0) >= 0"
+                    [class.neg]="(trade.pnl_amount ?? 0) < 0">
+                {{ tradeValue(trade) }}
+              </span>
+            </header>
+            <p class="meta">
+              {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
+              @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
+              @if (trade.mae_r !== null) { · MAE {{ rLabel(trade.mae_r) }} }
+            </p>
+            @if (trade.auto_lesson; as lesson) {
+              <p class="lesson">{{ lesson }}</p>
+            }
+            @if (trade.tags.length) {
+              <p class="tags">
+                @for (tag of trade.tags; track tag) {
+                  <span class="tag">{{ tag }}</span>
+                }
+              </p>
+            }
+          </article>
+        }
+      }
+    </sb-drawer>
   `,
   styles: `
     /* No backticks in here: these styles live in a TS template literal. */
@@ -245,6 +285,23 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       text-align: left;
     }
     .dow .num { font-family: var(--font-mono); text-align: right; }
+
+    .day-row { padding: var(--space-10) 0; border-bottom: 1px solid var(--border); }
+    .day-row header { display: flex; align-items: baseline; gap: var(--space-8); }
+    .day-row .amount { margin-left: auto; font-family: var(--font-mono); }
+    .day-row .amount.pos { color: var(--pos); }
+    .day-row .amount.neg { color: var(--neg); }
+    .day-row .meta { margin: var(--space-4) 0 0; color: var(--text-secondary); font-size: var(--text-micro); }
+    .lesson { margin: var(--space-6) 0 0; font-size: var(--text-table); }
+    .tags { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-6) 0 0; }
+    .tag {
+      padding: 0 var(--space-6);
+      background: var(--surface-raised);
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      font-size: var(--text-micro);
+    }
+    .day-empty, .day-loading { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
   `,
 })
 export class Calendar {
@@ -326,6 +383,19 @@ export class Calendar {
   protected extremeLabel(day: CalendarDay | null): string {
     if (!day) return ABSENT;
     return `${day.date} · ${this.display(day)}`;
+  }
+
+  /** One trade's headline figure, in the metric on show -- so the drawer
+   *  and the cell that opened it never disagree about units. */
+  protected tradeValue(trade: CalendarTrade): string {
+    if (this.store.metric() === 'r') return rMultiple(trade.r_multiple);
+    return trade.pnl_amount === null
+      ? ABSENT
+      : money(trade.pnl_amount, this.currency(), 2);
+  }
+
+  protected rLabel(value: number | null): string {
+    return rMultiple(value);
   }
 
   /** "1 losing day", or ABSENT when there is no run to report. */
