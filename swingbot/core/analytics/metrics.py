@@ -15,6 +15,66 @@ from datetime import datetime
 import numpy as np
 
 
+#: Every exit reason the code actually emits, plus "other".
+#:
+#: Sources: journal's _RUNNER_SUBSTRINGS ("runner_tp2", "runner_trail",
+#: "runner_be"), reversal.py's `close_reason == "reversed"`, and the
+#: "scratch"/"timeout" branches of resolve_outcome below.
+#:
+#: "other" is deliberate and must never be silently dropped: a non-empty
+#: "other" bucket means a reason string exists that this list does not know,
+#: which is a finding about the data, not a formatting problem.
+EXIT_REASONS: tuple[str, ...] = (
+    "tp1", "runner_tp2", "runner_trail", "runner_be",
+    "stop", "scratch", "timeout", "reversed", "other",
+)
+
+_RUNNER_SUBSTRINGS = ("runner_tp2", "runner_trail", "runner_be")
+
+
+def resolve_outcome(trade: dict) -> str:
+    """status is the coarse open/win/loss/closed vocabulary TradeLog has
+    always used; a v2-manager close additionally carries a specific
+    close_reason ("scratch"/"timeout"/...) inside the generic "closed"
+    status (see plan-engine-v2 Task 70's status mapping: only "win"/
+    "loss"/"closed" ever land in the field, with the real nuance in the
+    leg reason or close_reason). Prefer that finer-grained reason when
+    status itself is the generic "closed" bucket.
+
+    v50: moved here verbatim from journal._resolve_outcome so metrics and
+    journal share one vocabulary. journal.py imports metrics (journal.py:15),
+    never the reverse -- putting it here is what keeps that edge one-way.
+    """
+    status = trade.get("status")
+    if status in ("win", "loss"):
+        return status
+    legs = trade.get("legs") or []
+    candidates = []
+    if legs:
+        candidates.append(legs[-1].get("reason", ""))
+    candidates.append((trade.get("close_reason") or ""))
+    for reason in candidates:
+        reason = reason.lower()
+        if "scratch" in reason:
+            return "scratch"
+        if "timeout" in reason:
+            return "timeout"
+    return status or "closed"
+
+
+def close_reason_text(trade: dict) -> str:
+    """The trade's raw close reason, lowercased, never None.
+
+    A v2-manager close hides the real reason in the LAST leg while
+    `close_reason` keeps a coarser value, so the leg wins when present.
+    v50: moved here verbatim from journal._close_reason_text.
+    """
+    legs = trade.get("legs") or []
+    if legs:
+        return (legs[-1].get("reason") or "").lower()
+    return (trade.get("close_reason") or "").lower()
+
+
 def equity_curve(closed: list[dict], starting_balance: float) -> dict:
     """Walk realized P&L in chronological close order to build a running
     account-balance series.
